@@ -5,9 +5,10 @@ const projection = require('./material-projection.js');
 const charts = require('./material-chart-rebake.js');
 const {writeMips} = require('./registered-material-mips.js');
 const Geometry = require('./geometry-masks.js');
+const Cage = require('./material-cage.js');
 
-function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometryMasks}) {
-  if ([bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits].every(value=>value===undefined) &&
+function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometryMasks,cageBake}) {
+  if ([bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,cageBake].every(value=>value===undefined) &&
       (geometryMasks === undefined || geometryMasks === false)) return null;
   if(chartEdits!==undefined && rebakeFrom===undefined)throw new TypeError('Chart edits need a rebake baseline');
   if(geometryMasks!==undefined && geometryMasks!==false && !bakeDir)
@@ -18,12 +19,14 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
   const baseline=charts.readBaseline(rebakeFrom), edits=charts.readPlan(chartEdits);
   const geometrySettings=Geometry.settings(geometryMasks === undefined ? baseline?.document.geometryMasks : geometryMasks);
   const sameDirectory=baseline && fs.existsSync(directory) && fs.realpathSync(directory)===baseline.directory;
+  const cages=Cage.read(cageBake);
   const paint=projection.read(paintViews,'paint'), capture=projection.read(capturePaint,'camera');
   if (capture.length && (fs.existsSync(path.join(directory,'paint-views','approved.json')) ||
       capture.some(({id})=>fs.existsSync(path.join(directory,'paint-views',id+'-paint.png')))))
     throw new Error('Choose a fresh paint capture directory to preserve the existing paint files');
   function validate(count) {
     if([...paint,...capture,...edits].some(row=>row.mesh>=count))throw new RangeError('Material bake plan references a missing mesh index');
+    if ([...cages.keys()].some(index=>index>=count)) throw new RangeError('Material cage plan references a missing receiver mesh');
     if(baseline && baseline.document.meshes.length!==count)throw new Error('Chart rebake needs the baseline mesh count');
   }
 
@@ -69,6 +72,7 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
       uvLayout:projection.digest(JSON.stringify([faces,uvs])),texCoord:0,width:size,height:size,padding,
       coverage,emissionStrength:strength,maps,masks,mipmaps,paintViews:[...paintReceipts.values()],
       ...(baked.geometryMasks && {geometryMasks:baked.geometryMasks}),
+      ...(baked.cageBake && {cageBake:baked.cageBake}),
       charts:state.charts.map(({id,faces,bounds})=>({id,faces,bounds})),
       chartLayout:sidecar('chart-layout','json',Buffer.from(JSON.stringify(state))),
       rebakeState:{owners:sidecar('chart-owners','deflate',(!baked.layoutRevised && previous?.packedOwners) || charts.pack(baked.owners)),
@@ -82,6 +86,7 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
       captures.push({id,...view,paint:id+'-paint.png'});
     }
     return {index,width:size,height:size,uvLayout:row.uvLayout,chartReport,
+      ...(baked.cageBake && {cageBake:baked.cageBake}),
       mipmaps:mipmaps.levels.map(({level,width,height,filteredTexels,changedOwners,clearedTexels})=>
         ({level,width,height,filteredTexels,...(changedOwners !== undefined && {changedOwners,clearedTexels})})),
       paintViews:row.paintViews.map(({id,texels})=>({id,texels}))};
@@ -105,7 +110,15 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
 
   function plan(index, input, kit) {
     const views=paint.filter(view=>view.mesh===index);
-    const chartBake=charts.planMesh({...input,baseline,views,edits:edits.filter(edit=>edit.mesh===index)});
+    const spec=cages.get(index), prior=input.source?.row;
+    if (!spec && prior?.cageBake) throw new RangeError('Resupply the cage plan when rebaking a cage receiver');
+    const cage=spec && Cage.prepare(spec,input.mesh,require('../index.js'),kit);
+    const mesh=cage ? {...input.mesh,maskNames:[...(input.mesh.maskNames ?? []),...cage.maskNames]} : input.mesh;
+    const chartBake=charts.planMesh({...input,mesh,baseline,views,edits:edits.filter(edit=>edit.mesh===index)});
+    if (cage) {
+      chartBake.cage=cage;
+      for (const {id} of chartBake.state.charts) chartBake.dirty.add(id);
+    }
     if (geometrySettings) {
       const {mesh,faces,faceNormals,source} = input;
       const conflict = Geometry.names.find(name => chartBake.state.maskNames.includes(name));

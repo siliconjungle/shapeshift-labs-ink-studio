@@ -1727,9 +1727,9 @@ function makeSculpt(B, rest) {
     if (!positive.length && !parts.length) throw new Error('Model export needs an unbaked sculpt');
     const field = positive.length ? makeSculpt(B, { positive, negative: [...neg, ...negAll] }) : null;
     if (field) field.ready();
-    const maskNames = [...new Set([...positive,...neg,...negAll].flatMap(solid=>solid.mat.surfaceState?.maskNames??[]))];
+    const maskNames = [...new Set([...positive,...neg,...negAll].flatMap(solid=>[...(solid.mat.surfaceState?.maskNames ?? []),...Object.keys(solid.mat.model?.masks ?? {})]))];
     const paintedOpacity = [...positive,...neg,...negAll].some(solid=>solid.mat.surfaceState?.hasOpacity);
-    return { field, parts, noise: n3,maskNames,paintedOpacity };
+    return { field, parts, noise: n3,maskNames,paintedOpacity,palette:P };
   };
   S.renderSurface = (x,y,z) => {
     fieldAll(x,y,z);

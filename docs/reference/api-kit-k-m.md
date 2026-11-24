@@ -253,6 +253,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.model` | namespace |  |  |
+| `KIT.model.cageSource` | function | `(sculpt, { palette } = {})` | [guide](../registered-material-bake.md#bake-a-detailed-source-through-a-cage), [source](../../src/kit/pz-export-model.js) |
 | `KIT.model.fromCreature` | function | `(mesh, creature, { clips = [], parents = {}, bones = {}, weightZones = [], seamPasses = 7, defaultPart } = {})` | [guide](../../README.md#exporting-glb-models), [source](../../src/kit/pz-export-model.js) |
 | `KIT.model.fromMesh` | function | `(mesh, options = {})` | [guide](../field-fabrication.md), [source](../../src/kit/pz-export-model.js) |
 | `KIT.model.fromPuppet` | function | `(mesh, puppet, { clips = [], tags = {}, defaultPart } = {})` | [guide](../../README.md#exporting-glb-models), [source](../../src/kit/pz-export-model.js) |

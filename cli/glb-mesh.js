@@ -131,7 +131,7 @@ function meshWriter(doc, mesh, rig, kit, options) {
     const {chartBake,projection} = registered?.plan(registeredIndex,{
       mesh:{...bakeMesh,faces:mesh.faces},faces,uvs,normals,faceNormals,atlas,splits,sourceFaces,size:textureSize,source
     },kit) ?? {};
-    const baked = bake(bakeMesh,faces,uvs,normals,textureSize,atlas.padding,{V},{registered:Boolean(registered),projection,chartBake});
+    const baked = bake(bakeMesh,faces,uvs,normals,textureSize,atlas.padding,{V},{registered:Boolean(registered),projection,chartBake,sourceFaces});
     const {textures,strength,coverage}=baked;
     if(registered)registeredBake=registered.record(registeredIndex,mesh,faces,uvs,textureSize,atlas.padding,baked,chartBake,projection,source,{V});
     const material = { name, pbrMetallicRoughness: {

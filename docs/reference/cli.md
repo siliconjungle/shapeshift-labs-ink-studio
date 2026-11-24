@@ -238,6 +238,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   export-glb <scene.js|.json|.obj|.gltf|.glb> --out model.glb   write UV-mapped geometry with materials, skins and clips
     --bake-dir <folder> [--paint-views <plan.json> | --capture-paint <cameras.json>]   export registered UV material maps
     --geometry-masks [settings.json|off]   bake slope, cavity, exposure and thickness into the registered atlas
+    --cage-bake <plan.json>   project a detailed mesh, signed field or scan proxy onto registered receiver UVs
     --rebake-from <material-bake.json> [--chart-edits <plan.json>] [--rebake-report <file.json>]   update selected or changed UV charts
   interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets
     --manifest <revision.json>   attach an Ink asset revision to tagged glTF data

@@ -1426,6 +1426,7 @@ const CMD = {
         '  export-glb <scene.js|.json|.obj|.gltf|.glb> --out model.glb   write UV-mapped geometry with materials, skins and clips',
         '    --bake-dir <folder> [--paint-views <plan.json> | --capture-paint <cameras.json>]   export registered UV material maps',
         '    --geometry-masks [settings.json|off]   bake slope, cavity, exposure and thickness into the registered atlas',
+        '    --cage-bake <plan.json>   project a detailed mesh, signed field or scan proxy onto registered receiver UVs',
         '    --rebake-from <material-bake.json> [--chart-edits <plan.json>] [--rebake-report <file.json>]   update selected or changed UV charts',
         '  interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets',
         '    --manifest <revision.json>   attach an Ink asset revision to tagged glTF data',
@@ -2658,7 +2659,7 @@ const CMD = {
     const reportFile = opt['rebake-report'];
     if (reportFile !== undefined && (typeof reportFile !== 'string' || !reportFile.trim() ||
         typeof opt['rebake-from'] !== 'string' || !/\.json$/i.test(reportFile) ||
-        [id, opt.out, opt['rebake-from'], opt['chart-edits'], opt['paint-views'], opt['capture-paint'], opt.authoring,
+        [id, opt.out, opt['rebake-from'], opt['chart-edits'], opt['cage-bake'], opt['paint-views'], opt['capture-paint'], opt.authoring,
           typeof opt['bake-dir'] === 'string' && path.join(opt['bake-dir'], 'material-bake.json')]
           .some(file => typeof file === 'string' && path.resolve(file) === path.resolve(reportFile))))
       die('--rebake-report needs a distinct JSON file and a rebake baseline');
@@ -2685,7 +2686,7 @@ const CMD = {
       const result = require('../index.js').exportGlb(source, {
         out: opt.out, textureSize: num('texture-size', undefined), uvMargin: num('uv-margin', 0.008),
         bakeDir:opt['bake-dir'],paintViews:opt['paint-views'],capturePaint:opt['capture-paint'],
-        rebakeFrom:opt['rebake-from'],chartEdits:opt['chart-edits'],
+        rebakeFrom:opt['rebake-from'],chartEdits:opt['chart-edits'],cageBake:opt['cage-bake'],
         geometryMasks:opt['geometry-masks']==='off' ? false : opt['geometry-masks']==='on' ? true : opt['geometry-masks']
       });
       if (reportFile) require('./asset-files.js').json(path.resolve(reportFile),

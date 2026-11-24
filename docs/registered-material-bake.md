@@ -46,6 +46,99 @@ Use [material channel painting](pixel-art-authoring.md#paint-individual-material
 to apply indexed pigment, roughness, emission, normal, opacity, or named
 mask edits to a diorama solid before baking.
 
+## Bake a detailed source through a cage
+
+Use an authored receiver with a non-overlapping UV layout. Put the high
+source and receiver in the same rest-space coordinates. Add a version 1
+cage plan to the registered export:
+
+```json
+{
+  "format": "ink-studio/material-cage-bake",
+  "version": 1,
+  "receivers": [{
+    "mesh": 0,
+    "front": 0.18,
+    "back": 0.06,
+    "parts": { "front-panel": "housing" },
+    "source": {
+      "kind": "mesh",
+      "file": "machined-front.json",
+      "faceParts": { "panel": "housing", "bolt": "fittings" }
+    }
+  }]
+}
+```
+
+```sh
+node cli/ink-studio.js export-glb receiver.json --cage-bake cage.json \
+  --texture-size 512 --out review/receiver.glb --bake-dir review
+```
+
+Distances are in model units. Each ray starts `front` units along the
+receiver normal and ends `back` units behind it. The default direction
+uses interpolated receiver normals. Use `"direction": "geometric"` for
+face-normal projection and `minFacing` to set the source-facing
+threshold. Select a subset with `faces`. Mesh indices follow GLB export
+order. A retained source or receiver uses stable polygon IDs. Indexed
+models use zero-based polygon indices. Set a default expected `part`
+or map individual receiver faces with `parts`. Name source parts with
+`source.part`, `source.faceParts`, or the source model's `faceParts`
+array. Native fields can report their sculpt part or solid ID.
+
+The first source surface in the segment controls the result. A miss,
+back-facing surface, wrong part, or tie between different parts leaves
+the receiver's underlying material in place. Use `"partPolicy": "allow"`
+to accept a single wrong-part hit deliberately. It still appears in
+the diagnostics. Use `channels` for an individual pass such as
+`["normal"]`. The default transfers available pigment, normals,
+roughness, metalness, emission, and named masks. Normals are encoded in
+the receiver's tangent basis. Approved camera paint can be applied in
+the same export.
+
+- `mesh` loads retained topology, indexed model JSON, OBJ, glTF, or GLB.
+- `scan-proxy` uses the triangular surface of a scan, including PNG
+  pigment, tangent normals, roughness, metalness, and emission from a
+  captured glTF/GLB material. The ray ignores masked transparent
+  texels. Gaussian primitives are skipped. Texture maps use
+  untransformed `TEXCOORD_0`.
+- `sdf` traces a native signed diorama directly. Set `steps` when a
+  thin feature needs a finer search. A simple box or sphere can be
+  supplied as `source.volume` with an optional `source.material`.
+
+Source file paths are relative to the cage plan. A topology source
+takes optional named material definitions in `source.materials`.
+An indexed JSON model can carry its own materials. A named pigment PNG
+path in those definitions is also relative to the plan.
+
+The manifest includes sampled and accepted texel counts, misses,
+backfaces, cross-part hits, signed offset ranges, per-part totals, and
+representative atlas pixels with their world-space hits. The registered
+masks `cage-hit`, `cage-miss`, `cage-cross-part`, and `cage-backface`
+mark those outcomes. `cage-distance` is the absolute hit offset divided
+by `distanceScale`. `cage-relief` stores a signed accepted offset,
+with byte 128 at the receiver surface and endpoints at
+`±distanceScale`. Read it together with `cage-hit`. The maps share
+the receiver's gutters and mip chain. Relief is an editable map and the
+geometry stays at the receiver topology.
+
+The Node export option is `cageBake`. Pass the plan object or path.
+An SDK mesh source can supply `source.model`. An SDK signed source can
+supply `source.field` with `sdf(x,y,z)`, optional
+`sampleSurface(point,normal)`, `partAt(point)`, and `maskNames`.
+`KIT.model.cageSource(sculpt)` adapts an unbaked Ink sculpt and its
+authored materials. Resupply the cage plan for a chart rebake so the
+high source and part mapping can be evaluated again.
+
+```sh
+node examples/material-cage-bake.cjs aster-lock-review
+```
+
+Open `comparison.png` for matched views of the Aster Lock drive plate.
+The demo keeps the two-triangle receiver, restores the dial and vent's
+machined normals, and shows where a loose bracket blocks the cage and
+where the high source falls short.
+
 ## Project approved paint from several views
 
 Author a camera plan with named orbit views:

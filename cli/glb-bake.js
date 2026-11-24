@@ -27,10 +27,10 @@ function opaquePigment(texture) {
   };
 }
 
-function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = false, projection, chartBake } = {}) {
+function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = false, projection, chartBake, sourceFaces } = {}) {
   const count = size * size, covered = new Uint8Array(count);
   if(projection && count*projection.views>64000000)throw new RangeError('Paint views exceed the projected texel budget');
-  const { previous, state, dirty, reproject, geometry, layout, rebuild, release, transfer } = chartBake || {};
+  const { previous, state, dirty, reproject, geometry, layout, rebuild, release, transfer, cage } = chartBake || {};
   const revised = Boolean(rebuild?.size || release?.size), layoutRows = new Map(layout?.charts.map(row => [row.id, row]));
   const retired = new Map(layout?.retired.map(row => [row.id, row]));
   const owners = (revised ? previous.owners.slice() : previous?.owners) ?? (registered && new Uint32Array(count));
@@ -40,9 +40,10 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
     surface: new Uint8Array(count * 3), emission: new Uint8Array(count * 3)
   };
   const alpha = mesh.paintedOpacity && (previous?.opacity ?? new Uint8Array(count).fill(255));
-  const names = mesh.maskNames ?? [];
-  if (registered && (!Array.isArray(names) || !Array.from(names).every(idOK)))
+  const authoredNames = mesh.maskNames ?? [];
+  if (registered && (!Array.isArray(authoredNames) || !Array.from(authoredNames).every(idOK)))
     throw new TypeError('Material mask names must be lowercase IDs');
+  const names = registered ? [...authoredNames,...(cage?.maskNames ?? [])] : [];
   const masks = new Map(), pigment = registered && mesh.materials.map(material=>opaquePigment(material.texture));
   const paintMasks = new Set(state?.paintMasks), geometryMasks = new Set(geometry ? geometryNames : []);
   if (registered) {
@@ -92,7 +93,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
     if (Math.abs(det) < 1e-16) throw new Error('Cannot bake a degenerate UV triangle');
     const [pa, pb, pc] = face.map(i => mesh.points[i]);
     const ab = V.sub(pb, pa), ac = V.sub(pc, pa);
-    const front = project && V.norm(V.cross(ab,ac));
+    const front = (project || cage) && V.norm(V.cross(ab,ac));
     const tint = registered && mesh.colors && face.map(i=>mesh.colors[i]);
     const [na, nb, nc] = mesh.cornerNormals?.[f] || face.map(i => normals[i]), normAB = V.sub(nb, na), normAC = V.sub(nc, na);
     const tangent = V.mul(V.sub(V.mul(ab, c[1] - a[1]), V.mul(ac, b[1] - a[1])), 1 / det);
@@ -122,7 +123,11 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
       used++;
       const n = V.norm(V.mad(V.mad(na, normAB, u), normAC, v));
       const p = V.mad(V.mad(pa, ab, u), ac, v);
-      const material = mesh.sampleSurface?.(p, n, f) || fallback;
+      const receiver = mesh.sampleSurface?.(p, n, f) || fallback;
+      const projected = cage?.sample(p,n,front,sourceFaces[f],[x,y]);
+      const high = projected?.material;
+      const material = high ? { ...receiver,...high,
+        ...(high.masks && { masks:{...receiver.masks,...high.masks} }) } : receiver;
       let color = material.color || [0.45, 0.45, 0.45];
       const emission = material.emission || [0, 0, 0];
       const roughness = material.roughness ?? 0.8, metallic = material.metallic ?? 0;
@@ -147,8 +152,9 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
             throw new TypeError('Expected a declared mask with weight in [0, 1]: '+name);
           masks.get(name)[i]=byte(value);
         }
-        if(pigment[slot])color=pigment[slot](a.map((n,k)=>clamp((n+u*(b[k]-n)+v*(c[k]-n))/size)),color);
-        if(tint)color=color.map((value,k)=>value*(tint[0][k]*(1-u-v)+tint[1][k]*u+tint[2][k]*v));
+        if (projected) for (const [name,value] of Object.entries(projected.diagnostic)) masks.get(name)[i]=byte(value);
+        if(!high?.color && pigment[slot])color=pigment[slot](a.map((n,k)=>clamp((n+u*(b[k]-n)+v*(c[k]-n))/size)),color);
+        if(!high?.color && tint)color=color.map((value,k)=>value*(tint[0][k]*(1-u-v)+tint[1][k]*u+tint[2][k]*v));
         if(project){
           const weights=Object.create(null);
           projection.sample(p,front,f,weights,stamp,i*4);
@@ -246,6 +252,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
     ...(revised && { oldOwners: previous.owners })};
   return { textures, strength, coverage, registeredMaps, owners, stamp, translucent, sampledTexels:used, raster,
     ...(revised && { layoutRevised: true }),
+    ...(cage && {cageBake:cage.report()}),
     ...(geometry && {geometryMasks:geometry.calculate ? { ...geometry.calculate.report(), ...(geometry.scope && { scope: geometry.scope }) } : geometry.previous}) };
 }
 

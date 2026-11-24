@@ -119,6 +119,20 @@
     };
   }
 
+  function cageSource(sculpt, { palette } = {}) {
+    const { field, maskNames = [], palette: authored } = sculpt.modelSource();
+    const colors = palette ?? authored?.map(([r, g, b]) => r * 65536 + g * 256 + b) ?? PAL_HEX;
+    if (!field) throw new RangeError('A cage needs an unbaked signed sculpt surface');
+    function surface(point, normal) {
+      const { material } = field.surfaceAt(...point);
+      return bakeMaterial(colors, sculpt.materialAt(material, point, normal), point, normal);
+    }
+    return { sdf:field.sdf, partAt(point) {
+      const { tag, owner, target } = field.surfaceAt(...point, true);
+      return tag ?? target?.part ?? owner;
+    }, sampleSurface:surface, maskNames };
+  }
+
   function fromSculpt(sculpt, { palette = PAL_HEX, bounds, resolution = 0.08, targetTriangles = 16000,
       guides = [], topology, simplifyTopology = false, fur = {}, ...options } = {}) {
     const { field, parts, noise,maskNames=[],paintedOpacity } = sculpt.modelSource();
@@ -406,5 +420,5 @@
     return { meshes, joints, animations };
   }
 
-  K.model = { fromSdf, fromSculpt, fromMesh, fromTopology, fromPuppet, fromCreature, sampleClips, mapModelMeshes };
+  K.model = { fromSdf, fromSculpt, cageSource, fromMesh, fromTopology, fromPuppet, fromCreature, sampleClips, mapModelMeshes };
 })(KIT);
