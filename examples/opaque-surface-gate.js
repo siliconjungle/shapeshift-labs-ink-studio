@@ -4,8 +4,8 @@ const gatehouse=require('./sdf-gatehouse.js');
 module.exports=ink=>{
   const base=gatehouse(ink), {KIT:K,SpriteSurface}=ink;
   return {
-    ...base,id:'opaque-surface-gate',name:'The tidal gate',build(seed) {
-      const world=base.build(seed), atlas=SpriteSurface.make(64);
+    ...base,id:'opaque-surface-gate',name:'The tidal gate',build(seed, options) {
+      const world=base.build(seed, options), atlas=SpriteSurface.make(64);
       const rest=[-.53,1.60,.96, .53,1.60,.96, -.53,.47,.96, .53,.47,.96];
       const left=.42, mesh={points:rest.map((n,i)=>i%3===0?n+left:n),restPoints:rest,
         uvs:[0,0,1,0,0,1,1,1],triangles:[0,1,2,2,1,3]};

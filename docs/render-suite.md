@@ -90,3 +90,34 @@ node cli/ink-studio.js render-suite --profile settings.json --out render-review
 Use the same command on another checkout to collect comparable work and
 image measurements. Timing and process memory vary by machine and Node
 version. The report records both.
+
+## Accept a painted gatehouse revision
+
+```sh
+node examples/gatehouse-revision/demo.cjs gatehouse-edit-review
+```
+
+The edit fixture reuses the standard gatehouse set, sluice and orbit.
+The fixture uses an editable polygon portal for the gatehouse arch.
+The pixel editor previews and commits a topology patch that widens the
+throat and adds an entrance bevel. The asset path exports the committed
+topology, previews replacement of the pinned part, and reloads the new
+revision. The sign material and its mounting socket survive replacement.
+
+Both edited lanes must produce identical pictures. The test compares sign
+coverage and RGB against the original frame at each camera and checks all
+6,144 source texels against the original atlas. A second capture exposes a
+probe just past the rear face of the opening. The test measures its
+visible pixels and longest continuous row on the 128 × 80 art grid.
+The report also records five straight through-passage ray checks at a
+fixed height in scene units.
+With the sluice held at the left end of its travel, the edited passage
+must gain at least two contiguous pixels and 12 visible exit pixels at
+each of nine orbit views.
+
+`orbit.apng` plays the three matched lanes at 1×. `comparison.png` shows
+three angles with integer 2× zoom. Read the columns left to right as the
+original, native edit, and asset replacement. In `clearance.png`, teal
+marks the visible probe before and after the native edit. The output includes the atlas, both
+GLBs, the native patch and receipt, the asset replacement preview, and
+`report.json` with per-view measurements.

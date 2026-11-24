@@ -2,7 +2,7 @@ module.exports = ({ KIT: K, makeBuilder, makeSculpt }) => ({
   id:'sdf-gatehouse',
   name:'Gatehouse at the tidal canal',
   seed:18,
-  build(seed) {
+  build(seed, { sdfPortal = true } = {}) {
     const B = makeBuilder(seed, [
       0x30465c,0x1c2e42,0x304453,0x496472,0x607c83,0x8ca29d,
       0x543e43,0x805248,0xac7359,0xca9572,0xe3b38d,0xf7d7ac,
@@ -22,10 +22,12 @@ module.exports = ({ KIT: K, makeBuilder, makeSculpt }) => ({
       const x=(i-6)*.411,z=(j-3.5)*.37+.5;
       S.box([x,.115,z],[.196,.048,.176],paving,{rd:.034,res:.105,objectId:'quay'});
     }
-    S.box([.45,1.45,.04],[2.02,1.30,.40],stone,{rd:.055,res:.225,objectId:'gatehouse'});
-    // A rectangular lower cut joins the round upper cut to leave a true arched passage.
-    S.box([.56,.54,.04],[.82,.72,.68],stone,{neg:true,res:.19,objectId:'gatehouse'});
-    S.ball([.56,1.22,.04],[.82,.72,.74],stone,{neg:true,res:.19,objectId:'gatehouse'});
+    if (sdfPortal) {
+      S.box([.45,1.45,.04],[2.02,1.30,.40],stone,{rd:.055,res:.225,objectId:'gatehouse'});
+      // A rectangular lower cut joins the round upper cut to leave a true arched passage.
+      S.box([.56,.54,.04],[.82,.72,.68],stone,{neg:true,res:.19,objectId:'gatehouse'});
+      S.ball([.56,1.22,.04],[.82,.72,.74],stone,{neg:true,res:.19,objectId:'gatehouse'});
+    }
     for(const x of [-1.57,2.48]) {
       for(let j=0;j<6;j++)S.box([x,.35+j*.412,.065],[.245,.208,.52],stone,{rd:.042,res:.17,objectId:'gatehouse'});
       S.box([x,2.87,.06],[.32,.095,.62],trim,{rd:.045,res:.1,objectId:'roof'});
