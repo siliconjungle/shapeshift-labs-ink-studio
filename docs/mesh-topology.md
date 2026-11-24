@@ -530,6 +530,69 @@ node examples/topology-correspondence.cjs topology-correspondence-review
 ink-studio mesh-topology correspond topology-correspondence-review/after.json topology-correspondence-review/reimport.json --projection topology-correspondence-review/projection.json
 ```
 
+## Transfer material data to a replacement mesh
+
+Use a correspondence map produced from the painted source and the exact
+replacement revision. The receipt includes both topology revisions. Generate
+a new map after changing either mesh. Add face or corner lineage where the
+replacement tool knows the correspondence.
+
+```sh
+ink-studio mesh-topology correspond painted.json replacement.json \
+  --lineage links.json --out revision-map.json
+ink-studio mesh-topology transfer-materials painted.json replacement.json revision-map.json \
+  --materials painted-materials.json --out transferred.json \
+  --out-materials transferred-materials.json --report transfer-report.json
+```
+
+`KIT.meshTopology.transferMaterials(source, replacement, map, options)`
+returns the proposed `document`, retained `materials`, undoable topology
+`patch`, and `report`. Use the document and material array in a
+`topologyMeshes` scene entry. Keep the replacement's existing material
+definitions for faces left open for review.
+
+Transfer keeps the replacement's geometry and copies each accepted source
+material slot. Exact links copy per-corner UVs, authored normals, and named
+numeric attributes. New corners use bounded barycentric sampling of the
+linked source triangles. Checks inside each changed triangle catch UV or
+corner channels that the replacement's interpolation would distort. On a
+protected target UV corner, a change requires review. Authored source seams
+follow exact links on accepted edges.
+
+The transferred UVs point to the original material atlas. Supply material
+definitions with the normal topology scene fields and optional `masks`,
+an object mapping mask names to matching one-byte-per-texel arrays.
+For indexed pigment, use `texture: { width, height, palette, indices,
+coverage }`, with optional coverage. The palette entries are RGB24
+integers. Indices, coverage, and mask bytes are copied unchanged, including
+distinct indices with identical RGB colors. Use a subsequent [registered
+rebake](registered-material-bake.md#rebake-a-topology-or-uv-revision) when
+the replacement also needs a new atlas layout.
+
+Projection checks competing samples on weak links, including nearby
+opposing walls and overlapping sheets. When one replacement face crosses
+a source UV seam or material boundary, split it into corresponding regions
+before retrying. The report lists unresolved faces with the reason and
+available source triangle, distance, and barycentric evidence. Use
+`--settings` for `maxDistance` in model units, `minNormalDot`,
+`ambiguityDistance`, `maxUVError` in normalized UVs, or `maxChecks`.
+The meshes need a common rest-space coordinate system for projection.
+Use explicit lineage to identify overlapping parts when their identity
+is known.
+
+Omit `--out` to preview the full plan. If issues remain, the CLI writes
+the report and leaves the output mesh and material files unwritten.
+`--partial on` writes accepted faces and leaves unresolved faces at their
+replacement values.
+
+```sh
+node examples/mesh-material-transfer.cjs tide-case-review
+```
+
+Open `comparison.png` to see the Tide Survey Case with its replacement
+front panel, rejected badge seam, and repaired badge. The bundle includes
+the indexed PNG, seal mask, topology revisions, maps, and receipts.
+
 ## Edit topology in a scene transaction
 
 Put the editable document in the diorama's `topologyMeshes` map. The

@@ -111,6 +111,8 @@ function maintenance(action, file, input, rest, opt, meshTopology, openEditor) {
 
 function command([action, file, input, ...rest], opt, toolkit, { build, openEditor } = {}) {
   const { KIT: { meshTopology } } = toolkit;
+  if (action === 'transfer-materials')
+    return require('./mesh-material-transfer.js').command([file, input, ...rest], opt, meshTopology);
   if (action === 'modifiers')
     return require('./mesh-modifiers.js').command([file, input, ...rest], opt, toolkit, openEditor);
   if (action === 'shading') return require('./mesh-shading-preview.js').command(file, input, rest, opt, toolkit, openEditor);

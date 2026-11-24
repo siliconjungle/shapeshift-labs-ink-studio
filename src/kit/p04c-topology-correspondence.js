@@ -252,7 +252,8 @@
         ...(unresolved === null && { projectionIncomplete: true })
       }];
     }));
-    return K.procedural.data.freeze({ format, version: 1, before: source.id, after: target.id, matchedIds: sameMesh, domains: data,
+    return K.procedural.data.freeze({ format, version: 1, before: source.id, after: target.id,
+      beforeRevision: topology.revision(source), afterRevision: topology.revision(target), matchedIds: sameMesh, domains: data,
       ...(project && { projection: project.report() }) });
   }
 
