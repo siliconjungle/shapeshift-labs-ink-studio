@@ -1179,7 +1179,7 @@ function renderFrame(world, o, preparedPalettes) {
   const trackFields = trackMeshes && new Map();
   const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { V, W, H, focal, ortho, near,simulationLayers,
       far:camera.clipFar, clip: geometryClip,multiprojection:localProjection,
-      trackMesh:trackMeshes && ((source,triangle,project)=>trackMeshes.set(PixelSourceTracking.meshKey(source,triangle),project)),
+      captureRestNormal:passSelection.has('sourceRestNormal'),trackMesh:trackMeshes && ((source,triangle,project)=>trackMeshes.set(PixelSourceTracking.meshKey(source,triangle),project)),
       paletteSampling: o.paletteSampling, semanticMipmaps:o.semanticMipmaps, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1,
       capture:captureTexturedSurface, sourceBinding:captureSourceSurface, allow:isolate?.matches, motion:!!temporal||captureSurfaceMotion, meshMask:geometryMask?.meshCodes, spriteLOD,
       captureFogOwners,
@@ -1190,7 +1190,7 @@ function renderFrame(world, o, preparedPalettes) {
   if (localProjectionHits) for (const sample of surfaceFragments) if (sample.localProjection) localProjectionHits[sample.p]=1;
   const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip,
     editable:brickFrames,sourceBinding:captureSourceSurface || !!pixelSelection,allow:isolate?.matches,
-    trackSdf:trackFields && ((field,point)=>trackFields.set(JSON.stringify(field),point)),
+    captureRestNormal:passSelection.has('sourceRestNormal'),trackSdf:trackFields && ((field,point)=>trackFields.set(JSON.stringify(field),point)),
     visible:geometryMask ? (row,x,y)=>spriteLOD.geometry(geometryMask.codes[row],x,y) : undefined}) : null;
   for (const sample of sdf?.samples ?? []) surfaceFragments.push(sample);
   const emitterHits = !isolate && areaLights.length && AreaRaster.rasterize(areaLights, { w:W, h:H, rayAt, near, capture:!!(reflectionPlane || probeView), clip:geometryClip });

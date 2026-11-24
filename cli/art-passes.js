@@ -194,7 +194,8 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
     const geometric = selected.has('geometricNormal') ? new Float32Array(size * 3) : null;
     const positionOut = selected.has('position') ? new Float32Array(size * 3) : null;
     const objectOut = selected.has('objectPosition') ? new Float32Array(size * 3) : null;
-    const sample = (normalOut || geometric || positionOut || objectOut || capturePartMotion) && sampleFrames(world,time);
+    const restNormals = selected.has('sourceRestNormal') ? new Float32Array(size * 3) : null;
+    const sample = (normalOut || geometric || positionOut || objectOut || restNormals || capturePartMotion) && sampleFrames(world,time);
     if (capturePartMotion) {
       const motion = PartMotion.capture(w,h,parts,owner,depth,capturePartMotion,geometry,topDown,sample,atlasOwners,selected);
       geometry.motionReference.partMotion = motion.snapshot;
@@ -205,7 +206,7 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
         result.previousDepthValid = motion.valid;
       }
     }
-    if (normalOut || geometric || positionOut || objectOut) {
+    if (normalOut || geometric || positionOut || objectOut || restNormals) {
       const frames = new Map();
       for (let p = 0; p < size; p++) {
         const atlas=atlasOwners?.get(p);
@@ -213,6 +214,10 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
           if (atlas.normal) {
             normalOut?.set(atlas.normal,p*3);
             geometric?.set(atlas.biasNormal ?? atlas.normal,p*3);
+          }
+          if (restNormals) {
+            const rest = atlas.source?.restNormal ?? atlas.biasNormal ?? atlas.normal;
+            if (rest) restNormals.set(rest,p*3);
           }
           positionOut?.set(atlas.position,p*3);
           objectOut?.set(atlas.objectPosition,p*3);
@@ -226,6 +231,10 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
         if (frame.normal) {
           normalOut?.set(frame.normal,p*3);
           geometric?.set(frame.normal,p*3);
+          if (restNormals) {
+            const {anchor} = frame.basis();
+            restNormals.set([0,1,2].map(axis=>frame.normal.reduce((n,value,i)=>n+anchor[i*3+axis]*value,0)),p*3);
+          }
         }
         if (!positionOut && !objectOut) continue;
         const x = geometry.x[i], y = geometry.y[i], z = geometry.z[i];
@@ -244,6 +253,7 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
         if (selected.has('shadingNormal')) result.shadingNormal=normals;
       }
       if (geometric) result.geometricNormal=topDown(geometric,3);
+      if (restNormals) result.sourceRestNormal=topDown(restNormals,3);
       if (positionOut) result.position = topDown(positionOut, 3);
       if (objectOut) result.objectPosition = topDown(objectOut, 3);
       if (geometry.ditherPixelStep && result.position) {

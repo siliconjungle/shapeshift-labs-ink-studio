@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Multiview surface edit · Ink Studio</title>
+<style>
+:root { color-scheme:dark; background:#10161b; color:#e6eeea; font:15px system-ui,sans-serif; }
+* { box-sizing:border-box; }
+body { margin:0; }
+main { max-width:1120px; margin:auto; padding:clamp(16px,4vw,48px); }
+header { display:flex; flex-wrap:wrap; gap:12px; align-items:baseline; margin-bottom:16px; }
+h1 { margin:0 auto 0 0; font:400 clamp(30px,5vw,48px)/1 Georgia,serif; }
+select { font:inherit; color:inherit; background:#253437; border:1px solid #476062; border-radius:5px; padding:6px 8px; }
+#canvas { border:1px solid #354549; border-radius:8px; overflow:hidden; }
+/*CSS*/
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Multiview surface edit</h1>
+    <label>Camera <select id="view"></select></label>
+    <label>Image <select id="image"><option value="after">Proposed</option><option value="before">Before</option></select></label>
+    <label>Overlay <select id="overlay"></select></label>
+  </header>
+  <div id="canvas"></div>
+  <p id="status" role="status"></p>
+  <details id="choices"><summary>Conflicting samples</summary><ul id="conflicts"></ul></details>
+</main>
+<script type="module">
+/*SCRIPTS*/
+const { report,images } = /*DATA*/;
+const native = mountPixelGridCanvas(document.querySelector('#canvas'));
+const camera = document.querySelector('#view'), image = document.querySelector('#image'), overlay = document.querySelector('#overlay');
+const status = document.querySelector('#status'), choices = document.querySelector('#choices');
+const labels = { changed:'Changed pigment',seams:'View seams',chartEdges:'Chart edges',bleed:'Possible bleed',
+  conflict:'Conflicting samples',rejected:'Rejected marks' };
+const colors = { changed:'#72d4ea99',seams:'#ffbc6499',chartEdges:'#e2de7799',bleed:'#ff6c9299',
+  conflict:'#da9af399',rejected:'#fa866d99' };
+camera.replaceChildren(...report.views.map(row=>new Option(row.id)));
+overlay.replaceChildren(new Option('None','none'),...Object.entries(labels).map(([key,label])=>new Option(label,key)));
+if (report.unresolved) overlay.value = 'conflict';
+choices.hidden = !report.conflicts.length;
+for (const row of report.conflicts) {
+  const li = document.createElement('li');
+  const samples = row.samples.map(item=>item.view+' ('+item.pixel.join(', ')+') '+item.value);
+  li.textContent = 'Chart cell '+row.cell.join(', ')+' · '+samples.join(' · ')+
+    ' · '+(row.winner ? 'Selected '+row.winner.view+' ('+row.winner.pixel.join(', ')+')' : 'Needs a choice');
+  document.querySelector('#conflicts').append(li);
+}
+const scratch = document.createElement('canvas'), context = scratch.getContext('2d');
+const [width,height] = report.grid;
+scratch.width = width;
+scratch.height = height;
+let request = 0;
+async function draw() {
+  const token = ++request, index = camera.selectedIndex, row = report.views[index], key = overlay.value;
+  const next = new Image();
+  next.src = 'data:image/png;base64,'+images[index][image.value];
+  try {
+    await next.decode();
+    if (token !== request) return;
+    context.clearRect(0,0,width,height);
+    context.drawImage(next,0,0);
+    native.setFrame({ width,height,rgba:context.getImageData(0,0,width,height).data });
+    native.setDiagnostic(key === 'none' ? null : { bounds:[0,0,width,height],runs:row.runs[key],color:colors[key] },'multiview');
+    status.textContent = (report.status === 'ready' ? 'Patch ready for review' : 'Needs review')+
+      ' · '+row.accepted+' approved marks · '+row.counts.seams+' seam pixels · '+row.counts.bleed+' possible bleed pixels';
+  } catch (error) {
+    if (token === request) status.textContent = error.message;
+  }
+}
+for (const input of [camera,image,overlay]) input.addEventListener('change',draw);
+draw();
+</script>
+</body>
+</html>

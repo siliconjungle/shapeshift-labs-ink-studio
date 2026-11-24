@@ -248,6 +248,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art motion <scene> --views plan.json [--subject object] [--w n --h n] [--out report.json] [--review review.html]   check authored views
   pixel-art track <document.json> --selection id --binding id --views plan.json [--out report.json] [--review review.html]   track a bound selection
   pixel-art reprobe <document.json> --binding id --before view.json [--after view.json] --selection id|--rect x,y,w,h [--out report.json] [--invalidate checked.json]   check edited source bindings
+  pixel-art multiview <document.json> <plan.json> [--out report.json] [--patch edit.json] [--review review.html]   combine approved view marks on a bound surface
   pixel-art rules <design.json> [--frame id] [--layer id] [--art-shot id] [--out report.json]   inspect asset art rules and scene settings
   pixel-art lint <design.json> [--frame id] [--art-shot id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings
   pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint
@@ -680,6 +681,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio pixel-art inspect` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art lint` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art motion` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art multiview` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art palette` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art palette export` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art palette extract` · [source](../../cli/pixel-art.js)

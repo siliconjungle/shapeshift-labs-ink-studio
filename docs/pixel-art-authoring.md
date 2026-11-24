@@ -1555,6 +1555,82 @@ node cli/ink-studio.js pixel-art reprobe gate-checked.json --binding gate \
 Acceptance clears verified stale pixels inside the requested area.
 Unresolved pixels stay pending until the source can be verified.
 
+## Assemble and verify an edit from several cameras
+
+Use a bound `surface-channel` destination on an editable JSON diorama.
+A multiview plan lists the cameras you want to inspect and the native
+pixels you have approved for painting. The tool projects visible source
+hits onto one authored rest chart and combines the results into one
+guarded pixel edit.
+
+```json
+{
+  "format": "ink-studio/pixel-multiview",
+  "version": 1,
+  "id": "paint-hinge",
+  "destination": "hinge-paint",
+  "frame": "front",
+  "size": [32, 24],
+  "views": [
+    {
+      "id": "front",
+      "approved": true,
+      "camera": { "yaw": 0 },
+      "marks": [{ "at": [78, 52], "swatch": "warm-brass" }]
+    },
+    {
+      "id": "quarter",
+      "approved": true,
+      "camera": { "yaw": 0.45 },
+      "marks": [{ "at": [73, 51], "swatch": "warm-brass" }]
+    },
+    { "id": "check", "camera": { "yaw": -0.4 } }
+  ]
+}
+```
+
+The plan's `size` is the destination chart grid, up to 256 × 128.
+The mark coordinates use the pixel document's grid and its binding
+registration. Color marks take an exact swatch or a `value` of
+`#rrggbb`. Scalar channels take an in-range numeric `value`.
+Unapproved cameras can verify the proposal from an angle that
+contributed no paint. Set `time` per camera when an authored pose is
+needed. The report provides `documentRevision` and `sourceRevision`
+to pin the approvals in a subsequent plan.
+
+```sh
+node cli/ink-studio.js pixel-art multiview gate-ink.json views.json \
+  --out multiview.json --review multiview.html --patch hinge-edit.json
+```
+
+Equal values share the chart cell. Different values at the same
+`[column,row]` need a choice. Add an override such as
+`{"cell":[12,10],"view":"quarter","pixel":[73,51]}` to `overrides`.
+To choose by measured camera facing instead, set `"resolve": "facing"`
+and use the optional view `weight` to favor one camera. Rejected marks
+also require review. The tool flags protected and stale pixels, missing
+source addresses, and hits outside the visible chart. It writes a patch
+when every approved mark has a verified destination and every conflict
+has a choice.
+
+The HTML review switches between the actual before and proposed native
+renders for each camera. View seam overlays show neighboring pixels that
+received different values from different cameras. Chart edge overlays
+identify approaches to the neighboring rest chart. Possible bleed marks
+sampled pigment changes outside the resolved chart cells, including where
+a splat footprint carries a color beyond its intended boundary. These
+are review signals and can include intentional boundaries.
+
+Apply the reviewed patch through the standard edit path. It writes the
+updated scene to a separate file and records one receipt for all the
+stamps. The same patch can be applied through the pixel editor API in
+one undoable transaction.
+
+```sh
+node cli/ink-studio.js pixel-art edit gate-ink.json hinge-edit.json \
+  --scene gate.json --out gate-painted.json
+```
+
 ## Navigate craft diagnostics
 
 Open **Craft diagnostics** below the canvas in the Pixel Stamp Workshop or

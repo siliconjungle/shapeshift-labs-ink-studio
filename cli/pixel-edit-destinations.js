@@ -184,20 +184,25 @@ function restChart(solid, chart) {
   return target;
 }
 
-function channelSource(route, context) {
-  const { destination,binding,layer } = route;
+function surfaceSource(route, context) {
+  const { destination,binding } = route;
   if (destination.kind !== 'surface-channel')
     throw new TypeError('Choose a surface-channel destination to sample its material source');
   const source = observe(route,context);
   checkRevision(binding,source);
   const { solid } = boundSolid(binding,source.editor);
   const { chart,channel } = destination;
-  const surface = require('../index.js').load().KIT.procedural.surfaceState;
-  const definitions = surface.channels();
+  const api = require('../index.js').load().KIT.procedural.surfaceState;
+  const definitions = api.channels();
   if (!Object.hasOwn(definitions,channel))
     throw new RangeError('Unknown source material channel ' + channel);
-  const definition = definitions[channel];
-  const sampler = surface.restSampler(restChart(solid,chart));
+  return { source,solid,target:restChart(solid,chart),definition:definitions[channel],api };
+}
+
+function channelSource(route, context) {
+  const { destination,binding,layer } = route;
+  const { source,solid,target,definition,api } = surfaceSource(route,context);
+  const { chart,channel } = destination, sampler = api.restSampler(target);
   return { destination:destination.id, binding:binding.id, frame:binding.frame,
     scene:binding.scene,object:solid.id, ...(binding.part !== undefined && { part:binding.part }),
     chart,channel,...(layer && { layer:layer.id }),...definition,sourceRevision:source.sourceRevision,...(binding.canvas && { canvas:binding.canvas }),
@@ -210,10 +215,13 @@ function solidEdit(edit, destination, binding, editor) {
   if (destination.kind === 'surface-channel') {
     const state = solid.surfaceState, { chart, channel } = destination;
     const target = restChart(solid,chart);
-    if (!fields(operation,['stamp']) || !fields(operation.stamp,['brush','value','mode','strength','window']))
-      throw new TypeError('A surface channel edit needs a native UV stamp');
+    const stamps = fields(operation,['stamp']) ? [operation.stamp] :
+      fields(operation,['stamps']) ? operation.stamps : null;
+    if (!Array.isArray(stamps) || !stamps.length || stamps.length > 256 ||
+        !Array.from(stamps).every(stamp=>fields(stamp,['brush','value','mode','strength','window'])))
+      throw new TypeError('A surface channel edit needs one or more native UV stamps');
     editor.setSurfaceState({ ...state, charts:{ ...state.charts,
-      [chart]:{ ...target, stamps:[...(target.stamps ?? []),{ ...operation.stamp, channel }] }
+      [chart]:{ ...target, stamps:[...(target.stamps ?? []),...stamps.map(stamp=>({ ...stamp,channel }))] }
     } },key);
   } else if (destination.kind === 'sdf-shape') {
     if (!fields(operation,['parameters','modifier','updateModifier']) || Object.keys(operation).length !== 1)
@@ -310,4 +318,4 @@ function targets(route, context, limit) {
   };
 }
 
-module.exports = { validate, resolve, apply, targets, channelSource };
+module.exports = { validate, resolve, apply, targets, channelSource, surfaceSource };
