@@ -14,14 +14,15 @@ const PixelSlices = (() => {
     const known = new Set(frameIds), slices = new Set();
     for (const slice of rows) {
       if (!fields(slice,['id','label','keys']) || !id(slice.id) || !label(slice.label) || slices.has(slice.id) ||
-          !Array.isArray(slice.keys) || !slice.keys.length || slice.keys.length > known.size)
-        throw new TypeError('Pixel slices need a unique ID and one or more frame keys');
+          !Array.isArray(slice.keys) || slice.keys.length > known.size)
+        throw new TypeError('Pixel slices need a unique ID and a list of frame keys');
       slices.add(slice.id);
       const keys = new Set();
       for (const key of slice.keys) {
         if (!fields(key,['frame','bounds','pivot','nineSlice']) || !id(key.frame) || !known.has(key.frame) || keys.has(key.frame))
           throw new TypeError('Slice '+slice.id+' needs distinct keys on known frames');
         keys.add(key.frame);
+        if (key.bounds === null && key.pivot === undefined && key.nineSlice === undefined) continue;
         if (!vector(key.bounds,4,integer)) throw new RangeError('Slice '+slice.id+' needs integer [x,y,width,height] bounds');
         const [x,y,w,h] = key.bounds;
         if (w < 1 || h < 1 || x+w > width || y+h > height)
@@ -52,7 +53,7 @@ const PixelSlices = (() => {
           key = row;
         }
       }
-      if (!key) return [];
+      if (!key?.bounds) return [];
       const { frame:keyFrame,bounds,pivot,nineSlice } = key, [x,y,w,h] = bounds;
       const stretch = nineSlice && [nineSlice[0],nineSlice[1],w-nineSlice[0]-nineSlice[2],h-nineSlice[1]-nineSlice[3]];
       return [{ id:slice.id,...(slice.label !== undefined && { label:slice.label }),keyFrame,bounds,
@@ -90,7 +91,9 @@ const PixelSlices = (() => {
   }
 
   function includeBounds(rows,extent) {
-    for (const slice of rows ?? []) for (const {bounds:[x,y,w,h]} of slice.keys) {
+    for (const slice of rows ?? []) for (const { bounds } of slice.keys) {
+      if (!bounds) continue;
+      const [x,y,w,h] = bounds;
       extent.include(x,y);
       extent.include(x+w-1,y+h-1);
     }
@@ -108,6 +111,7 @@ const PixelSlices = (() => {
       return [x,y,clipped(i+w,0,true)-x,clipped(j+h,1,true)-y];
     }
     return rows.map(slice=>({ ...slice,keys:slice.keys.map(key=>{
+      if (!key.bounds) return key;
       const { bounds:[x,y,w,h],pivot,nineSlice } = key, bounds = rectangle(x,y,w,h), [u,v,a,b] = bounds;
       if (!a || !b) throw new RangeError('Canvas edit would remove slice '+slice.id+' on frame '+key.frame);
       const result = { ...key,bounds };

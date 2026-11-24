@@ -33,11 +33,13 @@ const PNGRaster = (() => {
     const entries = table?.length / 3;
     if (color === 3 && (!Number.isInteger(entries) || entries < 1 || entries > 2 ** bits || transparency?.length > entries))
       throw new Error('Invalid indexed PNG palette');
-    const paint = capturePalette === 'paint', readIndices = color === 3 && (paint || capturePalette === 'indices');
+    const paint = capturePalette === 'paint', sheet = capturePalette === 'sheet';
+    const readIndices = color === 3 && (paint || sheet || capturePalette === 'indices');
     if (capturePalette === 'indices' && color !== 3) throw new Error('Indexed PNG asset needs a palette-indexed PNG');
     if (layoutOnly) return { w, h };
     if (paint && (w > 512 || h > 512 || bits > 8))
       throw new RangeError('Pixel art import needs a PNG up to 512 × 512 with 8-bit or smaller channels');
+    if (sheet && bits > 8) throw new RangeError('Sprite sheets need 8-bit or smaller PNG channels');
     const slots = readIndices ? new Uint8Array(w * h) : null;
     const counts = capturePalette === true && color === 3 ? new Uint32Array(entries) : null;
     const out = counts || slots ? null : bits === 16 ? new Uint16Array(w * h * 4) : new Uint8Array(w * h * 4);

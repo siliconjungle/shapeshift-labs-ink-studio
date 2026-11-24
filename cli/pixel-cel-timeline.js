@@ -144,12 +144,11 @@ function timing(frames) {
 }
 
 function validateTags(design,timed) {
-  for (const { id,first,last,direction,loop } of Playback.resolve(design.frames,design.tags)) {
-    if (direction !== 'ping-pong' || first === last) continue;
-    const forward = timed[last].endMs-timed[first].startMs;
-    const returnStart = loop ? timed[first].endMs : timed[first].startMs;
-    if (!Number.isSafeInteger(forward+(timed[last].startMs-returnStart)))
-      throw new RangeError('Playback tag '+id+' exceeds the safe millisecond range');
+  const durations = timed.map(frame=>frame.durationMs);
+  for (const tag of Playback.resolve(design.frames,design.tags)) {
+    if (tag.repeat === undefined && !tag.direction.startsWith('ping-pong')) continue;
+    try { Playback.plan(durations,tag); }
+    catch (error) { throw new RangeError('Playback tag '+tag.id+': '+error.message,{ cause:error }); }
   }
 }
 

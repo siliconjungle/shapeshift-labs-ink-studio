@@ -1722,6 +1722,8 @@ function showTagFields() {
   $('tag-end').value = choice ? frames.findIndex(frame=>frame.id === choice.end) : state.frame;
   $('tag-direction').value = choice?.direction ?? 'forward';
   $('tag-loop').checked = choice?.loop ?? true;
+  $('tag-repeat').value = choice?.repeat ?? '';
+  $('tag-loop').disabled = !!choice?.repeat;
   $('tag-remove').disabled = !choice;
 }
 
@@ -1740,6 +1742,9 @@ function updateTagForm() {
 }
 
 $('tag-select').addEventListener('change',showTagFields);
+$('tag-repeat').addEventListener('input',()=>{
+  $('tag-loop').disabled = !!$('tag-repeat').value;
+});
 $('tag-form').addEventListener('submit',event=>{
   event.preventDefault();
   const doc = state.doc, tags = new Map((doc.tags ?? []).map(tag=>[tag.id,tag]));
@@ -1755,10 +1760,11 @@ $('tag-form').addEventListener('submit',event=>{
     return id;
   }
   try {
+    const repeat = $('tag-repeat').valueAsNumber;
     tags.set(id,{ id,...(label && { label }),start:endpoint(Number($('tag-start').value)),end:endpoint(Number($('tag-end').value)),
-      direction:$('tag-direction').value,loop:$('tag-loop').checked });
-    const revised = [...tags.values()];
-    ranges.resolve(frames,revised);
+      direction:$('tag-direction').value,loop:!repeat && $('tag-loop').checked,...(repeat && { repeat }) });
+    const revised = [...tags.values()], durations = frames.map(row=>row.duration ?? 1/(doc.fps ?? 12));
+    for (const tag of ranges.resolve(frames,revised)) ranges.plan(durations,tag);
     edit(()=>{ doc.frames = frames; doc.tags = revised; });
     $('tag-select').value = id;
     showTagFields();

@@ -56,7 +56,7 @@ test('tags survive timeline edits, undo, replay and layer deck round trips',()=>
   assert.throws(()=>validate({ ...drawing,tags:[{ ...tag,direction:'sideways' }] }),/valid labels, directions/);
   const long = [{ id:'start',durationMs:1,cels:{} },{ id:'middle',durationMs:Number.MAX_SAFE_INTEGER-2,cels:{} },
     { id:'end',durationMs:1,cels:{} }];
-  assert.throws(()=>validate({ ...drawing,frames:long,tags:[tag] }),/safe millisecond range/);
+  assert.throws(()=>validate({ ...drawing,frames:long,tags:[tag] }),/safe time range/);
 });
 
 test('pixel stamp images sample a tag on the same clock as their frame holds',()=>{

@@ -24,7 +24,9 @@ function selection(design,preset) {
     const tag = named(Playback.resolve(design.frames,design.tags),preset.tag);
     if (!tag) throw new RangeError('Unknown export playback tag '+preset.tag);
     const timing = Playback.plan(design.frames.map(row=>row.durationMs),tag);
-    return { frames:timing.order.map(i=>design.frames[i]),playback:{ id:tag.id,direction:tag.direction,loop:tag.loop } };
+    return { frames:timing.order.map(i=>design.frames[i]),playback:{
+      id:tag.id,direction:tag.direction,loop:tag.loop,...(tag.repeat !== undefined && { repeat:tag.repeat })
+    } };
   }
   const frames = preset.frames?.map(id=>{
     const frame = named(design.frames,id);

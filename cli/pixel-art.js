@@ -463,6 +463,7 @@ function validate(design) {
     ...(design.version === 2 && design.directional !== undefined && { directional:structuredClone(design.directional) }),
     ...(design.version === 2 && design.tilemap !== undefined && { tilemap:structuredClone(design.tilemap) }),
     ...(design.version === 2 && design.slices !== undefined && { slices:structuredClone(design.slices) }),
+    ...(design.version === 2 && design.legacyMetadata?.aseprite && { aseprite:structuredClone(design.legacyMetadata.aseprite) }),
     ...(design.version === 2 && design.guides && { guides:structuredClone(design.guides) }),
     ...(design.version === 2 && design.destinations !== undefined && { destinations:design.destinations }) };
 }
@@ -2219,6 +2220,15 @@ function documentFromPNG(file) {
       cels:{ image:authoredCel(width,image,swatchIds) } }] };
 }
 
+function documentFromAseprite(file,options) {
+  const { width,height,swatches,frames,tags,slices,aseprite } = require('./pixel-aseprite-sheet.js').readSheet(file,options,authoredCel);
+  const design = { format,version:2,width,height,pixelAspect:[1,1],palette:paletteDefinition(swatches),
+    layers:[{ id:'image' }],frames,...(tags.length && { tags }),...(slices.length && { slices }),
+    legacyMetadata:{ aseprite } };
+  validate(design);
+  return design;
+}
+
 const stackFormat = 'ink-studio/pixel-layer-deck';
 
 function layerDeck(design) {
@@ -2860,9 +2870,10 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
     return;
   }
   if (action === 'import') {
-    if (typeof opt.out !== 'string' || !opt.out.trim() || path.resolve(source) === path.resolve(opt.out))
-      throw new TypeError('Use pixel-art import <image.png> --out <document.json>');
-    const design = documentFromPNG(source);
+    const aseprite = path.extname(source).toLowerCase() === '.json';
+    if (!reference(opt.out) || path.resolve(source) === path.resolve(opt.out) || (!aseprite && opt.sheet !== undefined))
+      throw new TypeError('Use pixel-art import <image.png|sheet.json> --out <document.json> [--sheet <sheet.png> for JSON]');
+    const design = aseprite ? documentFromAseprite(source,{ sheet:opt.sheet,out:opt.out }) : documentFromPNG(source);
     files.json(path.resolve(opt.out),design);
     return;
   }
@@ -3146,5 +3157,5 @@ function sessionCommand(pos,opt,{ scene,capture,view }) {
     documentRevision:editor.describe().revision },null,2)+'\n');
 }
 
-module.exports = { createEditor, documentFromPNG, documentFromDeck, openEditorSession, compile, validate, stamp, image, review, edit, draw, trace, artRulesReport,
+module.exports = { createEditor, documentFromPNG, documentFromAseprite, documentFromDeck, openEditorSession, compile, validate, stamp, image, review, edit, draw, trace, artRulesReport,
   command, sessionCommand, splatDiagnosticOptions, actions, sessionActions, paletteActions, stackActions };

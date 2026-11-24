@@ -293,6 +293,9 @@ module.exports = {
   pixelDocumentFromPNG(source) {
     return require('./cli/pixel-art.js').documentFromPNG(source);
   },
+  pixelDocumentFromAseprite(source, options) {
+    return require('./cli/pixel-art.js').documentFromAseprite(source, options);
+  },
   createPixelEditor(source, options) {
     return require('./cli/pixel-art.js').createEditor(source, options);
   },

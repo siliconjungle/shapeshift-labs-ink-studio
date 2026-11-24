@@ -768,8 +768,9 @@
             <label class="side-label">Start <select id="tag-start"></select></label>
             <label class="side-label">End <select id="tag-end"></select></label>
             <label class="side-label">Direction <select id="tag-direction">
-              <option value="forward">Forward</option><option value="reverse">Reverse</option><option value="ping-pong">Ping-pong</option>
+              <option value="forward">Forward</option><option value="reverse">Reverse</option><option value="ping-pong">Ping-pong</option><option value="ping-pong-reverse">Reverse ping-pong</option>
             </select></label>
+            <label class="side-label"><span>Finite passes</span><input id="tag-repeat" type="number" min="1" max="65535" step="1"></label>
             <label class="side-label"><span>Loop tag</span><input id="tag-loop" type="checkbox" checked></label>
             <div class="row" style="margin-top:12px">
               <button type="submit" id="tag-save">Save tag</button>

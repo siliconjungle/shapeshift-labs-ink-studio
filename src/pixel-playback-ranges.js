@@ -1,8 +1,9 @@
 /* Stable frame tags and their duration-weighted playback order. */
 const PixelPlaybackRanges = (() => {
-  const directions = ['forward','reverse','ping-pong'];
+  const directions = ['forward','reverse','ping-pong','ping-pong-reverse'];
   const validId = value => typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value);
-  const fields = ['id','label','start','end','direction','loop'];
+  const fields = ['id','label','start','end','direction','loop','repeat'];
+  const validRepeat = value=>Number.isInteger(value) && value >= 1 && value <= 65535;
 
   function resolve(frames,tags = []) {
     if (!Array.isArray(tags) || tags.length > 128) throw new RangeError('Use a list of up to 128 playback tags');
@@ -19,25 +20,35 @@ const PixelPlaybackRanges = (() => {
           !validId(tag.id) || ids.has(tag.id) ||
           tag.label !== undefined && (typeof tag.label !== 'string' || !tag.label.trim()) ||
           tag.direction !== undefined && !directions.includes(tag.direction) ||
-          tag.loop !== undefined && typeof tag.loop !== 'boolean')
-        throw new TypeError('Playback tags need unique IDs and valid labels, directions and loop settings');
+          tag.loop !== undefined && typeof tag.loop !== 'boolean' ||
+          tag.repeat !== undefined && (!validRepeat(tag.repeat) || tag.loop === true))
+        throw new TypeError('Playback tags need unique IDs and valid labels, directions and repeat settings');
       const first = frameIndex.get(tag.start), last = frameIndex.get(tag.end);
       if (first === undefined || last === undefined || first > last)
         throw new RangeError('Playback tag '+tag.id+' needs known start and end frames in timeline order');
       ids.add(tag.id);
-      return { ...tag,direction:tag.direction ?? 'forward',loop:tag.loop ?? true,first,last };
+      return { ...tag,direction:tag.direction ?? 'forward',loop:tag.loop ?? (tag.repeat === undefined),first,last };
     });
   }
 
   // Durations and elapsed time use the same units. Frame indices always refer to the original timeline.
-  function plan(durations,{ first = 0,last = durations.length-1,direction = 'forward',loop = true } = {}) {
+  function plan(durations,{ first = 0,last = durations.length-1,direction = 'forward',repeat,loop = repeat === undefined } = {}) {
     if (!Number.isInteger(first) || !Number.isInteger(last) || first < 0 || last >= durations.length || first > last ||
-        !directions.includes(direction) || typeof loop !== 'boolean')
-      throw new RangeError('Playback needs a valid frame range, direction and loop setting');
-    const order = Array.from({ length:last-first+1 },(_,i)=>first+i);
-    if (direction === 'reverse') order.reverse();
-    if (direction === 'ping-pong' && first !== last)
-      for (let frame = last-1; frame >= first+Number(loop); frame--) order.push(frame);
+        !directions.includes(direction) || typeof loop !== 'boolean' || repeat !== undefined && (!validRepeat(repeat) || loop))
+      throw new RangeError('Playback needs a valid frame range, direction and repeat setting');
+    const reversed = direction === 'reverse' || direction === 'ping-pong-reverse';
+    const bouncing = direction.startsWith('ping-pong') && first !== last;
+    const length = last-first+1, passes = repeat ?? (bouncing ? 2 : 1);
+    const exposures = length*passes-(bouncing ? passes-1+Number(loop) : 0);
+    if (repeat !== undefined && exposures > 65536)
+      throw new RangeError('A finite playback tag can contain up to 65,536 frame exposures');
+    const order = [];
+    for (let pass = 0; pass < passes; pass++) {
+      const backward = reversed !== (bouncing && pass%2 === 1);
+      const start = bouncing && pass > 0 ? 1 : 0;
+      const end = bouncing && loop && pass === passes-1 ? length-1 : length;
+      for (let step = start; step < end; step++) order.push(backward ? last-step : first+step);
+    }
     let duration = 0, smallest = Infinity, fractional = false;
     const ends = order.map(frame=>{
       const span = durations[frame], next = duration+span;

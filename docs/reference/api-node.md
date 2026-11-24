@@ -87,6 +87,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.packProject` | function | `(scene, { out, root, revision, assetPack, paint, attachments } = {})` | [source](../../cli/project-bundle.js) |
 | `node.paletteUsage` | function | `(world,{select,rarePixels=3,rareShare=.001,...view}={})` | [guide](../palette-recipes.md#measure-palette-usage-at-export-size), [source](../../cli/palette-usage.js) |
 | `node.pickSurface` | function | `(passes,x,y)` | [guide](../art-passes.md#shared-opaque-surfaces), [guide](../textured-surfaces.md#inspecting-a-mesh), [guide](../art-passes.md), [source](../../src/art-passes.js) |
+| `node.pixelDocumentFromAseprite` | function | `(source, options)` | [source](../../index.js) |
 | `node.pixelDocumentFromLayerDeck` | function | `(source)` | [source](../../index.js) |
 | `node.pixelDocumentFromPNG` | function | `(source)` | [source](../../index.js) |
 | `node.planSubjectReframe` | function | `(frames, options)` | [guide](../subject-reframe.md), [source](../../cli/subject-reframe.js) |

@@ -106,10 +106,13 @@ between the endpoints become part of the range.
 ```
 
 Use the operation in a revision-checked `timeline` edit. Directions are
-`forward` (default), `reverse`, and `ping-pong`. Looping defaults to true.
-Looped ping-pong visits each turn once per cycle. A single-pass ping-pong
-returns to the first frame and holds it. `pixel-art timeline` reports
-each tag's playback order and duration in milliseconds.
+`forward` (default), `reverse`, `ping-pong`, and `ping-pong-reverse`. Looping
+defaults to true. Looped ping-pong visits each turn once per cycle. Set
+`loop: false` to play once and hold the last frame of the sequence.
+An optional positive integer `repeat` sets the number of directional passes and
+disables looping. For example, reverse ping-pong with two passes plays backward
+then forward, showing the turn frame once. Finite tags allow up to 65,536 frame
+exposures. `pixel-art timeline` reports playback order and duration in milliseconds.
 
 Tags survive layer deck export and import. Open the offline canvas or the
 Pixel Stamp Workshop to play a tag at 1× beside the editing frame.
@@ -502,6 +505,7 @@ Pass `null` as the label to clear the display name.
 } }
 ```
 
+Set a key's `bounds` to `null` to hide the slice until the next key.
 Use `remove-slice-key` with the slice ID and frame ID, or `remove-slice`
 with the slice ID. The offline `pixel-art canvas` review shows the saved
 slice guides for each frame.
@@ -517,6 +521,39 @@ local pivot and the absolute `registration` point, as well as the local
 `stretch` rectangle. Use `editor.slices({ frame: "speak" })` to inspect
 the active keys and `editor.slice("dialogue-panel", { frame: "speak" })`
 to obtain the same metadata and an RGBA raster.
+
+## Import an Aseprite sprite sheet
+
+Export a PNG with JSON Array or JSON Hash, and enable tag and slice metadata.
+Export the complete timeline of one sprite so tag endpoints and slice keys
+refer to the exported frames. [Aseprite sprite sheet documentation](https://www.aseprite.org/docs/sprite-sheet/)
+
+```sh
+ink-studio pixel-art import lantern.json --out lantern.ink.json
+ink-studio pixel-art timeline lantern.ink.json
+ink-studio pixel-art slices inspect lantern.ink.json --frame frame-1
+ink-studio pixel-art stack export lantern.ink.json --out lantern.deck.json
+```
+
+Ink locates `meta.image` relative to the JSON. Pass `--sheet path/to/sheet.png`
+when the PNG has moved or the JSON omits the image name. In Node, use
+`pixelDocumentFromAseprite(jsonPath, { sheet: pngPath })`.
+
+Frames become editable cels on one paint layer in their original canvas
+positions. Ink preserves frame names, millisecond durations, named ranges,
+keyed slices, local pivots, and nine-slice stretch rectangles. It skips packing
+gutters, restores each exposure even when several share a rectangle, and
+preserves alpha and the identity of used indexed PNG slots. Import supports
+unrotated, unscaled PNG sheets within Ink's 512 × 512 canvas, 2,048-frame,
+1,048,576 timeline-pixel and 255-swatch limits.
+
+Use `pixel-art validate lantern.ink.json` to inspect the original sheet
+rectangles and trim offsets in the `aseprite` report. They live under
+`legacyMetadata.aseprite` in the document, keyed by the imported frame IDs.
+Slice bounds that extend beyond the sprite expand the editable canvas.
+`canvasOrigin` gives the original Aseprite coordinates of Ink's top-left
+pixel in that case. Open the deck in the Pixel Stamp Workshop or use the
+document directly with the edit and export commands.
 
 ## Export from a saved preset
 
