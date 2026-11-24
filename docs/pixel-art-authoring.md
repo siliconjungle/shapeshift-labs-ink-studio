@@ -2220,6 +2220,59 @@ position. If resampling moves or retires the sample, inspect the new source
 before targeting it again. Coincident samples with an ambiguous derived ID
 need authored IDs for individual edits.
 
+### Select source splats
+
+Add `--query` to `pixel-art targets` to narrow a splat destination.
+The query can combine part ID, material ID, and an inclusive box around
+the splats' rest-space centers. Add a footprint to use only contributions
+that survived the rendered view.
+
+```json
+{
+  "part": "hinge",
+  "material": "enamel",
+  "region": { "min": [-0.8, 0.2, -0.3], "max": [0.1, 1.1, 0.6] },
+  "footprint": { "selection": "worn-edge" },
+  "minContribution": 0.08,
+  "editableOnly": true
+}
+```
+
+```sh
+ink-studio pixel-art targets document.json --destination edge-splats \
+  --scene gate.json --query splat-query.json --t 1.2
+```
+
+- For a footprint, use a saved pixel selection, `{"at":[x,y]}`, or
+  `{"rect":[x,y,width,height]}`. Coordinates are in the document's native
+  grid. Ink uses the binding registration to find the corresponding
+  source pixels.
+- `minContribution` uses coverage after occlusion and alpha compositing.
+  A splat qualifies if it meets the threshold at one sampled pixel.
+  A threshold on its own scans the visible contributions across the
+  registered document. Queries using only source metadata can include
+  splats hidden in the current shot.
+- Each visible pick includes the number of matching source pixels, its
+  peak contribution, and the source coordinate of that peak. Results
+  are ordered by peak contribution and then stable ID. The report
+  counts ambiguous IDs, stale hits, and pixels with omitted coverage.
+  An omitted contributor may also match the query.
+- Both live captures and saved source views are supported. Add
+  `--source-view view.json` alongside `--scene` to use the saved
+  viewpoint and pose. Ink checks the captured IDs, ownership, and row
+  revisions against the bound source.
+
+Use `editableOnly` to get IDs for an attribute edit. With it disabled
+the results can also include translucent or animated splats for
+inspection. Use `count` to see the total before `--limit`, and carry
+`documentRevision` and `sourceRevision` into the edit receipt workflow.
+
+The Node equivalent is
+`editor.targets("edge-splats", { query, frame, renderFrame })`.
+A footprint needs a render with the `sourceSplat` art passes at the
+binding's native size. A session can inspect its retained scene and
+fitted splat edits with `pixel-art session targets --query`.
+
 ### Edit splat pigment and coverage independently
 
 Use a `splat-attributes` destination to recolor a set of splats without

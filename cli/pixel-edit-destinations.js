@@ -9,6 +9,7 @@ const { conflict } = require('./pixel-edit-preview.js');
 const CanvasTransforms = require('../src/pixel-canvas-transforms.js');
 const { staleAt } = require('../src/pixel-source-bindings.js');
 const LayerStack = require('../src/pixel-layer-stack.js');
+const SplatSelection = require('./pixel-splat-selection.js');
 
 const record = value => !!value && Object.getPrototypeOf(value) === Object.prototype;
 const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
@@ -351,26 +352,36 @@ function apply(frame, edit, route, context, readMarks) {
   return solidEdit(change,destination,binding,source.editor,frame);
 }
 
-function targets(route, context, limit) {
+function targets(route, context, limit, query) {
   const { destination,binding } = route;
   if (!binding) throw new TypeError('Choose a scene destination. Pixel document IDs are listed by pixel-art validate.');
   const source = observe(route,context);
   checkRevision(binding,source);
   const { world,editor,revision,sourceRevision } = source;
   if (world) {
-    const ids = Provenance.identities(world,{ fresh:true }), { row } = Targets.index(world), scope = sceneTarget(binding);
-    const rest = world.rest ?? world.data, splats = [];
     const editing = destination.kind === 'splat-attributes';
     const fit = editing && SplatFit.prepare(world,world.look?.splatFit);
+    const rest = query ? Provenance.restData(world) : world.rest ?? world.data;
+    const describe = (id,i) => ({ id, at:Array.from(rest.subarray(i*16,i*16+3)),
+      ...(editing && {pigment:'#'+SplatFit.pigmentAt(world,i,fit).toString(16).padStart(6,'0'),
+        coverage:fit?.coverage?.[i]??1,footprintScale:fit?.[i]??1}) });
+    if (query) {
+      const {rows,row,selection}=SplatSelection.select(world,binding,query,context);
+      const splats=rows.slice(0,limit).map(({id,index,...evidence})=>{
+        const {object,entity,part,material}=row(index);
+        return {...describe(id,index),object,entity,part,material,...evidence};
+      });
+      return {destination:destination.id,binding,revision,sourceRevision,count:rows.length,splats,selection};
+    }
+    const ids = Provenance.identities(world,{ fresh:true }), {row}=Targets.index(world), scope = sceneTarget(binding);
+    const splats = [];
     let count = 0;
     for (let i = 0; i < world.count; i++) {
       const id = ids.idAt(i);
       if (!id || !Targets.objectScope(scope,row(i)) ||
           editing && !SplatFit.eligible(world,i)) continue;
       count++;
-      if (splats.length < limit) splats.push({ id, at:Array.from(rest.subarray(i*16,i*16+3)),
-        ...(editing && {pigment:'#'+SplatFit.pigmentAt(world,i,fit).toString(16).padStart(6,'0'),
-          coverage:fit?.coverage?.[i]??1,footprintScale:fit?.[i]??1}) });
+      if (splats.length < limit) splats.push(describe(id,i));
     }
     return { destination:destination.id, binding, revision, sourceRevision, count, splats };
   }
