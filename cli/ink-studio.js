@@ -1410,6 +1410,7 @@ const CMD = {
         '  pixel-art snap <design.json> --at x,y [--frame id] [--radius pixels]   resolve document guides',
         '  pixel-art draw|inspect|edit <design.json> [--frame id]   work on a native indexed frame',
         '  pixel-art edit <design.json> <edit.json> --out result.json   write an edit and print its receipt',
+        '    canvas destination: crop, trim, pad, resize, or resample all frames',
         '  pixel-art replay <design.json> <receipt.json> --out result.json   verify and reproduce an edit with the same options',
         '            --scene <bound scene> for native edits; --shot-hit-frame <index> to sample skipped shot hits',
         '  pixel-art session init <directory> <design.json> [--scene scene.json]   start a persistent edit session',

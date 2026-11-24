@@ -91,23 +91,26 @@ function report({ baseline, candidate = baseline, sources = [], targets = [], is
       const id = frame?.id;
       if (oldFrames && equal(oldFrames.get(id),frame)) continue;
       const before = compile(baseline,id), after = compile(candidate,id);
-      for (let p = 0; p < after.slots.length; p++) {
-        const oldSlot = before.slots[p], newSlot = after.slots[p];
-        const oldColor = oldSlot < 0 ? undefined : before.mixedColors?.[p] ?? before.colors[oldSlot];
-        const newColor = newSlot < 0 ? undefined : after.mixedColors?.[p] ?? after.colors[newSlot];
-        const oldAlpha = before.opacity?.[p] ?? (oldSlot < 0 ? 0 : 255);
-        const newAlpha = after.opacity?.[p] ?? (newSlot < 0 ? 0 : 255);
-        const oldLayer = before.layerIds[before.owners[p]], newLayer = after.layerIds[after.owners[p]];
+      const width = Math.max(before.width,after.width), height = Math.max(before.height,after.height);
+      for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+        const a = x < before.width && y < before.height ? y*before.width+x : -1;
+        const b = x < after.width && y < after.height ? y*after.width+x : -1;
+        const oldSlot = before.slots[a] ?? -1, newSlot = after.slots[b] ?? -1;
+        const oldColor = oldSlot < 0 ? undefined : before.mixedColors?.[a] ?? before.colors[oldSlot];
+        const newColor = newSlot < 0 ? undefined : after.mixedColors?.[b] ?? after.colors[newSlot];
+        const oldAlpha = before.opacity?.[a] ?? (oldSlot < 0 ? 0 : 255);
+        const newAlpha = after.opacity?.[b] ?? (newSlot < 0 ? 0 : 255);
+        const oldLayer = before.layerIds[before.owners[a]] ?? null, newLayer = after.layerIds[after.owners[b]] ?? null;
         if (oldLayer === newLayer && before.cels?.get(oldLayer) === after.cels?.get(newLayer) &&
             before.swatches[oldSlot] === after.swatches[newSlot] && oldColor === newColor && oldAlpha === newAlpha &&
-            before.locks[p] === after.locks[p]) continue;
+            (before.locks[a] ?? 0) === (after.locks[b] ?? 0)) continue;
         pixelCount++;
         if (pixels.length >= maximum) continue;
-        const { at, ...left } = cell(before,p), { at:_, ...right } = cell(after,p);
+        const { at, ...left } = a < 0 ? {} : cell(before,a), { at:_, ...right } = b < 0 ? {} : cell(after,b);
         const showAlpha = (before.opacity || after.opacity) && oldAlpha !== newAlpha;
-        pixels.push({ frame:id ?? null, at,
-          before:{ ...left, color:color(oldColor), ...(showAlpha && { alpha:oldAlpha }) },
-          after:{ ...right, color:color(newColor), ...(showAlpha && { alpha:newAlpha }) } });
+        pixels.push({ frame:id ?? null,at:at ?? [x,y],
+          before:a < 0 ? null : { ...left,color:color(oldColor),...(showAlpha && { alpha:oldAlpha }) },
+          after:b < 0 ? null : { ...right,color:color(newColor),...(showAlpha && { alpha:newAlpha }) } });
       }
     }
   }

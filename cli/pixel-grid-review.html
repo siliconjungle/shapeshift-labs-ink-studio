@@ -55,6 +55,7 @@ const eyedropper = document.querySelector('#eyedropper'), mode = document.queryS
 const layer = document.querySelector('#sample-layer'), swatch = document.querySelector('#sample-swatch');
 const result = document.querySelector('#sample-value');
 const scratch = document.createElement('canvas'), context = scratch.getContext('2d',{ willReadFrequently:true });
+const unmapped = material?.missing ? atob(material.missing) : null;
 const values = material && new DataView(Uint8Array.from(atob(material.values),byte=>byte.charCodeAt(0)).buffer);
 const hex = components => '#' + components.map(value => Math.round(value*255).toString(16).padStart(2,'0')).join('');
 let request = 0, active, sampling = false;
@@ -85,6 +86,7 @@ view.canvas.addEventListener('pointerdown',event => {
   const p = at[1]*view.canvas.width+at[0], position = at.join(', ');
   if (mode.value === 'source') {
     const name = material.object + '/' + material.chart + '/' + material.channel;
+    if (unmapped?.charCodeAt(p)) { showSample(position+' · '+name+' · Outside source'); return; }
     if (material.type === 'number') {
       showSample(position+' · '+name+' · '+values.getFloat64(p*8,true)+(material.units ? ' '+material.units : ''));
     } else {

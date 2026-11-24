@@ -1,6 +1,7 @@
 'use strict';
 
 const ArtPasses = require('../src/art-passes.js');
+const CanvasTransforms = require('../src/pixel-canvas-transforms.js');
 const { digest } = require('./pixel-edit-revisions.js');
 
 const identity = {
@@ -92,7 +93,8 @@ function sourceFor(width,height,query,{ capture,material }) {
       }
       const source = channels.get(destination);
       return p => {
-        const uv = [(p%width+.5)/width,1-(Math.floor(p/width)+.5)/height];
+        const uv = CanvasTransforms.uv([width,height],[p%width,Math.floor(p/width)],source.canvas);
+        if (!uv) return false;
         const value = source.sample(uv);
         return inRange(source.type === 'number' ? value : value?.coverage ?? 0,range);
       };

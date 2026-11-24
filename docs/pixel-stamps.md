@@ -105,9 +105,18 @@ or focus the canvas and use the arrow keys to move it. The grid appears at
 upper left. The second view stays at one CSS pixel per art pixel and
 updates during drawing and animation playback.
 
-Use **Canvas size** to resize all frames together. Resize keeps pixels at
-their existing coordinates, pads new space with transparency, and crops
-outside the new bounds. Undo restores the previous dimensions and pixels.
+Use **Canvas transforms** to transform all frames together. **Crop** keeps a
+rectangle you enter or takes the bounds of the active selection. **Trim**
+finds the bounds of visible paint across the animation. **Pad** adds
+transparent margins. **Resize** places the old grid at a chosen anchor
+inside the new bounds. **Resample** scales the artwork with nearest-pixel
+or area filtering.
+
+Pivots, registration guides, and saved selections follow the transform.
+If the stamp carries scene bindings, choose whether to preserve their
+source coordinates or map the whole new canvas before applying. Undo
+restores the previous grid, artwork, guides, and bindings.
+[Canvas transforms in a pixel document](pixel-art-authoring.md#transform-the-whole-canvas)
 
 Use **Guides** in the Workshop sidebar to add, edit, or remove grid origins,
 axes, pivots, and registration points. Put a guide on all frames or just

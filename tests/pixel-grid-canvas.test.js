@@ -580,6 +580,44 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     await click(browser,'#transform-apply');
     assert.deepEqual(await raster(browser,main,20,25),gold);
     assert.equal(await selected(20,25),true);
+
+    await change('canvas-operation','crop');
+    await click(browser,'#canvas-fit-selection');
+    await click(browser,'#canvas-apply');
+    const cropped = await download('#export');
+    assert.deepEqual([cropped.width,cropped.height],[2,1]);
+    assert.deepEqual(await raster(browser,preview,1,0),gold);
+
+    const boundFile = path.join(directory,'bound-canvas.json');
+    fs.writeFileSync(boundFile,JSON.stringify({ width:4,height:3,palette:['#e6dbb6'],
+      slots:[null,null,null,null,null,0,null,null,null,null,null,null],
+      guides:[{ id:'toe',kind:'pivot',at:[1,1] }],
+      sceneBindings:[{ id:'prop',scene:'panel',object:'wall' }] }));
+    await browser.send('DOM.setFileInputFiles',{ nodeId:imported.nodeId,files:[boundFile] });
+    await until(browser,"document.querySelector('#status').textContent === 'Opened bound-canvas.json'");
+    await change('canvas-operation','pad');
+    await change('canvas-left',1);
+    await change('canvas-top',1);
+    assert.equal(await browser.evaluate("document.querySelector('#canvas-size').checkValidity()"),false);
+    await change('canvas-binding-policy','preserve');
+    await click(browser,'#canvas-apply');
+    const padded = await download('#export');
+    assert.deepEqual([padded.width,padded.height],[5,4]);
+    assert.deepEqual(padded.guides[0].at,[2,2]);
+    assert.deepEqual(padded.sceneBindings[0].canvas,{ size:[4,3],offset:[-1,-1],scale:[1,1] });
+    assert.deepEqual(await raster(browser,preview,2,2),gold);
+
+    await change('canvas-operation','resample');
+    await change('canvas-width',10);
+    await change('canvas-height',8);
+    await click(browser,'#canvas-apply');
+    const scaled = await download('#export');
+    assert.deepEqual([scaled.width,scaled.height],[10,8]);
+    assert.deepEqual(scaled.guides[0].at,[4.5,4.5]);
+    assert.deepEqual(await raster(browser,preview,5,5),gold);
+    await click(browser,'#undo');
+    assert.deepEqual(await download('#export'),padded);
+
   });
 });
 
@@ -593,7 +631,8 @@ test('the CLI exports an offline native canvas with both views on the selected v
       { id:'side',label:'Side',durationMs:200,cels:{ paint:{ marks:[{ at:[1,2],swatch:'cool' }] } } }
     ],guides:[{ id:'tile',kind:'grid',at:[0,1],step:[4,3] },
       { id:'front-pin',kind:'registration',at:[3,4],frame:'front' }],
-    sceneBindings:[{ id:'panel',scene:scenePath,object:'face',frame:'front' }],
+    sceneBindings:[{ id:'panel',scene:scenePath,object:'face',frame:'front',
+      canvas:{ size:[7,6],offset:[-1,0],scale:[1,1] } }],
     destinations:[{ id:'scratches',kind:'surface-channel',binding:'panel',chart:'front',channel:'wear' }] };
   fs.writeFileSync(scenePath,JSON.stringify({ id:'panel',style:'slate',solids:[
     { id:'face',kind:'box',at:[0,0,0],half:[1,1,.25],res:.1,mat:'stone',surfaceState:{ charts:{ front:{
@@ -612,8 +651,8 @@ test('the CLI exports an offline native canvas with both views on the selected v
     assert.deepEqual(await raster(browser,preview,0,0),[0,0,0,0]);
     assert.equal(await browser.evaluate("Boolean(document.querySelector('[data-guide=front-pin]'))"),true);
     await click(browser,'#eyedropper');
-    const at = place(await screen(browser,main),1,2);
-    const sample = async (mode,expected) => {
+    const sample = async (mode,expected,x = 1,y = 2) => {
+      const at = place(await screen(browser,main),x,y);
       await evaluate(browser,mode => {
         const input = document.querySelector('#sample-mode');
         input.value = mode;
@@ -626,6 +665,7 @@ test('the CLI exports an offline native canvas with both views on the selected v
     await sample('composite','1, 2 · warm · #ac421d');
     await sample('layer','1, 2 · paint · cool · #216286');
     await sample('source','1, 2 · face/front/wear · 0.625');
+    await sample('source','0, 0 · face/front/wear · Outside source',0,0);
     await browser.evaluate(`document.querySelector('#frames').selectedIndex = 1;
       document.querySelector('#frames').dispatchEvent(new Event('change'));`);
     await until(browser,"document.querySelector('.ink-grid-main').getContext('2d').getImageData(1,2,1,1).data[0] === 33");

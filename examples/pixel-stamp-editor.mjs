@@ -2,6 +2,7 @@ import { mountPixelGridCanvas } from '../src/pixel-grid-canvas.mjs';
 
 const stamp = KIT.pixelStamps, guideTool = KIT.pixelGuides, paintTools = KIT.pixelPaintTools;
 const brushes = KIT.pixelBrushes, selections = KIT.pixelSelections, transforms = KIT.pixelSelectionTransforms;
+const canvasTransforms = KIT.pixelCanvasTransforms;
 const { stonePaint, flowingInk, bubble, glint, starTwinkle, line, rect } = InkPixelStudies;
 const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
@@ -48,6 +49,10 @@ function load(data) {
       !palette.every(color => typeof color === 'string' && /^#[a-f\d]{6}$/i.test(color)))
     throw new RangeError('Open a stamp up to 512 × 512 with 1–48 hex swatches.');
   if (data.drawing !== undefined) paintTools.drawingGrid(width,height,data.drawing);
+  if (data.sceneBindings !== undefined && (!Array.isArray(data.sceneBindings) ||
+      data.sceneBindings.some(row=>!row || typeof row.id !== 'string' ||
+        row.canvas !== undefined && !canvasTransforms.registered(row.canvas))))
+    throw new TypeError('The stamp needs valid scene bindings and canvas registration');
   const { slots,rows,strokes,alpha,frames,selections:saved,...rest } = data;
   if (frames !== undefined && saved !== undefined)
     throw new TypeError('Save animation masks on their own frames');
@@ -62,6 +67,7 @@ function load(data) {
   stop();
   if (state.doc) saveUndo();
   state.doc = { ...rest,frames:loaded };
+  $('canvas-binding-policy').value = '';
   state.frame = 0;
   state.swatch = 0;
   selection = undefined;
@@ -164,6 +170,7 @@ function drawSelection() {
   $('transform-fields').hidden = !transformDraft;
   $('transform-duplicate-label').hidden = !transformDraft?.fromSelection;
   $('transform-apply').disabled = !transformDraft?.preview || drawingPointer !== undefined;
+  $('canvas-fit-selection').disabled = busy || !active?.pixelCount;
 }
 
 function refreshSelection() {
@@ -461,6 +468,7 @@ function update() {
   $('undo').disabled = !state.undo.length;
   $('canvas-width').value = state.doc.width;
   $('canvas-height').value = state.doc.height;
+  showCanvasControls();
   $('add-color').disabled = state.doc.palette.length >= 48;
   $('playback').value = state.doc.playback ?? 'loop';
   selectSwatch(Math.min(state.swatch,state.doc.palette.length-1));
@@ -868,30 +876,79 @@ $('drawing-settings').addEventListener('change',() => {
   }
 });
 
-function resizeCanvas(width,height) {
-  const doc = state.doc;
-  if (![width,height].every(size => Number.isSafeInteger(size) && size >= 1 && size <= 512) ||
-      width * height * doc.frames.length > 2 ** 20)
-    throw new RangeError('Canvas size exceeds the stamp grid or animation budget.');
-  if (width === doc.width && height === doc.height) return;
-  const columns = Math.min(width,doc.width), rows = Math.min(height,doc.height);
-  const frames = doc.frames.map(({ slots,rows:sourceRows,strokes,alpha,selections:saved,...hold }) => {
-    const before = stamp.paint(doc.width,doc.height,{ slots,rows:sourceRows,strokes });
-    const resized = Array(width * height).fill(null), opacity = alpha && Array(width * height).fill(255);
-    for (let y = 0; y < rows; y++) for (let x = 0; x < columns; x++) {
-      const p = y*width+x, source = y*doc.width+x;
-      resized[p] = before[source];
-      if (opacity) opacity[p] = alpha[source];
+function showCanvasControls() {
+  const type = $('canvas-operation').value, size = ['resize','crop','resample'].includes(type);
+  const crop = type === 'crop', pad = type === 'pad';
+  $('canvas-crop-origin').hidden = $('canvas-fit-selection').hidden = !crop;
+  $('canvas-x').disabled = $('canvas-y').disabled = !crop;
+  $('canvas-dimensions').hidden = $('canvas-width').disabled = $('canvas-height').disabled = !size;
+  $('canvas-anchor-label').hidden = type !== 'resize';
+  $('canvas-filter-label').hidden = type !== 'resample';
+  $('canvas-margins').hidden = !pad;
+  for (const input of $('canvas-margins').querySelectorAll('input')) input.disabled = !pad;
+  $('canvas-binding-label').hidden = $('canvas-binding-policy').disabled = !state.doc.sceneBindings?.length;
+  $('canvas-apply').textContent = type[0].toUpperCase()+type.slice(1);
+}
+
+function canvasOperation() {
+  const type = $('canvas-operation').value, number = id => $('canvas-'+id).valueAsNumber;
+  const size = [number('width'),number('height')];
+  if (type === 'crop') return { type,rect:[number('x'),number('y'),...size] };
+  if (type === 'pad') return { type,margins:['left','top','right','bottom'].map(number) };
+  if (type === 'resize') return { type,size,anchor:$('canvas-anchor').value };
+  if (type === 'resample') return { type,size,filter:$('canvas-filter').value };
+  return { type };
+}
+
+function transformCanvas(operation,bindingPolicy) {
+  const doc = state.doc, trim = canvasTransforms.extent(doc.width,doc.height);
+  if (operation.type === 'trim') {
+    for (const frame of doc.frames) {
+      const slots = stamp.paint(doc.width,doc.height,frame);
+      for (let p = 0; p < slots.length; p++)
+        if (slots[p] !== null && frame.alpha?.[p] !== 0) trim.include(p%doc.width,Math.floor(p/doc.width));
     }
-    const retained = saved?.map(({ id,pixels })=>({ id,pixels:pixels.filter(([x,y])=>x < width && y < height) }));
-    return { ...hold,slots:resized,...(opacity && { alpha:opacity }),...(retained && { selections:retained }) };
-  });
+  }
+  const map = canvasTransforms.plan(doc.width,doc.height,operation,trim), [width,height] = map.size;
+  if (width*height*doc.frames.length > 2**20) throw new RangeError('Canvas size exceeds the stamp animation budget');
+  const changesGrid = width !== doc.width || height !== doc.height || map.offset.some(Boolean);
+  if (doc.sceneBindings?.length && !['preserve','reframe'].includes(bindingPolicy))
+    throw new TypeError('Choose how the scene bindings map to the new canvas');
+  if (!changesGrid && !(bindingPolicy === 'reframe' && doc.sceneBindings?.some(row=>row.canvas))) return;
+  const revised = { ...doc,width,height };
+  let updatedSelection = selection;
+  if (changesGrid) {
+    revised.frames = doc.frames.map(({ slots,rows,strokes,alpha,selections:saved,guides,...hold }) => {
+      const pixels = stamp.paint(doc.width,doc.height,{ slots,rows,strokes });
+      const output = canvasTransforms.raster(map,pixels,alpha);
+      const adjusted = canvasTransforms.guides(map,guides);
+      if (adjusted) guideTool.prepare(adjusted);
+      return { ...hold,...output,...(adjusted && { guides:adjusted }),
+        ...(saved && { selections:saved.map(row=>({ ...row,pixels:canvasTransforms.region(map,row.pixels).pixels })) }) };
+    });
+    if (doc.guides) revised.guides = guideTool.prepare(canvasTransforms.guides(map,doc.guides));
+    if (doc.drawing) {
+      revised.drawing = { ...doc.drawing };
+      for (const [axis,key] of ['mirrorX','mirrorY'].entries()) {
+        if (doc.drawing[key] !== undefined) revised.drawing[key] = limit(
+          Math.round(canvasTransforms.coordinate(map,doc.drawing[key],axis)*2)/2,-.5,map.size[axis]-.5);
+      }
+    }
+    if (selection) {
+      const mask = Uint8Array.from(map.index,p=>selection.mask[p] ?? 0);
+      updatedSelection = { ...selectionFromMask(mask),frame:selection.frame };
+    }
+  }
+  if (doc.sceneBindings?.length) {
+    revised.sceneBindings = doc.sceneBindings.map(({ canvas,...binding }) => {
+      const next = bindingPolicy === 'preserve' ? canvasTransforms.preserve(map,canvas) : undefined;
+      return { ...binding,...(next && { canvas:next }) };
+    });
+  }
   edit(() => {
-    const drawing = doc.drawing && { ...doc.drawing };
-    if (drawing?.mirrorX !== undefined) drawing.mirrorX = Math.min(drawing.mirrorX,width-.5);
-    if (drawing?.mirrorY !== undefined) drawing.mirrorY = Math.min(drawing.mirrorY,height-.5);
-    state.doc = { ...doc,width,height,frames,...(drawing && { drawing }) };
-    selection = undefined;
+    state.doc = revised;
+    selection = updatedSelection;
+    $('canvas-x').value = $('canvas-y').value = 0;
     resetStroke();
   });
 }
@@ -1091,12 +1148,20 @@ $('shape-controls').addEventListener('change',event => {
   if (['shape-type','shape-curve'].includes(event.target.id)) resetStroke();
   draw();
 });
+$('canvas-operation').addEventListener('change',showCanvasControls);
+$('canvas-fit-selection').addEventListener('click',() => {
+  const active = activeSelection(), { width,height } = state.doc;
+  if (!active?.pixelCount) return;
+  const bounds = canvasTransforms.extent(width,height);
+  for (const [x,y] of selections.pixels(width,active.mask)) bounds.include(x,y);
+  const [x,y,w,h] = bounds.rect();
+  [$('canvas-x').value,$('canvas-y').value,$('canvas-width').value,$('canvas-height').value] = [x,y,w,h];
+});
 $('canvas-size').addEventListener('submit',event => {
   event.preventDefault();
   try {
-    const width = $('canvas-width').valueAsNumber, height = $('canvas-height').valueAsNumber;
-    resizeCanvas(width,height);
-    notify(`Canvas ${width} × ${height} px`);
+    transformCanvas(canvasOperation(),$('canvas-binding-policy').value);
+    notify(`Canvas ${state.doc.width} × ${state.doc.height} px`);
   } catch (error) { notify(error.message); }
 });
 function chooseTool(tool) {

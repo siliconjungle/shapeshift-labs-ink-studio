@@ -6,6 +6,7 @@ const SplatFit = require('./splat-fit-asset.js');
 const { observe } = require('./pixel-edit-revisions.js');
 const Provenance = require('../src/splat-provenance.js');
 const { conflict } = require('./pixel-edit-preview.js');
+const CanvasTransforms = require('../src/pixel-canvas-transforms.js');
 
 const record = value => !!value && Object.getPrototypeOf(value) === Object.prototype;
 const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
@@ -39,7 +40,8 @@ function validate(destinations, bindings) {
 
 function resolve(design, name = 'raster') {
   const destination = (design.version === 2 && design.destinations?.find(target => target.id === name)) ||
-    (name === 'raster' && { id:'raster', kind:'raster' }) ||
+    (name === 'raster' && { id:name,kind:name }) ||
+    (['canvas','document:canvas'].includes(name) && { id:'canvas',kind:'canvas' }) ||
     (design.version === 2 && ['guides','selections'].includes(name) && { id:name, kind:name });
   if (!destination) throw conflict('unknown-destination','Unknown pixel edit destination ' + name,{ destination:name });
   const binding = destination.binding && design.sceneBindings.find(item => item.id === destination.binding);
@@ -85,12 +87,24 @@ function shot(frame, edit, binding, world, marks, onSplat) {
       !fields(operation.anchor,['splat','offset','depthOffset']))
     throw new TypeError('A shot correction needs an art-grid anchor pixel and explicit splat anchor');
   if (marks.some(mark => mark.swatch === null)) throw new TypeError('Shot correction pixels need an RGB swatch');
-  const { at:[x,y], fps, startTime, frames, anchor, depthTolerance } = operation;
+  const { fps,startTime,frames,anchor,depthTolerance } = operation;
+  const grid = [frame.width,frame.height], size = binding.canvas?.size ?? grid;
+  function sourcePixel(at) {
+    const mapped = CanvasTransforms.sourcePoint(grid,at,binding.canvas);
+    if (!mapped) throw conflict('outside-bound-canvas','Shot pixel is outside the bound camera grid',{ binding:binding.id,at });
+    return mapped.map(Math.floor);
+  }
+  const [x,y] = sourcePixel(operation.at), seen = new Set();
   const colors = new Map(frame.swatches.map((swatch,i) => [swatch,'#'+frame.colors[i].toString(16).padStart(6,'0')]));
-  const pixels = marks.map(mark => [mark.at[0]-x,mark.at[1]-y,colors.get(mark.swatch)]);
+  const pixels = marks.map(mark => {
+    const [u,v] = sourcePixel(mark.at), key = v*size[0]+u;
+    if (seen.has(key)) throw conflict('duplicate-bound-pixel','Shot pixels resolve to the same bound pixel',
+      { binding:binding.id,at:mark.at,source:[u,v] });
+    seen.add(key);
+    return [u-x,v-y,colors.get(mark.swatch)];
+  });
   const { scope } = splatRows(world,binding,onSplat)(anchor.splat);
   const base = world.look?.shotCorrections;
-  const size = [frame.width,frame.height];
   const prior = ShotCorrections.prepare(base);
   const clock = ShotCorrections.prepare({ size, fps, startTime:startTime ?? prior?.startTime });
   if (prior && (prior.size[0] !== size[0] || prior.size[1] !== size[1] ||
@@ -169,7 +183,7 @@ function channelSource(route, context) {
   const sampler = surface.restSampler(restChart(solid,chart));
   return { destination:destination.id, binding:binding.id, frame:binding.frame,
     scene:binding.scene,object:solid.id, ...(binding.part !== undefined && { part:binding.part }),
-    chart,channel, ...definition,sourceRevision:source.sourceRevision,
+    chart,channel,...definition,sourceRevision:source.sourceRevision,...(binding.canvas && { canvas:binding.canvas }),
     sample:uv => sampler.sample(uv)[channel] };
 }
 

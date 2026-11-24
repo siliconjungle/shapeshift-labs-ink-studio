@@ -72,6 +72,31 @@ function setup(t) {
   return { document, filename, write, read, request, apply, reject, targets };
 }
 
+test('canvas registration maps shot corrections back to the original art grid', t => {
+  const { document,filename } = setup(t);
+  const sourceEditor = ink.createSceneEditor(source);
+  const editor = ink.createPixelEditor(document,{ sceneEditor:sourceEditor,sceneRef:filename('source') });
+  const world = KIT.diorama.build(source);
+  const baseline = ink.render(world,{ ...view,captureShotCorrectionSurface:true });
+  const { target,...anchor } = baseline.shotCorrectionSurface.pin(20,16);
+  assert.equal(target.object,'gate');
+
+  function canvas(operation) {
+    return editor.apply({ id:operation.type,destination:'canvas',revision:editor.describe().revision,
+      operation:{ ...operation,bindingPolicy:'preserve' } });
+  }
+  const change = (at,edits) => ({ id:'hit',destination:'one-shot',frame:'front',revision:editor.describe().revision,
+    operation:{ at,anchor,fps:10,frames:[0,0] },edits:edits.map(at=>({ at,layer:null,from:null,to:'amber' })) });
+  canvas({ type:'pad',margins:[2,3,0,0] });
+  assert.equal(editor.previewEdit(change([22,19],[[1,1]])).conflicts[0].code,'outside-bound-canvas');
+  canvas({ type:'crop',rect:[10,10,20,15] });
+  const result = editor.apply(change([12,9],[[12,9],[13,9]]));
+  assert.deepEqual(result.size,[40,32]);
+  assert.deepEqual(result.corrections[0].pixels,[[0,0,'#ffca33'],[1,0,'#ffca33']]);
+  canvas({ type:'resample',size:[40,30] });
+  assert.equal(editor.previewEdit(change([24,18],[[24,18],[25,18]])).conflicts[0].code,'duplicate-bound-pixel');
+});
+
 test('pixel destinations route raster, shot and splat edits through their native consumers', t => {
   const { document, filename, request, apply, reject } = setup(t);
   assert.deepEqual(validate(document).destinations,document.destinations);

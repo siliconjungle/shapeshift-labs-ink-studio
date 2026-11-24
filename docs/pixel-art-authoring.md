@@ -484,6 +484,53 @@ selection. Paste maps colors into the destination palette, adding any
 missing swatches. Preview, edit, replay and persistent sessions use
 the same placement.
 
+### Transform the whole canvas
+
+Use the `canvas` edit destination to change the native art grid of every
+frame in one transaction. Omit `frame` and `cel` from the patch. Use
+`document:canvas` if you already have a destination named `canvas`.
+
+```json
+{
+  "id": "crop-gate",
+  "revision": "<revision from pixel-art inspect>",
+  "destination": "canvas",
+  "operation": { "type": "crop", "rect": [8, 4, 32, 24], "bindingPolicy": "preserve" }
+}
+```
+
+| Operation | Fields | Result |
+| --- | --- | --- |
+| `crop` | `rect: [x, y, width, height]` | Keep an in-bounds rectangle. |
+| `trim` | None | Keep the bounds of visible paint and protected pixels across all frames. A fully empty canvas keeps its size. |
+| `pad` | `margins: [left, top, right, bottom]` | Add transparent space in whole pixels. |
+| `resize` | `size: [width, height]`, optional `anchor` | Crop or add space without scaling the art. Anchors are `top-left` (default), `top`, `top-right`, `left`, `center`, `right`, `bottom-left`, `bottom`, and `bottom-right`. |
+| `resample` | `size: [width, height]`, optional `filter` | Scale the artwork using `nearest` (default) or `area`. Area filtering chooses the swatch with the most opaque coverage and carries the area-weighted alpha. |
+
+All dimensions are 1–512 px. Grid-changing edits bake each cel's drawing
+commands to indexed pixels and alpha or knockout runs. Frame timing, cel
+IDs, clipping links, and pixel aspect remain part of the document. Pivots
+and registration guides move with the art at half-pixel precision. Grid
+origins and steps stay in whole pixels. Saved selections and protected
+masks follow the nearest-pixel mapping.
+
+Choose a binding policy when the document has scene bindings:
+
+- `preserve` carries forward the original source grid, offset, and scale.
+  A painted location keeps its chart UV or shot pixel after a crop or
+  pad. Padding beyond the source has no chart sample. Shot corrections
+  reject pixels outside the source grid and pairs that map to the same
+  source pixel.
+- `reframe` maps the whole new grid to the chart or camera. If a scene
+  already has shot corrections, its correction grid must match the
+  reframed canvas before applying another correction.
+
+Use `pixel-art preview` or `editor.previewEdit()` to inspect changed
+pixels, guide positions, binding mappings, and protected locations the
+transform drops. Commit through `pixel-art edit` or `editor.apply()`.
+Canvas edits support receipts, replay, and persistent sessions. Undo
+restores the original grid and authored cel commands.
+
 ## Author a drawing
 
 ```json

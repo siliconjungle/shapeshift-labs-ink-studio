@@ -276,11 +276,44 @@
         </div>
       </section>
       <section>
-        <h2>Canvas size</h2>
-        <form class="canvas-size" id="canvas-size">
-          <label>Width<input type="number" id="canvas-width" min="1" max="512" step="1" required></label>
-          <label>Height<input type="number" id="canvas-height" min="1" max="512" step="1" required></label>
-          <button type="submit">Resize</button>
+        <h2>Canvas transforms</h2>
+        <form class="guide-controls" id="canvas-size">
+          <label>Operation<select id="canvas-operation">
+            <option value="resize">Resize</option><option value="crop">Crop</option><option value="trim">Trim</option>
+            <option value="pad">Pad</option><option value="resample">Resample</option>
+          </select></label>
+          <div class="canvas-size" id="canvas-crop-origin" hidden>
+            <label>X<input type="number" id="canvas-x" min="0" max="511" step="1" value="0"></label>
+            <label>Y<input type="number" id="canvas-y" min="0" max="511" step="1" value="0"></label>
+          </div>
+          <div class="canvas-size" id="canvas-dimensions">
+            <label>Width<input type="number" id="canvas-width" min="1" max="512" step="1" required></label>
+            <label>Height<input type="number" id="canvas-height" min="1" max="512" step="1" required></label>
+          </div>
+          <label id="canvas-anchor-label">Resize anchor<select id="canvas-anchor">
+            <option value="top-left">Top left</option><option value="top">Top</option><option value="top-right">Top right</option>
+            <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
+            <option value="bottom-left">Bottom left</option><option value="bottom">Bottom</option>
+            <option value="bottom-right">Bottom right</option>
+          </select></label>
+          <label id="canvas-filter-label" hidden>Resampling<select id="canvas-filter">
+            <option value="nearest">Nearest pixel</option><option value="area">Area coverage</option>
+          </select></label>
+          <div class="canvas-size" id="canvas-margins" hidden>
+            <label>Left<input id="canvas-left" type="number" min="0" max="511" step="1" value="0"></label>
+            <label>Top<input id="canvas-top" type="number" min="0" max="511" step="1" value="0"></label>
+            <label>Right<input id="canvas-right" type="number" min="0" max="511" step="1" value="0"></label>
+            <label>Bottom<input id="canvas-bottom" type="number" min="0" max="511" step="1" value="0"></label>
+          </div>
+          <label id="canvas-binding-label" hidden>Scene registration<select id="canvas-binding-policy" required disabled>
+            <option value="">Choose a binding policy</option>
+            <option value="preserve">Preserve source registration</option>
+            <option value="reframe">Map whole new canvas</option>
+          </select></label>
+          <div class="row">
+            <button type="submit" id="canvas-apply">Resize</button>
+            <button type="button" id="canvas-fit-selection" hidden disabled>Use selection bounds</button>
+          </div>
         </form>
       </section>
       <section>

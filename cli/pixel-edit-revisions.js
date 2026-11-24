@@ -20,6 +20,7 @@ function observe({ destination,binding }, context, { guard = true } = {}) {
   const { id,kind,chart,channel } = destination;
   const scope = ['ink-studio/pixel-source-v1',id,kind,chart,channel,
     binding.id,binding.scene,binding.object,binding.part,binding.frame,binding.layer,binding.revision];
+  if (binding.canvas !== undefined) scope.push(binding.canvas);
   if (kind === 'shot-correction' || kind === 'splat-attributes') {
     const world = context.world(binding);
     const revision = signature(world,{ fresh:true });
