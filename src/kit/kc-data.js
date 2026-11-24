@@ -1581,9 +1581,13 @@
         meshLooks.set(s, { mesh, look: K.mesh.look(mesh, { hues: s.hues || 5, pal }) });
       }
     const brushed = spec.solids.filter(s=>s.id && activeModifiers(s).some(modifier=>modifier.kind==='grid-brush'));
-    if (brushed.length && st0.finish.look?.sdfAssist === undefined) {
+    const brushedParts = new Set(brushed.filter(s=>s.part).map(s=>s.id));
+    const authoredAssist = st0.finish.look?.sdfAssist;
+    if (brushed.length && authoredAssist===undefined) {
       const rules = brushed.map(s=>({ select:{entity:s.id} }));
-      st0.finish.look = { ...st0.finish.look,sdfAssist:rules.length>64 ? true : { rules } };
+      st0.finish.look = { ...st0.finish.look,sdfAssist:{ ...(rules.length<=64 && {rules}),...(brushedParts.size>0 && {posed:true}) } };
+    } else if (brushedParts.size && (authoredAssist===true || authoredAssist && authoredAssist.posed===undefined)) {
+      st0.finish.look = { ...st0.finish.look,sdfAssist:{ ...authoredAssist,posed:true } };
     }
     const { detailBudgets, shadowArt } = st0.finish.look ?? {};
     const B = (env.makeBuilder || makeBuilder)(seed, pal, detailBudgets === undefined && shadowArt === undefined ?
@@ -1598,7 +1602,8 @@
       S = K.sculpt((env.makeSculpt || makeSculpt)(B));
       S.sun = B.norm(st0.sun);
       if (st0.finish.look?.pixel) S.pixel = true;
-      S.keepRenderSdf = env.retainRenderSdf === true || keepLightCasters || Boolean(st0.finish.look?.sdfAssist ||
+      S.keepPartRenderSdf = env.retainPartRenderSdf === true || brushedParts;
+      S.keepRenderSdf = env.retainRenderSdf === true || env.retainPartRenderSdf === true || keepLightCasters || Boolean(st0.finish.look?.sdfAssist ||
         st0.finish.bounceProbes?.geometry?.sdfs?.length && (!st0.finish.bounceProbes.format || st0.finish.bounceProbes.dynamic));
       S.captureAlbedo = Boolean(st0.finish.liveSun) ||
         Array.isArray(st0.finish.look?.renderStages) && st0.finish.look.renderStages.some(rule => rule.stage === 'material');
@@ -1682,7 +1687,7 @@
         const p = space ? S.transformSolids(space,recipe) : recipe();
         if (s.id) {
           made[s.id] = p;
-          if (env.retainRenderSdf && p?.sd) p.modifierSpace = space;
+          if ((env.retainRenderSdf || env.retainPartRenderSdf) && p?.sd) p.modifierSpace = space;
         }
         return p;
       },

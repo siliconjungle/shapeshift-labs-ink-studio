@@ -33,6 +33,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.makeSculpt().grp` | function | `(k)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `toolkit.makeSculpt().heightAt` | function | `(x, z, y0, depth)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `toolkit.makeSculpt().keepAttrs` | value | `boolean` | [guide](../../README.md#geometry-and-materials) |
+| `toolkit.makeSculpt().keepPartRenderSdf` | value | `null` | [guide](../../README.md#geometry-and-materials) |
 | `toolkit.makeSculpt().keepReferenceSdf` | value | `boolean` | [guide](../../README.md#geometry-and-materials) |
 | `toolkit.makeSculpt().keepRenderSdf` | value | `boolean` | [guide](../../README.md#geometry-and-materials) |
 | `toolkit.makeSculpt().lathe` | function | `(c, h, rf, mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |

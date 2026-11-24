@@ -1,9 +1,11 @@
 /* Partition retained composites into fields which share one affine skin transform. */
 const cache = new WeakMap();
 
-function keyFor(world, rest, row) {
-  if (world.anim?.geometryOwned?.[row] || world.anim?.physicsOwned?.[row] || world.anim?.rig?.bid?.[row])
-    return null;
+function keyFor(world, rest, row, owner) {
+  const rig = world.anim?.rig, part = rig?.bid?.[row];
+  if (world.anim?.geometryOwned?.[row] || world.anim?.physicsOwned?.[row]) return null;
+  if (part) return owner.whole && rig.names[part]===owner.tag && !rig.free?.[row] ? 'rig:'+part : null;
+  if (owner.whole) return null;
   const q = row * 16, kind = Math.round(rest[q+11]) & 15;
   if (kind !== 12) return kind === 13 ? null : '';
   return rest[q+14] ? [rest[q+12],rest[q+13],rest[q+14]].join(',') : String(rest[q+12]);
@@ -16,8 +18,9 @@ function groups(world, source, acceptsRow, makeFields) {
     if (owner.born !== undefined || owner.mat.motionAt) continue;
     for (const [start,end,saved] of ranges) for (let i=start;i<end;i++) {
       const q=i*16, k=(i-start)*3;
-      const next = i<world.count && acceptsRow(i,rest) &&
-        [0,1,2].every(c=>rest[q+c]===saved[k+c]) ? keyFor(world,rest,i) : null;
+      const reference = owner.whole ? world.anim?.base ?? rest : rest;
+      const next = i<world.count && acceptsRow(i,reference) &&
+        [0,1,2].every(c=>reference[q+c]===saved[k+c]) ? keyFor(world,reference,i,owner) : null;
       key = key===undefined || key===next ? next : null;
     }
     if (owner.tag && key!==undefined) {
@@ -59,23 +62,34 @@ const mul = (m,x,y,z) => [
   m[6]*x+m[7]*y+m[8]*z
 ];
 
-function transform(key, bones) {
+function rigPart(key) {
+  return key.startsWith('rig:') ? Number(key.slice(4)) : 0;
+}
+
+function transform(key, bones, rig) {
   if (key==='') return null;
+  const part = rigPart(key);
+  if (part) return rig?.M?.length>=(part+1)*12 ? affine(rig.M.subarray(part*12,(part+1)*12)) : false;
   const [first,second,weight]=key.split(',').map(Number);
   if (!bones || (first+1)*12>bones.length || weight && (second+1)*12>bones.length) return false;
   const m=Array.from(bones.subarray(first*12,first*12+12),
     (n,i)=>weight ? n+weight*(bones[second*12+i]-n) : n);
+  return affine(m);
+}
+
+function affine(m) {
   const [a,b,c,d,e,f,g,h,i,tx,ty,tz]=m;
   const adj=[e*i-f*h,c*h-b*i,b*f-c*e,f*g-d*i,a*i-c*g,c*d-a*f,d*h-e*g,b*g-a*h,a*e-b*d];
   const det=a*adj[0]+b*adj[3]+c*adj[6];
   if (!Number.isFinite(det) || Math.abs(det)<1e-8) return false;
   const inverse=adj.map(n=>n/det);
   const transpose=[inverse[0],inverse[3],inverse[6],inverse[1],inverse[4],inverse[7],inverse[2],inverse[5],inverse[8]];
-  const gram=[0,3,6].map(j=>[0,3,6].map(k=>inverse[j]*inverse[k]+inverse[j+1]*inverse[k+1]+inverse[j+2]*inverse[k+2]));
-  // The maximum absolute row sum bounds the squared inverse spectral norm.
-  const distanceScale=1/Math.sqrt(Math.max(...gram.map(row=>row.reduce((sum,n)=>sum+Math.abs(n),0))));
+  // The maximum absolute row sum of the Gram matrix bounds the squared spectral norm.
+  const normBound = matrix=>Math.sqrt(Math.max(...[0,3,6].map(j=>[0,3,6].reduce((sum,k)=>
+    sum+Math.abs(matrix[j]*matrix[k]+matrix[j+1]*matrix[k+1]+matrix[j+2]*matrix[k+2]),0))));
   return {
-    distanceScale,
+    distanceScale:1/normBound(inverse),
+    stretch:normBound(m),
     point(x,y,z) {
       const p=mul(m,x,y,z);
       return [p[0]+tx,p[1]+ty,p[2]+tz];
@@ -111,4 +125,4 @@ function field(source, motion) {
   };
 }
 
-module.exports={groups,transform,field};
+module.exports={groups,transform,field,affine,rigPart};

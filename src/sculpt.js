@@ -83,6 +83,7 @@ function makeSculpt(B, rest) {
     res: 0.09,
     adaptiveSampling: false,
     keepRenderSdf: false,
+    keepPartRenderSdf: null,
     keepReferenceSdf: false,
     sun: norm([-0.5, 0.8, 0.45]),
     amb: 0.14,
@@ -1711,7 +1712,8 @@ function makeSculpt(B, rest) {
   };
   let renderSdf, referenceSdf;
   function captureRenderSdf() {
-    const positive = pos.filter(p => !p.whole && Number.isFinite(p.br) && p.br < 1e8 && SdfAssist.opaque(p.mat));
+    const partAllowed = p => p.tag && (S.keepPartRenderSdf===true || S.keepPartRenderSdf?.has(p.renderTarget?.entity));
+    const positive = pos.filter(p => (!p.whole || partAllowed(p)) && Number.isFinite(p.br) && p.br < 1e8 && SdfAssist.opaque(p.mat));
     if (!positive.length) return null;
     const negative = neg.slice();
     const rows = new Map();

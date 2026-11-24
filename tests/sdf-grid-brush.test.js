@@ -113,6 +113,19 @@ test('the CLI previews and writes a source-bound brush with a stable modifier ID
   const output=JSON.parse(fs.readFileSync(file('edited.json')));
   assert.equal(output.solids[0].modifiers[0].id,'grid-cut');
   assert(KIT.diorama.check(output).every(row=>row.level!=='error'));
+  write('scene.json',output);
+  const latest=run('targets',file('document.json'),'--destination','sculpt',...sceneArgs);
+  const retune=patch(latest,undefined,'deepen');
+  retune.operation={updateBrush:{id:'grid-cut',depth:.34}};
+  write('edit.json',retune);
+  const tuned=run('preview',...args);
+  assert(tuned.valid,JSON.stringify(tuned.conflicts));
+  assert.equal(tuned.targets[0].modifier,'grid-cut');
+  assert.equal(tuned.targets[0].brush.settings.depth,.34);
+  run('edit',...args,'--out',file('deepened.json'));
+  const [deepened]=JSON.parse(fs.readFileSync(file('deepened.json'))).solids[0].modifiers;
+  assert.equal(deepened.id,'grid-cut');
+  assert.deepEqual(deepened.brush.attachment,output.solids[0].modifiers[0].brush.attachment);
 });
 
 function sculpt(spec,mode,options,id=mode) {
@@ -221,4 +234,94 @@ test('fill meets the rim and smooth removes and adds relief locally', () => {
   assert(smoothing.editor.undo());
   smoothing.editor.redo();
   assert.deepEqual(smoothing.scene.snapshot(),edited);
+  const wider = smoothing.editor.apply(retune(smoothing.editor,'smooth',{radius:2}));
+  assert.equal(wider.solids[0].modifiers[0].brush.settings.radius,2);
+  assert.deepEqual(wider.solids[0].modifiers[0].brush.attachment,edited.solids[0].modifiers[0].brush.attachment);
+});
+
+function partSource() {
+  const base = source();
+  return { ...base,solids:[{ ...base.solids[0],part:'door' }],
+    parts:{door:{joint:[0,0,0]}},
+    motion:[
+      {do:'bob',part:'door',axis:[1,0,0],amount:.45,period:2},
+      {do:'squash',part:'door',axis:[0,0,1],amount:.3,period:2}
+    ] };
+}
+
+function partDocument() {
+  return document('panel.json',{ sceneBindings:[{id:'plate',scene:'panel.json',object:'plate',part:'door'}] });
+}
+
+function retune(editor,id,settings,editId='retune') {
+  const observed = pixels(editor);
+  const command = patch(observed,undefined,editId);
+  command.operation = { updateBrush:{id,...settings} };
+  return command;
+}
+
+test('cuts and relief drawn on a posed part follow rest points through a squash and translation', () => {
+  const spec = partSource(), scene = ink.createSceneEditor(spec);
+  const editor = ink.createPixelEditor(partDocument(),{sceneEditor:scene,sceneRef:'panel.json'});
+  const command = patch(pixels(editor),{mode:'carve',depth:.16,time:.5,direction:'normal',pixels:[[32,32]]},'door-groove');
+  const preview = editor.previewEdit(command);
+  assert(preview.valid,JSON.stringify(preview.conflicts));
+  const target = preview.targets[0], hit = target.brush.hits[0];
+  assert.deepEqual(target.brush.attachment,{object:'plate',part:'door',time:.5});
+  assert(hit.rest[0]<-.4);
+  const carved = editor.apply(command);
+  assert.equal(carved.solids[0].modifiers[0].brush.attachment.source.part,'door');
+  const edited = editor.apply(patch(pixels(editor),{mode:'raise',depth:.11,time:.5,direction:'normal',pixels:[[35,32]]},'door-relief'));
+
+  function render(sourceScene,time) {
+    const world = KIT.diorama.build(sourceScene,{retainPartRenderSdf:true});
+    require('../cli/diarama-pose.js').pose(world,time,{kit:ink.load()});
+    return ink.render(world,{w,h,px:1,t:time,raw:true,sdfAssist:{posed:true},
+      passes:['opaque-surface','partId','sourceSurface']}).passes;
+  }
+  const animated = render(edited,.5), original = render(spec,.5), center=32*w+32;
+  assert.equal(animated.surfaceKind[center],2);
+  assert(animated.depth[center]>original.depth[center]+.13);
+  const relief=32*w+35;
+  assert.equal(animated.surfaceKind[relief],2);
+  assert(animated.depth[relief]<original.depth[relief]-.08);
+  const unposed = render(edited,0), originalRest = render(spec,0);
+  const changed = Array.from({length:w},(_,x)=>32*w+x).filter(p=>
+    unposed.surfaceKind[p]===2 && originalRest.surfaceKind[p]===2 && unposed.depth[p]>originalRest.depth[p]+.09);
+  assert(changed.some(p=>p%w<30));
+  assert(unposed.depth[center]<originalRest.depth[center]+.01);
+});
+
+test('parameter updates use the original anchors and preserve the stroke ID and following sculpt modifiers', () => {
+  const scene = ink.createSceneEditor(partSource()), editor = ink.createPixelEditor(partDocument(),
+    {sceneEditor:scene,sceneRef:'panel.json'});
+  const cut = patch(pixels(editor),{mode:'carve',depth:.15,time:.5,pixels:[[32,32]]},'retained-notch');
+  const first = editor.apply(cut).solids[0].modifiers[0];
+  scene.setTransform({translation:[2,0,0],scale:1.5},'solid:plate');
+  const warp = {id:'later-warp',kind:'warp',bend:.15};
+  scene.setModifiers([first,warp],'solid:plate');
+  const before = scene.snapshot(), command = retune(editor,first.id,{depth:.31,direction:'normal',profile:'round',falloff:{pixels:.2}});
+  const preview = editor.previewEdit(command);
+  assert(preview.valid,JSON.stringify(preview.conflicts));
+  const review = preview.targets[0].brush;
+  assert.equal(preview.targets[0].modifier,first.id);
+  assert.equal(review.settings.depth,.31);
+  assert.deepEqual(review.attachment,{object:'plate',part:'door',time:.5});
+  assert.deepEqual(scene.snapshot(),before);
+  editor.begin('Retune retained notch');
+  const result = editor.apply(command), [updated,following] = result.solids[0].modifiers;
+  assert.deepEqual(editor.previewChanges().targets[0].brush,review);
+  assert.equal(updated.id,first.id);
+  assert.deepEqual(updated.brush.attachment,first.brush.attachment);
+  assert.notDeepEqual(updated.brush.columns,first.brush.columns);
+  assert.deepEqual(following,warp);
+  const scan = pixels(editor).modifiers[0];
+  assert.equal(scan.settings.depth,.31);
+  assert.equal(scan.attachment.pixels,1);
+  editor.commit();
+  const receipt = editor.receipts().at(-1);
+  assert(editor.undo());
+  assert.deepEqual(scene.snapshot(),before);
+  editor.replay(receipt);
+  assert.deepEqual(scene.snapshot(),result);
 });

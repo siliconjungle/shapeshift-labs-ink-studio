@@ -41,7 +41,7 @@ function isolatedField(source,allow,coverage,overrideRows) {
 function bind(world, data, settings,allow,sourceBinding,coverage,overrideRows) {
   const labels = TargetSelectors.index(world), rows = [];
   const normals = world.renderMetadata?.normals;
-  const boned = new Set(world.anim?.boned ?? []), owned = world.anim?.geometryOwned;
+  const boned = new Set(world.anim?.boned ?? []), owned = world.anim?.geometryOwned, rig = world.anim?.rig;
   const { nearest } = require('../index.js').load().KIT.procedural.attributes;
   const sources = [];
   function opaque(i, rest, posed) {
@@ -50,17 +50,18 @@ function bind(world, data, settings,allow,sourceBinding,coverage,overrideRows) {
       !world.opticalSplats?.[i*OpticalMaterials.STRIDE+3];
   }
   function addSource(source, geometry, ownerSet, motion, key, sourceIndex, ownerIndices) {
-    const parts = new Map();
+    const parts = new Map(), rigPart = SdfPose.rigPart(key);
     let selected = false, partIndex=0;
     for (const [owner,ranges] of source.rows) {
       if (ownerSet && !ownerSet.has(owner)) continue;
       const part = { records:[], points:[], key:JSON.stringify(['sdf',sourceIndex,key,partIndex++]) };
       for (const [start,end,points] of ranges) for (let i=start;i<Math.min(end,world.count);i++) {
         const q = i*16, offset = (i-start)*3;
-        if (owned?.[i] || !opaque(i,data,false) || world.anim?.rig?.bid?.[i]) continue;
+        if (owned?.[i] || !opaque(i,data,false) || rig?.bid?.[i] && !rigPart) continue;
         if (!motion && (boned.has(i) || data[q]!==points[offset] || data[q+1]!==points[offset+1] ||
             data[q+2]!==points[offset+2])) continue;
-        if (motion && (!boned.has(i) || motion.point(points[offset],points[offset+1],points[offset+2])
+        if (motion && (!(rigPart ? rig.bid[i]===rigPart && !rig.free[i] : boned.has(i)) ||
+            motion.point(points[offset],points[offset+1],points[offset+2])
             .some((value,axis)=>Math.abs(data[q+axis]-value)>1e-4))) continue;
         const target = {object:owner.renderOwner,entity:owner.renderOwner,material:owner.mat.materialId,
           surface:owner.mat.surfaceId ?? owner.mat.surface?.id,
@@ -84,10 +85,10 @@ function bind(world, data, settings,allow,sourceBinding,coverage,overrideRows) {
     const source = isolatedField(original,allow,coverage,overrideRows);
     if (!source) continue;
     const ownerIndices = sourceBinding && new Map([...original.rows.keys()].map((owner,i)=>[owner,i]));
-    if (settings.posed && world.anim?.bones && source.bind) {
+    if (settings.posed && (world.anim?.bones || rig) && source.bind) {
       for (const [key,group] of SdfPose.groups(world,source,(i,rest)=>opaque(i,rest,true),
         (body,cut)=>[source.bind(body,cut)].filter(Boolean))) {
-        const motion=SdfPose.transform(key,world.anim.bones);
+        const motion=SdfPose.transform(key,world.anim?.bones,rig);
         if (motion!==false) for (const geometry of group.fields)
           addSource(source,SdfPose.field(geometry,motion),group.owners,motion,key,sourceIndex,ownerIndices);
       }

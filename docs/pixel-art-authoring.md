@@ -2176,7 +2176,7 @@ and declared destinations. The edit JSON has `revision`, `frame`, `id`, and
 | `decal-layer` | `operation.type` of `move`, `mask`, `replace`, or `bake` | Revised JSON diorama with the [decal layer](surface-decals.md#edit-a-decal-layer) edited in place |
 | `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and paint, footprint, or transform controls, or an ordered `operation.topology` batch | Splat-fit asset for `render --splat-fit` |
 | `scan-material` | Explicit `operation.texels` on a registered mesh material | Scan paint asset for `render --scan-paint` |
-| `sdf-shape` | `operation.brush`, `operation.parameters`, a new `operation.modifier`, or `operation.updateModifier` with `id` and `patch` | Revised JSON diorama with edited geometry |
+| `sdf-shape` | `operation.brush`, `operation.updateBrush`, `operation.parameters`, a new `operation.modifier`, or `operation.updateModifier` with `id` and `patch` | Revised JSON diorama with edited geometry |
 | `sdf-material` | `operation.material` with a palette role or native material object | Revised JSON diorama with the solid's material changed |
 
 Omitting `destination` continues to edit raster pixels. Scene writes take
@@ -2586,8 +2586,8 @@ the imported directional coefficients. See the [scan painting workflow](relighta
 
 ### Sculpt an SDF from native pixels
 
-Bind an `sdf-shape` destination to a finite static solid in a JSON
-diorama. Use the document and source revisions from `pixel-art targets`
+Bind an `sdf-shape` destination to a finite solid in a JSON diorama.
+A moving solid can use a named `part`. Use the document and source revisions from `pixel-art targets`
 in the edit. A brush can use explicit document pixels or a named
 selection on the active frame.
 
@@ -2607,7 +2607,8 @@ selection on the active frame.
 Put this object under `operation`. For a saved selection, replace
 `pixels` with `"selection": "notch"`. A footprint can contain up to 1024
 pixels. Marks resolve through the binding's canvas mapping. The scene's
-initial camera supplies the projection. An optional `camera` in the
+initial camera supplies the projection. Set `time` in the brush to
+capture a posed source at a time in seconds. An optional `camera` in the
 brush accepts `target`, `yaw`, `pitch`, `dist`, `ortho`, and `fov`.
 Use `minFacing` to adjust the minimum view-facing cosine from the
 default of 0.2.
@@ -2657,6 +2658,38 @@ solid, using 16 depth samples along each projected pixel's center. Blocked,
 grazing, protected, and unbound marks are skipped. A brush with no valid
 hits is rejected. Apply from an editor transaction to preview, cancel,
 commit, undo, or replay the retained modifier.
+
+### Edit an attached SDF stroke
+
+Brush geometry is kept in the source solid's rest frame. A named part
+can translate, rotate, and squash with its shared affine rig transform.
+A later sculpt modifier can also deform the stroke as part of the solid.
+Exact posed SDF tracing uses coherent part ownership and an invertible
+pose. The painted footprint stays anchored to the same rest surface.
+
+The five explicit shape operations capture editing anchors when you
+draw them. Use `pixel-art targets` to inspect the stroke ID, source part,
+and current parameters. To retune a committed stroke, use a new edit ID,
+the latest source revision, and this operation:
+
+```json
+{
+  "updateBrush": {
+    "id": "notch",
+    "depth": 0.34,
+    "direction": "normal",
+    "profile": "round",
+    "falloff": { "pixels": 2 }
+  }
+}
+```
+
+`updateBrush` accepts depth, direction, profile, falloff, and smoothing
+radius. It rebuilds the stroke from the saved anchors, evaluates the
+source before that modifier, and keeps the stroke's ID and stack
+position. The preview describes the retuned stroke in its capture frame.
+The usual revision, preview, undo, and receipt paths apply. Stored strokes
+from before anchor capture still build as retained geometry.
 
 ### Target shot corrections and scene sources
 

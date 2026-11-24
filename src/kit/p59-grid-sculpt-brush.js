@@ -39,11 +39,47 @@
     return Array.isArray(grid) && grid.length===2 && Array.from(grid).every(n=>Number.isSafeInteger(n) && finite(n,1,512));
   }
 
+  function validProjection(projection) {
+    return record(projection,['origin','right','down','forward','perspective']) &&
+      [projection.origin,projection.right,projection.down,projection.forward].every(vec) &&
+      typeof projection.perspective==='boolean';
+  }
+
+  function checkAttachment(attachment,grid,mode) {
+    if (attachment===undefined) return;
+    const { source,time,projection,frame,marks } = attachment ?? {};
+    const named = value=>typeof value==='string' && value.trim().length>0 && value.length<=256;
+    if (!record(attachment,['source','time','projection','frame','marks']) ||
+        !record(source,['object','part']) || !named(source.object) || !(source.part===null || named(source.part)) ||
+        !finite(time,0,120) || !validProjection(projection) ||
+        !Array.isArray(frame) || frame.length!==12 || !Array.from(frame).every(n=>finite(n,-1e6,1e6)) ||
+        Math.abs(V.dot(V.cross(frame.slice(0,3),frame.slice(3,6)),frame.slice(6,9)))<1e-8 ||
+        !Array.isArray(marks) || !marks.length || marks.length>maxCells)
+      throw new TypeError('Invalid grid brush attachment frame or source');
+    const used = new Set(), [w] = grid;
+    for (const mark of marks) {
+      if (!record(mark,['at','sourceAt','depth','position','normal',...(mode==='smooth' ? ['smoothOffsets'] : [])]) ||
+          !Array.isArray(mark.at) || mark.at.length!==2 ||
+          !Array.from(mark.at).every(n=>Number.isSafeInteger(n) && finite(n,0,1e6)) ||
+          !Array.isArray(mark.sourceAt) || mark.sourceAt.length!==2 ||
+          !Array.from(mark.sourceAt).every((n,i)=>Number.isSafeInteger(n) && n>=0 && n<grid[i]) ||
+          !finite(mark.depth,1e-4,2000) || !vec(mark.position) || !vec(mark.normal) || !finite(V.len(mark.normal),.99,1.01) ||
+          mode==='smooth' && (!Array.isArray(mark.smoothOffsets) || mark.smoothOffsets.length!==8 ||
+            !Array.from(mark.smoothOffsets).every(p=>p===null || vec(p))))
+        throw new RangeError('Invalid grid brush attachment mark');
+      const key = mark.sourceAt[1]*w+mark.sourceAt[0];
+      if (used.has(key)) throw new RangeError('Repeated grid brush attachment mark');
+      used.add(key);
+    }
+    return used;
+  }
+
   function checkColumns(brush,mode) {
-    if (!record(brush,['version','grid','settings','columns']) || !checkGrid(brush.grid) ||
+    if (!allowed(brush,['version','grid','settings','columns','attachment']) || !checkGrid(brush.grid) ||
         !Array.isArray(brush.columns) || !brush.columns.length || brush.columns.length>maxCells)
       throw new TypeError('Grid shape operation needs a version 2 stencil of up to 1024 columns');
     settings(brush.settings,mode);
+    const attached = checkAttachment(brush.attachment,brush.grid,mode);
     const change = mode==='carve' || mode==='through-cut' ? 'cut' : 'add';
     const [w,h] = brush.grid, used = new Set();
     for (const row of brush.columns) {
@@ -53,7 +89,7 @@
           !(mode==='smooth' ? ['add','cut'].includes(row.change) : row.change===change))
         throw new TypeError('A shape operation column needs a native pixel, eight rest-space corners, and a supported change');
       const key = row.at[1]*w+row.at[0];
-      if (used.has(key)) throw new RangeError('Repeated shape operation pixel');
+      if (used.has(key) || attached && !attached.has(key)) throw new RangeError('Repeated or unanchored shape operation pixel');
       used.add(key);
       columnFromCorners(row.corners,true);
     }
@@ -67,14 +103,12 @@
         !Array.isArray(brush.cells) || !brush.cells.length || brush.cells.length > maxCells)
       throw new TypeError('Grid sculpt brush needs a version 1 stencil of up to 1024 cells');
     const { projection, grid:[w,h], cells } = brush;
-    if (!record(projection,['origin','right','down','forward','perspective']) ||
-        ![projection.origin,projection.right,projection.down,projection.forward].every(vec) ||
-        typeof projection.perspective !== 'boolean')
+    if (!validProjection(projection))
       throw new TypeError('Grid sculpt brush needs a finite projection frame');
     const { right, down, forward } = projection;
     const lengths = [right,down,forward].map(axis => Math.hypot(...axis));
     if (lengths.some(n=>n<1e-7 || n>1000) ||
-        Math.abs(V.dot(V.cross(right,down),forward)) < lengths.reduce((a,b)=>a*b)*.999)
+        Math.abs(V.dot(V.cross(right,down),forward)) < lengths.reduce((a,b)=>a*b)*1e-4)
       throw new RangeError('Grid sculpt brush projection needs independent camera axes');
     const seen = new Set();
     for (const cell of cells) {

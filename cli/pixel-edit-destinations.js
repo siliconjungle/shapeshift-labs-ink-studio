@@ -546,14 +546,25 @@ function apply(frame, edit, route, context, readMarks) {
     return asset;
   }
   if (destination.kind === 'decal-layer') return decalEdit(frame,edit,route,source.editor);
-  if (destination.kind === 'sdf-shape' && edit.operation?.brush !== undefined) {
-    if (!fields(edit.operation,['brush'])) throw new TypeError('Use a separate edit for a grid brush');
+  if (destination.kind === 'sdf-shape' &&
+      (edit.operation?.brush !== undefined || edit.operation?.updateBrush !== undefined)) {
+    const { brush,updateBrush } = edit.operation;
+    if (!fields(edit.operation,[brush!==undefined ? 'brush' : 'updateBrush']))
+      throw new TypeError('Use a separate edit for a grid brush');
     const { key,solid } = boundSolid(binding,source.editor), modifiers = solid.modifiers ?? [];
-    if (modifiers.some(modifier=>modifier.id===edit.id))
-      throw new RangeError('An SDF modifier uses the edit ID, which must be new on the solid');
-    const { modifier,report } = GridBrush.project(source.editor,solid,frame,binding,edit.operation.brush,layer);
-    source.editor.setModifiers([...modifiers,{ ...modifier,id:edit.id }],key);
-    context.onEditTarget?.({ ...sourceTarget(route,edit),node:key,modifier:edit.id,brush:report });
+    let report, id;
+    if (brush!==undefined) {
+      id = edit.id;
+      if (modifiers.some(modifier=>modifier.id===id))
+        throw new RangeError('An SDF modifier uses the edit ID, which must be new on the solid');
+      const planned = GridBrush.project(source.editor,solid,frame,binding,brush,layer);
+      source.editor.setModifiers([...modifiers,{ ...planned.modifier,id }],key);
+      report = planned.report;
+    } else {
+      report = GridBrush.update(source.editor,key,solid,binding,updateBrush);
+      id = updateBrush.id;
+    }
+    context.onEditTarget?.({ ...sourceTarget(route,edit),node:key,modifier:id,brush:report });
     return source.editor.snapshot();
   }
   const change = destination.kind === 'surface-channel' && layer?.kind === 'surface' &&
@@ -619,7 +630,10 @@ function targets(route, context, limit, query) {
   return { destination:destination.id, binding, revision, sourceRevision,
     solid:{ id:solid.id, key, label:solid.label, part:solid.part },
     ...(channel !== undefined && { surfaceChannel:{ object:solid.id, chart, channel } }),
-    modifiers:(solid.modifiers ?? []).map(({id,kind,label}) => ({ id,kind,label }))
+    modifiers:(solid.modifiers ?? []).map(({id,kind,label,mode,brush}) => ({ id,kind,label,
+      ...(kind==='grid-brush' && { mode,...(brush.settings && {settings:brush.settings}),
+        ...(brush.attachment && { attachment:{ ...brush.attachment.source,time:brush.attachment.time,
+          pixels:brush.attachment.marks.length } }) }) }))
   };
 }
 

@@ -262,8 +262,11 @@
       else document.transact('Edit material role ' + name, write);
     }
 
-    const build = (inputs = buildEnv.parameterInputs, { retainRenderSdf = buildEnv.retainRenderSdf } = {}) => Object.assign(
-      DIO.build(current().preview, { ...buildEnv, parameterInputs: inputs, retainRenderSdf }), { spec: snapshot() });
+    const build = (inputs = buildEnv.parameterInputs, {
+      retainRenderSdf = buildEnv.retainRenderSdf, retainPartRenderSdf = buildEnv.retainPartRenderSdf
+    } = {}) => Object.assign(DIO.build(current().preview, {
+      ...buildEnv, parameterInputs:inputs,retainRenderSdf,retainPartRenderSdf
+    }), { spec:snapshot() });
 
     function refreshPrefabs(prefabs, { assets = buildEnv.assets } = {}) {
       const bindings = { ...buildEnv, assets, prefabs: freeze(clone(prefabs)) };

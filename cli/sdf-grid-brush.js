@@ -8,6 +8,8 @@ const Targets = require('../src/target-selectors.js');
 const Camera = require('../src/camera-lens.js');
 const { conflict } = require('./pixel-edit-preview.js');
 const ShapeOperations = require('./sdf-brush-operations.js');
+const SdfPose = require('./sdf-pose.js');
+const { pose } = require('./diarama-pose.js');
 
 const fields = (raw, keys) => raw && Object.getPrototypeOf(raw) === Object.prototype &&
   Object.keys(raw).every(key=>keys.includes(key));
@@ -19,19 +21,19 @@ function prepare(raw,frame,binding,api) {
   const { maxCells,modes } = api;
   const legacy = ['add','cut'].includes(raw?.mode);
   const controls = ['direction','profile','falloff','radius'];
-  const keys = ['mode','depth','pixels','selection','camera','minFacing',...(legacy ? [] : controls)];
+  const keys = ['mode','depth','pixels','selection','camera','minFacing','time',...(legacy ? [] : controls)];
   if (!fields(raw,keys) || !legacy && !modes.includes(raw.mode) ||
       !finite(raw.depth,.005,20) || (raw.pixels===undefined)===(raw.selection===undefined))
     throw new TypeError('A native SDF brush needs a shape mode, depth from .005 to 20, and pixels or a named selection');
   const settings = !legacy && api.settings({ depth:raw.depth,
     ...Object.fromEntries(controls.map(key=>[key,raw[key]])) },raw.mode);
-  const { mode,depth,minFacing=.2,camera={} } = raw;
-  if (!finite(minFacing,.05,1) || !fields(camera,['yaw','pitch','dist','target','ortho','fov']) ||
+  const { mode,depth,minFacing=.2,camera={},time=0 } = raw;
+  if (!finite(time,0,120) || !finite(minFacing,.05,1) || !fields(camera,['yaw','pitch','dist','target','ortho','fov']) ||
       ['yaw','pitch','dist','fov'].some(key=>camera[key]!==undefined && !Number.isFinite(camera[key])) ||
       camera.dist!==undefined && !finite(camera.dist,.01,1000) ||
       camera.target!==undefined && !vector(camera.target,3,n=>finite(n,-1e5,1e5)) ||
       camera.ortho!==undefined && typeof camera.ortho!=='boolean')
-    throw new TypeError('An SDF brush needs a valid camera and a facing cosine from .05 to 1');
+    throw new TypeError('An SDF brush needs a valid camera, time from 0 to 120, and a facing cosine from .05 to 1');
   const { width,height } = frame, grid = binding.canvas?.size ?? [width,height];
   ViewSource.grid(...grid);
   const pixels = raw.pixels ?? frame.selections?.find(row=>row.id===raw.selection)?.pixels;
@@ -40,22 +42,28 @@ function prepare(raw,frame,binding,api) {
         at[0]>=0 && at[0]<width && at[1]>=0 && at[1]<height) ||
       new Set(pixels.map(at=>at.join(','))).size!==pixels.length)
     throw new RangeError('The brush footprint needs 1–'+maxCells+' distinct document pixels or a named selection on this frame');
-  return { mode,depth,minFacing,camera,grid,pixels,settings };
+  return { mode,depth,minFacing,camera,grid,pixels,settings,time };
 }
 
 function project(editor,solid,frame,binding,raw,layer) {
-  const { KIT } = require('../index.js').load(), { V } = KIT, api = KIT.procedural.gridSculptBrush;
-  const { mode,depth,minFacing,camera,grid,pixels,settings } = prepare(raw,frame,binding,api);
-  if (solid.part || solid.kind==='ground' || solid.ghost || solid.carve || solid.hold)
-    throw conflict('unsupported-sdf-brush-target','Grid brushes need a finite, static solid with an editable exterior',
+  const kit = require('../index.js').load(), { V } = kit.KIT, api = kit.KIT.procedural.gridSculptBrush;
+  const { mode,depth,minFacing,camera,grid,pixels,settings,time } = prepare(raw,frame,binding,api);
+  if (solid.kind==='ground' || solid.ghost || solid.carve || solid.hold)
+    throw conflict('unsupported-sdf-brush-target','Grid brushes need a finite solid with an editable exterior',
       { binding:binding.id,object:solid.id });
-  const world = editor.build(undefined,{ retainRenderSdf:true });
-  const [w,h] = grid, selected = { object:solid.id };
+  const world = editor.build(undefined,{ retainRenderSdf:true,retainPartRenderSdf:Boolean(solid.part) });
+  pose(world,time,{ kit,maxSteps:7200 });
+  const rig = world.anim?.rig, index = solid.part && rig?.names.indexOf(solid.part);
+  const carried = index>0 && SdfPose.transform('rig:'+index,null,rig);
+  if (solid.part && !carried)
+    throw conflict('unsupported-sdf-brush-pose','The source part needs an invertible affine pose',
+      { binding:binding.id,object:solid.id,part:solid.part });
+  const [w,h] = grid, selected = { object:solid.id,...(solid.part && {part:solid.part}) };
   const { render,cameraCapture } = require('./render.js');
   let projection;
-  const image = render(world,{ ...camera,w,h,px:1,t:0,raw:true,transparent:true,
+  const image = render(world,{ ...camera,w,h,px:1,t:time,raw:true,transparent:true,
     passes:['opaque-surface','partId','sourceSurface'],
-    sdfAssist:{ epsilon:.0005,steps:256 },splatOrder:'surface',pixelSelection:selected,
+    sdfAssist:{ epsilon:.0005,steps:256,posed:Boolean(world.anim?.rig || world.anim?.bones) },splatOrder:'surface',pixelSelection:selected,
     renderGraph:false,renderGrid:false,cameraGuides:false,inspection:false,shutter:false,composite:false,
     ...cameraCapture(null,(raster,sample)=>{
       if (raster.width!==w || raster.height!==h) return;
@@ -89,15 +97,15 @@ function project(editor,solid,frame,binding,raw,layer) {
       skip(at,code,{ sourceAt,...details });
       continue;
     }
-    const { surface,owner,viewAxis } = hit;
-    const space = owner.modifierSpace;
-    const toLocal = p=>space ? space.inverse(p) : p.slice();
+    const { surface,owner } = hit;
+    const toLocal = p=>ownerLocal(owner,carried ? carried.rest(...p) : p);
     if (settings) {
-      const { direction } = settings;
-      const outward = direction==='normal' ? V.norm(surface.geometricNormal) : direction==='view' ? viewAxis : direction;
-      if (V.dot(surface.geometricNormal,outward)<.05) { skip(at,'invalid-outward-axis',{ sourceAt }); continue; }
+      if (candidates.length && candidates[0].owner!==owner) {
+        skip(at,'incompatible-stroke-frame',{ sourceAt });
+        continue;
+      }
       used.add(pixel);
-      candidates.push({ at,sourceAt,surface,owner,outward,direction,toLocal });
+      candidates.push({ at,sourceAt,surface,owner,toLocal });
       continue;
     }
 
@@ -105,12 +113,13 @@ function project(editor,solid,frame,binding,raw,layer) {
     const overlap = Math.min(depth*.5,Math.max(.002,pixelSize*.15));
     const near = surface.depth-(mode==='cut' ? overlap : depth), far = surface.depth+(mode==='cut' ? depth : overlap);
     if (near<1e-4 || far>2000) { skip(at,'outside-brush-depth',{ sourceAt }); continue; }
-    retainedProjection ??= {
-      origin:toLocal(projection.origin), perspective:projection.perspective,
-      ...Object.fromEntries(['right','down','forward'].map(key=>[key,space ?
-        V.mul(space.inverseDirection(projection[key]),1/space.scale) : projection[key].slice()]))
-    };
-    const { intervals,estimate } = affectedDepth(owner.sd,api,projection,grid,x,y,near,far,mode);
+    if (!retainedProjection) {
+      const origin = toLocal(projection.origin);
+      retainedProjection = { origin,perspective:projection.perspective,
+        ...Object.fromEntries(['right','down','forward'].map(key=>
+          [key,V.sub(toLocal(V.add(projection.origin,projection[key])),origin)])) };
+    }
+    const { intervals,estimate } = affectedDepth(posedOwner(owner,carried).sd,api,projection,grid,x,y,near,far,mode);
     const geometricPoint = toLocal(surface.position);
     used.add(pixel);
     cells.push([x,y,near,far]);
@@ -118,20 +127,20 @@ function project(editor,solid,frame,binding,raw,layer) {
     volume += estimate;
   }
   if (settings) {
-    const planned = candidates.length && ShapeOperations.plan({ mode,settings,grid,projection,candidates,lookup,skipped,api,V });
-    if (planned) return planned;
-    return reject('No brush pixels can apply the requested shape operation');
+    if (!candidates.length) return reject(binding,skipped,'No brush pixels hit a visible, editable SDF surface');
+    const [first] = candidates;
+    const attachment = { source:{ object:solid.id,part:solid.part??null },time,projection,frame:affineMatrix(first.toLocal,V),
+      marks:candidates.map(hit=>({ at:hit.at,sourceAt:hit.sourceAt,depth:hit.surface.depth,position:hit.surface.position,
+        normal:V.norm(hit.surface.geometricNormal),
+        ...(mode==='smooth' && {smoothOffsets:ShapeOperations.smoothOffsets(hit,lookup,V)}) })) };
+    return fromAttachment({ mode,settings,grid,attachment,owner:posedOwner(first.owner,carried),binding,skipped,api,V });
   }
-  if (!hits.length) return reject('No brush pixels hit a visible, editable SDF surface');
+  if (!hits.length) return reject(binding,skipped,'No brush pixels hit a visible, editable SDF surface');
   const brush = { version:1,grid,projection:retainedProjection,cells };
   const { bounds } = api.prepare(brush);
   return { modifier:{ kind:'grid-brush',mode,brush },report:{ mode,grid,projectedPixels:hits.length,hits,
-    skippedHits:skipped,volume:{ space:'solid-rest',bounds,estimatedWorldVolume:volume,depthSamplesPerPixel:depthSamples } } };
-
-  function reject(message) {
-    const conflicts = skipped.map(hit=>({ ...hit,binding:binding.id,message }));
-    throw Object.assign(new RangeError(message),{ conflicts });
-  }
+    skippedHits:skipped,volume:{ space:'solid-rest',bounds,estimatedWorldVolume:volume,depthSamplesPerPixel:depthSamples },
+    ...(solid.part && {attachment:{object:solid.id,part:solid.part,time}}) } };
 
   function lookup(x,y) {
     if (x<0 || x>=w || y<0 || y>=h) return { code:'no-surface' };
@@ -150,12 +159,89 @@ function project(editor,solid,frame,binding,raw,layer) {
     const [sourceIndex,ownerIndex] = geometry.field;
     if (!sourceTables.has(sourceIndex)) sourceTables.set(sourceIndex,Array.from(world.renderSdfs?.[sourceIndex]?.rows.keys() ?? []));
     const owner = sourceTables.get(sourceIndex)[ownerIndex];
-    if (!owner?.sd || owner.renderTarget?.entity!==solid.id) return { code:'sdf-address-unavailable' };
+    if (!owner?.sd || owner.renderTarget?.entity!==solid.id || solid.part && owner.tag!==solid.part)
+      return { code:'sdf-address-unavailable' };
     const viewAxis = V.norm(projection.perspective ? V.sub(projection.origin,surface.position) : V.mul(projection.forward,-1));
     const facing = V.dot(surface.geometricNormal,viewAxis);
     if (!Number.isFinite(facing) || facing<minFacing) return { code:'grazing-or-back-facing',facing };
-    return { surface,owner,viewAxis };
+    return { surface,owner };
   }
+}
+
+function reject(binding,skipped,message) {
+  const conflicts = skipped.map(hit=>({ ...hit,binding:binding.id,message }));
+  throw Object.assign(new RangeError(message),{ conflicts });
+}
+
+function ownerLocal(owner,point) {
+  return owner.modifierSpace?.inverse(point) ?? point.slice();
+}
+
+function posedOwner(owner,motion) {
+  if (!motion) return owner;
+  return { bc:motion.point(...owner.bc),br:owner.br*motion.stretch,
+    sd:(x,y,z)=>owner.sd(...motion.rest(x,y,z))*motion.distanceScale };
+}
+
+function affineMatrix(toLocal,V) {
+  const origin = toLocal([0,0,0]);
+  const axes = [[1,0,0],[0,1,0],[0,0,1]].map(axis=>V.sub(toLocal(axis),origin));
+  return [0,1,2].flatMap(i=>axes.map(axis=>axis[i])).concat(origin);
+}
+
+function fromAttachment({ mode,settings,grid,attachment,owner,binding,skipped,api,V }) {
+  const { projection,marks } = attachment, frame = SdfPose.affine(attachment.frame), { direction } = settings;
+  if (!frame) throw new RangeError('SDF brush attachment needs an invertible frame');
+  const candidates = [];
+  for (const { at,sourceAt,depth,position,normal,smoothOffsets } of marks) {
+    const view = V.norm(projection.perspective ? V.sub(projection.origin,position) : V.mul(projection.forward,-1));
+    const outward = direction==='normal' ? normal : direction==='view' ? view : direction;
+    if (V.dot(normal,outward)<.05) { skipped.push({ at,sourceAt,code:'invalid-outward-axis' }); continue; }
+    candidates.push({ at,sourceAt,surface:{ depth,position,geometricNormal:normal },owner,outward,direction,
+      smoothOffsets,toLocal:p=>frame.point(...p) });
+  }
+  const result = candidates.length && ShapeOperations.plan({ mode,settings,grid,projection,candidates,attachment,skipped,api,V });
+  return result || reject(binding,skipped,'No brush pixels can apply the requested shape operation');
+}
+
+function update(editor,key,solid,binding,raw) {
+  const { KIT } = require('../index.js').load(), { V } = KIT, api = KIT.procedural.gridSculptBrush;
+  const keys = ['id','depth','direction','profile','falloff','radius'];
+  if (!fields(raw,keys) || typeof raw.id!=='string' || Object.keys(raw).length<2 ||
+      raw.falloff!==undefined && (!fields(raw.falloff,['pixels','curve']) || !Object.keys(raw.falloff).length))
+    throw new TypeError('A brush update needs a modifier ID and editable brush settings');
+  const modifiers = solid.modifiers ?? [], index = modifiers.findIndex(row=>row.id===raw.id);
+  const prior = modifiers[index];
+  if (prior?.kind!=='grid-brush') throw new RangeError('Unknown grid brush modifier: '+raw.id);
+  const { mode,brush:{ grid,attachment } } = prior;
+  if (!attachment) throw conflict('missing-brush-attachment','This stroke has no retained parameter anchors',
+    { binding:binding.id,modifier:raw.id });
+  if (attachment.source.object!==solid.id || attachment.source.part!==(solid.part??null))
+    throw conflict('brush-source-changed','The stroke is attached to a different source solid or part',
+      { binding:binding.id,modifier:raw.id,...attachment.source });
+
+  const { id,...settingsPatch } = raw;
+  const old = prior.brush.settings;
+  const settings = api.settings({ ...old,...settingsPatch,falloff:{ ...old.falloff,...raw.falloff } },mode);
+  const fork = editor.fork();
+  fork.setModifiers(modifiers.slice(0,index),key);
+  const input = fork.build(undefined,{ retainRenderSdf:true,retainPartRenderSdf:Boolean(solid.part) });
+  const owners = (input.renderSdfs ?? []).flatMap(source=>[...source.rows.keys()])
+    .filter(owner=>owner.renderTarget?.entity===solid.id && (owner.tag??null)===(solid.part??null));
+  if (owners.length!==1) throw conflict('brush-source-unavailable','The source before this stroke no longer has one retained SDF',
+    { binding:binding.id,modifier:id });
+  const [owner] = owners, frame = SdfPose.affine(attachment.frame), space = owner.modifierSpace;
+  const scale = space?.scale ?? 1;
+  const field = {
+    bc:frame.rest(...ownerLocal(owner,owner.bc)),br:owner.br/(scale*frame.distanceScale),
+    sd(x,y,z) {
+      const local = frame.point(x,y,z);
+      return owner.sd(...(space?.point(local) ?? local))/(scale*frame.stretch);
+    }
+  };
+  const { modifier,report } = fromAttachment({ mode,settings,grid,attachment,owner:field,binding,skipped:[],api,V });
+  editor.updateModifier(id,{ brush:modifier.brush },key);
+  return report;
 }
 
 function affectedDepth(sd,api,projection,grid,x,y,near,far,mode) {
@@ -178,4 +264,4 @@ function affectedDepth(sd,api,projection,grid,x,y,near,far,mode) {
   return { intervals,estimate };
 }
 
-module.exports = { project };
+module.exports = { project,update };

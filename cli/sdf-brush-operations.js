@@ -42,22 +42,27 @@ function profileAt(profile,t) {
   return a+(b-a)*(t-x)/(y-x);
 }
 
-function surfaceOffset(hit,lookup,settings,V) {
-  const { sourceAt:[x,y],surface,owner,outward } = hit;
-  const { radius } = settings;
-  let total = 0, weight = 0;
+function smoothOffsets(hit,lookup,V) {
+  const { sourceAt:[x,y],surface,owner } = hit, radius = 8;
+  const totals = Array.from({length:radius},()=>[0,0,0]), weights = new Float64Array(radius);
   for (let dy=0;dy<=radius;dy++) {
     for (let dx=-radius;dx<=radius;dx++) {
       const distance = Math.hypot(dx,dy);
       if (!distance || distance>radius || dy===0 && dx<0) continue;
       const a = lookup(x+dx,y+dy), b = lookup(x-dx,y-dy);
       if (a?.owner!==owner || b?.owner!==owner) continue;
+      const slot = Math.ceil(distance)-1;
       const mean = V.lerp(a.surface.position,b.surface.position,.5);
-      total += V.dot(V.sub(mean,surface.position),outward)/distance;
-      weight += 1/distance;
+      totals[slot] = V.mad(totals[slot],V.sub(mean,surface.position),1/distance);
+      weights[slot] += 1/distance;
     }
   }
-  return weight ? total/weight : null;
+  let total = [0,0,0], weight = 0;
+  return totals.map((vector,i)=>{
+    total = V.add(total,vector);
+    weight += weights[i];
+    return weight ? V.mul(total,1/weight) : null;
+  });
 }
 
 // Trace from behind the conservative bound to the last exit along the tool axis.
@@ -115,7 +120,7 @@ function brushSweep(hit,projection,grid,api,V) {
     volumeAt:distance=>area*(axial ? (1-distance*axial/surface.depth)**2 : 1) };
 }
 
-function plan({ mode,settings,grid,projection,candidates,lookup,skipped,api,V }) {
+function plan({ mode,settings,grid,projection,candidates,attachment,skipped,api,V }) {
   const [w,h] = grid;
   strengths(candidates,w,h,settings);
   const capAxis = settings.direction==='normal' ?
@@ -139,9 +144,9 @@ function plan({ mode,settings,grid,projection,candidates,lookup,skipped,api,V })
       if (travel<=.05) rejected = { code:'fill-direction-misses-level' };
       else offset = Math.min(depth,(level-V.dot(capAxis,surface.position))/travel);
     } else if (mode==='smooth') {
-      const average = surfaceOffset(hit,lookup,settings,V);
-      if (average===null) rejected = { code:'smooth-neighbors-unavailable' };
-      else offset = clamp(average*strength,-depth,depth);
+      const average = hit.smoothOffsets?.[settings.radius-1];
+      if (!average) rejected = { code:'smooth-neighbors-unavailable' };
+      else offset = clamp(V.dot(average,outward)*strength,-depth,depth);
     } else offset = mode==='carve' ? -depth : depth;
     if (!rejected && Math.abs(offset)<skin) rejected = { code:mode==='fill' ? 'already-at-level' : 'no-smooth-change' };
     if (rejected) {
@@ -157,7 +162,7 @@ function plan({ mode,settings,grid,projection,candidates,lookup,skipped,api,V })
     plans.push({ hit,sweep,range,strength,change });
   }
   if (!columns.length) return;
-  const brush = { version:2,grid,settings,columns };
+  const brush = { version:2,grid,settings,columns,attachment };
   const cutting = api.prepare(brush,mode,'cut'), adding = api.prepare(brush,mode,'add');
   const fields = [cutting,adding].filter(Boolean);
   const bounds = {
@@ -185,7 +190,7 @@ function plan({ mode,settings,grid,projection,candidates,lookup,skipped,api,V })
   });
   volume.estimatedWorldVolume = volume.addedWorldVolume+volume.removedWorldVolume;
   return { modifier:{ kind:'grid-brush',mode,brush },report:{ mode,grid,settings,depthUnit:'signed-world-from-hit',
-    projectedPixels:hits.length,hits,skippedHits:skipped,volume } };
+    projectedPixels:hits.length,hits,skippedHits:skipped,volume,attachment:{ ...attachment.source,time:attachment.time } } };
 }
 
-module.exports = { plan };
+module.exports = { plan,smoothOffsets };
