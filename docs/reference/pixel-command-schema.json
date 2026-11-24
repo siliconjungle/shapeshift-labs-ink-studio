@@ -7355,6 +7355,354 @@
         }
       ]
     },
+    "stencilSdfBrush": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "add",
+            "cut",
+            "carve",
+            "through-cut",
+            "raise",
+            "fill",
+            "smooth"
+          ]
+        },
+        "depth": {
+          "type": "number",
+          "minimum": 0.005,
+          "maximum": 20,
+          "description": "Depth in scene units."
+        },
+        "pixels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pixel"
+          },
+          "minItems": 1
+        },
+        "selection": {
+          "$ref": "#/$defs/id"
+        },
+        "camera": {
+          "type": "object"
+        },
+        "minFacing": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 1
+        },
+        "time": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 120,
+          "description": "Pose time in seconds."
+        },
+        "direction": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "minItems": 3,
+              "items": false
+            }
+          ]
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                ],
+                "minItems": 2,
+                "items": false
+              }
+            }
+          ]
+        },
+        "falloff": {
+          "type": "object"
+        },
+        "radius": {
+          "type": "number",
+          "minimum": 0
+        },
+        "surface": {
+          "type": "object"
+        },
+        "preserveFeatures": {
+          "type": "boolean"
+        },
+        "minWall": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "mode",
+        "depth"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "pixels"
+          ]
+        },
+        {
+          "required": [
+            "selection"
+          ]
+        }
+      ]
+    },
+    "freeformSdfBrush": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "grab",
+            "flatten",
+            "scrape",
+            "crease",
+            "pinch"
+          ]
+        },
+        "pixels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pixel"
+          },
+          "minItems": 1,
+          "maxItems": 32
+        },
+        "selection": {
+          "$ref": "#/$defs/id"
+        },
+        "camera": {
+          "type": "object"
+        },
+        "minFacing": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 1
+        },
+        "time": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 120,
+          "description": "Pose time in seconds."
+        },
+        "size": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "world"
+                },
+                "radius": {
+                  "type": "number",
+                  "minimum": 0.005,
+                  "maximum": 20
+                }
+              },
+              "required": [
+                "unit",
+                "radius"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "pixels"
+                },
+                "radius": {
+                  "type": "number",
+                  "minimum": 0.5,
+                  "maximum": 64
+                }
+              },
+              "required": [
+                "unit",
+                "radius"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "strength": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 1
+        },
+        "delta": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "minItems": 3,
+          "items": false
+        },
+        "depth": {
+          "type": "number",
+          "minimum": 0.001,
+          "maximum": 20
+        },
+        "angle": {
+          "type": "number",
+          "minimum": -360,
+          "maximum": 360
+        },
+        "mirror": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "axis": {
+                  "enum": [
+                    "x",
+                    "y",
+                    "z"
+                  ]
+                },
+                "at": {
+                  "type": "number",
+                  "minimum": -1000000,
+                  "maximum": 1000000
+                }
+              },
+              "required": [
+                "axis"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "mode",
+        "size"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "pixels"
+          ]
+        },
+        {
+          "required": [
+            "selection"
+          ]
+        }
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "enum": [
+                  "grab"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "delta"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "delta"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "depth"
+            ]
+          },
+          "then": {
+            "properties": {
+              "mode": {
+                "enum": [
+                  "scrape",
+                  "crease"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "angle"
+            ]
+          },
+          "then": {
+            "properties": {
+              "mode": {
+                "enum": [
+                  "crease",
+                  "pinch"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
     "sdfShapeOperation": {
       "anyOf": [
         {
@@ -7427,136 +7775,12 @@
           "type": "object",
           "properties": {
             "brush": {
-              "type": "object",
-              "properties": {
-                "mode": {
-                  "enum": [
-                    "add",
-                    "cut",
-                    "carve",
-                    "through-cut",
-                    "raise",
-                    "fill",
-                    "smooth"
-                  ]
-                },
-                "depth": {
-                  "type": "number",
-                  "minimum": 0.005,
-                  "maximum": 20,
-                  "description": "Depth in scene units."
-                },
-                "pixels": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/pixel"
-                  },
-                  "minItems": 1
-                },
-                "selection": {
-                  "$ref": "#/$defs/id"
-                },
-                "camera": {
-                  "type": "object"
-                },
-                "minFacing": {
-                  "type": "number",
-                  "minimum": 0.05,
-                  "maximum": 1
-                },
-                "time": {
-                  "type": "number",
-                  "minimum": 0,
-                  "maximum": 120,
-                  "description": "Pose time in seconds."
-                },
-                "direction": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "minLength": 1,
-                      "pattern": "\\S"
-                    },
-                    {
-                      "type": "array",
-                      "prefixItems": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "number"
-                        }
-                      ],
-                      "minItems": 3,
-                      "items": false
-                    }
-                  ]
-                },
-                "profile": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "minLength": 1,
-                      "pattern": "\\S"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "type": "array",
-                        "prefixItems": [
-                          {
-                            "type": "number",
-                            "minimum": 0,
-                            "maximum": 1
-                          },
-                          {
-                            "type": "number",
-                            "minimum": 0,
-                            "maximum": 1
-                          }
-                        ],
-                        "minItems": 2,
-                        "items": false
-                      }
-                    }
-                  ]
-                },
-                "falloff": {
-                  "type": "object"
-                },
-                "radius": {
-                  "type": "number",
-                  "minimum": 0
-                },
-                "surface": {
-                  "type": "object"
-                },
-                "preserveFeatures": {
-                  "type": "boolean"
-                },
-                "minWall": {
-                  "type": "number",
-                  "minimum": 0
-                }
-              },
-              "required": [
-                "mode",
-                "depth"
-              ],
-              "additionalProperties": false,
-              "oneOf": [
+              "anyOf": [
                 {
-                  "required": [
-                    "pixels"
-                  ]
+                  "$ref": "#/$defs/stencilSdfBrush"
                 },
                 {
-                  "required": [
-                    "selection"
-                  ]
+                  "$ref": "#/$defs/freeformSdfBrush"
                 }
               ]
             }

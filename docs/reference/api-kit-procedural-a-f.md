@@ -981,3 +981,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.frameBanks.operations["anim.frameBank"].outputs.tick` | value | `string = "frames"` |  |
 | `KIT.procedural.frameBanks.operations["anim.frameBank"].outputs.value` | value | `string = "displayRaster"` |  |
 | `KIT.procedural.frameBanks.operations["anim.frameBank"].time` | value | `boolean = true` |  |
+
+## KIT.procedural.freeformSculpt
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.freeformSculpt` | namespace |  |  |
+| `KIT.procedural.freeformSculpt.controls` | value | `array` |  |
+| `KIT.procedural.freeformSculpt.modes` | value | `array` |  |
+| `KIT.procedural.freeformSculpt.prepare` | function | `({ mode,strength=1,depth,stamps:raw }={})` | [source](../../src/kit/p59d-freeform-sculpt.js) |
+| `KIT.procedural.freeformSculpt.radius` | function | `(size, worldPerPixel)` | [source](../../src/kit/p59d-freeform-sculpt.js) |
+| `KIT.procedural.freeformSculpt.reflect` | function | `(row, mirror)` | [source](../../src/kit/p59d-freeform-sculpt.js) |
+| `KIT.procedural.freeformSculpt.settings` | function | `(mode, raw)` | [source](../../src/kit/p59d-freeform-sculpt.js) |
+| `KIT.procedural.freeformSculpt.solid` | function | `(S,base,program,options)` | [source](../../src/kit/p59d-freeform-sculpt.js) |

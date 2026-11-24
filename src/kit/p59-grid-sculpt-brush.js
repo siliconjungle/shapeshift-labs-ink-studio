@@ -105,6 +105,16 @@
   }
 
   function check(brush, mode) {
+    if (brush?.version===3) {
+      const freeform=K.procedural.freeformSculpt;
+      if (!record(brush,['version','grid','settings','attachment','stamps']) || !checkGrid(brush.grid) ||
+          !brush.attachment || brush.attachment.marks?.length>32)
+        throw new TypeError('A version 3 freeform brush needs a native grid, attachment and resolved stamps');
+      const {strength,depth}=freeform.settings(mode,brush.settings);
+      checkAttachment(brush.attachment,brush.grid,mode);
+      freeform.prepare({ mode,strength,depth,stamps:brush.stamps });
+      return brush;
+    }
     if (brush?.version===2) return checkColumns(brush,mode);
     if (mode!==undefined && !['add','cut'].includes(mode)) throw new TypeError('Shape operations need a version 2 stencil');
     if (!record(brush,['version','grid','projection','cells']) || brush.version !== 1 || !checkGrid(brush.grid) ||

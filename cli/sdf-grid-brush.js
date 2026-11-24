@@ -8,6 +8,7 @@ const Targets = require('../src/target-selectors.js');
 const Camera = require('../src/camera-lens.js');
 const { conflict } = require('./pixel-edit-preview.js');
 const ShapeOperations = require('./sdf-brush-operations.js');
+const Freeform = require('./sdf-freeform-brush.js');
 const SdfPose = require('./sdf-pose.js');
 const { pose } = require('./diarama-pose.js');
 
@@ -18,7 +19,14 @@ const vector = (value,length,check) => Array.isArray(value) && value.length===le
 const depthSamples = 16;
 const footprintKeys = ['pixels','selection','camera','minFacing','time'];
 
-function prepare(raw,frame,binding,api) {
+function prepare(raw,frame,binding,api,freeform) {
+  if (freeform.modes.includes(raw?.mode)) {
+    const {mode,...rest}=raw;
+    if (!fields(raw,['mode',...footprintKeys,...freeform.controls])) throw new TypeError('Invalid freeform SDF brush');
+    const controls=Object.fromEntries(freeform.controls.filter(key=>Object.hasOwn(rest,key)).map(key=>[key,rest[key]]));
+    const settings=freeform.settings(mode,controls);
+    return {mode,settings,...prepareFootprint(raw,frame,binding,32)};
+  }
   const { maxCells,modes } = api;
   const legacy = ['add','cut'].includes(raw?.mode);
   const controls = ['direction','profile','falloff','radius','surface','preserveFeatures','minWall'];
@@ -157,8 +165,9 @@ function solidGuard(solid,sdfProtection) {
 }
 
 function project(editor,solid,frame,binding,raw,layer) {
-  const { V,diorama,procedural:{gridSculptBrush:api,sdfBrushSurfaces,sdfProtection} } = require('../index.js').load().KIT;
-  const footprint = prepare(raw,frame,binding,api), { mode,depth,grid,settings,time } = footprint;
+  const K = require('../index.js').load().KIT;
+  const { V,diorama,procedural:{gridSculptBrush:api,sdfBrushSurfaces,sdfProtection,freeformSculpt} }=K;
+  const footprint = prepare(raw,frame,binding,api,freeformSculpt), { mode,depth,grid,settings,time } = footprint;
   if (settings?.surface) sdfBrushSurfaces.check(settings.surface,diorama.sceneMaterials(editor.snapshot()).roles);
   const guard=solidGuard(solid,sdfProtection), legacyBounds = new Map();
   const {projection,candidates,skipped,carried,lookup} = captureFootprint(editor,solid,frame,binding,footprint,layer,
@@ -176,7 +185,7 @@ function project(editor,solid,frame,binding,raw,layer) {
       marks:candidates.map(hit=>({ at:hit.at,sourceAt:hit.sourceAt,depth:hit.surface.depth,position:hit.surface.position,
         normal:V.norm(hit.surface.geometricNormal),
         ...(mode==='smooth' && ShapeOperations.smoothNeighborhood(hit,lookup,V)) })) };
-    return fromAttachment({ mode,settings,grid,attachment,owner:posedOwner(first.owner,carried),binding,skipped,api,V,guard });
+    return fromAttachment({ mode,settings,grid,attachment,owner:posedOwner(first.owner,carried),binding,skipped,api,V,guard,K });
   }
   const hits = [], cells = [];
   let retainedProjection, volume = 0;
@@ -221,9 +230,13 @@ function affineMatrix(toLocal,V) {
   return [0,1,2].flatMap(i=>axes.map(axis=>axis[i])).concat(origin);
 }
 
-function fromAttachment({ mode,settings,grid,attachment,owner,binding,skipped,api,V,guard }) {
+function fromAttachment({ mode,settings,grid,attachment,owner,binding,skipped,api,V,guard,K }) {
   const { projection,marks } = attachment, frame = SdfPose.affine(attachment.frame), { direction } = settings;
   if (!frame) throw new RangeError('SDF brush attachment needs an invertible frame');
+  if (K.procedural.freeformSculpt.modes.includes(mode)) {
+    const result=Freeform.plan({mode,settings,grid,attachment,frame,owner,skipped,K,guard});
+    return result || reject(binding,skipped,'No brush pixels can apply the requested freeform operation');
+  }
   const candidates = [];
   for (const { at,sourceAt,depth,position,normal,smoothOffsets,smoothBlocks } of marks) {
     const view = V.norm(projection.perspective ? V.sub(projection.origin,position) : V.mul(projection.forward,-1));
@@ -237,8 +250,9 @@ function fromAttachment({ mode,settings,grid,attachment,owner,binding,skipped,ap
 }
 
 function update(editor,key,solid,binding,raw) {
-  const { V,diorama,procedural:{gridSculptBrush:api,sdfBrushSurfaces,sdfProtection} } = require('../index.js').load().KIT;
-  const keys = ['id','depth','direction','profile','falloff','radius','surface','preserveFeatures','minWall'];
+  const K = require('../index.js').load().KIT;
+  const { V,diorama,procedural:{gridSculptBrush:api,sdfBrushSurfaces,sdfProtection,freeformSculpt} }=K;
+  const keys = ['id','depth','direction','profile','falloff','radius','surface','preserveFeatures','minWall',...freeformSculpt.controls];
   if (!fields(raw,keys) || typeof raw.id!=='string' || Object.keys(raw).length<2 ||
       raw.falloff!==undefined && (!fields(raw.falloff,['pixels','curve']) || !Object.keys(raw.falloff).length))
     throw new TypeError('A brush update needs a modifier ID and editable brush settings');
@@ -246,11 +260,14 @@ function update(editor,key,solid,binding,raw) {
   const prior = modifiers[index];
   if (prior?.kind!=='grid-brush') throw new RangeError('Unknown grid brush modifier: '+raw.id);
   const { mode,brush } = prior, { grid,attachment } = brush;
-  if (brush.version!==2) throw conflict('missing-brush-attachment','This stroke has no retained parameter anchors',
+  if (![2,3].includes(brush.version)) throw conflict('missing-brush-attachment','This stroke has no retained parameter anchors',
     { binding:binding.id,modifier:raw.id });
   const { id,surface,...settingsPatch } = raw, old = brush.settings;
-  const settings = api.settings({ ...old,...settingsPatch,
-    surface:surface===null ? undefined : surface ?? old.surface,falloff:{ ...old.falloff,...raw.falloff } },mode);
+  if (brush.version===3 && (surface!==undefined || Object.keys(settingsPatch).some(key=>!freeformSculpt.controls.includes(key))))
+    throw new TypeError('Update a freeform brush with its size, strength, displacement, depth, angle or mirror');
+  const settings = brush.version===3 ? freeformSculpt.settings(mode,{ ...old,...settingsPatch }) :
+    api.settings({ ...old,...settingsPatch,surface:surface===null ? undefined : surface ?? old.surface,
+      falloff:{ ...old.falloff,...raw.falloff } },mode);
   if (settings.surface) sdfBrushSurfaces.check(settings.surface,diorama.sceneMaterials(editor.snapshot()).roles);
   if (Object.keys(settingsPatch).length===0) {
     editor.updateModifier(id,{ brush:{ ...brush,settings } },key);
@@ -282,7 +299,7 @@ function update(editor,key,solid,binding,raw) {
       return owner.sd(...(space?.point(local) ?? local))/(scale*frame.stretch);
     }
   };
-  const { modifier,report } = fromAttachment({ mode,settings,grid,attachment,owner:field,binding,skipped:[],api,V,guard:solidGuard(solid,sdfProtection) });
+  const { modifier,report } = fromAttachment({ mode,settings,grid,attachment,owner:field,binding,skipped:[],api,V,guard:solidGuard(solid,sdfProtection),K });
   editor.updateModifier(id,{ brush:modifier.brush },key);
   return report;
 }

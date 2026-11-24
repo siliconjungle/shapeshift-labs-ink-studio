@@ -84,6 +84,21 @@ function createDefinitions() {
     depth:range(num(.005,20),'Depth in scene units.'),...sdfFootprint,
     direction:either(text,pos),profile:either(text,array(tuple(unit,unit))),falloff:obj,radius:num(0),surface:obj,
     preserveFeatures:bool,minWall:num(0)},['mode','depth']),...exactlyOne('pixels','selection') };
+  const brushSize = either(
+    object({unit:constant('world'),radius:num(.005,20)},['unit','radius']),
+    object({unit:constant('pixels'),radius:num(.5,64)},['unit','radius']));
+  const brushMode = (...values)=>({properties:{mode:choice(...values)}});
+  const freeformBrush = {
+    ...object({mode:choice('grab','flatten','scrape','crease','pinch'),...sdfFootprint,pixels:array(pixel,1,32),
+      size:brushSize,strength:num(.01,1),delta:pos,depth:num(.001,20),angle:num(-360,360),
+      mirror:nullable(object({axis:choice('x','y','z'),at:num(-1e6,1e6)},['axis']))},['mode','size']),
+    ...exactlyOne('pixels','selection'),
+    allOf:[
+      {if:brushMode('grab'),then:prop('delta'),else:{not:prop('delta')}},
+      {if:prop('depth'),then:brushMode('scrape','crease')},
+      {if:prop('angle'),then:brushMode('crease','pinch')}
+    ]
+  };
   const sdfPaint = { ...object({...sdfFootprint,material:nullable(text),
     masks:{type:'object',minProperties:1,additionalProperties:nullable(unit)},thickness:num(.001,2)}),
     allOf:[exactlyOne('pixels','selection'),{anyOf:[prop('material'),prop('masks')]}] };
@@ -316,9 +331,11 @@ function createDefinitions() {
       projection:object({maxDistance:{type:'number',exclusiveMinimum:0},minNormalDot:unit,maxUVDistance:unit,minConfidence:unit,
         ambiguity:unit,maxChecks:int(1,2000000)},['maxDistance'])
     }),oneOf:['patch','transform','repair','cut','faceRegion','edgeEdit','bevel','shading','modifiers'].map(prop) },
+    stencilSdfBrush:sdfBrush,
+    freeformSdfBrush:freeformBrush,
     sdfShapeOperation:either(...[
       ['parameters',obj],['modifier',obj],['updateModifier',object({id:text,patch:obj},['id','patch'])],
-      ['protection',array(obj)],['brush',sdfBrush],['updateBrush',{type:'object',required:['id']}]
+      ['protection',array(obj)],['brush',either(ref('stencilSdfBrush'),ref('freeformSdfBrush'))],['updateBrush',{type:'object',required:['id']}]
     ].map(([key,value])=>object({[key]:value},[key]))),
     sdfMaterialOperation:either(object({material:either(text,obj)},['material']),object({paint:sdfPaint},['paint']))
   };

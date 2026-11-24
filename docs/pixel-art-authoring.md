@@ -3701,6 +3701,54 @@ grazing, protected, and unbound marks are skipped. A brush with no valid
 hits is rejected. Apply from an editor transaction to preview, cancel,
 commit, undo, or replay the retained modifier.
 
+### Sculpt with freeform brushes
+
+Freeform brushes use the same `sdf-shape` destination, revisions, preview
+and edit commands as stencil brushes. Choose one or more visible pixels
+with `pixels` or a named `selection`. Each accepted hit anchors a soft
+brush stamp. Use up to 32 marks per edit.
+
+```json
+{
+  "brush": {
+    "mode": "grab",
+    "size": { "unit": "pixels", "radius": 12 },
+    "delta": [0.16, 0.03, 0],
+    "pixels": [[44, 28]],
+    "mirror": { "axis": "x", "at": 0 }
+  }
+}
+```
+
+| Mode | Effect | Additional control |
+| --- | --- | --- |
+| `grab` | Pulls the nearby shape with a soft falloff | `delta` is an XYZ displacement in captured world units. Its length can be up to 45% of the resolved radius |
+| `flatten` | Brings the surface toward the tangent plane at the hit | The captured geometric normal defines the plane |
+| `scrape` | Removes high spots against a plane just below the hit | `depth` positions the plane inward |
+| `crease` | Sculpts a narrow groove along the surface tangent | `depth` controls the groove and `angle` rotates its axis |
+| `pinch` | Pulls the shape toward the tangent line | `angle` rotates the pinch axis |
+
+`size.radius` is a radius in world units or on the native art grid.
+Pixel radii resolve to world units using the captured camera and hit depth.
+`strength` defaults to 1. Scrape and crease default to a depth of 22% of
+the radius and cap the effective depth at 40%. `angle` is in degrees from
+camera-right projected onto the surface. A mirror copies the whole stamp
+across a solid-space X, Y, or Z plane, including its tangent and grab
+direction. Overlapping stamps blend at the strongest local influence.
+
+Preview reports each hit's resolved radius, the rest-space stamp centers,
+protected copies that were skipped, and sampled occupancy changes. An
+off-camera mirrored copy uses the same rest-space placement rule.
+Committed strokes keep their version 3 attachment and resolved stamps in
+the scene. They follow the solid through later transforms and support
+`updateBrush` for the same controls. Set `mirror` to `null` to remove its
+mirrored copy. Stencil brushes keep their existing native pixel behavior.
+
+The [relief demo](../examples/freeform-sdf-brushes/README.md) includes a
+matching before and after render and a native depth-change map for each
+mode. See [freeform strokes on brick meshes](brick-meshes.md#freeform-strokes-on-brick-meshes)
+for sparse SDF fields and retained face sets.
+
 ### Edit an attached SDF stroke
 
 Brush geometry is kept in the source solid's rest frame. A named part
@@ -3709,8 +3757,8 @@ A later sculpt modifier can also deform the stroke as part of the solid.
 Exact posed SDF tracing uses coherent part ownership and an invertible
 pose. The painted footprint stays anchored to the same rest surface.
 
-The five explicit shape operations capture editing anchors when you
-draw them. Use `pixel-art targets` to inspect the stroke ID, source part,
+Explicit stencil operations and freeform brushes capture editing anchors
+when you draw them. Use `pixel-art targets` to inspect the stroke ID, source part,
 and current parameters. To retune a committed stroke, use a new edit ID,
 the latest source revision, and this operation:
 
@@ -3726,8 +3774,9 @@ the latest source revision, and this operation:
 }
 ```
 
-`updateBrush` accepts depth, direction, profile, falloff, and smoothing
-radius, `minWall`, or `preserveFeatures`. With shape settings it rebuilds the stroke from the saved anchors, evaluates the
+For a stencil stroke, `updateBrush` accepts depth, direction, profile,
+falloff, smoothing radius, `minWall`, or `preserveFeatures`. With shape
+settings it rebuilds the stroke from the saved anchors, evaluates the
 source before that modifier, and keeps the stroke's ID and stack
 position. The preview describes the retuned stroke in its capture frame.
 The usual revision, preview, undo, and receipt paths apply. Stored strokes

@@ -222,6 +222,36 @@ node cli/ink-studio.js sculpt-masks examples/sculpt-masks/workshop.js \
   --plan examples/sculpt-masks/plan.json --out studio/out/sculpt-mask-review
 ```
 
+## Freeform strokes on brick meshes
+
+Use `controller.sculpt(stroke, options)` for grab, flatten, scrape,
+crease, and pinch on a live brick mesh. Give each stamp an origin in the
+signed field, an oriented tangent, bitangent, and outward normal in the
+`axes` tuple, and a resolved radius. `drag` on a grab is expressed along
+those axes. Use `freeformSculpt.radius(size, worldPerPixel)` to resolve a
+native pixel radius from a capture.
+
+```js
+const P = KIT.procedural;
+const stamp = {
+  origin: [0.7, 1.1, 0.2],
+  axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+  radius: 0.38
+};
+const edited = gate.sculpt({
+  mode: 'crease',
+  depth: 0.1,
+  strength: 0.8,
+  stamps: [stamp, P.freeformSculpt.reflect(stamp, { axis: 'x' })]
+}, { masks: ['panel'] });
+```
+
+Omit `masks` to use the live controls alone. The stroke samples the source
+snapshot, applies the retained isolation, visibility, and lock controls,
+then publishes one revision through dirty-brick extraction. The field
+keeps its existing material assignments. Separate mirrored regions keep
+separate work bounds when they do not overlap.
+
 ## Validate the shape from several angles
 
 Run the review at the edit time you want to inspect.

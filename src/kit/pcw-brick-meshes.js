@@ -259,28 +259,43 @@
       return current;
     }
 
-    function edit(brush) {
-      if (brush?.material!=null && !materialSlots.has(brush.material))
-        throw new RangeError('Unknown brick mesh material: '+brush.material);
-      const {masks:selection,weight,...settings}=brush ?? {};
+    function influenceFor(selection,weight) {
       if (!currentMasks && selection!==undefined) throw new RangeError('Set a sculpt mask document before selecting brush masks');
       if (weight!==undefined && typeof weight!=='function') throw new TypeError('Brush weight must be a function');
       const sample=currentMasks?.sampler(selection,lockPadding);
-      const influence=sample ? (...point)=>{
+      if (!sample) return weight;
+      return (...point)=>{
         const authored=sample(point).weight;
         if (!authored || !weight) return authored;
         const value=weight(...point);
         if (!Number.isFinite(value) || value<0 || value>1) throw new RangeError('Sparse brush weights must be in [0, 1]');
         return authored*value;
-      } : weight;
-      return update(current.bricks.edit({...settings,weight:influence}));
+      };
+    }
+    function edit(brush) {
+      if (brush?.material!=null && !materialSlots.has(brush.material))
+        throw new RangeError('Unknown brick mesh material: '+brush.material);
+      const {masks:selection,weight,...settings}=brush ?? {};
+      return update(current.bricks.edit({...settings,weight:influenceFor(selection,weight)}));
+    }
+    function sculpt(stroke,{masks,weight,maxSamples=524288}={}) {
+      const program=P.freeformSculpt.prepare(stroke), source=current.bricks;
+      if (!bounded(maxSamples,1,4000000)) throw new RangeError('A freeform stroke needs a valid sample budget');
+      const budget=program.regions.reduce((total,{min,max})=>total+
+        min.reduce((count,n,i)=>count*(Math.ceil((max[i]-n)/cell)+1),1),0);
+      if (budget>maxSamples) throw new RangeError('A freeform stroke exceeds its sample budget');
+      const transform=program.field(source.distance), influence=influenceFor(masks,weight);
+      let edited=source;
+      for (const bounds of program.regions)
+        edited=edited.edit({ bounds,operation:'reshape',transform,weight:influence,maxSamples });
+      return update(edited);
     }
     function setSculptMasks(document) {
       const compiled=document==null ? null : P.sculptMasks.compile(document);
       if (JSON.stringify(compiled?.document)===JSON.stringify(currentMasks?.document)) return current;
       return publishRevision(current.bricks,compiled);
     }
-    const controller=Object.freeze({current:()=>current,update,edit,setSculptMasks});
+    const controller=Object.freeze({current:()=>current,update,edit,sculpt,setSculptMasks});
     update(initial);
     controls.add(controller);
     return controller;

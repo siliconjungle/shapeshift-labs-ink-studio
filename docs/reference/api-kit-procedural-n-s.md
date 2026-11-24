@@ -8,7 +8,7 @@ Members and callable signatures come from the public entry point. Guide links po
 
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
-| `KIT.procedural` | namespace |  | [guide](../../README.md#procedural-worlds), [guide](../brick-meshes.md), [guide](../curvature-lines.md), [guide](../curve-raster-map.md), [guide](../field-fabrication.md) |
+| `KIT.procedural` | namespace |  | [guide](../../README.md#procedural-worlds), [guide](../brick-meshes.md), [guide](../brick-meshes.md#freeform-strokes-on-brick-meshes), [guide](../curvature-lines.md), [guide](../curve-raster-map.md) |
 
 ## KIT.procedural.offsetRails
 

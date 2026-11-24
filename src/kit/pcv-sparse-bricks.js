@@ -94,11 +94,12 @@
         publish(next, key, brick);
         return snapshot(next);
       }
-      function edit({ bounds, sdf, operation = 'paint', smooth = 0, material, medium, weight, maxSamples = 524288 } = {}) {
+      function edit({ bounds, sdf, operation = 'paint', smooth = 0, material, medium, weight, transform, maxSamples = 524288 } = {}) {
         if (!coordinate(bounds?.min, pointOK) || !coordinate(bounds?.max, pointOK) ||
             bounds.min.some((v, axis) => v > bounds.max[axis]) ||
-            !['paint', 'union', 'subtract'].includes(operation) ||
-            (sdf !== undefined || operation !== 'paint') && typeof sdf !== 'function' ||
+            !['paint', 'union', 'subtract', 'reshape'].includes(operation) ||
+            (sdf !== undefined || operation==='union' || operation==='subtract') && typeof sdf !== 'function' ||
+            (operation==='reshape' ? typeof transform!=='function' : transform!==undefined) ||
             weight !== undefined && typeof weight !== 'function' ||
             !field(smooth) || smooth < 0 || material !== undefined && !label(material) ||
             medium !== undefined && !label(medium) || !integer(maxSamples) || maxSamples < 1 || maxSamples > 4000000)
@@ -118,7 +119,8 @@
           let offset = old;
           if (operation !== 'paint') {
             const baseline = checked(base(...xyz)), value = baseline + old;
-            const edited = operation === 'union' ? smoothMin(value, brush, smooth) : -smoothMin(-value, brush, smooth);
+            const edited = operation==='reshape' ? transform(...xyz,value) :
+              operation==='union' ? smoothMin(value,brush,smooth) : -smoothMin(-value,brush,smooth);
             const next = checked(edited - baseline);
             offset = Math.fround(checked(influence === 1 ? next : mix(old, next, influence)));
           }

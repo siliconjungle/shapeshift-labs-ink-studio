@@ -175,7 +175,7 @@
   modifierKinds.warp.may = { ...modifierKinds.warp.may, taper: 'vec2' };
   modifierKinds.join = { need: { how: 'join', shape: 'solid' }, may: DIO.kinds.join.may };
   modifierKinds.mask = { need: { mode: ['keep', 'cut'], shape: 'solid' } };
-  modifierKinds['grid-brush'] = { need: { mode: ['add', 'cut', 'carve', 'through-cut', 'raise', 'fill', 'smooth'], brush: 1 } };
+  modifierKinds['grid-brush'] = { need: { mode: ['add', 'cut', 'carve', 'through-cut', 'raise', 'fill', 'smooth', 'grab', 'flatten', 'scrape', 'crease', 'pinch'], brush: 1 } };
   const builtKinds = ['pillar', 'arch', 'stairs', 'fence', 'pipe'];
   const activeModifiers = solid => (solid.modifiers ?? []).filter(modifier => modifier.enabled !== false);
 
@@ -1845,7 +1845,11 @@
           for (const modifier of modifiers) {
             const options = { hold: true };
             let reach = p.reach;
-            if (modifier.kind === 'grid-brush') {
+            if (modifier.kind === 'grid-brush' && modifier.brush.version===3) {
+              const api=K.procedural.freeformSculpt, {mode,brush:{stamps,settings}}=modifier;
+              p=api.solid(S,p,api.prepare({mode,stamps,strength:settings.strength,depth:settings.depth}),options);
+              reach=0;
+            } else if (modifier.kind === 'grid-brush') {
               const { brush,mode } = modifier, api = K.procedural.gridSculptBrush;
               const changes = brush.version===1 ? [mode] : ['cut','add'].filter(change=>brush.columns.some(row=>row.change===change));
               for (const change of changes) {
