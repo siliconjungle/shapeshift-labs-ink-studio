@@ -9,7 +9,7 @@ const runWebGL = require('../cli/look-webgl.js');
 const scene = require('../examples/material-response/scene.cjs');
 
 const w = 336, h = 192, time = 3.18;
-const points = { ripple: [150,98], cart: [189,104], weak: [151,98], sky: [0,0] };
+const points = { ripple: [150,98], cart: [180,106], weak: [151,98], sky: [0,0] };
 const water = report => report.passes.find(pass => pass.material === 'water');
 const hex = rgb => '#' + rgb.map(value => value.toString(16).padStart(2,'0')).join('');
 
@@ -47,6 +47,8 @@ test('headless traces a swatch to the receiver, field texel and exact contact', 
   assert.equal(rejected.winner,null);
   assert.equal(water(rejected).reason,'receiver-mismatch');
   assert.deepEqual(water(rejected).select,{ material:'water' });
+  assert.equal(water(rejected).source.event.id,'wheel-5');
+  assert(water(rejected).source.sample.value > water(rejected).channels[0].threshold);
   const weak = water(read(points.weak));
   assert.equal(weak.reason,'below-threshold');
   assert(weak.channels[0].sample.value > 0 && weak.channels[0].sample.value < weak.channels[0].threshold);
@@ -82,6 +84,8 @@ test('WebGL reports the actual drawn swatch and rejects the cart without changin
   assert.equal(result.cart.outputSwatch,hex(result.after.cart));
   assert.equal(result.cart.receiver.object,'cart');
   assert.equal(water(result.cart).reason,'receiver-mismatch');
+  assert.equal(water(result.cart).source.event.id,'wheel-5');
+  assert(water(result.cart).source.sample.value > water(result.cart).channels[0].threshold);
   assert.equal(result.early.winner,null);
   assert.deepEqual(result.ripple,result.again);
 });

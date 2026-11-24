@@ -5,6 +5,7 @@ const play = document.querySelector('#play'), scrub = document.querySelector('[t
 const output = document.querySelector('output'), status = document.querySelector('[role=status]');
 const cursor = document.querySelector('.cursor'), form = document.querySelector('form'), input = form.elements.pixel;
 const summary = document.querySelector('#summary'), source = document.querySelector('#source');
+const receiverLine = document.querySelector('#receiver');
 const decisions = document.querySelector('#decisions'), details = document.querySelector('details');
 const cases = document.querySelector('.cases');
 const renderer = createRenderer(canvas, { toolkit: { KIT, makeBuilder, makeSculpt, PixelLook } });
@@ -29,9 +30,11 @@ function showReport(report) {
   const chip = document.createElement('span');
   chip.className = 'swatch';
   chip.style.backgroundColor = outputSwatch ?? 'transparent';
-  summary.replaceChildren(chip, (outputSwatch ?? 'Transparent') + ' · ' +
-    (receiver?.object ?? receiver?.material ?? 'No splat receiver') + ' · ' + report.pixel.join(', ') +
+  summary.replaceChildren(chip, (outputSwatch ?? 'Transparent') + ' · ' + report.pixel.join(', ') +
     ' at ' + report.time.toFixed(2) + ' s');
+  receiverLine.textContent = receiver
+    ? 'Receiver ' + [receiver.object, receiver.material].filter(Boolean).join(' · ')
+    : 'No visible splat receiver.';
   source.textContent = winner
     ? [winner.kind, winner.event?.id ?? 'Unknown contact', winner.event && winner.event.time.toFixed(2) + ' s',
       winner.sample && 'field ' + winner.sample.value.toFixed(3)].filter(Boolean).join(' · ')
@@ -40,7 +43,7 @@ function showReport(report) {
     const item = document.createElement('li');
     const samples = pass.channels?.filter(channel => channel.sample).map(channel => {
       const { value, event } = channel.sample;
-      return channel.kind + ' ' + value.toFixed(3) + ' / ' + channel.threshold.toFixed(2) +
+      return channel.kind + ' ' + value.toFixed(3) + ' (threshold ' + channel.threshold.toFixed(2) + ')' +
         (event ? ' from ' + event.id : '');
     }) ?? [];
     item.textContent = [pass.material ?? 'Particles', reasons[pass.reason] ?? pass.reason, ...samples].join(' · ');
@@ -111,7 +114,7 @@ async function open(read) {
     details.hidden = decisions.hidden = true;
     if (cases.hidden) {
       summary.textContent = 'Click the scene or enter a pixel.';
-      source.textContent = '';
+      receiverLine.textContent = source.textContent = '';
       draw(0);
     } else select([150,98], 3.18);
     play.disabled = scrub.disabled = input.disabled = form.querySelector('button').disabled = false;
