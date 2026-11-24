@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lantern Crossing · Ink Studio</title>
+<style>
+  :root{color-scheme:dark;font-family:system-ui,sans-serif;background:#11121c;color:#f1e8d9;--line:#353449;--muted:#b5adc4;--accent:#ffce89}
+  *{box-sizing:border-box}
+  body{margin:0}
+  main{max-width:1140px;margin:auto;padding:52px 32px 40px}
+  header{display:flex;gap:24px;align-items:end;justify-content:space-between;margin-bottom:24px}
+  h1{font-family:Georgia,serif;font-weight:400;letter-spacing:-.065em;font-size:clamp(46px,7vw,92px);line-height:.88;margin:9px 0 0}
+  .eyebrow,.caption,legend,output{font:600 11px/1.45 ui-monospace,monospace;letter-spacing:.11em;text-transform:uppercase}
+  .eyebrow{color:var(--accent)}
+  .caption{color:var(--muted)}
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 228px;gap:20px}
+  .stage{min-width:0}
+  .view{position:relative;border:1px solid #4b475b;outline-offset:5px;background:#242236;cursor:crosshair;touch-action:none}
+  .view:focus-visible{outline:2px solid var(--accent)}
+  canvas{display:block;width:100%;height:auto;image-rendering:pixelated;aspect-ratio:8/5}
+  .marker{position:absolute;width:13px;height:13px;transform:translate(-50%,-50%);border:1px solid #fff4cc;box-shadow:0 0 0 1px #282236;pointer-events:none}
+  .marker::after{content:"";position:absolute;width:3px;height:3px;left:4px;top:4px;background:#fff4cc}
+  .under{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+  aside{align-self:start;border:1px solid var(--line);padding:18px;background:#191926}
+  fieldset{border:0;padding:0;margin:0 0 19px}
+  legend{color:var(--muted);margin-bottom:12px;padding:0}
+  label{display:flex;gap:8px;align-items:center;margin:0 0 10px;font-size:14px}
+  input{accent-color:var(--accent);width:15px;height:15px;margin:0}
+  button,a.button{width:100%;display:block;padding:9px 9px;margin:0 0 8px;text-align:left;background:#242337;border:1px solid #444158;color:#f3ebdd;font:600 13px system-ui,sans-serif;border-radius:3px;text-decoration:none;cursor:pointer}
+  button:hover,a.button:hover,button:focus-visible,a.button:focus-visible{border-color:var(--accent)}
+  button[aria-pressed=true]{color:var(--accent)}
+  output{display:block;min-height:31px;color:#9fe3c4;letter-spacing:.045em;margin-top:4px}
+  .palette{display:grid;grid-template-columns:repeat(5,1fr);gap:2px;margin:8px 0 5px}
+  .palette i{display:block;height:9px}
+  #error{color:#ffc6ad}
+  #error:empty{display:none}
+  @media(max-width:700px){main{padding:30px 16px}.layout{grid-template-columns:1fr}aside{display:grid;gap:15px;grid-template-columns:1fr 1fr}fieldset{margin:0}header{align-items:start;flex-direction:column;gap:10px}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <div class="eyebrow">Ink Studio / Native-grid 2D lighting</div>
+      <h1>Lantern Crossing</h1>
+    </div>
+    <div class="caption">128 × 80 art pixels</div>
+  </header>
+  <div class="layout">
+    <section class="stage" aria-label="Interactive rendering">
+      <div class="view" tabindex="0" aria-label="Lighting preview. Use the arrow keys or drag to move the lamp.">
+        <canvas width="128" height="80"></canvas>
+        <div class="marker" aria-hidden="true"></div>
+      </div>
+      <div class="under caption"><span>Drag the lamp or use the arrow keys</span><span id="backend">WebGL2</span></div>
+      <p id="error" role="alert"></p>
+    </section>
+    <aside aria-label="Lighting controls">
+      <fieldset>
+        <legend>Lighting</legend>
+        <label><input id="shadows" type="checkbox" checked> Cast shadows</label>
+        <label><input id="normals" type="checkbox" checked> Surface normals</label>
+        <button type="button" id="sweep" aria-pressed="false">Sweep lamp</button>
+        <button type="button" id="reset">Reset</button>
+      </fieldset>
+      <div>
+        <div class="caption">Export and verify</div>
+        <button type="button" id="compare">Compare with headless</button>
+        <output id="comparison" aria-live="polite"></output>
+        <button type="button" id="save">Download scene JSON</button>
+        <a class="button" id="reference" download="lantern-crossing-reference.png" href="__HEADLESS_PNG__">Download source PNG</a>
+        <div class="palette" aria-hidden="true"></div>
+        <div class="caption">Five swatches per ramp</div>
+      </div>
+    </aside>
+  </div>
+</main>
+<!-- INK_DEMO_SCRIPT -->
+</body>
+</html>

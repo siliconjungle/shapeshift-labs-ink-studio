@@ -2,6 +2,8 @@
 const FrameComposite = (() => {
   const primitives = typeof DrawingPrimitives === 'undefined' ? require('./drawing-primitives.js') : DrawingPrimitives;
   const annotations = typeof ViewAnnotations === 'undefined' ? require('./view-annotations.js') : ViewAnnotations;
+  const lighting = typeof PixelLighting === 'undefined' ? require('./pixel-lighting.js') : PixelLighting;
+  const lightingScenes = new WeakMap();
   const byte = data => data instanceof Uint8Array || data instanceof Uint8ClampedArray;
   const positive = n => Number.isSafeInteger(n) && n > 0;
   const tuple = (value, length) => Array.isArray(value) && value.length === length && Array.from(value).every(Number.isFinite);
@@ -84,7 +86,7 @@ const FrameComposite = (() => {
     if (!Array.isArray(layers)) throw new TypeError('Composite layers must be an ordered list');
     const prepared = Array.from(layers, layer => {
       record(layer, ['resolution', 'filter', 'opacity', 'blend', 'draw', 'source', 'annotations', 'rect', 'directionDrawing',
-        'needsCamera', 'depthTest'], 'composite layer');
+        'needsCamera', 'depthTest', 'lighting2d', 'lightFrame'], 'composite layer');
       const { opacity = 1, blend = 'over', draw, source, rect, directionDrawing, needsCamera = false } = layer;
       const depthTest = depthRule(layer.depthTest);
       if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) throw new RangeError('Layer opacity must be in [0, 1]');
@@ -93,9 +95,23 @@ const FrameComposite = (() => {
       if (directionDrawing !== undefined && (!directionDrawing || typeof directionDrawing !== 'object' ||
           !Array.isArray(directionDrawing.sources)))
         throw new TypeError('A direction drawing layer needs mesh sources');
+      const { lighting2d, lightFrame } = layer;
       const hasDrawing = draw !== undefined || layout !== null || directionDrawing !== undefined;
-      if (hasDrawing === (source !== undefined) || draw !== undefined && !Array.isArray(draw))
-        throw new TypeError('A layer needs drawing commands, annotations or a raster source');
+      if (Number(hasDrawing) + Number(source !== undefined) + Number(lighting2d !== undefined) !== 1 ||
+          draw !== undefined && !Array.isArray(draw))
+        throw new TypeError('A layer needs drawing commands, annotations, a raster source or a pixel lighting scene');
+      if (lightFrame !== undefined && (lighting2d === undefined || typeof lightFrame !== 'function'))
+        throw new TypeError('A lightFrame callback needs a pixel lighting scene');
+      let lit;
+      if (lighting2d !== undefined) {
+        if (layer.resolution !== undefined || layer.filter === 'linear')
+          throw new TypeError('Pixel lighting layers use the native art grid and nearest scaling');
+        lit = lightingScenes.get(lighting2d);
+        if (!lit) {
+          lit = lighting.prepare(lighting2d);
+          lightingScenes.set(lighting2d, lit);
+        }
+      }
       if (typeof needsCamera !== 'boolean' || (needsCamera && typeof source !== 'function'))
         throw new TypeError('A camera-dependent raster layer needs a source function');
       if (rect !== undefined && (hasDrawing || !tuple(rect, 4) || rect[2] <= 0 || rect[3] <= 0 ||
@@ -104,8 +120,9 @@ const FrameComposite = (() => {
       if (source !== undefined && typeof source !== 'function') image(source);
       if (depthTest && depthTest.depth === undefined && typeof source !== 'function')
         depthRaster(source, source?.w, source?.h);
-      return { resolution: resolution(layer.resolution), filter: filter(layer.filter), opacity, blend, source, layout, directionDrawing,
-        needsCamera, depthTest, rect: rect?.slice(),
+      return { resolution: lit ? [lit.w, lit.h] : resolution(layer.resolution),
+        filter: filter(layer.filter), opacity, blend, source, layout, directionDrawing,
+        needsCamera, depthTest, rect: rect?.slice(), lit, lightFrame,
         draw: draw && Array.from(draw, command) };
     });
     return { world: { resolution: resolution(world.resolution), filter: filter(world.filter) }, layers: prepared,
@@ -294,7 +311,7 @@ const FrameComposite = (() => {
     return {width,height,channels:4,data:out};
   }
 
-  function layers(plan, world, time, text, camera, resolve, gl, extractDirections, sceneTime) {
+  function layers(plan, world, time, text, camera, resolve, gl, extractDirections, sceneTime, drawLighting) {
     return plan.layers.filter(layer => layer.opacity > 0).map(layer => {
       const { w, h } = layer;
       const layout = layer.layout && annotations.layout(layer.layout,
@@ -302,9 +319,12 @@ const FrameComposite = (() => {
       const directions = layer.directionDrawing && extractDirections({ ...layer.directionDrawing, camera, width: plan.w, height: plan.h });
       const draw = directions || layout ? [...(directions?.draw.map(command) ?? []), ...(layer.draw ?? []),
         ...(layout?.draw.map(command) ?? [])] : layer.draw;
-      const gpu = gl && typeof layer.source === 'function' && layer.source[textureSource]?.(gl);
-      const source = !draw && !gpu && (typeof layer.source === 'function' ?
-        layer.source({ w, h, outputWidth: plan.w, outputHeight: plan.h, world, time, sceneTime, camera }) : layer.source);
+      const context = { w, h, outputWidth: plan.w, outputHeight: plan.h, world, time, sceneTime, camera };
+      const lightFrame = layer.lightFrame?.(context);
+      const gpu = layer.lit && drawLighting ? drawLighting(layer.lit, lightFrame) :
+        gl && typeof layer.source === 'function' && layer.source[textureSource]?.(gl);
+      const source = !draw && !gpu && (layer.lit ? lighting.render(layer.lit, lightFrame) :
+        typeof layer.source === 'function' ? layer.source(context) : layer.source);
       const result = gpu ? { w: gpu.region[2], h: gpu.region[3], gpu } :
         draw ? drawLayer(layer, plan.w, plan.h, text, camera, draw, false, directions ? 64e6 : undefined, false) : pixels(source);
       if (result.w !== w || result.h !== h) throw new RangeError('Composite raster dimensions must match the layer resolution');

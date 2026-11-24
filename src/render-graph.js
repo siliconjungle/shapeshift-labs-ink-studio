@@ -870,11 +870,11 @@ const RenderGraph = (() => {
     return { w: width, h: height, rgba, depth:source?.depth };
   }
 
-  function layer(node, w, h, world, time, text, camera, resolve, gl, sources, raster, extractDirections, sceneTime) {
+  function layer(node, w, h, world, time, text, camera, resolve, gl, sources, raster, extractDirections, sceneTime, drawLighting) {
     if (node.slot && node.layer.opacity === 0) return;
     const input = node.slot ? { ...node.layer, source: slotPixels(node, sources, raster) } : node.layer;
     const plan = compositor.prepare({ layers: [input] }, w, h);
-    return compositor.layers(plan, world, time, text, camera, resolve, gl, extractDirections, sceneTime)[0];
+    return compositor.layers(plan, world, time, text, camera, resolve, gl, extractDirections, sceneTime, drawLighting)[0];
   }
 
   function frameAgeClock(state, node, time, release) {

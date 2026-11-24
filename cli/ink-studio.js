@@ -1482,6 +1482,7 @@ const CMD = {
         '  flow-map editor [map.json] --out editor.html  open an offline brush editor and solver previews',
         '  splat-footprints <shape|profile.json> [--rotation n --stretch x,y --softness n --point x,y --preview file.png --out report.json]  inspect native splat silhouettes',
         '  render-grid <hex|triangle|diamond|settings.json> [--size 8 --point x,y --bounds x,y,w,h --out report.json]  inspect tessellating cells',
+        '  pixel-lighting <scene.json> --out frame.png [--frame lighting.json]  render an indexed 2D lighting scene',
         '  render-graph <graph.json> [--w 900 --h 620 --out report.json]  inspect effect resolution and memory/work budgets',
         '  music audition <recipe.json> --out directory   compare audiovisual phrase variations',
         '  music arrange <arrangement.json> [--out plan.json]   compile motifs and roles into a score',
@@ -3169,6 +3170,17 @@ const CMD = {
   },
   'render-grid'() {
     return require('./render-grid.js')(pos,opt,lib());
+  },
+  'pixel-lighting'() {
+    if (pos.length !== 1 || typeof opt.out !== 'string' || opt.frame === true ||
+        Object.keys(opt).some(key => key !== 'out' && key !== 'frame'))
+      die('usage: ink-studio pixel-lighting <scene.json> --out frame.png [--frame lighting.json]');
+    const read = file => JSON.parse(fs.readFileSync(path.resolve(file), 'utf8'));
+    const api = require('../src/pixel-lighting.js');
+    const scene = read(pos[0]), options = opt.frame === undefined ? undefined : read(opt.frame);
+    const { w, h, rgba } = api.render(scene, options);
+    const png = require('./png.js').encode(w, h, rgba, 4);
+    fs.writeFileSync(path.resolve(opt.out), png);
   },
   'render-graph'() {
     return require('./render-graph-plan.js')(pos,opt,lib());

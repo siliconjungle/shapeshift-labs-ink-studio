@@ -23,6 +23,7 @@ import { waterReflectionPlan, selectReflectionWorld } from './reflections.mjs';
 import { readHybridDepth } from './hybrid-depth.mjs';
 import { createFiniteCurvePass, finiteCurveMode, prepareFiniteCurves } from './finite-curves.mjs';
 import { createRenderGraph, graphOwner, graphCapture, graphEffectPixel } from './render-graph.mjs';
+import { createPixelLightingPass } from './pixel-lighting.mjs';
 import { createFrameComposite, frameCamera, captureFrameCamera } from './frame-composite.mjs';
 import { createSurfacePipeline } from './surfaces.mjs';
 import { createDepthMeshPass } from './depth-mesh-proxies.mjs';
@@ -2107,7 +2108,14 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           guide = { texture:depth, range:view.depthRange };
           frame[graphOwner]?.(scene, owner, frame[graphOwner].depth ? depth : undefined, view);
         }, { depth:true }) }) };
-      const layers = plan.needsCamera ? () => api.layers(plan, world, time, camera, gl, frame.time) : api.layers(plan, world, time, undefined, gl, frame.time);
+      const readLayers = () => {
+        let index = 0;
+        return api.layers(plan, world, time, camera, gl, frame.time, (spec, options) => {
+          const pass = mixedLighting[index++] ??= createPixelLightingPass(gl, toolkit.KIT.pixelLighting, resources);
+          return pass.draw(spec, options);
+        });
+      };
+      const layers = plan.needsCamera || plan.layers.some(layer => layer.lit) ? readLayers : readLayers();
       composite ??= createFrameComposite(gl, { program, resources, target, textureUnit, fullscreen });
       composite(world, drawFrame, plan, layers, output, present, plan.needsDepth ? () => guide : undefined);
     }
@@ -2125,7 +2133,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       gridRenderer ??= createRenderGrid(gl, { api, program, target, textureUnit, fullscreen });
       gridRenderer(world, frame, plan, width, height, output, presentGraph);
     }
-    let renderGraph;
+    const mixedLighting = [];
+    let graphLighting, renderGraph;
     function presentGraph(world, frame, width, height, output) {
       const definition = frame.renderGraph ?? world.look?.renderGraph;
       const capture = frame.renderGraphCapture;
@@ -2142,7 +2151,12 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       }
       if (width > Math.min(maxSize, viewportLimit[0]) || height > Math.min(maxSize, viewportLimit[1]))
         throw new RangeError('Render graph exceeds the WebGL viewport or texture size limit');
-      renderGraph ??= createRenderGraph(gl, { api, program, resources, target, textureUnit, fullscreen, maxSize });
+      renderGraph ??= createRenderGraph(gl, { api, program, resources, target, textureUnit, fullscreen, maxSize,
+        drawLighting(spec, options) {
+          graphLighting ??= createPixelLightingPass(gl, toolkit.KIT.pixelLighting, resources);
+          return graphLighting.draw(spec, options);
+        }
+      });
       renderGraph(world, frame, plan, width, height, output, presentMixed);
     }
     let inspection;

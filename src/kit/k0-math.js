@@ -2,6 +2,7 @@
 // k0-math: vectors, 3x3 matrices, easing, keyed values, springs.
 const KIT = {};
 KIT.flowMap = FlowMap;
+KIT.pixelLighting = PixelLighting;
 KIT.material = MaterialControls;
 KIT.sceneMeshes = SceneMeshes;
 KIT.artStability = ArtStability;

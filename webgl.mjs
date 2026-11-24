@@ -1,4 +1,5 @@
 export { createRenderer as default, createRenderer } from './src/webgl/renderer.mjs';
+export { createPixelLightingPass } from './src/webgl/pixel-lighting.mjs';
 export { createSplatPipeline } from './src/webgl/pipeline.mjs';
 export { pixelShaderSources, splatShaderSources } from './src/webgl/shaders.mjs';
 export { createTransitionComposer } from './src/webgl/transition-composer.mjs';

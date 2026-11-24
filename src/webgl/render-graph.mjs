@@ -461,7 +461,7 @@ void main() {
   color = floor(mix(old, fresh, weight) * 255.0 + .50001) / 255.0;
 }`;
 
-export function createRenderGraph(gl, { api, program, resources, target, textureUnit, fullscreen, maxSize }) {
+export function createRenderGraph(gl, { api, program, resources, target, textureUnit, fullscreen, maxSize, drawLighting }) {
   const shader = program(fragment),
     scene = target();
   const selected = resources.texture(),
@@ -645,7 +645,7 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
           table = node.type === 'grade' && api.cube(node);
         const layer =
           node.enabled && node.layer && (!feedback || memory.capture) &&
-          api.layer(node, w, h, world, time, camera, gl, frame.time, frame.renderGraphInputs);
+          api.layer(node, w, h, world, time, camera, gl, frame.time, frame.renderGraphInputs, drawLighting);
         const window = node.window && node.opacity && api.windowFrame(node.window, {
           world, time, sceneTime: frame.time, width: w, height: h, camera
         });

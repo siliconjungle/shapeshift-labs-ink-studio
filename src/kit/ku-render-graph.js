@@ -17,7 +17,7 @@
     addressRaster: RenderGraph.addressRaster,
     scheduleTable: RenderGraph.scheduleTable,
     indexedSchedule: RenderGraph.indexedSchedule,
-    layer: (node, w, h, world, time, camera, gl, sceneTime, inputs) =>
+    layer: (node, w, h, world, time, camera, gl, sceneTime, inputs, drawLighting) =>
       RenderGraph.layer(
         node,
         w,
@@ -31,7 +31,8 @@
         inputs,
         K.procedural.raster,
         K.directionDrawing.extract,
-        sceneTime
+        sceneTime,
+        drawLighting
       )
   });
 })(KIT);

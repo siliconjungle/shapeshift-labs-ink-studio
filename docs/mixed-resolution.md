@@ -17,6 +17,8 @@ The output dimensions come from `w` and `h` in Node and the CLI, or `width` and 
 
 A positive integer resolution rounds the native width and height up independently. Fixed resolutions fit the full frame, so choose a matching aspect ratio to preserve proportions.
 
+A [native-grid 2D lighting layer](pixel-lighting.md) composites lit indexed tiles and sprites using its own art grid.
+
 ## Typography and technical overlays
 
 A `draw` list renders at the layer's native resolution. Command sizes and positions stay in output pixels as that resolution changes. Colors accept `#rrggbb` and `#rrggbbaa` hex strings.
