@@ -4,14 +4,19 @@ const files = require('./asset-files.js');
 const projection = require('./material-projection.js');
 const charts = require('./material-chart-rebake.js');
 const {writeMips} = require('./registered-material-mips.js');
+const Geometry = require('./geometry-masks.js');
 
-function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits}) {
-  if ([bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits].every(value=>value===undefined)) return null;
+function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometryMasks}) {
+  if ([bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits].every(value=>value===undefined) &&
+      (geometryMasks === undefined || geometryMasks === false)) return null;
   if(chartEdits!==undefined && rebakeFrom===undefined)throw new TypeError('Chart edits need a rebake baseline');
+  if(geometryMasks!==undefined && geometryMasks!==false && !bakeDir)
+    throw new TypeError('Geometry masks need a registered bake directory');
   if(typeof bakeDir!=='string'||!bakeDir || paintViews!==undefined && capturePaint!==undefined)
     throw new TypeError('Registered baking needs a bake directory and one paint or capture plan at a time');
   const directory=path.resolve(bakeDir), meshes=[], output=new Map(), captures=[];
   const baseline=charts.readBaseline(rebakeFrom), edits=charts.readPlan(chartEdits);
+  const geometrySettings=Geometry.settings(geometryMasks === undefined ? baseline?.document.geometryMasks : geometryMasks);
   const sameDirectory=baseline && fs.existsSync(directory) && fs.realpathSync(directory)===baseline.directory;
   const paint=projection.read(paintViews,'paint'), capture=projection.read(capturePaint,'camera');
   if (capture.length && (fs.existsSync(path.join(directory,'paint-views','approved.json')) ||
@@ -55,12 +60,14 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits}) {
     const chartReport={
       updated:state.charts.filter(chart=>dirty.has(chart.id)).map(chart=>chart.id),
       reused:state.charts.filter(chart=>!dirty.has(chart.id)).map(chart=>chart.id),
-      sampledTexels:baked.sampledTexels
+      sampledTexels:baked.sampledTexels,
+      ...(baked.geometryMasks && {geometryMaskTexels:chartBake.geometry.calculate ? baked.geometryMasks.texels : 0})
     };
     const mipmaps=writeMips(baked,size,dirty,source?.row.mipmaps,baseline?.read,map,sidecar);
     const row={index,name:mesh.name,geometry:projection.geometryHash(mesh.points,faces),
       uvLayout:projection.digest(JSON.stringify([faces,uvs])),texCoord:0,width:size,height:size,padding,
       coverage,emissionStrength:strength,maps,masks,mipmaps,paintViews:[...paintReceipts.values()],
+      ...(baked.geometryMasks && {geometryMasks:baked.geometryMasks}),
       charts:state.charts.map(({id,faces,bounds})=>({id,faces,bounds})),
       chartLayout:sidecar('chart-layout','json',Buffer.from(JSON.stringify(state))),
       rebakeState:{owners:sidecar('chart-owners','deflate',previous?.packedOwners??charts.pack(baked.owners)),
@@ -80,6 +87,7 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits}) {
 
   function write(glb) {
     const document={format:'ink-studio/registered-material-bake',version:1,
+      ...(geometrySettings && {geometryMasks:geometrySettings}),
       glb:path.relative(directory,glb).split(path.sep).join('/'),meshes};
     for(const [file,bytes] of output)files.write(path.join(directory,file),bytes);
     if(captures.length) {
@@ -96,6 +104,20 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits}) {
   function plan(index, input, kit) {
     const views=paint.filter(view=>view.mesh===index);
     const chartBake=charts.planMesh({...input,baseline,views,edits:edits.filter(edit=>edit.mesh===index)});
+    if (geometrySettings) {
+      const {mesh,faces,faceNormals,source} = input;
+      const conflict = Geometry.names.find(name => chartBake.state.maskNames.includes(name));
+      if (conflict) throw new TypeError('Geometry mask ID is already authored: '+conflict);
+      const same = source?.row.geometryMasks && JSON.stringify(geometrySettings) ===
+        JSON.stringify(Geometry.settings(baseline.document.geometryMasks)) &&
+        source.row.geometry === projection.geometryHash(mesh.points,faces);
+      if (same) chartBake.geometry={previous:source.row.geometryMasks};
+      else {
+        // A moving wall can change exposure or thickness on an otherwise identical chart.
+        for (const {id} of chartBake.state.charts) chartBake.dirty.add(id);
+        chartBake.geometry={calculate:Geometry.prepare(mesh.points,faces,faceNormals,geometrySettings,kit)};
+      }
+    }
     const projected=chartBake.reproject.size ? projection.prepare(input.mesh.points,input.faces,views,kit) : undefined;
     return {chartBake,projection:projected};
   }

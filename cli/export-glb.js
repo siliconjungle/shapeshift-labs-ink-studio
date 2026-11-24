@@ -21,7 +21,8 @@ function summarize({ meshes = [], skins = [], accessors = [] }) {
   };
 }
 
-function exportGlb(modelOrFile, { out, uvMargin = 0.008, textureSize, bakeDir, paintViews, capturePaint, rebakeFrom, chartEdits } = {}) {
+function exportGlb(modelOrFile, { out, uvMargin = 0.008, textureSize, bakeDir, paintViews, capturePaint, rebakeFrom, chartEdits,
+  geometryMasks } = {}) {
   if (!out || path.extname(out).toLowerCase() !== '.glb') throw new Error('Choose an .glb output filename');
   if (!Number.isFinite(uvMargin) || uvMargin <= 0 || uvMargin >= 0.1)
     throw new Error('UV margin must be between 0 and 0.1');
@@ -30,7 +31,7 @@ function exportGlb(modelOrFile, { out, uvMargin = 0.008, textureSize, bakeDir, p
   const input = typeof modelOrFile === 'string' ? path.resolve(modelOrFile) : null, output = path.resolve(out);
   if (input === output) throw new Error('Choose an output different from the input mesh');
   const studio = require('../index'), extension = input && path.extname(input).toLowerCase();
-  const registered = registeredMaterial.prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits});
+  const registered = registeredMaterial.prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometryMasks});
   let bytes, report;
   if (extension === '.gltf' || extension === '.glb') {
     if (registered) throw new TypeError('Registered baking uses an authored model or OBJ input');

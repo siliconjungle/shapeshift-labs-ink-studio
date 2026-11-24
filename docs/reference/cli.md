@@ -206,6 +206,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   scenery inspect <asset.inkscenery>   decode the pack and report its transfer sizes
   export-glb <scene.js|.json|.obj|.gltf|.glb> --out model.glb   write UV-mapped geometry with materials, skins and clips
     --bake-dir <folder> [--paint-views <plan.json> | --capture-paint <cameras.json>]   export registered UV material maps
+    --geometry-masks [settings.json|off]   bake slope, cavity, exposure and thickness into the registered atlas
     --rebake-from <material-bake.json> [--chart-edits <plan.json>]   update selected or changed UV charts
   interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets
                               [--res 0.08 --texture-size 1024 --triangles 16000 --duration 4 --fps 30]

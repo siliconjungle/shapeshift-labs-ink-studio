@@ -4,7 +4,8 @@ const { unwrap, area2 } = require('./glb-uv');
 const bake = require('./glb-bake');
 const MeshUV = require('../src/mesh-uv.js');
 
-function meshWriter(doc, mesh, rig, { V }, options) {
+function meshWriter(doc, mesh, rig, kit, options) {
+  const { V } = kit;
   const { name, points } = mesh;
   const validVector = (v, n) => Array.isArray(v) && v.length === n && v.every(Number.isFinite);
   if (!points?.length || !points.every(p => validVector(p, 3)) || !mesh.faces?.length)
@@ -128,8 +129,8 @@ function meshWriter(doc, mesh, rig, { V }, options) {
       sampleSurface: sample && ((p, n, f) => sample.call(mesh,p,n,sourceFaces[f]))
     };
     const {chartBake,projection} = registered?.plan(registeredIndex,{
-      mesh:{...bakeMesh,faces:mesh.faces},faces,uvs,normals,atlas,splits,size:textureSize,source
-    },{V}) ?? {};
+      mesh:{...bakeMesh,faces:mesh.faces},faces,uvs,normals,faceNormals,atlas,splits,size:textureSize,source
+    },kit) ?? {};
     const baked = bake(bakeMesh,faces,uvs,normals,textureSize,atlas.padding,{V},{registered:Boolean(registered),projection,chartBake});
     const {textures,strength,coverage}=baked;
     if(registered)registeredBake=registered.record(registeredIndex,mesh,faces,uvs,textureSize,atlas.padding,baked,chartBake,projection,source,{V});

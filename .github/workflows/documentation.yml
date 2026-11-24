@@ -24,7 +24,7 @@ jobs:
           node --test tests/public-reference.test.js tests/graph-catalog.test.js
           tests/render-compatibility.test.js tests/rebirth-examples.test.js
           tests/additional-light-emitters.test.js tests/color-lut.test.js
-          tests/color-space.test.js tests/uv-atlas-slip.test.js
+          tests/color-space.test.js tests/uv-atlas-slip.test.js tests/geometry-masks.test.js
       - name: Browser and headless rendering smoke tests
         run: |
           chrome="$(command -v google-chrome)"

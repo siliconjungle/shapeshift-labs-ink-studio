@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spillway Nine · Geometry mask bake</title>
+<style>
+  :root { color-scheme:dark; background:#131b22; color:#edece2; font:15px/1.45 system-ui,sans-serif;
+    --muted:#a6b7bc; --line:#3b5057; --panel:#1b2830; --active:#b0decd; }
+  * { box-sizing:border-box; }
+  body { margin:0; }
+  main { max-width:1230px; margin:auto; padding:clamp(16px,4vw,46px); }
+  h1 { margin:0; font:400 clamp(38px,6vw,64px)/1.1 Georgia,serif; }
+  h2 { margin:0; font-size:1.05rem; }
+  p { margin:.5rem 0; }
+  header { margin-bottom:1.2rem; }
+  #dimensions, #description, .muted { color:var(--muted); }
+  .controls, .panel-head { display:flex; flex-wrap:wrap; align-items:center; gap:.65rem; }
+  .controls { justify-content:space-between; margin-bottom:.9rem; }
+  nav { display:flex; flex-wrap:wrap; gap:.45rem; }
+  button { background:#263941; color:inherit; border:1px solid var(--line); border-radius:.35rem;
+    padding:.45rem .7rem; font:inherit; cursor:pointer; }
+  button:hover, button[aria-pressed="true"] { border-color:var(--active); }
+  button[aria-pressed="true"] { background:var(--active); color:#192e2e; font-weight:650; }
+  .layout { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(230px,1fr); gap:1rem; align-items:start; }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:.48rem; overflow:hidden; }
+  .panel-head { padding:.75rem .9rem; justify-content:space-between; }
+  .viewport { position:relative; background:#17242c; border-block:1px solid var(--line); }
+  #mesh { display:block; width:100%; aspect-ratio:588/388; object-fit:contain; image-rendering:pixelated;
+    background:radial-gradient(ellipse at center,#2b4350,#152329 77%); }
+  #atlas { display:block; width:100%; image-rendering:pixelated; cursor:crosshair;
+    background-color:#26353d; background-image:conic-gradient(#304149 25%,transparent 0 50%,#304149 0 75%,transparent 0); background-size:16px 16px; }
+  #crosshair { position:absolute; pointer-events:none; transform:translate(-50%,-50%); width:12px; height:12px;
+    border:1px solid #ffdbaa; box-shadow:0 0 0 1px #422f30; }
+  #description, #probe { padding:.2rem .9rem .65rem; }
+  .gradient { width:94px; height:8px; border-radius:6px; background:linear-gradient(90deg,#000,#fff); }
+  .legend { display:inline-flex; align-items:center; gap:.4rem; font-size:.83rem; color:var(--muted); }
+  dl { display:grid; grid-template-columns:auto 1fr; gap:.15rem 1rem; margin:.45rem 0; font-variant-numeric:tabular-nums; }
+  dt { color:var(--muted); }
+  dd { margin:0; }
+  form { display:flex; flex-wrap:wrap; gap:.45rem; align-items:center; margin-top:.55rem; }
+  input[type=number] { width:4rem; background:#22343a; color:inherit; border:1px solid var(--line);
+    font:inherit; padding:.24rem .34rem; border-radius:.28rem; }
+  [hidden] { display:none !important; }
+  @media(max-width:760px) { .layout { grid-template-columns:1fr; } }
+</style>
+<main>
+  <header>
+    <h1>Spillway Nine</h1>
+    <p id="dimensions"></p>
+  </header>
+  <div class="controls">
+    <nav aria-label="Geometry mask">
+      <button type="button" data-mask="slope">Slope</button>
+      <button type="button" data-mask="cavity">Cavity</button>
+      <button type="button" data-mask="exposure">Exposure</button>
+      <button type="button" data-mask="thickness">Thickness</button>
+    </nav>
+    <label><input type="checkbox" id="material"> Show original material</label>
+  </div>
+  <div class="layout">
+    <section>
+      <div class="panel-head"><h2 id="mesh-title">Mask on mesh</h2><span class="muted" id="validity" hidden>Coral marks unknown thickness</span></div>
+      <div class="viewport"><img id="mesh" alt="Selected mask mapped to the spillway mesh"></div>
+      <p id="description"></p>
+    </section>
+    <section>
+      <div class="panel-head"><h2>UV atlas</h2><span class="legend">0 <span class="gradient"></span> 1</span></div>
+      <div class="viewport"><canvas id="atlas" aria-label="Click to sample the UV atlas"></canvas><span id="crosshair" aria-hidden="true" hidden></span></div>
+      <div id="probe">
+        <form>
+          <label>X <input type="number" id="x" required></label>
+          <label>Y <input type="number" id="y" required></label>
+          <button>Sample texel</button>
+        </form>
+        <p id="values" role="status"></p>
+        <dl id="channels"></dl>
+      </div>
+    </section>
+  </div>
+</main>
+<script>
+const {preview,atlases,summary} = /*DATA*/;
+const [width,height] = summary.size;
+const $ = id => document.getElementById(id);
+const canvas = $('atlas'), context = canvas.getContext('2d'), maskBuffers = new Map();
+const buttons = [...document.querySelectorAll('button[data-mask]')];
+const descriptions = {
+  slope:'Bright values mark steep surfaces. Horizontal floors and roofs start at zero.',
+  cavity:'Bright values mark nearby occlusion, including the floor beneath the canopy and wall bases.',
+  exposure:'Bright values mark open space around the surface. Covered surfaces receive lower values.',
+  thickness:'Mint marks thicker sections through a closed shell. Coral marks unknown thickness, including the open survey plate.'
+};
+let active = 'cavity', at;
+canvas.width = width; canvas.height = height;
+$('x').min=0; $('y').min=0; $('x').max=width-1; $('y').max=height-1;
+$('dimensions').textContent = width+' × '+height+' UV atlas · '+summary.samples+' shared rays per covered texel';
+
+function probe(x,y) {
+  if (!Number.isInteger(x) || !Number.isInteger(y) || x<0 || y<0 || x>=width || y>=height) return;
+  at = [x,y];
+  $('x').value=x; $('y').value=y;
+  const p=4*(y*width+x), pin=$('crosshair');
+  pin.hidden=false; pin.style.left=(x+.5)*100/width+'%'; pin.style.top=(y+.5)*100/height+'%';
+  const covered = maskBuffers.get('coverage')?.data[p+3], rows = $('channels');
+  rows.replaceChildren();
+  if (!covered) { $('values').textContent='Outside a covered UV chart'; return; }
+  $('values').textContent='Texel '+x+', '+y;
+  const valid=maskBuffers.get('thickness-valid').data[p]===255;
+  for (const button of buttons) {
+    const id=button.dataset.mask, value=maskBuffers.get(id).data[p]/255;
+    const key=document.createElement('dt'), result=document.createElement('dd');
+    key.textContent=button.textContent;
+    result.textContent=id==='thickness' ? valid ?
+      (value >= 1 ? '≥ ' : '≈ ')+(value*summary.thicknessScale).toFixed(3)+' scene units' : 'Unknown' : value.toFixed(3);
+    rows.append(key,result);
+  }
+}
+
+function show(name) {
+  active=name;
+  for (const button of buttons) button.setAttribute('aria-pressed',String(button.dataset.mask===name));
+  const original=$('material').checked;
+  $('mesh').src=preview[original ? 'model' : name];
+  $('mesh-title').textContent=original ? 'Original material' : 'Mask on mesh';
+  $('validity').hidden=original || name!=='thickness';
+  $('description').textContent=descriptions[name];
+  if (!maskBuffers.has(name)) return;
+  context.putImageData(maskBuffers.get(name),0,0);
+  if (at) probe(...at);
+}
+
+for (const button of buttons) button.onclick=()=>show(button.dataset.mask);
+$('material').onchange=()=>show(active);
+canvas.onclick=event=>{
+  const box=canvas.getBoundingClientRect();
+  if (maskBuffers.size) probe(Math.floor((event.clientX-box.left)*width/box.width),Math.floor((event.clientY-box.top)*height/box.height));
+};
+document.querySelector('form').onsubmit=event=>{
+  event.preventDefault();
+  if (maskBuffers.size) probe($('x').valueAsNumber,$('y').valueAsNumber);
+};
+show(active);
+Promise.all(Object.entries(atlases).map(async ([name,url])=>{
+  const img=new Image(); img.src=url; await img.decode();
+  const source=document.createElement('canvas'); source.width=width; source.height=height;
+  const read=source.getContext('2d'); read.drawImage(img,0,0);
+  return [name,read.getImageData(0,0,width,height)];
+})).then(entries=>{
+  for (const [name,data] of entries) maskBuffers.set(name,data);
+  const data=maskBuffers.get('cavity').data;
+  let best=0;
+  for (let p=0;p<data.length;p+=4) if(data[p+3]&&data[p]>data[best]) best=p;
+  at=[best/4%width,Math.floor(best/4/width)]; show(active);
+}).catch(error=>{$('values').textContent=error.message;});
+</script>
+</html>

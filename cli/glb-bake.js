@@ -2,6 +2,7 @@
 const png = require('./png');
 const { area2 } = require('./glb-uv');
 const { idOK } = require('./material-projection.js');
+const { names:geometryNames } = require('./geometry-masks.js');
 
 const clamp = (x, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, x));
 const byte = value => Math.round(clamp(value) * 255);
@@ -29,7 +30,7 @@ function opaquePigment(texture) {
 function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = false, projection, chartBake } = {}) {
   const count = size * size, covered = new Uint8Array(count);
   if(projection && count*projection.views>64000000)throw new RangeError('Paint views exceed the projected texel budget');
-  const { previous, state, dirty, reproject } = chartBake || {};
+  const { previous, state, dirty, reproject, geometry } = chartBake || {};
   const owners = previous?.owners ?? (registered && new Uint32Array(count));
   const stamp = previous?.paint ?? (projection && new Float32Array(count * 4));
   const pixels = previous?.pixels ?? {
@@ -41,17 +42,19 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
   if (registered && (!Array.isArray(names) || !Array.from(names).every(idOK)))
     throw new TypeError('Material mask names must be lowercase IDs');
   const masks = new Map(), pigment = registered && mesh.materials.map(material=>opaquePigment(material.texture));
-  const paintMasks = new Set(state?.paintMasks);
+  const paintMasks = new Set(state?.paintMasks), geometryMasks = new Set(geometry ? geometryNames : []);
   if (registered) {
     const authored=new Set([...names,...mesh.materials.flatMap(layer=>Object.keys(layer.masks??{}))]);
     for (const name of paintMasks) {
       if (authored.has(name)) throw new Error('Material mask ID is reserved for an approved view: '+name);
       authored.add(name);
     }
+    for (const name of geometryMasks) authored.add(name);
     if(authored.size>24 || count*authored.size>64000000 || [...authored].some(id=>!idOK(id)))
       throw new RangeError('Material masks exceed the atlas mask budget or have an invalid ID');
     for(const name of authored)masks.set(name,previous?.masks.get(name) ?? new Uint8Array(count));
   }
+  const geometryLayers = geometry?.calculate && geometryNames.map(name=>masks.get(name));
   let used = 0, strength = previous?.strength ?? 1, normalUsed = false, emissiveUsed = false, surfaceUsed = false;
   const hot = previous ? null : new Float32Array(count * 3), mats = mesh.materials;
   // Freeze all reused texels, including gutters. Dirty triangles can only
@@ -62,6 +65,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
   for (const [f, face] of faces.entries()) {
     const chart = state?.faceCharts[f], project = projection && reproject.has(chart);
     if (previous && !dirty.has(chart)) continue;
+    const geometrySample = geometry?.calculate?.forFace(f,geometryLayers);
     const t = uvs[f].map(p => p.map(x => x * size)), [a, b, c] = t, det = area2(a, b, c);
     if (Math.abs(det) < 1e-16) throw new Error('Cannot bake a degenerate UV triangle');
     const [pa, pb, pc] = face.map(i => mesh.points[i]);
@@ -107,10 +111,10 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
             !Array.from(authoredNormal).every(Number.isFinite)||Math.hypot(...authoredNormal)===0))
           throw new TypeError('Registered material samples need valid linear RGB, normals and surface channels');
         if(previous) for(const [name,layer] of masks) {
-          if(project || !paintMasks.has(name))layer[i]=0;
+          if(!geometryMasks.has(name) && (project || !paintMasks.has(name)))layer[i]=0;
         }
         for (const [name,value] of Object.entries(material.masks??{})) {
-          if(!masks.has(name) || paintMasks.has(name) || !Number.isFinite(value)||value<0||value>1)
+          if(!masks.has(name) || paintMasks.has(name) || geometryMasks.has(name) || !Number.isFinite(value)||value<0||value>1)
             throw new TypeError('Expected a declared mask with weight in [0, 1]: '+name);
           masks.get(name)[i]=byte(value);
         }
@@ -123,6 +127,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
         }
         if(stamp && stamp[i*4+3])color=color.map((value,k)=>value*(1-stamp[i*4+3])+stamp[i*4+k]);
       }
+      geometrySample?.(p,i);
       const source = authoredNormal ? (registered ? V.norm(authoredNormal) : authoredNormal) : n;
       const tx = V.norm(V.mad(tangent, n, -V.dot(tangent, n)), V.perp(n));
       const ty = V.mul(V.cross(n, tx), V.dot(V.cross(n, tx), bitangent) < 0 ? -1 : 1);
@@ -195,7 +200,8 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
   };
   const coverage = previous ? footprint.reduce((n,value)=>n+Number(value!==0),0)/count : used/count;
   const raster = registered && {pixels,opacity:alpha,footprint,masks,owners};
-  return { textures, strength, coverage, registeredMaps, owners, stamp, translucent, sampledTexels:used, raster };
+  return { textures, strength, coverage, registeredMaps, owners, stamp, translucent, sampledTexels:used, raster,
+    ...(geometry && {geometryMasks:geometry.calculate?.report() ?? geometry.previous}) };
 }
 
 module.exports = bake;

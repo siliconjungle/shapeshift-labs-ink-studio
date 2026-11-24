@@ -104,6 +104,70 @@ of view. The API takes these plans as paths or objects through
 `studio.exportGlb(model, { out, bakeDir, capturePaint, paintViews })`.
 Select either capture or paint for each export.
 
+## Bake geometry masks
+
+Add `--geometry-masks` to generate the surface masks during the same
+registered UV pass as pigment and roughness.
+
+```sh
+node cli/ink-studio.js export-glb examples/geometry-mask-bake.js \
+  --out spillway.glb --bake-dir spillway-maps --texture-size 256 --geometry-masks
+```
+
+The bake writes linear grayscale PNGs under `mesh-000` and registers them
+as named masks in `material-bake.json`. They share `TEXCOORD_0`, the surface
+coverage map, chart gutters, and the registered mip chain.
+
+| Mask | Value |
+| --- | --- |
+| `slope` | Angular tilt from horizontal, normalized from 0° to 90° using a geometric face normal and the configured up axis. Flat floors and ceilings both start at 0. |
+| `cavity` | Local occlusion. Nearby hits have more weight, falling linearly to zero at `cavityRadius`. |
+| `exposure` | Fraction of outward rays that reach `exposureDistance` without a hit. Open surfaces are bright. |
+| `thickness` | Distance along the inward normal to the first exit from the same closed shell, divided by `thicknessScale` and clamped at 1. |
+| `thickness-valid` | 1 when the inward ray measured a valid exit. Open, non-manifold, and ambiguous shells or misses return 0. |
+
+The geometry query uses the triangles of each rest mesh, including its
+separate shells. Cavity and exposure reuse one set of deterministic,
+cosine-weighted rays per covered texel. The baker treats triangles as
+opaque geometry. Pigment, shading normals, lighting, and camera do not
+enter these masks. Use `thickness-valid` before interpreting a zero value
+as a measurement. On a filtered mip it stores the fraction with a valid
+measurement, so divide the normalized thickness by that fraction when
+estimating average thickness over valid samples.
+
+Pass a JSON settings file after `--geometry-masks` or supply
+`geometryMasks: { ... }` to `studio.exportGlb`.
+
+```json
+{
+  "up": [0, 1, 0],
+  "samples": 24,
+  "cavityRadius": 0.7,
+  "exposureDistance": 4.5,
+  "thicknessScale": 1.75
+}
+```
+
+Defaults use +Y, 16 samples, a cavity radius of 14% of the mesh bounds
+diagonal, and one diagonal for exposure and thickness scale. Distances
+are in scene units. `samples` accepts 4–64. Optional `rayBias` changes the
+small surface offset used when starting a trace. The manifest records
+the resolved distances and counts of measured, missing, and clipped
+thickness texels. Choose fewer samples or a smaller texture when the
+geometry exceeds the ray budget.
+
+A chart rebake inherits the baseline settings. A geometry or settings
+change refreshes the geometry masks across that mesh, since an edit can
+change occlusion on another chart. Unchanged geometry can reuse the
+saved masks. Use `--geometry-masks off` to drop the generated channels.
+
+```sh
+node examples/geometry-mask-bake.js /tmp/spillway-nine
+```
+
+Open `spillway-review.html` to compare the masks on the model, switch back
+to its original material, or sample an exact texel of the UV atlas.
+
 ## Reproduce the demo
 
 ```sh

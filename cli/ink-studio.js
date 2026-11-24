@@ -1388,6 +1388,7 @@ const CMD = {
         '  scenery inspect <asset.inkscenery>   decode the pack and report its transfer sizes',
         '  export-glb <scene.js|.json|.obj|.gltf|.glb> --out model.glb   write UV-mapped geometry with materials, skins and clips',
         '    --bake-dir <folder> [--paint-views <plan.json> | --capture-paint <cameras.json>]   export registered UV material maps',
+        '    --geometry-masks [settings.json|off]   bake slope, cavity, exposure and thickness into the registered atlas',
         '    --rebake-from <material-bake.json> [--chart-edits <plan.json>]   update selected or changed UV charts',
         '  interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets',
         '                              [--res 0.08 --texture-size 1024 --triangles 16000 --duration 4 --fps 30]',
@@ -2514,7 +2515,8 @@ const CMD = {
       const result = require('../index.js').exportGlb(source, {
         out: opt.out, textureSize: num('texture-size', undefined), uvMargin: num('uv-margin', 0.008),
         bakeDir:opt['bake-dir'],paintViews:opt['paint-views'],capturePaint:opt['capture-paint'],
-        rebakeFrom:opt['rebake-from'],chartEdits:opt['chart-edits']
+        rebakeFrom:opt['rebake-from'],chartEdits:opt['chart-edits'],
+        geometryMasks:opt['geometry-masks']==='off' ? false : opt['geometry-masks']==='on' ? true : opt['geometry-masks']
       });
       console.log(JSON.stringify(result, null, 2));
     } catch (error) {
