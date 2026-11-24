@@ -207,3 +207,51 @@ test('a portable capture keeps the nearest weak splat in addition to the ranked 
   const sdk = ink.createPixelEditor(document).inspect([32,24],{ binding:'study',renderFrame }).scene;
   assert.deepEqual(sdk.sources,report.sources);
 });
+
+test('binding diagnostics confirm a foreground blocker and distinguish a missing projection',t=>{
+  const file = workspace(t), scene = file('blocker.json'), art = file('art.json'), view = file('view.json');
+  fs.writeFileSync(scene,JSON.stringify({ id:'blocker-study',style:'slate',
+    camera:{target:[0,0,0],dist:4,yaw:0,pitch:0,sway:0,projection:'orthographic'},
+    finish:{ look:{ sdfAssist:true } },
+    solids:[
+      { id:'rear',kind:'box',at:[0,0,0],half:[.65,.65,.12],res:.13,mat:'stone' },
+      { id:'cover',kind:'box',at:[0,0,.7],half:[.24,1.1,.12],res:.13,mat:'stone' }
+    ] }));
+  const document = design(scene,'rear');
+  fs.writeFileSync(art,JSON.stringify(document));
+  const inspect = (at,...capture)=>JSON.parse(cli('inspect',art,'--at',at,'--binding','study',...capture)).scene.bindings[0];
+  const occluded = inspect('32,24','--scene',scene), blocker = occluded.diagnostics.find(issue=>issue.kind === 'blocker');
+  assert.equal(occluded.status,'occluded');
+  assert.equal(occluded.hits.length,0);
+  assert.equal(blocker.blocker.object,'cover');
+  assert.equal(blocker.blocker.kind,'sdf');
+  assert.equal(blocker.partial,false);
+  assert.ok(blocker.targetDepth > blocker.blocker.depth);
+  assert.equal(blocker.visibleCoverage,0);
+  assert.ok(blocker.projectedCoverage > 0);
+  const offTarget = inspect('32,4','--scene',scene);
+  assert.ok(!offTarget.diagnostics?.some(issue=>issue.kind === 'blocker'));
+  const saved = capture(scene,view,64,48);
+  assert.equal(ink.pickSurface(saved.passes,32,24).object,'cover');
+  assert.ok(!inspect('32,24','--source-view',view).diagnostics?.some(issue=>issue.kind === 'blocker'));
+
+  const spec = JSON.parse(fs.readFileSync(scene,'utf8')), world = ink.createSceneEditor(spec).build();
+  const editor = ink.createPixelEditor(design(spec.id,'rear'));
+  const render = (settings,yaw=0)=>ink.render(world,{ ...settings,px:1,yaw,raw:true });
+  const sdk = editor.inspect([32,24],{ binding:'study',captureSelection:render }).scene.bindings[0];
+  assert.equal(sdk.status,'occluded');
+  assert.throws(()=>editor.inspect([32,24],{ binding:'study',
+    captureSelection:settings=>render(settings,settings.pixelSelection.isolated ? .2 : 0) }),/same camera grid/);
+});
+
+test('anonymous translucent splats still count as distinct overlapping sources',()=>{
+  const B = ink.load().makeBuilder(3,[0x202020,0x76cbb9,0xedaf67]);
+  B.iso(0,0,0,.6,B.P[1],.45,{ nd:true });
+  B.iso(0,0,.4,.6,B.P[2],.4,{ nd:true });
+  const world = B.finish({ cam:{target:[0,0,0],dist:4,yaw:0,pitch:0,sway:0,ortho:true} });
+  const frame = ink.render(world,{ w:64,h:48,px:1,raw:true,passes:['sourceSplat','coverage'] });
+  const report = ink.createPixelEditor(design('sheets','unknown')).inspect([32,24],{renderFrame:frame});
+  assert.deepEqual(report.scene.diagnostics,[{kind:'overlap',code:'overlapping-sources',count:2},
+    {kind:'unreliable',code:'unstable-splat-id'}]);
+  assert.ok(!ink.createPixelEditor(design('sheets','unknown')).inspect([0,0],{renderFrame:frame}).scene.diagnostics);
+});

@@ -1397,6 +1397,32 @@ views can still provide saved mesh UVs and any saved pinned splat trace.
 New captures store the representation data as optional typed planes and
 source tables in the same version 1 format.
 
+## Highlight occlusion and ambiguous hits
+
+For a bound target, compare the scene and its isolated projection from the
+same camera. Ink reports a foreground blocker when that projection reaches
+the pixel and the scene shows a closer depth owner cutting into the target's
+visible coverage. The report includes the blocker, both depths, and the
+visible and projected coverage. A missing target hit by itself is a miss.
+
+```sh
+node cli/ink-studio.js pixel-art inspect design.json --scene scene.json \
+  --binding gate --at 18,23
+node cli/ink-studio.js pixel-art canvas design.json --scene scene.json \
+  --binding gate --out hit-review.html
+```
+
+In the offline canvas, choose **Highlight scene hits**. **Foreground
+blockers** marks confirmed occlusion for the chosen binding. **Overlapping
+sources** marks pixels with multiple retained contributors. **Unreliable
+bindings** marks missing addresses, omitted contributors, and occlusion
+without a confirmed foreground blocker. Hover or pin a pixel to read its
+**Hit diagnostics**. The 1× preview keeps showing the original artwork.
+
+A bound canvas keeps the paired evidence so the blocker overlay works
+offline. An ordinary saved source view still supports overlap and address
+diagnostics. Inspecting it requires paired evidence to confirm a blocker.
+
 ## Navigate craft diagnostics
 
 Open **Craft diagnostics** below the canvas in the Pixel Stamp Workshop or

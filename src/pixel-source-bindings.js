@@ -27,17 +27,17 @@ const PixelSourceBindings = (() => {
     const splats = [], omitted = passes.sourceSplatOmitted?.[p];
     const frontRank = passes.sourceSplatFrontRank?.[p];
     for (let i=p*lanes; i<(p+1)*lanes; i++) {
-      const handle = passes.splatSources?.[passes.sourceSplat?.[i]];
+      const slot = passes.sourceSplat?.[i], handle = passes.splatSources?.[slot];
       if (!handle) continue;
-      splats.push({ kind:'splat',...handle,depth:passes.sourceSplatDepth[i],alpha:passes.sourceSplatAlpha[i],
+      splats.push({ kind:'splat',...handle,slot,depth:passes.sourceSplatDepth[i],alpha:passes.sourceSplatAlpha[i],
         visibleCoverage:passes.sourceSplatWeight[i],...(frontRank === i-p*lanes+1 && { frontmost:true }) });
     }
     if (frontRank === lanes+1) {
-      const handle = passes.splatSources?.[passes.sourceSplatFront?.[p]];
+      const slot = passes.sourceSplatFront?.[p], handle = passes.splatSources?.[slot];
       const metrics = point(passes.sourceSplatFrontMetrics,p,3);
       if (handle && metrics) {
         const [alpha,depth,visibleCoverage] = metrics;
-        splats.push({ kind:'splat',...handle,alpha,depth,visibleCoverage,frontmost:true });
+        splats.push({ kind:'splat',...handle,slot,alpha,depth,visibleCoverage,frontmost:true });
       }
     }
     let truncated = omitted > 1e-6;
@@ -47,7 +47,7 @@ const PixelSourceBindings = (() => {
       for (const hit of frame.pixelFragments.hits) {
         if (hit.kind !== 'splat' && hit.kind !== 'glass') continue;
         const { identity,object,part,material,depth,alpha,visibleCoverage } = hit;
-        splats.push({ kind:'splat',id:identity ?? null,object,part,material,depth,alpha,visibleCoverage });
+        splats.push({ kind:'splat',id:identity ?? null,slot:hit.splatId,object,part,material,depth,alpha,visibleCoverage });
       }
     }
     if (!geometry && omitted === undefined && !pinned) return null;
@@ -55,6 +55,61 @@ const PixelSourceBindings = (() => {
     const frontSplat = splats.find(hit=>hit.frontmost) ?? (frontRank === undefined && complete ?
       splats.reduce((nearest,hit)=>!nearest || hit.depth < nearest.depth ? hit : nearest,null) : null);
     return { geometry,splats,frontSplat,omittedCoverage:omitted ?? null,truncated };
+  }
+
+  const minimum = 1e-6;
+  const named = value => typeof value === 'string' && !!value.trim();
+  const vector = (value,n)=>value?.length === n && value.every(Number.isFinite);
+  function addressable(hit) {
+    if (!hit) return false;
+    if (hit.kind === 'splat') return named(hit.id);
+    if (!named(hit.object) && !named(hit.entity)) return false;
+    return hit.kind === 'sdf' ? vector(hit.local,3) :
+      hit.kind === 'mesh' && (vector(hit.uv,2) || Number.isSafeInteger(hit.triangle) && vector(hit.barycentric,3));
+  }
+  const matches = (binding,hit) => hit && (hit.object === binding.object || hit.entity === binding.object) &&
+    (binding.part === undefined || hit.part === binding.part);
+
+  function issues(frame,at,ArtPasses,{ surface,sources,binding } = {}) {
+    const { passes } = frame;
+    if (!passes) return [];
+    const p = at[1]*frame.w+at[0], output = [];
+    const evidence = frame.bindingEvidence;
+    if (binding && (!evidence || evidence.object !== binding.object || evidence.part !== binding.part ||
+        !(evidence.projected[p] > minimum))) return output;
+    if (surface === undefined && passes.depth && passes.surfaceKind && passes.position)
+      surface = ArtPasses.pick(passes,...at);
+    if (sources === undefined) sources = sample(frame,at,ArtPasses,surface);
+    const splats = sources?.splats ?? [], geometry = sources?.geometry;
+    const frontSurface = surface && { ...surface,entity:geometry?.entity ?? passes.parts?.[passes.partId?.[p]]?.entity };
+    if (!binding) {
+      const unique = new Set(splats.map(hit=>hit.id ?? hit.slot ?? hit));
+      const unnamed = splats.some(hit=>!addressable(hit));
+      const hasSurface = frontSurface && frontSurface.kind !== 'splat';
+      const count = unique.size+Number(!!hasSurface);
+      if (count > 1) output.push({ kind:'overlap',code:'overlapping-sources',count });
+      if (frontSurface?.kind === 'splat' && !splats.length)
+        output.push({ kind:'unreliable',code:'splat-contributors-unavailable' });
+      if (unnamed) output.push({ kind:'unreliable',code:'unstable-splat-id' });
+      if (hasSurface && !addressable(geometry))
+        output.push({ kind:'unreliable',code:'surface-address-unavailable',representation:frontSurface.kind ?? null });
+      if (sources?.truncated) output.push({ kind:'unreliable',code:'contributors-omitted',coverage:sources.omittedCoverage });
+      if (!frontSurface && !splats.length && !sources?.truncated && passes.coverage?.[p] > minimum)
+        output.push({ kind:'unreliable',code:'covered-pixel-without-source' });
+      return output;
+    }
+    const projected = evidence.projected[p], visible = evidence.visible[p], depth = evidence.depth[p];
+    if (visible + minimum < projected) {
+      if (frontSurface && !matches(binding,frontSurface) && Number.isFinite(depth) && frontSurface.depth < depth-1e-5) {
+        output.push({ kind:'blocker',code:'foreground-blocker',partial:visible > minimum,
+          blocker:{ kind:frontSurface.kind ?? null,object:frontSurface.object ?? null,part:frontSurface.part ?? null,
+            depth:frontSurface.depth },visibleCoverage:visible,projectedCoverage:projected,targetDepth:depth });
+      } else if (visible <= minimum) output.push({ kind:'unreliable',code:'hidden-source-without-confirmed-blocker' });
+    }
+    if (visible > minimum && !(matches(binding,geometry) && addressable(geometry)) &&
+        !splats.some(hit=>addressable(hit) && matches(binding,hit)))
+      output.push({ kind:'unreliable',code:'binding-address-unavailable' });
+    return output;
   }
 
   function resolve(frame,binding,at,{ grid,frameId,layerId,sceneMatches,sourcePoint,ArtPasses }) {
@@ -70,15 +125,16 @@ const PixelSourceBindings = (() => {
     const sourceAt = mapped.map(Math.floor);
     const evidence = sample(frame,sourceAt,ArtPasses);
     if (!evidence) return { ...result,sourceAt,status:'source-unavailable' };
-    const matches = hit => hit && (hit.object === object || hit.entity === object) &&
-      (part === undefined || hit.part === part);
-    const hits = [evidence.geometry,...evidence.splats].filter(matches);
-    const resolved = hits.some(hit=>hit.kind !== 'splat' || hit.id !== null);
-    const status = resolved ? 'resolved' : hits.length ? 'unidentified-splat' : evidence.truncated ? 'truncated' : 'miss';
-    const frontSplat = matches(evidence.frontSplat) ? evidence.frontSplat : null;
-    return { ...result,sourceAt,status,hits,frontSplat,omittedCoverage:evidence.omittedCoverage,truncated:evidence.truncated };
+    const hits = [evidence.geometry,...evidence.splats].filter(hit=>matches(binding,hit));
+    const diagnostics = issues(frame,sourceAt,ArtPasses,{ binding,sources:evidence });
+    const blocked = diagnostics.some(issue=>issue.kind === 'blocker' && !issue.partial);
+    const status = blocked ? 'occluded' : hits.some(addressable) ? 'resolved' :
+      hits.some(hit=>hit.kind !== 'splat') || diagnostics.some(issue=>issue.kind === 'unreliable') ? 'unreliable-source' :
+        hits.length ? 'unidentified-splat' : evidence.truncated ? 'truncated' : 'miss';
+    const frontSplat = matches(binding,evidence.frontSplat) ? evidence.frontSplat : null;
+    return { ...result,sourceAt,status,hits,frontSplat,omittedCoverage:evidence.omittedCoverage,truncated:evidence.truncated,...(diagnostics.length && { diagnostics }) };
   }
 
-  return Object.freeze({ sample,resolve });
+  return Object.freeze({ sample,resolve,issues });
 })();
 if (typeof module !== 'undefined') module.exports = PixelSourceBindings;

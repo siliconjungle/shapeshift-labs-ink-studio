@@ -2005,7 +2005,7 @@ function renderFrame(world, o, preparedPalettes) {
     col[p3 + 2] = pb * a + col[p3 + 2] * ia;
     if (captured) captured[p] = a + captured[p] * ia;
     if (hazeCoverage) hazeCoverage[p] = haze*a + hazeCoverage[p]*ia;
-    pixelSelection?.fragment(p,i,sprite,a,wd);
+    pixelSelection?.fragment(p,i,sprite,a,wd,opticalDepth);
     const owned = art?.fragment(p, i, a, wd, z, emits, pr, pg, pb, sprite, emissionTint,opticalDepth);
     if (owned && paintStage) paintStage[p] = baseColor ?? 0;
     if (owned && paletteCapture) paletteCapture.claim(p,claim?.[0] ?? selectSlot(i,paletteId),claim);
@@ -3373,7 +3373,7 @@ function renderFrame(world, o, preparedPalettes) {
         if (edgePixels) edgePixels[q] = 0;
         if (axialDepth) axialDepth[q] = eyeD - R + sprD[q] * 2 * R;
         if (fogOwners) fogOwners[q] = fogOwner(sprOwner[q]);
-        pixelSelection?.fragment(q,sprOwner[q],undefined,1);
+        pixelSelection?.fragment(q,sprOwner[q],undefined,1,true,depth);
         if (art) art.sprite(q, sprOwner[q], eyeD - R + sprD[q] * 2 * R);
         if (deep) {
           const depth = eyeD - R + sprD[q] * 2 * R;
@@ -3402,6 +3402,9 @@ function renderFrame(world, o, preparedPalettes) {
     deep.transmit(p, source, eyeD - R + depth * 2 * R, eyeD - R + sourceDepth * 2 * R, weight)));
   const deepFrame = deep?.finish();
   const objectMattes = mattes?.finish(), selectionCoverage = pixelSelection?.finish();
+  if (selectionCoverage?.depth) selectionCoverage.view = {
+    matrix:Array.from(V),focal,orthographic:ortho,near,far:camera.clipFar,time:sceneTime,poseTime:t
+  };
   let atmosphere, volumeStats = mediaOptions?.stats ? rayMedia.stats : undefined;
   const captureFog = ink?.ramps.has('fog') || o.captureFog;
   const effectMedia = trackMedia && axialDepth && new Float32Array(W * H * 3);

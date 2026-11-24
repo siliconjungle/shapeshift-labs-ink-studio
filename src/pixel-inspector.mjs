@@ -98,6 +98,32 @@ export function mountPixelInspector(root,view,read) {
     return rows;
   }
 
+  function issueRows(scene) {
+    const rows = [];
+    const problems = [...(scene?.diagnostics ?? []),...(scene?.bindings ?? []).flatMap(binding=>
+      (binding.diagnostics ?? []).map(issue=>({ ...issue,binding:binding.id })))];
+    const descriptions = {
+      'unstable-splat-id':'A contributing splat has no stable source ID',
+      'surface-address-unavailable':'The visible surface has no usable source address',
+      'splat-contributors-unavailable':'The capture has no source IDs for the visible splat',
+      'covered-pixel-without-source':'The pixel has coverage without a captured source',
+      'hidden-source-without-confirmed-blocker':'The target projects here but the foreground blocker could not be confirmed',
+      'binding-address-unavailable':'The bound target is visible here but has no usable source address'
+    };
+    for (const issue of problems) {
+      let text = descriptions[issue.code];
+      if (issue.kind === 'blocker') {
+        const { blocker,targetDepth,partial } = issue;
+        text = [partial ? 'Partly occluded' : 'Occluded',issue.binding,blocker.object ?? blocker.kind ?? 'Unidentified foreground',
+          blocker.part,'depth '+showValue(blocker.depth),'target depth '+showValue(targetDepth)].filter(Boolean).join(' · ');
+      }
+      if (issue.kind === 'overlap') text = issue.count+' sources overlap';
+      if (issue.code === 'contributors-omitted') text = 'Contributor coverage was omitted';
+      if (text) rows.push({text});
+    }
+    return rows;
+  }
+
   function refresh() {
     if (!panel.open) return;
     let result;
@@ -136,6 +162,7 @@ export function mountPixelInspector(root,view,read) {
     }
     group('Palette',colors);
     group('Material channels',materialRows(materials,scene));
+    group('Hit diagnostics',issueRows(scene));
     group('Scene hits',sceneRows(scene));
     group('Splat contributors',splatRows(scene?.sources));
     group('Scene bindings',(scene?.bindings ?? []).map(row=>({ text:[row.id,row.status.replaceAll('-',' '),

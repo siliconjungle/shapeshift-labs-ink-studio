@@ -78,7 +78,7 @@ const PixelViewSource = (() => {
   }
 
   function transform(frame,convert) {
-    const { w,h,scene,time,sourceView,rgb,alpha,passes,palettePixel,pixelFragments,strandPixel } = frame;
+    const { w,h,scene,time,sourceView,rgb,alpha,passes,palettePixel,pixelFragments,strandPixel,bindingEvidence } = frame;
     grid(w,h);
     metadata(sourceView,w,h);
     if (!name(scene) || time !== sourceView.frame.time || !passes || passes.w !== w || passes.h !== h)
@@ -103,11 +103,21 @@ const PixelViewSource = (() => {
         (result.sourceSplatFront || result.sourceSplatFrontMetrics) &&
           !(result.sourceSplatFrontRank && result.sourceSplatFront && result.sourceSplatFrontMetrics))
       throw new TypeError('Incomplete pixel source view frontmost splat planes');
+    let paired;
+    if (bindingEvidence !== undefined) {
+      const { object,part,visible,projected,depth } = bindingEvidence ?? {};
+      if (!name(object) || part !== undefined && !name(part))
+        throw new TypeError('Invalid pixel source view binding evidence');
+      paired = { object,...(part !== undefined && {part}),
+        visible:plane(visible,1,['Float32Array'],'binding visible coverage'),
+        projected:plane(projected,1,['Float32Array'],'binding projected coverage'),
+        depth:plane(depth,1,['Float32Array'],'binding projected depth') };
+    }
     const colorBytes = ['Uint8Array','Uint8ClampedArray'];
     return { w,h,scene,time,sourceView,passes:result,
       ...(rgb !== undefined && { rgb:plane(rgb,3,colorBytes,'rgb') }),
       ...(alpha !== undefined && { alpha:plane(alpha,1,colorBytes,'alpha') }),
-      palettePixel,pixelFragments,strandPixel };
+      palettePixel,pixelFragments,strandPixel,...(paired && { bindingEvidence:paired }) };
   }
 
   function pack(frame,{ color = true } = {}) {

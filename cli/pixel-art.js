@@ -371,14 +371,33 @@ function inspectMaterial(source,coordinate,width,height) {
   return { ...metadata,requestedDestination:name,uv,value:uv ? sample(uv) : null };
 }
 
-function inspectionCapture(width,height,coordinate,context) {
+function inspectionCapture(width,height,coordinate,context,binding) {
   if (!context?.captureSelection) return;
+  const pixelSelection = binding && (!context.sceneRef || sameScene(binding.scene,context.sceneRef)) ?
+    { object:binding.object,...(binding.part !== undefined && {part:binding.part}),captureDepth:true } : undefined;
   const frame = context.captureSelection({ w:width,h:height,passes:[...PixelInspection.channels,...ArtPasses.sourceBindings],
     ...(coordinate && { palettePixel:coordinate,strandPixel:coordinate,inspectFragmentPixel:coordinate }),
-    sceneInspection:true });
+    sceneInspection:true,...(pixelSelection && { pixelSelection }) });
   if (frame?.w !== width || frame?.h !== height || frame.passes && (frame.passes.w !== width || frame.passes.h !== height))
     throw new RangeError('Scene inspection must use the requested native grid');
-  return frame;
+  if (!pixelSelection || frame.bindingEvidence) return frame;
+  const normal = frame.pixelSelection;
+  const matches = (shot,isolated)=>shot?.w === width && shot.h === height &&
+    shot.object === binding.object && shot.part === binding.part && shot.isolated === isolated &&
+    shot.coverage instanceof Float32Array && shot.coverage.length === width*height;
+  if (!matches(normal,false)) return frame;
+  const projected = context.captureSelection({ w:width,h:height,passes:[],sceneInspection:true,
+    pixelSelection:{ ...pixelSelection,isolated:true } });
+  const source = projected?.pixelSelection;
+  if (!matches(source,true) || !(source.depth instanceof Float32Array) || source.depth.length !== width*height)
+    return frame;
+  const camera = frame.sourceView?.camera ?? normal.view;
+  if (!camera) return frame;
+  if (frame.scene !== projected.scene || normal.scene !== source.scene || frame.time !== projected.time ||
+      !equal(camera,projected.sourceView?.camera ?? source.view))
+    throw new RangeError('Binding diagnostics need matched scene and isolated captures on the same camera grid');
+  return { ...frame,bindingEvidence:{ object:binding.object,part:binding.part,
+    visible:normal.coverage,projected:source.coverage,depth:source.depth } };
 }
 
 function inspect(design,coordinate,{ frame,cel,binding,destinations,references = false } = {},context) {
@@ -399,8 +418,9 @@ function inspect(design,coordinate,{ frame,cel,binding,destinations,references =
   if (selected && !context?.captureSelection) throw new TypeError('Binding inspection needs a captured scene view');
   const grid = [width,height], size = selected?.canvas?.size ?? grid;
   const mapped = selected ? CanvasTransforms.sourcePoint(grid,coordinate,selected.canvas)?.map(Math.floor) : coordinate;
-  const scene = inspectionCapture(...size,mapped,context);
-  const sceneRef = scene?.sourceView?.source ?? context?.sceneRef ?? scene?.scene;
+  const activeScope = selected?.frame !== undefined && selected.frame !== compiled.id ? undefined : selected;
+  const scene = inspectionCapture(...size,mapped,context,activeScope);
+  const sceneRef = scene?.sourceView?.source ?? context?.sceneRef ?? scene?.scene ?? scene?.pixelSelection?.scene;
   const candidates = selected ? [selected] : bindings.filter(row=>sceneRef !== undefined && sameScene(row.scene,sceneRef) &&
     (row.frame === undefined || row.frame === compiled.id));
   const resolved = scene && candidates.map(row=>SourceBindings.resolve(scene,row,coordinate,{
@@ -2059,7 +2079,7 @@ function draw(frame,directory,{ layer,colorMode,rules,shot } = {}) {
   return result.report;
 }
 
-function canvasReview(design,frameId,file,sources,scene,artShot) {
+function canvasReview(design,frameId,file,sources,scene,artShot,reviewBinding) {
   documentShape(design);
   const palette = paletteEntries(design.palette,design.version), revision = fingerprint(design);
   const frames = design.version === 1 ? [undefined] : design.frames;
@@ -2120,7 +2140,7 @@ function canvasReview(design,frameId,file,sources,scene,artShot) {
   const sceneRef = scene?.sourceView?.source ?? scene?.scene;
   const sceneBindings = sceneRef === undefined ? [] : (design.sceneBindings ?? []).filter(row=>sameScene(row.scene,sceneRef));
   const data = JSON.stringify({ frames:deck,palette,materials,definitions,scene:scene && ViewSource.pack(scene),
-    sceneBindings,layerIds,rulesSource }).replaceAll('<','\\u003c');
+    sceneBindings,reviewBinding,layerIds,rulesSource }).replaceAll('<','\\u003c');
   files.write(file,template.replace('/*PIXEL_GRID_CSS*/',() => browserSource('css'))
     .replace('/*PIXEL_GUIDES_MODULE*/',() => fs.readFileSync(path.join(__dirname,'../src/pixel-guides.js'),'utf8'))
     .replace('/*PIXEL_GRID_MODULE*/',() => browserSource('mjs'))
@@ -2231,8 +2251,8 @@ function command(pos,opt,outputFile,{ capture, captureMotion, world, scene }) {
       pos.length !== (writing || ['preview','select'].includes(action) ? 3 : 2))
     throw new TypeError('Use pixel-art capture, trace, import, upgrade, validate, targets, draw, canvas, inspect, lint, rules, motion, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
   const sourceViewFile = opt['source-view'];
-  if (opt.binding !== undefined && (action !== 'inspect' || !reference(opt.binding)))
-    throw new TypeError('Use --binding id with pixel-art inspect');
+  if (opt.binding !== undefined && (!['inspect','canvas'].includes(action) || !reference(opt.binding)))
+    throw new TypeError('Use --binding id with pixel-art inspect or canvas');
   if (sourceViewFile !== undefined && (!['inspect','canvas'].includes(action) || !reference(sourceViewFile) || opt.scene !== undefined))
     throw new TypeError('Use --source-view <view.json> by itself with pixel-art inspect or canvas');
   if (action === 'motion') return motionCommand(source,opt,captureMotion);
@@ -2337,9 +2357,19 @@ function command(pos,opt,outputFile,{ capture, captureMotion, world, scene }) {
     const coordinate = opt.at === undefined ? undefined : inspectCoordinate(opt.at);
     if (coordinate && !at(design.width,design.height,coordinate)) throw new RangeError('Scene pixel is outside the native grid');
     const materials = inspectionMaterials(design,destinations,context,opt.frame);
-    const scene = inspectionCapture(design.width,design.height,coordinate,context);
+    const binding = opt.binding === undefined ? undefined : design.sceneBindings?.find(row=>row.id === opt.binding);
+    if (opt.binding !== undefined && !binding) throw new RangeError('Unknown pixel scene binding '+opt.binding);
+    if (binding && !context.captureSelection) throw new TypeError('A binding canvas needs --scene or --source-view');
+    if (binding && opt.frame !== undefined && binding.frame !== undefined && binding.frame !== opt.frame)
+      throw new RangeError('Canvas binding is scoped to frame '+binding.frame);
+    const grid = [design.width,design.height], size = binding?.canvas?.size ?? grid;
+    const sample = coordinate && (binding ? CanvasTransforms.sourcePoint(grid,coordinate,binding.canvas)?.map(Math.floor) : coordinate);
+    const scene = inspectionCapture(...size,sample,context,binding);
+    const sceneRef = scene?.sourceView?.source ?? context.sceneRef ?? scene?.scene;
+    if (binding && (!sceneRef || !sameScene(binding.scene,sceneRef)))
+      throw new RangeError('Canvas source is not the scene of binding '+binding.id);
     const file = path.resolve(opt.out);
-    canvasReview(design,opt.frame,file,materials,scene,opt['art-shot']);
+    canvasReview(design,opt.frame,file,materials,scene,opt['art-shot'],binding?.id);
     console.log('wrote',file);
     return;
   }

@@ -31,6 +31,7 @@ const PixelInspection = (() => {
     const p = at[1]*frame.w+at[0], passes = frame.passes ?? {};
     const surface = passes.depth && passes.surfaceKind && passes.position ? ArtPasses.pick(passes,...at) : undefined;
     const sources = pixelSourceBindings.sample(frame,at,ArtPasses,surface);
+    const diagnostics = pixelSourceBindings.issues(frame,at,ArtPasses,{ surface,sources });
     const strandId = passes.strandId?.[p], owner = passes.paletteOwners?.[passes.paletteOwner?.[p]];
     const splatId = passes.splatId?.[p] || null;
     const frontStrand = strandId ? { id:strandId,strand:passes.strands?.[strandId] ?? null,
@@ -46,6 +47,7 @@ const PixelInspection = (() => {
     return { ...(frame.scene !== undefined && { id:frame.scene }),...(frame.time !== undefined && { time:frame.time }),
       ...(frame.sourceView && { sourceView:frame.sourceView }),
       ...(sources && { sources }),
+      ...(diagnostics.length && { diagnostics }),
       ...(sample && { color:alpha ? hex(sample[0]*65536+sample[1]*256+sample[2]) : null,alpha }),
       ...(owner && { palette:{ ...owner,colors:owner.colors?.map(hex),...(owner.sharedColors && { sharedColors:owner.sharedColors.map(hex) }) } }),
       ...(trace && { paletteTrace:trace }),
