@@ -228,19 +228,33 @@ const PixelBrushes = (() => {
     };
   }
 
-  function resolvePalette(brush,entries,{ limit = 255,named = false,used } = {}) {
+  function resolvePalette(brush,entries,{ limit = 255,named = false,used,preserveIds = false } = {}) {
     const palette = entries.slice(), tone = brush.settings.swatch;
     const ids = new Set(palette.map(entry=>entry.id));
     function resolve({ id,color }) {
       const rgb = color.toLowerCase();
       const matches = entry => entry.color.toLowerCase() === rgb;
       const preferred = id === undefined ? -1 : palette.findIndex(entry => entry.id === id && matches(entry));
-      const existing = preferred >= 0 ? preferred : palette.findIndex(matches);
-      if (existing >= 0) return existing;
+      const distinct = preserveIds && id !== undefined;
+      if (preferred >= 0) return preferred;
+      let renamed;
+      if (distinct && ids.has(id)) {
+        const stem = id.slice(0,51)+'-'+rgb.slice(1);
+        renamed = stem;
+        let suffix = 2;
+        while (ids.has(renamed)) {
+          const existing = palette.findIndex(entry=>entry.id === renamed && matches(entry));
+          if (existing >= 0) return existing;
+          renamed = stem+'-'+suffix++;
+        }
+      } else if (!distinct) {
+        const existing = palette.findIndex(matches);
+        if (existing >= 0) return existing;
+      }
       if (palette.length >= limit) throw new RangeError('Brush colors exceed the target palette limit');
       let key;
       if (named) {
-        const stem = id !== undefined && !ids.has(id) ? id : 'brush-'+rgb.slice(1);
+        const stem = id !== undefined && !ids.has(id) ? id : renamed ?? 'brush-'+rgb.slice(1);
         key = stem;
         let suffix = 2;
         while (ids.has(key)) key = stem+'-'+suffix++;

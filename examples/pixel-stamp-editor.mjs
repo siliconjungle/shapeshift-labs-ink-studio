@@ -1,4 +1,5 @@
 import { mountPixelGridCanvas } from '../src/pixel-grid-canvas.mjs';
+import { colors,openPNG,savePNG } from './pixel-stamp-png.mjs';
 
 const stamp = KIT.pixelStamps, guideTool = KIT.pixelGuides, paintTools = KIT.pixelPaintTools;
 const brushes = KIT.pixelBrushes, selections = KIT.pixelSelections, transforms = KIT.pixelSelectionTransforms;
@@ -45,28 +46,34 @@ function validateSavedMasks(width,height,rows) {
 
 function load(data) {
   const { width, height, palette } = stamp.prepare(data);
-  if (width > 512 || height > 512 || !palette || palette.length > 48 ||
+  if (width > 512 || height > 512 || !palette || palette.length > colors.limit ||
       !palette.every(color => typeof color === 'string' && /^#[a-f\d]{6}$/i.test(color)))
-    throw new RangeError('Open a stamp up to 512 × 512 with 1–48 hex swatches.');
+    throw new RangeError('Open a stamp up to 512 × 512 with 1–255 hex swatches.');
+  const swatchIds = colors.swatchIds(palette,data.swatchIds);
   if (data.drawing !== undefined) paintTools.drawingGrid(width,height,data.drawing);
   if (data.sceneBindings !== undefined && (!Array.isArray(data.sceneBindings) ||
       data.sceneBindings.some(row=>!row || typeof row.id !== 'string' ||
         row.canvas !== undefined && !canvasTransforms.registered(row.canvas))))
     throw new TypeError('The stamp needs valid scene bindings and canvas registration');
-  const { slots,rows,strokes,alpha,frames,selections:saved,...rest } = data;
+  const { slots,rows,strokes,alpha,knockouts,frames,selections:saved,...rest } = data;
   if (frames !== undefined && saved !== undefined)
     throw new TypeError('Save animation masks on their own frames');
-  const sourceFrames = frames ?? [{ slots,rows,strokes,alpha,duration:1 / (data.fps ?? 12),
+  const sourceFrames = frames ?? [{ slots,rows,strokes,alpha,knockouts,duration:1 / (data.fps ?? 12),
     ...(saved !== undefined && { selections:saved }) }];
   const loaded = sourceFrames.map(frame => {
     validateSavedMasks(width,height,frame.selections);
-    if (!frame.alpha) return frame;
+    if (!frame.alpha && !frame.knockouts) return frame;
     const pixels = stamp.paint(width,height,frame);
+    if (frame.knockouts !== undefined && (!Array.isArray(frame.knockouts) ||
+        !Array.from(frame.knockouts).every((p,i)=>Number.isInteger(p) && pixels[p] === null &&
+          (i === 0 || p > frame.knockouts[i-1]))))
+      throw new TypeError('Knockouts must be sorted locations of transparent pixels');
+    if (!frame.alpha) return frame;
     return { ...frame,alpha:frame.alpha.map((value,p)=>pixels[p] === null ? 255 : value) };
   });
   stop();
   if (state.doc) saveUndo();
-  state.doc = { ...rest,frames:loaded };
+  state.doc = { ...rest,swatchIds,frames:loaded };
   $('canvas-binding-policy').value = '';
   state.frame = 0;
   state.swatch = 0;
@@ -281,12 +288,17 @@ function recallSelection() {
   draw();
 }
 
-const indexedPalette = () => state.doc.palette.map((color,i)=>({ id:'slot-'+i,color }));
+const indexedPalette = () => state.doc.palette.map((color,i)=>({ id:state.doc.swatchIds[i],color }));
+function rasterSlots(width,height,frame) {
+  const pixels = stamp.paint(width,height,frame);
+  for (const p of frame.knockouts ?? []) pixels[p] = -2;
+  return pixels;
+}
 
 function copyPixels() {
   const { width,height } = state.doc, current = state.doc.frames[state.frame];
   const active = activeSelection();
-  return transforms.capture(width,height,{ slots:stamp.paint(width,height,current),
+  return transforms.capture(width,height,{ slots:rasterSlots(width,height,current),
     alpha:current.alpha,palette:indexedPalette() },active.mask);
 }
 
@@ -328,7 +340,7 @@ function repositionTransform(x,y) {
 function updateTransform() {
   if (!transformDraft) return;
   const { width,height } = state.doc, frame = state.doc.frames[state.frame];
-  const slots = stamp.paint(width,height,frame), alpha = frame.alpha?.slice() ?? Array(width*height).fill(255);
+  const slots = rasterSlots(width,height,frame), alpha = frame.alpha?.slice() ?? Array(width*height).fill(255);
   try {
     const settings = {
       at:[$('transform-x').valueAsNumber,$('transform-y').valueAsNumber],
@@ -336,13 +348,15 @@ function updateTransform() {
       flipX:$('transform-flip-x').checked,flipY:$('transform-flip-y').checked,rotation:$('transform-rotation').value
     };
     const move = transformDraft.fromSelection && !$('transform-duplicate').checked;
-    const raster = transforms.stage(width,height,{ slots,alpha,palette:indexedPalette() },transformDraft.clip,settings,{ move,limit:48 });
+    const raster = transforms.stage(width,height,{ slots,alpha,palette:indexedPalette() },transformDraft.clip,settings,{ move,named:true,limit:colors.limit });
     for (const [p,pixel] of raster.writes) {
-      slots[p] = pixel.slot < 0 ? null : pixel.slot;
+      slots[p] = pixel.slot === -1 ? null : pixel.slot;
       alpha[p] = pixel.alpha;
     }
-    transformDraft.preview = { slots,alpha,palette:raster.palette.map(entry=>entry.color),
-      selection:selectionFromMask(raster.mask) };
+    const knockouts = [];
+    for (let p = 0; p < slots.length; p++) if (slots[p] === -2) { slots[p] = null; knockouts.push(p); }
+    transformDraft.preview = { slots,alpha,knockouts,palette:raster.palette.map(entry=>entry.color),
+      swatchIds:raster.palette.map(entry=>entry.id),selection:selectionFromMask(raster.mask) };
     $('transform-info').value = raster.clippedPixels ? `${raster.clippedPixels} selected pixels outside the canvas` : '';
   } catch (error) {
     transformDraft.preview = undefined;
@@ -354,8 +368,8 @@ function updateTransform() {
 function finishTransform() {
   const preview = transformDraft?.preview;
   if (!preview || drawingPointer !== undefined) return;
-  const { slots,palette,alpha,selection } = preview;
-  savePixels(state.doc.frames[state.frame],slots,palette,alpha,selection);
+  const { slots,palette,alpha,selection,swatchIds,knockouts } = preview;
+  savePixels(state.doc.frames[state.frame],slots,palette,alpha,selection,swatchIds,knockouts);
   notify('Applied transform');
 }
 
@@ -381,6 +395,33 @@ function extendTransformDrag(event) {
   repositionTransform(x+Math.round((event.clientX-clientX)*scaleX),y+Math.round((event.clientY-clientY)*scaleY));
 }
 
+function rgbaPencil() {
+  return state.tool === 'pencil' && $('pencil-color-mode').value === 'rgba';
+}
+
+function rgbaStroke(current) {
+  const tip = pencilStroke?.tip(), { width,height } = state.doc;
+  const alphaByte = $('pencil-alpha').valueAsNumber;
+  if (!Number.isInteger(alphaByte) || alphaByte < 0 || alphaByte > 255)
+    throw new RangeError('Pencil alpha needs a whole value from 0 to 255');
+  const raster = colors.paletteEditor(indexedPalette()), slots = stamp.paint(width,height,current);
+  const alpha = current.alpha?.slice() ?? Array(slots.length).fill(255);
+  const mask = activeSelection()?.mask;
+  let changed = false;
+  function paint(p) {
+    if (mask && !mask[p]) return;
+    const slot = raster.resolve($('pencil-rgb').value,undefined,slots[p] ?? state.swatch);
+    changed ||= slots[p] !== slot || alpha[p] !== alphaByte;
+    slots[p] = slot;
+    alpha[p] = alphaByte;
+  }
+  if (tip) for (const [x,y] of [...state.points,tip]) {
+    if (grid) grid.pixels(x,y,paint);
+    else paint(y*width+x);
+  }
+  return { slots,alpha,changed,palette:raster.palette.map(row=>row.color),swatchIds:raster.palette.map(row=>row.id) };
+}
+
 function frameSlots(current) {
   const { width,height } = state.doc;
   const slotData = stamp.paint(width,height,current), selected = activeSelection()?.mask;
@@ -392,7 +433,7 @@ function frameSlots(current) {
     }
     return slotData;
   }
-  if (state.tool === 'brush-select' || state.tool === 'brush-stamp') return slotData;
+  if (['brush-select','brush-stamp'].includes(state.tool) || rgbaPencil()) return slotData;
   if (grid && state.tool === 'pencil') {
     const tip = pencilStroke?.tip();
     if (tip) for (const [x,y] of [...state.points,tip])
@@ -413,6 +454,10 @@ function draw() {
   const preview = transformDraft?.preview;
   let palette = preview?.palette ?? state.doc.palette, slots = preview?.slots ?? frameSlots(current);
   let alpha = preview?.alpha ?? current.alpha;
+  if (!transformDraft && rgbaPencil() && pencilStroke?.tip()) {
+    try { ({ palette,slots,alpha } = rgbaStroke(current)); }
+    catch (error) { notify(error.message); }
+  }
   if (!transformDraft && state.tool === 'brush-stamp' && brush && (brushStroke || state.points.length)) {
     try { ({ palette,slots,alpha } = applyBrush(slots,alpha)); }
     catch (error) { notify(error.message); }
@@ -426,7 +471,8 @@ function draw() {
   $('current').value = `Frame ${state.frame+1} / ${count}`;
   $('duration').value = +(current.duration ?? 1/(state.doc.fps ?? 12)).toFixed(4);
   $('width').disabled = !['brush','erase'].includes(state.tool);
-  $('pixel-perfect').disabled = state.tool !== 'pencil';
+  $('pixel-perfect').disabled = $('pencil-color-mode').disabled = state.tool !== 'pencil';
+  $('pencil-rgba').hidden = !rgbaPencil();
   $('remove').disabled = count === 1;
   $('duplicate').disabled = count >= 2048 || (count+1)*width*height > 2**20;
   showShapeControls();
@@ -437,7 +483,7 @@ function selectSwatch(index) {
   document.querySelectorAll('.swatch').forEach((button,i) => button.setAttribute('aria-pressed',i === index));
   const color = state.doc.palette[index];
   $('color').value = color;
-  $('swatch-label').textContent = `${state.doc.swatchRoles?.[index] ?? `Swatch ${index+1}`} · ${color}`;
+  $('swatch-label').textContent = `${state.doc.swatchRoles?.[index] ?? state.doc.swatchIds[index]} · ${color}`;
   draw();
 }
 
@@ -462,6 +508,7 @@ function update() {
     b.className='swatch';
     b.style.setProperty('--swatch',color);
     b.setAttribute('aria-label',`Swatch ${index+1}, ${color}`);
+    b.title = state.doc.swatchIds[index];
     b.addEventListener('click',()=>selectSwatch(index));
     return b;
   }));
@@ -469,7 +516,7 @@ function update() {
   $('canvas-width').value = state.doc.width;
   $('canvas-height').value = state.doc.height;
   showCanvasControls();
-  $('add-color').disabled = state.doc.palette.length >= 48;
+  $('add-color').disabled = state.doc.palette.length >= colors.limit;
   $('playback').value = state.doc.playback ?? 'loop';
   selectSwatch(Math.min(state.swatch,state.doc.palette.length-1));
 }
@@ -491,7 +538,17 @@ function edit(callback) {
 
 function commitStroke() {
   if (!state.points.length && !pencilStroke?.tip()) return;
-  const { width,height } = state.doc, current = state.doc.frames[state.frame], slots = frameSlots(current);
+  const { width,height } = state.doc, current = state.doc.frames[state.frame];
+  if (rgbaPencil()) {
+    try {
+      const { slots,palette,alpha,swatchIds,changed } = rgbaStroke(current);
+      if (changed) { savePixels(current,slots,palette,alpha,selection,swatchIds); return; }
+    } catch (error) { notify(error.message); }
+    resetStroke();
+    draw();
+    return;
+  }
+  const slots = frameSlots(current);
   if (activeSelection() && stamp.paint(width,height,current).every((slot,p)=>slot === slots[p])) {
     resetStroke();
     draw();
@@ -500,13 +557,16 @@ function commitStroke() {
   savePixels(current,slots);
 }
 
-function savePixels(current,slots,palette = state.doc.palette,alpha = current.alpha,nextSelection = selection) {
+function savePixels(current,slots,palette = state.doc.palette,alpha = current.alpha,nextSelection = selection,
+    swatchIds = state.doc.swatchIds,knockouts = current.knockouts?.filter(p=>slots[p] === null)) {
   edit(() => {
-    const { rows,strokes,alpha:previousAlpha,...frame } = current;
+    const { rows,strokes,alpha:previousAlpha,knockouts:previousKnockouts,...frame } = current;
     const keepAlpha = alpha?.some((value,p)=>value !== 255 && slots[p] !== null);
     state.doc.frames[state.frame] = { ...frame,slots,duration:current.duration ?? 1/(state.doc.fps ?? 12),
-      ...(keepAlpha && { alpha:alpha.map((value,p)=>slots[p] === null ? 255 : value) }) };
+      ...(keepAlpha && { alpha:alpha.map((value,p)=>slots[p] === null ? 255 : value) }),
+      ...(knockouts?.length && { knockouts }) };
     state.doc.palette = palette;
+    state.doc.swatchIds = swatchIds;
     selection = nextSelection;
     resetStroke();
   });
@@ -577,14 +637,14 @@ function brushShading() {
 }
 
 function applyBrush(slots,alpha) {
-  const { width,height,palette:colors } = state.doc;
+  const { width,height,palette:swatches } = state.doc;
   let dabs = brushStroke?.dabs ?? new Map();
   if (!brushStroke) brushes.stroke(width,height,brushTip,state.points,(p,slot)=>{ dabs.set(p,slot); },grid);
   const selected = activeSelection()?.mask;
   if (selected) dabs = new Map([...dabs].filter(([p])=>selected[p]));
   const shading = brushShading();
   if (shading) {
-    const resolve = brushes.shade(shading,colors.map((_,slot)=>slot));
+    const resolve = brushes.shade(shading,swatches.map((_,slot)=>slot));
     const opacity = shading.mode === 'alpha' ? alpha?.slice() ?? Array(slots.length).fill(255) : alpha;
     let changed = false;
     for (const p of dabs.keys()) {
@@ -598,11 +658,11 @@ function applyBrush(slots,alpha) {
       }
       changed = true;
     }
-    return { slots,palette:colors,alpha:opacity,changed };
+    return { slots,palette:swatches,alpha:opacity,changed };
   }
 
-  const { palette,mapping } = brushes.resolvePalette(brush,colors.map(color=>({ color })),
-    { limit:48,used:new Set(dabs.values()) });
+  const { palette,mapping } = brushes.resolvePalette(brush,indexedPalette(),
+    { limit:colors.limit,used:new Set(dabs.values()),named:true,preserveIds:true });
   let changed = false;
   for (const [p,source] of dabs) {
     const next = mapping[source];
@@ -610,15 +670,15 @@ function applyBrush(slots,alpha) {
     slots[p] = next;
     changed = true;
   }
-  return { slots,palette:palette.map(entry=>entry.color),alpha,changed };
+  return { slots,palette:palette.map(entry=>entry.color),swatchIds:palette.map(entry=>entry.id),alpha,changed };
 }
 
 function commitBrush() {
   const { width,height } = state.doc, current = state.doc.frames[state.frame];
   try {
     brushStroke?.path.finish();
-    const { slots,palette,alpha,changed } = applyBrush(stamp.paint(width,height,current),current.alpha);
-    if (changed) savePixels(current,slots,palette,alpha);
+    const { slots,palette,alpha,swatchIds,changed } = applyBrush(stamp.paint(width,height,current),current.alpha);
+    if (changed) savePixels(current,slots,palette,alpha,selection,swatchIds);
     else { resetStroke(); draw(); }
     notify('');
   } catch (error) {
@@ -629,14 +689,14 @@ function commitBrush() {
 }
 
 $('capture-brush').addEventListener('click',() => {
-  const { width,height,palette } = state.doc;
+  const { width,height } = state.doc, palette = indexedPalette();
   const current = state.doc.frames[state.frame], slots = stamp.paint(width,height,current);
   try {
     const pixels = selections.pixels(width,activeSelection().mask);
     setBrush(brushes.capture({ width,height,pixels,
       read(x,y) {
         const p = y*width+x, slot = slots[p];
-        return slot === null || current.alpha?.[p] === 0 ? null : { color:palette[slot] };
+        return slot === null || current.alpha?.[p] === 0 ? null : palette[slot];
       } }));
     clearSelection();
     chooseTool('brush-stamp');
@@ -918,12 +978,15 @@ function transformCanvas(operation,bindingPolicy) {
   const revised = { ...doc,width,height };
   let updatedSelection = selection;
   if (changesGrid) {
-    revised.frames = doc.frames.map(({ slots,rows,strokes,alpha,selections:saved,guides,...hold }) => {
-      const pixels = stamp.paint(doc.width,doc.height,{ slots,rows,strokes });
-      const output = canvasTransforms.raster(map,pixels,alpha);
+    revised.frames = doc.frames.map(frame => {
+      const { slots,rows,strokes,alpha,knockouts,selections:saved,guides,...hold } = frame;
+      const output = canvasTransforms.raster(map,rasterSlots(doc.width,doc.height,frame),alpha);
+      const erased = [];
+      for (let p = 0; p < output.slots.length; p++)
+        if (output.slots[p] === -2) { output.slots[p] = null; erased.push(p); }
       const adjusted = canvasTransforms.guides(map,guides);
       if (adjusted) guideTool.prepare(adjusted);
-      return { ...hold,...output,...(adjusted && { guides:adjusted }),
+      return { ...hold,...output,...(erased.length && { knockouts:erased }),...(adjusted && { guides:adjusted }),
         ...(saved && { selections:saved.map(row=>({ ...row,pixels:canvasTransforms.region(map,row.pixels).pixels })) }) };
     });
     if (doc.guides) revised.guides = guideTool.prepare(canvasTransforms.guides(map,doc.guides));
@@ -1218,8 +1281,15 @@ $('undo').addEventListener('click',()=>{
   resetStroke();
   update();
 });
+$('pencil-color-mode').addEventListener('change',()=>{
+  $('pencil-rgb').value = state.doc.palette[state.swatch];
+  draw();
+});
 $('color').addEventListener('change',()=>edit(()=>{ state.doc.palette[state.swatch]=$('color').value; }));
-$('add-color').addEventListener('click',()=>edit(()=>{ state.swatch=state.doc.palette.push('#ffffff')-1; }));
+$('add-color').addEventListener('click',()=>edit(()=>{
+  state.swatch=state.doc.palette.push('#ffffff')-1;
+  state.doc.swatchIds.push(colors.uniqueId(new Set(state.doc.swatchIds),'slot-'+state.swatch));
+}));
 
 const ink=flowingInk();
 const presets={stone:stonePaint,glint,star:starTwinkle,bubble,library:stamp.clip,body:()=>ink.body,eye:()=>ink.eye,
@@ -1240,12 +1310,15 @@ $('size').addEventListener('change',()=>{ load(presets[$('preset').value]($('siz
 $('import').addEventListener('change',async event=>{
   const [file]=event.target.files;
   if (!file) return;
-  try { load(JSON.parse(await file.text())); notify(`Opened ${file.name}`); }
+  try {
+    load(/\.png$/i.test(file.name) || file.type === 'image/png' ? await openPNG(file) : JSON.parse(await file.text()));
+    notify(`Opened ${file.name}`);
+  }
   catch (error) { notify(error.message); }
   finally { event.target.value=''; }
 });
-function saveJson(filename,data) {
-  const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+function download(filename,blob) {
+  const url=URL.createObjectURL(blob);
   const link=document.createElement('a');
   link.href=url;
   link.download=filename;
@@ -1253,5 +1326,17 @@ function saveJson(filename,data) {
   setTimeout(()=>URL.revokeObjectURL(url),1000);
   notify(`Saved ${link.download}`);
 }
+function saveJson(filename,data) {
+  download(filename,new Blob([JSON.stringify(data,null,2)],{ type:'application/json' }));
+}
+$('export-png').addEventListener('click',async()=>{
+  const { width,height,palette,swatchIds,frames } = state.doc;
+  const index = state.frame, current = frames[index], name = $('preset').value;
+  try {
+    const png = await savePNG({ width,height,palette,swatchIds,slots:stamp.paint(width,height,current),
+      alpha:current.alpha,knockouts:current.knockouts },$('png-color-mode').value);
+    download(`${name}-frame-${index+1}.png`,png);
+  } catch (error) { notify(error.message); }
+});
 $('export').addEventListener('click',()=>saveJson(`${$('preset').value}-stamp.json`,state.doc));
 load(stonePaint());

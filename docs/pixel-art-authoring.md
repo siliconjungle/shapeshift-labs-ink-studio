@@ -278,10 +278,53 @@ clears both paint and stored alpha. Preview and composite eyedropper results
 include the visible color after layer blending, and layer sampling shows the
 original swatch and its own alpha.
 
-`pixel-art draw` preserves partial coverage in the flattened `stamp.json`
-and writes an RGBA `art.png` when the frame has authored alpha. Fully
-transparent paint remains recoverable in the source document. Flattened
-exports describe the visible composite.
+### Edit and exchange exact RGBA pixels
+
+The indexed and RGBA paths use the same editable pixels. Each pixel has
+a swatch ID and its own alpha byte. Swatches with the same RGB remain
+distinct. An RGBA edit keeps the current swatch ID when its RGB is
+unchanged. An optional `swatch` names an exact match or creates a new ID
+with the supplied RGB. New unnamed colors receive an ID based on their RGB.
+
+```json
+{
+  "tool": "rgba",
+  "layer": "ink",
+  "pixels": [
+    { "at": [5, 3], "rgba": [231, 185, 97, 96] },
+    { "at": [6, 3], "rgba": [231, 185, 97, 0], "swatch": "hidden-glaze" },
+    { "at": [7, 3], "rgba": null }
+  ]
+}
+```
+
+Use this as `operation` in a raster patch. You can target a cel by putting
+`cel` on the patch and omitting `layer`. Zero alpha retains the pigment.
+`rgba: null` clears the pixel. Edits honor clipping and protection, and
+support preview, receipts, replay, and undo. Ink can edit up to 255 exact
+RGB swatches per document. Alpha values share their RGB swatch.
+
+```sh
+node cli/ink-studio.js pixel-art draw design.json --color-mode rgba --out export
+node cli/ink-studio.js pixel-art import export/art.png --out imported.json
+node cli/ink-studio.js pixel-art draw imported.json --layer image --color-mode indexed --out indexed
+```
+
+`--color-mode auto` chooses indexed PNG if the swatches, alpha variants,
+and empty slot fit within PNG's 256 entries. It uses RGBA otherwise.
+`indexed` reports when an exact indexed export cannot fit. Both modes
+carry a compressed Ink metadata chunk with the palette order, swatch IDs,
+and editable index plane. An external PNG without Ink metadata keeps its
+indexed palette and slot numbers, or gets exact swatches from its RGB
+samples. Import accepts still images up to 512 × 512 with 8-bit or smaller
+channels and up to 255 RGB swatches. Tools that strip metadata can remove
+authored swatch IDs and knockout information from a PNG.
+
+The default export flattens the visible composite. A blended color gets
+a separate swatch ID. Use `--layer ink` to export the raw layer including
+zero-alpha pigment and knockouts. PNG import opens a single editable layer
+named `image`. Keep the source document for its full layer stack, animation,
+and scene bindings.
 
 ### Symmetry and wraparound
 
@@ -480,8 +523,9 @@ node cli/ink-studio.js pixel-art copy document.json --selection badge --layer in
 
 Paste by embedding the clipboard JSON in `operation.clipboard` with
 `tool: "paste"`, a target layer or cel, and optional transform and result
-selection. Paste maps colors into the destination palette, adding any
-missing swatches. Preview, edit, replay and persistent sessions use
+selection. Paste maps colors into the destination palette, adding missing
+swatches and keeping named RGB aliases separate. A conflicting ID receives
+a color-specific suffix. Preview, edit, replay and persistent sessions use
 the same placement.
 
 ### Transform the whole canvas
@@ -605,9 +649,12 @@ fs.writeFileSync('relay-edited.json', editor.serialize());
 ```
 
 `describe()` lists the document revision and stable IDs. `snapshot()` returns
-a copy of the editable document, and `stamp({ frame, cel })` exports the
-chosen frame as an indexed stamp. `inspect` reports the visible owner of a
-pixel. Passing a cel ID selects the frame containing that cel.
+a copy of the editable document, and `stamp({ frame, cel, layer })` exports the
+chosen frame as an indexed stamp with `swatchIds` in palette order. Supply
+`layer` for the raw indexed cel. `png({ frame, cel, layer, colorMode })`
+returns PNG bytes. Pass PNG bytes or a file path to the package's
+`pixelDocumentFromPNG()` to obtain an editable document. `inspect` reports
+the visible owner of a pixel. Passing a cel ID selects the frame containing that cel.
 `apply(patch)` uses the same guarded edits as the CLI. The original revision
 can still be used by a legacy patch when the version 1 source is freshly
 opened. After a successful edit, inspect the current revision before applying

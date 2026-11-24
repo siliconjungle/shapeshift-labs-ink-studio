@@ -129,7 +129,7 @@ test('CLI and working sessions copy portable pixels and replay paste into anothe
   const operation = { tool:'paste',layer:'ink',clipboard,transform:{ at:[3,2],angle:90 },resultSelection:'pasted' };
   write('paste',patch(ink.createPixelEditor(target),'paste-badge',operation));
   const preview = cli('preview',file('target'),file('paste'));
-  assert.deepEqual(preview.targets[0].addedSwatches,['brush-cc381a']);
+  assert.deepEqual(preview.targets[0].addedSwatches,['rust-cc381a','alias']);
   write('receipt',cli('edit',file('target'),file('paste'),'--out',file('edited')));
   cli('replay',file('target'),file('receipt'),'--out',file('replayed'));
   assert.equal(fs.readFileSync(file('edited'),'utf8'),fs.readFileSync(file('replayed'),'utf8'));

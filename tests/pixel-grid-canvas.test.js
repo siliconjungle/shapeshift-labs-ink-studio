@@ -8,6 +8,7 @@ const { setTimeout: pause } = require('node:timers/promises');
 const { pathToFileURL } = require('node:url');
 const { build } = require('../scripts/build.js');
 const { withChrome } = require('../cli/canvas-grid-chrome.js');
+const PNG = require('../cli/png.js');
 
 const root = path.resolve(__dirname,'..');
 const skip = !process.env.INK_TEST_CHROME;
@@ -248,19 +249,24 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
       angle.value = 90;
       angle.dispatchEvent(new Event('change',{ bubbles:true }));
     });
-    const download = selector => evaluate(browser,async selector => {
+    const download = (selector,json = true) => evaluate(browser,async (selector,json) => {
       const createURL = URL.createObjectURL, clickLink = HTMLAnchorElement.prototype.click;
-      let writing;
+      const writing = new Promise(resolve=>{
+        URL.createObjectURL = blob => {
+          resolve(json ? blob.text() : blob.arrayBuffer());
+          return createURL.call(URL,blob);
+        };
+      });
       try {
-        URL.createObjectURL = blob => { writing = blob.text(); return createURL.call(URL,blob); };
         HTMLAnchorElement.prototype.click = function () {};
         document.querySelector(selector).click();
-        return JSON.parse(await writing);
+        const data = await writing;
+        return json ? JSON.parse(data) : Array.from(new Uint8Array(data));
       } finally {
         URL.createObjectURL = createURL;
         HTMLAnchorElement.prototype.click = clickLink;
       }
-    },selector);
+    },selector,json);
     const saveBrush = () => download('#save-brush');
     const savedBrush = await saveBrush();
     assert.deepEqual(savedBrush.anchor,[1,1]);
@@ -617,6 +623,42 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     assert.deepEqual(await raster(browser,preview,5,5),gold);
     await click(browser,'#undo');
     assert.deepEqual(await download('#export'),padded);
+
+    const aliasPNG = path.join(directory,'aliases.png');
+    const paint = { width:3,height:2,palette:['#cb4519','#cb4519'],swatchIds:['brass','accent'],
+      slots:[0,1,0,null,null,1],alpha:[255,255,3,255,255,0],knockouts:[4] };
+    fs.writeFileSync(aliasPNG,PNG.encodePaint(paint,'rgba'));
+    await browser.send('DOM.setFileInputFiles',{ nodeId:imported.nodeId,files:[aliasPNG] });
+    await until(browser,"document.querySelector('#status').textContent === 'Opened aliases.png'");
+    await click(browser,'[data-tool="pencil"]');
+    await change('pencil-color-mode','rgba');
+    await change('pencil-alpha',7);
+    const adjusted = place(await screen(browser,main),1,0);
+    await press(adjusted);
+    await release(adjusted);
+    await change('pencil-rgb','#112233');
+    await change('pencil-alpha',1);
+    const precise = place(await screen(browser,main),0,1);
+    await press(precise);
+    await release(precise);
+    await change('png-color-mode','indexed');
+    const exported = Buffer.from(await download('#export-png',false));
+    assert.equal(exported[25],3);
+    const reopened = PNG.paintRaster(exported);
+    assert.deepEqual(reopened.swatchIds,['brass','accent','rgb-112233']);
+    assert.deepEqual(reopened.slots,[0,1,0,2,null,1]);
+    assert.deepEqual(reopened.alpha,[255,7,3,1,255,0]);
+    assert.deepEqual(reopened.knockouts,[4]);
+    assert.deepEqual([...PNG.raster(exported).data.slice(12,16)],[17,34,51,1]);
+    const editedPNG = path.join(directory,'edited-aliases.png');
+    fs.writeFileSync(editedPNG,exported);
+    await browser.send('DOM.setFileInputFiles',{ nodeId:imported.nodeId,files:[editedPNG] });
+    await until(browser,"document.querySelector('#status').textContent === 'Opened edited-aliases.png'");
+    const editable = await download('#export');
+    assert.deepEqual(editable.swatchIds,reopened.swatchIds);
+    assert.deepEqual(editable.frames[0].slots,reopened.slots);
+    assert.deepEqual(editable.frames[0].alpha,reopened.alpha);
+
 
   });
 });

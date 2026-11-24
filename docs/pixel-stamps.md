@@ -74,7 +74,18 @@ undo step. [Document shading operations](pixel-art-authoring.md#coverage-lock-an
 A stamp or animated frame can carry an optional `alpha` array with one byte
 per texel alongside its indexed paint. Omitting the array gives painted
 texels full opacity. Sprite atlases and projected indexed paint and masks
-carry this coverage through sampling.
+carry this coverage through sampling. Optional `swatchIds` align with
+the palette entries and distinguish colors with identical RGB values.
+Use `pixelStamps.image(stamp, { preserveHidden: true })` to include the
+original RGB bytes at zero alpha in a straight RGBA image.
+
+Choose **RGBA** under **Pencil color** to paint with an RGB color and an
+alpha byte. Ink adds an exact swatch if needed and keeps the current
+swatch when only alpha changes. **Open stamp or PNG** loads stamp JSON
+or a still PNG. **Save PNG frame** exports the current frame as indexed
+or RGBA and keeps Ink's swatch IDs, indexed pixels, and alpha on reimport.
+Use **Save JSON** to retain the animation and guides.
+[PNG modes and editable RGBA patches](pixel-art-authoring.md#edit-and-exchange-exact-rgba-pixels)
 
 Under **Symmetry and wrapping**, enable **Mirror X** or **Mirror Y** and
 move the axis using its position field. Whole values run through pixel

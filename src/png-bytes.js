@@ -25,7 +25,7 @@ const PNGBytes = (() => {
       bytes.set(pixels.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);
     return bytes;
   }
-  function indexed(width, height, palette, alpha, deflated) {
+  function indexed(width, height, palette, alpha, deflated, ink) {
     const hd = new Uint8Array(13), view = new DataView(hd.buffer);
     view.setUint32(0, width);
     view.setUint32(4, height);
@@ -33,16 +33,18 @@ const PNGBytes = (() => {
     hd[9] = 3;
     const parts = [signature, chunk('IHDR', hd), chunk('PLTE', palette)];
     if (alpha) parts.push(chunk('tRNS', alpha));
+    if (ink) parts.push(chunk('inKD',ink));
     parts.push(chunk('IDAT', deflated), chunk('IEND', new Uint8Array(0)));
     return parts;
   }
-  function rgba(width, height, deflated) {
+  function rgba(width, height, deflated, ink) {
     const hd = new Uint8Array(13), view = new DataView(hd.buffer);
     view.setUint32(0, width);
     view.setUint32(4, height);
     hd[8] = 8;
     hd[9] = 6;
-    return [signature, chunk('IHDR', hd), chunk('IDAT', deflated), chunk('IEND', new Uint8Array(0))];
+    return [signature, chunk('IHDR', hd), ...(ink ? [chunk('inKD',ink)] : []),
+      chunk('IDAT', deflated), chunk('IEND', new Uint8Array(0))];
   }
   return Object.freeze({ chunk, scanlines, indexed, rgba });
 })();

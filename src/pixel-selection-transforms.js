@@ -12,7 +12,7 @@ const PixelSelectionTransforms = (() => {
 
   function validate(clip) {
     if (!fields(clip,['format','version','width','height','origin','palette','slots','alpha']) ||
-        clip.format !== format || clip.version !== 1 || !integer(clip.width,1,512) || !integer(clip.height,1,512) ||
+        clip.format !== format || ![1,2].includes(clip.version) || !integer(clip.width,1,512) || !integer(clip.height,1,512) ||
         !pair(clip.origin,0,511) || !Array.isArray(clip.palette) || clip.palette.length > 255 ||
         !Array.from(clip.palette).every(value=>fields(value,['id','color']) && rgb(value.color) &&
           (value.id === undefined || id(value.id))) ||
@@ -53,7 +53,7 @@ const PixelSelectionTransforms = (() => {
       out.push(slot);
       opacity.push(coverage);
     }
-    return validate({ format,version:1,width:right-left+1,height:bottom-top+1,origin:[left,top],
+    return validate({ format,version:2,width:right-left+1,height:bottom-top+1,origin:[left,top],
       palette:colors,slots:out,...(opacity.some(value=>value !== 255) && { alpha:opacity }) });
   }
 
@@ -146,7 +146,7 @@ const PixelSelectionTransforms = (() => {
     }
 
     const { palette,mapping } = brushes.resolvePalette({ palette:clip.palette,settings:{ swatch:{ mode:'original' } } },
-      current.palette,{ named,limit,used });
+      current.palette,{ named,limit,used,preserveIds:named && clip.version === 2 });
     for (const [p,from] of placed) {
       const slot = clip.slots[from];
       set(p,slot < 0 ? slot : mapping[slot],slot < 0 ? 255 : clip.alpha?.[from] ?? 255);

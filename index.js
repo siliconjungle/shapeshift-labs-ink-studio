@@ -282,6 +282,9 @@ module.exports = {
   createSceneEditor(source, options) {
     return module.exports.load().KIT.authoring.sceneEditor.create(source, options);
   },
+  pixelDocumentFromPNG(source) {
+    return require('./cli/pixel-art.js').documentFromPNG(source);
+  },
   createPixelEditor(source, options) {
     return require('./cli/pixel-art.js').createEditor(source, options);
   },

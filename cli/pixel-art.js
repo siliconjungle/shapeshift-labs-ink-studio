@@ -11,6 +11,7 @@ const PixelBrushes = require('../src/pixel-brushes.js');
 const PixelSelections = require('../src/pixel-selections.js');
 const PixelTransforms = require('../src/pixel-selection-transforms.js');
 const CanvasTransforms = require('../src/pixel-canvas-transforms.js');
+const PixelColors = require('../src/pixel-raster-colors.js');
 const SelectionSources = require('./pixel-selection-sources.js');
 const PNG = require('./png.js');
 const Critic = require('./critic.js');
@@ -589,6 +590,7 @@ function edit(design, frame, patch, context) {
     return Destinations.apply(frame,patch,route,context,readPixelEdits);
   }
   if (patch.operation !== undefined) {
+    if (patch.operation?.tool === 'rgba') return editRGBA(design,frame,patch,route.destination,context);
     if (['transform','paste'].includes(patch.operation?.tool))
       return editTransform(design,frame,patch,route.destination,context);
     return editRasterTool(design,frame,patch,route.destination,context);
@@ -731,6 +733,58 @@ function appendRasterMarks(design,frame,layer,marks,added) {
     }) };
 }
 
+function rasterWriteMarks(width,source,palette,writes,changed) {
+  const bySlot = new Map(), byAlpha = new Map();
+  function group(groups,key,p) {
+    if (!groups.has(key)) groups.set(key,[]);
+    groups.get(key).push(p);
+  }
+  for (const p of changed) {
+    const { slot,alpha } = writes.get(p), previous = source.slots[p];
+    if (previous !== slot) group(bySlot,slot,p);
+    if (slot >= 0 && alpha !== (previous < 0 ? 255 : source.alpha?.[p] ?? 255)) group(byAlpha,alpha,p);
+  }
+  const marks = [...bySlot].map(([slot,indices])=>({
+    ...(slot === -1 ? { clear:true } : { swatch:slot < 0 ? null : palette[slot].id }),
+    runs:RasterTools.runs(width,indices)
+  }));
+  for (const [alpha,indices] of byAlpha) marks.push({ alpha,runs:RasterTools.runs(width,indices) });
+  return marks;
+}
+
+function editRGBA(design,frame,patch,destination,context) {
+  const { operation } = patch, { width,height } = frame;
+  if (patch.edits !== undefined || !fields(operation,['tool','layer','pixels']) ||
+      !Array.isArray(operation.pixels) || !integer(operation.pixels.length,1,width*height))
+    throw new TypeError('An RGBA edit needs a layer or cel and native pixels');
+  const layer = rasterToolLayer(frame,patch);
+  const source = compile(design,frame.id,patch.cel,layer).layerSources.get(layer);
+  const original = paletteEntries(design.palette,design.version), colors = PixelColors.paletteEditor(original);
+  const writes = new Map(), visited = new Set();
+  for (const pixel of operation.pixels) {
+    if (!fields(pixel,['at','rgba','swatch']) || !at(width,height,pixel.at) ||
+        (pixel.rgba === null ? pixel.swatch !== undefined : !PixelColors.rgbaPixel(pixel.rgba)))
+      throw new TypeError('An RGBA pixel needs an in-bounds coordinate, four bytes or null, and an optional swatch ID');
+    const [x,y] = pixel.at, p = y*width+x, previous = source.slots[p];
+    if (visited.has(p)) throw new RangeError('RGBA edit repeats a pixel at '+pixel.at.join(','));
+    visited.add(p);
+    const slot = pixel.rgba === null ? -1 : colors.resolve(PixelColors.fromBytes(...pixel.rgba),pixel.swatch,previous);
+    const alpha = pixel.rgba?.[3] ?? 255;
+    if (slot === previous && (slot < 0 || alpha === (source.alpha?.[p] ?? 255))) continue;
+    if (frame.locks[p] || source.clipping && !source.clipping[p])
+      throw Preview.conflict(frame.locks[p] ? 'protected-pixel' : 'clipped-pixel','RGBA edit cannot change this pixel',
+        { layer,at:pixel.at });
+    writes.set(p,{ slot,alpha });
+  }
+  const changed = [...writes.keys()].sort((a,b)=>a-b), added = colors.palette.slice(original.length);
+  const revised = appendRasterMarks(design,frame,layer,rasterWriteMarks(width,source,colors.palette,writes,changed),added);
+  compile(revised,frame.id);
+  context?.onEditTarget?.({ destination:destination.id,kind:'raster',tool:'rgba',frame:frame.id ?? null,layer,
+    cel:frame.cels?.get(layer) ?? (frame.id ? frame.id+'/'+layer : null),pixelCount:changed.length,
+    runs:RasterTools.runs(width,changed),...(added.length && { addedSwatches:added.map(entry=>entry.id) }) });
+  return revised;
+}
+
 function editTransform(design,frame,patch,destination,context) {
   const { operation } = patch, paste = operation.tool === 'paste';
   const input = paste ? ['clipboard'] : ['selection','mode'];
@@ -746,24 +800,13 @@ function editTransform(design,frame,patch,destination,context) {
   const clip = paste ? clipboard : PixelTransforms.capture(width,height,current,
     PixelSelections.fromPixels(width,height,namedSelection(design,selection,frame.id).pixels));
   const result = PixelTransforms.stage(width,height,current,clip,transform,{ move:!paste && mode === 'move',named:true });
-  const changed = [...result.writes.keys()].sort((a,b)=>a-b), bySlot = new Map(), byAlpha = new Map();
-  function group(groups,key,p) {
-    if (!groups.has(key)) groups.set(key,[]);
-    groups.get(key).push(p);
-  }
+  const changed = [...result.writes.keys()].sort((a,b)=>a-b);
   for (const p of changed) {
-    const { slot,alpha } = result.writes.get(p), previous = source.slots[p];
     if (frame.locks[p] || source.clipping && !source.clipping[p])
       throw Preview.conflict(frame.locks[p] ? 'protected-pixel' : 'clipped-pixel','Transform cannot change this pixel',
         { layer,at:[p%width,Math.floor(p/width)] });
-    if (previous !== slot) group(bySlot,slot,p);
-    if (slot >= 0 && alpha !== (previous < 0 ? 255 : source.alpha?.[p] ?? 255)) group(byAlpha,alpha,p);
   }
-  const marks = [...bySlot].map(([slot,indices])=>({
-    ...(slot === -1 ? { clear:true } : { swatch:slot < 0 ? null : result.palette[slot].id }),
-    runs:RasterTools.runs(width,indices)
-  }));
-  for (const [alpha,indices] of byAlpha) marks.push({ alpha,runs:RasterTools.runs(width,indices) });
+  const marks = rasterWriteMarks(width,source,result.palette,result.writes,changed);
   const added = result.palette.slice(palette.length);
   let revised = appendRasterMarks(design,frame,layer,marks,added);
   let selectionRuns;
@@ -1305,7 +1348,9 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     copySelection: options => copySelection(state().design,options),
     select: (query,options) => selectPixels(state().design,query,options,editContext(options,false)),
     snap: (coordinate,{ frame,radius } = {}) => snapPoint(compile(state().design,frame),coordinate,radius),
-    stamp: ({ frame,cel } = {}) => stamp(compile(state().design,frame,cel)),
+    stamp: ({ frame,cel,layer } = {}) => stamp(compile(state().design,frame,cel,layer),layer),
+    png: ({ frame,cel,layer,colorMode } = {}) =>
+      PNG.encodePaint(stamp(compile(state().design,frame,cel,layer),layer),colorMode),
     renderOptions: (scene = sceneName) => structuredClone(renderOptions(scene)),
     targets(destination,options = {}) {
       return inspectTargets(state().design,destination,editContext(options,false),options.limit);
@@ -1353,25 +1398,51 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
   return editor;
 }
 
-function stamp(frame) {
-  const palette = frame.colors.map(hexColor), slots = Array.from(frame.slots,n=>n < 0 ? null : n);
-  if (frame.mixedColors) {
-    const ids = new Map(palette.map((rgb,slot)=>[rgb,slot]));
+function stamp(frame,layer) {
+  const raw = layer === undefined ? undefined : frame.layerSources?.get(layer);
+  if (layer !== undefined && !raw) throw new RangeError('Unknown pixel layer '+layer);
+  const palette = frame.colors.map(hexColor), ids = frame.swatches.slice();
+  const slots = Array.from(raw?.slots ?? frame.slots,n=>n < 0 ? null : n);
+  if (!raw && frame.mixedColors) {
+    const blends = new Map(), occupied = new Set(ids);
     for (let p = 0; p < slots.length; p++) {
       if (slots[p] === null || frame.mixedColors[p] === frame.colors[slots[p]]) continue;
-      const rgb = hexColor(frame.mixedColors[p]);
-      if (!ids.has(rgb)) {
-        ids.set(rgb,palette.length);
+      const color = frame.mixedColors[p];
+      if (!blends.has(color)) {
+        const rgb = hexColor(color), id = PixelColors.uniqueId(occupied,'blend-'+rgb.slice(1));
+        blends.set(color,palette.length);
+        occupied.add(id);
         palette.push(rgb);
+        ids.push(id);
       }
-      slots[p] = ids.get(rgb);
+      slots[p] = blends.get(color);
     }
   }
-  return { width:frame.width,height:frame.height,origin:'top-left',palette,slots,
-    ...(frame.opacity && { alpha:Array.from(frame.opacity) }),
+  const alpha = raw ? raw.alpha : frame.opacity;
+  const knockouts = raw && Array.from(raw.slots).flatMap((slot,p)=>slot === -2 ? [p] : []);
+  return { width:frame.width,height:frame.height,origin:'top-left',palette,swatchIds:ids,slots,
+    ...(alpha && { alpha:Array.from(alpha,(a,p)=>slots[p] === null ? 255 : a) }),
+    ...(knockouts?.length && { knockouts }),
     ...(frame.guides?.length && { guides:structuredClone(frame.guides) }),
     ...(frame.sceneBindings?.length && { sceneBindings:structuredClone(frame.sceneBindings) }),
     ...(frame.selections?.length && { selections:frame.selections.map(({ id,pixels })=>({ id,pixels:structuredClone(pixels) })) }) };
+}
+
+function documentFromPNG(file) {
+  const { width,height,palette,swatchIds,slots,alpha,knockouts } = PNG.paintRaster(file);
+  const byAlpha = new Map(), marks = [];
+  for (let p = 0; p < slots.length; p++) {
+    const value = alpha?.[p] ?? 255;
+    if (value === 255 || slots[p] === null) continue;
+    if (!byAlpha.has(value)) byAlpha.set(value,[]);
+    byAlpha.get(value).push(p);
+  }
+  for (const [coverage,indices] of byAlpha) marks.push({ alpha:coverage,runs:RasterTools.runs(width,indices) });
+  if (knockouts?.length) marks.push({ swatch:null,runs:RasterTools.runs(width,knockouts) });
+  return { format,version:2,width,height,pixelAspect:[1,1],
+    palette:Object.fromEntries(palette.map((color,i)=>[swatchIds[i],color])),
+    layers:[{ id:'image' }],frames:[{ id:'artwork',durationMs:100,
+      cels:{ image:{ slots:slots.map(slot=>slot === null ? null : swatchIds[slot]),marks } } }] };
 }
 
 function snapPoint(frame,point,radius) {
@@ -1434,13 +1505,18 @@ function writeBrush(design,opt,source) {
   return { file:out,format:brush.format,size:[brush.width,brush.height],anchor:brush.anchor };
 }
 
-function draw(frame,directory) {
+function draw(frame,directory,{ layer,colorMode } = {}) {
+  const indexed = stamp(frame,layer), art = PNG.encodePaint(indexed,colorMode);
+  const raw = layer === undefined ? undefined : frame.layerSources.get(layer);
+  let reviewed = frame;
+  if (raw) {
+    const slots = Int16Array.from(raw.slots,(slot,p)=>slot < 0 || raw.alpha?.[p] === 0 ? -1 : slot);
+    reviewed = { ...frame,slots,owners:Uint8Array.from(slots,slot=>Number(slot >= 0)),
+      layerIds:[null,layer],mixedColors:undefined };
+  }
+  const result = review(reviewed), { w,h,rgb } = result.overlay;
   fs.mkdirSync(directory,{ recursive:true });
-  const indexed = stamp(frame), result = review(frame), { w,h,rgb } = result.overlay;
-  const art = path.join(directory,'art.png');
-  if (indexed.alpha) files.write(art,PNG.encode(frame.width,frame.height,stampImage(indexed).rgba,4));
-  else PNG.writeIndexed(art,frame.width,frame.height,indexed.slots,
-    frame.colors.map(color=>[color>>>16,color>>>8&255,color&255]));
+  files.write(path.join(directory,'art.png'),art);
   files.write(path.join(directory,'review.png'),PNG.encode(w,h,rgb));
   files.json(path.join(directory,'stamp.json'),indexed);
   files.json(path.join(directory,'report.json'),result.report);
@@ -1525,9 +1601,9 @@ function trace(frame, object, scene) {
 function command(pos,opt,outputFile,{ capture, world, scene }) {
   const [action, source, patch] = pos;
   const writing = action === 'edit' || action === 'replay';
-  if (!['trace','upgrade','validate','targets','draw','canvas','inspect','sample','select','snap','brush','copy','preview','edit','replay'].includes(action) ||
+  if (!['trace','import','upgrade','validate','targets','draw','canvas','inspect','sample','select','snap','brush','copy','preview','edit','replay'].includes(action) ||
       pos.length !== (writing || ['preview','select'].includes(action) ? 3 : 2))
-    throw new TypeError('Use pixel-art trace, upgrade, validate, targets, draw, canvas, inspect, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
+    throw new TypeError('Use pixel-art trace, import, upgrade, validate, targets, draw, canvas, inspect, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
   if (action === 'trace') {
     if (typeof opt.subject !== 'string' || !opt.subject.trim()) throw new TypeError('Trace needs --subject object-id');
     const design = trace(capture(source), opt.subject, source);
@@ -1535,6 +1611,13 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     draw(compile(design),directory);
     files.json(path.join(directory,'design.json'),design);
     console.log('wrote',directory);
+    return;
+  }
+  if (action === 'import') {
+    if (typeof opt.out !== 'string' || !opt.out.trim() || path.resolve(source) === path.resolve(opt.out))
+      throw new TypeError('Use pixel-art import <image.png> --out <document.json>');
+    const design = documentFromPNG(source);
+    files.json(path.resolve(opt.out),design);
     return;
   }
   const design = read(source);
@@ -1639,7 +1722,7 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     process.stdout.write(JSON.stringify(receipt,null,2)+'\n');
     return;
   }
-  const frame = compile(design,opt.frame);
+  const frame = compile(design,opt.frame,undefined,action === 'draw' ? opt.layer : undefined);
   if (action === 'snap') {
     const { point,radius } = snapOptions(opt);
     process.stdout.write(JSON.stringify(snapPoint(frame,point,radius),null,2)+'\n');
@@ -1653,7 +1736,7 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
   }
   if (action === 'draw') {
     const directory=outputFile('pixel-art');
-    draw(frame,directory);
+    draw(frame,directory,{ layer:opt.layer,colorMode:opt['color-mode'] });
     console.log('wrote',directory);
     return;
   }
@@ -1748,4 +1831,4 @@ function sessionCommand(pos,opt,{ scene,capture }) {
     documentRevision:editor.describe().revision },null,2)+'\n');
 }
 
-module.exports = { createEditor, openEditorSession, compile, validate, stamp, image, review, edit, draw, trace, command, sessionCommand };
+module.exports = { createEditor, documentFromPNG, openEditorSession, compile, validate, stamp, image, review, edit, draw, trace, command, sessionCommand };

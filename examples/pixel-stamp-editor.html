@@ -41,7 +41,7 @@
   .guide-controls { display:grid; gap:9px; }
   .guide-controls > label { display:grid; gap:4px; color:var(--quiet); font-size:13px; }
   .guide-controls select { max-width:100%; color:#e6eeea; }
-  .guide-controls[hidden], .guide-controls [hidden] { display:none; }
+  .guide-controls[hidden], .guide-controls [hidden], #pencil-rgba[hidden] { display:none; }
   #shape-controls { margin-top:12px; }
   #shape-controls textarea, #shape-lengths { width:100%; }
   #shape-controls textarea, #shape-lengths { font:inherit; color:inherit; border:1px solid #476062; border-radius:5px; background:#253437; padding:6px 10px; }
@@ -59,8 +59,12 @@
         <option value="body">Flowing ink</option><option value="eye">Red eye</option><option value="blank">Blank stamp</option>
       </select>
       <label id="size-label" hidden><span id="variant-label">Size</span> <select id="size"></select></label>
-      <label class="file-button">Open JSON<input type="file" id="import" accept=".json,application/json"></label>
+      <label class="file-button">Open stamp or PNG<input type="file" id="import" accept=".json,.png,application/json,image/png"></label>
       <button id="export" class="primary">Save JSON</button>
+      <select id="png-color-mode" aria-label="PNG color mode">
+        <option value="auto">Auto PNG</option><option value="indexed">Indexed PNG</option><option value="rgba">RGBA PNG</option>
+      </select>
+      <button id="export-png">Save PNG frame</button>
     </div>
   </header>
   <div class="layout">
@@ -83,6 +87,13 @@
           <button type="button" data-tool="shape" aria-pressed="false">Shape</button>
         </div>
         <label class="side-label"><span>Pixel-perfect pencil</span><input id="pixel-perfect" type="checkbox" checked></label>
+        <label class="side-label">Pencil color<select id="pencil-color-mode">
+          <option value="indexed">Active swatch</option><option value="rgba">RGBA</option>
+        </select></label>
+        <div class="row" id="pencil-rgba" hidden>
+          <label>RGB <input type="color" id="pencil-rgb"></label>
+          <label>Alpha <input type="number" id="pencil-alpha" min="0" max="255" step="1" value="255"></label>
+        </div>
         <label class="side-label"><span>Brush width</span><input id="width" type="number" min="1" max="24" value="2"></label>
         <div class="guide-controls" id="shape-controls" hidden>
           <label>Shape<select id="shape-type">

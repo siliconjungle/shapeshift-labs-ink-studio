@@ -45,7 +45,7 @@ const PixelStamps = (() => {
     return result;
   }
 
-  function prepare(spec) {
+  function prepare(spec,{ preserveHidden = false } = {}) {
     if (!record(spec)) throw new TypeError('Pixel stamps need an indexed raster object');
     const { width, height, slots, rows, strokes, alpha, frames, fps = 12, playback = 'loop', phase = 0, palette } = spec;
     if (![width, height].every(n => Number.isSafeInteger(n) && n > 0) || width * height > maxCells ||
@@ -70,7 +70,7 @@ const PixelStamps = (() => {
         if (!Array.isArray(opacity) || opacity.length !== texels.length ||
             !Array.from(opacity).every(value => index(value) && value <= 255))
           throw new TypeError('Pixel stamp alpha needs one byte per texel');
-        for (let p = 0; p < texels.length; p++)
+        if (!preserveHidden) for (let p = 0; p < texels.length; p++)
           if (opacity[p] === 0) texels[p] = null;
       }
       const visibleGuides = entry.guides === undefined ? sharedGuides : guides.prepare([...sharedGuides,...guides.prepare(entry.guides)]);
@@ -122,8 +122,8 @@ const PixelStamps = (() => {
     return { rgba, emission };
   }
 
-  function image(spec, { time = 0, scenePalette, paletteRoles } = {}) {
-    const { width, height, entries, palette, at } = prepare(spec);
+  function image(spec, { time = 0, scenePalette, paletteRoles, preserveHidden = false } = {}) {
+    const { width, height, entries, palette, at } = prepare(spec,{ preserveHidden });
     const { rgba } = raster(width, height, entries[at(time)], palette, scenePalette, paletteRoles, new Set());
     return { width, height, rgba };
   }
