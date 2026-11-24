@@ -86,7 +86,7 @@ const stroke = {
   points: [[-.32, .25, .46], [.17, .16, .44]],
   radius: .11, softness: .2, bias: .24
 };
-brass.shadowBand = { strokes: [stroke] };
+pbrMaterials.materials.brass.shadowBand = { strokes: [stroke] };
 editor.paintShadowBand(stroke, { pbrMaterial: 'brass' });
 ```
 
