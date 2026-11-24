@@ -123,16 +123,18 @@ fn project(index: u32, xyz: vec3f, depth: f32) -> Ellipse {
   var alpha = point.position.w;
   if (compensated && change > 0.0) { alpha *= sqrt(det/(det+change)); }
   if (!(alpha >= minimum)) { return ellipse; }
-  let rgb = u32(point.covariance0.w);
+  let style = select(0u,u32(point.covariance1.w),chunk.identity.y != 0u);
+  let rgb = u32(point.covariance0.w) | (style << 24u);
+  let reach = select(3.0,point.extra.x,style > 0u);
   ${ray ? `
-  if (perspective) {
+  if (perspective && style == 0u) {
     let basis = mat3x3f(right,up,-back);
     return perspectiveEllipse(vec3f(xyz.xy,depth),transpose(basis)*covariance*basis,variance,rgb,alpha);
   }` : ''}
   let xx = rawXX + variance;
   let yy = rawYY + variance;
   if (!(xx > 0.0 && yy > 0.0)) { return ellipse; }
-  let extent = 3.0 * sqrt(vec2f(xx, yy));
+  let extent = reach * sqrt(vec2f(xx, yy));
   if (any(abs(center) - extent >= viewport)) { return ellipse; }
   let halfTrace = (xx + yy) * 0.5;
   let halfGap = length(vec2f((xx - yy) * 0.5, xy));
@@ -150,10 +152,10 @@ fn project(index: u32, xyz: vec3f, depth: f32) -> Ellipse {
   let xxz = dot(jx,axial);
   let yyz = dot(jy,axial);
   let slopeZ = vec2f(yy*xxz-xy*yyz,xx*yyz-xy*xxz)/(major*minor);
-  let depthModel = vec4f(slopeZ,3.0*sqrt(max(0.0,dot(-back,axial))),depth);
+  let depthModel = vec4f(select(slopeZ,vec2f(0),style > 0u),3.0*sqrt(max(0.0,dot(-back,axial))),depth);
   ` : ''}
-  return Ellipse(center, 3.0 * sqrt(major) * axis,
-    3.0 * sqrt(minor) * vec2f(-axis.y, axis.x), rgb, alpha${ray ? ',vec4f(0),vec4f(0),vec4f(0)' : ''}${local ? ',depthModel' : ''});
+  return Ellipse(center, reach * sqrt(major) * axis,
+    reach * sqrt(minor) * vec2f(-axis.y, axis.x), rgb, alpha${ray ? ',vec4f(0),vec4f(0),vec4f(0)' : ''}${local ? ',depthModel' : ''});
 }
 
 @compute @workgroup_size(${lanes})
@@ -279,12 +281,32 @@ fn finishTile(@builtin(workgroup_id) group: vec3u, @builtin(local_invocation_ind
 export const rasterShader = (ray = false, local = false) => camera(ray,local) + (local ? captureTransparency : '') + /* wgsl */ `
 @group(0) @binding(1) var<storage, read> ellipses: array<Ellipse>;
 @group(0) @binding(2) var<storage, read> keys: array<vec4u>;
+struct Footprints {
+  parameters: array<vec4f, 128>,
+  distance: array<f32>,
+}
+@group(0) @binding(3) var<storage, read> footprints: Footprints;
+
+fn footprintCoverage(style: u32, p: vec2f) -> f32 {
+  let slot = style - 1u;
+  let base = slot * 16384u;
+  let q = clamp((p / 3.0 + .5) * 127.0,vec2f(0),vec2f(127));
+  let lo = vec2u(floor(q));
+  let hi = min(lo+1u,vec2u(127u));
+  let top = mix(footprints.distance[base+lo.y*128u+lo.x],footprints.distance[base+lo.y*128u+hi.x],fract(q.x));
+  let bottom = mix(footprints.distance[base+hi.y*128u+lo.x],footprints.distance[base+hi.y*128u+hi.x],fract(q.x));
+  let distance = select(mix(top,bottom,fract(q.y)),max(abs(p.x),abs(p.y))-1.0,any(abs(p)>vec2f(1.5)));
+  let softness = footprints.parameters[slot*2u+1u].x;
+  if (softness == 0.0) { return select(0.0,1.0,distance<=0.0); }
+  return 1.0-smoothstep(-softness,softness,distance);
+}
 struct Vertex {
   @builtin(position) position: vec4f,
   @location(0) uv: vec2f,
   @location(1) @interpolate(flat) color: vec4f,
   ${ray || local ? '@location(2) @interpolate(flat) slot: u32,' : ''}
   ${local ? '@location(3) @interpolate(flat) rank: u32,' : ''}
+  @location(4) @interpolate(flat) style: u32,
 }
 
 @vertex
@@ -294,7 +316,15 @@ fn vertex(@builtin(vertex_index) id: u32, @builtin(instance_index) instance: u32
   let uv = vec2f(f32(id & 1u), f32(id >> 1u)) * 2.0 - 1.0;
   let position = (ellipse.center + uv.x * ellipse.axisX + uv.y * ellipse.axisY) / camera.viewport.xy;
   let color = unpack4x8unorm(ellipse.rgb);
-  return Vertex(vec4f(position, 0.0, 1.0), uv, vec4f(color.rgb, ellipse.alpha)${ray || local ? ",slot" : ""}${local ? ",instance" : ""});
+  let style = ellipse.rgb >> 24u;
+  var sampleUV = uv;
+  if (style != 0u) {
+    let parameters = footprints.parameters[(style-1u)*2u];
+    let reach = footprints.parameters[(style-1u)*2u+1u].y / 1.1774100225;
+    let projected = reach * (uv.x*normalize(ellipse.axisX)+uv.y*normalize(ellipse.axisY));
+    sampleUV = vec2f(dot(parameters.xy,projected),dot(parameters.zw,projected));
+  }
+  return Vertex(vec4f(position, 0.0, 1.0), sampleUV, vec4f(color.rgb, ellipse.alpha)${ray || local ? ",slot" : ""}${local ? ",instance" : ""},style);
 }
 
 @fragment
@@ -302,12 +332,12 @@ fn fragment(input: Vertex) -> @location(0) vec4f {
   var power = -4.5 * dot(input.uv,input.uv);
   ${local ? `
   let sample = ellipses[input.slot];
-  let screenOffset = input.uv.x*sample.axisX+input.uv.y*sample.axisY;
+  let screenOffset = vec2f(input.position.x-camera.viewport.x,camera.viewport.y-input.position.y)-sample.center;
   var localDepth = sample.localDepth.w +
     clamp(dot(screenOffset,sample.localDepth.xy),-sample.localDepth.z,sample.localDepth.z);
   ` : ''}
   ${ray ? `
-  if (camera.viewport.w == 0.0) {
+  if (camera.viewport.w == 0.0 && input.style == 0u) {
     let ellipse = ellipses[input.slot];
     let pixel = vec2f(input.position.x-camera.viewport.x,camera.viewport.y-input.position.y);
     let ray = vec3f(pixel/camera.viewport.z,1);
@@ -319,8 +349,12 @@ fn fragment(input: Vertex) -> @location(0) vec4f {
     power = -.5*dot(delta,delta);
   }` : ''}
   let minimum = select(0.004,0.0000152587890625,camera.clip.w > 0.0);
-  let alpha = min(0.99,input.color.a*exp(power));
-  if (power < -4.5 || alpha < minimum) { discard; }
+  var coverage = exp(power);
+  if (input.style != 0u) {
+    coverage = footprintCoverage(input.style,input.uv);
+  } else if (power < -4.5) { discard; }
+  let alpha = min(0.99,input.color.a*coverage);
+  if (alpha < minimum) { discard; }
   ${local ? 'captureLocal(vec2u(input.position.xy),input.rank,max(camera.clip.x,localDepth),input.color.rgb,alpha);' : ''}
   return vec4f(input.color.rgb * alpha, alpha);
 }

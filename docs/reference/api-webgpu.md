@@ -16,5 +16,5 @@ Members and callable signatures come from the public entry point. Guide links po
 | `webgpu.decodeGaussianSpz` | function | `(input, { maxPoints = pointLimit, decompress = decompressStream } = {})` | [source](../../src/gaussian-splats.mjs) |
 | `webgpu.gaussianSplatWorld` | function | `(cloud, { size = 6, up = 'y', viewDirection, colorMode = 'baked', palette = defaultPalette, objectId } = {})` | [source](../../src/gaussian-splats.mjs) |
 | `webgpu.inspectGaussianChunkManifest` | function | `(manifest)` | [source](../../src/gaussian-chunks.mjs) |
-| `webgpu.packGaussianChunks` | function | `(world, { cellSize = 2, voxelSizes = [.2, .1, .05, 0], layer = 'main' } = {})` | [source](../../src/gaussian-chunks.mjs) |
+| `webgpu.packGaussianChunks` | function | `(world, { cellSize = 2, voxelSizes = [.2, .1, .05, 0], layer = 'main', previousFootprints = [] } = {})` | [source](../../src/gaussian-chunks.mjs) |
 | `webgpu.planWebGPUGraph` | function | `(definition)` | [source](../../src/webgpu/graph.mjs) |

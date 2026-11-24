@@ -109,3 +109,29 @@ test('WebGL masks mesh parts on the same native grid and picks the same object a
     for(const hit of [result.native,result.distant])
       assert.deepEqual([hit.target.object,hit.target.part,hit.target.material],['signal','shell','enamel']);
   });
+
+test('edited splat parts stay live while unedited parts use their distant cards', () => {
+  const { world, rows, api } = fixture(kit);
+  const row = Array.from({ length: world.count }, (_, i) => i)
+    .find(i => require('../src/target-selectors.js').index(world).row(i).part === 'hood');
+  const id = kit.KIT.procedural.splatProvenance.identities(world).idAt(row);
+  const splatFit = { format: 'ink-studio/splat-fit', version: 2, target: { object: 'signal', part: 'hood' },
+    edits: [], attributes: [[id, { pigment: 0xb04050 }]] };
+  let plan;
+  const frame = ink.render(world, { ...view, dist: 13, splatFit, spriteReconstructionFrame: value => { plan = value; } });
+  assert.equal(plan.states.find(state => state.part === 'hood').reason, 'source-edited');
+  assert.equal(plan.states.find(state => state.part === 'shell').sprite, 1);
+  const hood = named(frame.passes, 'hood');
+  assert(frame.passes.partId.some((part, i) => part === hood && frame.passes.surfaceKind[i] === 3));
+  assert(!frame.passes.partId.some((part, i) => part === hood && frame.passes.surfaceKind[i] === 4));
+
+  const { spriteAtlas } = require('../cli/sprite-atlas.js');
+  const atlas = spriteAtlas(world, { width: 24, height: 24, directions: 1, pivot: [1.12, 0, 0],
+    view: { raw: true, splatFit, pixelSelection: { object: 'signal', part: 'hood', isolated: true } } });
+  assert.match(atlas.metadata.splatFitRevision, /^[a-f0-9]{64}$/);
+  rows[2].sprite.asset = api.asset({ atlas, range: [4, 8] });
+  api.bindParts(world, rows);
+  const fresh = ink.render(world, { ...view, dist: 13, splatFit, spriteReconstructionFrame: value => { plan = value; } });
+  assert.equal(plan.states.find(state => state.part === 'hood').sprite, 1);
+  assert(fresh.passes.partId.some((part, i) => part === hood && fresh.passes.surfaceKind[i] === 4));
+});

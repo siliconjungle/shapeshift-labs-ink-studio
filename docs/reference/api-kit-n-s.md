@@ -1575,7 +1575,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.sprite.reconstruction.hits` | function | `(plan, { origin, direction, maxDistance = 100, pixelAt, clip })` | [guide](../sprite-reconstruction.md), [source](../../src/sprite-reconstruction.js) |
 | `KIT.sprite.reconstruction.labels` | function | `(world)` | [guide](../sprite-reconstruction.md), [source](../../src/sprite-reconstruction.js) |
 | `KIT.sprite.reconstruction.light` | function | `(authored, override, time)` | [guide](../sprite-reconstruction.md), [source](../../src/sprite-reconstruction.js) |
-| `KIT.sprite.reconstruction.resolve` | function | `(world, { eye, back, ortho, focal, time = 0, setback = 0, mode = 'auto', atlasTime, impostorBlend } = {})` | [guide](../sprite-reconstruction.md), [source](../../src/sprite-reconstruction.js) |
+| `KIT.sprite.reconstruction.resolve` | function | `(world, { eye, back, ortho, focal, time = 0, setback = 0, mode = 'auto', atlasTime, impostorBlend, retainGeometry } = {})` | [guide](../sprite-reconstruction.md), [source](../../src/sprite-reconstruction.js) |
 | `KIT.sprite.reconstruction.sprite` | function | `(row, x, y)` | [guide](../sprite-reconstruction.md), [source](../../src/sprite-reconstruction.js) |
 | `KIT.sprite.reconstruction.tile` | function | `(row)` | [guide](../sprite-reconstruction.md), [source](../../src/sprite-reconstruction.js) |
 | `KIT.sprite.scanlineBudget` | namespace |  |  |

@@ -102,6 +102,7 @@ module.exports = {
   createShowBridge: require('./cli/show-bridge.js').createShowBridge,
   readGaussianSplat: require('./cli/gaussian-splats.js').readGaussianSplat,
   scanToMesh: require('./cli/scan-mesh.js').scanToMesh,
+  bakeSplatFit: require('./cli/splat-fit-asset.js').bake,
   async gaussianSplatWorld(cloud, options) {
     return (await import('./src/gaussian-splats.mjs')).gaussianSplatWorld(cloud, options);
   },

@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const PNG = require('./png.js');
 const { render, FOV } = require('./render.js');
+const SplatFit = require('./splat-fit-asset.js');
 const ArtEffects = require('../src/art-effects.js');
 const AtlasSprites = require('../src/atlas-sprites.js');
 const CutoutMipmaps = require('../src/sprite-cutout-mipmaps.js');
@@ -38,7 +39,7 @@ function assessmentView(world,view) {
 
 const assessmentPasses=['protected','emission','splatId','objectId','materialId'];
 const tileView=(view,angle,pivot,w,h,t) => ({
-  spriteReconstruction:false,...view,t,w,h,px:1,yaw:angle.yaw,pitch:angle.pitch,ortho:true,target:pivot,transparent:true
+  ...view,spriteReconstruction:false,t,w,h,px:1,yaw:angle.yaw,pitch:angle.pitch,ortho:true,target:pivot,transparent:true
 });
 
 function assessAtlas(world,view,angle,pivot,width,height,time,protect) {
@@ -69,6 +70,7 @@ function spriteAtlas(world, options = {}) {
       (pose !== undefined && typeof pose !== 'function'))
     throw new RangeError('Invalid sprite atlas dimensions, timing, directions, pivot or maps');
   const view = {protectedPixels:false,...authoredView};
+  const splatFitRevision = SplatFit.prepare(world,view.splatFit ?? world.look?.splatFit)?.revision;
   const requested = [...new Set(maps)], viewBlend=AtlasSprites.viewBlend(authoredBlend);
   const depthReprojection=viewBlend==='depth-reprojected';
   if (depthReprojection && (!requested.includes('depth') || width*height>AtlasSprites.reprojectionPixelLimit))
@@ -217,7 +219,7 @@ function spriteAtlas(world, options = {}) {
   }
   const metadata = { width: w, height: h, tileWidth: width, tileHeight: height,
     directions:adaptive ? Math.max(...adaptiveViews.rings.map(ring=>ring.yaws.length)) : directions,
-    ...(adaptiveViews && {adaptiveViews}),fps, ...(pitches && { pitches:pitches.slice() }),
+    ...(adaptiveViews && {adaptiveViews}), ...(splatFitRevision && {splatFitRevision}), fps, ...(pitches && { pitches:pitches.slice() }),
     pivot: anchor.slice(), frames: entries, normalSpace, emissionMode:'baked', ...(plan && { clips: plan.tracks }),
     ...(cutout && { cutoutMipmaps: cutout }), ...(viewBlend && {viewBlend}),
     encodings: {

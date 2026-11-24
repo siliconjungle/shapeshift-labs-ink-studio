@@ -5,6 +5,7 @@ export const gaussianRecordBytes = gaussianRecordFloats * Float32Array.BYTES_PER
 const finite = Number.isFinite;
 const xyz = value => Array.isArray(value) && value.length === 3 && value.every(finite);
 const validId = value => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,96}$/.test(value);
+const half = Math.sqrt(2 * Math.log(2));
 const validFile = value => typeof value === 'string' && /^[a-zA-Z0-9_-]+\.bin$/.test(value);
 const covarianceFields = [4, 5, 6, 8, 9, 10];
 const color = (value, channel) => value >>> (channel * 8) & 255;
@@ -19,10 +20,10 @@ export function gaussianChunkData(input, count) {
   return values;
 }
 
-function setBounds(bounds, data) {
+function setBounds(bounds, data, shaped) {
   for (let i = 0; i < data.length; i += gaussianRecordFloats) {
     for (const [axis, field] of [4, 8, 10].entries()) {
-      const radius = 3 * Math.sqrt(Math.max(0, data[i + field]));
+      const radius = (shaped && data[i+11] ? data[i+12] : 3) * Math.sqrt(Math.max(0, data[i + field]));
       bounds.min[axis] = Math.min(bounds.min[axis], data[i + axis] - radius);
       bounds.max[axis] = Math.max(bounds.max[axis], data[i + axis] + radius);
     }
@@ -31,11 +32,12 @@ function setBounds(bounds, data) {
 
 // Moment matching retains the direction and spread of a group. Optical
 // thickness is averaged over that larger footprint rather than summing alpha.
-function coarsen(source, voxel) {
+function coarsen(source, voxel, protect) {
   const groups = new Map();
   for (let i = 0; i < source.length; i += gaussianRecordFloats) {
     const [x, y, z] = source.subarray(i, i + 3);
-    const key = [x, y, z].map(n => Math.floor(n / voxel)).join(',');
+    const row=i/gaussianRecordFloats;
+    const key = protect[row] ? 'row:'+row : [x, y, z].map(n => Math.floor(n / voxel)).join(',');
     let group = groups.get(key);
     if (!group) {
       group = { origin: [x, y, z], sum: new Float64Array(13), indices: [] };
@@ -79,9 +81,9 @@ function coarsen(source, voxel) {
   return { data, error };
 }
 
-export function packGaussianChunks(world, { cellSize = 2, voxelSizes = [.2, .1, .05, 0], layer = 'main' } = {}) {
+export function packGaussianChunks(world, { cellSize = 2, voxelSizes = [.2, .1, .05, 0], layer = 'main', previousFootprints = [] } = {}) {
   const { count, data, cam, radius, bg } = world ?? {};
-  if (!Number.isSafeInteger(count) || count < 1 || !(data instanceof Float32Array) || data.length !== count * gaussianRecordFloats)
+  if (!Number.isSafeInteger(count) || count < 0 || !(data instanceof Float32Array) || data.length !== count * gaussianRecordFloats)
     throw new TypeError('Expected a packed imported Gaussian world');
   if (!finite(cellSize) || cellSize <= 0 || !Array.isArray(voxelSizes) || !voxelSizes.length ||
       voxelSizes.length > 16 || voxelSizes.at(-1) !== 0 || !voxelSizes.every(n => finite(n) && n >= 0) ||
@@ -90,6 +92,31 @@ export function packGaussianChunks(world, { cellSize = 2, voxelSizes = [.2, .1, 
       typeof layer !== 'function' && !validId(layer))
     throw new RangeError('Gaussian chunk packing needs a positive cell size, nested voxel sizes ending in zero, and a layer ID');
 
+  if (!Array.isArray(previousFootprints) || previousFootprints.length > 64)
+    throw new TypeError('Invalid previous Gaussian footprint registry');
+  const layout=world.splatFootprints, byKey=new Map(previousFootprints.flatMap((style,index)=>
+    style ? [[JSON.stringify(style),index]] : []));
+  const footprints=new Array(previousFootprints.length).fill(null), styles=new Map();
+  const styleAt=i=>layout?.styles[(layout.indices[i]??0)-1];
+  for (let i=0;i<count;i++) {
+    const style=styleAt(i);
+    if (!style) continue;
+    if (style.depth==='plane' || layout.frames?.subarray(i*6,i*6+6).some(Boolean))
+      throw new RangeError('Streamed custom Gaussian footprints need center-depth covariance profiles');
+    if (styles.has(style)) continue;
+    const slot=byKey.get(JSON.stringify(style));
+    if (slot!==undefined) footprints[slot]=style;
+    styles.set(style,slot);
+  }
+  for (const [style,slot] of styles) if (slot===undefined) {
+    const free=footprints.indexOf(null);
+    const index=free<0 ? footprints.length : free;
+    if (index>=64) throw new RangeError('A Gaussian pack supports up to 64 footprint profiles');
+    footprints[index]=style;
+    styles.set(style,index);
+  }
+  while (footprints.length && !footprints.at(-1)) footprints.pop();
+
   const bins = new Map();
   for (let n = 0; n < count; n++) {
     const i = n * gaussianRecordFloats;
@@ -97,33 +124,42 @@ export function packGaussianChunks(world, { cellSize = 2, voxelSizes = [.2, .1, 
     const id = typeof layer === 'function' ? layer(n) : layer;
     if (!validId(id) || !cell.every(Number.isSafeInteger)) throw new RangeError('Invalid Gaussian chunk cell or layer');
     const key = [id, ...cell].join(',');
-    if (!bins.has(key)) bins.set(key, { layer: id, indices: [] });
-    bins.get(key).indices.push(i);
+    if (!bins.has(key)) bins.set(key, { layer: id, cell, indices: [] });
+    bins.get(key).indices.push(n);
   }
 
   function* chunks() {
     let id = 0;
     for (const key of [...bins.keys()].sort()) {
-      const { layer, indices } = bins.get(key);
-      const raw = new Float32Array(indices.length * gaussianRecordFloats);
-      indices.forEach((at, i) => raw.set(data.subarray(at, at + gaussianRecordFloats), i * gaussianRecordFloats));
+      const { layer,cell,indices } = bins.get(key);
+      const raw = new Float32Array(indices.length * gaussianRecordFloats), protect=new Uint8Array(indices.length);
+      const shaped=indices.some(n=>!!styleAt(n));
+      for (const [i,n] of indices.entries()) {
+        const at=n*gaussianRecordFloats, offset=i*gaussianRecordFloats, style=styleAt(n);
+        raw.set(data.subarray(at,at+gaussianRecordFloats),offset);
+        protect[i]=+(!!style || !!world.splatLodProtected?.[n]);
+        if (shaped) raw[offset+11]=style ? styles.get(style)+1 : 0;
+        if (style) {
+          raw[offset+12]=half*Math.SQRT2*Math.max(...style.stretch)*(1+style.softness);
+        }
+      }
       const name = 'chunk-' + String(++id).padStart(5, '0');
       const bounds = { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] };
       const levels = [];
       let prior = 0;
       for (let i = voxelSizes.length - 1; i >= 0; i--) {
-        const level = voxelSizes[i] ? coarsen(raw, voxelSizes[i]) : { data: raw, error: 0 };
+        const level = voxelSizes[i] ? coarsen(raw, voxelSizes[i],protect) : { data: raw, error: 0 };
         const splats = level.data.length / gaussianRecordFloats;
         if (levels[0]?.splats === splats) continue;
         prior = Math.max(prior, level.error);
-        setBounds(bounds, level.data);
+        setBounds(bounds, level.data, shaped);
         levels.unshift({ id: 'lod-' + i, file: name + '-' + i + '.bin', revision: 1, splats,
           error: prior, data: level.data });
       }
-      yield { id: name, layer, bounds, levels };
+      yield { id: name, layer, cell, bounds, levels,...(shaped&&{footprints:true}) };
     }
   }
-  return { schema: gaussianChunkSchema, world: { cam, radius, bg }, chunks };
+  return { schema: gaussianChunkSchema, world: { cam, radius, bg }, chunks,...(footprints.length&&{footprints}) };
 }
 
 export function inspectGaussianChunkManifest(manifest) {
@@ -131,11 +167,18 @@ export function inspectGaussianChunkManifest(manifest) {
   if (schema !== gaussianChunkSchema || !xyz(world?.cam?.target) ||
       ![world.cam.yaw, world.cam.pitch, world.cam.dist, world.radius].every(finite) ||
       world.cam.dist <= 0 || world.radius <= 0 || !xyz(world.bg) || !world.bg.every(n => n >= 0 && n <= 255) ||
-      !Array.isArray(chunks) || chunks.length < 1 || chunks.length > 65536)
+      (manifest.epoch!==undefined && (!Number.isSafeInteger(manifest.epoch) || manifest.epoch<1)) ||
+      !Array.isArray(chunks) || chunks.length > 65536 ||
+      (manifest.footprints!==undefined && (!Array.isArray(manifest.footprints) || manifest.footprints.length>64 ||
+        !manifest.footprints.every(style=>style===null || style && typeof style==='object' && style.depth!=='plane'))))
     throw new TypeError('Invalid Gaussian chunk manifest');
   const ids = new Set(), files = new Set();
   for (const chunk of chunks) {
     if (!validId(chunk?.id) || ids.has(chunk.id) || !validId(chunk.layer) ||
+        (chunk.footprints!==undefined && typeof chunk.footprints!=='boolean') ||
+        (chunk.footprints && !manifest.footprints?.some(Boolean)) ||
+        (chunk.footprintRevision!==undefined && (typeof chunk.footprintRevision!=='string' ||
+          !/^[a-f0-9]{20}$/.test(chunk.footprintRevision))) ||
         !xyz(chunk.bounds?.min) || !xyz(chunk.bounds.max) || chunk.bounds.min.some((n, i) => n > chunk.bounds.max[i]) ||
         !Array.isArray(chunk.levels) || !chunk.levels.length || chunk.levels.length > 16)
       throw new TypeError('Invalid Gaussian chunk bounds, identity, or levels');

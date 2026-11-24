@@ -1035,7 +1035,7 @@ function renderFrame(world, o, preparedPalettes) {
   const spritePlan = spriteLOD && spriteLOD.resolve(world, {
     eye, back:[V[2],V[6],V[10]], ortho, focal:focal/(o.artGridScale||1),
     setback:depthOffset, time:t, mode:o.spriteReconstruction, impostorBlend:o.impostorBlend,
-    atlasTime:shutterRows?.atlasTime
+    atlasTime:shutterRows?.atlasTime, retainGeometry:SplatFit.editedSubjects(world,fitted)
   });
   const spriteAtlases = AtlasSprites.placements(world.spriteAtlases, o.spriteAtlases);
   const reconstructed = spritePlan?.rows.length ? new Map(spritePlan.rows.map(row => [row.placement,row])) : null;

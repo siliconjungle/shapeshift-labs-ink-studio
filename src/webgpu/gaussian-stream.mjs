@@ -1,5 +1,5 @@
 import { captureStreamingCamera } from '../webgl/view.mjs';
-import { gaussianChunkData, gaussianRecordBytes, inspectGaussianChunkManifest } from '../gaussian-chunks.mjs';
+import { gaussianChunkData, gaussianRecordBytes, gaussianRecordFloats, inspectGaussianChunkManifest } from '../gaussian-chunks.mjs';
 import { gaussianChunkBytes } from './gaussian-renderer.mjs';
 
 async function readRecords(response, count) {
@@ -27,32 +27,64 @@ export function createGaussianChunkStream(renderer, toolkit, manifest, {
   url, fetch: fetchFile = globalThis.fetch, budgetBytes, maxSplats, layers,
   projectedError = {}, guardPixels = 12, startsPerFrame, concurrency
 } = {}) {
-  inspectGaussianChunkManifest(manifest);
   const createSceneStream = toolkit?.KIT?.procedural?.chunks?.createSceneStream ?? toolkit?.procedural?.chunks?.createSceneStream;
   if (!createSceneStream || typeof fetchFile !== 'function' || !renderer?.uploadChunk)
     throw new TypeError('Gaussian streaming needs the Ink toolkit, WebGPU renderer, and a fetch callback');
   if (!Number.isSafeInteger(maxSplats) || maxSplats < 1 || maxSplats > renderer.maxSplats)
     throw new RangeError('Gaussian stream splat budget exceeds the renderer limit or is invalid');
-  const base = new URL('.', url), cameraWorld = manifest.world;
+  const base = new URL('.', url);
+  const footprintAPI = toolkit?.KIT?.splatFootprints ?? toolkit?.splatFootprints;
+  let rows, cameraWorld, atlas, atlasKey, orders = new Map(), nextOrder = 0, disposed = false;
   let uploads = { bytes: 0, cpuMs: 0, chunks: 0 }, loads = 0, evictions = 0;
-  const rows = manifest.chunks.map((chunk, order) => ({
-    ...chunk,
-    levels: chunk.levels.filter(level => level.splats <= maxSplats).map(level => ({
-      ...level,
-      bytes: gaussianChunkBytes(level.splats),
-      input: { url: new URL(level.file, base), order }
-    }))
-  })).filter(row => row.levels.length);
+
+  function updateManifest(next) {
+    if (disposed) throw new Error('Gaussian stream is disposed');
+    inspectGaussianChunkManifest(next);
+    const styles = next.footprints ?? [];
+    const key = JSON.stringify(styles);
+    const slots = styles.map(Boolean);
+    const currentOrders = new Map();
+    let orderCursor = nextOrder;
+    const currentRows = next.chunks.map(chunk => {
+      const order = orders.get(chunk.id) ?? orderCursor++;
+      currentOrders.set(chunk.id, order);
+      return {
+        ...chunk,
+        levels: chunk.levels.filter(level => level.splats <= maxSplats).map(level => ({
+          ...level,
+          revision: JSON.stringify([level.revision, level.file, chunk.footprints ? (chunk.footprintRevision ?? key) : null]),
+          bytes: gaussianChunkBytes(level.splats),
+          input: { url: new URL(level.file, base), order, slots: chunk.footprints ? slots : undefined }
+        }))
+      };
+    }).filter(row => row.levels.length);
+    if (key !== atlasKey) {
+      const currentAtlas = slots.some(Boolean) ? renderer.createFootprintAtlas(styles, footprintAPI) : undefined;
+      atlas?.dispose();
+      atlas = currentAtlas;
+      atlasKey = key;
+    }
+    orders = currentOrders;
+    nextOrder = orderCursor;
+    rows = currentRows;
+    cameraWorld = next.world;
+  }
+
   const planner = createSceneStream({
     budgetBytes, maxSplats, projectedError, layers, guardPixels, startsPerFrame, concurrency, maxPortals: 0,
-    maxCandidates: Math.max(1, rows.length),
+    maxCandidates: 65536,
     query: () => rows,
     async load({ input, splats }, { signal }) {
       const response = await fetchFile(input.url, { signal });
       if (!response.ok) throw new Error('Gaussian chunk request failed with HTTP ' + response.status);
       const data = await readRecords(response, splats);
       signal.throwIfAborted();
-      const handle = renderer.uploadChunk(data, { order: input.order });
+      if (input.slots) for (let i = 0; i < data.length; i += gaussianRecordFloats) {
+        const slot = data[i + 11];
+        if (slot !== 0 && (!input.slots[slot - 1] || !Number.isFinite(data[i + 12]) || data[i + 12] <= 0))
+          throw new TypeError('Gaussian chunk references an invalid footprint profile');
+      }
+      const handle = renderer.uploadChunk(data, { order: input.order, ...(input.slots && { footprints: true }) });
       uploads.bytes += handle.bytes;
       uploads.cpuMs += handle.cpuMs;
       uploads.chunks++;
@@ -67,19 +99,34 @@ export function createGaussianChunkStream(renderer, toolkit, manifest, {
     }
   });
 
+  try {
+    updateManifest(manifest);
+  } catch (error) {
+    planner.dispose();
+    throw error;
+  }
+
   function render(target, { selected, ...frame } = {}) {
     const { snapshot, camera } = captureStreamingCamera(cameraWorld, frame, target.width, target.height);
     const scene = planner.advance({ place: 'cloud', camera, selected });
     const entries = scene.views[0].entries;
     const next = renderer.renderChunks(target, cameraWorld, entries.map(row => row.value),
-      { ...frame, cameraSnapshot: snapshot }, uploads);
+      { ...frame, cameraSnapshot: snapshot, ...(atlas && { footprintAtlas: atlas }) }, uploads);
     uploads = { bytes: 0, cpuMs: 0, chunks: 0 };
     const failures = planner.failures();
     const stream = { ...planner.stats(), loads, evictions, ...scene.budget, failures,
+      ...(atlas && { footprintBytes: atlas.bytes }),
       pending: Math.max(0, scene.budget.admitted - scene.budget.ready - failures.length),
       chunks: entries.map(({ chunk, layer, level, fallback, errorPx }) => ({ chunk, layer, level, fallback, errorPx })) };
     return frame.profile ? next.then(draw => ({ ...draw, stream })) : { ...next, stream };
   }
-  return Object.freeze({ render, snapshot: planner.snapshot, stats: planner.stats, retry: planner.retry,
-    ready: planner.ready, dispose: planner.dispose });
+  return Object.freeze({ render, updateManifest, snapshot: planner.snapshot, stats: planner.stats, retry: planner.retry,
+    ready: planner.ready,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      planner.dispose();
+      atlas?.dispose();
+    }
+  });
 }

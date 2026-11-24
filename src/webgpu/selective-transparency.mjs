@@ -152,7 +152,8 @@ export async function createSelectiveDraw(device, format, affineSource, exactSou
   const drawLayout = device.createBindGroupLayout({ entries:[
     {binding:0,visibility:GPUShaderStage.VERTEX|stage,buffer:{type:'uniform'}},
     {binding:1,visibility:GPUShaderStage.VERTEX|stage,buffer:{type:'read-only-storage'}},
-    {binding:2,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage'}}
+    {binding:2,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage'}},
+    {binding:3,visibility:GPUShaderStage.VERTEX|stage,buffer:{type:'read-only-storage'}}
   ] });
   const blend = { srcFactor:'one', dstFactor:'one-minus-src-alpha', operation:'add' };
   function pipeline(label, code, layouts, target, blended = false) {
@@ -211,10 +212,10 @@ export async function createSelectiveDraw(device, format, affineSource, exactSou
     const rasterBindings = device.createBindGroup({layout:inputLayout,entries:entries(resources)});
     const finishBindings = device.createBindGroup({layout:resolveLayout,entries:entries([...resources,view])});
 
-    function draw(encoder, workspace, camera, target, rasterTimes, finishTimes) {
-      if (geometry?.keys !== workspace.keys) {
-        geometry = {keys:workspace.keys,binding:device.createBindGroup({layout:drawLayout,
-          entries:entries([{buffer:camera},{buffer:workspace.ellipses},{buffer:workspace.keys}]) })};
+    function draw(encoder, workspace, camera, atlas, target, rasterTimes, finishTimes) {
+      if (geometry?.keys !== workspace.keys || geometry.atlas !== atlas) {
+        geometry = {keys:workspace.keys,atlas,binding:device.createBindGroup({layout:drawLayout,
+          entries:entries([{buffer:camera},{buffer:workspace.ellipses},{buffer:workspace.keys},{buffer:atlas}]) })};
       }
       encoder.clearBuffer(counts);
       if (reads) encoder.clearBuffer(stats);

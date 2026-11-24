@@ -44,22 +44,26 @@ bool spriteGeometry(int code, vec2 at) {
         limits[0] <= 0 || limits[1] <= limits[0])
       throw new RangeError(projectedRange === undefined ? 'Sprite reconstruction needs increasing positive near and far distances' :
         'Sprite reconstruction needs an increasing positive projected texel range');
-    const result = Object.freeze({ atlas:source, [projectedRange===undefined ? 'range' : 'projectedRange']:Object.freeze(limits.slice()) });
+    const splatFitRevision = atlas?.metadata?.splatFitRevision;
+    if (splatFitRevision !== undefined && !/^[a-f0-9]{64}$/.test(splatFitRevision))
+      throw new TypeError('Invalid sprite atlas splat fit revision');
+    const result = Object.freeze({ atlas:source, ...(splatFitRevision && {splatFitRevision}), [projectedRange===undefined ? 'range' : 'projectedRange']:Object.freeze(limits.slice()) });
     assets.add(result);
     return result;
   }
   const partKey = (object,part) => JSON.stringify([object,part]);
 
-  function bindingsFor(world, configuration) {
+  function bindingsFor(world, configuration, retainGeometry) {
     const plan = bindings.get(configuration);
     if (!plan) throw new TypeError('Use the sprite reconstruction binding API');
-    if (plan.metadata === world.renderMetadata && plan.count === world.count && plan.meshes === world.meshes) return plan;
+    if (plan.metadata === world.renderMetadata && plan.count === world.count && plan.meshes === world.meshes && plan.retainGeometry === retainGeometry) return plan;
     const { objects, objectIds, materials, materialIds, targets, targetIds } = world.renderMetadata ?? {};
-    const legacy = new Map(), parts = new Map();
+    const legacy = new Map(), parts = new Map(), retained = new Set();
     for (const [i,entry] of plan.entries.entries()) {
+      if (retainGeometry?.(entry)) retained.add(i);
       if (entry.part === undefined) legacy.set(entry.object,i);
       else {
-        if (entry.mesh && !world.meshes?.includes(entry.mesh))
+        if (entry.mesh && !retained.has(i) && !world.meshes?.includes(entry.mesh))
           throw new RangeError('Part mesh must be present in world.meshes: '+entry.object+'/'+entry.part);
         parts.set(partKey(entry.object,entry.part),i);
       }
@@ -72,7 +76,7 @@ bool spriteGeometry(int code, vec2 at) {
       const slot=legacy.get(object) ?? (target?.part===undefined ? undefined : parts.get(partKey(object,target.part)));
       if (slot===undefined) continue;
       const entry=plan.entries[slot];
-      if (entry.part!==undefined) {
+      if (entry.part!==undefined && !retained.has(slot)) {
         const isCurve=Boolean(world.curveStations?.[i*curveAPI.stationStride]);
         if (entry.mesh || isCurve!==(entry.representation==='curves') || materials?.[materialIds?.[i]]!==entry.material ||
             target.entity!==undefined && target.entity!==object)
@@ -82,9 +86,9 @@ bool spriteGeometry(int code, vec2 at) {
       counts[slot]++;
     }
     for (const [i,entry] of plan.entries.entries())
-      if (!counts[i] && !entry.mesh)
+      if (!counts[i] && !entry.mesh && !retained.has(i))
         throw new RangeError('Sprite reconstruction cannot find native splats for '+entry.object+(entry.part ? '/'+entry.part : ''));
-    return Object.assign(plan,{metadata:world.renderMetadata,count:world.count,meshes:world.meshes,slots,counts,mask:null,key:''});
+    return Object.assign(plan,{metadata:world.renderMetadata,count:world.count,meshes:world.meshes,retainGeometry,retained,slots,counts,mask:null,key:''});
   }
 
   function placementFor(object,material,part,spec) {
@@ -156,13 +160,13 @@ bool spriteGeometry(int code, vec2 at) {
     return entries.filter(row=>row.part!==undefined).map(({object,part,material})=>({object,part,material}));
   }
 
-  function resolve(world, { eye, back, ortho, focal, time = 0, setback = 0, mode = 'auto', atlasTime, impostorBlend } = {}) {
+  function resolve(world, { eye, back, ortho, focal, time = 0, setback = 0, mode = 'auto', atlasTime, impostorBlend, retainGeometry } = {}) {
     const configuration = world.spriteReconstruction;
     if (!configuration || mode === false || mode === 'geometry') return null;
     if (!['auto', 'sprite'].includes(mode) || !Number.isFinite(time) || !Number.isFinite(setback))
       throw new RangeError('Sprite reconstruction mode must be auto, geometry or sprite');
     atlasAPI.viewBlend(impostorBlend);
-    const plan = bindingsFor(world, configuration),
+    const plan = bindingsFor(world, configuration, retainGeometry),
       rows = [],
       states = [],
       steps = [];
@@ -170,9 +174,10 @@ bool spriteGeometry(int code, vec2 at) {
     let geometryRows = world.count;
     for (const [i, { object, part, material, representation, placement, source, phase }] of plan.entries.entries()) {
       const tags=part===undefined ? {object} : {object,part,material,representation};
-      if (!placement) {
+      const retained=plan.retained.has(i);
+      if (!placement || retained) {
         steps.push(bins);
-        states.push({...tags,geometry:1,sprite:0});
+        states.push({...tags,geometry:1,sprite:0,...(retained&&{reason:'source-edited'})});
         continue;
       }
       const clock = atlasTime?.(placement) ?? time;

@@ -93,7 +93,8 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
   const resolved = timed ? buffer('Gaussian resolved timestamps', timestampBytes, usage.QUERY_RESOLVE | usage.COPY_SRC) : null;
   const uniform = new Float32Array(cameraBytes / wordBytes);
   let scene, work, accumulation, disposed = false, cloudUpload = emptyUpload;
-  const chunks = new Map();
+  const chunks = new Map(), atlases = new Map();
+  const emptyAtlas=buffer('Empty Gaussian footprint atlas',(64*8+4)*4,usage.STORAGE);
 
   const maxStorage = Math.min(limits.maxBufferSize, limits.maxStorageBufferBindingSize);
   const maxSplats = Math.min(4_000_000, Math.floor((maxStorage - gaussianChunkBytes(0)) / splatBytes),
@@ -109,11 +110,36 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     });
   }
 
-  function uploadChunk(data, { order = 0 } = {}) {
+  function createFootprintAtlas(styles,api) {
+    assertOpen();
+    if (!Array.isArray(styles) || styles.length>64 || !api?.prepare || !api.field || api.resolution!==128)
+      throw new TypeError('Gaussian footprint atlas needs 128² profiles from the Ink toolkit');
+    const data=new Float32Array(64*8+Math.max(4,styles.length*128*128));
+    for (const [i,style] of styles.entries()) if (style) {
+      const p=api.prepare(style);
+      if (!p || p.depth==='plane') throw new TypeError('Gaussian streaming needs center-depth footprints');
+      data.set([...p.matrix,p.softness,p.reach,0,0],i*8);
+      data.set(api.field(p),64*8+i*128*128);
+    }
+    const atlas=buffer('Gaussian footprint profiles',data.byteLength,usage.STORAGE|usage.COPY_DST);
+    try {
+      queue.writeBuffer(atlas,0,data);
+      const handle=Object.freeze({bytes:data.byteLength,dispose() {
+        if (atlases.delete(handle)) atlas.destroy();
+      }});
+      atlases.set(handle,atlas);
+      return handle;
+    } catch (error) {
+      atlas.destroy();
+      throw error;
+    }
+  }
+
+  function uploadChunk(data, { order = 0, footprints = false } = {}) {
     assertOpen();
     const count = data?.length / 16;
     if (!(data instanceof Float32Array) || !Number.isInteger(count) || count < 1 ||
-        !Number.isInteger(order) || order < 0 || order > 0xffffffff)
+        !Number.isInteger(order) || order < 0 || order > 0xffffffff || typeof footprints !== 'boolean')
       throw new TypeError('Supply packed Gaussian records and an unsigned chunk order');
     if (count > maxSplats)
       throw new RangeError('Gaussian cloud exceeds this WebGPU device limit of ' + maxSplats + ' splats');
@@ -121,13 +147,13 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     const points = buffer('Gaussian imported chunk', bytes, usage.STORAGE | usage.COPY_DST);
     try {
       const began = performance.now();
-      queue.writeBuffer(points, 0, Uint32Array.of(order, 0, 0, 0));
+      queue.writeBuffer(points, 0, Uint32Array.of(order, Number(footprints), 0, 0));
       queue.writeBuffer(points, gaussianChunkBytes(0), data);
       const cpuMs = performance.now() - began;
       const handle = Object.freeze({ count, order, bytes, cpuMs, dispose() {
         if (chunks.delete(handle)) points.destroy();
       } });
-      chunks.set(handle, { points });
+      chunks.set(handle, { points, footprints });
       return handle;
     } catch (error) {
       points.destroy();
@@ -181,9 +207,7 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
         capacity, bytes, ray, local, draw, dispatch, stages, destroy, keys, ellipses,
         prepare: group(prepare, draw, dispatch),
         sort: group(seed, keys, draw, { buffer: settings, size: 16 }),
-        drawModes,
-        raster: group(drawModes[0], camera, ellipses, keys),
-        floating: drawModes[1] && group(drawModes[1], camera, ellipses, keys)
+        drawModes
       };
       for (const chunk of chunks.values()) chunk.projection = undefined;
       work?.destroy();
@@ -234,11 +258,15 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
   function renderChunks(target, world, handles, frame = {}, upload = emptyUpload) {
     assertOpen();
     if (!Array.isArray(handles)) throw new TypeError('Expected an array of resident Gaussian chunks');
+    const atlas = frame.footprintAtlas===undefined ? emptyAtlas : atlases.get(frame.footprintAtlas);
+    if (!atlas) throw new TypeError('Draw needs a resident footprint atlas from this renderer');
     let input = 0;
     const orders = new Set();
     for (const handle of handles) {
       if (!chunks.has(handle) || orders.has(handle.order))
         throw new TypeError('Draw chunks must be resident on this renderer with unique order IDs');
+      if (chunks.get(handle).footprints && atlas===emptyAtlas)
+        throw new TypeError('Drawing custom footprints needs their atlas');
       orders.add(handle.order);
       input += handle.count;
     }
@@ -295,7 +323,7 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     if (selective) {
       const rasterTimes = frame.profile && query ? {timestampWrites:{querySet:query,beginningOfPassWriteIndex:4}} : {};
       const finishTimes = frame.profile && query ? {timestampWrites:{querySet:query,endOfPassWriteIndex:5}} : {};
-      selective.draw(encoder,workspace,camera,output,rasterTimes,finishTimes);
+      selective.draw(encoder,workspace,camera,atlas,output,rasterTimes,finishTimes);
     } else {
       const floating = setting?.compensated && resolve ? floatTarget(width,height) : null;
       const pass = encoder.beginRenderPass({
@@ -305,6 +333,11 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
           loadOp: 'clear', storeOp: 'store'
         }]
       });
+      if (workspace.atlas!==atlas) {
+        workspace.atlas=atlas;
+        workspace.raster=group(workspace.drawModes[0],camera,workspace.ellipses,workspace.keys,atlas);
+        workspace.floating=workspace.drawModes[1]&&group(workspace.drawModes[1],camera,workspace.ellipses,workspace.keys,atlas);
+      }
       pass.setPipeline(workspace.drawModes[floating ? 1 : 0]);
       pass.setBindGroup(0, floating ? workspace.floating : workspace.raster);
       pass.drawIndirect(draw, 0);
@@ -349,6 +382,8 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     if (disposed) return;
     disposed = true;
     for (const handle of chunks.keys()) handle.dispose();
+    for (const handle of atlases.keys()) handle.dispose();
+    emptyAtlas.destroy();
     work?.destroy();
     accumulation?.texture.destroy();
     selectiveDraw.dispose();
@@ -356,5 +391,5 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     query?.destroy();
     resolved?.destroy();
   }
-  return Object.freeze({ setWorld, render, uploadChunk, renderChunks, dispose, format, maxSplats, timestamps: timed });
+  return Object.freeze({ setWorld, render, uploadChunk, createFootprintAtlas, renderChunks, dispose, format, maxSplats, timestamps: timed });
 }

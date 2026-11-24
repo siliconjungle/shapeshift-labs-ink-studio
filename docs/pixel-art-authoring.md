@@ -2529,6 +2529,15 @@ report the source ID. Undo, redo, and replay use the existing pixel
 editor session. The saved fit renders through `--splat-fit` in the
 software renderer.
 
+### Carry source edits into distance tiers
+
+Use the saved fit with the [Gaussian chunk packer](webgpu-graphs.md#stream-gaussian-chunks)
+to carry pigment and trimmed edges into streamed tiers. For a static
+native splat bake, call `bakeSplatFit(world, fit)` before
+`KIT.procedural.lod.reduceWorld(baked, options)` to preserve edited rows
+and their stable IDs. See [sprite reconstruction](sprite-reconstruction.md)
+for refreshing distance cards with the same edit.
+
 ### Paint relightable scan materials
 
 Edit explicit pigment, roughness, and tangent normals on a registered

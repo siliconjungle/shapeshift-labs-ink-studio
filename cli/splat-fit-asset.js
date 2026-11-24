@@ -1,3 +1,4 @@
+const { createHash } = require('node:crypto');
 const RowAssets = require('./render-row-assets.js');
 const RowAttributes = require('./splat-row-attributes.js');
 const Topology = require('./splat-topology.js');
@@ -84,7 +85,7 @@ function prepare(world, asset) {
   if (!Array.isArray(asset.edits) || asset.edits.length>world.count) throw new TypeError('Splat fit needs splat edits');
   const ids = stable && Provenance.identities(world);
   const owner = stable && Targets.index(world).row;
-  const scales=new Float32Array(world.count).fill(1), seen=new Set();
+  const scales=new Float32Array(world.count).fill(1), seen=new Set(), editedRows=new Uint8Array(world.count);
   function index(source, supports=eligible) {
     const i = stable ? ids.rowOf(source) : source;
     if (!Number.isSafeInteger(i) || i<0 || i>=world.count || seen.has(i) || !supports(world,i) ||
@@ -98,12 +99,13 @@ function prepare(world, asset) {
       throw new RangeError('Invalid splat fit footprint scale');
     const i=index(source);
     scales[i]=scale;
+    if (scale!==1) editedRows[i]=1;
   }
   if (asset.attributes!==undefined) {
     if (!Array.isArray(asset.attributes) || asset.attributes.length>world.count)
       throw new TypeError('Splat fit needs a bounded attribute table');
     const authored=Footprints.validate(world);
-    const footprints=new Map(), editedRows=new Map();
+    const footprints=new Map(), transforms=new Map();
     let pigment, albedo, coverage, materialIds, roughness, emission;
     let surfaceData, surfaces, profiles;
     const stride = SurfaceLook.STRIDE;
@@ -132,6 +134,7 @@ function prepare(world, asset) {
     seen.clear();
     for (const [source, change] of asset.attributes) {
       const i=index(source,paintable);
+      editedRows[i]=1;
       if (!change || Object.getPrototypeOf(change)!==Object.prototype || !Object.keys(change).length ||
           Object.keys(change).some(key=>!['footprint','pigment','coverage','material','roughness','emission',...RowAttributes.keys].includes(key)))
         throw new TypeError('Invalid splat fit attributes');
@@ -144,7 +147,7 @@ function prepare(world, asset) {
           const value=RowAttributes.prepare(name,change[name]);
           if (!RowAttributes.same(value,authored[name])) values[name]=value;
         }
-        if (Object.keys(values).length) editedRows.set(i,values);
+        if (Object.keys(values).length) transforms.set(i,values);
       }
       if (change.footprint!==undefined) {
         const authoredStyle=footprintAt(authored,i);
@@ -212,10 +215,10 @@ function prepare(world, asset) {
       scales.footprintRows=new Uint8Array(world.count);
       for (const i of footprints.keys()) scales.footprintRows[i]=1;
     }
-    if (editedRows.size) {
-      scales.rowAttributes=editedRows;
+    if (transforms.size) {
+      scales.rowAttributes=transforms;
       scales.attributeRows=new Uint8Array(world.count);
-      for (const i of editedRows.keys()) scales.attributeRows[i]=1;
+      for (const i of transforms.keys()) scales.attributeRows[i]=1;
     }
     if (pigment) Object.assign(scales,{pigment,albedo});
     if (coverage) scales.coverage=coverage;
@@ -227,13 +230,19 @@ function prepare(world, asset) {
   }
   if (topology) {
     scales.topology=topology;
+    for (const i of topology.created.keys()) editedRows[i]=1;
     if (topology.retired.size) {
       scales.retiredRows=new Uint8Array(world.count);
       for (const i of topology.retired.keys()) {
         scales[i]=0;
         scales.retiredRows[i]=1;
+        editedRows[i]=1;
       }
     }
+  }
+  if (editedRows.some(Boolean)) {
+    scales.editedRows=editedRows;
+    scales.revision=createHash('sha256').update(JSON.stringify(asset)).digest('hex');
   }
   cache.set(base,scales);
   return scales;
@@ -313,6 +322,69 @@ function renderWorld(world,fit,{footprints=true,applyAttributes=true} = {}) {
   return RowAttributes.apply(rendered,attributesSource,fit.rowAttributes);
 }
 
+// Materialize a static derivative once before reducing or packing its rows.
+function bake(world,asset=world.look?.splatFit) {
+  const fit=prepare(world,asset);
+  if (!fit) return world;
+  if (world.anim || world.rest || world.pixAnchors || world.effectParticles?.length || world.sortRanges?.length)
+    throw new TypeError('Splat LOD baking needs static source rows without external animation or draw ranges');
+  const rendered=renderWorld(world,fit), data=rendered.data.slice(0,rendered.count*16), keep=[];
+  const frames=rendered.splatFootprints?.frames?.slice();
+  for (let i=0;i<rendered.count;i++) {
+    const scale=fit[i], coverage=fit.coverage?.[i]??1, at=i*16;
+    if (!scale || !coverage || !data[at+3]) continue;
+    keep.push(i);
+    if (coverage<1) data[at+3]=Math.min(1,data[at+3])*coverage;
+    if (scale!==1) {
+      for (const c of [4,5,6,8,9,10]) data[at+c]*=scale*scale;
+      if (frames) for (let k=0;k<6;k++) frames[i*6+k]*=scale;
+    }
+    const pigment=fit.pigment?.[i];
+    if (pigment) {
+      const rgb=pigment-1;
+      data[at+7]=(rgb&255)<<16 | rgb&0xff00 | rgb>>>16;
+    }
+  }
+  const {rest, [source]:_, [sourceTopology]:_topology, [rowAttributes]:_attrs,
+    [footprintRows]:_shapes, ...result}=rendered;
+  result.data=data;
+  const {splatFit,...look}=rendered.look??{};
+  result.look=look;
+  const identity=Provenance.identities(sourceWorld(rendered,fit));
+  result.splatIds=Object.freeze(Array.from({length:rendered.count},(_,i)=>identity.idAt(i)??null));
+  if (frames) {
+    const {styles,indices}=rendered.splatFootprints;
+    result.splatFootprints=Footprints.layout(rendered.count,styles,indices,frames);
+  }
+  if (fit.editedRows) result.splatLodProtected=fit.editedRows;
+  delete result.renderSdfs;
+  delete result.referenceSdfs;
+  return keep.length===rendered.count ? result : Provenance.subset(result,keep);
+}
+
+const subjectLookups = new WeakMap();
+function editedSubjects(world,fit) {
+  if (!fit?.editedRows) return;
+  if (subjectLookups.has(fit)) return subjectLookups.get(fit);
+  const before=Targets.index(sourceWorld(world,fit)).row, after=Targets.index(world).row;
+  const objects=new Set(), parts=new Set();
+  const key=(owner,part)=>JSON.stringify([owner,part]);
+  function add({object,entity,part}) {
+    for (const owner of [object,entity]) if (owner!==undefined) {
+      objects.add(owner);
+      parts.add(key(owner,part));
+    }
+  }
+  for (let i=0;i<fit.editedRows.length;i++) if (fit.editedRows[i]) {
+    add(before(i));
+    add(after(i));
+  }
+  const includes = ({object,part,source: sprite}) => sprite?.splatFitRevision !== fit.revision &&
+    (part===undefined ? objects.has(object) : parts.has(key(object,part)));
+  subjectLookups.set(fit,includes);
+  return includes;
+}
+
 function editedFootprint(world,row) {
   return world[footprintRows]?.[row] ? footprintAt(world.splatFootprints,row) : undefined;
 }
@@ -323,4 +395,4 @@ function lifecycle(world,row) {
 }
 
 const editedAttributes = (world,row) => world[rowAttributes]?.get(row);
-module.exports={format,prepare,topologyEditable,sourceWorld,lifecycle,editedAttributes,footprintAt,footprintFor,editedFootprint,eligible,paintable,sceneId,rgb24,unit,pigmentAt,validEmission,roughnessAt,materialProfiles,renderWorld,baseWorld};
+module.exports={format,prepare,bake,editedSubjects,topologyEditable,sourceWorld,lifecycle,editedAttributes,footprintAt,footprintFor,editedFootprint,eligible,paintable,sceneId,rgb24,unit,pigmentAt,validEmission,roughnessAt,materialProfiles,renderWorld,baseWorld};

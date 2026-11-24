@@ -211,7 +211,7 @@ node scripts/pack-gaussian-chunks.mjs scan.ply packs/scan 2 .2,.1,.05,0 6
 
 The arguments after the destination are the spatial cell size, nested
 voxel sizes, fitted world size, and optional up axis. A final voxel size
-of zero keeps the original records. The packer groups samples into
+of zero keeps the finest records. The packer groups samples into
 spatial chunks, matches the moments of each coarser voxel, and records the
 largest source-center displacement per tier. The `manifest.json` records
 bounds, levels, revisions, and chunk filenames. Its little-endian binary
@@ -219,6 +219,22 @@ payloads contain the same 64-byte records as the imported Gaussian world.
 Serve the manifest and its files together over HTTP. Code can use
 `packGaussianChunks(world, { layer: index => 'foliage', ...settings })`
 to assign layer IDs before writing a pack.
+
+Pass an authored splat-fit asset to rebuild a pack with source edits.
+Use the same world size and up axis that you used while editing.
+
+```sh
+node scripts/pack-gaussian-chunks.mjs scan.ply packs/scan 2 .2,.1,.05,0 6 --splat-fit scan-fit.json
+```
+
+The pack carries baked RGB pigment, coverage and footprint trims,
+transforms, and added or retired rows. Edited rows stay intact across
+tiers while surrounding rows remain eligible for voxel merging. The
+streamed renderer supports covariance-based footprints with center depth.
+The WebGPU pack is a baked RGB derivative of the editable scan.
+Repacking the same directory keeps IDs tied to spatial cells, reuses
+unchanged files and revisions, and publishes the new manifest after its
+payloads are available.
 
 After creating a WebGPU renderer and loading Ink's browser toolkit:
 
@@ -245,8 +261,20 @@ draws from the resident buffers, and sorts their visible splats together.
 The byte budget caps chunk buffers and in-flight reservations. The render
 report lists reusable projection and sort workspace separately as
 `workBytes`. The visible splat ceiling applies before GPU culling, so
-the profiled GPU visible count is at or below that ceiling. Call
-`stream.dispose()` before disposing the renderer.
+the profiled GPU visible count is at or below that ceiling. The optional
+footprint atlas is reported separately as `stream.footprintBytes`.
+
+Refresh a running stream with the newly published manifest. The next
+render uses its revisions to reload changed visible chunks while retaining
+the existing handles for unchanged ones.
+
+```js
+const response = await fetch(url, { cache: 'no-cache' });
+if (!response.ok) throw new Error('Could not refresh the Gaussian pack');
+stream.updateManifest(await response.json());
+```
+
+Call `stream.dispose()` before disposing the renderer.
 
 Run the [Glasswater Transect demo](../examples/gaussian-stream/) with:
 

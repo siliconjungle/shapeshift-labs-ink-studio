@@ -111,6 +111,14 @@ labels. Soft pixels follow their usual depth ownership rule.
 The frame report includes the representation, part, material,
 native coverage share, and selected sprite view for each binding.
 
+A headless render using a splat-fit asset keeps an edited object or part
+native while its atlas is stale. The frame report shows
+`reason: 'source-edited'` for that binding. Rebake the affected atlas
+with the same fit and bind the new atlas to re-enable the distance
+handoff. `ink-studio atlas scan.ply --splat-fit scan-fit.json` and
+`spriteAtlas(world, { view: { splatFit } })` record the fit revision in
+the atlas metadata.
+
 The [curve bake](curve-bake.md) exports registered color, coverage, depth, and optional normals for curve parts.
 
 The [Brine lantern scene](../examples/part-representations.js) bakes

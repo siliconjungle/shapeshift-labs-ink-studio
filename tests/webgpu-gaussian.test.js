@@ -55,7 +55,7 @@ test('WebGPU keeps a multi-tile Gaussian order deterministic after offscreen cul
   const response = JSON.parse(event.data);
   assert.equal(response.error, undefined, JSON.stringify(response.error));
   assert.equal(response.result.exceptionDetails, undefined, JSON.stringify(response.result.exceptionDetails));
-  const { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, local, validation } = response.result.result.value;
+  const { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, local, trimmed, validation } = response.result.result.value;
   assert.equal(validation, null);
   assert.equal(first.profile.visible, 692);
   assert.equal(first.profile.sortCapacity, 1024);
@@ -91,6 +91,9 @@ test('WebGPU keeps a multi-tile Gaussian order deterministic after offscreen cul
   assert(local.capped.profile.transparencyReport.pixelBudgetPixels > 100);
   assert(local.capped.profile.transparencyReport.tiles.some(t=>t.pixelBudgetPixels>0));
   assert(local.ray.profile.transparencyReport.sortedPixels > 20);
+  for (const sample of [trimmed.hole, trimmed.selectiveHole]) assert.deepEqual(sample.pixel, [10,20,30,255]);
+  for (const sample of [trimmed.paint, trimmed.selectivePaint])
+    assert(sample.pixel[1] > 205 && sample.pixel[0] < 60, String(sample.pixel));
 });
 
 async function fixture({ createGaussianSplatRenderer, decodeGaussianPly, gaussianSplatWorld }) {
@@ -174,9 +177,30 @@ async function fixture({ createGaussianSplatRenderer, decodeGaussianPly, gaussia
   const over = await capture(cameraTarget,false,45,null,settings);
   layer.destroy();
   const local={center,sorted,opaque,capped,ray,over};
+  const reach = Math.sqrt(4 * Math.log(2));
+  const atlas = renderer.createFootprintAtlas([{}], {
+    resolution: 128,
+    prepare: () => ({ matrix: [1,0,0,1], softness: 0, reach }),
+    field: () => Float32Array.from({ length: 128 * 128 }, (_, i) => {
+      const radius = Math.hypot((i % 128) / 127 * 3 - 1.5, Math.floor(i / 128) / 127 * 3 - 1.5);
+      return Math.max(radius - .92, .35 - radius);
+    })
+  });
+  const painted = renderer.uploadChunk(Float32Array.of(0,0,0,1,1,0,0,0x28e030,1,0,1,1,reach,0,0,0),
+    { footprints: true });
+  const paintFrame = { footprintAtlas: atlas };
+  const selectiveFrame = { ...paintFrame, splatOrder: 'selective', gaussianFilter: { projection: 'ray' } };
+  const trimmed = {
+    hole: await capture(cameraTarget, false, 32, [painted], paintFrame),
+    paint: await capture(cameraTarget, false, 42, [painted], paintFrame),
+    selectiveHole: await capture(cameraTarget, false, 32, [painted], selectiveFrame),
+    selectivePaint: await capture(cameraTarget, false, 42, [painted], selectiveFrame)
+  };
+  painted.dispose();
+  atlas.dispose();
   const error = await device.popErrorScope();
   renderer.dispose();
   readback.destroy();
   image.destroy();
-  return { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, local, validation: error ? error.message : null };
+  return { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, local, trimmed, validation: error ? error.message : null };
 }
