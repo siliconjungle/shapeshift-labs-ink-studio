@@ -19,4 +19,4 @@ jobs:
         with:
           node-version: 22
       - run: npm run docs:check
-      - run: node --test tests/public-reference.test.js tests/graph-catalog.test.js
+      - run: node --test tests/public-reference.test.js tests/graph-catalog.test.js tests/agent-project.test.js

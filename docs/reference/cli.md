@@ -519,6 +519,11 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   project pack <scene|take|experiment|story-pack|story-run.json> --out <bundle.json> [--root directory --revision N]
     [--asset-pack file --paint file --attachments file]
   project inspect <bundle.json>   show the bundle version, entry path and retained files
+  project author inspect <bundle.json>   list the current revision, scene addresses, pixel assets and timeline
+  project author sample <bundle.json> --at seconds [--w pixels --h pixels --pick x,y --out frame.png]
+  project author pixel <bundle.json> <asset> --at x,y [--frame id --layer id]   inspect a native pixel
+  project author preview <bundle.json> <edit.json> [--at seconds --w pixels --h pixels --pick x,y --image frame.png]
+  project author apply <bundle.json> <edit.json> --out <revision.json>   save all edits as one guarded project revision
   assets lock <draft.json> --out catalog.json | assets validate <catalog.json> | assets resolve <catalog.json> <ID> <revision>
   render @namespace/scene@revision --asset-registry catalog.json   render a pinned scene
   project unpack <bundle.json> --out new-directory   extract a portable project
@@ -692,6 +697,11 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio pixel-art trace` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art upgrade` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art validate` · [source](../../cli/pixel-art.js)
+- `ink-studio project author apply` · `--out` · [source](../../cli/agent-project.js)
+- `ink-studio project author inspect` · [source](../../cli/agent-project.js)
+- `ink-studio project author pixel` · `--at`, `--frame`, `--layer` · [source](../../cli/agent-project.js)
+- `ink-studio project author preview` · `--at`, `--w`, `--h`, `--pick`, `--image` · [source](../../cli/agent-project.js)
+- `ink-studio project author sample` · `--at`, `--w`, `--h`, `--pick`, `--out` · [source](../../cli/agent-project.js)
 - `ink-studio scene apply` · [source](../../cli/world.js)
 - `ink-studio scene capture` · [source](../../cli/world.js)
 - `ink-studio scene history` · [source](../../cli/world.js)

@@ -1672,6 +1672,7 @@ const CMD = {
         '  project pack <scene|take|experiment|story-pack|story-run.json> --out <bundle.json> [--root directory --revision N]',
         '    [--asset-pack file --paint file --attachments file]',
         '  project inspect <bundle.json>   show the bundle version, entry path and retained files',
+        ...require('./agent-project.js').usages.map(line => '  ' + line),
         '  assets lock <draft.json> --out catalog.json | assets validate <catalog.json> | assets resolve <catalog.json> <ID> <revision>',
         '  render @namespace/scene@revision --asset-registry catalog.json   render a pinned scene',
         '  project unpack <bundle.json> --out new-directory   extract a portable project',
@@ -3448,9 +3449,9 @@ const CMD = {
     const host = await require('./graph-host-command.js').adapters(opt.adapters, {
       kit, operations: cfg.graphOperations, adapters: cfg.graphAdapters
     });
-    return require('./project-bundle.js').withTakeSource(pos[0], source => {
+    return require('./agent-project.js').withExportSource(pos[0], (source, bundledAudio) => {
       const native = require('./scene-export-world.js').readExportWorld(source, kit);
-      const soundtrack = opt.audio ?? native?.audio;
+      const soundtrack = opt.audio ?? native?.audio ?? bundledAudio;
       if (opt.mux !== undefined && soundtrack === undefined) die('A review mux needs a take soundtrack or --audio');
       const audio = soundtrack === undefined ? undefined : require('./scene-audio.js').readSceneAudio(soundtrack, { ...host, jointPriority:jointPriorityOption() });
       const video = opt.mux === undefined ? undefined : require('./graph-host.js').createGraphHost(host.adapters, { kit });
@@ -3503,8 +3504,9 @@ const CMD = {
   },
   async project() {
     const [mode, input] = pos, api = require('./project-bundle.js');
+    if (mode === 'author') return require('./agent-project.js').command(pos.slice(1), opt);
     if (pos.length !== 2 || !['pack', 'inspect', 'unpack', 'verify'].includes(mode))
-      die('Use project pack, inspect, unpack or verify with a JSON document');
+      die('Use project pack, inspect, unpack, verify or author with a JSON document');
     if (mode === 'unpack') {
       const { entry } = api.unpackProject(input, { out: opt.out });
       console.log('unpacked', entry);
