@@ -232,7 +232,11 @@
   };
   K.particles = (st, pool, o) => {
     o = o || {};
-    const { renderTransforms } = o;
+    const { renderTransforms, impacts } = o;
+    if (impacts !== undefined && (typeof impacts?.track?.add !== 'function' || impacts.source !== undefined &&
+        (typeof impacts.source !== 'string' || impacts.source.length > 128)))
+      throw new TypeError('Particle impacts need a material-response track and optional source ID');
+    const sweepImpact = impacts && K.particleImpacts.sweep(impacts.receivers);
     if (renderTransforms !== undefined && typeof renderTransforms !== 'function')
       throw new TypeError('Particle renderTransforms needs a pose callback');
     const n = pool.n,
@@ -249,7 +253,8 @@
           i = pool.first + next;
         next = (next + 1) % n;
         q.i = i;
-        if (renderTransforms) q.id = 'particle-' + pool.first + '-' + generation++;
+        if (renderTransforms || sweepImpact) q.id = 'particle-' + pool.first + '-' + generation++;
+        q.materialImpact = Boolean(sweepImpact && e.materialImpact !== false);
         q.p = e.p.slice();
         q.v = (e.v || [0, 0, 0]).slice();
         q.life = q.max = e.life || 1;
@@ -274,27 +279,46 @@
         for (let k = 0; k < n; k++) {
           const q = P[k];
           if (q.life <= 0) continue;
+          const flight = q.materialImpact && !q.fixed;
+          const remaining = q.life, step = flight ? Math.min(dt, remaining) : dt;
           q.life -= dt;
-          if (q.life <= 0) {
+          if (q.life <= 0 && !flight) {
             pool.hide(st, q.i);
             continue;
           }
           live++;
           const u = 1 - q.life / q.max;
           if (!q.fixed) {
-            q.v[1] -= q.grav * dt;
+            q.v[1] -= q.grav * step;
             if (q.ride && ps.flow) {
               ps.flow(q.p[0], q.p[1], q.p[2], t, fl);
-              const kk = Math.min(1, q.ride * dt * 6);
+              const kk = Math.min(1, q.ride * step * 6);
               q.v[0] += (fl[0] - q.v[0]) * kk;
               q.v[1] += (fl[1] - q.v[1]) * kk;
               q.v[2] += (fl[2] - q.v[2]) * kk;
             }
             if (q.drag) {
-              const d = Math.max(0, 1 - q.drag * dt);
+              const d = Math.max(0, 1 - q.drag * step);
               q.v[0] *= d;
               q.v[1] *= d;
               q.v[2] *= d;
+            }
+            if (flight) {
+              const hit = sweepImpact(q.p, V.mad(q.p, q.v, step), q.size);
+              if (hit && step * hit.fraction < remaining) {
+                const particle = impacts.source ? impacts.source + '/' + q.id : q.id;
+                const time = Math.max(0, t - dt + step * hit.fraction);
+                impacts.track.add([K.particleImpacts.contact(hit, { particle, time, velocity: q.v, source: impacts.source })]);
+                q.life = 0;
+                live--;
+                pool.hide(st, q.i);
+                continue;
+              }
+            }
+            if (q.life <= 0) {
+              live--;
+              pool.hide(st, q.i);
+              continue;
             }
             q.p[0] += q.v[0] * dt;
             q.p[1] += q.v[1] * dt;

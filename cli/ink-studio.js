@@ -1208,6 +1208,7 @@ const CMD = {
         '  effect-recipe open <id|file.json> [--out example.json]  copy an editable recipe',
         '  effect-recipe render <id|file.json> [--inputs edits.json] [--sample index] --out frame.png  export a recipe frame',
         '  effect-recipe check [id|file.json] [--chrome executable] [--out report.json]  compare WebGL preview with PNG export',
+        '  effect impacts <scene> [--t seconds] [--out report.json]   read particle impacts and receiver materials',
         '  effect transfers <scene> [--t seconds] [--out report.json]   read material pickup and deposit events',
         '  effect inspect <scene> --at x,y [--t seconds] [--out report.json]   trace a rendered pixel to its material response and contact',
         '  palette fit <fit.json> [--format png|data] [--tile]   fit two approved swatches and preview at native size',
@@ -2426,16 +2427,18 @@ const CMD = {
     return require('./effect-recipes.js').command(pos,opt);
   },
   effect() {
-    if (pos[0] === 'transfers') {
+    const action = pos[0];
+    if (action === 'transfers' || action === 'impacts') {
       if (pos.length !== 2 || Object.entries(opt).some(([key,value]) => !['t','out'].includes(key) || typeof value !== 'string'))
-        die('Use effect transfers <scene> [--t seconds] [--out report.json]');
+        die('Use effect ' + action + ' <scene> [--t seconds] [--out report.json]');
       const world = buildPreview(pos[1]);
       const track = world.materialResponse;
-      if (!track) die('Effect transfers needs a scene with a material response track');
+      if (!track) die('Effect ' + action + ' needs a scene with a material response track');
       const time = num('t', 1e6);
-      const report = { format:'ink-studio/material-transfers', version:1, time, events:track.transfers(time) };
+      const kind = action === 'impacts' ? 'particle-impacts' : 'material-transfers';
+      const report = { format:'ink-studio/' + kind, version:1, time, events:track[action](time) };
       if (!opt.out) return process.stdout.write(JSON.stringify(report,null,2)+'\n');
-      const file = outputFile('material-transfers.json');
+      const file = outputFile(kind + '.json');
       if (file === path.resolve(pos[1])) die('Choose a report path separate from the scene');
       require('./asset-files.js').json(file,report);
       return;

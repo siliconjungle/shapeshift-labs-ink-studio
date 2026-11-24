@@ -341,6 +341,7 @@ All checked-in guides, indexed by title and section headings.
 - [Halftone and layered screen printing](../screen-print.md)
 - [SDF-assisted rendering](../sdf-assist.md)
 - [Offline path-traced SDF reference](../sdf-reference.md)
+- [Material-aware secondary emission](../secondary-emission.md)
 - [Sector-based rooms](../sector-raycaster.md)
 - [Seeded sound recipes](../seeded-sound-recipes.md)
 - [Semantic texture mipmaps](../semantic-texture-mipmaps.md)

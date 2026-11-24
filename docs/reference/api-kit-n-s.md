@@ -124,11 +124,20 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.parameters` | namespace |  |  |
 | `KIT.parameters.prepare` | function | `(definition)` | [guide](../parameter-bindings.md#simulation-worlds-and-reusable-programs), [source](../../src/kit/p23-parameter-bindings.js) |
 
+## KIT.particleImpacts
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.particleImpacts` | namespace |  |  |
+| `KIT.particleImpacts.compile` | function | `(spec)` | [guide](../secondary-emission.md#author-portable-particle-flights), [source](../../src/kit/pan-particle-impacts.js) |
+| `KIT.particleImpacts.contact` | function | `(hit, { particle, velocity, time, source })` | [source](../../src/kit/pan-particle-impacts.js) |
+| `KIT.particleImpacts.sweep` | function | `(value)` | [source](../../src/kit/pan-particle-impacts.js) |
+
 ## KIT.particles
 
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
-| `KIT.particles` | function | `(st, pool, o)` | [guide](../../README.md#particles-and-interaction), [guide](../../README.md#frame-local-splat-effects), [guide](../headless-authoring.md#hold-or-duplicate-instance-transforms), [guide](../materialisation.md), [source](../../src/kit/k7-particles.js) |
+| `KIT.particles` | function | `(st, pool, o)` | [guide](../../README.md#particles-and-interaction), [guide](../../README.md#frame-local-splat-effects), [guide](../headless-authoring.md#hold-or-duplicate-instance-transforms), [guide](../materialisation.md), [guide](../secondary-emission.md#connect-live-splat-particles), [source](../../src/kit/k7-particles.js) |
 
 ## KIT.passQuality
 

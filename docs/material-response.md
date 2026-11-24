@@ -122,6 +122,12 @@ npm exec --yes --package=esbuild@0.25.12 -- esbuild examples/effect-recipes/prev
 node examples/material-transfer/build-demo.cjs ink-renderer.mjs after-the-rain.html
 ```
 
+## Respond to particle collisions
+
+[Material-aware secondary emission](secondary-emission.md) feeds the same track
+from authored particle flights or the live splat particle system. The hit
+routes a ripple, burst, mark, or cue using the receiving material.
+
 ## Read live contacts
 
 Create and bind a track to an existing world, or use the track installed

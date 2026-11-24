@@ -4,6 +4,7 @@
   const format = 'ink-studio/material-response';
   const surfacePrefix = 'material-response-surface/';
   const particlePass = 'material-response-particles';
+  const flightPass = 'material-response-flight';
   const kinds = ['step', 'roll', 'impact'];
   const limits = { contacts: 2048, materials: 8, particles: 512 };
   const record = value => value != null && Object.getPrototypeOf(value) === Object.prototype;
@@ -73,7 +74,7 @@
     return { cue, gain, rollInterval };
   }
 
-  function create(recipe, { contacts = [] } = {}) {
+  function create(recipe, { contacts = [], particleImpacts } = {}) {
     fields(recipe, ['format', 'version', 'materials', 'speedReference', 'loadReference', 'pixelSize'], 'recipe');
     const { materials, speedReference = 2, loadReference = 10, pixelSize = 1 } = recipe;
     check(recipe.format === format && recipe.version === 1 && record(materials) &&
@@ -112,6 +113,8 @@
     for (const [material, rule] of rules) if (rule.transfer)
       check(rule.transfer.from !== material && rules.get(rule.transfer.from)?.pickup,
         'transfer on ' + material + ' needs a different source material with pickup');
+    const flight = particleImpacts === undefined ? null : K.particleImpacts.compile(particleImpacts);
+    const generated = flight?.contacts() ?? [], generatedIds = new Set(generated.map(hit => hit.id));
     const rows = new Map();
     let revision = 0, ordered, cues, mixed, transferState, bound;
 
@@ -121,12 +124,14 @@
       for (const row of records) {
         check(record(row), 'expected a material contact record');
         const { id: key, interaction, material, point, speed, load = loadReference, normal = [0, 1, 0],
-          heading = [1, 0, 0], entity, wheel, source, carrier, time: at = time } = row;
+          heading = [1, 0, 0], entity, wheel, source, carrier, particle, receiver, time: at = time } = row;
         check(typeof key === 'string' && key.length > 0 && key.length <= 256 && kinds.includes(interaction) &&
           (material == null || typeof material === 'string') && tuple(point, 3) &&
           tuple(normal, 3) && V.len(normal) > 1e-8 && tuple(heading, 3) &&
           finite(at, 0, 1e6) && finite(speed, 0, 1e8) && finite(load, 0, 1e12) &&
           [entity, wheel, source].every(value => value == null || typeof value === 'string' && value.length <= 256) &&
+          (particle === undefined && receiver === undefined || interaction === 'impact' &&
+            typeof particle === 'string' && particle.length > 0 && particle.length <= 256 && id(receiver)) &&
           (carrier === undefined || typeof carrier === 'string' && carrier.length > 0 && carrier.length <= 256),
           'expected an ID, step/roll/impact, world position, speed and timestamp');
         if (rows.has(key) || pending.has(key)) continue;
@@ -135,7 +140,7 @@
         const n = V.norm(normal), h = V.norm(V.mad(heading, n, -V.dot(heading, n)), V.perp(n));
         const hit = { id: key, interaction, material, point: point.slice(), normal: n, heading: h,
           time: at, speed, load, ...(entity != null && { entity }), ...(wheel != null && { wheel }), ...(source != null && { source }),
-          ...(carrier !== undefined && { carrier }),
+          ...(carrier !== undefined && { carrier }), ...(particle !== undefined && { particle, receiver }),
           ...(Number.isSafeInteger(row.tick) && { tick: row.tick }),
           ...(Number.isSafeInteger(row.appliedTick) && { appliedTick: row.appliedTick }) };
         pending.set(key, { hit, rule, strength });
@@ -160,9 +165,16 @@
       }
       return pending.size;
     }
-    add(contacts);
+    check(Array.isArray(contacts) && contacts.every(hit => !generatedIds.has(hit?.id)),
+      'authored contacts must use IDs distinct from computed particle impacts');
+    add([...contacts, ...generated]);
     const contactsByTime = () => ordered ??= [...rows.values()].sort((a, b) => a.hit.time - b.hit.time ||
       (a.hit.id < b.hit.id ? -1 : a.hit.id > b.hit.id ? 1 : 0));
+    function impacts(time = 1e6) {
+      check(finite(time, 0, 1e6), 'invalid particle impact sample time');
+      return contactsByTime().filter(({hit}) => hit.particle !== undefined && hit.time <= time)
+        .map(({hit}) => structuredClone(hit));
+    }
     function compileTransfers() {
       if (transferState) return transferState;
       const byRule = new Map(receivers.map(rule => [rule, []]));
@@ -309,9 +321,9 @@
       }
       return output;
     }
-    function projectParticles(time, camera, w, h, draw) {
+    function projectParticles(particles, camera, w, h, draw) {
       const project = DrawingPrimitives.projector(camera, w, h);
-      for (const dot of particlesAt(time)) {
+      for (const dot of particles) {
         const view = project.toView(dot.point);
         if (!project.visible(view)) continue;
         const [x, y] = project.point(view);
@@ -320,9 +332,9 @@
         draw(dot, cx, cy, radius, view[2]);
       }
     }
-    function particleRaster({ w, h, time, camera }) {
+    function particleRaster({ w, h, time, camera }, particles = particlesAt(time)) {
       const rgba = new Uint8Array(w * h * 4), depth = new Float32Array(w * h).fill(Infinity);
-      projectParticles(time, camera, w, h, (dot, cx, cy, radius, z) => {
+      projectParticles(particles, camera, w, h, (dot, cx, cy, radius, z) => {
         for (let iy = Math.max(0, Math.ceil(cy - radius - .5)); iy <= Math.min(h - 1, Math.floor(cy + radius - .5)); iy++)
           for (let ix = Math.max(0, Math.ceil(cx - radius - .5)); ix <= Math.min(w - 1, Math.floor(cx + radius - .5)); ix++) {
             const p = iy * w + ix;
@@ -336,7 +348,7 @@
     }
     function inspectParticle(time, camera, w, h, x, y) {
       let nearest, depth = Infinity;
-      projectParticles(time, camera, w, h, (dot, cx, cy, radius, z) => {
+      projectParticles(particlesAt(time), camera, w, h, (dot, cx, cy, radius, z) => {
         if (z >= depth || (x + .5 - cx) ** 2 + (y + .5 - cy) ** 2 > radius ** 2) return;
         nearest = dot;
         depth = Math.fround(z);
@@ -365,6 +377,11 @@
           layer: { resolution: rule.resolution, filter: 'nearest', source: ({ time }) => raster(rule, time) } });
         input = id;
       }
+      if (flight) {
+        passes.push({ id: flightPass, input, type: 'composite', layer: { resolution: pixelSize, filter: 'nearest',
+          needsCamera: true, depthTest: { mode: 'occlude', bias: .015 }, source: ctx => particleRaster(ctx, flight.frame(ctx.time)) } });
+        input = flightPass;
+      }
       if ([...rules.values()].some(rule => rule.particles)) {
         const id = particlePass;
         passes.push({ id, input, type: 'composite', layer: { resolution: pixelSize, filter: 'nearest', needsCamera: true,
@@ -380,13 +397,15 @@
       world.materialResponse = api;
       return world;
     }
-    const api = Object.freeze({ add, bind, audioTimeline, effectPass, transfers,
+    const api = Object.freeze({ add, bind, audioTimeline, effectPass, transfers, impacts,
       createPlayback: (context, resolve) => playback(sounds, context, resolve),
-      snapshot: () => ({ recipe: structuredClone(authored), contacts: contactsByTime().map(row => structuredClone(row.hit)) }),
+      snapshot: () => ({ recipe: structuredClone(authored),
+        contacts: contactsByTime().filter(({hit}) => !generatedIds.has(hit.id)).map(({hit}) => structuredClone(hit)),
+        ...(flight && { particleImpacts: flight.snapshot() }) }),
       sounds: () => sounds().map(row => ({ ...row })),
       get revision() { return revision; },
       get duration() {
-        let end = 0;
+        let end = flight?.duration ?? 0;
         for (const { hit, rule } of rows.values()) if (rule) end = Math.max(end, hit.time +
           Math.max(rule.mark?.duration ?? 0, rule.ripple?.duration ?? 0, rule.particles?.duration ?? 0, rule.sound ? .001 : 0));
         if (receivers.length) for (const deposit of compileTransfers().deposits.values())

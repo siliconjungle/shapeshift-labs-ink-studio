@@ -582,8 +582,8 @@
     }
     if (st.finish.materialResponse !== undefined) {
       try {
-        const { recipe, contacts } = st.finish.materialResponse;
-        K.materialResponse.create(recipe, { contacts }).bind({ look: st.finish.look });
+        const { recipe, contacts, particleImpacts } = st.finish.materialResponse;
+        K.materialResponse.create(recipe, { contacts, particleImpacts }).bind({ look: st.finish.look });
       } catch (error) {
         bad('finish.materialResponse', error.message);
       }

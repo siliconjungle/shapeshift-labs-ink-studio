@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiln Runoff · Ink Studio</title>
+<style>
+  :root{color-scheme:dark;font:15px/1.45 system-ui,sans-serif;background:#151923;color:#f2eada;--muted:#b7b5c1;--line:#414552;--teal:#9ddbd0;--gold:#ffca85}
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  body{margin:0}
+  main{max-width:1120px;margin:auto;padding:37px 30px 39px}
+  header{display:flex;align-items:end;justify-content:space-between;gap:20px;margin-bottom:24px}
+  h1{margin:0;font:400 clamp(44px,8vw,91px)/.87 Georgia,serif;letter-spacing:-.067em}
+  h2{margin:0 0 5px;font:400 27px/1.06 Georgia,serif;letter-spacing:-.025em}
+  p{margin:0}
+  .label{font:600 11px/1.35 ui-monospace,monospace;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
+  .product{color:var(--gold);margin-bottom:8px}
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 245px;gap:15px;align-items:start}
+  .stage{border:1px solid #535568;overflow:hidden;background:#15212c}
+  .stage canvas,.stage img{display:block;width:100%;height:auto;aspect-ratio:336/172;image-rendering:pixelated}
+  .caption{display:flex;justify-content:space-between;gap:8px;margin:8px 0 13px}
+  .row{display:grid;grid-template-columns:72px minmax(0,1fr) 65px;align-items:center;gap:12px;border-bottom:1px solid var(--line);padding-bottom:14px}
+  button,a.button{border:1px solid #515563;background:#282b36;color:#efe7d8;border-radius:3px;padding:7px 9px;font:600 13px system-ui,sans-serif;cursor:pointer;text-decoration:none}
+  button:hover,a.button:hover,button:focus-visible,a.button:focus-visible,input:focus-visible{outline:1px solid var(--gold)}
+  button:disabled{opacity:.5;cursor:default}
+  button[aria-pressed=true]{border-color:var(--gold);color:var(--gold)}
+  input{width:100%;accent-color:var(--gold);margin:0}
+  output{font-variant-numeric:tabular-nums;text-align:right;color:#f3c88f}
+  aside{display:grid;gap:9px}
+  section{border:1px solid var(--line);padding:13px 14px;background:#20242f}
+  .water{border-left:3px solid #79cac0}
+  .stone{border-left:3px solid #eca969}
+  .water h2{color:var(--teal)}
+  .stone h2{color:var(--gold)}
+  .receipt{min-height:38px;color:var(--muted);font-size:12px;margin-top:7px}
+  .actions{display:grid;gap:6px}
+  .actions button,.actions a{text-align:left}
+  .moments{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
+  #message{color:#ffba9c;margin-top:12px}
+  #message:empty{display:none}
+  @media(max-width:730px){main{padding:24px 16px}.layout{grid-template-columns:1fr}aside{grid-template-columns:1fr 1fr}.actions{grid-column:span 2}header{align-items:start;flex-direction:column;gap:11px}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><div class="product label">Ink Studio / Material-aware secondary emission</div><h1>Kiln Runoff</h1></div>
+    <div class="label">Matching drops · Two receivers</div>
+  </header>
+  <div class="layout">
+    <div>
+      <div class="stage">
+        <canvas width="336" height="172" aria-label="Particles hit water and stone and leave secondary effects"></canvas>
+        <img hidden id="still" alt="Water ripple and stone sparks from the two impacts" src="data:image/png;base64,@REFERENCE@">
+      </div>
+      <div class="caption label"><span id="backend">WebGL2 preview</span><span>336 × 172 native pixels</span></div>
+      <div class="row">
+        <button id="play" type="button">Play</button>
+        <input id="time" type="range" min="0" max="4.6" step=".01" value=".99" aria-label="Particle sequence time">
+        <output id="clock" for="time">0.99 s</output>
+      </div>
+      <div class="moments" aria-label="Choose a moment">
+        <button type="button" data-time=".54">In flight</button>
+        <button type="button" data-time=".99">After impact</button>
+        <button type="button" data-time="4.60">Settled</button>
+      </div>
+    </div>
+    <aside aria-label="Receiver effects">
+      <section class="water">
+        <div class="label">Basin / Water</div>
+        <h2>Ripple</h2>
+        <p class="receipt" id="water"></p>
+      </section>
+      <section class="stone">
+        <div class="label">Paving / Stone</div>
+        <h2>Sparks</h2>
+        <p class="receipt" id="stone"></p>
+      </section>
+      <section class="actions">
+        <button id="save" type="button">Download scene JSON</button>
+        <a class="button" id="reference" download="kiln-runoff-headless.png">Download headless PNG</a>
+      </section>
+    </aside>
+  </div>
+  <p id="message" role="status">Loading scene…</p>
+</main>
+<script>
+async function unpack(value){
+  const bytes=Uint8Array.from(atob(value),character=>character.charCodeAt(0));
+  return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+}
+async function boot(){
+  const [toolkitCode,rendererCode,sceneCode]=await Promise.all(['@TOOLKIT@','@RENDERER@','@SCENE@'].map(unpack));
+  const toolkit=Function(toolkitCode)(), spec=JSON.parse(sceneCode);
+  const url=URL.createObjectURL(new Blob([rendererCode],{type:'text/javascript'}));
+  let createRenderer;
+  try { ({createRenderer}=await import(url)); }
+  finally { URL.revokeObjectURL(url); }
+  /* DEMO */
+}
+boot().catch(error=>{document.getElementById('message').textContent=error.message;});
+</script>
+</body>
+</html>

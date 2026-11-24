@@ -145,7 +145,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.materialResponse` | namespace |  |  |
-| `KIT.materialResponse.create` | function | `(recipe, { contacts = [] } = {})` | [guide](../material-response.md), [source](../../src/kit/pan-material-response.js) |
+| `KIT.materialResponse.create` | function | `(recipe, { contacts = [], particleImpacts } = {})` | [guide](../material-response.md), [guide](../secondary-emission.md#connect-live-splat-particles), [source](../../src/kit/pan-material-response.js) |
 
 ## KIT.materialisation
 
