@@ -66,8 +66,10 @@ function bind(world, data, settings,allow,sourceBinding,coverage,overrideRows) {
         const target = {object:owner.renderOwner,entity:owner.renderOwner,material:owner.mat.materialId,
           surface:owner.mat.surfaceId ?? owner.mat.surface?.id,
           ...(owner.tag && {tags:[owner.tag]}),...owner.renderTarget,...labels.row(i)};
+        const base = owner.sdfPaintBase?.get(i);
+        if (base?.material!==undefined) target.material=base.material;
         const reach = 3*Math.sqrt(Math.max(0,data[q+4]+data[q+8]+data[q+10]));
-        const row = {i,part,target,reach,point:Array.from(data.subarray(q,q+3)),
+        const row = {i,part,target,reach,baseColor:base?.color,point:Array.from(data.subarray(q,q+3)),
           normal:normals && (motion ? motion.normal(...normals.subarray(i*3,i*3+3)) : normals.subarray(i*3,i*3+3))};
         part.records.push(row);
         part.points.push(row.point);
@@ -78,7 +80,7 @@ function bind(world, data, settings,allow,sourceBinding,coverage,overrideRows) {
       }
       if (part.records.length) parts.set(owner,part);
     }
-    if (selected) sources.push({...geometry,parts,motion,sourceIndex,ownerIndices});
+    if (selected) sources.push({...geometry,parts,motion,sourceIndex,ownerIndices,paintKeys:sourceBinding&&new Map()});
   }
   for (const [sourceIndex,original] of (world.renderSdfs ?? []).entries()) {
     if (!(original.rows instanceof Map) || typeof original.distance !== 'function' || typeof original.locate !== 'function') continue;
@@ -130,16 +132,21 @@ function trace(source, ray, near, far, settings, clip, visible, x, y, sourceBind
       }
       if (row && (row.i<0 || !visible || visible(row.i,x,y)) && settings.allows(row.target,point)) {
         const rest = source.motion?.rest(...point) ?? point;
-        const state = fieldOwner?.mat.surfaceState;
-        const localNormal = (state?.hasOpacity || state?.hasNormal || state?.hasInkControls) && (source.motion?.restNormal(...normal) ?? normal);
+        const state = fieldOwner?.mat.surfaceState, program = fieldOwner?.mat.sdfPaint;
+        const localNormal = (program || state?.hasOpacity || state?.hasNormal || state?.hasInkControls) &&
+          (source.motion?.restNormal(...normal) ?? normal);
         const length = localNormal && Math.hypot(...localNormal);
-        const paint = length && state.locate(rest,localNormal.map(n=>n/length));
+        const normalAtRest = length && localNormal.map(n=>n/length);
+        const paint = normalAtRest && state?.locate(rest,normalAtRest);
+        const materialPaint = normalAtRest && program?.locate(rest,normalAtRest);
         const opacity = paint?.values?.opacity;
         if (opacity && opacity.value < 1 && opacity.coverage > 0) return null;
         const shadingNormal = paint?.paintedNormal && (source.motion?.normal(...paint.paintedNormal) ?? paint.paintedNormal);
+        const materialId = (program || row.baseColor!==undefined) && (materialPaint?.material ?? row.target.material);
         return {z:along*axial,position:point,normal,row,objectPosition:rest,...(shadingNormal&&{shadingNormal}),
+          ...(materialId && {materialId}),...(materialPaint?.tint && {materialTint:materialPaint.tint}),
           ...(state?.hasInkControls && {inkControls:paint?.inkControls ?? neutralInk}),
-          ...(sourceBinding && { source:{ ...sdfSource(source,fieldOwner,row,rest),...(captureRestNormal && {restNormal:source.motion?.restNormal(...normal) ?? normal}) } })};
+          ...(sourceBinding && { source:{ ...sdfSource(source,fieldOwner,row,rest,materialPaint),...(captureRestNormal && {restNormal:source.motion?.restNormal(...normal) ?? normal}) } })};
       }
     }
     along+=6*epsilon/Math.max(.12,normal ? Math.abs(dot(normal,direction)) : 1);
@@ -153,11 +160,21 @@ function fieldAddress(source,owner,object) {
   return index === undefined ? null : [source.sourceIndex,index];
 }
 
-function sdfSource(source,owner,row,rest) {
+function sdfSource(source,owner,row,rest,paint) {
   const target = owner ? ownerLabel(owner) : row.target;
   const field = fieldAddress(source,owner,target.object);
-  return { key:owner ?? row.part,identity:{ kind:'sdf',object:target.object,entity:target.entity,part:target.part,field },
-    coordinate:owner?.sourceLocal?.(rest) ?? rest };
+  const identity = { kind:'sdf',object:target.object,entity:target.entity,part:target.part,field };
+  let key = owner ?? row.part;
+  if (paint) {
+    const masks = Object.fromEntries(Object.entries(paint.masks ?? {}).filter(([,value])=>value!==null));
+    if (paint.material || Object.keys(masks).length) {
+      identity.paint = { ...(paint.material && {material:paint.material}),masks };
+      const index = JSON.stringify([field,identity.paint]);
+      if (!source.paintKeys.has(index)) source.paintKeys.set(index,{});
+      key = source.paintKeys.get(index);
+    }
+  }
+  return { key,identity,coordinate:owner?.sourceLocal?.(rest) ?? rest };
 }
 
 function editableSource(field) {

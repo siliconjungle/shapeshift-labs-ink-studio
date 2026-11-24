@@ -173,29 +173,45 @@ function makeSculpt(B, rest) {
       pos.length = start;
     }
   };
-  S.materialAt = (material, point, normal) => {
-    if (!material) return material;
+  function baseMaterialAt(material, point, normal) {
     const selected = material.materialAt?.(...point, ...normal) ?? material;
     const state = selected.surfaceState, hit = state?.locate(point, normal);
     return hit ? state.apply(selected, hit, point, normal) : selected;
+  }
+  S.materialAt = (material, point, normal) => {
+    if (!material) return material;
+    const base = baseMaterialAt(material,point,normal), paint = material.sdfPaint?.locate(point,normal);
+    if (!paint) return base;
+    const { material:role,masks,tint } = paint, model = base.model ?? {};
+    const changed = { ...model.masks };
+    for (const [name,value] of Object.entries(masks ?? {})) if (value!==null) changed[name]=value;
+    const rgb = model.color ?? [1,1,1];
+    return { ...base,...(role && { materialId:role }),model:{
+      ...model,...(tint && { color:tint(rgb) }),...(Object.keys(changed).length && { masks:changed }) } };
   };
   S.mapSurfaceState = (material, inverse, pullNormal, pushNormal) => {
-    const state = material?.surfaceState;
-    return state ? { ...material, surfaceState: { ...state, locate(point, normal) {
+    const state = material?.surfaceState, paint = material?.sdfPaint;
+    if (!state && !paint) return material;
+    return { ...material,...(paint && { sdfPaint:{ locate(point,normal,epsilon) {
+      const rest = inverse(point);
+      return paint.locate(rest,pullNormal ? pullNormal(normal,rest,point) : normal,epsilon);
+    } } }), ...(state && { surfaceState: { ...state, locate(point, normal) {
       const rest = inverse(point);
       const hit = state.locate(rest, pullNormal ? pullNormal(normal, rest, point) : normal);
       return hit && pushNormal ? { ...hit,normal,
         ...(hit.paintedNormal && { paintedNormal:pushNormal(hit.paintedNormal) }) } : hit;
-    } } } : material;
+    } } }) };
   };
   // Transform the geometry registered by one recipe, or its held boolean operand.
-  S.transformSolids = ({ point, inverse, direction, scale }, build) => {
+  S.transformSolids = (space, build, trackModifierSpace = false) => {
+    const { point,inverse,direction,scale } = space;
     const lists = [pos, neg, ghosts], starts = lists.map(list => list.length);
     const result = build();
     const solids = lists.flatMap((list, i) => list.slice(starts[i]));
     if (!solids.length && result?.sd) solids.push(result);
     for (const solid of solids) {
       const { sd, sample, lowerBound, along, analytic, geometryBounds, mat,sourceLocal } = solid;
+      if (trackModifierSpace) solid.modifierSpace=space;
       solid.bc = point(solid.bc);
       if (solid.br < 1e8) solid.br *= scale;
       solid.reach *= scale;
@@ -214,7 +230,7 @@ function makeSculpt(B, rest) {
       if (lowerBound) solid.lowerBound = (x, y, z, limit) => scale * lowerBound(...inverse([x, y, z]), limit / scale);
       if (along) solid.along = (x, y, z) => along(...inverse([x, y, z]));
       if (mat.rf) solid.mat = { ...mat, rf: (x, y, z) => mat.rf(...inverse([x, y, z])) };
-      if (mat.surfaceState) {
+      if (mat.surfaceState || mat.sdfPaint) {
         const axes = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map(direction);
         solid.mat = S.mapSurfaceState(solid.mat, inverse,
           normal => axes.map(axis => axis[0] * normal[0] + axis[1] * normal[1] + axis[2] * normal[2]), direction);
@@ -1867,7 +1883,7 @@ function makeSculpt(B, rest) {
 
   function shadeOwned(owner, material, ...sample) {
     if (material.materialAt || material.surfaceState)
-      material = S.materialAt(material, sample.slice(1, 4), sample.slice(4, 7));
+      material = baseMaterialAt(material, sample.slice(1, 4), sample.slice(4, 7));
     material = controlled(material);
     const preview = typeof globalThis !== 'undefined' && globalThis.INK_LOOK_ALBEDO;
     const pigment = material.indexedPigment, glow = material.paintedEmission;
@@ -1920,9 +1936,13 @@ function makeSculpt(B, rest) {
     if (effective.optical !== undefined) B.describeOptical?.(first, end, effective.optical);
     if (style) B.describePixelStyle?.(first, end, style, pair);
     const surfaceId = effective.surfaceId ?? (effective === material ? undefined : effective.surface?.id) ?? material.surfaceId;
+    const baseId = effective.materialId ?? material.materialId;
+    const paint = first<end && owner?.mat.sdfPaint?.locate(sample.slice(1,4),sample.slice(4,7));
+    if (paint?.tint && B.tintSplatColors)
+      B.tintSplatColors(first,end,paint.tint,owner.sdfPaintBase??=new Map(),baseId);
     B.describeSplats?.(first, end, {
       object: owner?.renderOwner ?? owner,
-      material: effective.materialId ?? material.materialId ?? material,
+      material: paint?.material ?? baseId ?? material,
       target: renderTarget(owner, surfaceId)
     });
     const albedo = pigment ?? effective.albedo ?? effective.r?.at(-1) ?? material.albedo ?? material.r?.at(-1);

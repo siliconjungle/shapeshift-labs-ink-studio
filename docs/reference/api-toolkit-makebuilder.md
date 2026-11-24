@@ -79,6 +79,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.makeBuilder().stick` | function | `(x, y, z, ax, sl, sw, col, a, an)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
 | `toolkit.makeBuilder().surfaceNext` | function | `(settings, nx, ny, nz, light, visibility = 1, tangent, bevelDistance, facingRamp)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
 | `toolkit.makeBuilder().take` | function | `()` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
+| `toolkit.makeBuilder().tintSplatColors` | function | `(first,end,tint,base,material)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
 | `toolkit.makeBuilder().tube` | function | `(pts, r0, r1, cols, an)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
 | `toolkit.makeBuilder().wet` | function | `(v)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
 | `toolkit.makeBuilder().withColor` | function | `(color,draw)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |

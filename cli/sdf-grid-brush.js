@@ -16,18 +16,25 @@ const fields = (raw, keys) => raw && Object.getPrototypeOf(raw) === Object.proto
 const finite = (value, a, b) => Number.isFinite(value) && value>=a && value<=b;
 const vector = (value,length,check) => Array.isArray(value) && value.length===length && Array.from(value).every(check);
 const depthSamples = 16;
+const footprintKeys = ['pixels','selection','camera','minFacing','time'];
 
 function prepare(raw,frame,binding,api) {
   const { maxCells,modes } = api;
   const legacy = ['add','cut'].includes(raw?.mode);
   const controls = ['direction','profile','falloff','radius'];
-  const keys = ['mode','depth','pixels','selection','camera','minFacing','time',...(legacy ? [] : controls)];
+  const keys = ['mode','depth',...footprintKeys,...(legacy ? [] : controls)];
   if (!fields(raw,keys) || !legacy && !modes.includes(raw.mode) ||
-      !finite(raw.depth,.005,20) || (raw.pixels===undefined)===(raw.selection===undefined))
+      !finite(raw.depth,.005,20))
     throw new TypeError('A native SDF brush needs a shape mode, depth from .005 to 20, and pixels or a named selection');
   const settings = !legacy && api.settings({ depth:raw.depth,
     ...Object.fromEntries(controls.map(key=>[key,raw[key]])) },raw.mode);
-  const { mode,depth,minFacing=.2,camera={},time=0 } = raw;
+  return { mode:raw.mode,depth:raw.depth,settings,...prepareFootprint(raw,frame,binding,maxCells) };
+}
+
+function prepareFootprint(raw,frame,binding,maxCells) {
+  if ((raw.pixels===undefined)===(raw.selection===undefined))
+    throw new TypeError('Choose explicit pixels or a named selection for the SDF footprint');
+  const { minFacing=.2,camera={},time=0 } = raw;
   if (!finite(time,0,120) || !finite(minFacing,.05,1) || !fields(camera,['yaw','pitch','dist','target','ortho','fov']) ||
       ['yaw','pitch','dist','fov'].some(key=>camera[key]!==undefined && !Number.isFinite(camera[key])) ||
       camera.dist!==undefined && !finite(camera.dist,.01,1000) ||
@@ -42,12 +49,11 @@ function prepare(raw,frame,binding,api) {
         at[0]>=0 && at[0]<width && at[1]>=0 && at[1]<height) ||
       new Set(pixels.map(at=>at.join(','))).size!==pixels.length)
     throw new RangeError('The brush footprint needs 1–'+maxCells+' distinct document pixels or a named selection on this frame');
-  return { mode,depth,minFacing,camera,grid,pixels,settings,time };
+  return { minFacing,camera,grid,pixels,time };
 }
 
-function project(editor,solid,frame,binding,raw,layer) {
-  const kit = require('../index.js').load(), { V } = kit.KIT, api = kit.KIT.procedural.gridSculptBrush;
-  const { mode,depth,minFacing,camera,grid,pixels,settings,time } = prepare(raw,frame,binding,api);
+function captureFootprint(editor,solid,frame,binding,{ minFacing,camera,grid,pixels,time },layer,{ singleOwner=false,accept } = {}) {
+  const kit = require('../index.js').load(), { V } = kit.KIT;
   if (solid.kind==='ground' || solid.ghost || solid.carve || solid.hold)
     throw conflict('unsupported-sdf-brush-target','Grid brushes need a finite solid with an editable exterior',
       { binding:binding.id,object:solid.id });
@@ -74,9 +80,8 @@ function project(editor,solid,frame,binding,raw,layer) {
   });
   if (!projection || image.w!==w || image.h!==h || !image.pixelSelection || !image.passes?.surfaceSources)
     throw new Error('Grid sculpt brush could not capture the native surface and camera');
-  const { passes } = image, sourceTables = new Map(), hits = [], skipped = [], cells = [], used = new Set(), candidates = [];
+  const { passes } = image, sourceTables = new Map(), skipped = [], used = new Set(), candidates = [];
   const sourceHits = new Map();
-  let retainedProjection, volume = 0;
   const clipping = frame.layerSources?.get(layer?.id)?.clipping;
   function skip(at,code,details) { skipped.push({ at,code,...details }); }
 
@@ -99,48 +104,17 @@ function project(editor,solid,frame,binding,raw,layer) {
     }
     const { surface,owner } = hit;
     const toLocal = p=>ownerLocal(owner,carried ? carried.rest(...p) : p);
-    if (settings) {
-      if (candidates.length && candidates[0].owner!==owner) {
-        skip(at,'incompatible-stroke-frame',{ sourceAt });
-        continue;
-      }
-      used.add(pixel);
-      candidates.push({ at,sourceAt,surface,owner,toLocal });
+    if (singleOwner && candidates.length && candidates[0].owner!==owner) {
+      skip(at,'incompatible-stroke-frame',{ sourceAt });
       continue;
     }
-
-    const pixelSize = V.len(projection.right)*(projection.perspective ? surface.depth : 1);
-    const overlap = Math.min(depth*.5,Math.max(.002,pixelSize*.15));
-    const near = surface.depth-(mode==='cut' ? overlap : depth), far = surface.depth+(mode==='cut' ? depth : overlap);
-    if (near<1e-4 || far>2000) { skip(at,'outside-brush-depth',{ sourceAt }); continue; }
-    if (!retainedProjection) {
-      const origin = toLocal(projection.origin);
-      retainedProjection = { origin,perspective:projection.perspective,
-        ...Object.fromEntries(['right','down','forward'].map(key=>
-          [key,V.sub(toLocal(V.add(projection.origin,projection[key])),origin)])) };
-    }
-    const { intervals,estimate } = affectedDepth(posedOwner(owner,carried).sd,api,projection,grid,x,y,near,far,mode);
-    const geometricPoint = toLocal(surface.position);
+    const candidate = { at,sourceAt,surface,owner,toLocal };
+    const issue = accept?.(candidate,projection);
+    if (issue) { skip(at,issue,{ sourceAt }); continue; }
     used.add(pixel);
-    cells.push([x,y,near,far]);
-    hits.push({ at,sourceAt,rest:geometricPoint,surfaceDepth:surface.depth,depth:[near,far],changedDepths:intervals });
-    volume += estimate;
+    candidates.push(candidate);
   }
-  if (settings) {
-    if (!candidates.length) return reject(binding,skipped,'No brush pixels hit a visible, editable SDF surface');
-    const [first] = candidates;
-    const attachment = { source:{ object:solid.id,part:solid.part??null },time,projection,frame:affineMatrix(first.toLocal,V),
-      marks:candidates.map(hit=>({ at:hit.at,sourceAt:hit.sourceAt,depth:hit.surface.depth,position:hit.surface.position,
-        normal:V.norm(hit.surface.geometricNormal),
-        ...(mode==='smooth' && {smoothOffsets:ShapeOperations.smoothOffsets(hit,lookup,V)}) })) };
-    return fromAttachment({ mode,settings,grid,attachment,owner:posedOwner(first.owner,carried),binding,skipped,api,V });
-  }
-  if (!hits.length) return reject(binding,skipped,'No brush pixels hit a visible, editable SDF surface');
-  const brush = { version:1,grid,projection:retainedProjection,cells };
-  const { bounds } = api.prepare(brush);
-  return { modifier:{ kind:'grid-brush',mode,brush },report:{ mode,grid,projectedPixels:hits.length,hits,
-    skippedHits:skipped,volume:{ space:'solid-rest',bounds,estimatedWorldVolume:volume,depthSamplesPerPixel:depthSamples },
-    ...(solid.part && {attachment:{object:solid.id,part:solid.part,time}}) } };
+  return { projection,candidates,skipped,carried,lookup };
 
   function lookup(x,y) {
     if (x<0 || x>=w || y<0 || y>=h) return { code:'no-surface' };
@@ -166,6 +140,53 @@ function project(editor,solid,frame,binding,raw,layer) {
     if (!Number.isFinite(facing) || facing<minFacing) return { code:'grazing-or-back-facing',facing };
     return { surface,owner };
   }
+}
+
+function localProjection(projection,toLocal,V) {
+  const origin = toLocal(projection.origin);
+  return { origin,perspective:projection.perspective,
+    ...Object.fromEntries(['right','down','forward'].map(key=>
+      [key,V.sub(toLocal(V.add(projection.origin,projection[key])),origin)])) };
+}
+
+function project(editor,solid,frame,binding,raw,layer) {
+  const { V,procedural:{gridSculptBrush:api} } = require('../index.js').load().KIT;
+  const footprint = prepare(raw,frame,binding,api), { mode,depth,grid,settings,time } = footprint;
+  const legacyBounds = new Map();
+  const {projection,candidates,skipped,carried,lookup} = captureFootprint(editor,solid,frame,binding,footprint,layer,
+    settings ? { singleOwner:true } : { accept(hit,projection) {
+      const { surface } = hit, pixelSize = V.len(projection.right)*(projection.perspective ? surface.depth : 1);
+      const overlap = Math.min(depth*.5,Math.max(.002,pixelSize*.15));
+      const near = surface.depth-(mode==='cut' ? overlap : depth), far = surface.depth+(mode==='cut' ? depth : overlap);
+      if (near<1e-4 || far>2000) return 'outside-brush-depth';
+      legacyBounds.set(hit,[near,far]);
+    } });
+  const [first] = candidates;
+  if (!first) return reject(binding,skipped,'No brush pixels hit a visible, editable SDF surface');
+  if (settings) {
+    const attachment = { source:{ object:solid.id,part:solid.part??null },time,projection,frame:affineMatrix(first.toLocal,V),
+      marks:candidates.map(hit=>({ at:hit.at,sourceAt:hit.sourceAt,depth:hit.surface.depth,position:hit.surface.position,
+        normal:V.norm(hit.surface.geometricNormal),
+        ...(mode==='smooth' && {smoothOffsets:ShapeOperations.smoothOffsets(hit,lookup,V)}) })) };
+    return fromAttachment({ mode,settings,grid,attachment,owner:posedOwner(first.owner,carried),binding,skipped,api,V });
+  }
+  const hits = [], cells = [];
+  let retainedProjection, volume = 0;
+  for (const hit of candidates) {
+    const { at,sourceAt,surface,owner,toLocal } = hit, [x,y] = sourceAt, [near,far] = legacyBounds.get(hit);
+    retainedProjection ??= localProjection(projection,toLocal,V);
+    const { intervals,estimate } = affectedDepth(posedOwner(owner,carried).sd,api,projection,grid,x,y,near,far,mode);
+    const geometricPoint = toLocal(surface.position);
+    cells.push([x,y,near,far]);
+    hits.push({ at,sourceAt,rest:geometricPoint,surfaceDepth:surface.depth,depth:[near,far],changedDepths:intervals });
+    volume += estimate;
+  }
+  if (!hits.length) return reject(binding,skipped,'No brush pixels hit a visible, editable SDF surface');
+  const brush = { version:1,grid,projection:retainedProjection,cells };
+  const { bounds } = api.prepare(brush);
+  return { modifier:{ kind:'grid-brush',mode,brush },report:{ mode,grid,projectedPixels:hits.length,hits,
+    skippedHits:skipped,volume:{ space:'solid-rest',bounds,estimatedWorldVolume:volume,depthSamplesPerPixel:depthSamples },
+    ...(solid.part && {attachment:{object:solid.id,part:solid.part,time}}) } };
 }
 
 function reject(binding,skipped,message) {
@@ -264,4 +285,4 @@ function affectedDepth(sd,api,projection,grid,x,y,near,far,mode) {
   return { intervals,estimate };
 }
 
-module.exports = { project,update };
+module.exports = { project,update,prepareFootprint,captureFootprint,localProjection,affineMatrix,footprintKeys,fields,reject };

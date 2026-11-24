@@ -2177,7 +2177,7 @@ and declared destinations. The edit JSON has `revision`, `frame`, `id`, and
 | `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and paint, footprint, or transform controls, or an ordered `operation.topology` batch | Splat-fit asset for `render --splat-fit` |
 | `scan-material` | Explicit `operation.texels` on a registered mesh material | Scan paint asset for `render --scan-paint` |
 | `sdf-shape` | `operation.brush`, `operation.updateBrush`, `operation.parameters`, a new `operation.modifier`, or `operation.updateModifier` with `id` and `patch` | Revised JSON diorama with edited geometry |
-| `sdf-material` | `operation.material` with a palette role or native material object | Revised JSON diorama with the solid's material changed |
+| `sdf-material` | `operation.paint` for a native-grid palette role or mask stroke, or `operation.material` for the whole solid | Revised JSON diorama with edited surface appearance |
 
 Omitting `destination` continues to edit raster pixels. Scene writes take
 an explicit `--scene` matching the binding and save their own output file.
@@ -2690,6 +2690,50 @@ source before that modifier, and keeps the stroke's ID and stack
 position. The preview describes the retuned stroke in its capture frame.
 The usual revision, preview, undo, and receipt paths apply. Stored strokes
 from before anchor capture still build as retained geometry.
+
+### Paint an SDF material boundary
+
+Bind an `sdf-material` destination to a named finite solid. Use the revisions
+from `pixel-art targets` and supply `operation.paint` with a named selection
+or up to 4096 explicit document pixels.
+
+```json
+{
+  "paint": {
+    "selection": "badge",
+    "material": "metal",
+    "masks": { "wear": 0.85, "soot": 0.2 }
+  }
+}
+```
+
+Use an existing scene palette role for `material`. Ink maps the surface's
+shading onto that role's ramp. Named mask values range from 0 to 1.
+A later stroke replaces only the channels it names. Use `null` for the
+material or an individual mask to reveal the underlying value. The solid's
+distance function, transform, and shape modifiers are preserved.
+
+Ink captures visible contacts on the selected solid and stores them in
+versioned `sdfPaint` strokes. A stroke follows solid transforms and shared
+affine part poses. It uses the same `camera`, `time`, and `minFacing` controls
+as a shape brush. Optional `thickness` sets the contact tolerance in world
+units, from 0.001 to 2. The default scales with a native pixel's footprint.
+Preview and edit receipts report accepted contacts and skipped marks under
+`surfacePaint`. Undo, redo, and receipt replay use the existing pixel edit
+transaction.
+
+```sh
+node cli/ink-studio.js pixel-art preview drawing.json badge.json --scene gate.json
+node cli/ink-studio.js pixel-art edit drawing.json badge.json --scene gate.json --out gate-painted.json
+node cli/ink-studio.js pixel-art inspect drawing.json --scene gate-painted.json --binding gate --at 32,32 --sdf-assist on
+```
+
+For inspection, make the binding's scene path match the edited scene. Use
+`--sdf-assist posed` for a moving part. An exact hit reports the effective
+material ID and the painted mask overrides under `geometry.paint`. The
+sculpt material query also returns the mask values in `model.masks`.
+Baked splats carry the paint at their sampling resolution. Use exact SDF
+tracing for one-pixel boundaries and gaps.
 
 ### Target shot corrections and scene sources
 

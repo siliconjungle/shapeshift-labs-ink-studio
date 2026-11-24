@@ -1326,6 +1326,14 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
       if(typeof draw!=='function'||typeof color!=='function'&&(!Array.isArray(color)||color.length!==3||!color.every(v=>Number.isFinite(v)&&v>=0&&v<=255)))throw new TypeError('withColor needs RGB bytes or a transform and a drawing function');
       const previous=colorOverride;colorOverride=color;try{return draw();}finally{colorOverride=previous;}
     },
+    tintSplatColors(first,end,tint,base,material) {
+      for (let i=first;i<end;i++) {
+        const q=i*16+7, packed=data[q], color=[packed&255,packed>>8&255,packed>>16&255].map(n=>n/255);
+        const [r,g,b]=tint(color).map(n=>Math.round(n*255));
+        base.set(i,{ color:packed,material });
+        data[q]=r | g<<8 | b<<16;
+      }
+    },
     detailBudget,
     shadowArt,
     shadowNext,

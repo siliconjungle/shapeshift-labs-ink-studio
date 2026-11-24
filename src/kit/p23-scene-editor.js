@@ -246,6 +246,10 @@
       const value = clone(state);
       return edit('Set rest surface state', targets, solid => patchFields(solid, { surfaceState: value }));
     }
+    function setSdfPaint(paint, targets = selectedKeys()) {
+      const value = clone(paint);
+      return edit('Paint SDF material', targets, solid => patchFields(solid, { sdfPaint:value }));
+    }
     function editSurfaceDecal(id, operation) {
       const decals = K.surfaceDecals.edit(snapshot().surfaceDecals, id, operation);
       const write = () => document.setEnvironment({ surfaceDecals:decals });
@@ -393,6 +397,7 @@
       paintShadowBand,
       paintShadeNormal,
       setSurfaceState,
+      setSdfPaint,
       editSurfaceDecal,
       setRole,
       materials: () => freeze(clone(DIO.sceneMaterials(snapshot()))),

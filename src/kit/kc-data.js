@@ -109,6 +109,7 @@
     label: 'str',
     surfaceId: 'str',
     surfaceState: 1,
+    sdfPaint: 1,
     prefabs: 'list',
     tags: 'list',
     mat: 'mat',
@@ -1087,6 +1088,13 @@
         try { K.procedural.surfaceState.projection(s.surfaceState); }
         catch (error) { bad(path + '.surfaceState', error.message); }
       }
+      if (s.sdfPaint !== undefined) {
+        try {
+          if (!s.id || inner || s.kind==='ground' || s.ghost || s.carve || s.hold)
+            throw new TypeError('SDF paint needs a named, finite exterior solid');
+          K.procedural.sdfMaterialPaint.prepare(s.sdfPaint,st.roles);
+        } catch (error) { bad(path + '.sdfPaint',error.message); }
+      }
       checkModifiers(s.modifiers, path + '.modifiers');
       let scale = 1;
       try {
@@ -1582,6 +1590,8 @@
       }
     const brushed = spec.solids.filter(s=>s.id && activeModifiers(s).some(modifier=>modifier.kind==='grid-brush'));
     const brushedParts = new Set(brushed.filter(s=>s.part).map(s=>s.id));
+    const painted = spec.solids.filter(s=>s.sdfPaint);
+    const retainedParts = new Set([...brushedParts,...painted.filter(s=>s.part).map(s=>s.id)]);
     const authoredAssist = st0.finish.look?.sdfAssist;
     if (brushed.length && authoredAssist===undefined) {
       const rules = brushed.map(s=>({ select:{entity:s.id} }));
@@ -1602,8 +1612,8 @@
       S = K.sculpt((env.makeSculpt || makeSculpt)(B));
       S.sun = B.norm(st0.sun);
       if (st0.finish.look?.pixel) S.pixel = true;
-      S.keepPartRenderSdf = env.retainPartRenderSdf === true || brushedParts;
-      S.keepRenderSdf = env.retainRenderSdf === true || env.retainPartRenderSdf === true || keepLightCasters || Boolean(st0.finish.look?.sdfAssist ||
+      S.keepPartRenderSdf = env.retainPartRenderSdf === true || retainedParts;
+      S.keepRenderSdf = env.retainRenderSdf === true || env.retainPartRenderSdf === true || keepLightCasters || painted.length>0 || Boolean(st0.finish.look?.sdfAssist ||
         st0.finish.bounceProbes?.geometry?.sdfs?.length && (!st0.finish.bounceProbes.format || st0.finish.bounceProbes.dynamic));
       S.captureAlbedo = Boolean(st0.finish.liveSun) ||
         Array.isArray(st0.finish.look?.renderStages) && st0.finish.look.renderStages.some(rule => rule.stage === 'material');
@@ -1684,11 +1694,9 @@
     const made = {},
       make = (s, held) => {
         const space = solidSpace(s,B.frame), recipe = () => makeSolid(s,held);
-        const p = space ? S.transformSolids(space,recipe) : recipe();
-        if (s.id) {
-          made[s.id] = p;
-          if ((env.retainRenderSdf || env.retainPartRenderSdf) && p?.sd) p.modifierSpace = space;
-        }
+        const trackModifierSpace = Boolean(s.id && (env.retainRenderSdf || env.retainPartRenderSdf));
+        const p = space ? S.transformSolids(space,recipe,trackModifierSpace) : recipe();
+        if (s.id) made[s.id] = p;
         return p;
       },
       makeSolid = (s, held) => {
@@ -1713,6 +1721,7 @@
         if (s.turn) o.ax = B.frame(s.turn[0], s.turn[1], s.turn[2]);
         const charts = K.procedural.surfaceState;
         const locate = s.surfaceState && charts.projection(s.surfaceState);
+        const paint = s.sdfPaint && K.procedural.sdfMaterialPaint.prepare(s.sdfPaint,st0.roles,B.P);
         const m = locate ? charts.bind(matOf(s.mat), locate, B.P) : matOf(s.mat);
         const sub = q => make(q, true), k = s.kind;
         const baseOptions = modifiers.length ? { ...o, hold: true } : o;
@@ -1755,7 +1764,8 @@
         } else if (k === 'join') p = S.join(s.how, sub(s.a), sub(s.b), Object.assign({ r: s.size, n: s.steps }, baseOptions));
         else if (unaryKinds.includes(k)) p = deform(sub(s.of), s, baseOptions);
         else if (builtKinds.includes(k)) {
-          const mats = { stone: m, post: m, rail: m, metal: m },
+          const surface = paint && !modifiers.length ? {...m,sdfPaint:paint} : m;
+          const mats = { stone:surface,post:surface,rail:surface,metal:surface },
             oo = Object.assign({}, s, { mats, tag: s.part, res: s.res, objectId: baseOptions.objectId, target: baseOptions.target });
           const buildRecipe = () =>
             k === 'pillar'
@@ -1803,6 +1813,7 @@
           }
           p = S.add(p, p.mat, { ...o, res, bump: undefined, reach: p.reach });
         }
+        if (paint && p?.mat) p.mat = { ...p.mat,sdfPaint:paint };
         return p;
       };
     if (modelOptions?.[brushField]) {

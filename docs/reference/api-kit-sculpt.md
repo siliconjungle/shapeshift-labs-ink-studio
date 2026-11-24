@@ -101,7 +101,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.sculpt().template` | function | `(build, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().terrain` | function | `(mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().torus` | function | `(c, R, r, mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
-| `KIT.sculpt().transformSolids` | function | `({ point, inverse, direction, scale }, build)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
+| `KIT.sculpt().transformSolids` | function | `(space, build, trackModifierSpace = false)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().tree` | function | `(x, y, z, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().trim` | function | `(pts, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/kit/kpx-pixel.js) |
 | `KIT.sculpt().tube` | function | `(pts, r0, r1, mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |

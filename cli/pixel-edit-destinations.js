@@ -9,6 +9,7 @@ const RowAttributes = require('./splat-row-attributes.js');
 const Topology = require('./splat-topology.js');
 const ScanPaint = require('./scan-material-paint.js');
 const GridBrush = require('./sdf-grid-brush.js');
+const SdfMaterialPaint = require('./sdf-material-paint.js');
 const { observe } = require('./pixel-edit-revisions.js');
 const Provenance = require('../src/splat-provenance.js');
 const { conflict,sourceTarget } = require('./pixel-edit-preview.js');
@@ -546,6 +547,13 @@ function apply(frame, edit, route, context, readMarks) {
     return asset;
   }
   if (destination.kind === 'decal-layer') return decalEdit(frame,edit,route,source.editor);
+  if (destination.kind==='sdf-material' && edit.operation?.paint!==undefined) {
+    if (!fields(edit.operation,['paint'])) throw new TypeError('Use a separate edit for SDF surface paint');
+    const { key,solid } = boundSolid(binding,source.editor);
+    const surfacePaint = SdfMaterialPaint.apply(source.editor,key,solid,frame,binding,layer,edit.id,edit.operation.paint);
+    context.onEditTarget?.({ ...sourceTarget(route,edit),node:key,surfacePaint });
+    return source.editor.snapshot();
+  }
   if (destination.kind === 'sdf-shape' &&
       (edit.operation?.brush !== undefined || edit.operation?.updateBrush !== undefined)) {
     const { brush,updateBrush } = edit.operation;
@@ -630,6 +638,8 @@ function targets(route, context, limit, query) {
   return { destination:destination.id, binding, revision, sourceRevision,
     solid:{ id:solid.id, key, label:solid.label, part:solid.part },
     ...(channel !== undefined && { surfaceChannel:{ object:solid.id, chart, channel } }),
+    ...(destination.kind==='sdf-material' && { paintStrokes:(solid.sdfPaint?.strokes ?? []).map(
+      ({ id,material,masks,cells })=>({ id,material,masks,pixels:cells.length })) }),
     modifiers:(solid.modifiers ?? []).map(({id,kind,label,mode,brush}) => ({ id,kind,label,
       ...(kind==='grid-brush' && { mode,...(brush.settings && {settings:brush.settings}),
         ...(brush.attachment && { attachment:{ ...brush.attachment.source,time:brush.attachment.time,

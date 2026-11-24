@@ -2105,7 +2105,7 @@ function renderFrame(world, o, preparedPalettes) {
     let scanLight, color=sprite.color, highlight=0, paletteId=spritePalettes.get(sprite.swatches) ?? 0, reflected, claim, surfaceMatte;
     let stageBase = paintStage && sprite.surface && !sprite.effect && i < 0 ? color : undefined;
     if (i>=0) {
-      const packed=d[i*16+7];
+      const packed=sprite.row.baseColor ?? d[i*16+7];
       color=live?.albedo(i) ?? fitPigment?.(i) ?? [(packed&255)/255, (packed>>8&255)/255, (packed>>16)/255];
       const staged=stages && stages.at(i);
       const sample=(staged?.material || staged?.lit) && (stageMasks ? stageSample(i,position,sprite.p) : undefined);
@@ -2115,6 +2115,7 @@ function renderFrame(world, o, preparedPalettes) {
       if (staged?.material) color=stagedMaterial(i,staged.material,color,sample,paintedAlbedo,
         choices && paletteTrace.forStage(choices));
       stageBase = reference && (paintedAlbedo?.slice() ?? reference);
+      if (sprite.materialTint) color=sprite.materialTint(color);
       if (live?.normal(i)) {
         live.gains(i,...position,sunGains,sprite.normal,sprite.inkControls?.[0]);
         color=color.map((v,k)=>v*sunGains[k]);
@@ -2287,7 +2288,7 @@ function renderFrame(world, o, preparedPalettes) {
       kind = kraw % 16,
       flags = Math.floor(kraw / 16),
       s2 = SC[i] * SC[i],
-      pk = d[q + 7];
+      pk = sdf?.rows[i]?.baseColor ?? d[q + 7];
     const fieldParticle = i >= baseCount;
     const correction = paint && d[q + 14] === paint.marker;
     const translucent = al < 1 && d[q+3] < 1 || opticalActive || (kraw & 16) && (kraw & 256);
@@ -2698,6 +2699,14 @@ function renderFrame(world, o, preparedPalettes) {
           highlight = glint,
           paletteId = centerPalette;
         let samplePaint = stageBase;
+        if (exact?.materialTint) {
+          const haze = centerFog ? fogMix : 0, visible = 1-haze;
+          if (visible>1e-6) {
+            const tint = exact.materialTint([pr,pg,pb].map((n,k)=>(n-fog[k]*haze)/visible));
+            [pr,pg,pb]=tint.map((n,k)=>n*visible+fog[k]*haze);
+          }
+          if (samplePaint) samplePaint=exact.materialTint(samplePaint);
+        }
         if (curve?.pattern?.pigment) {
           const [u, v] = curveFootprint?.offset ?? [0, 0], sx = ix + .5 + u, sy = iy + .5 + v;
           const ray = rayAt(sx, sy), pattern = curve.pattern;

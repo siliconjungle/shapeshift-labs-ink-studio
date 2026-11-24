@@ -69,7 +69,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.makeSculpt().template` | function | `(build, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `toolkit.makeSculpt().terrain` | function | `(mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `toolkit.makeSculpt().torus` | function | `(c, R, r, mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
-| `toolkit.makeSculpt().transformSolids` | function | `({ point, inverse, direction, scale }, build)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
+| `toolkit.makeSculpt().transformSolids` | function | `(space, build, trackModifierSpace = false)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `toolkit.makeSculpt().tree` | function | `(x, y, z, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `toolkit.makeSculpt().tube` | function | `(pts, r0, r1, mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `toolkit.makeSculpt().vox` | function | `(spec, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |

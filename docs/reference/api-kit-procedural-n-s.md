@@ -1553,6 +1553,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.tube` | function | `(start, end, { radius = .2, sides = 12, color: tint = '#b7bccb' } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-mesh.js) |
 | `KIT.procedural.sceneGraph.world` | function | `(objects, { seed = 0, lights = [], camera: view, background = '#171d30', look = {}, palette: authoredPalette, style = {}, surfaces } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-scene.js) |
 
+## KIT.procedural.sdfMaterialPaint
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.sdfMaterialPaint` | namespace |  |  |
+| `KIT.procedural.sdfMaterialPaint.maxCells` | value | `number = 4096` |  |
+| `KIT.procedural.sdfMaterialPaint.maxStrokes` | value | `number = 256` |  |
+| `KIT.procedural.sdfMaterialPaint.prepare` | function | `(definition,roles,palette)` | [source](../../src/kit/p26a-sdf-material-paint.js) |
+| `KIT.procedural.sdfMaterialPaint.values` | function | `({ material,masks },roles)` | [source](../../src/kit/p26a-sdf-material-paint.js) |
+
 ## KIT.procedural.signalRecovery
 
 | Member | Kind | Signature or value | Guides and source |
