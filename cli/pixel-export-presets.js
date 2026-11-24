@@ -118,7 +118,7 @@ function framePlate(design,frame,compiled,preset,frameIds,aux,stamp) {
   const maps = Object.fromEntries(Object.entries(registered.maps).map(([name,rgba])=>[
     name,raster(w,h,Slices.crop({width,rgba},bounds).rgba)
   ]));
-  return { id,view,depthOrigin:registered.depthOrigin,handoff:view?.handoff ?? registered.handoff,
+  return { id,view,registration:registered.source,depthOrigin:registered.depthOrigin,handoff:view?.handoff ?? registered.handoff,
     paint,maps,pivot,unitsPerPixel,sourceBounds:bounds,
     ...(slice && { slice:{ id:slice.id,keyFrame:slice.keyFrame,...(slice.nineSlice && { nineSlice:slice.nineSlice,stretch:slice.stretch }) } }),
     ...(slices.length && { slices }) };
@@ -148,10 +148,10 @@ function atlasFor(sequence,plates,preset,design,aux,pack,add) {
   if (directional) atlas.metadata.partAnchors = design.directional.partAnchors ?? [];
   if (approved && approved.size <= 64) atlas.metadata.outputPalette = [...approved];
   atlas.metadata.frames = sequence.map((row,index)=>{
-    const { view,depthOrigin,handoff:authoredHandoff,paint,maps,sourceBounds,slice,slices } = byId.get(row.frame);
+    const { view,registration,depthOrigin,handoff:authoredHandoff,paint,maps,sourceBounds,slice,slices } = byId.get(row.frame);
     const frame = { ...packed.get(row.frame),frame:index,sourceFrame:row.frame,duration:row.durationMs/1000,
       sourceBounds,...(slice && { slice }),...(slices && { slices }),...(depthOrigin !== undefined && { depthOrigin }) };
-    if (!view) return frame;
+    if (!view) return registration ? { ...frame,yaw:registration.yaw,pitch:registration.pitch } : frame;
     if (!poses.has(view.pose)) poses.set(view.pose,{ index:poses.size,duration:frame.duration });
     const pose = poses.get(view.pose);
     if (pose.duration !== frame.duration) throw new RangeError('Directional views of pose '+view.pose+' need equal durations');

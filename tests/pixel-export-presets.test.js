@@ -130,6 +130,13 @@ test('repacking a registered directional source preserves its depth encoding and
   const second = metadata.frames[1].rect;
   const expected = at({width,rgba:images.depth},doc.width,0)[0];
   assert.deepEqual(at({width:metadata.width,rgba:packed.depth},second.x,second.y),[expected,expected,expected,255]);
+
+  delete source.directional;
+  const still = { ...recipe,frames:['idle'],auxiliary:{atlas:'base.json',bindings:{idle:1}} };
+  const single = createPixelEditor(source).exportPreset(still,{out,directory:dir});
+  const [registered] = load(path.join(out,single.content,single.outputs.atlas.file)).frames;
+  assert.equal(registered.yaw,1);
+  assert.equal(registered.depthOrigin,11);
 });
 
 test('CLI runs a saved preset from a layer deck and rebases its auxiliary paths',t=>{
