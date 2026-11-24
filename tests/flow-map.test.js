@@ -131,6 +131,7 @@ test('offline editor paints, probes, plays the shared solvers and round-trips JS
       await send('Page.navigate',{ url:pathToFileURL(file).href });
       await until(() => evaluate('document.querySelector("#grid")?.textContent.includes("48 × 32")'));
       assert.equal(await evaluate('document.querySelectorAll("[data-simulation]").length'),4);
+      assert.equal(await evaluate('getComputedStyle(document.querySelector("#angle-row")).display'),'none');
       const state = () => evaluate(`Array.from(document.querySelectorAll('[data-simulation]'),canvas =>
         canvas.toDataURL())`);
       const before = await state();
@@ -145,6 +146,7 @@ test('offline editor paints, probes, plays the shared solvers and round-trips JS
         q('new').click(); q('heading').value = 'fixed'; q('heading').dispatchEvent(new Event('change'));
         q('speed').value = 4; q('angle').value = -90; q('radius').value = .6;
       })()`);
+      assert.equal(await evaluate('getComputedStyle(document.querySelector("#angle-row")).display'),'grid');
       const [x,y] = await evaluate(`(() => {
         const r = document.querySelector('#chart').getBoundingClientRect();
         return [r.left+r.width/2,r.top+r.height/2];

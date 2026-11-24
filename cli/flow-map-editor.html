@@ -35,7 +35,7 @@
   aside section { background:var(--panel); border:1px solid var(--line); border-radius:.45rem; padding:.9rem; }
   .fields { display:grid; gap:.42rem 1rem; grid-template-columns:1fr 1fr; margin:.65rem 0 0; }
   .full { grid-column:1 / -1; }
-  .fields > label { display:grid; gap:.21rem; align-content:start; }
+  .fields > label:not([hidden]) { display:grid; gap:.21rem; align-content:start; }
   input[type=number], select { min-width:0; width:100%; }
   input[type=range] { width:100%; accent-color:var(--accent); }
   .probe { margin-top:.66rem; display:grid; grid-template-columns:1fr 1fr auto; gap:.4rem; align-items:end; }
