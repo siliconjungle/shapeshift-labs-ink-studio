@@ -127,6 +127,19 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
     }
     const topDepth=(selected.has('depth')||captureSurfaceMotion) && topDown(depth,1);
     if (selected.has('depth')) result.depth=topDepth;
+    if (selected.has('pigment')) {
+      // RGB24 plus one keeps opaque black distinct from a missing sample.
+      const data=world.rest??world.data;
+      const pigment=Uint32Array.from(owner,(i,p)=>{
+        if (i>=0) {
+          const rgb=Math.round(data[i*16+7]);
+          return world.materialAlbedo?.[i] || ((rgb&255)<<16 | rgb&0xff00 | rgb>>>16&255)+1;
+        }
+        const color=atlasOwners?.get(p)?.color;
+        return color ? color.reduce((value,n)=>value*256+Math.round(Math.min(1,Math.max(0,n))*255),0)+1 : 0;
+      });
+      result.pigment=topDown(pigment,1);
+    }
     if (captureSurfaceMotion) {
       const motion=SurfaceMotion.capture(w,h,captureSurfaceMotion,topDepth,atlasOwners,selected);
       geometry.motionReference.surfaceMotion=motion.snapshot;

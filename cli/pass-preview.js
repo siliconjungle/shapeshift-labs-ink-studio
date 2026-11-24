@@ -47,7 +47,8 @@ const environmentEncodings = {
   surfaceMotion: 'RGB8 preview, red and green encode signed XY at ±4 art pixels, black means invalid',
   surfaceMotionValid: 'RGB8 grayscale, white is a valid previous sample',
   inkMask: 'RGB8 ink operation legend color',
-  inkShadow: 'RGB8 grayscale cast shadow attenuation, white is fully shadowed'
+  inkShadow: 'RGB8 grayscale cast shadow attenuation, white is fully shadowed',
+  pigment: 'RGBA8 source pigment before lighting, transparent where there is no surface owner'
 };
 
 function environmentEncoding(passes) {
@@ -71,7 +72,7 @@ function encode(frame, channel) {
   const data = passes[channel];
   if (!data) throw new Error('The renderer did not supply the ' + channel + ' pass');
   const rgb = new Uint8Array(w * h * 3);
-  const alpha = channel === 'precipitation' && new Uint8Array(w * h);
+  const alpha = (channel === 'precipitation' || channel === 'pigment') && new Uint8Array(w * h);
   const isDepth = ['depth', 'emissionDepth', 'previousDepth', 'strandDepth', 'proxyDepth'].includes(channel);
   const depth = isDepth && depthRange(data);
   for (let p = 0; p < w * h; p++) {
@@ -99,6 +100,11 @@ function encode(frame, channel) {
     } else if (channel==='surfaceUV') {
       if (!passes.surfaceUVValid[p]) continue;
       rgb[q]=byte(data[p*2]); rgb[q+1]=byte(data[p*2+1]); rgb[q+2]=255;
+    } else if (channel === 'pigment') {
+      if (!data[p]) continue;
+      const color=data[p]-1;
+      rgb.set([color>>16,color>>8&255,color&255],q);
+      alpha[p]=255;
     } else if (alpha) {
       const i = p * 4, a = data[i + 3];
       alpha[p] = byte(a);

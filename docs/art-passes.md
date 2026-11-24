@@ -9,6 +9,7 @@ In Node, call the library's `render(world, { passes: true })` or supply an array
 | `coverage` | One float per pixel. The combined opacity of splat and edge-sprite layers, independent of the background. |
 | `depth` | One float per pixel. Camera-axis depth of the owner in scene units. Center sorting uses splat centers. Surface sorting and traced geometry can supply sampled depths. Empty pixels use infinity. |
 | `normal` | Three floats per pixel. The owning sample's normalized world-space surface normal. Samples with no surface normal use zeros. |
+| `pigment` | RGB24 plus one from the owning sample before lighting. Zero means no pigment sample. Request this channel explicitly. Its PNG uses transparent pixels for missing samples. |
 | `objectId`, `materialId` | Unsigned integers. Zero means unassigned. The `objects` and `materials` arrays give authored labels, where supplied. |
 | `target` | Index into `targets` for the dominant splat or frame look at each pixel. Scoped bindings take precedence over scene-wide grades. Zero means no recorded binding. The table identifies the asset, stage, and selector when available. |
 | `mask` | A scalar between zero and one. The pass shows sampled spatial mask weights composited with surface coverage, including transparent splats, followed by applied frame and palette masks. |

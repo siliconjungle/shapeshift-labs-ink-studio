@@ -2247,16 +2247,29 @@ const CMD = {
     if (file===path.resolve(pos[0]) || file===plan) die('Write splat fit separately from its inputs');
     const {views,...settings}=JSON.parse(fs.readFileSync(plan,'utf8'));
     if (!Array.isArray(views) || !views.length) die('Splat fit needs approval views');
-    const load=image=>{
-      if (typeof image!=='string') throw new TypeError('Splat fit reference must name a PNG');
-      const input=path.resolve(path.dirname(plan),image);
+    const inputPath=name=>{
+      if (typeof name!=='string') throw new TypeError('Splat fit reference must name a file');
+      const input=path.resolve(path.dirname(plan),name);
       if (input===file) die('Write splat fit separately from its reference images');
-      return require('./png.js').raster(input);
+      return input;
+    };
+    const load=image=>require('./png.js').raster(inputPath(image));
+    const loadDepth=name=>{
+      const input=inputPath(name), count=settings.width*settings.height;
+      if (!Number.isSafeInteger(count) || count<64 || count>512**2 || fs.statSync(input).size!==count*4)
+        throw new RangeError('Splat fit depth needs a native-grid depth.f32le file');
+      const bytes=fs.readFileSync(input);
+      return Float32Array.from({length:count},(_,i)=>bytes.readFloatLE(i*4));
     };
     const asset=require('./splat-fit.js').fit(buildPreview(pos[0],{retainSdf:true}),{...settings,pose,view,
-      views:views.map(entry=>({...entry,reference:load(entry.reference),mask:entry.mask && load(entry.mask)}))});
+      views:views.map(entry=>({...entry,reference:load(entry.reference),mask:entry.mask && load(entry.mask),
+        ...(entry.depth!==undefined && {depth:loadDepth(entry.depth)}),
+        ...Object.fromEntries(['normal','pigment','pins'].filter(key=>entry[key]!==undefined).map(key=>[key,load(entry[key])]))}))});
     require('./asset-files.js').json(file,asset);
-    console.log('Fitted',asset.report.resized,'splats and omitted',asset.report.omitted,'splats. Wrote',file);
+    const {resized,omitted,reshaped,repainted,validation}=asset.report;
+    console.log('Resized',resized,'and omitted',omitted,'splats.',
+      ...(reshaped!==undefined ? ['Reshaped',reshaped,'and repainted',repainted,'splats.'] : []),'Wrote',file);
+    if (validation) console.log(validation.passed?'Passed':'Regressed on',validation.views,'held-out view(s).');
   },
   'path-ink'() {
     if (pos.length!==1 || typeof opt.out!=='string' || !/\.png$/i.test(opt.out) ||

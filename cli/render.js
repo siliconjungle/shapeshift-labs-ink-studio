@@ -448,6 +448,9 @@ function renderFrame(world, o, preparedPalettes) {
   const orderMode = o.splatOrder ?? look.splatOrder ?? 'center';
   const traced = TracedLighting.prepare(world,o.tracedLighting ?? look.tracedLighting);
   const fitted = SplatFit.prepare(world,o.splatFit ?? look.splatFit);
+  if (fitted && (Object.hasOwn(fitted,'footprints') || fitted.albedo)) world={...world,
+    ...(Object.hasOwn(fitted,'footprints') && {splatFootprints:fitted.footprints}),
+    ...(fitted.albedo && {materialAlbedo:fitted.albedo})};
   const sdfSettings = SdfAssist.prepare(o.sdfAssist ?? look.sdfAssist);
   const areaLights = AreaLights.prepare(o.areaLights === true ? world.areaLights : o.areaLights ?? world.areaLights,{time:t});
   const shotLighting = ShotLighting.frame(world.shotLighting, o.shotLighting, t);
@@ -2250,9 +2253,11 @@ function renderFrame(world, o, preparedPalettes) {
     const litNormal = litMask ? stageFrame(i).normal : null;
     const liveNormal = live?.normal(i), liveAlbedo = liveNormal && live.albedo(i);
     const lightSlot = i * 4, relit = relight?.[lightSlot + 3];
-    let r = liveAlbedo ? liveAlbedo[0] : (pk % 256) / 255,
-      g = liveAlbedo ? liveAlbedo[1] : (Math.floor(pk / 256) % 256) / 255,
-      b = liveAlbedo ? liveAlbedo[2] : Math.floor(pk / 65536) / 255;
+    const pigment=fitted?.pigment?.[i];
+    const basePigment=liveAlbedo || (pigment && RenderStages.unpack(pigment-1));
+    let r = basePigment ? basePigment[0] : (pk % 256) / 255,
+      g = basePigment ? basePigment[1] : (Math.floor(pk / 256) % 256) / 255,
+      b = basePigment ? basePigment[2] : Math.floor(pk / 65536) / 255;
     const reference = paintStage && baseReference(i);
     const paintedAlbedo = staged?.material && (surface?.paintsBase(i) || reference) ? [] : undefined;
     const centerChoices = paletteTrace && staged?.material?.some(rule=>rule.palette) ? [] : undefined;
