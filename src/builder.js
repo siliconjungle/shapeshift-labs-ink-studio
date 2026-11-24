@@ -151,6 +151,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     else engravingRanges.push([first, end, prepared, frame]);
   }
   let ownerRows, materialRows, targetRows, muteEmission, materialAlbedo, materialPixelStyles, opticalSplats;
+  let shadingNormals, paintedEmission;
   let unnamedOwners = new WeakMap(), unnamedMaterials = new WeakMap();
   const ownerIds = new Map(), materialIds = new Map();
   const ownerNames = [null], materialNames = [null];
@@ -228,6 +229,21 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     for (let i = first; i < end; i++) opticalSplats.set(packed, i * stride);
   }
 
+  function describePaintedShading(first,end,normal,emission) {
+    function write(values,triple) {
+      if(!triple||first===end)return values;
+      if(!values||values.length<cap*3){
+        const next=new Float32Array(cap*3);
+        if(values)next.set(values);
+        values=next;
+      }
+      for(let i=first;i<end;i++)values.set(triple,i*3);
+      return values;
+    }
+    shadingNormals=write(shadingNormals,normal);
+    paintedEmission=write(paintedEmission,emission);
+  }
+
   function describeSplats(first, end, { object, material, target } = {}) {
     if (!renderMetadata || first === end) return;
     if (!Number.isSafeInteger(first) || !Number.isSafeInteger(end) || first < 0 || end < first || end > n)
@@ -271,6 +287,8 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     if (!renderMetadata) return { normals };
     return {
       normals,
+      ...(shadingNormals && {shadingNormals:Float32Array.from({length:n*3},(_,i)=>shadingNormals[i]??0)}),
+      ...(paintedEmission && {paintedEmission:Float32Array.from({length:n*3},(_,i)=>paintedEmission[i]??0)}),
       muteEmission: muteEmission?.slice(0, n),
       objectIds: ownerRows?.slice(0, n),
       materialIds: materialRows?.slice(0, n),
@@ -1263,6 +1281,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     footprintRecorder = undefined;
     engravingRanges=undefined;
     ownerRows = materialRows = muteEmission = materialAlbedo = materialPixelStyles = opticalSplats = undefined;
+    shadingNormals = paintedEmission = undefined;
     unnamedOwners = new WeakMap();
     unnamedMaterials = new WeakMap();
     ownerIds.clear();
@@ -1310,6 +1329,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     keepReferenceSdf: keepSdf(referenceSdfs),
     describeSplats: renderMetadata ? describeSplats : undefined,
     describeAlbedo,
+    describePaintedShading,
     describePixelStyle,
     describeFootprint,
     describeEngraving,

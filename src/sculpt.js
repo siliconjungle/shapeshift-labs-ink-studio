@@ -178,11 +178,13 @@ function makeSculpt(B, rest) {
     const state = selected.surfaceState, hit = state?.locate(point, normal);
     return hit ? state.apply(selected, hit, point, normal) : selected;
   };
-  S.mapSurfaceState = (material, inverse, pullNormal) => {
+  S.mapSurfaceState = (material, inverse, pullNormal, pushNormal) => {
     const state = material?.surfaceState;
     return state ? { ...material, surfaceState: { ...state, locate(point, normal) {
       const rest = inverse(point);
-      return state.locate(rest, pullNormal ? pullNormal(normal, rest, point) : normal);
+      const hit = state.locate(rest, pullNormal ? pullNormal(normal, rest, point) : normal);
+      return hit && pushNormal ? { ...hit,normal,
+        ...(hit.paintedNormal && { paintedNormal:pushNormal(hit.paintedNormal) }) } : hit;
     } } } : material;
   };
   // Transform the geometry registered by one recipe, or its held boolean operand.
@@ -214,7 +216,7 @@ function makeSculpt(B, rest) {
       if (mat.surfaceState) {
         const axes = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map(direction);
         solid.mat = S.mapSurfaceState(solid.mat, inverse,
-          normal => axes.map(axis => axis[0] * normal[0] + axis[1] * normal[1] + axis[2] * normal[2]));
+          normal => axes.map(axis => axis[0] * normal[0] + axis[1] * normal[1] + axis[2] * normal[2]), direction);
       }
       if (analytic) {
         const axes = analytic.frame ?? [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
@@ -926,6 +928,20 @@ function makeSculpt(B, rest) {
     }
   }
   const RR = [null, 0];
+  const finishProfiles = new Map();
+  function paintedFinish(surface,roughness) {
+    if(roughness===undefined)return surface;
+    if(!finishProfiles.has(surface))finishProfiles.set(surface,new Map());
+    const profiles=finishProfiles.get(surface), level=Math.round(roughness*16);
+    if(!profiles.has(level)){
+      const layers={...surface?.layers};
+      const specular=Object.keys(layers).filter(key=>layers[key]?.type==='specular');
+      for(const key of specular)layers[key]={...layers[key],roughness:level/16};
+      if(!specular.length)layers['painted-roughness']={type:'specular',roughness:level/16,strength:.28,color:'#ffffff'};
+      profiles.set(level,{...surface,layers});
+    }
+    return profiles.get(level);
+  }
   function light(m, res, x, y, z, nx, ny, nz, full, selected, fine, coarse = false) {
     if (!coarse && S.clip && !S.clip(x, y, z)) return;
     /* born: when this dab appears (growth you can watch). A material's or a solid's o.born: seconds, or (x, y, z, along) -> seconds */
@@ -950,6 +966,7 @@ function makeSculpt(B, rest) {
       const f = m.form(x, y, z, nx, ny, nz);
       if (f) ((nx = f[0]), (ny = f[1]), (nz = f[2]));
     }
+    if (m.paintedNormal) [nx,ny,nz]=m.paintedNormal;
     let ramp = m.rf ? m.rf(x, y, z) || m.r : m.r,
       t,
       ao = 1,
@@ -1157,7 +1174,7 @@ function makeSculpt(B, rest) {
     }
     /* a wet or polished thing has a small hard highlight where it mirrors the sun to the eye. The eye is taken to be at S.view (set it to the
        way the camera looks from); gloss: { c (palette index), at (how small: 0.95), c2 and at2 (a dimmer ring round it) } */
-    const surface = m.surface === undefined ? m0.surface : m.surface;
+    const surface = paintedFinish(m.surface === undefined ? m0.surface : m.surface,m0.paintedRoughness);
     let glint = false;
     if (m.gloss && !style?.highlight && !surface && !m.em && !flat) {
       const g = m.gloss,
@@ -1375,7 +1392,7 @@ function makeSculpt(B, rest) {
     }
     const alternate = shadowArt?.small && hadShadow && !m.glass && !flat ?
       light(m0, res, x, y, z, gx, gy, gz, full, undefined, undefined, true) : null;
-    if ((fine ?? (S.fine || m0.fine)) && !m.glass && (m.a === undefined || m.a >= 1 || glint))
+    if (!m0.indexedPigment && !m0.paintedEmission && (fine ?? (S.fine || m0.fine)) && !m.glass && (m.a === undefined || m.a >= 1 || glint))
       fineTile(m0, res, x, y, z, nx, ny, nz, full, ci);
     if (S.bounce && !flat && !m.em)
       ((BTAP.ramp[B.count()] = ramp), (BTAP.t[B.count()] = t)); /* kept for the bounce pass */
@@ -1383,7 +1400,7 @@ function makeSculpt(B, rest) {
     /* colour worked out per pixel (S.pixel, for a diorama whose look.pixel is on): the dab says which ramp, how lit, which pattern and
        which way its surface truly faces; each pixel is then coloured from those where it lands. A colour a material chose itself
        (a texture with no pattern behind it), a glowing thing, glass and a glint keep the dab's own colour */
-    if (S.pixel && !m.optical && !surface?.opacity && !m.em && !m.glass && !glint && (m.a === undefined || m.a >= 1) && (!flat || m.pat))
+    if (S.pixel && !m0.indexedPigment && !m0.paintedEmission && !m.optical && !surface?.opacity && !m.em && !m.glass && !glint && (m.a === undefined || m.a >= 1) && (!flat || m.pat))
       B.pixNext(
         ramp,
         t,
@@ -1407,15 +1424,16 @@ function makeSculpt(B, rest) {
       SurfaceBrush.stamp(B, frame, P[ci], brush, { opacity: m.a === undefined || glint ? 3 : m.a, animation: fl });
       return;
     }
+    const geometry = m0.paintedNormal ? [gx,gy,gz] : [nx,ny,nz];
     if (S.follow && !m.glass) {
-      formDab(res, x, y, z, nx, ny, nz, P[ci], m.a === undefined || glint ? 3 : m.a, fl);
+      formDab(res, x, y, z, ...geometry, P[ci], m.a === undefined || glint ? 3 : m.a, fl);
       return;
     }
     disc(
       x,
       y,
       z,
-      [nx, ny, nz],
+      geometry,
       res * (m.fat || S.fat), // (a material may ask for bigger dabs: m.fat, against the sculpt's 0.46: stone with steps in it)
       res * 0.3,
       P[ci],
@@ -1683,7 +1701,9 @@ function makeSculpt(B, rest) {
     if (!positive.length && !parts.length) throw new Error('Model export needs an unbaked sculpt');
     const field = positive.length ? makeSculpt(B, { positive, negative: [...neg, ...negAll] }) : null;
     if (field) field.ready();
-    return { field, parts, noise: n3 };
+    const maskNames = [...new Set([...positive,...neg,...negAll].flatMap(solid=>solid.mat.surfaceState?.maskNames??[]))];
+    const paintedOpacity = [...positive,...neg,...negAll].some(solid=>solid.mat.surfaceState?.hasOpacity);
+    return { field, parts, noise: n3,maskNames,paintedOpacity };
   };
   S.renderSurface = (x,y,z) => {
     fieldAll(x,y,z);
@@ -1848,7 +1868,8 @@ function makeSculpt(B, rest) {
       material = S.materialAt(material, sample.slice(1, 4), sample.slice(4, 7));
     material = controlled(material);
     const preview = typeof globalThis !== 'undefined' && globalThis.INK_LOOK_ALBEDO;
-    const capture = B.describeAlbedo && (preview || S.captureAlbedo || stagedAlbedo(material.surface) || stagedAlbedo(material.top?.surface));
+    const pigment = material.indexedPigment, glow = material.paintedEmission;
+    const capture = B.describeAlbedo && (pigment || glow || preview || S.captureAlbedo || stagedAlbedo(material.surface) || stagedAlbedo(material.top?.surface));
     const fine = owner?.detailBudget?.fine;
     const collectFootprint = B.describeFootprint && (material.footprint !== undefined || material.top?.footprint !== undefined);
     const collectEngraving=material.engraving!==undefined||material.top?.engraving!==undefined||S.engraving!==undefined;
@@ -1857,13 +1878,14 @@ function makeSculpt(B, rest) {
     if (!renderSdf && !referenceSdf && !capture && !B.describeSplats && !collectStyle && !collectFootprint && !collectEngraving && !collectPrint && !material.optical && !material.top?.optical) return light(material, ...sample, undefined, fine);
     const first = B.count();
     let effective = material, style, pair;
-    if (material.top || collectStyle || collectFootprint || collectEngraving || collectPrint) light(material, ...sample, (used, settings, shades) => {
-      effective = used;
-      style = settings;
-      pair = shades;
-    }, fine);
-    else light(material, ...sample, undefined, fine);
+    const shade = () => light(material, ...sample, material.top || collectStyle || collectFootprint || collectEngraving || collectPrint ?
+      (used,settings,shades)=>{ effective=used; style=settings; pair=shades; } : undefined,fine);
+    const glowRGB = glow?.map(n=>Math.min(1,n<=.0031308 ? n*12.92 : 1.055*n**(1/2.4)-.055));
+    if (pigment || glowRGB?.some(Boolean)) B.withColor(rgb=>(pigment ? pigment.map(n=>n*255) : rgb)
+      .map((n,i)=>Math.min(255,Math.round(n+255*(glowRGB?.[i]??0)))),shade);
+    else shade();
     const end = B.count();
+    if (material.paintedNormal || glowRGB?.some(Boolean)) B.describePaintedShading?.(first,end,material.paintedNormal,glowRGB);
     const referenceRows = referenceSdf?.rows.get(owner);
     if (referenceRows && first < end) {
       if (referenceRows.at(-1)?.[1] === first) referenceRows.at(-1)[1] = end;
@@ -1900,7 +1922,7 @@ function makeSculpt(B, rest) {
       material: effective.materialId ?? material.materialId ?? material,
       target: renderTarget(owner, surfaceId)
     });
-    const albedo = effective.albedo ?? effective.r?.at(-1) ?? material.albedo ?? material.r?.at(-1);
+    const albedo = pigment ?? effective.albedo ?? effective.r?.at(-1) ?? material.albedo ?? material.r?.at(-1);
     if (capture && albedo !== undefined) B.describeAlbedo(first, end, albedo);
   }
   function sampleAt(solid, spacing, visit) {

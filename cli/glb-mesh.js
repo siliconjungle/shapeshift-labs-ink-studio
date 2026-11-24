@@ -81,7 +81,7 @@ function meshWriter(doc, mesh, rig, { V }, options) {
   }) : { uvs: corners, padding: Math.max(2, Math.ceil(textureSize * uvMargin / 2)) };
   const uvs = registered ? atlas.uvs.map(face=>face.map(uv=>uv.map(Math.fround))) : atlas.uvs;
   if (uvs.some(uv => Math.abs(area2(...uv)) < 1e-15)) throw new Error('Degenerate UV mapping on ' + name);
-  if (registered && (!textureSize || materials.some(m=>m.alphaMode && m.alphaMode!=='OPAQUE' || (m.opacity??1)!==1)))
+  if (registered && (!textureSize || materials.some(m=>m.alphaMode && m.alphaMode!=='OPAQUE' || (m.opacity??1)!==1 && !mesh.paintedOpacity)))
     throw new TypeError('Registered baking needs a texture size and opaque source materials');
   const bakeSource = registered || (generated || mesh.bakeUVs) && textureSize && materials.every(m => !m.texture && !m.alphaMode);
   if (bakeSource && uvs.some(face => face.some(uv => uv.some(x => x < 0 || x > 1))))
@@ -107,6 +107,7 @@ function meshWriter(doc, mesh, rig, { V }, options) {
       material.pbrMetallicRoughness.baseColorTexture = texture(bytes || png.encode(width, height, pixels, channels), m.name || 'base color', mimeType);
     }
     if (m.alphaMode) material.alphaMode = m.alphaMode;
+    else if (mesh.paintedOpacity && (m.opacity??1)<1) material.alphaMode = 'BLEND';
     if (m.alphaMode === 'MASK') material.alphaCutoff = m.alphaCutoff ?? 0.5;
     if (m.doubleSided) material.doubleSided = true;
     const emission = m.emission || [0, 0, 0], strength = Math.max(1, ...emission);
@@ -135,6 +136,7 @@ function meshWriter(doc, mesh, rig, { V }, options) {
     const material = { name, pbrMetallicRoughness: {
       baseColorTexture: texture(textures.base, 'base color'), metallicFactor: 0, roughnessFactor: 0.8
     } };
+    if (baked.translucent) material.alphaMode = 'BLEND';
     if (textures.normal) material.normalTexture = texture(textures.normal, 'normal');
     if (textures.surface) {
       material.pbrMetallicRoughness.metallicRoughnessTexture = texture(textures.surface, 'roughness and metal');

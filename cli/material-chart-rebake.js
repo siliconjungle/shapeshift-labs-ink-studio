@@ -98,7 +98,7 @@ function loadAtlas(baseline, row) {
   }).map(([key,map]) => [key,raster(map,3)]));
   const packedOwners=baseline.read(rebakeState.owners);
   const packedPaint=rebakeState.paint && baseline.read(rebakeState.paint);
-  return {pixels, footprint:raster(maps.coverage,1), strength:row.emissionStrength,packedOwners,packedPaint,
+  return {pixels, ...(maps.opacity&&{opacity:raster(maps.opacity,1)}), footprint:raster(maps.coverage,1), strength:row.emissionStrength,packedOwners,packedPaint,
     masks:new Map(Object.entries(row.masks).map(([name,map]) => [name,raster(map,1)])),
     owners:unpack(packedOwners,Uint32Array,count),
     paint:packedPaint && unpack(packedPaint,Float32Array,count*4)};

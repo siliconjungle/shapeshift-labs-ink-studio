@@ -212,7 +212,7 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
         const atlas=atlasOwners?.get(p);
         if (atlas) {
           if (atlas.normal) {
-            normalOut?.set(atlas.normal,p*3);
+            normalOut?.set(atlas.shadingNormal ?? atlas.normal,p*3);
             geometric?.set(atlas.biasNormal ?? atlas.normal,p*3);
           }
           if (restNormals) {
@@ -229,7 +229,12 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
         if (!frames.has(i)) frames.set(i, sample(i));
         const frame = frames.get(i);
         if (frame.normal) {
-          normalOut?.set(frame.normal,p*3);
+          if (normalOut) {
+            const row = world.renderMetadata?.shadingNormals?.subarray(i*3,i*3+3);
+            const transformed = row?.some(Boolean) ? frame.worldNormal(Array.from(row)) : null;
+            const length = transformed && Math.hypot(...transformed);
+            normalOut.set(length ? transformed.map(n=>n/length) : frame.normal,p*3);
+          }
           geometric?.set(frame.normal,p*3);
           if (restNormals) {
             const {anchor} = frame.basis();

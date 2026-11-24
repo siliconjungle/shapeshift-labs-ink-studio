@@ -184,6 +184,16 @@ function restChart(solid, chart) {
   return target;
 }
 
+function indexedValue(input,palette) {
+  const swatch = typeof input === 'string' ? input : input?.swatch;
+  const row = Object.hasOwn(palette,swatch) && palette[swatch];
+  const color = typeof row === 'string' ? row : row?.color;
+  if (typeof color !== 'string' || typeof input !== 'string' &&
+      (!fields(input,['swatch','color']) || typeof input.color !== 'string' || input.color.toLowerCase() !== color.toLowerCase()))
+    throw new RangeError('Indexed pigment needs a swatch from the pixel document palette');
+  return { swatch,color:color.toLowerCase() };
+}
+
 function surfaceSource(route, context) {
   const { destination,binding } = route;
   if (destination.kind !== 'surface-channel')
@@ -193,23 +203,23 @@ function surfaceSource(route, context) {
   const { solid } = boundSolid(binding,source.editor);
   const { chart,channel } = destination;
   const api = require('../index.js').load().KIT.procedural.surfaceState;
-  const definitions = api.channels();
+  const definitions = api.materialChannels(solid.surfaceState);
   if (!Object.hasOwn(definitions,channel))
     throw new RangeError('Unknown source material channel ' + channel);
-  return { source,solid,target:restChart(solid,chart),definition:definitions[channel],api };
+  return { source,solid,target:restChart(solid,chart),definition:definitions[channel],definitions,api };
 }
 
 function channelSource(route, context) {
   const { destination,binding,layer } = route;
-  const { source,solid,target,definition,api } = surfaceSource(route,context);
-  const { chart,channel } = destination, sampler = api.restSampler(target);
+  const { source,solid,target,definition,definitions,api } = surfaceSource(route,context);
+  const { chart,channel } = destination, sampler = api.restSampler(target,definitions);
   return { destination:destination.id, binding:binding.id, frame:binding.frame,
     scene:binding.scene,object:solid.id, ...(binding.part !== undefined && { part:binding.part }),
     chart,channel,...(layer && { layer:layer.id }),...definition,sourceRevision:source.sourceRevision,...(binding.canvas && { canvas:binding.canvas }),
     sample:uv => sampler.sample(uv)[channel] };
 }
 
-function solidEdit(edit, destination, binding, editor) {
+function solidEdit(edit, destination, binding, editor, frame) {
   const { key, solid } = boundSolid(binding,editor);
   const operation = edit.operation;
   if (destination.kind === 'surface-channel') {
@@ -220,8 +230,11 @@ function solidEdit(edit, destination, binding, editor) {
     if (!Array.isArray(stamps) || !stamps.length || stamps.length > 256 ||
         !Array.from(stamps).every(stamp=>fields(stamp,['brush','value','mode','strength','window'])))
       throw new TypeError('A surface channel edit needs one or more native UV stamps');
+    const palette = Object.fromEntries(frame.paletteEntries.map(row=>[row.id,row.color]));
+    const painted = stamps.map(stamp=>({ ...stamp,channel,
+      ...(channel === 'pigment' && stamp.mode !== 'clear' && { value:indexedValue(stamp.value,palette) }) }));
     editor.setSurfaceState({ ...state, charts:{ ...state.charts,
-      [chart]:{ ...target, stamps:[...(target.stamps ?? []),...stamps.map(stamp=>({ ...stamp,channel }))] }
+      [chart]:{ ...target, stamps:[...(target.stamps ?? []),...painted] }
     } },key);
   } else if (destination.kind === 'sdf-shape') {
     if (!fields(operation,['parameters','modifier','updateModifier']) || Object.keys(operation).length !== 1)
@@ -286,7 +299,7 @@ function apply(frame, edit, route, context, readMarks) {
   if (destination.kind === 'splat-attributes') return splats(edit,binding,source.world,source.revision,context.onSplat);
   const change = destination.kind === 'surface-channel' && layer?.kind === 'surface' &&
     edit.operation?.pixel !== undefined ? { ...edit,operation:surfacePixel(frame,edit.operation,binding,layer) } : edit;
-  return solidEdit(change,destination,binding,source.editor);
+  return solidEdit(change,destination,binding,source.editor,frame);
 }
 
 function targets(route, context, limit) {
@@ -318,4 +331,4 @@ function targets(route, context, limit) {
   };
 }
 
-module.exports = { validate, resolve, apply, targets, channelSource, surfaceSource };
+module.exports = { validate, resolve, apply, targets, channelSource, surfaceSource, indexedValue };

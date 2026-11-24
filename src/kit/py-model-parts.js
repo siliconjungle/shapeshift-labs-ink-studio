@@ -44,7 +44,8 @@
         face([at(i, rows - 1), at(i + 1, rows - 1), last], [[a, (rows - 1) / rows], [b, (rows - 1) / rows], [mid, 1]]);
       }
     }
-    return { name: model?.name || [tag, shape.kind].filter(Boolean).join(' '),
+    const state = mat.surfaceState;
+    return { ...(state?.maskNames?.length&&{maskNames:state.maskNames}),...(state?.hasOpacity&&{paintedOpacity:true}), name: model?.name || [tag, shape.kind].filter(Boolean).join(' '),
       points, faces, uvs, closed: true, rigidPart: model?.blend !== true, bakeUVs: model?.bake === true, textureSize: model?.textureSize, materials: [sample(mat, center, [0, 1, 0])],
       sampleSurface: (p, n) => sample(mat, p, n),
       partTags: points.map(() => tag)

@@ -35,6 +35,41 @@
     }
     return freeze(definitions);
   }
+  const finish = freeze({
+    pigment:{type:'indexed',default:null},
+    roughness:{type:'number',min:0,max:1,default:null,material:true},
+    emission:{type:'emission',default:null},
+    normal:{type:'normal',default:null},
+    opacity:{type:'number',min:0,max:1,default:null,material:true}
+  });
+  const maskId = value=>typeof value==='string'&&/^[a-z][a-z0-9_-]{0,47}$/.test(value)&&name(value);
+  function materialChannels(spec) {
+    const masks = spec?.masks ?? [];
+    check(Array.isArray(masks)&&masks.length<=16&&Array.from(masks).every(maskId)&&new Set(masks).size===masks.length,
+      'Rest surface masks need up to 16 unique lowercase IDs');
+    return freeze({ ...defaults,...finish,...Object.fromEntries(masks.map(id=>['mask:'+id,
+      {type:'number',min:0,max:1,default:0}])) });
+  }
+  function valueOf(schema,value,add=false) {
+    if(schema.type==='color')return color(value);
+    if(schema.type==='indexed'){
+      check(keys(value,['swatch','color'])&&typeof value.swatch==='string'&&/^[a-z][a-z0-9-]{0,63}$/.test(value.swatch)&&
+        typeof value.color==='string'&&/^#[a-f0-9]{6}$/i.test(value.color),'Indexed pigment needs a swatch ID and exact #rrggbb color');
+      return {swatch:value.swatch,color:value.color.toLowerCase()};
+    }
+    if(schema.type==='normal'||schema.type==='emission'){
+      const vector=Array.isArray(value)&&value.length===3&&Array.from(value).every(finite);
+      if(schema.type==='emission'){
+        check(vector&&value.every(v=>v>=0&&v<=64),'Surface emission needs linear RGB values from 0 to 64');
+        return value.slice();
+      }
+      check(vector&&value.every(v=>Math.abs(v)<=1)&&value[2]>=0&&Math.hypot(...value)>1e-8,
+        'Surface normal needs a nonzero tangent-space XYZ vector in [-1, 1] with nonnegative Z');
+      return K.V.norm(value);
+    }
+    check(add?finite(value)&&Math.abs(value)<=1e9:scalar(schema,value),'Invalid scalar surface stamp value');
+    return value;
+  }
   function mask(brush,size) {
     check(record(brush),'A surface stamp needs a brush');
     if(brush.kind==='stroke') {
@@ -64,16 +99,8 @@
       'Unknown surface channel or stamp arguments');
     const {channel,mode='set',strength=1,window:chartWindow=full}=spec, type=definitions[channel].type;
     check(window(chartWindow)&&unit(strength)&&['set','add','clear'].includes(mode)&&
-      (mode!=='add'||type==='number'),'Invalid surface stamp mode, strength or window');
-    let value;
-    if(mode!=='clear'){
-      if(type==='color') value=color(spec.value);
-      else {
-        const schema=definitions[channel];
-        check(mode==='add'?finite(spec.value)&&Math.abs(spec.value)<=1e9:scalar(schema,spec.value),'Invalid scalar surface stamp value');
-        value=spec.value;
-      }
-    }
+      (mode!=='add'||type==='number'&&!definitions[channel].material),'Invalid surface stamp mode, strength or window');
+    const value=mode==='clear'?undefined:valueOf(definitions[channel],spec.value,mode==='add');
     const span=chartWindow.max.map((v,i)=>v-chartWindow.min[i]);
     const weight=mask(spec.brush,size.map((v,i)=>v*span[i]));
     return {channel,mode,strength,value,amount:p=>inside(p,chartWindow)?
@@ -95,12 +122,16 @@
         const a=amount(point);
         if(!a)continue;
         const schema=definitions[channel], before=values[channel];
-        if(schema.type==='color'){
+        if(schema.type==='indexed'){
+          if(a>=.5)values[channel]=mode==='clear'?null:{...value};
+        }else if(schema.type!=='number'||schema.material){
+          const colorChannel=schema.type==='color', key=colorChannel?'color':'value';
           const retained=(before?.coverage??0)*(1-a);
-          if(mode==='clear') values[channel]=retained?{color:before.color.slice(),coverage:retained}:null;
+          if(mode==='clear') values[channel]=retained?{[key]:before[key],coverage:retained}:null;
           else {
             const coverage=a+retained;
-            values[channel]={color:value.map((v,i)=>(v*a+(before?.color[i]??0)*retained)/coverage),coverage};
+            const previous=before?.[key], combine=(next,prior)=>(next*a+(prior??0)*retained)/coverage;
+            values[channel]={[key]:Array.isArray(value)?value.map((v,i)=>combine(v,previous?.[i])):combine(value,previous),coverage};
           }
         }else if(mode==='add')values[channel]=clamp(before+value*a,schema.min,schema.max);
         else values[channel]=before*(1-a)+(mode==='clear'?schema.default:value)*a;
@@ -140,37 +171,67 @@
     if(Number.isSafeInteger(input))return palette[input];
     return color(input).map(v=>v*255);
   }
+  const materialValue=(layer,base)=>layer?mix(base,layer.value,layer.coverage):base;
+  const materialVector=(layer,base)=>layer?base.map((n,i)=>mix(n,layer.value[i],layer.coverage)):base;
+
   function appearance(base,hit,palette,point) {
-    const {values,chart}=hit, adjusted={...base,surfaceId:chart};
-    if(!active(values))return adjusted;
+    const {values,chart,paintedNormal}=hit, adjusted={...base,surfaceId:chart};
+    const stains=active(values), pigment=values.pigment, wet=wetness(values), masks={};
+    for(const [id,value] of Object.entries(values))if(id.startsWith('mask:'))masks[id.slice(5)]=value;
+    const channels=pigment||values.roughness||values.emission||paintedNormal||values.opacity||Object.keys(masks).length;
+    if(!stains&&!channels)return adjusted;
     const source=base.rf?.(...point)||base.r;
-    adjusted.r=ramp(source,palette,values);
-    adjusted.rf=undefined;
     const rgb=colorFor(base.albedo,palette,source.at(-1));
-    if(rgb)adjusted.albedo=shade(rgb,values).map(v=>v/255);
-    const wet=wetness(values);
-    if(base.model||wet)adjusted.model=(point,normal)=>{
-      const model=typeof base.model==='function'?base.model(point,normal):base.model;
-      const modelRGB=model?.color&&display(model.color).map(v=>v*255);
-      return {...model,...(modelRGB&&{color:linear(shade(modelRGB,values).map(v=>v/255))}),
-        ...(wet&&{roughness:mix(model?.roughness??.8,.25,wet)})};
+    if(stains){
+      adjusted.r=ramp(source,palette,values);
+      adjusted.rf=undefined;
+      if(rgb)adjusted.albedo=shade(rgb,values).map(v=>v/255);
+    }
+    const exact=pigment&&color(pigment.color);
+    if(exact){
+      adjusted.albedo=exact;
+      adjusted.indexedPigment=exact;
+    }
+    const modelAt=(p,n)=>typeof base.model==='function'?base.model(p,n):base.model;
+    const model=channels&&modelAt(point,hit.normal);
+    if(values.roughness)adjusted.paintedRoughness=materialValue(values.roughness,model?.roughness??.8);
+    if(paintedNormal)adjusted.paintedNormal=paintedNormal;
+    if(values.opacity){
+      const opacity=materialValue(values.opacity,clamp(base.a??model?.opacity??1,0,1));
+      adjusted.a=opacity<1?opacity:Math.max(1,base.a??3);
+    }
+    if(values.emission){
+      const previous=model?.emission??(base.em&&rgb?linear(rgb.map(v=>v/255)):[0,0,0]);
+      adjusted.paintedEmission=materialVector(values.emission,previous);
+      adjusted.em=false;
+    }
+    if(channels||base.model||wet)adjusted.model=(p,n)=>{
+      const original=modelAt(p,n);
+      const modelRGB=original?.color&&display(original.color).map(v=>v*255);
+      const rough=mix(original?.roughness??.8,.25,wet);
+      return {...original,
+        ...(exact?{color:linear(exact)}:stains&&modelRGB&&{color:linear(shade(modelRGB,values).map(v=>v/255))}),
+        ...(values.roughness||wet?{roughness:materialValue(values.roughness,rough)}:{}),
+        ...(adjusted.paintedEmission&&{emission:adjusted.paintedEmission}),
+        ...(paintedNormal&&{normal:paintedNormal}),
+        ...(values.opacity&&{opacity:materialValue(values.opacity,original?.opacity??clamp(base.a??1,0,1))}),
+        ...(Object.keys(masks).length&&{masks:{...original?.masks,...masks}})};
     };
     return adjusted;
   }
   function bind(material,locate,palette) {
-    return {...material,surfaceState:{locate,apply(base,hit,point) {
-      return appearance(base,hit,palette,point);
-    }}};
+    return {...material,surfaceState:{locate,maskNames:locate.maskNames,hasOpacity:locate.hasOpacity,hasNormal:locate.hasNormal,
+      apply(base,hit,point) {return appearance(base,hit,palette,point);} }};
   }
   const xyz=value=>Array.isArray(value)&&value.length===3&&Array.from(value).every(finite);
-  function restSampler({u,v,stamps}) {
+  function restSampler({u,v,stamps},definitions=materialChannels()) {
     const {V}=K;
-    return prepare(stamps,{size:[Math.sqrt(V.dot(u,u)),Math.sqrt(V.dot(v,v))]});
+    return prepare(stamps,{size:[Math.sqrt(V.dot(u,u)),Math.sqrt(V.dot(v,v))],definitions});
   }
   function projection(spec,{coordinatesOnly=false}={}) {
-    check(keys(spec,['charts'])&&record(spec.charts)&&Object.keys(spec.charts).length>0&&Object.keys(spec.charts).length<=32,
+    check(keys(spec,['charts','masks'])&&record(spec.charts)&&Object.keys(spec.charts).length>0&&Object.keys(spec.charts).length<=32,
       'Expected one to 32 named rest surface charts');
-    const {V}=K;
+    const {V}=K, definitions=materialChannels(spec);
     const projectors=Object.entries(clone(spec.charts)).map(([chart,row])=>{
       check(name(chart)&&keys(row,['origin','u','v','depth','twoSided','stamps']),'Invalid rest surface chart '+chart);
       const {origin,u,v,depth=.035,twoSided=false,stamps=[]}=row;
@@ -178,8 +239,8 @@
         'Surface chart needs a finite origin, UV axes and positive depth');
       const cross=V.cross(u,v), uu=V.dot(u,u), vv=V.dot(v,v), uv=V.dot(u,v), det=V.dot(cross,cross);
       check(det>1e-12&&det>uu*vv*1e-10,'Surface chart UV axes must span a plane');
-      const n=V.norm(cross), sampler=!coordinatesOnly && restSampler({u,v,stamps});
-      return {chart,sampler,point(point,normal) {
+      const n=V.norm(cross), sampler=coordinatesOnly ? null : restSampler({u,v,stamps},definitions);
+      return {chart,sampler,u,v,point(point,normal) {
         const delta=V.sub(point,origin), distance=Math.abs(V.dot(delta,n)), facing=V.dot(n,normal);
         if(distance>depth||(twoSided?Math.abs(facing):facing)<.5)return null;
         const a=V.dot(delta,u), b=V.dot(delta,v);
@@ -188,14 +249,28 @@
         return {distance,uv:p.map(value=>clamp(value,0,1))};
       }};
     });
-    return (point,normal)=>{
+    const locate=(point,normal)=>{
       let best, distance=Infinity;
       for(const row of projectors){
         const hit=row.point(point,normal);
         if(hit&&hit.distance<distance){best={row,uv:hit.uv};distance=hit.distance;}
       }
-      return best?{chart:best.row.chart,uv:best.uv,...(best.row.sampler&&{values:best.row.sampler.sample(best.uv)})}:null;
+      if(!best)return null;
+      const {row,uv}=best, values=row.sampler?.sample(uv);
+      if(!values)return {chart:row.chart,uv};
+      let paintedNormal;
+      if(values.normal){
+        const n=V.norm(normal), u=V.norm(V.mad(row.u,n,-V.dot(row.u,n)),V.perp(n));
+        const across=V.cross(n,u), v=V.dot(across,row.v)<0 ? V.mul(across,-1) : across;
+        const [x,y,z]=values.normal.value;
+        const mapped=V.norm(V.mad(V.mad(V.mul(n,z),u,x),v,y),n);
+        paintedNormal=V.norm(V.mad(n,V.sub(mapped,n),values.normal.coverage),n);
+      }
+      return {chart:row.chart,uv,values,normal,...(paintedNormal&&{paintedNormal})};
     };
+    return Object.assign(locate,{maskNames:spec.masks?.slice()??[],
+      hasOpacity:Object.values(spec.charts).some(chart=>chart.stamps?.some(stamp=>stamp.channel==='opacity')),
+      hasNormal:Object.values(spec.charts).some(chart=>chart.stamps?.some(stamp=>stamp.channel==='normal'))});
   }
-  P.surfaceState=Object.freeze({channels,prepare,restSampler,correspondence,projection,bind,appearance,ramp,window,into,isUv:uv,full});
+  P.surfaceState=Object.freeze({channels,materialChannels,valueOf,prepare,restSampler,correspondence,projection,bind,appearance,ramp,window,into,isUv:uv,full});
 })(KIT);
