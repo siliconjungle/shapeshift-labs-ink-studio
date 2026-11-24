@@ -1573,6 +1573,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sdfMaterialPaint.ramp` | function | `(indices,palette)` | [source](../../src/kit/p26a-sdf-material-paint.js) |
 | `KIT.procedural.sdfMaterialPaint.values` | function | `({ material,masks },roles)` | [source](../../src/kit/p26a-sdf-material-paint.js) |
 
+## KIT.procedural.sdfProtection
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.sdfProtection` | namespace |  |  |
+| `KIT.procedural.sdfProtection.blocked` | function | `(guards,corners,change)` | [source](../../src/kit/p59b-sdf-protection.js) |
+| `KIT.procedural.sdfProtection.check` | function | `(value)` | [source](../../src/kit/p59b-sdf-protection.js) |
+| `KIT.procedural.sdfProtection.verify` | function | `(guards,chunks,bricks,previous,dirty)` | [source](../../src/kit/p59b-sdf-protection.js) |
+
 ## KIT.procedural.signalRecovery
 
 | Member | Kind | Signature or value | Guides and source |

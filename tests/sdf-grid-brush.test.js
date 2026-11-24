@@ -219,7 +219,7 @@ test('fill meets the rim and smooth removes and adds relief locally', () => {
   assert(filled.sdf(0,0,.27)>0);
   assert(filled.sdf(0,.12,.22)>0);
 
-  const smoothing=sculpt(spec,'smooth',{...brush,profile:'round',radius:1});
+  const smoothing=sculpt(spec,'smooth',{...brush,profile:'round',radius:1,preserveFeatures:false});
   assert(smoothing.preview.valid,JSON.stringify(smoothing.preview.conflicts));
   assert.deepEqual(smoothing.review.hits.map(hit=>hit.change),['add','cut']);
   assert(smoothing.review.volume.addedWorldVolume>0);

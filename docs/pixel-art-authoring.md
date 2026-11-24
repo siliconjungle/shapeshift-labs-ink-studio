@@ -2176,7 +2176,7 @@ and declared destinations. The edit JSON has `revision`, `frame`, `id`, and
 | `decal-layer` | `operation.type` of `move`, `mask`, `replace`, or `bake` | Revised JSON diorama with the [decal layer](surface-decals.md#edit-a-decal-layer) edited in place |
 | `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and paint, footprint, or transform controls, or an ordered `operation.topology` batch | Splat-fit asset for `render --splat-fit` |
 | `scan-material` | Explicit `operation.texels` on a registered mesh material | Scan paint asset for `render --scan-paint` |
-| `sdf-shape` | `operation.brush`, `operation.updateBrush`, `operation.parameters`, a new `operation.modifier`, or `operation.updateModifier` with `id` and `patch` | Revised JSON diorama with edited geometry |
+| `sdf-shape` | `operation.brush`, `operation.updateBrush`, `operation.parameters`, a new `operation.modifier`, `operation.updateModifier` with `id` and `patch`, or `operation.protection` | Revised JSON diorama with edited geometry or feature volumes |
 | `sdf-material` | `operation.paint` for a native-grid palette role or mask stroke, or `operation.material` for the whole solid | Revised JSON diorama with edited surface appearance |
 
 Omitting `destination` continues to edit raster pixels. Scene writes take
@@ -2685,11 +2685,49 @@ the latest source revision, and this operation:
 ```
 
 `updateBrush` accepts depth, direction, profile, falloff, and smoothing
-radius. With shape settings it rebuilds the stroke from the saved anchors, evaluates the
+radius, `minWall`, or `preserveFeatures`. With shape settings it rebuilds the stroke from the saved anchors, evaluates the
 source before that modifier, and keeps the stroke's ID and stack
 position. The preview describes the retuned stroke in its capture frame.
 The usual revision, preview, undo, and receipt paths apply. Stored strokes
 from before anchor capture still build as retained geometry.
+
+### Protect SDF corners, seams, walls, and openings
+
+New smooth strokes skip captured native neighborhoods that cross a visible hard
+corner, material boundary, or gap. Set `preserveFeatures: false` on a
+smooth brush when you intend to blend across those features.
+
+New blind carves and the subtractive part of smoothing check the connected
+wall along the sweep. `minWall` is the requested remaining thickness in
+world units at capture time and defaults to 0.002. Ink checks the center
+and interior corner rays for each column and reports skipped thin-wall
+hits in preview and receipts. A `through-cut` expresses an intentional
+perforation.
+
+Use `operation.protection` on an `sdf-shape` destination to replace the
+named feature volumes attached to a solid. These bounds are in the
+solid's rest frame and follow its transform and supported affine pose.
+For example:
+
+```json
+{
+  "protection": [
+    { "id": "lintel-seam", "kind": "seam",
+      "bounds": { "min": [-0.6, 1.8, 0.1], "max": [0.6, 1.9, 0.4] } },
+    { "id": "walkway", "kind": "opening",
+      "bounds": { "min": [-0.3, 0.2, -0.4], "max": [0.3, 1.6, 0.4] } }
+  ]
+}
+```
+
+`corner` and `seam` volumes block cuts and additions, `wall` volumes block
+cuts, and `opening` volumes block additions. A column whose swept bounds
+touch a protected volume is skipped with the feature ID and kind.
+These volumes also apply when you retune a stroke or explicitly
+through-cut a solid. Pass an empty list to clear them. Existing strokes
+retain their geometry. New or retuned grid strokes check the current
+protection. Brick mesh controllers accept the same feature volume format.
+See [protected brick mesh features](brick-meshes.md#protect-features-across-remeshing).
 
 ### Finish the faces created by a cut or relief
 

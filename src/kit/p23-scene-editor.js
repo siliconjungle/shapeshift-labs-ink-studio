@@ -250,6 +250,11 @@
       const value = clone(paint);
       return edit('Paint SDF material', targets, solid => patchFields(solid, { sdfPaint:value }));
     }
+    function setSdfProtection(protection, targets = selectedKeys()) {
+      const value = clone(protection);
+      K.procedural.sdfProtection.check(value);
+      return edit('Set SDF feature protection', targets, solid => patchFields(solid, { sdfProtection:value }));
+    }
     function editSurfaceDecal(id, operation) {
       const decals = K.surfaceDecals.edit(snapshot().surfaceDecals, id, operation);
       const write = () => document.setEnvironment({ surfaceDecals:decals });
@@ -398,6 +403,7 @@
       paintShadeNormal,
       setSurfaceState,
       setSdfPaint,
+      setSdfProtection,
       editSurfaceDecal,
       setRole,
       materials: () => freeze(clone(DIO.sceneMaterials(snapshot()))),

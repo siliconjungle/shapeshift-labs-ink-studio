@@ -8,7 +8,7 @@
   const overlap=(a,b)=>axes.every(i=>a.min[i]<=b.max[i] && b.min[i]<=a.max[i]);
   const same=(a,b)=>a.length===b.length && a.every((value,i)=>value===b[i]);
 
-  function create({bricks:initial,bounds,objectId,materials,materialAt,normal,refine=3,
+  function create({bricks:initial,bounds,objectId,materials,materialAt,normal,refine=3,protection,
     maxBricks=512,maxCells=1600000,maxTriangles=400000}={}) {
     if (!P.sparseBricks.isSnapshot(initial) || !name(objectId) ||
         !vector(bounds?.min,Number.isFinite) || !vector(bounds?.max,Number.isFinite) ||
@@ -26,6 +26,7 @@
     });
     const materialSlots=new Map(colors.map((row,i)=>[row.id,i]));
     if (materialSlots.size!==colors.length) throw new RangeError('Brick mesh material IDs must be distinct');
+    const guards=freeze(P.data.clone(P.sdfProtection.check(protection)));
     const {cell,brickSize}=initial;
     const snap=n=>{
       const q=n/cell, near=Math.round(q);
@@ -36,6 +37,8 @@
       throw new RangeError('Brick mesh bounds exceed the lattice coordinate limit');
     const toWorld=box=>({min:box.min.map(n=>n*cell),max:box.max.map(n=>n*cell)});
     const extent=freeze(toWorld(grid));
+    if (guards.some(({bounds})=>axes.some(i=>bounds.min[i]<extent.min[i] || bounds.max[i]>extent.max[i])))
+      throw new RangeError('Protected feature bounds must lie inside the brick mesh domain');
     const first=grid.min.map(n=>Math.floor(n/brickSize)), end=grid.max.map(n=>Math.ceil(n/brickSize));
     if (end.reduce((n,v,i)=>n*(v-first[i]),1)>maxBricks)
       throw new RangeError('Brick mesh domain exceeds its brick budget');
@@ -121,11 +124,12 @@
         if (triangles>maxTriangles) throw new RangeError('Brick mesh triangles exceed the scene budget');
         return geometry;
       });
+      const checked=guards.length && P.sdfProtection.verify(guards,chunks,bricks,current,dirty);
       const trace=Object.freeze({objectId,bounds:extent,distance:bricks.distance,maxStep:cell*.85,
         material(point,n){return colors[slot(bricks,point,n)];}});
       current=Object.freeze({revision:(current?.revision??0)+1,bricks,bounds:extent,objectId,chunks:Object.freeze(chunks),trace,
         materials:Object.freeze(colors.map(row=>row.id)),
-        work:freeze({rebuilt,changed,reused,cells,samples,triangles})});
+        work:freeze({rebuilt,changed,reused,cells,samples,triangles,...(checked && {checkedFeatures:checked})})});
       return current;
     }
 

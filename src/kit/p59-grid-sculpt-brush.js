@@ -16,10 +16,10 @@
   const finite = (n,min,max) => Number.isFinite(n) && n>=min && n<=max;
 
   function settings(raw,mode) {
-    if (!allowed(raw,['depth','direction','profile','falloff','radius','surface']) || !modes.includes(mode) ||
+    if (!allowed(raw,['depth','direction','profile','falloff','radius','surface','preserveFeatures','minWall']) || !modes.includes(mode) ||
         !finite(raw.depth,.005,20))
       throw new TypeError('SDF shape operations need a supported mode and depth from .005 to 20');
-    const { depth,direction='view',profile='flat',falloff={pixels:0},radius,surface } = raw;
+    const { depth,direction='view',profile='flat',falloff={pixels:0},radius,surface,preserveFeatures,minWall } = raw;
     if (!['view','normal'].includes(direction) && (!vec(direction) || V.len(direction)<1e-8))
       throw new TypeError('SDF brush direction needs view, normal, or a nonzero outward XYZ axis');
     if (!profiles.includes(profile) && !(Array.isArray(profile) && profile.length>=2 && profile.length<=16 &&
@@ -31,8 +31,13 @@
       throw new RangeError('Brush falloff needs a width from 0 to 64 pixels and linear or smoothstep');
     if (radius!==undefined && (mode!=='smooth' || !Number.isSafeInteger(radius) || !finite(radius,1,8)))
       throw new RangeError('Smoothing radius needs 1–8 pixels');
+    if (preserveFeatures!==undefined && (mode!=='smooth' || typeof preserveFeatures!=='boolean'))
+      throw new TypeError('preserveFeatures is a boolean on smooth brushes');
+    if (minWall!==undefined && (!['carve','smooth'].includes(mode) || !finite(minWall,0,20)))
+      throw new RangeError('Minimum wall thickness on carve and smooth brushes must be from 0 to 20');
     K.procedural.sdfBrushSurfaces.check(surface);
-    return { ...(surface!==undefined && {surface}),depth,direction:Array.isArray(direction) ? V.norm(direction) : direction,profile,
+    return { ...(surface!==undefined && {surface}),...(preserveFeatures!==undefined && {preserveFeatures}),
+      ...(minWall!==undefined && {minWall}),depth,direction:Array.isArray(direction) ? V.norm(direction) : direction,profile,
       falloff:{pixels:falloff.pixels,curve:falloff.curve ?? 'smoothstep'},...(mode==='smooth' && {radius:radius ?? 1}) };
   }
 
@@ -59,14 +64,16 @@
       throw new TypeError('Invalid grid brush attachment frame or source');
     const used = new Set(), [w] = grid;
     for (const mark of marks) {
-      if (!record(mark,['at','sourceAt','depth','position','normal',...(mode==='smooth' ? ['smoothOffsets'] : [])]) ||
+      if (!record(mark,['at','sourceAt','depth','position','normal',...(mode==='smooth' ? ['smoothOffsets',...(mark?.smoothBlocks!==undefined ? ['smoothBlocks'] : [])] : [])]) ||
           !Array.isArray(mark.at) || mark.at.length!==2 ||
           !Array.from(mark.at).every(n=>Number.isSafeInteger(n) && finite(n,0,1e6)) ||
           !Array.isArray(mark.sourceAt) || mark.sourceAt.length!==2 ||
           !Array.from(mark.sourceAt).every((n,i)=>Number.isSafeInteger(n) && n>=0 && n<grid[i]) ||
           !finite(mark.depth,1e-4,2000) || !vec(mark.position) || !vec(mark.normal) || !finite(V.len(mark.normal),.99,1.01) ||
           mode==='smooth' && (!Array.isArray(mark.smoothOffsets) || mark.smoothOffsets.length!==8 ||
-            !Array.from(mark.smoothOffsets).every(p=>p===null || vec(p))))
+            !Array.from(mark.smoothOffsets).every(p=>p===null || vec(p))) ||
+          mark.smoothBlocks!==undefined && (!Array.isArray(mark.smoothBlocks) || mark.smoothBlocks.length!==8 ||
+            !Array.from(mark.smoothBlocks).every(code=>[null,'smooth-open-boundary','smooth-hard-corner','smooth-material-seam'].includes(code))))
         throw new RangeError('Invalid grid brush attachment mark');
       const key = mark.sourceAt[1]*w+mark.sourceAt[0];
       if (used.has(key)) throw new RangeError('Repeated grid brush attachment mark');

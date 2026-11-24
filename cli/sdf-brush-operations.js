@@ -42,27 +42,41 @@ function profileAt(profile,t) {
   return a+(b-a)*(t-x)/(y-x);
 }
 
-function smoothOffsets(hit,lookup,V) {
+function smoothNeighborhood(hit,lookup,V) {
   const { sourceAt:[x,y],surface,owner } = hit, radius = 8;
-  const totals = Array.from({length:radius},()=>[0,0,0]), weights = new Float64Array(radius);
+  const totals = Array.from({length:radius},()=>[0,0,0]), weights = new Float64Array(radius), blocks=Array(radius).fill(null);
   for (let dy=0;dy<=radius;dy++) {
     for (let dx=-radius;dx<=radius;dx++) {
       const distance = Math.hypot(dx,dy);
       if (!distance || distance>radius || dy===0 && dx<0) continue;
       const a = lookup(x+dx,y+dy), b = lookup(x-dx,y-dy);
-      if (a?.owner!==owner || b?.owner!==owner) continue;
       const slot = Math.ceil(distance)-1;
+      blocks[slot] ??= between(a) ?? between(b) ?? null;
+      if (a?.owner!==owner || b?.owner!==owner) continue;
       const mean = V.lerp(a.surface.position,b.surface.position,.5);
       totals[slot] = V.mad(totals[slot],V.sub(mean,surface.position),1/distance);
       weights[slot] += 1/distance;
     }
   }
-  let total = [0,0,0], weight = 0;
-  return totals.map((vector,i)=>{
+  let total = [0,0,0], weight = 0, blocked=null;
+  const smoothOffsets=totals.map((vector,i)=>{
     total = V.add(total,vector);
     weight += weights[i];
     return weight ? V.mul(total,1/weight) : null;
   });
+  const smoothBlocks=blocks.map(code=>blocked??=code);
+  return {smoothOffsets,smoothBlocks};
+
+  function between(neighbor) {
+    if (neighbor?.owner!==owner)
+      return neighbor?.code==='grazing-or-back-facing' ? 'smooth-hard-corner' : 'smooth-open-boundary';
+    const other=neighbor.surface;
+    if (other.material!==surface.material) return 'smooth-material-seam';
+    if (V.dot(surface.geometricNormal,other.geometricNormal)<.72) return 'smooth-hard-corner';
+    const delta=V.sub(other.position,surface.position);
+    if (Math.abs(V.dot(surface.geometricNormal,delta))>.65*V.len(delta))
+      return 'smooth-open-boundary';
+  }
 }
 
 // Trace from behind the conservative bound to the last exit along the tool axis.
@@ -95,6 +109,25 @@ function throughDepth(hit,sweep,depth,V) {
   return reach<=depth ? { offset:-reach } : { code:'through-cut-depth-limit',requiredDepth:reach };
 }
 
+function checkWall(hit,sweep,depth,minimum,V) {
+  const {sourceAt:[x,y],owner}=hit, limit=depth+minimum;
+  for (const [i,[u,v]] of [[.5,.5],...corners2].entries()) {
+    const origin=sweep(x+u,y+v,0), axis=V.len(V.sub(sweep(x+u,y+v,-1),origin));
+    const sample=distance=>owner.sd(...sweep(x+u,y+v,-distance));
+    let at=skin*2, distance=sample(at);
+    // Tangent-plane corners can miss the original skin on a curved or clipped footprint.
+    if (distance>=-skin*.25 && i>0) continue;
+    if (!Number.isFinite(distance) || distance>=-skin*.25) return {code:'wall-trace-unavailable'};
+    for (let steps=0;at<limit && steps<2048;steps++) {
+      at=Math.min(limit,at+Math.max(skin*.25,Math.abs(distance)*.65/axis));
+      distance=sample(at);
+      if (!Number.isFinite(distance)) return {code:'wall-trace-unavailable'};
+      if (distance>=-skin*.25) return {code:'thin-wall',requiredDepth:limit,availableDepth:at,minimumWall:minimum};
+    }
+    if (at<limit) return {code:'wall-trace-unavailable'};
+  }
+}
+
 function brushSweep(hit,projection,grid,api,V) {
   const { sourceAt:[x,y],outward,surface,direction } = hit;
   const axial = direction==='view' && projection.perspective ? -V.dot(outward,projection.forward) : 0;
@@ -120,7 +153,7 @@ function brushSweep(hit,projection,grid,api,V) {
     volumeAt:distance=>area*(axial ? (1-distance*axial/surface.depth)**2 : 1) };
 }
 
-function plan({ mode,settings,grid,projection,candidates,attachment,skipped,api,V }) {
+function plan({ mode,settings,grid,projection,candidates,attachment,skipped,api,V,guard }) {
   const [w,h] = grid;
   strengths(candidates,w,h,settings);
   const capAxis = settings.direction==='normal' ?
@@ -145,7 +178,9 @@ function plan({ mode,settings,grid,projection,candidates,attachment,skipped,api,
       else offset = Math.min(depth,(level-V.dot(capAxis,surface.position))/travel);
     } else if (mode==='smooth') {
       const average = hit.smoothOffsets?.[settings.radius-1];
-      if (!average) rejected = { code:'smooth-neighbors-unavailable' };
+      const blocked=settings.preserveFeatures && hit.smoothBlocks?.[settings.radius-1];
+      if (blocked) rejected={code:blocked};
+      else if (!average) rejected = { code:'smooth-neighbors-unavailable' };
       else offset = clamp(V.dot(average,outward)*strength,-depth,depth);
     } else offset = mode==='carve' ? -depth : depth;
     if (!rejected && Math.abs(offset)<skin) rejected = { code:mode==='fill' ? 'already-at-level' : 'no-smooth-change' };
@@ -158,6 +193,12 @@ function plan({ mode,settings,grid,projection,candidates,attachment,skipped,api,
     const range = [Math.min(offset,-overlap),Math.max(offset,overlap)];
     if (!sweep.valid(range[1])) { skipped.push({ at,sourceAt:hit.sourceAt,code:'outside-brush-depth' }); continue; }
     const corners = range.flatMap(d=>corners2.map(([u,v])=>hit.toLocal(sweep.point(x+u,y+v,d))));
+    const protection=guard(corners,change) ?? (change==='cut' && settings.minWall!==undefined ?
+      checkWall(hit,sweep.point,-offset,settings.minWall,V) : undefined);
+    if (protection) {
+      skipped.push({at,sourceAt:hit.sourceAt,...protection});
+      continue;
+    }
     columns.push({ at:hit.sourceAt,corners,change });
     plans.push({ hit,sweep,range,strength,change });
   }
@@ -193,4 +234,4 @@ function plan({ mode,settings,grid,projection,candidates,attachment,skipped,api,
     projectedPixels:hits.length,hits,skippedHits:skipped,volume,attachment:{ ...attachment.source,time:attachment.time } } };
 }
 
-module.exports = { plan,smoothOffsets };
+module.exports = { plan,smoothNeighborhood };

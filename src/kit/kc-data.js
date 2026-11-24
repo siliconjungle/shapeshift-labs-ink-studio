@@ -110,6 +110,7 @@
     surfaceId: 'str',
     surfaceState: 1,
     sdfPaint: 1,
+    sdfProtection: 1,
     prefabs: 'list',
     tags: 'list',
     mat: 'mat',
@@ -1097,6 +1098,13 @@
             throw new TypeError('SDF paint needs a named, finite exterior solid');
           K.procedural.sdfMaterialPaint.prepare(s.sdfPaint,st.roles);
         } catch (error) { bad(path + '.sdfPaint',error.message); }
+      }
+      if (s.sdfProtection !== undefined) {
+        try {
+          if (!s.id || inner || s.kind==='ground' || s.ghost || s.carve || s.hold)
+            throw new TypeError('SDF protection needs a named, finite exterior solid');
+          K.procedural.sdfProtection.check(s.sdfProtection);
+        } catch (error) { bad(path + '.sdfProtection',error.message); }
       }
       checkModifiers(s.modifiers, path + '.modifiers');
       let scale = 1;

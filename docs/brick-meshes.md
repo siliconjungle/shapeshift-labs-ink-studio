@@ -73,6 +73,31 @@ to attach editable curves to the signed field through cuts and undo.
 Set `brickMeshes: false` on a frame or use `--brick-meshes off`
 to hide the editable fields.
 
+## Protect features across remeshing
+
+Pass a `protection` list with named feature bounds to `brickMeshes.create`.
+Use the same `{ id, kind, bounds: { min, max } }` format as
+[SDF brush volumes](pixel-art-authoring.md#protect-sdf-corners-seams-walls-and-openings).
+The bounds are in the mesh field's coordinates.
+
+- Place a `wall` volume inside the solid core you need to keep.
+- Place an `opening` volume in the air that must stay clear.
+- Wrap a `corner` around the faces you want to hold in place.
+- Wrap a `seam` around the faces whose positions and material assignments
+  should stay fixed.
+
+The controller samples the signed field at 27 points per wall or opening
+volume and checks the reserved volume against the extracted triangles. If a
+feature does not resolve on the current lattice, use a finer `cell`.
+Corners and seams compare protected faces across the old and new mesh.
+Chunks around a brick boundary participate in the same check. Protected
+corners and seams need at least one resolved face in the initial mesh.
+
+The checks also run on `update(snapshot)`. A failure identifies the feature
+and leaves the published snapshot intact. Successful revisions list the
+feature IDs checked in `work.checkedFeatures`. Sparse edits outside the
+protected regions still rebuild only their affected bricks.
+
 ## Choose direct tracing for a close-up
 
 Headless rendering can trace the current signed field with

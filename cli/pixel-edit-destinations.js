@@ -475,8 +475,8 @@ function solidEdit(edit, destination, binding, editor, frame) {
       [chart]:{ ...target, stamps:[...(target.stamps ?? []),...painted] }
     } },key);
   } else if (destination.kind === 'sdf-shape') {
-    if (!fields(operation,['parameters','modifier','updateModifier']) || Object.keys(operation).length !== 1)
-      throw new TypeError('An SDF shape edit needs shape parameters, a new modifier, or an update by modifier ID');
+    if (!fields(operation,['parameters','modifier','updateModifier','protection']) || Object.keys(operation).length !== 1)
+      throw new TypeError('An SDF shape edit needs shape parameters, a modifier operation, or a list of protected features');
     if (operation.modifier !== undefined) {
       const modifiers = solid.modifiers ?? [];
       if (!record(operation.modifier) || Object.hasOwn(operation.modifier,'id') ||
@@ -487,6 +487,9 @@ function solidEdit(edit, destination, binding, editor, frame) {
       const update = operation.updateModifier;
       if (!fields(update,['id','patch'])) throw new TypeError('An SDF modifier update needs an ID and patch');
       editor.updateModifier(update.id,update.patch,key);
+    } else if (operation.protection!==undefined) {
+      if (!Array.isArray(operation.protection)) throw new TypeError('SDF protection needs a list of feature volumes');
+      editor.setSdfProtection(operation.protection,key);
     } else editor.updateShape(operation.parameters,key);
   } else {
     if (!fields(operation,['material']) || (typeof operation.material !== 'string' && !record(operation.material)))
@@ -638,6 +641,7 @@ function targets(route, context, limit, query) {
   return { destination:destination.id, binding, revision, sourceRevision,
     solid:{ id:solid.id, key, label:solid.label, part:solid.part },
     ...(channel !== undefined && { surfaceChannel:{ object:solid.id, chart, channel } }),
+    ...(destination.kind==='sdf-shape' && solid.sdfProtection?.length && {protection:solid.sdfProtection}),
     ...(destination.kind==='sdf-material' && { paintStrokes:(solid.sdfPaint?.strokes ?? []).map(
       ({ id,material,masks,cells })=>({ id,material,masks,pixels:cells.length })) }),
     modifiers:(solid.modifiers ?? []).map(({id,kind,label,mode,brush}) => ({ id,kind,label,
