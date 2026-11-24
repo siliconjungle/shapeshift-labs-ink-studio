@@ -1686,6 +1686,11 @@ brick data and remain readable.
   for a vertical span bake. A new water scene can then publish the result to
   gameplay and WebGL together.
 - `changesFrom(previous)` returns bounds with the interpolation halo.
+  `sampleChangesFrom(previous, {channels: ['offset', 'material']})` compares
+  snapshots of the same field. It returns exact sample counts and inclusive
+  lattice and world bounds per changed brick and channel. Each row's
+  `touches({min, max})` checks actual changed samples in inclusive integer
+  lattice bounds, including when the row contains disjoint edits.
   `stats` counts retained, uniform, dense and sculpted bricks.
 - For a biome world edit, create the brush snapshot with an unedited frame's
   `distance` as its base, then call `prepare(view, {bricks, water})`. The

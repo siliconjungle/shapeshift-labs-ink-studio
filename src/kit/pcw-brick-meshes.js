@@ -5,7 +5,6 @@
   const axes=[0,1,2], name=id=>typeof id==='string' && id.trim().length>0;
   const vector=(p,test)=>Array.isArray(p)&&p.length===3&&Array.from(p).every(test);
   const bounded=(n,min,max)=>Number.isSafeInteger(n)&&n>=min&&n<=max;
-  const overlap=(a,b)=>axes.every(i=>a.min[i]<=b.max[i] && b.min[i]<=a.max[i]);
   const same=(a,b)=>a.length===b.length && a.every((value,i)=>value===b[i]);
 
   function create({bricks:initial,bounds,objectId,materials,materialAt,normal,refine=3,protection,
@@ -42,7 +41,7 @@
     const first=grid.min.map(n=>Math.floor(n/brickSize)), end=grid.max.map(n=>Math.ceil(n/brickSize));
     if (end.reduce((n,v,i)=>n*(v-first[i]),1)>maxBricks)
       throw new RangeError('Brick mesh domain exceeds its brick budget');
-    const specs=[];
+    const specs=[], byKey=new Map();
     let cellBudget=0;
     for (let z=first[2];z<end[2];z++) for (let y=first[1];y<end[1];y++) for (let x=first[0];x<end[0];x++) {
       const coordinate=[x,y,z], key=coordinate.join('/');
@@ -52,7 +51,27 @@
         max:owned.max.map((n,i)=>Math.min(grid.max[i],n+2))};
       cellBudget+=lattice.max.reduce((n,v,i)=>n*(v-lattice.min[i]),1);
       if (cellBudget>maxCells) throw new RangeError('Brick mesh domain exceeds its padded lattice cell budget');
-      specs.push({key,bounds:freeze(toWorld(owned)),lattice,owned,dependencies:toWorld(lattice)});
+      const spec={key,bounds:freeze(toWorld(owned)),lattice,owned,
+        ownSamples:{min:owned.min,max:owned.max.map(n=>n-1)}};
+      specs.push(spec);
+      byKey.set(key,spec);
+    }
+
+    function dependencies(dirty) {
+      const geometry=new Set(), material=new Set(), local=new Set();
+      for (const edit of dirty) {
+        // Material taps round to samples at most .45 cells from an owned crossing.
+        const offset=edit.channel==='offset', padding=offset ? 2 : 0;
+        const affected=offset ? geometry : material, {min,max}=edit.lattice;
+        const from=first.map((n,i)=>Math.max(n,Math.ceil((min[i]-padding)/brickSize)-1));
+        const to=end.map((n,i)=>Math.min(n-1,Math.floor((max[i]+padding)/brickSize)));
+        for (let z=from[2];z<=to[2];z++) for (let y=from[1];y<=to[1];y++) for (let x=from[0];x<=to[0];x++) {
+          const spec=byKey.get([x,y,z].join('/'));
+          if (edit.touches(offset ? spec.lattice : spec.owned)) affected.add(spec.key);
+          if (edit.key===spec.key && edit.touches(spec.ownSamples)) local.add(spec.key);
+        }
+      }
+      return {geometry,material,local};
     }
 
     function slot(bricks,point,normal) {
@@ -69,8 +88,11 @@
         cell,latticeBounds:spec.lattice,ownedEdges:spec.owned,normal,refine
       });
       const positions=[], indices=[], materials=[], byVertex=new Map();
+      const sites=new Float64Array(surface.crossings.length*6), faceCounts=new Uint8Array(surface.crossings.length);
       for (const [i,hit] of surface.crossings.entries()) {
         const material=slot(bricks,hit.p,hit.n);
+        sites.set(hit.p,i*6);
+        sites.set(hit.n,i*6+3);
         for (let triangle=i*2;triangle<i*2+2;triangle++) {
           const points=surface.triangles[triangle].map(j=>surface.points[j].map(Math.fround));
           const area=V.len(V.cross(V.sub(points[1],points[0]),V.sub(points[2],points[0])));
@@ -84,10 +106,26 @@
             indices.push(byVertex.get(key));
           }
           materials.push(material);
+          faceCounts[i]++;
         }
       }
-      if (previous && same(positions,previous.positions) && same(indices,previous.indices) &&
-          same(materials,previous.faceMaterials)) return {geometry:previous,work:surface.work};
+      return {geometry:publish(spec,positions,indices,materials,previous),sites:{points:sites,faceCounts},work:surface.work};
+    }
+
+    function recolor(bricks,spec,previous,{points,faceCounts}) {
+      const materials=[];
+      for (let i=0;i<faceCounts.length;i++) {
+        const offset=i*6;
+        const material=slot(bricks,points.subarray(offset,offset+3),points.subarray(offset+3,offset+6));
+        for (let count=0;count<faceCounts[i];count++) materials.push(material);
+      }
+      return publish(spec,previous.positions,previous.indices,materials,previous);
+    }
+
+    function publish(spec,positions,indices,materials,previous) {
+      if (previous && (positions===previous.positions || same(positions,previous.positions)) &&
+          (indices===previous.indices || same(indices,previous.indices)) &&
+          same(materials,previous.faceMaterials)) return previous;
       const mesh=materials.length ? K.sceneMeshes.create({id:JSON.stringify([objectId,spec.key]),objectId,positions,indices,
         uvs:new Float32Array(positions.length/3*2),materials:colors,faceMaterials:materials}) : null;
       if (mesh) {
@@ -95,41 +133,50 @@
         layer.brickField=objectId;
         layer.surfaceMotionKey=JSON.stringify([mesh.id,(current?.revision??0)+1]);
       }
-      const geometry=Object.freeze({key:spec.key,bounds:spec.bounds,positions:Object.freeze(positions),
+      return Object.freeze({key:spec.key,bounds:spec.bounds,positions:Object.freeze(positions),
         indices:Object.freeze(indices),faceMaterials:Object.freeze(materials),triangles:materials.length,mesh});
-      return {geometry,work:surface.work};
     }
 
-    let current;
+    let current, currentSites;
     function update(bricks) {
       if (!P.sparseBricks.sharesBase(initial,bricks))
         throw new TypeError('Brick meshes need a snapshot from their original sparse field');
       if (current?.bricks===bricks) return current;
-      const dirty=current && [...bricks.changesFrom(current.bricks,{channel:'offset'}),
-        ...bricks.changesFrom(current.bricks,{channel:'material'})];
-      const rebuilt=[], changed=[], reused=[];
+      const dirty=current ? bricks.sampleChangesFrom(current.bricks,{channels:['offset','material']}) : [];
+      const affected=current && dependencies(dirty);
+      const rebuilt=[], recolored=[], seamNeighbors=[], changed=[], reused=[], sites=[];
       let triangles=0,cells=0,samples=0;
       const chunks=specs.map((spec,i)=>{
         const previous=current?.chunks[i];
-        let geometry=previous;
-        if (!dirty || dirty.some(box=>overlap(box,spec.dependencies))) {
+        let geometry=previous, saved=currentSites?.[i];
+        if (!affected || affected.geometry.has(spec.key)) {
           const built=compile(bricks,spec,previous);
           geometry=built.geometry;
+          saved=built.sites;
           cells+=built.work.cells;
           samples+=built.work.samples;
           rebuilt.push(spec.key);
+          if (affected && !affected.local.has(spec.key)) seamNeighbors.push(spec.key);
+        } else if (affected.material.has(spec.key)) {
+          geometry=recolor(bricks,spec,previous,saved);
+          recolored.push(spec.key);
+          if (!affected.local.has(spec.key)) seamNeighbors.push(spec.key);
         }
+        sites.push(saved);
         (geometry===previous ? reused : changed).push(spec.key);
         triangles+=geometry.triangles;
         if (triangles>maxTriangles) throw new RangeError('Brick mesh triangles exceed the scene budget');
         return geometry;
       });
-      const checked=guards.length && P.sdfProtection.verify(guards,chunks,bricks,current,dirty);
+      const checked=guards.length && P.sdfProtection.verify(guards,chunks,bricks,current,
+        current && dirty.map(edit=>P.spatial.expand(edit.bounds,cell)));
       const trace=Object.freeze({objectId,bounds:extent,distance:bricks.distance,maxStep:cell*.85,
         material(point,n){return colors[slot(bricks,point,n)];}});
       current=Object.freeze({revision:(current?.revision??0)+1,bricks,bounds:extent,objectId,chunks:Object.freeze(chunks),trace,
         materials:Object.freeze(colors.map(row=>row.id)),
-        work:freeze({rebuilt,changed,reused,cells,samples,triangles,...(checked && {checkedFeatures:checked})})});
+        work:freeze({dirty:dirty.map(({key,channel,samples,bounds})=>({key,channel,samples,bounds})),
+          rebuilt,recolored,seamNeighbors,changed,reused,cells,samples,triangles,...(checked && {checkedFeatures:checked})})});
+      currentSites=sites;
       return current;
     }
 

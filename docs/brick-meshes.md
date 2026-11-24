@@ -52,19 +52,34 @@ The brush bounds need to cover the full change, including any blend
 distance. World simulation or editor code can pass the resulting
 snapshot through the same API.
 
-Geometry and material changes rebuild the bricks whose extraction
-samples overlap the change and its halo. Untouched chunks keep their
-mesh handles. Brick mesh publications are atomic, including when a
-material or triangle budget fails. Medium-only changes retain the mesh
-buffers. A revision has the following work fields.
+The controller compares actual lattice samples between snapshots. An
+offset change extracts the bricks that read those samples, including
+neighbors whose padded lattice reaches them across a seam. Distant
+edits within one storage brick are tracked separately for overlap checks.
+Material-only edits reuse the saved surface crossings and triangle
+positions and update the affected face assignments. Medium-only changes
+reuse all mesh buffers.
+
+Untouched chunks keep their mesh handles. Publications are atomic,
+including when a feature guard, material, or triangle budget fails.
+A revision has the following work fields.
 
 | Field | Meaning |
 | --- | --- |
-| `rebuilt` | Brick IDs that ran extraction in this update |
+| `dirty` | Exact changed-sample count and world-space bounds per source brick and channel |
+| `rebuilt` | Brick IDs that ran geometry extraction |
+| `recolored` | Brick IDs that reassigned materials using cached crossings |
+| `seamNeighbors` | Bricks processed because they read changed samples owned outside their range |
 | `changed` | Brick IDs whose mesh data changed, including empty bricks |
 | `reused` | Brick IDs that kept their previous mesh data |
 | `cells`, `samples` | Lattice cells and field calls used by the update |
 | `triangles` | Triangle count for the published revision |
+
+The initial build runs extraction across the mesh domain. Subsequent
+`dirty` bounds describe the changed sample positions before interpolation
+or seam padding, so a one-sample box can have equal min and max. With
+`renderStats: true`, headless renders include the object, revision, and
+work report in `renderStats.brickMeshes`.
 
 Node and WebGL 2 draw these meshes in the scene and expose their
 object and material IDs. Mesh picking follows the current revision.
@@ -103,7 +118,11 @@ protected regions still rebuild only their affected bricks.
 Headless rendering can trace the current signed field with
 [`sdfAssist`](sdf-assist.md). Set an object, material, or world-space
 box in the existing rules to use tracing locally while the rest of the
-asset uses cached triangles. WebGL 2 uses the triangle meshes.
+asset uses cached triangles. For a matched comparison on one revision, use
+the same camera and render settings with `sdfAssist: false` for a mesh render
+and `sdfAssist: true` for a direct field render. Compare `depth`,
+`surfaceCoverage`, and `surfaceKind` from the opaque surface passes.
+WebGL 2 uses the triangle meshes.
 
 ```js
 ink.render(world, {

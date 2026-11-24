@@ -466,6 +466,8 @@ function renderFrame(world, o, preparedPalettes) {
   const probeView = o[probeCamera];
   const brickAPI=world.brickMeshes && require('../index.js').load().KIT.procedural.brickMeshes;
   const brickFrames=brickAPI?.frame(world,o.brickMeshes) ?? [];
+  if (counters && brickFrames.length && !o.reflectionPlane && !probeView)
+    counters.brickMeshes=brickFrames.map(({objectId,revision,work})=>({objectId,revision,work}));
   const useSdf = sdfSettings && (world.renderSdfs?.length || brickFrames.length) && !o.reflectionPlane?.select && !probeView?.allow;
   const transparency = SplatOrder.transparency(o.stableTransparency ?? look.stableTransparency);
   const blendDepth = transparency?.mode === 'blend' ? transparency.depthTolerance : 0;

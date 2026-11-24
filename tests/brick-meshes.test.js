@@ -55,6 +55,75 @@ test('local CSG edits reuse other chunks and agree with a full fresh bake across
   assert(corners.some(([x,y,z])=>Math.abs(x-1.904)<.014&&Math.abs(y-1.197)<.014&&Math.abs(z-.41)<.014));
 });
 
+function alignedFixture() {
+  const {brickMeshes,sparseBricks}=ink.load().KIT.procedural;
+  const root=sparseBricks.create({cell:.125,brickSize:8,base:(x,y,z)=>{
+    const a=Math.abs(x-.5)-1.14, b=Math.abs(y-.5)-1.13, c=Math.abs(z-.54)-.107;
+    return Math.hypot(Math.max(0,a),Math.max(0,b),Math.max(0,c))+Math.min(0,Math.max(a,b,c));
+  }});
+  const options={bricks:root,bounds:{min:[-1,-1,-1],max:[2,2,2]},objectId:'slab',
+    materials:[{id:'stone',color:0x89736e},{id:'trim',color:0x649681}]};
+  return {brickMeshes,root,options,surface:brickMeshes.create(options)};
+}
+
+function sameMeshes(actual,expected) {
+  for (const [i,chunk] of actual.chunks.entries())
+    for (const key of ['positions','indices','faceMaterials'])
+      assert.deepEqual(chunk[key],expected.chunks[i][key],chunk.key+' '+key);
+}
+
+test('dirty samples trigger only their owning brick and seam dependencies, including arbitrary snapshot swaps',()=>{
+  const {brickMeshes,root,options,surface}=alignedFixture(), before=surface.current();
+  const cut=point=>({operation:'subtract',bounds:{min:point,max:point},sdf:()=>-.1});
+  const interior=[.5,.5,.625], east=[.875,.5,.625], north=[.5,.875,.625];
+  const centered=surface.edit(cut(interior));
+  assert.deepEqual(centered.work.rebuilt,['0/0/0']);
+  assert.deepEqual(centered.work.seamNeighbors,[]);
+  assert.deepEqual(centered.work.dirty,[{key:'0/0/0',channel:'offset',samples:1,
+    bounds:{min:interior,max:interior}}]);
+  assert(centered.work.changed.length>0);
+
+  const split=root.edit(cut(east)).edit(cut(north));
+  const after=surface.update(split);
+  const expected=['0/0/0','1/0/0','0/1/0'];
+  assert.deepEqual(after.work.rebuilt,expected);
+  assert.deepEqual(after.work.seamNeighbors,expected.slice(1));
+  assert.deepEqual(after.work.dirty,[{key:'0/0/0',channel:'offset',samples:3,
+    bounds:{min:interior,max:[.875,.875,.625]}}]);
+  assert.deepEqual([...welded(after).values()].filter(count=>count!==2),[]);
+  sameMeshes(after,brickMeshes.create({...options,bricks:split}).current());
+  for (const [i,chunk] of after.chunks.entries())
+    if (!expected.includes(chunk.key)) assert.equal(chunk,centered.chunks[i]);
+
+  const restored=surface.update(root);
+  sameMeshes(restored,before);
+  assert.deepEqual(restored.work.rebuilt,expected);
+  assert.equal(restored.trace.distance(...east),root.distance(...east));
+  assert.notEqual(after.trace.distance(...east),restored.trace.distance(...east));
+
+  const outside=[2.125,.5,.625], outsideEdit=surface.edit({...cut(outside),sdf:()=>-1});
+  assert.deepEqual(outsideEdit.work.rebuilt,[]);
+  assert.equal(outsideEdit.work.dirty[0].samples,1);
+  assert(outsideEdit.chunks.every((chunk,i)=>chunk===restored.chunks[i]));
+});
+
+test('material samples recolor crossing owners without extracting geometry',()=>{
+  const {brickMeshes,root,options,surface}=alignedFixture();
+  const before=surface.current(), point=[1,.5,.625];
+  const painted=surface.edit({bounds:{min:point,max:point},material:'trim'});
+  assert.deepEqual(painted.work.rebuilt,[]);
+  assert.deepEqual(painted.work.recolored,['0/0/0','1/0/0']);
+  assert.deepEqual(painted.work.seamNeighbors,['0/0/0']);
+  assert.deepEqual(painted.work.dirty,[{key:'1/0/0',channel:'material',samples:1,bounds:{min:point,max:point}}]);
+  assert.equal(painted.work.cells,0);
+  assert.equal(painted.work.samples,0);
+  assert(painted.work.changed.length>0);
+  assert(painted.chunks.every((chunk,i)=>chunk.positions===before.chunks[i].positions &&
+    chunk.indices===before.chunks[i].indices));
+  sameMeshes(painted,brickMeshes.create({...options,bricks:painted.bricks}).current());
+  sameMeshes(surface.update(root),before);
+});
+
 test('paint and field swaps publish atomically, including material-only updates and failed edits',()=>{
   const {surface,options}=fixture(ink.load()), before=surface.current();
   const paint={bounds:{min:[.63,-.49,.22],max:[1.1,.45,.55]},material:'cut'};
@@ -84,8 +153,13 @@ test('headless scene draws the updated opening, retains material IDs, and can tr
   const w=116,h=80,opts={w,h,px:1,raw:true,passes:['opaque-surface']};
   const p=40*w+58;
   const before=ink.render(world,opts).passes;
-  surface.edit(cut);
-  const after=ink.render(world,opts).passes;
+  const edited=surface.edit(cut);
+  const mesh=ink.render(world,{...opts,sdfAssist:false,renderStats:true});
+  const after=mesh.passes;
+  assert.deepEqual(mesh.renderStats.brickMeshes,[{objectId:'gate',revision:edited.revision,work:edited.work}]);
+  const direct=ink.render(world,{...opts,sdfAssist:true}).passes;
+  assert.equal(direct.depth[p],after.depth[p]);
+  assert(direct.surfaceKind.includes(2));
   const trace=ink.render(world,{...opts,sdfAssist:{steps:224,rules:[{
     select:{object:'gate'},bounds:{min:[-1.3,-1.2,-.6],max:[.6,1.3,.6]}
   }]}}).passes;
