@@ -1338,7 +1338,8 @@ const CMD = {
         '    --input-out-of-range preserve|clamp|error --output-out-of-range preserve|clamp|error --domain-policy clamp|error|extrapolate',
         '',
         '  shape capture <recipe.js|shape.json> [--out dir] [--yaw degrees,...] [--pitch degrees] export editable silhouettes',
-        '  shape fit <capture-dir> [--out shape.json] [--growth voxels] fit a shared voxel proxy',
+        '  shape capture <recipe.js|shape.json> --views plan.json [--out dir] [--cell size] export approved perspective silhouettes',
+        '  shape fit <capture-dir> [--out shape.json] [--growth voxels] [--review dir] fit a shared voxel proxy',
         '',
         '  scenes                      list every diorama',
         '  show-bridge [--port 8181] [--osc-in 9002]   open live audio, timecode, stage and projection control',
@@ -4048,7 +4049,7 @@ const CMD = {
     require('./depth.js')(pos[0], opt, lib(), path.join(OUT, 'depth-import'));
   },
   shape() {
-    require('./turntable-shape.js').command(pos, opt, lib());
+    require('./turntable-shape.js').command(pos, opt, lib(), { build: file => build(file, undefined, { retainSdf: true }) });
   },
   'mesh-topology'() {
     require('./mesh-topology.js').command(pos, opt, lib(), {

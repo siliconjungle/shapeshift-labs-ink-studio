@@ -35,7 +35,7 @@ function turntableShapeLantern({ KIT: K, makeBuilder, makeSculpt }) {
       S.box([side * 0.80, 1.56, 0], [0.16, 0.15, 0.18], brass, { rd: 0.06 });
     }
     S.bake();
-    K.voxelSurface.draw(B, K.turntableShape.proxy(shape), {
+    if (shape) K.voxelSurface.draw(B, K.turntableShape.proxy(shape), {
       color: '#e2aa6b', ambient: 0.36, shadeSteps: 5, object: 'lantern-handle', material: 'cast-brass'
     });
     return B.finish({

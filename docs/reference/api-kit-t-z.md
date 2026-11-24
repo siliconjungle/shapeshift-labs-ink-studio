@@ -128,10 +128,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.turntableShape` | namespace |  |  |
 | `KIT.turntableShape.camera` | function | `(shape, { width = 96, height = 96, yaw = 0, pitch = 0 } = {})` | [source](../../src/kit/p81-turntable-shape.js) |
-| `KIT.turntableShape.fit` | function | `(prior, edits, { maxGrowth = 4 } = {})` | [source](../../src/kit/p81-turntable-shape.js) |
+| `KIT.turntableShape.fit` | function | `(prior, edits, { maxGrowth = 4, review = false } = {})` | [guide](../turntable-shape.md#keep-an-opening-clear-across-shots), [source](../../src/kit/p81-turntable-shape.js) |
 | `KIT.turntableShape.fromSdf` | function | `(distance, { bounds, cell = 0.08 } = {})` | [guide](../turntable-shape.md#use-the-fitted-shape-in-a-bake), [source](../../src/kit/p81-turntable-shape.js) |
+| `KIT.turntableShape.observe` | function | `(shape, camera, options)` | [guide](../turntable-shape.md#keep-an-opening-clear-across-shots), [source](../../src/kit/p81-turntable-shape.js) |
+| `KIT.turntableShape.perspectiveCamera` | function | `(camera, placement)` | [guide](../turntable-shape.md#keep-an-opening-clear-across-shots), [source](../../src/kit/p81-turntable-shape.js) |
 | `KIT.turntableShape.proxy` | function | `(shape, options)` | [guide](../turntable-shape.md#use-the-fitted-shape-in-a-bake), [source](../../src/kit/p81-turntable-shape.js) |
-| `KIT.turntableShape.silhouette` | function | `(shape, camera)` | [source](../../src/kit/p81-turntable-shape.js) |
+| `KIT.turntableShape.silhouette` | function | `(shape, camera, options)` | [source](../../src/kit/p81-turntable-shape.js) |
 
 ## KIT.typography
 

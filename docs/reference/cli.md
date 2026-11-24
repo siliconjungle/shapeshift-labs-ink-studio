@@ -150,7 +150,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
     --input-out-of-range preserve|clamp|error --output-out-of-range preserve|clamp|error --domain-policy clamp|error|extrapolate
 
   shape capture <recipe.js|shape.json> [--out dir] [--yaw degrees,...] [--pitch degrees] export editable silhouettes
-  shape fit <capture-dir> [--out shape.json] [--growth voxels] fit a shared voxel proxy
+  shape capture <recipe.js|shape.json> --views plan.json [--out dir] [--cell size] export approved perspective silhouettes
+  shape fit <capture-dir> [--out shape.json] [--growth voxels] [--review dir] fit a shared voxel proxy
 
   scenes                      list every diorama
   show-bridge [--port 8181] [--osc-in 9002]   open live audio, timecode, stage and projection control
@@ -920,7 +921,6 @@ These options are read by CLI code. Follow each source link for the accepted val
 - `--buildup-threshold` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--camera-impulse-time` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--case` · [cli/music-instrument-benchmark.js](../../cli/music-instrument-benchmark.js)
-- `--cell` · [cli/turntable-shape.js](../../cli/turntable-shape.js)
 - `--channel` · [cli/depth.js](../../cli/depth.js)
 - `--closest` · [cli/curve.js](../../cli/curve.js)
 - `--cloud` · [cli/scan-mesh.js](../../cli/scan-mesh.js)

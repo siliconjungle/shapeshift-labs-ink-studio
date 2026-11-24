@@ -1,0 +1,28 @@
+{
+  "format": "ink-studio/perspective-shape-views",
+  "version": 1,
+  "occluders": "turntable-shape-perspective.js",
+  "views": [
+    {
+      "id": "workbench",
+      "width": 160,
+      "height": 152,
+      "camera": { "target": [0, 1.79, 0], "dist": 6.2, "yaw": -0.44, "pitch": 0.11, "fov": 0.69 },
+      "openings": [{ "id": "handle-opening", "rect": [75, 59, 12, 7] }]
+    },
+    {
+      "id": "operator",
+      "width": 160,
+      "height": 152,
+      "camera": { "target": [0, 1.82, 0], "dist": 5.6, "yaw": 0.16, "pitch": 0.16, "fov": 0.76 },
+      "openings": [{ "id": "handle-opening", "rect": [79, 59, 12, 7] }]
+    },
+    {
+      "id": "rack-side",
+      "width": 160,
+      "height": 152,
+      "camera": { "target": [0.12, 1.79, 0], "dist": 5.45, "yaw": 0.64, "pitch": 0.29, "fov": 0.79 },
+      "openings": [{ "id": "handle-opening", "rect": [66, 58, 12, 7] }]
+    }
+  ]
+}
