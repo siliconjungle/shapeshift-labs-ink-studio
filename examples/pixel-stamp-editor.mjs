@@ -1,4 +1,5 @@
 import { mountPixelGridCanvas } from '../src/pixel-grid-canvas.mjs';
+import { mountPixelOnionSkin } from '../src/pixel-onion-skin.mjs';
 import { mountPixelMotionPanel } from '../src/pixel-motion-panel.mjs';
 import { mountPixelCraftPanel } from '../src/pixel-craft-panel.mjs';
 import { mountPixelInspector } from '../src/pixel-inspector.mjs';
@@ -13,6 +14,7 @@ const protection = KIT.pixelProtection, layerStack = KIT.pixelLayerStack, stackF
 const { stonePaint, flowingInk, bubble, glint, starTwinkle, line, rect } = InkPixelStudies;
 const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
+const onionSkin = mountPixelOnionSkin($('onion-skin'),view);
 let readInspection;
 const inspector = mountPixelInspector($('pixel-inspection'),view,at=>readInspection?.(at));
 const craft = KIT.pixelCraft, artRules = KIT.pixelArtRules, cleanup = KIT.pixelCleanup;
@@ -691,7 +693,8 @@ function draw() {
   let palette = preview?.palette ?? state.doc.palette, slots = preview?.slots ?? frameSlots(current);
   let alpha = preview?.alpha ?? current.alpha, swatchIds = preview?.swatchIds ?? state.doc.swatchIds;
   let knockouts = preview?.knockouts ?? current.knockouts;
-  const isolated = state.stack && $('layer-view').value === 'active';
+  const { stack } = state, isolated = stack && $('layer-view').value === 'active';
+  const references = $('layer-references').checked;
   if (!adjustmentDraft && !transformDraft && rgbaPencil() && pencilStroke?.tip()) {
     try { ({ palette,slots,alpha,swatchIds } = rgbaStroke(current)); }
     catch (error) { notify(error.message); }
@@ -704,8 +707,7 @@ function draw() {
     } catch (error) { notify(error.message); }
   }
   let image;
-  if (state.stack && !isolated) {
-    const references = $('layer-references').checked;
+  if (stack && !isolated) {
     try {
       const composed = renderStack(state.doc,state.stack,frame,palette,{ id:state.layer,cel:{ slots,alpha,knockouts } },references);
       image = layerStack.image(composed,composed.packed);
@@ -720,7 +722,20 @@ function draw() {
     }
   } else image = stamp.image({ width,height,palette,slots,alpha });
   view.setFrame(image);
-  const doc = state.doc, index = state.frame;
+  const doc = state.doc, index = state.frame, activeLayer = state.layer;
+  onionSkin.setSource({
+    key:JSON.stringify([craftRevision,isolated ? activeLayer : null,references]),index,count:doc.frames.length,rgba:image.rgba,
+    readFrame(i) {
+      const neighbor = doc.frames[i];
+      if (stack && !isolated) {
+        const composite = renderStack(doc,stack,neighbor,doc.palette,undefined,references);
+        return layerStack.image(composite,composite.packed).rgba;
+      }
+      const { rows,slots,strokes,alpha } = stack && isolated
+        ? Object.hasOwn(neighbor.cels,activeLayer) ? neighbor.cels[activeLayer] : {} : neighbor;
+      return stamp.image({ width,height,palette:doc.palette,rows,slots,strokes,alpha }).rgba;
+    }
+  });
   let reader;
   readInspection = at=>(reader ??= inspectionReader(doc,frame,index,{ palette,swatchIds,slots,alpha,knockouts,isolated }))(at);
   inspector.refresh();
@@ -844,6 +859,7 @@ function stop() {
   cancelAnimationFrame(state.play);
   state.play = undefined;
   $('play').textContent = 'Play';
+  onionSkin.setPlaying(false);
 }
 
 function edit(callback) {
@@ -1603,6 +1619,7 @@ $('play').addEventListener('click',() => {
   const elapsed=entries.slice(0,state.frame).reduce((sum, entry)=>sum+entry.duration,0);
   const stopAt=entries.reduce((sum, entry)=>sum+entry.duration,0);
   $('play').textContent='Pause';
+  onionSkin.setPlaying(true);
   const step=now=>{
     const time=(now-start)/1000+elapsed;
     const frame=at(time-(state.doc.phase ?? 0));

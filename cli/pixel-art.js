@@ -2396,6 +2396,7 @@ function canvasReview(design,frameId,file,sources,scene,artShot,reviewBinding) {
   files.write(file,template.replace('/*PIXEL_GRID_CSS*/',() => browserSource('css'))
     .replace('/*PIXEL_GUIDES_MODULE*/',() => fs.readFileSync(path.join(__dirname,'../src/pixel-guides.js'),'utf8'))
     .replace('/*PIXEL_GRID_MODULE*/',() => browserSource('mjs'))
+    .replace('/*PIXEL_ONION_MODULE*/',() => fs.readFileSync(path.join(__dirname,'../src/pixel-onion-skin.mjs'),'utf8'))
     .replace('/*PIXEL_INSPECT_MODULES*/',() => [
       'pixel-layer-stack.js','pixel-canvas-transforms.js','pixel-source-bindings.js','pixel-inspection.js','pixel-view-source.js','pixel-protection.js','art-passes.js',
       'pixel-craft.js','target-selectors.js','pixel-art-rules.js','pixel-inspector.mjs','pixel-craft-panel.mjs'

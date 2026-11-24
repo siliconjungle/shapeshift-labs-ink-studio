@@ -178,6 +178,24 @@ pins, hooks, and arcs for brass, enamel, and glass.
 [Jointed sprite chains](jointed-sprite-chains.md) register authored link cels
 to two spring-driven sockets and switch drawings as the links deform.
 
+## Onion skin
+
+Open **Onion skin** below the frame scrubber and turn on **Show onion skin**.
+Set the count, tint, and opacity for previous and next frames independently.
+Each side can show up to eight frames. A count of zero disables that side.
+Ghosts fade with distance in frame order and stop at the ends of the sequence.
+
+**Changes only** compares visible color and alpha against the current working
+frame, including live stroke previews. It shows pixels that appear,
+disappear, or change color or opacity. The Workshop uses the visible layer
+composite or the isolated layer, according to the **Layer view** setting.
+The overlay pauses during playback and resumes when playback stops.
+The 1× preview, eyedropper, and saved artwork use the unmodified frame.
+
+The offline canvas exported with `pixel-art canvas` has the same overlay
+controls for comparing the frames in that review.
+[Native pixel-art authoring](pixel-art-authoring.md#edit-the-cel-timeline)
+
 ## Drawing and timing
 
 ```js
@@ -219,7 +237,8 @@ To use the same viewport in another browser tool, import
 `mountPixelGridCanvas` from `src/pixel-grid-canvas.mjs` and load the matching
 CSS. Pass each native `{ width, height, rgba }` frame to `view.setFrame()`.
 Use `view.pixelAt(clientX, clientY)` to get the art coordinate for an edit
-and `view.dispose()` when removing the canvas.
+and `view.dispose()` when removing the canvas. Pass an RGBA overlay on the
+same grid to `view.setOnionSkin(rgba)` or `null` to clear it.
 
 Open **Inspect pixel** in the Workshop to trace the composite, layer masks,
 and palette under the cursor. Pin a coordinate to see it update through

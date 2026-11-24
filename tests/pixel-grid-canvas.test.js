@@ -1220,6 +1220,11 @@ test('offline cel timeline navigates linked exposures and shows timing and offse
     assert.equal(await browser.evaluate("document.querySelector('#frames').selectedIndex"),1);
     assert.equal(await browser.evaluate("document.querySelector('#timeline output').value.endsWith('offset 1, -1')"),true);
     assert.deepEqual(await raster(browser,preview,1,0),[189,32,32,255]);
+    await click(browser,'#onion-skin summary');
+    await click(browser,'[data-onion-enabled]');
+    await until(browser,"!document.querySelector('.ink-grid-onion').hidden");
+    assert.equal((await raster(browser,'.ink-grid-onion',1,1))[3],89);
+    assert.deepEqual(await raster(browser,preview,1,1),[0,0,0,0]);
     assert.equal(await browser.evaluate("document.querySelectorAll('#timeline [data-linked]').length"),2);
     assert.match(await browser.evaluate("document.querySelector('#timeline-links').textContent"),/2 cels across 2 frames/);
     const unlink = await browser.evaluate("JSON.parse(decodeURIComponent(document.querySelector('#timeline-unlink').href.split(',')[1]))");
@@ -1230,5 +1235,83 @@ test('offline cel timeline navigates linked exposures and shows timing and offse
     await click(browser,'#timeline-source');
     await until(browser,"document.querySelector('#timeline-source').hidden && document.querySelector('#frames').selectedIndex === 0");
     assert.deepEqual(await raster(browser,preview,1,1),[189,32,32,255]);
+  });
+});
+
+test('workshop onion skin follows the native grid, live strokes, layer view and playback',{ skip },async t=>{
+  const directory = workspace(t), [{ file:bundle }] = build('development',directory);
+  const base = path.join(root,'examples'), file = path.join(directory,'workshop.html');
+  const source = path.join(directory,'onion-frames.json');
+  const url = relative=>pathToFileURL(path.resolve(base,relative)).href;
+  const slots = (...pixels)=>Array.from({ length:15 },(_,i)=>pixels.includes(i) ? 0 : null);
+  fs.writeFileSync(source,JSON.stringify({
+    format:'ink-studio/pixel-layer-deck',version:1,width:5,height:3,palette:['#0000ff'],
+    layers:[{ id:'paper' },{ id:'ink' }],frames:[
+      { id:'distant',duration:.5,cels:{ ink:{ slots:slots(1,4) } } },
+      { id:'previous',duration:.5,cels:{ ink:{ slots:slots(0,1) } } },
+      { id:'current',duration:.5,cels:{ ink:{ slots:slots(1,2) } } },
+      { id:'next',duration:.5,cels:{ paper:{ slots:slots(9) },ink:{ slots:slots(1,3) } } }
+    ]
+  }));
+  fs.writeFileSync(file,fs.readFileSync(path.join(base,'pixel-stamp-editor.html'),'utf8')
+    .replace('../dist/ink-studio.browser.js',pathToFileURL(bundle).href)
+    .replace('../src/pixel-grid-canvas.css',url('../src/pixel-grid-canvas.css'))
+    .replace('src="pixel-stamp-studies.js"','src="'+url('pixel-stamp-studies.js')+'"')
+    .replace('src="pixel-stamp-editor.mjs"','src="'+url('pixel-stamp-editor.mjs')+'"'));
+  const overlay = '.ink-grid-onion';
+  await withChrome(directory,{ hardware:true },async browser=>{
+    await load(browser,file);
+    const doc = await browser.send('DOM.getDocument');
+    const input = await browser.send('DOM.querySelector',{ nodeId:doc.root.nodeId,selector:'#import' });
+    await browser.send('DOM.setFileInputFiles',{ nodeId:input.nodeId,files:[source] });
+    await until(browser,"document.querySelector('#status').textContent === 'Opened onion-frames.json'");
+    const change = (selector,value,event = 'input')=>evaluate(browser,(selector,value,event)=>{
+      const input = document.querySelector(selector);
+      input.value = value;
+      input.dispatchEvent(new Event(event,{ bubbles:true }));
+    },selector,value,event);
+    const waitAlpha = (x,y,alpha)=>until(browser,
+      `document.querySelector(${JSON.stringify(overlay)}).getContext('2d').getImageData(${x},${y},1,1).data[3] === ${alpha}`);
+    await change('#scrub',3);
+    await click(browser,'#onion-skin summary');
+    await change('[data-onion-side="previous"] [data-onion-tint]','#ff0000');
+    await change('[data-onion-side="previous"] [data-onion-opacity]',60);
+    await change('[data-onion-side="next"] [data-onion-tint]','#00ff00');
+    await change('[data-onion-side="next"] [data-onion-opacity]',40);
+    await click(browser,'[data-onion-enabled]');
+    await waitAlpha(0,0,153);
+    assert.deepEqual(await raster(browser,overlay,0,0),[255,0,0,153]);
+    assert.deepEqual(await raster(browser,overlay,3,0),[0,255,0,102]);
+    assert.deepEqual(await raster(browser,overlay,4,0),[0,0,0,0]);
+    assert.deepEqual(await raster(browser,overlay,4,1),[0,255,0,102]);
+    assert.deepEqual(await raster(browser,preview,0,0),[0,0,0,0]);
+
+    await change('[data-onion-side="previous"] [data-onion-count]',2);
+    await waitAlpha(4,0,77);
+    await change('#layer-view','active','change');
+    await waitAlpha(4,1,0);
+    await click(browser,'[data-onion-changes]');
+    await waitAlpha(1,0,0);
+    assert.equal((await raster(browser,overlay,2,0))[3],153);
+    assert.deepEqual(await raster(browser,preview,2,0),[0,0,255,255]);
+
+    await change('[data-onion-side="next"] [data-onion-count]',0);
+    await waitAlpha(3,0,0);
+    await change('[data-onion-side="previous"] [data-onion-count]',1);
+    await waitAlpha(4,0,0);
+    const target = place(await screen(browser,main),0,0);
+    await browser.send('Input.dispatchMouseEvent',{ type:'mousePressed',...target,button:'left',buttons:1,clickCount:1 });
+    await waitAlpha(0,0,0);
+    assert.deepEqual(await raster(browser,preview,0,0),[0,0,255,255]);
+    await browser.send('Input.dispatchMouseEvent',{ type:'mouseReleased',...target,button:'left',clickCount:1 });
+    await click(browser,'#undo');
+    await waitAlpha(0,0,153);
+
+    await click(browser,'#play');
+    assert.equal(await browser.evaluate("document.querySelector('.ink-grid-onion').hidden"),true);
+    await click(browser,'#play');
+    await until(browser,"!document.querySelector('.ink-grid-onion').hidden");
+    await change('#scrub',1);
+    await until(browser,"document.querySelector('.ink-grid-onion').hidden");
   });
 });

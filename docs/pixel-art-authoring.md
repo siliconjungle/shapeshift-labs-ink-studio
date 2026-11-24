@@ -22,6 +22,9 @@ integer zoom, pan, an optional grid, cursor coordinates, and a synchronized
 frames. Use `--frame <id>` to export a single frame. The HTML is a review
 artifact. Use the pixel editor API for document edits or the
 [Pixel Stamp Workshop](pixel-stamps.md) to draw and resize exported stamps.
+Use **Onion skin** to compare earlier and later frames in the canvas.
+The same controls are available while drawing in the Workshop.
+[Onion skin controls](pixel-stamps.md#onion-skin)
 
 ## Edit the cel timeline
 

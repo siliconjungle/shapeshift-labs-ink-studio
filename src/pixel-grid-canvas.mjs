@@ -16,6 +16,7 @@ const markup = `
       <div class="ink-grid-plane">
         <div class="ink-grid-repeats" aria-hidden="true"></div>
         <canvas class="ink-grid-main" aria-label="Native pixel canvas"></canvas>
+        <canvas class="ink-grid-onion" aria-hidden="true" hidden></canvas>
         <div class="ink-grid-lines" aria-hidden="true" hidden></div>
         <div class="ink-grid-guides" aria-hidden="true" hidden></div>
         <div class="ink-grid-mirrors" aria-hidden="true">
@@ -48,6 +49,8 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   const viewport = find('.ink-grid-viewport'), plane = find('.ink-grid-plane');
   const canvas = find('.ink-grid-main'), preview = find('.ink-grid-reference canvas');
   const art = canvas.getContext('2d'), sample = preview.getContext('2d');
+  const onionCanvas = find('.ink-grid-onion'), onion = onionCanvas.getContext('2d');
+  let onionImage;
   const lines = find('.ink-grid-lines'), cursor = find('.ink-grid-cursor');
   const diagnostic = find('.ink-grid-diagnostic'), motion = find('.ink-grid-motion');
   const sourceHits = find('.ink-grid-source-hits');
@@ -272,6 +275,7 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
       preview.style.height = `${h}px`;
       dimensions.value = `${w} × ${h} px`;
       image = art.createImageData(w,h);
+      onionCanvas.hidden = true;
       showPoint(null);
       fit();
     }
@@ -279,6 +283,20 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
     art.putImageData(image,0,0);
     sample.putImageData(image,0,0);
     drawRepeats();
+  }
+
+  function setOnionSkin(rgba) {
+    if (rgba && (rgba.length !== width*height*4 || !width))
+      throw new RangeError('Onion skin must match the native grid');
+    onionCanvas.hidden = !rgba;
+    if (!rgba) return;
+    if (onionImage?.width !== width || onionImage?.height !== height) {
+      onionCanvas.width = width;
+      onionCanvas.height = height;
+      onionImage = onion.createImageData(width,height);
+    }
+    onionImage.data.set(rgba);
+    onion.putImageData(onionImage,0,0);
   }
 
   listen(zoomOut,'click',() => setZoom(zoom-1));
@@ -350,6 +368,6 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   const observer = new ResizeObserver(() => { if (fitting) fit(); else move(left,top); });
   observer.observe(viewport);
   paintView();
-  return Object.freeze({ canvas, setFrame, setGuides, setDrawing, setSelection, setDiagnostic, focusRegion, setZoom, fit, pixelAt, positionAt,
+  return Object.freeze({ canvas, setFrame, setOnionSkin, setGuides, setDrawing, setSelection, setDiagnostic, focusRegion, setZoom, fit, pixelAt, positionAt,
     dispose() { events.abort(); observer.disconnect(); host.replaceChildren(); host.classList.remove('ink-grid-canvas'); } });
 }

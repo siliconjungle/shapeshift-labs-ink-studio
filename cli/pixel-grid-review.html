@@ -59,6 +59,7 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
     <div class="sample-readout"><span id="sample-swatch" aria-hidden="true" hidden></span><output id="sample-value"></output></div>
   </div>
   <div id="canvas"></div>
+  <div id="onion-skin"></div>
   <details id="timeline" hidden open>
     <summary>Cel timeline</summary>
     <div id="timeline-scroll" tabindex="0" role="region" aria-label="Cel timeline">
@@ -85,9 +86,11 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
 <script type="module">
 /*PIXEL_GUIDES_MODULE*/
 /*PIXEL_GRID_MODULE*/
+/*PIXEL_ONION_MODULE*/
 /*PIXEL_INSPECT_MODULES*/
 const { frames,timeline,palette,materials,definitions,layerIds,rulesSource,sceneBindings,reviewBinding,scene:embeddedScene } = /*PIXEL_GRID_DATA*/;
 const view = mountPixelGridCanvas(document.querySelector('#canvas'),{ guideTool:PixelGuides });
+const onionSkin = mountPixelOnionSkin(document.querySelector('#onion-skin'),view);
 const select = document.querySelector('#frames'), status = document.querySelector('#error');
 const eyedropper = document.querySelector('#eyedropper'), mode = document.querySelector('#sample-mode');
 const layer = document.querySelector('#sample-layer'), swatch = document.querySelector('#sample-swatch');
@@ -322,22 +325,28 @@ function syncTimeline() {
   }
 }
 
-async function draw() {
-  const serial = ++request, frame = frames[select.selectedIndex];
+async function decodeFrame(frame) {
   const image = new Image();
+  image.src = 'data:image/png;base64,' + frame.png;
+  await image.decode();
+  const width = scratch.width = image.naturalWidth, height = scratch.height = image.naturalHeight;
+  context.drawImage(image,0,0);
+  return { width,height,rgba:context.getImageData(0,0,width,height).data };
+}
+
+async function draw() {
+  const serial = ++request, index = select.selectedIndex, frame = frames[index];
+  onionSkin.setSource(null);
   try {
-    image.src = 'data:image/png;base64,' + frame.png;
-    await image.decode();
+    const image = await decodeFrame(frame);
     if (serial !== request) return;
-    scratch.width = image.naturalWidth;
-    scratch.height = image.naturalHeight;
-    context.drawImage(image,0,0);
-    view.setFrame({ width:scratch.width, height:scratch.height,
-      rgba:context.getImageData(0,0,scratch.width,scratch.height).data });
+    const { width,height,rgba } = image;
+    view.setFrame(image);
+    onionSkin.setSource({ key:frames,index,count:frames.length,rgba,readFrame:async i=>(await decodeFrame(frames[i])).rgba });
     view.setGuides(frame.guides);
     const layers = frame.layers.map(row=>({ ...row,slots:atob(row.slots),alpha:row.alpha && atob(row.alpha),
       knockouts:row.knockouts && atob(row.knockouts) }));
-    active = { id:frame.id,protectedDetails:frame.protectedDetails,width:scratch.width,height:scratch.height,composite:atob(frame.composite),
+    active = { id:frame.id,protectedDetails:frame.protectedDetails,width,height,composite:atob(frame.composite),
       alpha:frame.alpha && atob(frame.alpha),rgb:frame.rgb && atob(frame.rgb),layers,
       sources:new Map(layers.map(row=>[row.id,row])),
       material:materialRows.find(row=>row.frame === undefined || row.frame === frame.id) };
