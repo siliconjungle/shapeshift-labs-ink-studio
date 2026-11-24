@@ -186,7 +186,7 @@ function scene(id) {
     die('--environment-preset selects a preset for a JSON diorama');
   if (gaussianFile(id)) {
     const descriptor = gaussianScenes.get(id);
-    if (!descriptor) throw new Error('Gaussian input is supported by render, turn, sheet, clip and snap');
+    if (!descriptor) throw new Error('Gaussian input is supported by render, turn, sheet, clip, atlas and snap');
     return descriptor;
   }
   if (sceneryFile(id)) {
@@ -4975,7 +4975,7 @@ async function run() {
     return;
   }
   const pixelInputs=cmd==='pixel-art' ? (pos[0]==='capture' ? [pos[1]] : [opt.scene]).filter(value=>typeof value==='string') : [];
-  const splatFiles = cmd === 'pixel-art' ? pixelInputs.filter(gaussianFile) : cmd === 'snap' ? pos.filter(gaussianFile) : ['render', 'turn', 'sheet', 'clip'].includes(cmd)
+  const splatFiles = cmd === 'pixel-art' ? pixelInputs.filter(gaussianFile) : cmd === 'snap' ? pos.filter(gaussianFile) : ['render', 'turn', 'sheet', 'clip', 'atlas'].includes(cmd)
     ? pos.slice(0, 1).filter(gaussianFile) : [];
   if (splatFiles.length) {
     const ink = require('../index.js');

@@ -112,6 +112,15 @@ test('the public Node and CLI entry points render imported Gaussian data', async
   execFileSync(process.execPath, [path.resolve(__dirname, '../cli/ink-studio.js'), 'render', file,
     '--raw', '--w', '36', '--h', '32', '--out', out], { cwd: dir });
   assert.equal(fs.readFileSync(out).subarray(1, 4).toString(), 'PNG');
+
+  const editable = await ink.gaussianSplatWorld(cloud, { colorMode: 'rgb', objectId: 'gaussian-cloud' });
+  const { idAt } = ink.load().KIT.procedural.splatProvenance.identities(editable);
+  const fit = path.join(dir, 'fit.json'), atlas = path.join(dir, 'atlas');
+  fs.writeFileSync(fit, JSON.stringify({ format: 'ink-studio/splat-fit', version: 2,
+    target: { object: 'gaussian-cloud' }, edits: [], attributes: [[idAt(0), { pigment: 0xd05136 }]] }));
+  execFileSync(process.execPath, [path.resolve(__dirname, '../cli/ink-studio.js'), 'atlas', file,
+    '--w', '24', '--h', '24', '--directions', '2', '--splat-fit', fit, '--out', atlas], { cwd: dir });
+  assert.match(JSON.parse(fs.readFileSync(path.join(atlas, 'atlas.json'))).splatFitRevision, /^[a-f0-9]{64}$/);
 });
 
 test('live worlds share decoded rows and preserve the fixed-view fallback', async () => {
