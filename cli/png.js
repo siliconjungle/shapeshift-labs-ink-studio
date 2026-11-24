@@ -45,7 +45,7 @@ function encodeGray(w, h, values) {
 function write(file, w, h, rgb, alpha) {
   fs.writeFileSync(file, alpha ? encode(w, h, withAlpha(rgb, alpha), 4) : encode(w, h, rgb));
 }
-function writeIndexed(file, w, h, slots, palette) {
+function encodeIndexed(w, h, slots, palette) {
   if (!Number.isSafeInteger(w) || !Number.isSafeInteger(h) || w < 1 || h < 1 ||
       !Array.isArray(slots) || slots.length !== w*h || !Array.isArray(palette) ||
       !palette.length || palette.length > 256)
@@ -67,8 +67,10 @@ function writeIndexed(file, w, h, slots, palette) {
   const alpha = holes ? Buffer.alloc(empty + 1, 255) : null;
   if (holes) alpha[empty] = 0;
   const colors = holes ? Buffer.concat([table, Buffer.alloc(3)]) : table;
-  const out = PNGBytes.indexed(w, h, colors, alpha, scanlines(w, h, pixels, 1));
-  fs.writeFileSync(file, Buffer.concat(out));
+  return Buffer.concat(PNGBytes.indexed(w, h, colors, alpha, scanlines(w, h, pixels, 1)));
+}
+function writeIndexed(file, w, h, slots, palette) {
+  fs.writeFileSync(file, encodeIndexed(w, h, slots, palette));
 }
 function decode(file,capturePalette,layoutOnly) {
   const bytes = file instanceof Uint8Array ? file : fs.readFileSync(file);
@@ -154,4 +156,4 @@ function encodeAnimation(frames, fps) {
 function animate(file, frames, fps) {
   fs.writeFileSync(file, encodeAnimation(frames.map(packFrame), fps));
 }
-module.exports = { paintRaster, encodePaint, encode, encodeGray, write, writeIndexed, read, raster, layout, sheetRaster, indexedRaster, paletteSource, animate, packFrame, packRGBA, encodeFrame, encodeAnimation, animationDelay };
+module.exports = { paintRaster, encodePaint, encode, encodeGray, encodeIndexed, write, writeIndexed, read, raster, layout, sheetRaster, indexedRaster, paletteSource, animate, packFrame, packRGBA, encodeFrame, encodeAnimation, animationDelay };

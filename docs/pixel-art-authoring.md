@@ -2425,6 +2425,44 @@ Pass the saved edited scene to `export-glb --rebake-from` with the previous
 registered bake's manifest. Ink updates the receiving atlas charts and
 their mip texels while keeping neighboring chart paint and UVs in place.
 
+### Round-trip bound paint through a PNG
+
+Export a `paint` or `pigment` surface-channel destination on an editable
+JSON scene. Choose the destination ID or `layer:<id>` for a bound
+surface layer. Ink samples the source chart on the document's native grid.
+The exported `paint.png` holds the paint itself, independent of scene lighting.
+Keep `binding.json` beside it. The sidecar pins the document, frame, object,
+chart, registration, and source revisions.
+
+```sh
+ink-studio pixel-art paint export gate.ink.json --destination gate-color \
+  --scene gate.json --out exchange
+ink-studio pixel-art paint preview gate.ink.json exchange/binding.json painted.png \
+  --scene gate.json --out preview.json --review review.html
+approval=$(node -p "require('./preview.json').approval")
+ink-studio pixel-art paint apply gate.ink.json exchange/binding.json painted.png \
+  --scene gate.json --approval "$approval" --out gate-painted.json
+```
+
+Keep the image dimensions unchanged. For indexed pigment, use exact document
+colors and keep the exported palette order to distinguish swatches with
+identical RGB values. Pigment pixels are opaque or transparent. The RGBA
+paint channel also supports partial alpha. Erasing a pixel clears the
+override in that chart cell.
+
+The preview lists the affected object, chart, UVs, and actual scene fields.
+The optional HTML review shows the original, edited, and proposed chart
+images with the eligible and blocked pixels. Changes to protected pixels,
+stale binding regions, clipped layers, and chart padding require a corrected
+image or a refreshed export. Ink re-samples the proposed source at the
+native grid and checks for changes beyond the requested pixels before
+issuing an approval digest.
+
+Apply checks the live scene and its dependencies, the pixel document, and the
+edited pixels again. It saves a new scene and prints a regular pixel edit
+receipt. Keep the new scene beside the source when it uses relative assets.
+Untouched source values retain their original precision.
+
 ### Preview paint under different lighting
 
 Run a review on the saved scene after painting:

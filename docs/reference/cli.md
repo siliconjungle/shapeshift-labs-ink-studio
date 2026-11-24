@@ -260,6 +260,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art targets <design.json> --destination id --scene <bound scene>   list stable scene targets
     --query splats.json [--source-view view.json] [--limit N]   pick splats by footprint, contribution, part, material or rest bounds
   pixel-art preview <design.json> <edit.json> [--scene <bound scene>] [--splat-diagnostics]   report a proposed edit and its conflicts
+  pixel-art paint export <design.json> --destination id --scene scene.json --out directory [--frame id]   export chart paint and binding data
+  pixel-art paint preview <design.json> <binding.json> <edited.png> --scene scene.json [--out report.json] [--review review.html] [--limit N]   review the source diff
+  pixel-art paint apply <design.json> <binding.json> <edited.png> --scene scene.json --approval digest --out scene.json   commit the approved diff
   pixel-art splat-diagnostics <scene> [--before fit.json] [--splat-fit fit.json] [--rect x,y,w,h] [--at x,y] [--out report.json]
   pixel-art canvas <design.json> --out canvas.html [--frame id] [--scene scene.json | --source-view view.json] [--binding id] [--destination ids] [--at x,y]   inspect the cursor and optional pinned scene pixel
   pixel-art sample <design.json> --at x,y [--mode composite|layer|source]   sample art or a bound material channel

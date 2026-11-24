@@ -2834,6 +2834,8 @@ function tilemapCommand([action,source,...rest],opt) {
 }
 
 function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, captureMultiview, world, scene, view }) {
+  if (pos[0] === 'paint')
+    return require('./pixel-bound-paint.js').command(pos.slice(1),opt,{ read,compile,scene,sameScene,fingerprint,editWithReceipt });
   if (pos[0] === 'aseprite-tiles') {
     const [,source] = pos;
     if (pos.length !== 2 || !reference(opt.layer) || !reference(opt.frame) || !reference(opt.out) ||
