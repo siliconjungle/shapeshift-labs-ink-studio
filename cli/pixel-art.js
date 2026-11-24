@@ -22,6 +22,7 @@ const PaletteExtract = require('../src/palette-extract.js');
 const SelectionSources = require('./pixel-selection-sources.js');
 const PNG = require('./png.js');
 const Craft = require('../src/pixel-craft.js');
+const Cleanup = require('../src/pixel-cleanup.js');
 const files = require('./asset-files.js');
 const Destinations = require('./pixel-edit-destinations.js');
 const Preview = require('./pixel-edit-preview.js');
@@ -620,6 +621,7 @@ function edit(design, frame, patch, context) {
     return Destinations.apply(frame,patch,route,context,readPixelEdits);
   }
   if (patch.operation !== undefined) {
+    if (patch.operation?.tool === 'cleanup') return editCleanup(design,frame,patch,route.destination,context);
     if (patch.operation?.tool === 'rgba') return editRGBA(design,frame,patch,route.destination,context);
     if (patch.operation?.tool === 'replace-swatch') return replaceSwatch(design,frame,patch,route.destination,context);
     if (['transform','paste'].includes(patch.operation?.tool))
@@ -789,6 +791,27 @@ function rasterWriteMarks(width,source,palette,writes,changed) {
   }));
   for (const [alpha,indices] of byAlpha) marks.push({ alpha,runs:RasterTools.runs(width,indices) });
   return marks;
+}
+
+function editCleanup(design,frame,patch,destination,context) {
+  const { operation } = patch, { width,height } = frame;
+  if (patch.edits !== undefined || !fields(operation,['tool','layer','selection','pixels','kind','mode','at','swatch','maxChanges']) ||
+      (operation.selection === undefined) === (operation.pixels === undefined))
+    throw new TypeError('Cleanup needs a saved selection or an explicit list of native pixels');
+  const { selection,pixels,kind,mode,at,swatch,maxChanges } = operation;
+  const layer = rasterToolLayer(frame,patch);
+  const captured = compile(design,frame.id,patch.cel,layer).layerSources.get(layer);
+  const mask = PixelSelections.fromPixels(width,height,pixels === undefined ? namedSelection(design,selection,frame.id).pixels : pixels);
+  const plan = Cleanup.plan({ width,height,...captured,locks:frame.locks,swatches:frame.swatches,colors:frame.colors },mask,
+    { kind,mode,at,swatch,maxChanges });
+  const marks = rasterWriteMarks(width,captured,frame.paletteEntries,plan.writes,plan.indices);
+  const revised = appendRasterMarks(design,frame,layer,marks,[]);
+  compile(revised,frame.id);
+  context?.onEditTarget?.({ destination:destination.id,kind:'raster',tool:'cleanup',cleanup:kind,
+    frame:frame.id ?? null,layer,cel:frame.cels?.get(layer) ?? (frame.id ? frame.id+'/'+layer : null),
+    ...(selection !== undefined && { selection }),...(mode !== undefined && { mode }),
+    maxChanges:plan.maxChanges,pixelCount:plan.indices.length,runs:RasterTools.runs(width,plan.indices),changes:plan.changes });
+  return revised;
 }
 
 function editRGBA(design,frame,patch,destination,context) {

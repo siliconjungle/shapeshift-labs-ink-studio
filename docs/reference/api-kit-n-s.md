@@ -245,6 +245,17 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelCanvasTransforms.sourcePoint` | function | `(grid,point,registration)` | [source](../../src/pixel-canvas-transforms.js) |
 | `KIT.pixelCanvasTransforms.uv` | function | `(grid,point,registration)` | [source](../../src/pixel-canvas-transforms.js) |
 
+## KIT.pixelCleanup
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.pixelCleanup` | namespace |  |  |
+| `KIT.pixelCleanup.defaultBudget` | value | `number = 64` |  |
+| `KIT.pixelCleanup.kinds` | value | `array` |  |
+| `KIT.pixelCleanup.maxBudget` | value | `number = 256` |  |
+| `KIT.pixelCleanup.maxSelection` | value | `number = 2048` |  |
+| `KIT.pixelCleanup.plan` | function | `({ width,height,slots,alpha,clipping,locks,swatches,colors },mask,settings)` | [source](../../src/pixel-cleanup.js) |
+
 ## KIT.pixelCraft
 
 | Member | Kind | Signature or value | Guides and source |

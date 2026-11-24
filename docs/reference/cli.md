@@ -252,6 +252,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art stack import <deck.json> --out document.json
     protection destination: set or remove named pixel locks across frames
     layers destination: add, update, reorder, set-cel, remove, merge-down, flatten-group, and flatten
+    raster cleanup tool: stair, fragment, outline, and cluster within a selection
     adjustments destination: curves, hue-saturation, gradient, replace, dither, and outline by scope
     canvas destination: crop, trim, pad, resize, or resample all frames
   pixel-art replay <design.json> <receipt.json> --out result.json   verify and reproduce an edit with the same options

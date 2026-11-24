@@ -46,6 +46,9 @@
   #shape-controls textarea, #shape-lengths { width:100%; }
   #shape-controls textarea, #shape-lengths { font:inherit; color:inherit; border:1px solid #476062; border-radius:5px; background:#253437; padding:6px 10px; }
   #shape-hint { font-size:13px; margin:0; }
+  #cleanup-diff { overflow:auto; max-height:240px; }
+  #cleanup-diff table { width:100%; border-collapse:collapse; font:12px/1.4 ui-monospace,monospace; }
+  #cleanup-diff th, #cleanup-diff td { padding:4px; border-bottom:1px solid var(--line); text-align:left; }
   @media(max-width:780px) { .layout { grid-template-columns:1fr; } aside { grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); } }
 </style>
 <main>
@@ -499,6 +502,34 @@
       </section>
       <section>
         <h2>Adjustments</h2>
+        <details id="cleanup-tools">
+          <summary>Clean up selected pixels</summary>
+          <div class="guide-controls" id="cleanup-settings" style="margin-top:9px">
+            <label>Operation <select id="cleanup-kind">
+              <option value="stair">Even out a staircase</option>
+              <option value="fragment">Merge one pixel</option>
+              <option value="outline">Thin doubled outline</option>
+              <option value="cluster">Reshape a cluster</option>
+            </select></label>
+            <label id="cleanup-mode-label" hidden>Cluster edge <select id="cleanup-mode">
+              <option value="grow">Grow one pixel</option><option value="shrink">Shrink one pixel</option>
+            </select></label>
+            <label id="cleanup-swatch-label" hidden>Merge into <select id="cleanup-swatch"></select></label>
+            <label>Pixel budget <input type="number" id="cleanup-budget" min="1" max="256" value="64"></label>
+            <div class="row">
+              <button type="button" id="cleanup-preview">Preview cleanup</button>
+              <button type="button" id="cleanup-apply" disabled>Apply cleanup</button>
+              <button type="button" id="cleanup-cancel" disabled>Cancel</button>
+            </div>
+            <output id="cleanup-info" aria-live="polite"></output>
+            <div id="cleanup-diff" hidden>
+              <table aria-label="Cleanup pixel changes">
+                <thead><tr><th scope="col">Pixel</th><th scope="col">Before</th><th scope="col">After</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </details>
         <details class="selection-group">
           <summary>Adjust pixels</summary>
           <div class="guide-controls" id="adjustment-settings">
