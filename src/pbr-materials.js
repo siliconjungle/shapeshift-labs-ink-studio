@@ -1,7 +1,8 @@
 /* Portable material parameters and the matching CPU/WebGL lighting equations. */
 const PbrMaterials = (() => {
-  const selectors = typeof TargetSelectors === 'undefined' ? require('./target-selectors.js') : TargetSelectors;
-  const colors = typeof ColorSpace === 'undefined' ? require('./color-space.js') : ColorSpace;
+  let selectors, colors;
+  try { selectors = TargetSelectors; } catch { selectors = require('./target-selectors.js'); }
+  try { colors = ColorSpace; } catch { colors = require('./color-space.js'); }
   const toLinear = colors.prepare('srgb', 'srgb-linear');
   const toDisplay = colors.prepare('srgb-linear', 'srgb');
   const MAX_MATERIALS = 16, MAX_LIGHTS = 4, MAX_PROJECTIONS = 8;
