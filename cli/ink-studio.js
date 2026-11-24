@@ -4332,9 +4332,9 @@ const CMD = {
       const passes = [...sourcePasses,'sourceRestNormal','emission',...require('../src/art-passes.js').inkControls];
       return captureSourceSamples(id,retained,render=>render({passes}));
     }
-    if (pos[0] === 'session') return PixelArt.sessionCommand(pos.slice(1),opt,{ scene:editScene,capture });
+    if (pos[0] === 'session') return PixelArt.sessionCommand(pos.slice(1),opt,{ scene:editScene,capture,view });
     PixelArt.command(pos,opt,outputFile,{
-      capture,captureMotion,captureTrack,captureMultiview,
+      capture,captureMotion,captureTrack,captureMultiview,view,
       world: id => buildPreview(id),
       scene:editScene
     });

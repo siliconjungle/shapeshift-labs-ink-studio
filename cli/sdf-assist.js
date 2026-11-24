@@ -17,13 +17,13 @@ function ownerLabel(owner) {
   return { object:owner.renderOwner,entity:owner.renderOwner,...owner.renderTarget };
 }
 
-function isolatedField(source,allow,coverage,footprintRows) {
-  if (!allow && !coverage && !footprintRows) return source;
+function isolatedField(source,allow,coverage,overrideRows) {
+  if (!allow && !coverage && !overrideRows) return source;
   const excluded=new Set();
-  if (coverage || footprintRows) {
+  if (coverage || overrideRows) {
     for (const [owner,ranges] of source.rows)
       if (ranges.some(([start,end])=>coverage?.subarray(start,end).some(value=>value<1) ||
-          footprintRows?.subarray(start,end).some(Boolean))) excluded.add(owner);
+          overrideRows?.some(mask=>mask.subarray(start,end).some(Boolean)))) excluded.add(owner);
     // A cut can affect several members of a joined field.
     if (source.negative?.some(owner=>excluded.has(owner))) return null;
   }
@@ -38,7 +38,7 @@ function isolatedField(source,allow,coverage,footprintRows) {
   return { ...source,...geometry,rows,bind:(select,cut)=>source.bind(owner=>select(owner)&&body(owner),cut) };
 }
 
-function bind(world, data, settings,allow,sourceBinding,coverage,footprintRows) {
+function bind(world, data, settings,allow,sourceBinding,coverage,overrideRows) {
   const labels = TargetSelectors.index(world), rows = [];
   const normals = world.renderMetadata?.normals;
   const boned = new Set(world.anim?.boned ?? []), owned = world.anim?.geometryOwned;
@@ -81,7 +81,7 @@ function bind(world, data, settings,allow,sourceBinding,coverage,footprintRows) 
   }
   for (const [sourceIndex,original] of (world.renderSdfs ?? []).entries()) {
     if (!(original.rows instanceof Map) || typeof original.distance !== 'function' || typeof original.locate !== 'function') continue;
-    const source = isolatedField(original,allow,coverage,footprintRows);
+    const source = isolatedField(original,allow,coverage,overrideRows);
     if (!source) continue;
     const ownerIndices = sourceBinding && new Map([...original.rows.keys()].map((owner,i)=>[owner,i]));
     if (settings.posed && world.anim?.bones && source.bind) {
@@ -171,8 +171,8 @@ function editableSource(field) {
   }};
 }
 
-function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible,sourceBinding,captureRestNormal=false,allow,editable=[],trackSdf,coverage,footprintRows}) {
-  const {sources,rows} = bind(world,data,settings,allow,sourceBinding || trackSdf,coverage,footprintRows);
+function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible,sourceBinding,captureRestNormal=false,allow,editable=[],trackSdf,coverage,overrideRows}) {
+  const {sources,rows} = bind(world,data,settings,allow,sourceBinding || trackSdf,coverage,overrideRows);
   for (const field of editable) {
     if (allow && !allow({object:field.objectId})) continue;
     if (field.materials.some(material=>settings.candidates({object:field.objectId,entity:field.objectId,material})))

@@ -260,3 +260,105 @@ test('replacing the last use of a footprint profile frees its slot for the edite
   assert.deepEqual(Fit.footprintAt(replaced.footprints,64),Fit.footprintAt(world.splatFootprints,64));
   assert.throws(()=>Fit.prepare(world,{...asset,attributes:[[0,{footprint:'wedge'}]]}),/footprint style budget/);
 });
+
+test('source attributes preview coverage and depth and retain IDs through a move and undo',()=>{
+  const world=sampleWorld(), splat=ids(world).idAt(1), source=world.data.slice();
+  const doc={format:'ink-studio/pixel-art',version:2,width:65,height:65,pixelAspect:[1,1],
+    palette:{rose:'#f35c81'},layers:[{id:'ink'}],frames:[{id:'front',durationMs:100,cels:{}}],
+    sceneBindings:[{id:'plate',scene:world.id,object:'plate'}],
+    destinations:[{id:'attributes',kind:'splat-attributes',binding:'plate'}]};
+  const editor=ink.createPixelEditor(doc);
+  const render=extra=>ink.render(world,{...options,...editor.renderOptions(world.id),raw:true,
+    passes:[...options.passes,'sourceSplat'],...extra});
+  const context={world:()=>world,captureSelection:render};
+  const targets=query=>editor.targets('attributes',{...context,query});
+  const patch=(id,operation)=>({id,destination:'attributes',frame:'front',revision:editor.describe().revision,
+    sourceRevision:targets().sourceRevision,operation});
+  const before=render();
+  const change=patch('move-turn',{attributes:{opacity:.6,scale:[2,1,1]},
+    splats:[{splat,position:[.67,.22,.88],orientation:[0,0,1,1]}]});
+  const preview=editor.previewEdit(change,{...context,limit:7,time:.125});
+  assert.equal(preview.valid,true,JSON.stringify(preview.conflicts));
+  const {attributeHits,render:review}=preview.targets[0];
+  assert.equal(attributeHits[0].id,splat);
+  assert.deepEqual(attributeHits[0].attributes.before.position,[0,0,source[18]]);
+  assert.deepEqual(attributeHits[0].attributes.after.position,[.67,.22,.88]);
+  assert.deepEqual(review.grid,[65,65]);
+  assert.equal(review.time,.125);
+  assert(review.coverageChanged>7 && review.depthChanged>7);
+  assert(review.truncated && review.pixels.length===7);
+  assert.deepEqual(editor.renderOptions(world.id),{});
+  assert.deepEqual(world.data,source);
+
+  const applied=editor.apply(change,context);
+  const after=render();
+  assert.notDeepEqual(after.passes.coverage,before.passes.coverage);
+  assert.notDeepEqual(after.passes.depth,before.passes.depth);
+  assert(after.passes.splatSources.some(row=>row?.id===splat));
+  const current=targets({region:{min:[.6,.2,.8],max:[.7,.3,.9]}}).splats[0];
+  assert.equal(current.id,splat);
+  assert.equal(current.attributes.opacity,.6);
+  assert.deepEqual(current.at,[.67,.22,.88]);
+  assert.deepEqual(current.attributes.scale,[2,1,1]);
+  const transformed=Fit.renderWorld(world,Fit.prepare(world,applied));
+  assert(transformed.data[24]>transformed.data[20]*3);
+  assert.deepEqual(transformed.data.subarray(0,16),source.subarray(0,16));
+  const stale=editor.targets('attributes',{world:()=>world,renderFrame:before,query:{footprint:{at:[32,32]}}});
+  assert.equal(stale.count,0);
+  assert.equal(stale.selection.footprint.staleIds,1);
+  assert.equal(editor.undo(),true);
+  assert.deepEqual(render().rgb,before.rgb);
+  assert.equal(editor.redo(),true);
+  assert.deepEqual(render().passes.depth,after.passes.depth);
+
+  const reset=patch('restore',{splats:[{splat,opacity:null,position:null,scale:null,orientation:null}]});
+  assert.deepEqual(editor.apply(reset,context).attributes,undefined);
+  assert.deepEqual(render().rgb,before.rgb);
+  assert.throws(()=>editor.apply(patch('bad-scale',{splats:[{splat,scale:[0,1,1]}]}),context),/Invalid splat scale/);
+  assert.deepEqual(world.data,source);
+});
+
+test('an open transaction previews opacity on its bound scene and SDF assist leaves the edited body hidden',()=>{
+  const authored=scene(), sceneEditor=ink.createSceneEditor(authored), world=sceneEditor.build();
+  const doc={format:'ink-studio/pixel-art',version:2,width:65,height:65,pixelAspect:[1,1],
+    palette:{rose:'#f35c81'},layers:[{id:'ink'}],frames:[{id:'front',durationMs:100,cels:{}}],
+    sceneBindings:[{id:'plate',scene:'panel',object:'plate'}],
+    destinations:[{id:'alpha',kind:'splat-attributes',binding:'plate'}]};
+  const editor=ink.createPixelEditor(doc,{sceneEditor,sceneRef:'panel'});
+  const selected=editor.targets('alpha',{limit:4096});
+  assert(selected.count>1 && selected.splats.length===selected.count);
+  const patch={id:'hide-plate',destination:'alpha',frame:'front',revision:editor.describe().revision,
+    sourceRevision:selected.sourceRevision,operation:{attributes:{opacity:0},splats:selected.splats.map(row=>({splat:row.id}))}};
+  editor.begin('Hide plate');
+  editor.apply(patch);
+  const review=editor.previewChanges({limit:1});
+  assert.equal(review.valid,true,JSON.stringify(review.conflicts));
+  assert(review.targets[0].render.changedPixels>1);
+  assert(review.targets[0].render.pixels[0].before.sceneCoverage>review.targets[0].render.pixels[0].after.sceneCoverage);
+  const base=ink.render(world,options), draft=ink.render(world,{...options,...editor.renderOptions('panel')});
+  assert(base.passes.objectId.includes(base.passes.objects.indexOf('plate')));
+  assert(!draft.passes.objectId.includes(draft.passes.objects.indexOf('plate')));
+  const sdf=draft.passes.surfaceKinds.indexOf('sdf'), post=draft.passes.objects.indexOf('post');
+  assert(draft.passes.surfaceKind.some((n,i)=>n===sdf && draft.passes.objectId[i]===post));
+  editor.cancel();
+  assert.deepEqual(editor.renderOptions('panel'),{});
+});
+
+test('geometry attributes carry retained footprint axes and shading normals with the covariance',()=>{
+  const B=makeBuilder(4,[0,red]);
+  B.disc(0,0,0,[0,0,1],.38,.018,B.P[1],3);
+  B.describeSplats(0,1,{object:'plate'});
+  B.describeFootprint(0,1,{shape:'square',softness:0,depth:'plane'},[.45,0,0,0,.45,0]);
+  const world=B.finish({id:'tilt-test',cam:{target:[0,0,0],dist:4,yaw:0,pitch:0,ortho:true}});
+  const angle=Math.PI/6;
+  const asset={format:Fit.format,version:1,rows:world.count,signature:signature(world),edits:[],
+    attributes:[[0,{scale:[2,1,1],orientation:[Math.sin(angle),0,0,Math.cos(angle)]}]]};
+  const fitted=Fit.renderWorld(world,Fit.prepare(world,asset));
+  assert.equal(Fit.footprintAt(fitted.splatFootprints,0).depth,'plane');
+  assert(Math.abs(fitted.splatFootprints.frames[0]-.9)<1e-6);
+  assert(fitted.splatFootprints.frames[5]>.38);
+  assert(fitted.renderMetadata.normals[1]<-.85);
+  const a=ink.render(world,{...options,raw:true}), b=ink.render(world,{...options,raw:true,splatFit:asset});
+  assert.notDeepEqual(a.passes.depth,b.passes.depth);
+  assert(world.splatFootprints.frames[5]===0);
+});

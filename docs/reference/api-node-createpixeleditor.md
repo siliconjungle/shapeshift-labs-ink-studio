@@ -27,7 +27,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createPixelEditor().palette` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().png` | function | `({ frame,cel,layer,colorMode } = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().preview` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
-| `node.createPixelEditor().previewChanges` | function | `({ limit } = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
+| `node.createPixelEditor().previewChanges` | function | `(options = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().previewEdit` | function | `(patch,options = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().receipts` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().redo` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../src/kit/p23-authoring-document.js) |

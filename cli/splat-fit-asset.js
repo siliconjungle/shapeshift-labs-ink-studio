@@ -1,4 +1,5 @@
 const RowAssets = require('./render-row-assets.js');
+const RowAttributes = require('./splat-row-attributes.js');
 const Curve = require('../src/curve-splat.js');
 const Optical = require('../src/optical-materials.js');
 const Provenance = require('../src/splat-provenance.js');
@@ -7,6 +8,7 @@ const Footprints = require('../src/splat-footprints.js');
 const SurfaceLook = require('../src/surface-look.js');
 const source = Symbol('splat fit source');
 const footprintRows = Symbol('edited footprint rows');
+const rowAttributes = Symbol('edited splat attributes');
 const baseWorld = world => world[source] ?? world;
 
 const format='ink-studio/splat-fit';
@@ -94,7 +96,7 @@ function prepare(world, asset) {
     if (!Array.isArray(asset.attributes) || asset.attributes.length>world.count)
       throw new TypeError('Splat fit needs a bounded attribute table');
     const authored=Footprints.validate(world);
-    const footprints=new Map();
+    const footprints=new Map(), editedRows=new Map();
     let pigment, albedo, coverage, materialIds, roughness, emission;
     let surfaceData, surfaces, profiles;
     const stride = SurfaceLook.STRIDE;
@@ -124,8 +126,19 @@ function prepare(world, asset) {
     for (const [source, change] of asset.attributes) {
       const i=index(source,paintable);
       if (!change || Object.getPrototypeOf(change)!==Object.prototype || !Object.keys(change).length ||
-          Object.keys(change).some(key=>!['footprint','pigment','coverage','material','roughness','emission'].includes(key)))
+          Object.keys(change).some(key=>!['footprint','pigment','coverage','material','roughness','emission',...RowAttributes.keys].includes(key)))
         throw new TypeError('Invalid splat fit attributes');
+      const changed=RowAttributes.keys.filter(name=>change[name]!==undefined);
+      if (changed.length) {
+        if (changed.some(name=>name!=='opacity') && !RowAttributes.transformable(world,i))
+          throw new RangeError('Splat transforms need a static source row');
+        const authored=RowAttributes.valuesAt(world,i), values={};
+        for (const name of changed) {
+          const value=RowAttributes.prepare(name,change[name]);
+          if (!RowAttributes.same(value,authored[name])) values[name]=value;
+        }
+        if (Object.keys(values).length) editedRows.set(i,values);
+      }
       if (change.footprint!==undefined) {
         const authoredStyle=footprintAt(authored,i);
         const style=footprintFor(authoredStyle,change.footprint);
@@ -192,6 +205,11 @@ function prepare(world, asset) {
       scales.footprintRows=new Uint8Array(world.count);
       for (const i of footprints.keys()) scales.footprintRows[i]=1;
     }
+    if (editedRows.size) {
+      scales.rowAttributes=editedRows;
+      scales.attributeRows=new Uint8Array(world.count);
+      for (const i of editedRows.keys()) scales.attributeRows[i]=1;
+    }
     if (pigment) Object.assign(scales,{pigment,albedo});
     if (coverage) scales.coverage=coverage;
     if (materialIds) scales.renderMetadata={...world.renderMetadata,materialIds};
@@ -257,22 +275,29 @@ function materialProfiles(world) {
   };
 }
 
-function renderWorld(world,fit,{footprints=true} = {}) {
+function renderWorld(world,fit,{footprints=true,applyAttributes=true} = {}) {
   if (!fit) return world;
   const { albedo,renderMetadata,surfaceData,surfaces,roughness } = fit;
   const hasFootprints=footprints && Object.hasOwn(fit,'footprints');
-  if (!albedo && !renderMetadata && !surfaceData && !roughness && !hasFootprints) return world;
-  return { ...world,[source]:baseWorld(world),
+  if (!albedo && !renderMetadata && !surfaceData && !roughness && !hasFootprints && !fit.rowAttributes) return world;
+  const base=baseWorld(world);
+  const rendered={ ...world,[source]:base,
     ...(hasFootprints && {splatFootprints:fit.footprints,[footprintRows]:fit.footprintRows}),
     ...(albedo && {materialAlbedo:albedo}),
     ...(renderMetadata && {renderMetadata}),
     ...(surfaceData && {surfaceData}),
     ...(surfaces && {surfaces}),
-    ...(roughness && {splatRoughness:roughness}) };
+    ...(roughness && {splatRoughness:roughness}),
+    ...(fit.rowAttributes && {[rowAttributes]:fit.rowAttributes}) };
+  if (!fit.rowAttributes || !applyAttributes) return rendered;
+  const attributesSource={...base,...(surfaceData&&{surfaceData}),
+    ...(hasFootprints&&{splatFootprints:fit.footprints})};
+  return RowAttributes.apply(rendered,attributesSource,fit.rowAttributes);
 }
 
 function editedFootprint(world,row) {
   return world[footprintRows]?.[row] ? footprintAt(world.splatFootprints,row) : undefined;
 }
 
-module.exports={format,prepare,footprintAt,footprintFor,editedFootprint,eligible,paintable,sceneId,rgb24,unit,pigmentAt,validEmission,roughnessAt,materialProfiles,renderWorld,baseWorld};
+const editedAttributes = (world,row) => world[rowAttributes]?.get(row);
+module.exports={format,prepare,editedAttributes,footprintAt,footprintFor,editedFootprint,eligible,paintable,sceneId,rgb24,unit,pigmentAt,validEmission,roughnessAt,materialProfiles,renderWorld,baseWorld};

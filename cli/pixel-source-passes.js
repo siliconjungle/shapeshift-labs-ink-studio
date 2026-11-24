@@ -18,6 +18,7 @@ function splatTargets(world, row=Targets.index(world).row) {
 
 function rowRevision(world,row) {
   const editedFootprint=SplatFit.editedFootprint(world,row);
+  const attributes=SplatFit.editedAttributes(world,row);
   world = SplatFit.baseWorld(world);
   const hash = createHash('sha256');
   const data = Provenance.restData(world);
@@ -32,6 +33,7 @@ function rowRevision(world,row) {
     hash.update(key);
     hash.update(Buffer.from(chunk.buffer,chunk.byteOffset,chunk.byteLength));
   }
+  if (attributes) hash.update('splat-attributes').update(JSON.stringify(attributes));
   if (editedFootprint!==undefined) {
     if (editedFootprint && !footprintDigests.has(editedFootprint))
       footprintDigests.set(editedFootprint,createHash('sha256').update(JSON.stringify(editedFootprint)).digest('hex'));
@@ -92,7 +94,7 @@ function splatBuffer(size) {
         const { object,entity,part,material } = target(row);
         slots.set(row,splatSources.length);
         identities ??= Provenance.identities(world,{fresh:true});
-        splatSources.push({ id:identities.idAt(row) ?? null,renderRow:row,object,entity,part,material,editable:SplatFit.eligible(world,row),revision:rowRevision(world,row) });
+        splatSources.push({ id:identities.idAt(row) ?? null,renderRow:row,object,entity,part,material,editable:SplatFit.eligible(SplatFit.baseWorld(world),row),revision:rowRevision(world,row) });
       }
       return slots.get(row);
     }

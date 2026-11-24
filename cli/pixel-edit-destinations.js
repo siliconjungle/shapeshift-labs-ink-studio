@@ -5,6 +5,7 @@ const Targets = require('../src/target-selectors.js');
 const SplatFit = require('./splat-fit-asset.js');
 const Footprints = require('../src/splat-footprints.js');
 const FootprintEdits = require('./pixel-splat-footprints.js');
+const RowAttributes = require('./splat-row-attributes.js');
 const { observe } = require('./pixel-edit-revisions.js');
 const Provenance = require('../src/splat-provenance.js');
 const { conflict } = require('./pixel-edit-preview.js');
@@ -147,9 +148,8 @@ function splatFalloff(falloff) {
       !Number.isFinite(falloff.radius) || falloff.radius<=0 || falloff.hardness!==undefined && !SplatFit.unit(falloff.hardness))
     throw new TypeError('Splat falloff needs a rest-space center, positive radius and hardness from 0 to 1');
   const {center,radius,hardness=0}=falloff;
-  return (rest,i)=>{
-    const offset=i*16;
-    const distance=Math.hypot(rest[offset]-center[0],rest[offset+1]-center[1],rest[offset+2]-center[2])/radius;
+  return (x,y,z)=>{
+    const distance=Math.hypot(x-center[0],y-center[1],z-center[2])/radius;
     if (distance>=1) return 0;
     if (distance<=hardness) return 1;
     const t=(1-distance)/(1-hardness);
@@ -166,9 +166,11 @@ function mixPigment(from,to,weight) {
 
 function splats(frame, edit, binding, world, bake, onSplat) {
   const operation = edit.operation;
-  if (!fields(operation,['splats','paint','falloff','footprint']) || !Array.isArray(operation.splats) || !operation.splats.length)
+  if (!fields(operation,['splats','paint','falloff','footprint','attributes']) || !Array.isArray(operation.splats) || !operation.splats.length)
     throw new TypeError('A splat attribute edit needs a list of explicit source splats');
-  const { paint } = operation;
+  const { paint,attributes:sharedAttributes } = operation;
+  if (sharedAttributes!==undefined && (!fields(sharedAttributes,RowAttributes.keys) || !Object.keys(sharedAttributes).length))
+    throw new TypeError('Splat attributes need opacity, position, scale or orientation');
   if (paint!==undefined && (!fields(paint,splatChannels) || !Object.keys(paint).length))
     throw new TypeError('Splat paint needs pigment, coverage, material, roughness or emission');
   const falloff=splatFalloff(operation.falloff), rest=falloff && Provenance.restData(world);
@@ -191,15 +193,16 @@ function splats(frame, edit, binding, world, bake, onSplat) {
   const sharedFootprints = new Map();
   const profile = name => (materials ??= SplatFit.materialProfiles(world))(name);
   for (const change of operation.splats) {
-    if (!fields(change,['splat','footprint','footprintScale','visible','weight',...splatChannels]))
+    if (!fields(change,['splat','footprint','footprintScale','visible','weight',...splatChannels,...RowAttributes.keys]))
       throw new TypeError('Invalid splat attribute edit');
-    const values={footprint:operation.footprint,...paint,...change};
+    const values={footprint:operation.footprint,...paint,...sharedAttributes,...change};
     const {splat,footprint,footprintScale,visible,weight:pressure=1,coverage,pigment,material,roughness,emission}=values;
     const painted = splatChannels.filter(key=>values[key]!==undefined);
+    const attributeEdits=RowAttributes.keys.filter(key=>values[key]!==undefined);
     const editsFootprint=footprint!==undefined || footprintScale!==undefined || visible!==undefined;
-    if (editsFootprint && (change.weight!==undefined || falloff))
-      throw new TypeError('Footprints are direct edits. Apply weighted paint in a separate operation.');
-    if ((!painted.length && !editsFootprint) || !SplatFit.unit(pressure) ||
+    if ((editsFootprint || attributeEdits.length) && (change.weight!==undefined || falloff))
+      throw new TypeError('Footprints and splat attributes are direct edits. Apply weighted paint in a separate operation.');
+    if ((!painted.length && !editsFootprint && !attributeEdits.length) || !SplatFit.unit(pressure) ||
         visible !== undefined && (typeof visible !== 'boolean' || footprintScale !== undefined) ||
         footprintScale !== undefined && (!Number.isFinite(footprintScale) || footprintScale < .4 || footprintScale > 2) ||
         coverage !== undefined && !SplatFit.unit(coverage) ||
@@ -209,7 +212,8 @@ function splats(frame, edit, binding, world, bake, onSplat) {
     if (material != null) profile(material);
     const color=pigment == null ? undefined : parseInt(indexedValue(pigment,palette).color.slice(1),16);
     const { index,report } = row(splat);
-    const weight=pressure*(falloff?.(rest,index)??1);
+    const position=fitted?.rowAttributes?.get(index)?.position;
+    const weight=pressure*(falloff ? falloff(...(position ?? rest.subarray(index*16,index*16+3))) : 1);
     const brush=paint!==undefined || falloff || change.weight!==undefined ||
       material!==undefined || roughness!==undefined || emission!==undefined;
     if (seen.has(index)) throw new RangeError('Duplicate splat edit ' + splat);
@@ -234,7 +238,23 @@ function splats(frame, edit, binding, world, bake, onSplat) {
       else attributes.footprint=after;
       footprintChange={before:FootprintEdits.describe(before),after:FootprintEdits.describe(after)};
     }
+    let attributeChange;
+    if (attributeEdits.length) {
+      if (attributeEdits.some(name=>name!=='opacity') && !RowAttributes.transformable(world,index))
+        throw new RangeError('Splat transforms need a static source row');
+      const authored=RowAttributes.valuesAt(world,index);
+      const before=RowAttributes.valuesAt(world,index,fitted?.rowAttributes?.get(index));
+      attributeChange={before:{},after:{}};
+      for (const name of attributeEdits) {
+        const value=values[name]===null ? authored[name] : RowAttributes.prepare(name,values[name]);
+        if (RowAttributes.same(value,authored[name])) delete attributes[name];
+        else attributes[name]=value;
+        attributeChange.before[name]=before[name];
+        attributeChange.after[name]=value;
+      }
+    }
     report?.({
+      ...(attributeChange && {attributes:attributeChange}),
       ...(brush && { weight, channels:painted.filter(key=>weight>0 && (key!=='material' || weight>=.5)) }),
       ...(footprintChange && {footprint:footprintChange})
     });
@@ -464,14 +484,17 @@ function targets(route, context, limit, query) {
     const editing = destination.kind === 'splat-attributes';
     const fit = editing && SplatFit.prepare(world,world.look?.splatFit);
     const rest = query ? Provenance.restData(world) : world.rest ?? world.data;
-    const fittedWorld=SplatFit.renderWorld(world,fit);
+    const fittedWorld=SplatFit.renderWorld(world,fit,{applyAttributes:false});
     const effectiveRow=editing && Targets.index(fittedWorld).row;
     const layout=editing && Footprints.validate(fittedWorld);
-    const describe = (id,i) => ({ id, at:Array.from(rest.subarray(i*16,i*16+3)),
-      ...(editing && {pigment:'#'+SplatFit.pigmentAt(world,i,fit).toString(16).padStart(6,'0'),
+    const describe = (id,i) => {
+      const attributes=editing && RowAttributes.valuesAt(world,i,fit?.rowAttributes?.get(i));
+      return { id, at:attributes?.position ?? Array.from(rest.subarray(i*16,i*16+3)),
+      ...(editing && {attributes,transformable:SplatFit.paintable(world,i) && RowAttributes.transformable(world,i),pigment:'#'+SplatFit.pigmentAt(world,i,fit).toString(16).padStart(6,'0'),
         paintable:SplatFit.paintable(world,i),material:effectiveRow(i).material,roughness:SplatFit.roughnessAt(fittedWorld,i,fit),
         emission:fit?.emission?.get(i)??[0,0,0],coverage:fit?.coverage?.[i]??1,
-        footprint:SplatFit.footprintAt(layout,i),footprintScale:fit?.[i]??1}) });
+        footprint:SplatFit.footprintAt(layout,i),footprintScale:fit?.[i]??1}) };
+    };
     if (query) {
       const {rows,row,selection}=SplatSelection.select(world,binding,query,context);
       const splats=rows.slice(0,limit).map(({id,index,...evidence})=>{

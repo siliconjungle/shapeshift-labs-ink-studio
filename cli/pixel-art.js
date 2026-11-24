@@ -33,6 +33,7 @@ const Cleanup = require('../src/pixel-cleanup.js');
 const files = require('./asset-files.js');
 const Destinations = require('./pixel-edit-destinations.js');
 const Preview = require('./pixel-edit-preview.js');
+const SplatPreview = require('./pixel-splat-preview.js');
 const Sessions = require('./pixel-edit-session.js');
 const { isRevision } = require('./pixel-edit-revisions.js');
 
@@ -1535,25 +1536,28 @@ function sourceWarning(binding) {
 }
 
 function previewEdit(design, patch, context, { frameId,limit } = {}) {
-  Preview.previewLimit(limit);
+  const previewLimit=Preview.previewLimit(limit);
   const targets = [], sources = [], warnings = [];
-  let candidate = design, issues = [], source, sourceRevision;
+  let candidate = design, issues = [], source, sourceRevision, sourceWorld;
   try {
     const route = Destinations.resolve(design,patch?.destination);
-    const target = Preview.sourceTarget(route,patch);
+    const target = Preview.sourceTarget(route,patch), resolvedRows=new Set();
     if (target) targets.push(target);
     const frame = compile(design,frameId ?? (design.version === 2 ? patch?.frame : undefined),patch?.cel,
       route.layer?.kind === 'surface' ? route.layer.id : undefined);
     const output = edit(design,frame,patch,{
       captureSelection:context.captureSelection,
       sceneRef:context.sceneRef,
-      onSource(revision) {
+      onSource(revision,observed) {
+        sourceWorld = observed.world;
         sourceRevision = revision;
         if (patch.sourceRevision === undefined) warnings.push(sourceWarning(route.binding.id));
       },
       onSplat(splat) {
+        resolvedRows.add(splat.id??splat.row);
         if (splat.weight!==undefined) (target.paintHits ??= []).push(splat);
         if (splat.footprint) (target.footprintHits ??= []).push(splat);
+        if (splat.attributes) (target.attributeHits ??= []).push(splat);
       },
       onEditTarget: target => targets.push(target),
       world:binding => context.world(binding),
@@ -1565,6 +1569,13 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
       }
     });
     if (!route.binding) candidate = output;
+    if (target?.attributeHits) {
+      target.render=SplatPreview.compare(sourceWorld,sourceWorld.look?.splatFit,output,{
+        grid:route.binding.canvas?.size??[design.width,design.height],
+        rows:resolvedRows,
+        limit:previewLimit,time:context.time,view:context.splatView
+      });
+    }
     if (source) sources.push(...Preview.sourceChanges(source.scene,source.before,source.fork.snapshot()));
   } catch (error) {
     issues = Preview.conflicts(error);
@@ -1685,6 +1696,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
 
   function editContext(context, grouped) {
     return {
+      time:context?.time,splatView:context?.view,
       captureSelection:context?.captureSelection ?? (context?.renderFrame && (()=>context.renderFrame)),
       sceneRef:context?.sceneRef ?? (sceneEditor ? sceneName : undefined),
       scene(binding) {
@@ -1739,13 +1751,14 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     });
   }
 
-  function previewChanges({ limit } = {}) {
-    Preview.previewLimit(limit);
+  function previewChanges(options = {}) {
+    const {limit,time,view}=options, previewLimit=Preview.previewLimit(limit);
     const before = journal.transactionBase();
     if (!before) throw new Error('No active transaction');
     const content = before.entities[slot]?.content;
     const base = content === undefined ? baseline : JSON.parse(content);
     const draft = state(), targetsByKey = new Map(), verifiedReplays = new Set(draft.verifiedReplays);
+    const splatReviews=new Map();
     for (let index = base.receipts.length; index < draft.receipts.length; index++) {
       const receipt = draft.receipts[index];
       const patch = receipt.command.patch, route = Destinations.resolve(draft.design,patch.destination);
@@ -1756,10 +1769,19 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
         const splats = painted?.kind === 'splat-attributes' ? painted.splats : [];
         const paintHits = splats.filter(row=>row.weight!==undefined);
         const footprintHits = splats.filter(row=>row.footprint);
-        targetsByKey.set(key,{ ...target, sourceRevision:receipt.inputs.sourceRevision,
+        const attributeHits = splats.filter(row=>row.attributes);
+        const summary={ ...target, sourceRevision:receipt.inputs.sourceRevision,
           sourceChecked:patch.sourceRevision !== undefined || verifiedReplays.has(index),
           ...(paintHits.length && {paintHits}),
-          ...(footprintHits.length && {footprintHits}) });
+          ...(footprintHits.length && {footprintHits}),
+          ...(attributeHits.length && {attributeHits}) };
+        targetsByKey.set(key,summary);
+        if (attributeHits.length) {
+          const binding=route.binding, grid=binding.canvas?.size??[draft.design.width,draft.design.height];
+          const reviewKey=JSON.stringify([binding.scene,grid]);
+          if (!splatReviews.has(reviewKey)) splatReviews.set(reviewKey,{binding,grid,rows:new Set(),target:summary});
+          for (const row of splats) splatReviews.get(reviewKey).rows.add(row.id??row.row);
+        }
       }
       if (['canvas','palette','selections','adjustments','layers','protection','art-rules'].includes(painted?.kind) || painted?.kind === 'raster' && painted.tool) targetsByKey.set(index,structuredClone(painted));
     }
@@ -1769,6 +1791,12 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
       journal.preview();
       candidate = state().design;
       scene = sceneEditor?.snapshot();
+      for (const {binding,grid,rows,target} of splatReviews.values()) {
+        const world=options.world?.(binding) ?? resolveScene(binding).build();
+        const authored=world.look?.splatFit;
+        target.render=SplatPreview.compare(world,base.renderOutputs[binding.scene]?.splatFit??authored,
+          draft.renderOutputs[binding.scene]?.splatFit??authored,{grid,rows,limit:previewLimit,time,view});
+      }
     } catch (error) {
       issues = Preview.conflicts(error);
     }
@@ -2391,7 +2419,7 @@ function inspectCoordinate(raw) {
   return raw.split(',').map(Number);
 }
 
-function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, captureMultiview, world, scene }) {
+function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, captureMultiview, world, scene, view }) {
   if (pos[0] === 'stack') return stackCommand(pos.slice(1),opt);
   if (pos[0] === 'palette') return paletteCommand(pos.slice(1),opt);
   const [action, source, patch] = pos;
@@ -2485,7 +2513,8 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
     return opt.scene;
   }
   const context = {
-    sceneRef:opt.scene,
+    sceneRef:opt.scene,splatView:view,
+    time:opt.t===undefined ? undefined : typeof opt.t==='string' ? Number(opt.t) : NaN,
     captureSelection:sourceViewFile ? ()=>ViewSource.unpack(read(sourceViewFile)) : reference(opt.scene) ? settings=>{
       if (out === path.resolve(opt.scene))
         throw new RangeError('Write the edit to a separate output from the rendered scene');
@@ -2624,7 +2653,7 @@ function inspectTargets(design,destination,context,limit = 128,{query,frame} = {
   return { documentRevision:fingerprint(design), ...targets };
 }
 
-function sessionCommand(pos,opt,{ scene,capture }) {
+function sessionCommand(pos,opt,{ scene,capture,view }) {
   const [action,directory,input] = pos;
   const argc = ['init','apply','select'].includes(action) ? 3 : 2;
   if (pos.length !== argc || !sessionActions.includes(action))
@@ -2658,7 +2687,7 @@ function sessionCommand(pos,opt,{ scene,capture }) {
       result = editor.receipts().at(-1);
     } else if (action === 'preview') {
       const limit = opt.limit === undefined ? undefined : typeof opt.limit === 'string' ? Number(opt.limit) : NaN;
-      result = editor.previewChanges({ limit });
+      result = editor.previewChanges({ limit,view,time:opt.t===undefined ? undefined : typeof opt.t==='string' ? Number(opt.t) : NaN });
       if (!result.valid) process.exitCode = 2;
     } else if (action === 'inspect') {
       result = editor.inspect(inspectCoordinate(opt.at),{ frame:opt.frame,cel:opt.cel,
