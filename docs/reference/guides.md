@@ -258,6 +258,7 @@ All checked-in guides, indexed by title and section headings.
 - [CLI patch tooling](../patch-tooling.md)
 - [Ink through reflection and refraction](../path-ink.md)
 - [Measure sections along a path](../path-sections.md)
+- [Shared PBR materials](../pbr-materials.md)
 - [Groove from a performance](../performance-groove.md)
 - [Performance-driven mouth cels](../performance-mouth-cels.md)
 - [Persistent spatial fields](../persistent-spatial-fields.md)

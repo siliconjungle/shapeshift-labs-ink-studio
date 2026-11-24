@@ -73,11 +73,12 @@ const SemanticTextureMipmaps = (() => {
     return pixels===undefined ? {} : {sourceView:sourceView.slice(),angles:angles.slice()};
   }
 
-  function build({width,height,pigment,normal,roughness=.65,emission,emissionStrength=1,indices,palette,scan}, config=true) {
+  function build({width,height,pigment,normal,roughness=.65,metalness,emission,emissionStrength=1,indices,palette,scan}, config=true) {
     const rule=settings(config), count=width*height;
     if(!rule||![width,height].every(n=>Number.isInteger(n)&&n>0&&n<=1024)||
       !bytes(pigment)||pigment.length!==count*4||normal!==undefined&&(!bytes(normal)||normal.length!==count*4)||
       !unit(roughness)&&(!bytes(roughness)||roughness.length!==count)||
+      metalness!==undefined&&!unit(metalness)&&(!bytes(metalness)||metalness.length!==count)||
       emission!==undefined&&(!bytes(emission)||![count*3,count*4].includes(emission.length)) ||
       !Number.isFinite(emissionStrength)||emissionStrength<0||emissionStrength>1024 ||
       (indices!==undefined||palette!==undefined)&&(!bytes(indices)||indices.length!==count||!Array.isArray(palette)||
@@ -109,7 +110,8 @@ const SemanticTextureMipmaps = (() => {
     for(let w=width,h=height;;w=Math.max(1,w>>1),h=Math.max(1,h>>1)){
       const texels=w*h, layerBytes=texels*4, rgba=new Uint8Array(layerBytes*(3+(captured?1:0)));
       const scaleX=width/w,scaleY=height/h;
-      const sum=new Float64Array(11+captureStride);
+      const sum=new Float64Array(12+captureStride);
+      const metalIndex=sum.length-1;
       for(let y=0;y<h;y++)for(let x=0;x<w;x++){
         const left=x*scaleX,right=(x+1)*scaleX,top=y*scaleY,bottom=(y+1)*scaleY;
         sum.fill(0);
@@ -121,6 +123,7 @@ const SemanticTextureMipmaps = (() => {
           for(let c=0;c<7;c++)sum[c+1]+=data[at+c]*weight;
           if(normals)for(let c=0;c<3;c++)sum[c+8]+=normals[p*3+c]*weight;
           if(appearance)for(let c=0;c<4;c++)sum[11+c]+=appearance[p*4+c]*weight;
+          if(metalness!==undefined)sum[metalIndex]+=(typeof metalness==='number'?metalness:metalness[p]/255)*weight;
           if(indices){
             const index=indices[p];
             if(votes[index]===0)used.push(index);
@@ -157,11 +160,13 @@ const SemanticTextureMipmaps = (() => {
           rgba[at+3]=toByte(sum[14]/area);
         }
         rgba[layerBytes+i+3]=filtered.roughness;
+        rgba[layerBytes*2+i+3]=toByte(sum[metalIndex]/area);
       }
       levels.push({width:w,height:h,rgba});
       if(w===1&&h===1)break;
     }
-    return {width,height,levels,rule,emissionStrength,normal:!!normal,scan:capture,captured:!!captured};
+    return {width,height,levels,rule,emissionStrength,normal:!!normal,scan:capture,captured:!!captured,
+      ...(metalness!==undefined && {metalness:true})};
   }
 
   function levelAt(chain,footprint) {
@@ -189,6 +194,7 @@ const SemanticTextureMipmaps = (() => {
     const captured=chain.captured && Array.from(color.rgba.subarray(color.stride*3+color.at,color.stride*3+color.at+4),
       (n,k)=>k===3?n/255:linearByte[n]);
     return {color:Array.from(color.rgba.subarray(color.at,color.at+3),n=>n/255),coverage,visible,normal,roughness,emission,lod,
+      ...(chain.metalness && {metalness:mix(a.rgba[a.at+a.stride*2+3],b.rgba[b.at+b.stride*2+3])/255}),
       ...(captured && {captured})};
   }
 

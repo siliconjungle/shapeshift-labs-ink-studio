@@ -35,13 +35,13 @@ const SceneMeshes = (() => {
     return { min, max };
   }
 
-  function materialOf({ id, color = 0xffffff, texture: input, normal, roughness, emission, emissionStrength,
+  function materialOf({ id, color = 0xffffff, texture: input, normal, roughness, metalness, emission, emissionStrength,
       alphaCutoff = .5, sampling, engraving, mipmaps, simulationLayers, scan } = {}) {
     const texture=Mips.texture(input);
     const { width = 1, height = 1, pixels, indices, palette } = texture ?? {};
     const simulation=simulationLayers===undefined ? undefined :
       simulationAPI().create(simulationLayers);
-    const rules=Mips.settings(mipmaps ?? (simulation||indices||roughness!==undefined||emission||scan ? true : undefined));
+    const rules=Mips.settings(mipmaps ?? (simulation||indices||roughness!==undefined||metalness!==undefined||emission||scan ? true : undefined));
     if(simulation&&!rules)throw new TypeError('Simulation layers need semantic material channels');
     if(rules && sampling)throw new TypeError('Choose one texture filter per material');
     if (!name(id) || !Number.isInteger(color) || color < 0 || color > 0xffffff || !unit(alphaCutoff))
@@ -72,7 +72,7 @@ const SceneMeshes = (() => {
         if(ink!==undefined)pigment.set([ink>>16,ink>>8&255,ink&255,255],(y*width+x)*4);
       }
       const tintColor=ink=>tint.reduce((value,n,c)=>value*256+Math.round((ink>>((2-c)*8)&255)*n/255),0);
-      return Mips.build({width,height,pigment,indices,palette:palette?.map(tintColor),normal,roughness,emission,emissionStrength,scan},
+      return Mips.build({width,height,pigment,indices,palette:palette?.map(tintColor),normal,roughness,metalness,emission,emissionStrength,scan},
         {...rules,protect:rules.protect.map(tintColor)});
     }
     return { id, width, height, paint, normal, sampling, engraving, simulation, blockTexture, tint, ...(rules&&{chain}) };
@@ -111,9 +111,10 @@ const SceneMeshes = (() => {
       throw new RangeError('A mesh needs 1 to 64 materials and a material index for each face when using multiple materials');
     const scanSources=materials.some(row=>row?.scan && row.texture?.pixels) && materials.map(row=>{
       if (!row?.scan || !row.texture?.pixels) return row;
-      const {roughness,normal,emission,scan}=row;
+      const {roughness,metalness,normal,emission,scan}=row;
       return {...row,texture:{...row.texture,pixels:row.texture.pixels.slice()},
         ...(normal&&{normal:normal.slice()}),...(bytes(roughness)&&{roughness:roughness.slice()}),
+        ...(bytes(metalness)&&{metalness:metalness.slice()}),
         ...(emission&&{emission:emission.slice()}),scan:{...scan,
           ...(scan.pixels&&{pixels:scan.pixels.slice(),sourceView:scan.sourceView?.slice()}),
           ...(scan.angles&&{angles:scan.angles.slice()})}};
@@ -172,10 +173,10 @@ const SceneMeshes = (() => {
       lighting={}} = {}) {
     if (!bake?.cells || !bake.normal || !bake.roughness || !bake.emission)
       throw new TypeError('Use a relightable object texel bake');
-    const {width,height,rgba,normal,roughness,emission,points,uvs,triangles}=bake;
+    const {width,height,rgba,normal,roughness,metalness,emission,points,uvs,triangles}=bake;
     const mipmaps={ambient:.25,specular:.42,...lighting};
     const mesh=create({id,objectId,partId,positions:points,uvs,indices:triangles,
-      materials:[{id:materialId,texture:{width,height,pixels:rgba},normal,roughness,emission,emissionStrength,mipmaps}]});
+      materials:[{id:materialId,texture:{width,height,pixels:rgba},normal,roughness,metalness,emission,emissionStrength,mipmaps}]});
     const data=read(mesh), layer=data.layer;
     layer.semanticMipmaps=[{ ...layer.semanticMipmaps[0],objectTexels:true }];
     data.objectTexels={bake,emissionStrength,mipmaps:layer.semanticMipmaps[0].chain.rule};
@@ -191,9 +192,9 @@ const SceneMeshes = (() => {
         bake.width!==previous.width || bake.height!==previous.height)
       throw new TypeError('Object texel edits must retain the bound cells and geometry');
     if (previous===bake) return mesh;
-    const {width,height,rgba,normal,roughness,emission}=bake;
+    const {width,height,rgba,normal,roughness,metalness,emission}=bake;
     const {layer}=data, [row]=layer.semanticMipmaps;
-    const chain=Mips.build({width,height,pigment:rgba,normal,roughness,emission,
+    const chain=Mips.build({width,height,pigment:rgba,normal,roughness,metalness,emission,
       emissionStrength:binding.emissionStrength},binding.mipmaps);
     Sprite.update(layer,row.region,{w:width,h:height,rgba});
     layer.normalPixels.set(normal);

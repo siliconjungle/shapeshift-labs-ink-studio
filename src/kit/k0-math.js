@@ -4,6 +4,7 @@ const KIT = {};
 KIT.flowMap = FlowMap;
 KIT.pixelLighting = PixelLighting;
 KIT.material = MaterialControls;
+KIT.pbr = PbrMaterials;
 KIT.sceneMeshes = SceneMeshes;
 KIT.artStability = ArtStability;
 KIT.detailBudgets = DetailBudgets;
