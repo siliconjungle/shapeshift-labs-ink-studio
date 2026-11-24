@@ -125,6 +125,8 @@
             <option value="polygon">Polygon lasso</option>
             <option value="wand">Magic wand</option>
             <option value="range">Color range</option>
+            <option value="swatch">Swatch</option>
+            <option value="cluster">Swatch cluster</option>
           </select></label>
           <label>New selection<select id="selection-mode">
             <option value="replace">Replace</option>
@@ -134,6 +136,12 @@
           </select></label>
           <label id="selection-tolerance-label" hidden>Color tolerance
             <input id="selection-tolerance" type="number" min="0" max="255" step="1" value="0">
+          </label>
+          <label id="selection-connectivity-label" hidden>Cluster neighbors
+            <select id="selection-connectivity">
+              <option value="4">Edges</option>
+              <option value="8">Edges and corners</option>
+            </select>
           </label>
           <div class="row">
             <button type="button" data-tool="brush-select" aria-pressed="false">Select pixels</button>

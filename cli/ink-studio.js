@@ -1403,7 +1403,7 @@ const CMD = {
         '  pixel-art preview <design.json> <edit.json> [--scene <bound scene>]   report a proposed edit and its conflicts',
         '  pixel-art canvas <design.json> --out canvas.html [--frame id]   inspect native art and its 1× preview',
         '  pixel-art sample <design.json> --at x,y [--mode composite|layer|source]   sample art or a bound material channel',
-        '  pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id]   resolve a native selection',
+        '  pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id] [--scene path]   resolve a native selection',
         '  pixel-art brush <design.json> --selection id|--rect x,y,w,h --out brush.json   capture a portable indexed brush',
         '    dynamics options: --stabilization ms --pressure light,full --velocity pxPerSecond,slow,fast',
         '  pixel-art snap <design.json> --at x,y [--frame id] [--radius pixels]   resolve document guides',
@@ -4101,13 +4101,14 @@ const CMD = {
       return { editor:descriptor.openEditor({ historyLimit }),
         ...(bytes && { revision:require('./asset-references.js').hash(bytes) }) };
     }
-    if (pos[0] === 'session') return PixelArt.sessionCommand(pos.slice(1),opt,{ scene:editScene });
+    function capture(id,{ w = num('w',160),h = num('h',96),passes = ['objectId'] } = {}) {
+      const world = buildPreview(id), t = num('t',0);
+      pose(world,t);
+      return R.render(world,view({ w,h,px:1,t,passes }));
+    }
+    if (pos[0] === 'session') return PixelArt.sessionCommand(pos.slice(1),opt,{ scene:editScene,capture });
     PixelArt.command(pos,opt,outputFile,{
-      capture(id) {
-        const world = buildPreview(id), t = num('t',0);
-        pose(world,t);
-        return R.render(world, view({ w:num('w',160), h:num('h',96), px:1, t, passes:['objectId'] }));
-      },
+      capture,
       world: id => buildPreview(id),
       scene:editScene
     });

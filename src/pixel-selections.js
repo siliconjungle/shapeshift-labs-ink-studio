@@ -8,6 +8,11 @@ const PixelSelections = (() => {
     ['rectangle',['rect']],['ellipse',['rect']],['lasso',['points']],['polygon',['points']],
     ['wand',['at','tolerance','connected']]
   ]);
+  const semanticTypes = new Map([
+    ['swatch',['id','at']],['object',['id','at']],['part',['id','at','object','entity']],
+    ['material',['id','at']],['depth',['range']],['channel',['channel','destination','component','range']]
+  ]);
+  const label = value => typeof value === 'string' && value.trim().length > 0;
   const mergeTypes = ['combine','subtract','intersect'];
   const modifyTypes = new Map([
     ['invert',[]],['grow',['amount']],['shrink',['amount']],['outline',['amount','side']]
@@ -37,7 +42,7 @@ const PixelSelections = (() => {
     return result;
   }
 
-  function mask(width,height,query,read,recall) {
+  function mask(width,height,query,read,recall,matches) {
     gridSize(width,height);
     let remaining = 32;
     function evaluate(query) {
@@ -62,12 +67,54 @@ const PixelSelections = (() => {
           throw new TypeError('A selection modifier needs a source mask and valid options');
         return modify(width,height,evaluate(source),operation);
       }
+      if (type === 'cluster') {
+        if (!fields(query,['type','at','source','connectivity']) || !contains(width,height,query.at) ||
+            query.connectivity !== undefined && ![4,8].includes(query.connectivity))
+          throw new TypeError('A cluster needs a native seed and optional 4 or 8 connectivity');
+        const source = evaluate(query.source === undefined ? { type:'swatch',at:query.at } : query.source);
+        const result = new Uint8Array(source.length);
+        for (const p of tools.region(width,height,query.at,p=>!!source[p],query.connectivity === 8)) result[p] = 1;
+        return result;
+      }
+      if (semanticTypes.has(type)) {
+        validateMeaning(width,height,query);
+        if (typeof matches !== 'function') throw new TypeError('A semantic selection needs a source for '+type);
+        const match = matches(query);
+        const result = new Uint8Array(width*height);
+        for (let p = 0; p < result.length; p++) result[p] = Number(Boolean(match(p)));
+        return result;
+      }
       const keys = types.get(type);
       if (!keys || !fields(query,['type',...keys]))
         throw new TypeError('Choose a rectangle, ellipse, lasso, polygon, wand or selection operation');
       return toolMask(width,height,query,read);
     }
     return evaluate(query);
+  }
+
+  function validateMeaning(width,height,query) {
+    const { type,id,at,range,channel,destination,component,object,entity } = query;
+    if (!fields(query,['type',...semanticTypes.get(type)])) throw new TypeError('Unknown '+type+' selection field');
+    if (type === 'depth' || type === 'channel') {
+      if (!Array.isArray(range) || range.length !== 2 || !Number.isFinite(range[0]) ||
+          !Number.isFinite(range[1]) || range[0] > range[1])
+        throw new RangeError('A '+type+' selection needs an inclusive finite [min, max] range');
+      if (type === 'channel' && ((channel === undefined) === (destination === undefined) ||
+          !label(channel ?? destination) || component !== undefined && (!integer(component,0,3) || destination !== undefined)))
+        throw new TypeError('Choose a render channel or a bound material destination and optional render component');
+      return;
+    }
+    if ((id === undefined) === (at === undefined) ||
+        (id !== undefined ? !label(id) : !contains(width,height,at)) ||
+        (object !== undefined && !label(object)) || (entity !== undefined && !label(entity)))
+      throw new TypeError('Choose a '+type+' ID or a native seed pixel and optional part scope');
+  }
+
+  function swatch(width,query,slots,alpha,ids) {
+    const visible = p => slots[p] !== null && slots[p] >= 0 && (alpha?.[p] ?? 255) > 0;
+    const p = query.at && query.at[1]*width+query.at[0];
+    const slot = query.at ? (visible(p) ? slots[p] : -1) : ids?.indexOf(query.id) ?? -1;
+    return slot < 0 ? () => false : p => visible(p) && slots[p] === slot;
   }
 
   function requireMask(value,size) {
@@ -200,7 +247,7 @@ const PixelSelections = (() => {
     return result;
   }
 
-  return Object.freeze({ mask,pixels,fromPixels,combine,modify });
+  return Object.freeze({ mask,pixels,fromPixels,combine,modify,swatch });
 })();
 
 if (typeof module !== 'undefined') module.exports = PixelSelections;

@@ -360,6 +360,48 @@ edit participates in undo and replay. Reference the ID in a later raster
 patch as `operation.selection` to limit painting and fill to those pixels,
 or pass it to `pixel-art brush --selection` to capture its exact footprint.
 
+### Select by meaning
+
+Use the same selection queries to address artwork and visible render
+owners by identity.
+
+| Query | Selection |
+| --- | --- |
+| `{"type":"swatch","id":"oxide"}` | Exact indexed swatch ID. Use `at` in place of `id` to pick a visible swatch from a pixel. RGB aliases remain distinct. |
+| `{"type":"cluster","at":[12,8],"connectivity":8}` | The seed's connected swatch cluster. The default is four neighbors sharing an edge. Eight also follows corners. Supply a `source` query to find a component of any mask. |
+| `{"type":"object","id":"gatehouse"}` | Pixels owned by that visible render object. |
+| `{"type":"part","id":"tide-needle","object":"tide-needle"}` | Visible pixels of the part. Optional `object` and `entity` scope reused part names. |
+| `{"type":"material","id":"brushed-copper"}` | Pixels owned by that render material. |
+| `{"type":"depth","range":[2,6]}` | Finite visible camera-axis depths in the inclusive range, in scene units. |
+| `{"type":"channel","channel":"coverage","range":[0.5,1]}` | Values in an [art pass](art-passes.md). Add a zero-based `component` for vectors, such as `1` for the second coordinate of `surfaceUV`. Pixels with a reported invalid sample are skipped. |
+| `{"type":"channel","destination":"wear","range":[0.25,1]}` | Values from a bound surface-channel destination on its native UV chart. Color channels select by coverage. |
+
+Swatches and clusters can read the composite or a specific layer or cel.
+Fully transparent pixels are excluded from a swatch selection. Objects,
+parts and materials also accept a native seed `at` in place of `id`.
+The render owner passes resolve occlusion before selection. The depth range
+excludes empty pixels. Diagnostic channel ranges can include background
+values, such as zero coverage.
+
+For render queries, use the document's native grid and supply `--scene`
+with the same camera and time settings as the shot. Select a bound material
+channel with the scene declared by its destination.
+
+```sh
+node cli/ink-studio.js pixel-art select document.json query.json \
+  --scene examples/part-motion.js --t .25
+```
+
+The SDK accepts the render result as `editor.select(query, { renderFrame })`.
+Request the art passes used by the query when calling `ink.render()`.
+Owner queries use `objectId`, `partId`, and `materialId`. A part filter with
+`object` also uses `objectId`. Depth queries use `depth`. Use the same
+`renderFrame` option with `previewEdit`, `apply`, and `replay` when saving
+a scene-backed mask. Receipts fingerprint the inspected passes and bound
+material channels before saving their resolved pixels. Copy the selection
+report's `sources` into the save operation to guard it against changes
+since inspection. Recall the saved mask in the Workshop to use it as a paint boundary or brush footprint.
+
 ### Edit and recall masks
 
 The same selection query can read saved masks and combine them with fresh

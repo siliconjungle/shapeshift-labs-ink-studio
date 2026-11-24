@@ -208,3 +208,120 @@ test('the CLI saves and recalls edited masks and retains them in stamp exports',
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(output,'stamp.json'),'utf8')).selections[1],
     { id:'ring',pixels:expected });
 });
+
+test('swatches retain indexed identity and a cluster can follow edges or corners within any mask', () => {
+  const editor = ink.createPixelEditor(design), source = { type:'swatch',id:'rust' };
+  const all = [[1,1],[5,1],[2,2],[3,2]];
+  assert.deepEqual(editor.select(source,{ layer:'ink' }).pixels,all);
+  assert.deepEqual(editor.select({ type:'swatch',at:[2,1] }).pixels,[[2,1]]);
+  assert.deepEqual(editor.select({ type:'swatch',at:[1,2] },{ layer:'ink' }).pixels,[]);
+  assert.deepEqual(editor.select({ type:'cluster',at:[1,1] },{ cel:'drawing' }).pixels,[[1,1]]);
+  assert.deepEqual(editor.select({ type:'cluster',at:[1,1],connectivity:8,source }).pixels,[[1,1],[2,2],[3,2]]);
+  const selected = { type:'cluster',at:[0,0],source };
+  assert.deepEqual(editor.select(selected).pixels,[]);
+});
+
+test('owner, depth and diagnostic selections share the native grid and fingerprint the render', () => {
+  const editor = ink.createPixelEditor(design), { width:w,height:h } = design, n = w*h;
+  const objectId = new Uint32Array(n), partId = new Uint32Array(n), materialId = new Uint32Array(n);
+  const depth = new Float32Array(n).fill(Infinity), coverage = new Float32Array(n);
+  const surfaceUV = new Float32Array(n*2), surfaceUVValid = new Uint8Array(n);
+  objectId.set([1,2,2,1]); partId.set([1,2,2,0]); materialId.set([2,1,2,1]);
+  depth.set([2,1,1.5,3]); coverage.set([.2,.75,1,.4]);
+  surfaceUV.set([0,.5,0,.5]); surfaceUVValid.set([0,255]);
+  const renderFrame = { w,h,passes:{ w,h,objectId,partId,materialId,depth,coverage,surfaceUV,surfaceUVValid,
+    objects:[null,'dock','crane'],materials:[null,'metal','wood'],
+    parts:[null,{ part:'arm',entity:'dock' },{ part:'arm',entity:'crane' }] } };
+  const pick = query=>editor.select(query,{ renderFrame }).pixels;
+  assert.deepEqual(pick({ type:'object',id:'dock' }),[[0,0],[3,0]]);
+  assert.deepEqual(pick({ type:'object',at:[4,0] }),[]);
+  assert.deepEqual(pick({ type:'part',id:'arm',object:'crane' }),[[1,0],[2,0]]);
+  assert.deepEqual(pick({ type:'part',id:'arm',entity:'dock' }),[[0,0]]);
+  assert.deepEqual(pick({ type:'part',at:[1,0] }),[[1,0],[2,0]]);
+  assert.deepEqual(pick({ type:'material',id:'metal' }),[[1,0],[3,0]]);
+  assert.deepEqual(pick({ type:'depth',range:[1.5,3] }),[[0,0],[2,0],[3,0]]);
+  assert.deepEqual(pick({ type:'channel',channel:'coverage',range:[.7,1] }),[[1,0],[2,0]]);
+  assert.deepEqual(pick({ type:'channel',channel:'surfaceUV',component:1,range:[.5,.5] }),[[1,0]]);
+  assert.throws(()=>pick({ type:'channel',channel:'surfaceUV',range:[0,1] }),/Choose a component/);
+  assert.throws(()=>pick({ type:'channel',channel:'invented',range:[0,1] }),/Unknown render channel/);
+  assert.throws(()=>editor.select({ type:'depth',range:[0,2] }),/SDK renderFrame/);
+  assert.throws(()=>editor.select({ type:'depth',range:[0,2] },{ renderFrame:{ ...renderFrame,w:3 } }),/match the document/);
+
+  const query = { type:'intersect',base:{ type:'part',id:'arm',object:'crane' },
+    with:{ type:'depth',range:[1.5,3] } };
+  const { sources } = editor.select(query,{ renderFrame });
+  const selection = patch(editor,'inspect-crane',{ id:'near-arm',query,sources },{ destination:'selections' });
+  assert.deepEqual(editor.previewEdit(selection,{ renderFrame }).targets[0].runs,[[0,2,1]]);
+  assert.deepEqual(editor.previewEdit(selection,{ renderFrame }).targets[0].sources[0].passes,
+    ['depth','objectId','partId']);
+  const after = editor.apply(selection,{ renderFrame }), [receipt] = editor.receipts();
+  assert.deepEqual(ink.createPixelEditor(design).replay(receipt,{ renderFrame }),after);
+  depth[0] = 2.5; // The saved mask is identical, but the inspected pass has changed.
+  assert.equal(ink.createPixelEditor(design).previewEdit(selection,{ renderFrame }).conflicts[0].code,'stale-source');
+  assert.throws(()=>ink.createPixelEditor(design).replay(receipt,{ renderFrame }),
+    error=>error.receipt?.conflicts[0].code === 'stale-source');
+});
+
+test('a bound material channel selects rest-chart values and pigment coverage', () => {
+  const scene = { id:'test-panel',style:'slate',solids:[{
+    id:'panel',kind:'box',at:[0,0,0],half:[1,1,.25],res:.2,mat:'stone',
+    surfaceState:{ charts:{ front:{ origin:[-1,-1,.25],u:[2,0,0],v:[0,2,0],stamps:[
+      { channel:'wear',brush:{ kind:'rect',min:[0,0],max:[.5,1] },value:.625 },
+      { channel:'paint',brush:{ kind:'rect',min:[.5,0],max:[1,1] },value:'#ffaa44',strength:.5 }
+    ] } } }
+  }] };
+  const doc = { ...design,sceneBindings:[{ id:'panel',scene:'test-panel',object:'panel',frame:'front' }],
+    destinations:[
+      { id:'wear',kind:'surface-channel',binding:'panel',chart:'front',channel:'wear' },
+      { id:'pigment',kind:'surface-channel',binding:'panel',chart:'front',channel:'paint' }
+    ] };
+  const editor = ink.createPixelEditor(doc,{ sceneEditor:ink.createSceneEditor(scene) });
+  const wear = { type:'channel',destination:'wear',range:[.6,.7] };
+  const selected = editor.select(wear);
+  assert.equal(selected.pixelCount,design.width*design.height/2);
+  assert.ok(selected.pixels.every(([x])=>x < design.width/2));
+  assert.equal(selected.sources[0].kind,'surface-channel');
+  assert.ok(editor.select({ type:'channel',destination:'pigment',range:[.49,.51] }).pixels.every(([x])=>x >= design.width/2));
+  assert.throws(()=>editor.select(wear,{ frame:'back' }),/bound to frame front/);
+});
+
+test('CLI renders named parts at document size and replays their retained mask', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-semantic-selection-'));
+  t.after(()=>fs.rmSync(dir,{ recursive:true,force:true }));
+  const file = name=>path.join(dir,name+'.json');
+  const scene = 'examples/part-motion.js';
+  const write = (name,data)=>fs.writeFileSync(file(name),JSON.stringify(data));
+  const cli = (...args)=>JSON.parse(execFileSync(process.execPath,['cli/ink-studio.js','pixel-art',...args],
+    { cwd:path.resolve(__dirname,'..'),encoding:'utf8' }));
+  write('design',{ ...design,width:80,height:56 });
+  const query = { type:'part',id:'tide-needle',object:'tide-needle' };
+  write('query',query);
+  const report = cli('select',file('design'),file('query'),'--scene',scene,'--t','.25');
+  assert.deepEqual(report.grid,[80,56]);
+  assert.ok(report.pixelCount > 5);
+  assert.deepEqual(report.sources[0].passes,['objectId','partId']);
+  write('patch',{ id:'save-needle',revision:report.revision,frame:'front',destination:'selections',
+    operation:{ id:'needle',query } });
+  write('receipt',cli('edit',file('design'),file('patch'),'--scene',scene,'--t','.25','--out',file('edited')));
+  cli('replay',file('design'),file('receipt'),'--scene',scene,'--t','.25','--out',file('replayed'));
+  assert.equal(fs.readFileSync(file('edited'),'utf8'),fs.readFileSync(file('replayed'),'utf8'));
+  assert.deepEqual(JSON.parse(fs.readFileSync(file('edited'),'utf8')).selections[0].pixels,report.pixels);
+});
+
+test('CLI material and SDF masks follow the visible owners at mesh cutouts', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-cutout-selection-'));
+  t.after(()=>fs.rmSync(dir,{ recursive:true,force:true }));
+  const source = path.join(dir,'document.json'), query = path.join(dir,'query.json');
+  fs.writeFileSync(source,JSON.stringify({ ...design,width:100,height:72 }));
+  function select(value) {
+    fs.writeFileSync(query,JSON.stringify(value));
+    return JSON.parse(execFileSync(process.execPath,['cli/ink-studio.js','pixel-art','select',source,query,
+      '--scene','examples/opaque-surface-gate.js','--t','.4'],{ cwd:path.resolve(__dirname,'..'),encoding:'utf8' }));
+  }
+  const copper = { type:'material',id:'brushed-copper' };
+  const screen = select(copper);
+  assert.ok(screen.pixelCount > 10);
+  const sdf = { type:'channel',channel:'surfaceKind',range:[2,2] };
+  assert.ok(select(sdf).pixelCount > 50);
+  assert.equal(select({ type:'intersect',base:sdf,with:copper }).pixelCount,0);
+});

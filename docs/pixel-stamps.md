@@ -34,6 +34,11 @@ lasso on the native canvas. For a polygon, place vertices and use **Close
 polygon**, Enter, or a double-click to finish. The wand follows connected
 color and **Color range** also finds matching islands. Both use the color
 tolerance field.
+**Swatch** selects the exact palette entry under the pointer. **Swatch
+cluster** follows the same entry across edges, or across edges and
+corners. Scene object, part, material, channel, and depth masks can be
+saved through the CLI and recalled from a stamp export.
+[Semantic selections](pixel-art-authoring.md#select-by-meaning)
 
 The active mask limits painting on that frame. Use **New selection**
 to replace it, add to it, subtract the next selection, or intersect the

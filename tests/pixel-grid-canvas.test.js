@@ -448,6 +448,14 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     await click(browser,'[data-tool="pencil"]');
     await click(browser,'.swatch:nth-child(3)');
     for (const x of [5,6,13]) await clickPixel(x,32);
+    await chooseSelection('swatch');
+    await clickPixel(5,32);
+    assert.equal(await selected(13,32),true);
+    assert.equal(await selected(10,32),false);
+    await chooseSelection('cluster');
+    await clickPixel(5,32);
+    assert.equal(await selected(6,32),true);
+    assert.equal(await selected(13,32),false);
     await chooseSelection('wand');
     await clickPixel(5,32);
     assert.equal(await selected(6,32),true);

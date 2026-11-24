@@ -41,4 +41,4 @@ function observe({ destination,binding }, context, { guard = true } = {}) {
   return { editor,revision,sourceRevision };
 }
 
-module.exports = { isRevision, observe };
+module.exports = { isRevision, observe, digest };

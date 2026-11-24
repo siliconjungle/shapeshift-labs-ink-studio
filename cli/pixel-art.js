@@ -9,6 +9,7 @@ const PixelGuides = require('../src/pixel-guides.js');
 const RasterTools = require('../src/pixel-paint-tools.js');
 const PixelBrushes = require('../src/pixel-brushes.js');
 const PixelSelections = require('../src/pixel-selections.js');
+const SelectionSources = require('./pixel-selection-sources.js');
 const PNG = require('./png.js');
 const Critic = require('./critic.js');
 const files = require('./asset-files.js');
@@ -396,7 +397,7 @@ function samplePixel(design,coordinate,{ mode = 'composite',frame,layer,cel,dest
     ...(active.opacity && { alpha:active.opacity[p] }),protected:observed.protected };
 }
 
-function selectPixels(design,query,{ frame,layer,cel } = {}) {
+function selectPixels(design,query,{ frame,layer,cel } = {},context) {
   if (layer !== undefined && cel !== undefined) throw new TypeError('Select from the composite, a layer or a cel');
   if (query?.type === 'recall' && frame === undefined && cel === undefined)
     frame = namedSelection(design,query.id).frame;
@@ -406,15 +407,32 @@ function selectPixels(design,query,{ frame,layer,cel } = {}) {
   const raster = source ? active.layerSources?.get(target) : active;
   if (!raster) throw new RangeError('Unknown pixel layer ' + target);
   const { width,height } = active;
+  const alpha = source ? raster.alpha : active.opacity;
+  const visible = p => !raster.clipping || raster.clipping[p];
+  const rendering = SelectionSources.sourceFor(width,height,query,{
+    capture:context?.captureSelection,
+    material(destination) {
+      if (!context) throw new TypeError('Selection needs the scene bound to material destination ' + destination);
+      const reader = Destinations.channelSource(Destinations.resolve(design,destination),context);
+      if (reader.frame !== undefined && reader.frame !== active.id)
+        throw new RangeError('The source channel is bound to frame ' + reader.frame);
+      return reader;
+    }
+  });
   const mask = PixelSelections.mask(width,height,query,p => {
     const slot = raster.slots[p];
-    if (slot < 0 || raster.clipping && !raster.clipping[p]) return 0;
+    if (slot < 0 || !visible(p)) return 0;
     const rgb = source ? active.colors[slot] : active.mixedColors?.[p] ?? active.colors[slot];
-    const alpha = (source ? raster.alpha : active.opacity)?.[p] ?? 255;
-    return (rgb<<8) | alpha;
-  },id=>namedSelection(design,id,active.id).pixels);
-  const pixels = PixelSelections.pixels(width,mask);
-  return { revision:active.revision,frame:active.id ?? null,grid:[width,height],pixelCount:pixels.length,pixels };
+    return (rgb<<8) | (alpha?.[p] ?? 255);
+  },id=>namedSelection(design,id,active.id).pixels,meaning=>{
+    if (meaning.type !== 'swatch') return rendering.match(meaning);
+    if (meaning.at && !visible(meaning.at[1]*width+meaning.at[0])) return () => false;
+    const test = PixelSelections.swatch(width,meaning,raster.slots,alpha,active.swatches);
+    return p=>visible(p) && test(p);
+  });
+  const pixels = PixelSelections.pixels(width,mask), { sources } = rendering;
+  return { revision:active.revision,frame:active.id ?? null,grid:[width,height],pixelCount:pixels.length,pixels,
+    ...(sources.length && { sources }) };
 }
 
 function namedSelection(design,id,frame) {
@@ -721,17 +739,21 @@ function brushChanges(design,frame,brush,override,{ points,samples,shading },{ s
 function editSelection(design,frame,patch,context) {
   const { operation } = patch;
   if (patch.edits !== undefined || patch.cel !== undefined ||
-      !fields(operation,['id','query','layer','cel']) || !name(operation.id))
+      !fields(operation,['id','query','layer','cel','sources']) || !name(operation.id))
     throw new TypeError('A selection edit needs a stable selection ID and a query');
   const { id,query,layer,cel } = operation;
-  const { pixels } = selectPixels(design,query,{ frame:frame.id,layer,cel });
+  const { pixels,sources } = selectPixels(design,query,{ frame:frame.id,layer,cel },context);
+  if (sources) context?.onSelectionSources?.(sources);
+  if (operation.sources !== undefined && !equal(operation.sources,sources ?? []))
+    throw Preview.conflict('stale-source','Selection sources differ from the inspected sources',
+      { expected:operation.sources,actual:sources ?? [] });
   const row = { id,frame:frame.id,pixels }, selections = [...(design.selections ?? [])];
   const index = selections.findIndex(saved=>saved.id === id);
   if (index < 0) selections.push(row);
   else selections[index] = row;
   const runs = RasterTools.runs(frame.width,pixels.map(([x,y])=>y*frame.width+x));
   context?.onEditTarget?.({ destination:'selections',kind:'selections',selection:id,frame:frame.id,
-    tool:query.type,pixelCount:pixels.length,runs });
+    tool:query.type,pixelCount:pixels.length,runs,...(sources && { sources }) });
   return { ...design,selections };
 }
 
@@ -793,6 +815,12 @@ function editWithReceipt(design, patch, context, { runner, options, frameId, sho
         if (expected && !equal(inputs,expected.inputs))
           throw Preview.conflict('stale-source','Receipt was recorded against a different scene source',
             { binding:binding.id, expected:expected.inputs.sourceRevision, actual:sourceRevision });
+      },
+      onSelectionSources(sources) {
+        inputs.selectionSources = sources;
+        if (expected && !equal(sources,expected.inputs.selectionSources))
+          throw Preview.conflict('stale-source','Selection passes or material channels differ from the edit receipt',
+            { expected:expected.inputs.selectionSources,actual:sources });
       },
       onSplat: splat => splats.push(splat),
       onEditTarget: target => { editTarget = target; }
@@ -877,6 +905,7 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
     if (target) targets.push(target);
     const frame = compile(design,frameId ?? (design.version === 2 ? patch?.frame : undefined),patch?.cel);
     const output = edit(design,frame,patch,{
+      captureSelection:context.captureSelection,
       onSource(revision) {
         sourceRevision = revision;
         if (patch.sourceRevision === undefined) warnings.push(sourceWarning(route.binding.id));
@@ -1010,6 +1039,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
 
   function editContext(context, grouped) {
     return {
+      captureSelection:context?.captureSelection ?? (context?.renderFrame && (()=>context.renderFrame)),
       scene(binding) {
         if (grouped && !sceneEditor)
           throw new Error('Attach the source scene editor to group native scene and pixel edits');
@@ -1103,7 +1133,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     inspect: (coordinate,{ frame,cel } = {}) => inspect(compile(state().design,frame,cel),coordinate),
     sample: (coordinate,options = {}) => samplePixel(state().design,coordinate,options,editContext(options,false)),
     captureBrush: options => captureBrush(state().design,options),
-    select: (query,options) => selectPixels(state().design,query,options),
+    select: (query,options) => selectPixels(state().design,query,options,editContext(options,false)),
     snap: (coordinate,{ frame,radius } = {}) => snapPoint(compile(state().design,frame),coordinate,radius),
     stamp: ({ frame,cel } = {}) => stamp(compile(state().design,frame,cel)),
     renderOptions: (scene = sceneName) => structuredClone(renderOptions(scene)),
@@ -1330,11 +1360,6 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     return;
   }
   const design = read(source);
-  if (action === 'select') {
-    const { frame,layer,cel } = opt;
-    process.stdout.write(JSON.stringify(selectPixels(design,read(patch),{ frame,layer,cel }),null,2)+'\n');
-    return;
-  }
   if (action === 'brush') {
     process.stdout.write(JSON.stringify(writeBrush(design,opt,path.resolve(source)),null,2)+'\n');
     return;
@@ -1360,9 +1385,19 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     return opt.scene;
   }
   const context = {
+    captureSelection:reference(opt.scene) ? settings=>{
+      if (out === path.resolve(opt.scene))
+        throw new RangeError('Write the edit to a separate output from the rendered scene');
+      return capture(opt.scene,settings);
+    } : undefined,
     world:binding => world(sourceFor(binding)),
     scene:binding => scene(sourceFor(binding))
   };
+  if (action === 'select') {
+    const { frame,layer,cel } = opt;
+    process.stdout.write(JSON.stringify(selectPixels(design,read(patch),{ frame,layer,cel },context),null,2)+'\n');
+    return;
+  }
   if (action === 'canvas') {
     if (typeof opt.out !== 'string' || !/\.html$/i.test(opt.out) || path.resolve(opt.out) === path.resolve(source))
       throw new TypeError('Use pixel-art canvas <design.json> --out <canvas.html>');
@@ -1448,13 +1483,14 @@ function inspectTargets(design,destination,context,limit = 128) {
   return { documentRevision:fingerprint(design), ...targets };
 }
 
-function sessionCommand(pos,opt,{ scene }) {
+function sessionCommand(pos,opt,{ scene,capture }) {
   const [action,directory,input] = pos;
   const argc = ['init','apply','select'].includes(action) ? 3 : 2;
   if (pos.length !== argc || !['init','status','begin','apply','preview','commit','cancel','undo','redo',
     'inspect','sample','select','snap','brush','targets','export'].includes(action))
     throw new TypeError('Use pixel-art session init, status, begin, apply, preview, commit, cancel, undo, redo, inspect, sample, select, snap, brush, targets, or export');
 
+  const captureSelection = reference(opt.scene) && capture ? settings=>capture(opt.scene,settings) : undefined;
   let editor, result;
   if (action === 'init') {
     const design = read(input);
@@ -1478,7 +1514,7 @@ function sessionCommand(pos,opt,{ scene }) {
       const sample = opt['shot-hit-frame'];
       const shotHitFrame = sample === undefined ? undefined : typeof sample === 'string' && /^\d+$/.test(sample)
         ? Number(sample) : NaN;
-      editor.apply(read(input),{ shotHitFrame });
+      editor.apply(read(input),{ shotHitFrame,captureSelection });
       result = editor.receipts().at(-1);
     } else if (action === 'preview') {
       const limit = opt.limit === undefined ? undefined : typeof opt.limit === 'string' ? Number(opt.limit) : NaN;
@@ -1492,7 +1528,7 @@ function sessionCommand(pos,opt,{ scene }) {
       result = editor.sample(coordinate,options);
     } else if (action === 'select') {
       const { frame,layer,cel } = opt;
-      result = editor.select(read(input),{ frame,layer,cel });
+      result = editor.select(read(input),{ frame,layer,cel,captureSelection });
     } else if (action === 'brush') {
       result = writeBrush(editor.snapshot(),opt,path.resolve(directory));
     } else if (action === 'snap') {

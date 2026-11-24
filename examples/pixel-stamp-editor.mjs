@@ -102,6 +102,7 @@ function strokeCopies({ slot,shape }) {
 const activeSelection = () => selection?.frame === state.frame ? selection : undefined;
 const selectionType = () => $('selection-type').value;
 const colorSelection = type => type === 'wand' || type === 'range';
+const pointSelection = type => colorSelection(type) || type === 'swatch' || type === 'cluster';
 const savedMasks = () => state.doc.frames[state.frame].selections;
 
 function selectionFromMask(mask) {
@@ -116,13 +117,15 @@ function setActiveSelection(next) {
 
 function selectPixels(query) {
   const { width,height,palette } = state.doc;
-  let read;
-  if (query.type === 'wand') {
+  let read, meaning;
+  if (pointSelection(query.type)) {
     const current = state.doc.frames[state.frame], slots = stamp.paint(width,height,current);
-    const colors = palette.map(color=>Number.parseInt(color.slice(1),16));
-    read = p => slots[p] === null ? 0 : (colors[slots[p]]<<8) | (current.alpha?.[p] ?? 255);
+    if (query.type === 'wand') {
+      const colors = palette.map(color=>Number.parseInt(color.slice(1),16));
+      read = p => slots[p] === null ? 0 : (colors[slots[p]]<<8) | (current.alpha?.[p] ?? 255);
+    } else meaning = selection=>selections.swatch(width,selection,slots,current.alpha);
   }
-  const operand = selections.mask(width,height,query,read), mode = $('selection-mode').value;
+  const operand = selections.mask(width,height,query,read,undefined,meaning), mode = $('selection-mode').value;
   if (mode === 'replace') return selectionFromMask(operand);
   const base = activeSelection()?.mask ?? new Uint8Array(operand.length);
   return selectionFromMask(selections.combine(mode,base,operand));
@@ -134,6 +137,7 @@ function drawSelection() {
   view.setSelection(displayed?.mask ?? null);
   const type = selectionType(), choosing = state.tool === 'brush-select';
   $('selection-tolerance-label').hidden = !colorSelection(type);
+  $('selection-connectivity-label').hidden = type !== 'cluster';
   $('polygon-selection-actions').hidden = !choosing || type !== 'polygon';
   $('selection-close').disabled = (selectionDraft?.points.length ?? 0) < 3;
   $('selection-cancel').disabled = !selectionDraft;
@@ -166,9 +170,11 @@ function refreshSelection() {
 function beginSelection(event,at) {
   const type = selectionType();
   art.closest('.ink-grid-viewport').focus({ preventScroll:true });
-  if (colorSelection(type)) {
+  if (pointSelection(type)) {
     try {
-      const query = { type:'wand',at,connected:type === 'wand',tolerance:$('selection-tolerance').valueAsNumber };
+      const query = colorSelection(type)
+        ? { type:'wand',at,connected:type === 'wand',tolerance:$('selection-tolerance').valueAsNumber }
+        : { type,at,...(type === 'cluster' && { connectivity:Number($('selection-connectivity').value) }) };
       setActiveSelection(selectPixels(query));
       notify('');
       drawSelection();
@@ -838,7 +844,7 @@ art.parentElement.addEventListener('pointerdown',event => {
   if (event.button !== 0 || drawingPointer !== undefined) return;
   const central = event.target === art;
   if (!central && (!grid || state.tool === 'brush-select' || !event.target.matches('.ink-grid-repeats canvas'))) return;
-  const snap = state.tool !== 'eyedropper' && !(state.tool === 'brush-select' && colorSelection(selectionType()));
+  const snap = state.tool !== 'eyedropper' && !(state.tool === 'brush-select' && pointSelection(selectionType()));
   const at = central ? view.pixelAt(event.clientX,event.clientY,{ snap }) : strokeAt(event);
   if (!at) return;
   stop();

@@ -89,11 +89,11 @@ const PixelPaintTools = (() => {
     return { id,area,seed:[startX,startY],rect:{ x:left,y:top,width:right-left+1,height:bottom-top+1 } };
   }
 
-  function region(width,height,point,matches) {
+  function region(width,height,point,matches,diagonal = false) {
     const start = point[1]*width+point[0];
     if (!matches(start)) return new Uint32Array();
     const queue = new Uint32Array(width*height), marks = new Uint8Array(queue.length);
-    const { area } = visit(start,marks,1,matches,{ width,height,steps:four,queue });
+    const { area } = visit(start,marks,1,matches,{ width,height,steps:diagonal ? eight : four,queue });
     return queue.subarray(0,area);
   }
 
