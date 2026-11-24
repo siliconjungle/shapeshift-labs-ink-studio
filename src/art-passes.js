@@ -11,11 +11,12 @@ const ArtPasses = (() => {
     'sourceSplatFrontRank','sourceSplatFront','sourceSplatFrontMetrics'];
   const sourceBindings = Object.freeze([...geometrySource,...splatSource]);
   const proxies=Object.freeze(['proxyDepth','proxyRejected','proxyRemovedCoverage']);
+  const inkControls=Object.freeze(['shadowBandBias','hatchWeight','outlineWeight','lightSpillWeight']);
   const surfaceKinds=Object.freeze([null,'mesh','sdf','splat','sprite','emitter']);
   const needsSurfaceMotion = selected => selected.includes('surfaceMotion') || selected.includes('surfaceMotionValid');
   const needsPartMotion = selected => selected.some(channel => channel !== 'partId' && partMotion.includes(channel));
   const needsStrandMotion = selected => selected.includes('strandMotion') || selected.includes('strandMotionValid');
-  const channels = Object.freeze([...new Set([...surface, ...environment, ...partMotion, ...strands, ...opaque, ...proxies, ...sourceBindings,
+  const channels = Object.freeze([...new Set([...surface, ...environment, ...partMotion, ...strands, ...opaque, ...proxies, ...sourceBindings, ...inkControls,
     'paletteOwner', 'inkMask', 'inkShadow', 'pigment', 'sourceRestNormal'])]);
   const cutoff = 0.5;
   const ownsSurface = (alpha, writesDepth, depth, nearest) => writesDepth && alpha > cutoff && depth <= nearest;
@@ -75,6 +76,6 @@ vec3 inkEmissionOver(vec3 emission, vec3 below, float alpha) {
 }
 `;
 
-  return Object.freeze({ channels, environment, partMotion, strands, opaque, surfaceKinds, proxies, sourceBindings, needsPartMotion, needsStrandMotion, needsSurfaceMotion, select, subset, pick, cutoff, ownsSurface, over, glsl });
+  return Object.freeze({ channels, environment, partMotion, strands, opaque, surfaceKinds, proxies, inkControls, sourceBindings, needsPartMotion, needsStrandMotion, needsSurfaceMotion, select, subset, pick, cutoff, ownsSurface, over, glsl });
 })();
 if (typeof module !== 'undefined') module.exports = ArtPasses;

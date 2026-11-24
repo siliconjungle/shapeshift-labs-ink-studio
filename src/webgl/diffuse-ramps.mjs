@@ -39,6 +39,7 @@ export function applyDiffuseRamps(toolkit, world, frame, camera, time, poseTime,
       normal:Array.from(normal), tangent:tangent.some(Boolean) ? Array.from(tangent) : undefined,
       view:pose.localOffset(...view), lightDirection:K.V.norm(pose.localOffset(...material.sun)),
       shadeNormalFrame:pose, shadeNormalLight:material.sun,
+      shadowBandBias:frame.shadowBandPaint === false ? 0 : world.renderMetadata?.inkControls?.[i*4],
       time, visibility:metadata[tag+4]
     };
     base[0] = (packed & 255)/255;

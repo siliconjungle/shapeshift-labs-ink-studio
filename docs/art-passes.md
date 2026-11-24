@@ -379,6 +379,11 @@ Author the profile in `finish.look.ink` or override it for a shot with
 
 ### Material ink and shot overrides
 
+Use the `shadowBandBias`, `hatchWeight`, `outlineWeight`, and
+`lightSpillWeight` passes to inspect the visible surface's painted controls.
+The pass bundle includes float values in `inkControls`. See
+[Paint lighting and ink controls](pixel-art-authoring.md#paint-lighting-and-ink-controls).
+
 In the headless renderer, assign `materials` rules by authored material ID.
 Each material can specify its own silhouette, crease, boundary, shadow edge,
 and hatch. These rules share the same native art grid across splats, indexed

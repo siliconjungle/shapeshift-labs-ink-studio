@@ -133,6 +133,16 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
     }
     const topDepth=(selected.has('depth')||captureSurfaceMotion) && topDown(depth,1);
     if (selected.has('depth')) result.depth=topDepth;
+    const inkControls = world.renderMetadata?.inkControls;
+    ArtPasses.inkControls.forEach((channel,slot)=>{
+      if (!selected.has(channel)) return;
+      const values = Float32Array.from(owner,(row,p)=>{
+        const hit = atlasOwners?.get(p);
+        const value = hit?.inkControls?.[slot] ?? (row>=0 ? inkControls?.[row*4+slot] : undefined) ?? 0;
+        return slot ? 1-value : value;
+      });
+      result[channel]=topDown(values,1);
+    });
     if (selected.has('pigment')) {
       // RGB24 plus one keeps opaque black distinct from a missing sample.
       const data=world.rest??world.data;

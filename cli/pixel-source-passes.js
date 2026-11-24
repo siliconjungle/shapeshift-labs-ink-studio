@@ -12,7 +12,7 @@ function rowRevision(world,row) {
     ['base',data,16],['surface',world.surfaceData,8,1],['fine',world.fine,12],['curve',world.curveRest,16],
     ['attrs',world.attr,4],['pixels',world.pix,8],['optical',world.opticalSplats,12],
     ['normals',world.renderMetadata?.normals,3],['shading',world.renderMetadata?.shadingNormals,3],
-    ['emission',world.renderMetadata?.paintedEmission,3]
+    ['emission',world.renderMetadata?.paintedEmission,3],['inkControls',world.renderMetadata?.inkControls,4]
   ]) {
     if (!values) continue;
     const chunk = values.subarray(row*stride+start,(row+1)*stride);

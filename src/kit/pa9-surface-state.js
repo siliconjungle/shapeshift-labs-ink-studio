@@ -42,12 +42,17 @@
     normal:{type:'normal',default:null},
     opacity:{type:'number',min:0,max:1,default:null,material:true}
   });
+  const inkNames=['shadow-band','hatch','outline','light-spill'];
+  const inkChannels=freeze(Object.fromEntries(inkNames.map((id,i)=>[id,
+    {type:'number',min:i?0:-1,max:1,default:i?1:0}])));
+  // Store deviations from the neutral settings so zero-filled carrier rows stay neutral.
+  const inkAt=values=>inkNames.map((id,i)=>i?1-values[id]:values[id]);
   const maskId = value=>typeof value==='string'&&/^[a-z][a-z0-9_-]{0,47}$/.test(value)&&name(value);
   function materialChannels(spec) {
     const masks = spec?.masks ?? [];
     check(Array.isArray(masks)&&masks.length<=16&&Array.from(masks).every(maskId)&&new Set(masks).size===masks.length,
       'Rest surface masks need up to 16 unique lowercase IDs');
-    return freeze({ ...defaults,...finish,...Object.fromEntries(masks.map(id=>['mask:'+id,
+    return freeze({ ...defaults,...finish,...inkChannels,...Object.fromEntries(masks.map(id=>['mask:'+id,
       {type:'number',min:0,max:1,default:0}])) });
   }
   function valueOf(schema,value,add=false) {
@@ -175,7 +180,8 @@
   const materialVector=(layer,base)=>layer?base.map((n,i)=>mix(n,layer.value[i],layer.coverage)):base;
 
   function appearance(base,hit,palette,point) {
-    const {values,chart,paintedNormal}=hit, adjusted={...base,surfaceId:chart};
+    const {values,chart,paintedNormal,inkControls}=hit, adjusted={...base,surfaceId:chart};
+    if(inkControls?.some(Boolean))adjusted.inkControls=inkControls;
     const stains=active(values), pigment=values.pigment, wet=wetness(values), masks={};
     for(const [id,value] of Object.entries(values))if(id.startsWith('mask:'))masks[id.slice(5)]=value;
     const channels=pigment||values.roughness||values.emission||paintedNormal||values.opacity||Object.keys(masks).length;
@@ -221,6 +227,7 @@
   }
   function bind(material,locate,palette) {
     return {...material,surfaceState:{locate,maskNames:locate.maskNames,hasOpacity:locate.hasOpacity,hasNormal:locate.hasNormal,
+      hasInkControls:locate.hasInkControls,
       apply(base,hit,point) {return appearance(base,hit,palette,point);} }};
   }
   const xyz=value=>Array.isArray(value)&&value.length===3&&Array.from(value).every(finite);
@@ -266,11 +273,13 @@
         const mapped=V.norm(V.mad(V.mad(V.mul(n,z),u,x),v,y),n);
         paintedNormal=V.norm(V.mad(n,V.sub(mapped,n),values.normal.coverage),n);
       }
-      return {chart:row.chart,uv,values,normal,...(paintedNormal&&{paintedNormal})};
+      return {chart:row.chart,uv,values,normal,...(paintedNormal&&{paintedNormal}),
+        ...(locate.hasInkControls&&{inkControls:inkAt(values)})};
     };
     return Object.assign(locate,{maskNames:spec.masks?.slice()??[],
       hasOpacity:Object.values(spec.charts).some(chart=>chart.stamps?.some(stamp=>stamp.channel==='opacity')),
-      hasNormal:Object.values(spec.charts).some(chart=>chart.stamps?.some(stamp=>stamp.channel==='normal'))});
+      hasNormal:Object.values(spec.charts).some(chart=>chart.stamps?.some(stamp=>stamp.channel==='normal')),
+      hasInkControls:Object.values(spec.charts).some(chart=>chart.stamps?.some(stamp=>inkNames.includes(stamp.channel)))});
   }
   P.surfaceState=Object.freeze({channels,materialChannels,valueOf,prepare,restSampler,correspondence,projection,bind,appearance,ramp,window,into,isUv:uv,full});
 })(KIT);

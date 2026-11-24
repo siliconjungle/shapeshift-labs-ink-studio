@@ -180,6 +180,10 @@ function channelEvidence(frame,channel) {
     case 'emission': return { bytes:frame.passes.emission,stride:3 };
     case 'normal': return { bytes:frame.passes.shadingNormal,stride:3 };
     case 'roughness': return { bytes:frame.rgb,stride:3 };
+    case 'shadow-band': return { bytes:frame.passes.shadowBandBias,stride:1 };
+    case 'hatch': return { bytes:frame.passes.hatchWeight,stride:1 };
+    case 'outline': return { bytes:frame.passes.outlineWeight,stride:1 };
+    case 'light-spill': return { bytes:frame.passes.lightSpillWeight,stride:1 };
     default: return { bytes:frame.passes.pigment,stride:1 };
   }
 }

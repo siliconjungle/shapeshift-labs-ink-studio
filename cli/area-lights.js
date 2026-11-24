@@ -52,17 +52,19 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow, cutout
   const areaShadow = sources.length || cutoutShadow ? (origin, direction, stop) =>
     cutoutShadow?.(origin, direction, stop) || occludes(sources, origin, direction, stop) : null;
   const cache = [];
+  const inkControls = world.renderMetadata?.inkControls;
 
-  function evaluate(point, normal, row, biasNormal, specular) {
+  function evaluate(point, normal, row, biasNormal, specular, spillSuppression) {
     const rgb=[0,0,0];
     const shadeNormal=art?.normal?.(row,normal) ?? normal, bias=biasNormal??normal;
     AreaLights.evaluate(active,point,shadeNormal,rgb,{shadow:areaShadow,biasNormal:bias,specular});
-    if(spillLights.length){
+    const spillWeight=1-(spillSuppression ?? (Number.isInteger(row) ? inkControls?.[row*4+3] : undefined) ?? 0);
+    if(spillLights.length&&spillWeight){
       const emitted=[0,0,0];
       AreaLights.evaluate(spillLights,point,shadeNormal,emitted,{shadow:areaShadow,biasNormal:bias,
         contribution:art?.spill && ((light,at)=>art.spill(light,row,at))});
       const graded=art?.curves.emission?.(emitted) ?? emitted;
-      for(let c=0;c<3;c++)rgb[c]+=graded[c];
+      for(let c=0;c<3;c++)rgb[c]+=graded[c]*spillWeight;
     }
     for (const light of projectors) {
       const offset = light.at.map((value,k) => value-point[k]), distance = Math.hypot(...offset);
@@ -91,16 +93,16 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow, cutout
     return rgb.map((n, c) => (n + additional[c] + retention) * rig.exposure);
   }
 
-  function shade(pixel, point, normal, rgb, fog, fogMix = 0, row, biasNormal) {
+  function shade(pixel, point, normal, rgb, fog, fogMix = 0, row, biasNormal, spillSuppression) {
     const previous = cache[pixel];
     let light;
-    if (previous && previous.row === row && point.every((n,k)=>Math.abs(n-previous.point[k])<1e-6) &&
+    if (previous && previous.row === row && previous.spillSuppression === spillSuppression && point.every((n,k)=>Math.abs(n-previous.point[k])<1e-6) &&
         normal.every((n,k)=>Math.abs(n-previous.normal[k])<1e-6) &&
         (biasNormal===previous.biasNormal || biasNormal&&previous.biasNormal&&
           biasNormal.every((n,k)=>Math.abs(n-previous.biasNormal[k])<1e-6))) light=previous.light;
     else {
-      light=evaluate(point,normal,row,biasNormal);
-      cache[pixel]={point,normal,biasNormal,light,row};
+      light=evaluate(point,normal,row,biasNormal,undefined,spillSuppression);
+      cache[pixel]={point,normal,biasNormal,light,row,spillSuppression};
     }
     if (light.every(n => n === 1) || fogMix>=1) return rgb;
     const surface = fogMix ? rgb.map((n,k)=>clamp((n-fog[k]*fogMix)/(1-fogMix))) : rgb;

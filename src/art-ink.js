@@ -278,10 +278,10 @@ const ArtInk = (() => {
     return best;
   }
 
-  function apply(frame, passes, settings, palette, signals, { world, time = 0, depthOffset = 0, inspect } = {}) {
+  function apply(frame, passes, settings, palette, signals, { world, time = 0, depthOffset = 0, inspect, paintShadowBands=true } = {}) {
     const { w, h, rgb, alpha } = frame;
     const { depth, normal, geometricNormal = normal, objectId, materialId, emission, splatId,
-      objectPosition, inkShadow } = passes;
+      objectPosition, inkShadow, shadowBandBias, hatchWeight:paintedHatch, outlineWeight:paintedOutline } = passes;
     const mask = new Uint8Array(w * h);
     const { ramps, depthGap, creaseCosine, litAt, light, suppressSameMaterial, occlusionSilhouettes,
       usesBackdrop, needsLight } = settings;
@@ -297,7 +297,8 @@ const ArtInk = (() => {
     const shade = needsLight && Float32Array.from(depth,(z,p) => {
       const q = p * 3;
       if (!Number.isFinite(z) || emits(q) || !(normal[q] || normal[q+1] || normal[q+2])) return -1;
-      return clamp(dotAt(normal,q,light),0,1) * (1 - (inkShadow?.[p] ?? 0));
+      const bias=paintShadowBands ? shadowBandBias?.[p]??0 : 0;
+      return clamp(dotAt(normal,q,light)-bias,0,1) * (1 - (inkShadow?.[p] ?? 0));
     });
 
     function surfaceNeighbor(p,z) {
@@ -392,7 +393,7 @@ const ArtInk = (() => {
         const distance = depth[p]-depthOffset;
         const hatch = style.hatch;
         if (hatch) {
-          const weight = opacity(hatch,style.distance,distance) * hatchWeight(p,q,hatch);
+          const weight = opacity(hatch,style.distance,distance) * hatchWeight(p,q,hatch) * (paintedHatch?.[p]??1);
           if (weight && (hatch.color !== undefined || hatch.steps)) {
             const ink = hatch.color ?? stepColor(style,hatch.steps,r,g,b);
             color = blend(original,ink,weight);
@@ -410,7 +411,7 @@ const ArtInk = (() => {
           if (!(edges & (1 << edge))) continue;
           const type = edgeName[edge], rule = style[type];
           if (!rule) continue;
-          const paint = rule.mask ? rule.mask(surface) : 1;
+          const paint = (rule.mask ? rule.mask(surface) : 1) * (edge === SHADOW_EDGE ? 1 : paintedOutline?.[p]??1);
           if (!paint) continue;
           const weight = opacity(rule,style.distance,distance) * paint;
           let merge = 0, neighborColor = 0;
