@@ -544,3 +544,65 @@ node cli/ink-studio.js mesh-topology inspect mesh-topology-review/before.json
 node cli/ink-studio.js mesh-topology edit mesh-topology-review/before.json mesh-topology-review/patch.json --out mesh-topology-review/replayed.json
 node cli/ink-studio.js mesh-topology triangulate mesh-topology-review/replayed.json --out mesh-topology-review/triangles.json
 ```
+
+## Extrude, inset, or thicken a face region
+
+Save a face selection with `mesh-topology select`, then give its
+revision and IDs to the face-region planner. Neighboring selected faces
+are edited together and share the new rim. Each disconnected region is
+handled in its own frame.
+
+```sh
+ink-studio mesh-topology face-region meter.json inset.json
+ink-studio mesh-topology face-region meter.json inset.json --out framed.json --report inset-report.json
+ink-studio mesh-topology face-region workshop.json recess.json --object meter --out revised.json --report review.json
+```
+
+A request contains an `id`, `revision`, saved `selection` and `operation`.
+Use the mesh's stored units for the operation's `distance`.
+
+- `{ "kind": "extrude", "distance": 0.25 }` offsets the selected faces along
+  the region's area-weighted normal and joins them to the existing
+  boundary. Use a negative distance for a recess or supply a nonzero
+  XYZ `direction`. A fully enclosed region needs a selection boundary
+  for extrusion.
+- `{ "kind": "inset", "distance": 0.2 }` creates a planar border of the
+  specified width from the outline and any holes. The selected region
+  keeps its polygons and authored UVs by default. A large inset can
+  collapse a narrow corner. For a recessed panel, inset first, then use
+  a fresh face selection for a negative extrusion.
+- `{ "kind": "thicken", "distance": 0.2 }` adds a reverse-facing inner
+  skin behind the authored surface, with offset miters at bends. Select
+  complete surface islands. Open shells get stitched edge walls and
+  closed surfaces get an inward cavity. Use an inward extrusion for a
+  patch attached to surrounding faces.
+
+Set `rim.material` and `interior.material` independently. Without
+overrides, each new face inherits the material of its source. Rim
+`uv: "strip"` (default) maps U along each boundary loop by length and V
+across the rim. Choose `"per-edge"` to give each wall quad its own full
+UV rectangle. The interior defaults to `uv: "preserve"`, which keeps
+authored paint coordinates. Choose `"planar"` for a per-face planar
+projection. A thickening edit leaves the original skin and paint intact.
+
+Set `minWall` to the minimum acceptable distance between opposing
+surfaces. The default is 5% of the edit distance or four times the
+geometric tolerance, whichever is larger. The receipt includes blocking
+face IDs, measured separation and witness points when a thin wall is
+found. The planner also checks polygon orientation, mesh contacts, and
+sampled contact along extrusion and shell movement. A failed or
+incomplete check prevents commits through the CLI and scene editor.
+`--report` still writes the evidence for a blocked commit. Use the
+optional `tolerance` in mesh units to set the contact tolerance.
+
+The SDK's `KIT.meshTopology.planFaceRegion(mesh, request)` returns
+`document`, `patch`, and `report`. Inspect `report.canCommit` before
+installing the patch on a standalone mesh. A retained scene provides
+`editor.planMeshFaceRegion(object, request)` and
+`editor.editMeshFaceRegion(object, request)`. Bound pixel transactions
+accept `operation.faceRegion` and keep the revised source geometry,
+displaced bindings, bake invalidations, and edit receipt in the same
+undo and replay history.
+
+Run `node examples/mesh-face-region/render.cjs <directory>` for native
+art-grid comparisons and reproducible face selections and requests.

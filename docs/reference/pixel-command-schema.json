@@ -5750,6 +5750,183 @@
         }
       ]
     },
+    "meshFaceRegionRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_.-]{1,96}$"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "selection": {
+          "type": "object",
+          "properties": {
+            "format": {
+              "const": "ink-studio/mesh-selection"
+            },
+            "version": {
+              "const": 1
+            },
+            "mesh": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "revision": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "domain": {
+              "const": "faces"
+            },
+            "ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "format",
+            "version",
+            "mesh",
+            "revision",
+            "domain",
+            "ids"
+          ],
+          "additionalProperties": false
+        },
+        "operation": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "extrude"
+                },
+                "distance": {
+                  "type": "number"
+                },
+                "direction": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "minItems": 3,
+                  "items": false
+                }
+              },
+              "required": [
+                "kind",
+                "distance"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "inset"
+                },
+                "distance": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "distance"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "thicken"
+                },
+                "distance": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "distance"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "rim": {
+          "type": "object",
+          "properties": {
+            "material": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "uv": {
+              "enum": [
+                "strip",
+                "per-edge"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "interior": {
+          "type": "object",
+          "properties": {
+            "material": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "uv": {
+              "enum": [
+                "preserve",
+                "planar"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "minWall": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "tolerance": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "selection",
+        "operation"
+      ],
+      "additionalProperties": false
+    },
     "meshTopologyOperation": {
       "type": "object",
       "properties": {
@@ -5761,6 +5938,9 @@
         },
         "cut": {
           "$ref": "#/$defs/meshCutRequest"
+        },
+        "faceRegion": {
+          "$ref": "#/$defs/meshFaceRegionRequest"
         },
         "patch": {
           "type": "object",
@@ -6058,6 +6238,11 @@
         {
           "required": [
             "cut"
+          ]
+        },
+        {
+          "required": [
+            "faceRegion"
           ]
         }
       ],

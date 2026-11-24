@@ -567,6 +567,13 @@ function apply(frame, edit, route, context, readMarks) {
       evidence = source.editor.transformMeshTopology(binding.object, operation.transform, options);
     } else if (fields(operation, ['cut', 'projection']) && Object.hasOwn(operation, 'cut')) {
       evidence = source.editor.cutMeshTopology(binding.object, operation.cut, options);
+    } else if (fields(operation, ['faceRegion', 'projection']) && Object.hasOwn(operation, 'faceRegion')) {
+      try {
+        evidence = source.editor.editMeshFaceRegion(binding.object, operation.faceRegion, options);
+      } catch (error) {
+        if (!error.report) throw error;
+        throw conflict('mesh-face-region-blocked', error.message, { faceRegion: error.report });
+      }
     } else if (fields(operation, ['repair', 'projection']) && Object.hasOwn(operation, 'repair')) {
       try {
         evidence = source.editor.repairMeshTopology(binding.object, operation.repair, options);
@@ -577,7 +584,7 @@ function apply(frame, edit, route, context, readMarks) {
     } else {
       if (!fields(operation, ['patch', 'projection']) || !fields(operation.patch,
         ['vertices', 'faces', 'removeVertices', 'removeFaces', 'lineage']) || !Object.keys(operation.patch).length)
-        throw new TypeError('A topology edit needs a mesh topology patch, component transform, cut, or repair request');
+        throw new TypeError('A topology edit needs a mesh topology patch, component transform, cut, face-region, or repair request');
       evidence = { topology: source.editor.editMeshTopology(binding.object, operation.patch, options) };
     }
     context.onEditTarget?.({ ...sourceTarget(route, edit), node: 'mesh-topology:' + binding.object, ...evidence });

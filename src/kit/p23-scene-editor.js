@@ -407,6 +407,19 @@
       }) });
     }
 
+    function planMeshFaceRegion(object, request, { part } = {}) {
+      const row = meshTopology(object, part);
+      requireMeshShapeOwner(object, row.part, snapshot(), 'Edit');
+      return K.meshTopology.planFaceRegion(row.document, request);
+    }
+
+    function editMeshFaceRegion(object, request, options) {
+      const plan = planMeshFaceRegion(object, request, options);
+      if (!plan.report.canCommit)
+        throw Object.assign(new RangeError('Face-region edit failed geometry or wall clearance checks'), { report: plan.report });
+      return freeze({ faceRegion: plan.report, topology: editMeshTopology(object, plan.patch, options) });
+    }
+
     function setBrushRegion(region) {
       const value = clone(region);
       const write = () => document.setEnvironment({ brushRegion: value });
@@ -514,6 +527,8 @@
       repairMeshTopology,
       planMeshCut,
       cutMeshTopology,
+      planMeshFaceRegion,
+      editMeshFaceRegion,
       hybridRoute: address => A.hybridOwnership.route(snapshot().hybridOwnership, address),
       setBrushRegion,
       setBreakables,

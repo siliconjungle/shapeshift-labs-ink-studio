@@ -58,18 +58,18 @@ const retainedMeshHealth = (function (K) {
     return [V.lerp(a, b, min), V.lerp(a, b, max)];
   }
 
-  function contacts(a, b, epsilon) {
+  function contacts(a, b, epsilon, clipTolerance) {
     const distances = a.points.map(point => V.dot(V.sub(point, b.points[0]), b.normal));
     if (distances.every(d => d > epsilon) || distances.every(d => d < -epsilon)) return [];
     const hits = [];
     for (const [i, point] of a.points.entries()) {
       const j = (i + 1) % 3, next = a.points[j], u = distances[i], v = distances[j];
       if (Math.abs(u) <= epsilon && Math.abs(v) <= epsilon) {
-        hits.push(...clipSegment(point, next, b.sides, epsilon));
+        hits.push(...clipSegment(point, next, b.sides, clipTolerance));
       } else if (u * v <= 0 || Math.abs(u) <= epsilon || Math.abs(v) <= epsilon) {
         const t = Math.max(0, Math.min(1, u / (u - v)));
         const hit = V.lerp(point, next, t);
-        if (b.sides.every(({ p, inward }) => V.dot(V.sub(hit, p), inward) >= -epsilon)) hits.push(hit);
+        if (b.sides.every(({ p, inward }) => V.dot(V.sub(hit, p), inward) >= -clipTolerance)) hits.push(hit);
       }
     }
     return hits;
@@ -89,7 +89,11 @@ const retainedMeshHealth = (function (K) {
       return incidence.rings.get(a.face).has(key) && incidence.rings.get(b.face).has(key);
     }).map(next => [rasterPosition(incidence, id), rasterPosition(incidence, next)]));
     if (!a.twiceArea || !b.twiceArea) return null;
-    const hits = [...contacts(a, b, epsilon), ...contacts(b, a, epsilon)];
+    // Expanding the contact polygon at a shared seam turns a valid acute
+    // corner into an apparent overlap. Keep numerical slack much smaller
+    // than the boundary match tolerance for triangles that share vertices.
+    const pad = shared.length ? epsilon * .001 : epsilon;
+    const hits = [...contacts(a, b, epsilon, pad), ...contacts(b, a, epsilon, pad)];
     if (!hits.length) return null;
     const coplanar = Math.abs(V.dot(a.normal, b.normal)) >= 1 - 1e-10 &&
       b.points.every(p => Math.abs(V.dot(V.sub(p, a.points[0]), a.normal)) <= epsilon);

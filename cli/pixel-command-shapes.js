@@ -232,10 +232,21 @@ function createDefinitions() {
           domain:choice('vertices','edges','faces'),ids:array(text)},['format','version','mesh','revision','domain','ids'])
       },['projection','path'])
     },['id','revision']),...exactlyOne('plane','knife')},
+    meshFaceRegionRequest:object({
+      id:{type:'string',pattern:'^[a-zA-Z0-9_.-]{1,96}$'},revision:text,
+      selection:object({format:constant('ink-studio/mesh-selection'),version:constant(1),mesh:text,revision:text,
+        domain:constant('faces'),ids:array(text,1)},['format','version','mesh','revision','domain','ids']),
+      operation:either(tagged('kind','extrude',{distance:number,direction:pos},['distance']),
+        ...['inset','thicken'].map(kind=>tagged('kind',kind,{distance:{type:'number',exclusiveMinimum:0}},['distance']))),
+      rim:object({material:text,uv:choice('strip','per-edge')}),
+      interior:object({material:text,uv:choice('preserve','planar')}),
+      minWall:{type:'number',exclusiveMinimum:0},tolerance:{type:'number',exclusiveMinimum:0}
+    },['id','revision','selection','operation']),
     meshTopologyOperation:{ ...object({
       transform:ref('meshComponentTransform'),
       repair:ref('meshRepairRequest'),
       cut:ref('meshCutRequest'),
+      faceRegion:ref('meshFaceRegionRequest'),
       patch:{
         ...object({
           vertices:array(object({id:text,position:pos,weights:nullable(object({},[],unit))},['id','position'])),
@@ -250,7 +261,7 @@ function createDefinitions() {
       },
       projection:object({maxDistance:{type:'number',exclusiveMinimum:0},minNormalDot:unit,maxUVDistance:unit,minConfidence:unit,
         ambiguity:unit,maxChecks:int(1,2000000)},['maxDistance'])
-    }),oneOf:['patch','transform','repair','cut'].map(prop) },
+    }),oneOf:['patch','transform','repair','cut','faceRegion'].map(prop) },
     sdfShapeOperation:either(...[
       ['parameters',obj],['modifier',obj],['updateModifier',object({id:text,patch:obj},['id','patch'])],
       ['protection',array(obj)],['brush',sdfBrush],['updateBrush',{type:'object',required:['id']}]
