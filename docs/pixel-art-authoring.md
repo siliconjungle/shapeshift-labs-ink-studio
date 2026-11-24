@@ -23,6 +23,60 @@ frames. Use `--frame <id>` to export a single frame. The HTML is a review
 artifact. Use the pixel editor API for document edits or the
 [Pixel Stamp Workshop](pixel-stamps.md) to draw and resize exported stamps.
 
+## Edit the cel timeline
+
+Use `pixel-art timeline` or `editor.timeline()` to inspect the layer-by-frame
+matrix. Each column has a start, duration and end in integer milliseconds.
+Each cell distinguishes an empty slot, an explicit blank, a drawing, or a
+linked hold. It reports the cel ID, its own offset, and the combined layer
+and cel offset. The offline canvas shows the same matrix. Click a cell to
+open its frame and select its layer for sampling.
+
+```sh
+node cli/ink-studio.js pixel-art timeline document.json
+node cli/ink-studio.js pixel-art session timeline gate-session
+```
+
+Send timeline edits to the `timeline` destination. Frame and layer
+addresses belong inside the operation. Preview, apply, undo, replay and
+persistent sessions use the existing pixel edit workflow.
+
+```json
+{
+  "id": "hold-the-pose",
+  "revision": "<revision from pixel-art timeline>",
+  "destination": "timeline",
+  "operation": {
+    "type": "hold",
+    "from": { "frame": "look", "layer": "ink" },
+    "to": { "frame": "pause", "layer": "ink" }
+  }
+}
+```
+
+| Operation | Fields and behavior |
+| --- | --- |
+| `add-frame` | `frame`, `durationMs`, optional `label` and `before`. Appends an empty frame by default. |
+| `duration` | `frame`, `durationMs`. Retimes the chosen frame and the starts of later frames. |
+| `blank` | `frame`, `layer`. Creates an explicit transparent cel or clears the current cel. Clearing keeps the cel ID and updates any frames holding it. |
+| `duplicate` | `from`, optional `to`. Defaults to an independent copy on the next frame of the same layer. |
+| `hold` | `from`, `to`. Links to the source drawing by ID and gives the held cel its own placement. Painting directly on a held cel makes that cel independent. |
+| `move` | `from`, `to`. Vacates the source cell and keeps its ID, so holds continue to resolve after the move. |
+| `copy` | `from`, `to`. Copies the source drawing and cel offset under a new ID. |
+| `layer-offset` | `layer`, `offset`. Moves that layer across every frame. |
+| `cel-offset` | `frame`, `layer`, `offset`. Moves just that cel relative to its layer. |
+
+Transfer operations need `"replace": true` to overwrite an occupied cell.
+An edit that would remove another cel's hold source fails with the dependent
+cel and source IDs. Offsets are signed integer `[x,y]` pixels. The native
+canvas clips shifted art outside its edges while the document retains it.
+Paint tools take canvas coordinates and report a conflict when a stroke
+would write beyond the shifted cel's source grid. An explicit canvas
+crop, pad, resize or resample bakes placements and linked exposures into
+the new grid. Layer deck exports also bake placements and held exposures
+for use in the Pixel Stamp Workshop. Store the version 2 pixel document
+to retain editable offsets and hold links.
+
 ## Register frames and align texture pixels
 
 Version 2 documents can carry a top-level `guides` list. Guide IDs are

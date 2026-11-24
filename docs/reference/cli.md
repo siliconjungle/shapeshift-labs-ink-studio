@@ -244,6 +244,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art import <image.png> --out document.json   open indexed or RGBA PNG as editable pixels
   pixel-art upgrade <design.json> --out <document.json>   open a legacy drawing as editable cels
   pixel-art validate <design.json>           validate the versioned document and each frame
+  pixel-art timeline <design.json>           list frame timing and layer-by-frame cels
   pixel-art targets <design.json> --destination id --scene <bound scene>   list stable scene targets
     --query splats.json [--source-view view.json] [--limit N]   pick splats by footprint, contribution, part, material or rest bounds
   pixel-art preview <design.json> <edit.json> [--scene <bound scene>] [--splat-diagnostics]   report a proposed edit and its conflicts
@@ -279,7 +280,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art replay <design.json> <receipt.json> --out result.json   verify and reproduce an edit with the same options
             --scene <bound scene> for native edits; --shot-hit-frame <index> to sample skipped shot hits
   pixel-art session init <directory> <design.json> [--scene scene.json]   start a persistent edit session
-  pixel-art session <status|begin|apply|preview|commit|cancel|undo|redo|inspect|sample|select|snap|brush|copy|targets|export> <directory>
+  pixel-art session <status|begin|apply|preview|commit|cancel|undo|redo|inspect|sample|select|snap|brush|copy|timeline|targets|export> <directory>
   lint <id ...> [--map]              pixel-art lint: orphans, doubles, jaggies, banding, pillow shading, noise, colours
   review <id> [--ref pic --px 2]     a sheet of fixed shots (four sides, top, low, far, near, close), beside the last one
   sweep <scene> <plan.json> --out directory   render still and clip contact sheets across settings and seeds
@@ -732,12 +733,14 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio pixel-art session snap` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session status` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session targets` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art session timeline` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session undo` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art snap` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art stack` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art stack export` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art stack import` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art targets` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art timeline` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art trace` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art track` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art upgrade` · [source](../../cli/pixel-art.js)

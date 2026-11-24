@@ -70,6 +70,7 @@ function resolve(design, name = 'raster') {
     (['adjustments','document:adjustments'].includes(name) && { id:'adjustments',kind:'adjustments' }) ||
     (design.version === 2 && ['art-rules','document:art-rules'].includes(name) && { id:'art-rules',kind:'art-rules' }) ||
     (design.version === 2 && ['protection','document:protection'].includes(name) && { id:'protection',kind:'protection' }) ||
+    (['timeline','document:timeline'].includes(name) && { id:'timeline',kind:'timeline' }) ||
     (['layers','document:layers'].includes(name) && { id:'layers',kind:'layers' }) ||
     (design.version === 2 && ['guides','selections'].includes(name) && { id:name, kind:name });
   if (!destination) throw conflict('unknown-destination','Unknown pixel edit destination ' + name,{ destination:name });

@@ -42,5 +42,6 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createPixelEditor().snapshot` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().stamp` | function | `({ frame,cel,layer,references } = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().targets` | function | `(destination,options = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
+| `node.createPixelEditor().timeline` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().transact` | function | `(label,fn)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().undo` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../src/kit/p23-authoring-document.js) |

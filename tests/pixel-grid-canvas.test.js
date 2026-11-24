@@ -1197,3 +1197,28 @@ test('the CLI exports an offline native canvas with both views on the selected v
     assert.match(await browser.evaluate("document.querySelector('#pixel-inspection').textContent"),/yaw 0\.35/);
   });
 });
+
+test('offline cel timeline navigates linked exposures and shows timing and offsets',{ skip },async t=>{
+  const directory = workspace(t), source = path.join(directory,'day.json'), file = path.join(directory,'day.html');
+  fs.writeFileSync(source,JSON.stringify({
+    format:'ink-studio/pixel-art',version:2,width:3,height:2,pixelAspect:[1,1],
+    palette:{ red:'#bd2020' },layers:[{ id:'lines' },{ id:'ink',label:'Ink',offset:[1,0] }],
+    frames:[
+      { id:'rise',durationMs:120,cels:{ ink:{ marks:[{ swatch:'red',at:[0,1] }] } } },
+      { id:'rest',durationMs:240,cels:{ ink:{ hold:'rise/ink',offset:[0,-1] } } }
+    ]
+  }));
+  execFileSync(process.execPath,[path.join(root,'cli/ink-studio.js'),'pixel-art','canvas',source,'--out',file]);
+  await withChrome(directory,{ hardware:true },async browser=>{
+    await load(browser,file);
+    assert.match(await browser.evaluate("document.querySelector('#timeline thead tr').textContent"),/rest240 ms · 120 ms start/);
+    assert.deepEqual(await raster(browser,preview,1,1),[189,32,32,255]);
+    const hold = '#timeline tbody tr:last-child td:last-child button';
+    await click(browser,hold);
+    await until(browser,"document.querySelector('#timeline output').value.includes('holds rise/ink')");
+    assert.equal(await browser.evaluate("document.querySelector('#sample-layer').value"),'ink');
+    assert.equal(await browser.evaluate("document.querySelector('#frames').selectedIndex"),1);
+    assert.equal(await browser.evaluate("document.querySelector('#timeline output').value.endsWith('offset 1, -1')"),true);
+    assert.deepEqual(await raster(browser,preview,1,0),[189,32,32,255]);
+  });
+});

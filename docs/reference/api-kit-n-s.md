@@ -369,6 +369,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelLayerStack.kinds` | value | `array` |  |
 | `KIT.pixelLayerStack.mergePlan` | function | `(layers,operation)` | [source](../../src/pixel-layer-stack.js) |
 | `KIT.pixelLayerStack.prepare` | function | `(layers)` | [source](../../src/pixel-layer-stack.js) |
+| `KIT.pixelLayerStack.validOffset` | function | `(value)` | [source](../../src/pixel-layer-stack.js) |
 
 ## KIT.pixelLighting
 

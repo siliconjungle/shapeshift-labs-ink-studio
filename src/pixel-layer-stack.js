@@ -2,10 +2,13 @@
 const PixelLayerStack = (() => {
   const kinds = Object.freeze(['paint','mask','reference','group','surface']);
   const blends = Object.freeze(['normal','multiply','screen','overlay','add']);
-  const keys = ['id','label','kind','parent','clip','visible','locked','opacity','blend','protect','destination'];
+  const keys = ['id','label','kind','parent','clip','visible','locked','opacity','blend','protect','destination','offset'];
   const id = value=>typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value);
   const record = value=>value && Object.getPrototypeOf(value) === Object.prototype;
   const unit = value=>Number.isFinite(value) && value >= 0 && value <= 1;
+
+  const validOffset = value => Array.isArray(value) && value.length === 2 &&
+    Array.from(value).every(n=>Number.isSafeInteger(n) && Math.abs(n) <= 1_000_000);
 
   function prepare(layers) {
     if (!Array.isArray(layers) || !layers.length || layers.length > 64)
@@ -17,7 +20,8 @@ const PixelLayerStack = (() => {
           layer.label !== undefined && (typeof layer.label !== 'string' || !layer.label.trim()) ||
           ['visible','locked','protect'].some(key=>layer[key] !== undefined && typeof layer[key] !== 'boolean') ||
           layer.opacity !== undefined && !unit(layer.opacity) ||
-          layer.blend !== undefined && !blends.includes(layer.blend))
+          layer.blend !== undefined && !blends.includes(layer.blend) ||
+          layer.offset !== undefined && (layer.kind === 'group' || !validOffset(layer.offset)))
         throw new TypeError('Pixel layers need unique IDs, known kinds and valid visibility, opacity and blend settings');
       const parent = rows.get(layer.parent);
       if (layer.parent !== undefined && parent?.kind !== 'group')
@@ -179,7 +183,7 @@ const PixelLayerStack = (() => {
       if (row?.kind !== 'paint' || lower?.kind !== 'paint' || row.visible === false || lower.visible === false ||
           lower.clip !== undefined || row.clip !== undefined && row.clip !== lower.id)
         throw new RangeError('Merge down needs two visible paint siblings with clipping contained in the pair');
-      const { opacity,blend,parent,clip,...base } = original.get(lower.id);
+      const { opacity,blend,parent,clip,offset,...base } = original.get(lower.id);
       target = { ...base,...(parent !== undefined && { parent }) };
       inputs = [lower.id,row.id].map(id=>({ ...original.get(id),parent:undefined }));
       removed = [row.id];
@@ -242,6 +246,6 @@ const PixelLayerStack = (() => {
     return { width:raster.width,height:raster.height,rgba };
   }
 
-  return Object.freeze({ prepare,compose,inspect,image,bake,descendants,mergePlan,kinds,blends });
+  return Object.freeze({ prepare,compose,inspect,image,bake,descendants,mergePlan,kinds,blends,validOffset });
 })();
 if (typeof module !== 'undefined') module.exports = PixelLayerStack;

@@ -25,6 +25,18 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
 .sampling button:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
 .sampling output { color:#b8c8c4; font:13px ui-monospace,monospace; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 #sample-swatch { flex:0 0 16px; height:16px; border-radius:3px; border:1px solid #98aaa7; background:var(--picked-color); }
+#timeline { margin-block:12px; }
+#timeline-scroll { overflow:auto; max-height:320px; margin-top:8px; }
+#timeline table { border-collapse:separate; border-spacing:0; font-size:13px; }
+#timeline th, #timeline td { border:1px solid #354549; padding:4px 8px; white-space:nowrap; }
+#timeline th { background:#182328; text-align:left; }
+#timeline thead { position:sticky; top:0; z-index:2; }
+#timeline th:first-child { position:sticky; left:0; z-index:1; }
+#timeline small { display:block; color:#b8c8c4; font-variant-numeric:tabular-nums; }
+#timeline button { border:1px solid #476062; background:#253437; color:inherit; font:inherit; padding:3px 7px; border-radius:3px; cursor:pointer; }
+#timeline button[aria-pressed="true"] { color:#17221e; background:#b3d6bb; }
+#timeline button:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
+#timeline output { display:block; margin-top:6px; font:13px ui-monospace,monospace; overflow-wrap:anywhere; }
 /*PIXEL_GRID_CSS*/
 </style>
 </head>
@@ -44,6 +56,13 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
     <div class="sample-readout"><span id="sample-swatch" aria-hidden="true" hidden></span><output id="sample-value"></output></div>
   </div>
   <div id="canvas"></div>
+  <details id="timeline" hidden open>
+    <summary>Cel timeline</summary>
+    <div id="timeline-scroll" tabindex="0" role="region" aria-label="Cel timeline">
+      <table aria-label="Layers by frame"></table>
+    </div>
+    <output aria-label="Selected cel" aria-live="polite"></output>
+  </details>
   <div id="craft-diagnostics"></div>
   <div class="sample-controls" id="scene-hit-controls" hidden>
     <label>Highlight scene hits <select id="scene-hit-mode">
@@ -61,7 +80,7 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
 /*PIXEL_GUIDES_MODULE*/
 /*PIXEL_GRID_MODULE*/
 /*PIXEL_INSPECT_MODULES*/
-const { frames,palette,materials,definitions,layerIds,rulesSource,sceneBindings,reviewBinding,scene:embeddedScene } = /*PIXEL_GRID_DATA*/;
+const { frames,timeline,palette,materials,definitions,layerIds,rulesSource,sceneBindings,reviewBinding,scene:embeddedScene } = /*PIXEL_GRID_DATA*/;
 const view = mountPixelGridCanvas(document.querySelector('#canvas'),{ guideTool:PixelGuides });
 const select = document.querySelector('#frames'), status = document.querySelector('#error');
 const eyedropper = document.querySelector('#eyedropper'), mode = document.querySelector('#sample-mode');
@@ -206,6 +225,60 @@ view.canvas.addEventListener('pointerdown',event => {
   showSample(position+' · '+(entry ? entry.id+' · ' : '')+value,color);
 });
 
+let selectedCelLayer;
+const timelineButtons = [];
+const celReadout = document.querySelector('#timeline output');
+
+function mountTimeline() {
+  if (!timeline) return;
+  const panel = document.querySelector('#timeline'), table = panel.querySelector('table');
+  const frameIndex = new Map(frames.map((frame,i)=>[frame.id,i]));
+  const columns = timeline.frames.filter(frame=>frameIndex.has(frame.id));
+  const header = table.createTHead().insertRow(), body = table.createTBody();
+  function heading(row,title,scope) {
+    const th = document.createElement('th');
+    th.scope = scope;
+    th.textContent = title;
+    row.append(th);
+    return th;
+  }
+  heading(header,'Layer','col');
+  for (const { label,durationMs,startMs } of columns) {
+    const th = heading(header,label,'col'), timing = document.createElement('small');
+    timing.textContent = durationMs+' ms · '+startMs+' ms start';
+    th.append(timing);
+  }
+  for (const row of timeline.layers) {
+    const tr = body.insertRow(), th = heading(tr,row.label,'row');
+    if (row.locked) th.title = 'Locked layer';
+    for (const cell of row.cells.filter(cell=>frameIndex.has(cell.frame))) {
+      const button = document.createElement('button'), index = frameIndex.get(cell.frame);
+      button.type = 'button';
+      button.textContent = { cel:'Cel',hold:'Hold',blank:'Blank',empty:'Empty' }[cell.state];
+      button.setAttribute('aria-pressed','false');
+      button.title = [cell.cel,cell.hold && 'holds '+cell.hold,cell.effectiveOffset && 'offset '+cell.effectiveOffset.join(', ')].filter(Boolean).join(' · ');
+      button.addEventListener('click',()=>{
+        selectedCelLayer = row.id;
+        select.selectedIndex = index;
+        mode.value = 'layer';
+        draw();
+      });
+      tr.insertCell().append(button);
+      timelineButtons.push({ button,index,layer:row.id,cell });
+    }
+  }
+  panel.hidden = timeline.layers.length === 0;
+}
+
+function syncTimeline() {
+  celReadout.value = '';
+  for (const { button,index,layer,cell } of timelineButtons) {
+    const selected = index === select.selectedIndex && layer === selectedCelLayer;
+    button.setAttribute('aria-pressed',String(selected));
+    if (selected) celReadout.value = cell.cel ? button.title : 'Empty cell';
+  }
+}
+
 async function draw() {
   const serial = ++request, frame = frames[select.selectedIndex];
   const image = new Image();
@@ -228,13 +301,14 @@ async function draw() {
     inspector.refresh();
     highlightHits();
     craftPanel.setSource(frame,()=>diagnose(frame,active.width,active.height));
-    const selected = layer.value;
+    const selected = selectedCelLayer ?? layer.value;
     layer.replaceChildren(...active.layers.map(({ id })=>new Option(id,id)));
     if (active.layers.some(({ id })=>id === selected)) layer.value = selected;
     const hasMaterial = !!active.material;
     mode.options[2].disabled = !hasMaterial;
     if (!hasMaterial && mode.value === 'source') mode.value = 'composite';
     updateSampling();
+    syncTimeline();
     status.hidden = true;
   } catch (error) {
     if (serial !== request) return;
@@ -245,6 +319,8 @@ async function draw() {
 select.replaceChildren(...frames.map(({ label },index) => new Option(label,index)));
 document.querySelector('#frame-control').hidden = frames.length < 2;
 select.addEventListener('change',draw);
+layer.addEventListener('change',()=>{ selectedCelLayer = layer.value; syncTimeline(); });
+mountTimeline();
 draw();
 </script>
 </body>
