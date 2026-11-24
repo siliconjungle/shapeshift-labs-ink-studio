@@ -64,13 +64,12 @@ function transform(file, input, rest, opt, meshTopology, openEditor) {
 
 function maintenance(action, file, input, rest, opt, meshTopology, openEditor) {
   const { object, out, report, pieces } = opt, cutting = action === 'cut', editing = action !== 'health';
-  const region = action === 'face-region';
   const filenames = [file, input, out, report].filter(value => value !== undefined);
   if (!file || editing && !input || rest.length || filenames.some(value => typeof value !== 'string' || !value.trim()) ||
       object !== undefined && (typeof object !== 'string' || !object.trim()) || report && (!editing || !out) ||
       pieces !== undefined && (!cutting || typeof pieces !== 'string' || !pieces.trim()) ||
       ['selection', 'from', 'view', 'visibility', 'projection', 'lineage', 'match-ids'].some(key => opt[key] !== undefined))
-    throw new TypeError('Use mesh-topology health <mesh-or-scene.json> [settings.json] or repair|cut|face-region <mesh-or-scene.json> <request.json>');
+    throw new TypeError('Use mesh-topology health <mesh-or-scene.json> [settings.json] or repair|cut|face-region|edge-edit <mesh-or-scene.json> <request.json>');
   const inputs = [file, input].filter(Boolean).map(name => path.resolve(name));
   const outputs = [out, report].filter(Boolean).map(name => path.resolve(name));
   if (new Set(outputs).size !== outputs.length || outputs.some(name => inputs.includes(name)))
@@ -90,18 +89,18 @@ function maintenance(action, file, input, rest, opt, meshTopology, openEditor) {
   const editor = object && openEditor(file);
   const operations = {
     cut: ['planCut', 'planMeshCut', 'cutMeshTopology'],
-    repair: ['planRepair', 'planMeshRepair', 'repairMeshTopology'],
-    'face-region': ['planFaceRegion', 'planMeshFaceRegion', 'editMeshFaceRegion']
+    repair: ['planRepair', 'planMeshRepair', 'repairMeshTopology', 'Repair would create or worsen a non-manifold edge'],
+    'face-region': ['planFaceRegion', 'planMeshFaceRegion', 'editMeshFaceRegion', 'Face-region edit failed geometry or wall clearance checks'],
+    'edge-edit': ['planEdgeEdit', 'planMeshEdgeEdit', 'editMeshEdges', 'Edge edit failed geometry checks']
   };
-  const [planMesh, planScene, commitScene] = operations[action];
+  const [planMesh, planScene, commitScene, blocked] = operations[action];
   const plan = editor ? editor[planScene](object, settings) : meshTopology[planMesh](doc, settings);
   const exports = pieces ? plan.pieces.map((_, i) => path.resolve(pieces, 'piece-' + (i + 1) + '.json')) : [];
   if (exports.some(file => [...inputs, ...outputs].includes(file)))
     throw new RangeError('Write cut pieces separately from the input and other outputs');
   if (plan.report.canCommit === false && out) {
     if (report) write(report, plan.report);
-    throw new RangeError(region ? 'Face-region edit failed geometry or wall clearance checks' :
-      'Repair would create or worsen a non-manifold edge');
+    throw new RangeError(blocked);
   }
   const result = out && editor && editor[commitScene](object, settings);
   for (const [i, file] of exports.entries()) write(file, plan.pieces[i].document);
@@ -118,7 +117,7 @@ function command([action, file, input, ...rest], opt, { KIT: { meshTopology } },
     else process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }
-  if (['health', 'repair', 'cut', 'face-region'].includes(action))
+  if (['health', 'repair', 'cut', 'face-region', 'edge-edit'].includes(action))
     return maintenance(action, file, input, rest, opt, meshTopology, openEditor);
   if (opt.pieces !== undefined) throw new TypeError('Use --pieces with mesh-topology cut');
   if (action === 'transform') {

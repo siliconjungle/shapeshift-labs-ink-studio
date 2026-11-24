@@ -420,6 +420,21 @@
       return freeze({ faceRegion: plan.report, topology: editMeshTopology(object, plan.patch, options) });
     }
 
+    function planMeshEdgeEdit(object, request, { part } = {}) {
+      const row = meshTopology(object, part);
+      requireMeshShapeOwner(object, row.part, snapshot(), 'Edit');
+      return K.meshTopology.planEdgeEdit(row.document, request);
+    }
+
+    function editMeshEdges(object, request, options) {
+      const plan = planMeshEdgeEdit(object, request, options);
+      if (!plan.report.canCommit)
+        throw Object.assign(new RangeError('Edge edit failed geometry checks'), { report: plan.report });
+      return freeze({ edgeEdit: plan.report, ...(Object.keys(plan.patch).length && {
+        topology: editMeshTopology(object, plan.patch, options)
+      }) });
+    }
+
     function setBrushRegion(region) {
       const value = clone(region);
       const write = () => document.setEnvironment({ brushRegion: value });
@@ -529,6 +544,8 @@
       cutMeshTopology,
       planMeshFaceRegion,
       editMeshFaceRegion,
+      planMeshEdgeEdit,
+      editMeshEdges,
       hybridRoute: address => A.hybridOwnership.route(snapshot().hybridOwnership, address),
       setBrushRegion,
       setBreakables,

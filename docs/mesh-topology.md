@@ -606,3 +606,73 @@ undo and replay history.
 
 Run `node examples/mesh-face-region/render.cjs <directory>` for native
 art-grid comparisons and reproducible face selections and requests.
+
+## Edit edge loops and fill openings
+
+Use `mesh-topology select` to save an edge seed, chain, or boundary.
+Every edge-edit request carries an `id`, the topology `revision`, and
+an `operation` with the saved selection or selections.
+
+```sh
+ink-studio mesh-topology edge-edit joint.json insert.json
+ink-studio mesh-topology edge-edit joint.json insert.json --out revised.json --report receipt.json
+ink-studio mesh-topology edge-edit workshop.json bridge.json --object coupling --out revised.json
+```
+
+- **Insert a loop** with `kind: "insert-loop"`, a `selection` holding
+  one seed edge, and a `fraction` strictly between 0 and 1. The cut
+  follows opposite edges across quads in both directions. Use `start`
+  to choose the seed endpoint used for fraction zero. At a non-quad or
+  protected edge, the neighboring polygon receives a matching corner
+  so the transition stays connected. Every split face keeps its
+  material, and new corners sample UVs and other attributes separately
+  on each face, including across seams. New vertices blend source
+  weights.
+- **Slide an edge chain or loop** with `kind: "slide"`, a `selection`,
+  and an `amount` strictly between -1 and 1. Positive amounts follow
+  the face winding on the forward side of the ordered chain. Negative
+  amounts follow the other side. Use `start` to pick a closed loop's
+  start or an open chain's endpoint. A movable vertex needs one
+  unambiguous rail on the chosen side. The slide keeps all face and
+  corner IDs, corner paint coordinates and vertex weights.
+- **Bridge rims** with `kind: "bridge"` and `first` and `second` saved
+  selections. Each selection must describe an entire exposed loop, and
+  both loops must have the same edge count. The default alignment
+  minimizes the total squared pairing distance while matching the
+  rims' winding. Set `starts` to a vertex ID on each rim and `offset`
+  to control the pairing. Use `segments` from 1 to 32 to add rows of
+  quads with interpolated weights. Set `material` explicitly or let the
+  faces inherit materials from the nearest end. Use `uv: "strip"` for
+  a length-based strip chart, or `uv: "inherit"` to match the adjacent
+  face's UVs at each rim, including at seams.
+- **Fill a grid** with `kind: "grid-fill"` and a `selection` of one
+  exposed boundary with an even edge count. Set `start` to the desired
+  first corner and `columns` to the number of edges along the first
+  side. Rows are inferred from the remaining perimeter. The grid
+  follows all four boundary profiles, uses its own normalized UV
+  chart, and blends interior weights and corner data from the
+  surrounding faces. Set `material` explicitly or inherit the nearest
+  rim face's material.
+
+Use `pins.vertices` to hold vertex positions, `pins.edges` to hold
+edge endpoints and prevent subdivision, or `pins.boundary: true` to
+protect every exposed edge. Bridge and grid fill keep the existing
+rims and their face-corner UVs intact. If a new patch samples a named
+corner channel with incompatible scalar and vector layouts, the
+receipt lists that channel under `attributeConflicts`.
+
+The preview contains the exact patch, affected faces, protected stops,
+generated vertex sources, and geometry findings. Invalid polygons,
+flipped slides, surface intersections, or incomplete contact checks
+block the CLI and retained-scene commit. The command still writes
+`--report` when a geometry check blocks a commit. Review
+`report.canCommit` before installing a standalone patch from
+`KIT.meshTopology.planEdgeEdit(mesh, request)`.
+
+For a retained scene use `editor.planMeshEdgeEdit(object, request)`
+and `editor.editMeshEdges(object, request)`. A bound pixel transaction
+can use `operation.edgeEdit` to include topology, binding review and
+bake invalidations in the same undo and replay history.
+
+Run `node examples/mesh-edge-edit/render.cjs <directory>` for playable
+CLI requests and native-grid comparisons.

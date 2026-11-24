@@ -242,11 +242,27 @@ function createDefinitions() {
       interior:object({material:text,uv:choice('preserve','planar')}),
       minWall:{type:'number',exclusiveMinimum:0},tolerance:{type:'number',exclusiveMinimum:0}
     },['id','revision','selection','operation']),
+    meshEdgeSelection:object({format:constant('ink-studio/mesh-selection'),version:constant(1),mesh:text,revision:text,
+      domain:constant('edges'),ids:array(text,1)},['format','version','mesh','revision','domain','ids']),
+    meshEdgeEditRequest:object({
+      id:{type:'string',pattern:'^[a-zA-Z0-9_.-]{1,96}$'},revision:text,
+      pins:object({vertices:array(text),edges:array(text),boundary:bool}),
+      operation:either(
+        tagged('kind','insert-loop',{selection:ref('meshEdgeSelection'),start:text,
+          fraction:{type:'number',exclusiveMinimum:0,exclusiveMaximum:1}},['selection','fraction']),
+        tagged('kind','slide',{selection:ref('meshEdgeSelection'),start:text,
+          amount:{type:'number',exclusiveMinimum:-1,exclusiveMaximum:1}},['selection','amount']),
+        tagged('kind','bridge',{first:ref('meshEdgeSelection'),second:ref('meshEdgeSelection'),starts:tuple(text,text),
+          offset:{type:'integer'},segments:int(1,32),material:text,uv:choice('strip','inherit')},['first','second']),
+        tagged('kind','grid-fill',{selection:ref('meshEdgeSelection'),start:text,columns:int(1,127),material:text},['selection'])
+      )
+    },['id','revision','operation']),
     meshTopologyOperation:{ ...object({
       transform:ref('meshComponentTransform'),
       repair:ref('meshRepairRequest'),
       cut:ref('meshCutRequest'),
       faceRegion:ref('meshFaceRegionRequest'),
+      edgeEdit:ref('meshEdgeEditRequest'),
       patch:{
         ...object({
           vertices:array(object({id:text,position:pos,weights:nullable(object({},[],unit))},['id','position'])),
@@ -261,7 +277,7 @@ function createDefinitions() {
       },
       projection:object({maxDistance:{type:'number',exclusiveMinimum:0},minNormalDot:unit,maxUVDistance:unit,minConfidence:unit,
         ambiguity:unit,maxChecks:int(1,2000000)},['maxDistance'])
-    }),oneOf:['patch','transform','repair','cut','faceRegion'].map(prop) },
+    }),oneOf:['patch','transform','repair','cut','faceRegion','edgeEdit'].map(prop) },
     sdfShapeOperation:either(...[
       ['parameters',obj],['modifier',obj],['updateModifier',object({id:text,patch:obj},['id','patch'])],
       ['protection',array(obj)],['brush',sdfBrush],['updateBrush',{type:'object',required:['id']}]

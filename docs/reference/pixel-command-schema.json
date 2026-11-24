@@ -5927,6 +5927,239 @@
       ],
       "additionalProperties": false
     },
+    "meshEdgeSelection": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "ink-studio/mesh-selection"
+        },
+        "version": {
+          "const": 1
+        },
+        "mesh": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "domain": {
+          "const": "edges"
+        },
+        "ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "mesh",
+        "revision",
+        "domain",
+        "ids"
+      ],
+      "additionalProperties": false
+    },
+    "meshEdgeEditRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_.-]{1,96}$"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "pins": {
+          "type": "object",
+          "properties": {
+            "vertices": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "edges": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "boundary": {
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "operation": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "insert-loop"
+                },
+                "selection": {
+                  "$ref": "#/$defs/meshEdgeSelection"
+                },
+                "start": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "fraction": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "exclusiveMaximum": 1
+                }
+              },
+              "required": [
+                "kind",
+                "selection",
+                "fraction"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "slide"
+                },
+                "selection": {
+                  "$ref": "#/$defs/meshEdgeSelection"
+                },
+                "start": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "amount": {
+                  "type": "number",
+                  "exclusiveMinimum": -1,
+                  "exclusiveMaximum": 1
+                }
+              },
+              "required": [
+                "kind",
+                "selection",
+                "amount"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "bridge"
+                },
+                "first": {
+                  "$ref": "#/$defs/meshEdgeSelection"
+                },
+                "second": {
+                  "$ref": "#/$defs/meshEdgeSelection"
+                },
+                "starts": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    }
+                  ],
+                  "minItems": 2,
+                  "items": false
+                },
+                "offset": {
+                  "type": "integer"
+                },
+                "segments": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 32
+                },
+                "material": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "uv": {
+                  "enum": [
+                    "strip",
+                    "inherit"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "first",
+                "second"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "grid-fill"
+                },
+                "selection": {
+                  "$ref": "#/$defs/meshEdgeSelection"
+                },
+                "start": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "columns": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 127
+                },
+                "material": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "kind",
+                "selection"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "operation"
+      ],
+      "additionalProperties": false
+    },
     "meshTopologyOperation": {
       "type": "object",
       "properties": {
@@ -5941,6 +6174,9 @@
         },
         "faceRegion": {
           "$ref": "#/$defs/meshFaceRegionRequest"
+        },
+        "edgeEdit": {
+          "$ref": "#/$defs/meshEdgeEditRequest"
         },
         "patch": {
           "type": "object",
@@ -6243,6 +6479,11 @@
         {
           "required": [
             "faceRegion"
+          ]
+        },
+        {
+          "required": [
+            "edgeEdit"
           ]
         }
       ],
