@@ -449,9 +449,7 @@
       serialize: (space = 2) => JSON.stringify(snapshot(), null, space),
       fork: (source = snapshot()) => create(source,{ env:buildEnv, historyLimit:0 }),
       sourceDependencies: () => A.bakeCache.signature([
-        buildEnv.assets ?? {},buildEnv.prefabs ?? {},buildEnv.parameterInputs ?? {},
-        ...(Object.keys(buildEnv.assetPartImports ?? {}).length ?
-          [Object.fromEntries(Object.entries(buildEnv.assetPartImports).map(([id, entry]) => [id, entry.part]))] : [])
+        buildEnv.assets ?? {},buildEnv.prefabs ?? {},buildEnv.parameterInputs ?? {}
       ]),
       tree: () => current().tree,
       node: key => current().nodes.get(key),
