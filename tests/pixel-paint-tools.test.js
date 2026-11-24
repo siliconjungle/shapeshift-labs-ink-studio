@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const ink = require('..');
+const { freehand } = require('../src/pixel-paint-tools.js');
 
 const design = {
   format:'ink-studio/pixel-art',version:2,width:8,height:6,pixelAspect:[1,1],
@@ -22,6 +23,59 @@ const design = {
 };
 const makePatch = (editor,id,operation,extra = {}) => ({
   id,revision:editor.describe().revision,frame:'front',operation,...extra
+});
+
+test('pixel-perfect freehand keeps diagonals, taps and endpoints while trimming corner doubles', () => {
+  function trace(points,pixelPerfect = true) {
+    const kept = [], stroke = freehand((x,y)=>{ kept.push([x,y]); },{ pixelPerfect });
+    for (const point of points) stroke.add(point);
+    return [...kept,stroke.tip()];
+  }
+  const stairs = [[0,0],[1,0],[1,1],[2,1],[2,2]];
+  assert.deepEqual(trace(stairs),[[0,0],[1,1],[2,2]]);
+  assert.deepEqual(trace(stairs,false),stairs);
+  assert.deepEqual(trace([[7,7],[4,4]]),[[7,7],[6,6],[5,5],[4,4]]);
+  assert.deepEqual(trace([[3,2],[3,2]]),[[3,2]]);
+  assert.deepEqual(trace([[1,0],[1,1],[1,0]]),[[1,0],[1,1],[1,0]]);
+  assert.deepEqual(trace([[0,0],[1,0],[1,1],[1,0]]),[[0,0],[1,1],[1,0]]);
+  assert.deepEqual(trace([[4,2],[4,3],[3,3],[3,4],[2,4]]),[[4,2],[3,3],[2,4]]);
+});
+
+test('the pixel-perfect pencil preserves stored pixels and replays the resolved path', t => {
+  const doc = structuredClone(design);
+  doc.protectedDetails = [{ id:'highlight',pixels:[[3,1]] }];
+  const editor = ink.createPixelEditor(doc);
+  const points = [[2,1],[3,1],[3,2],[4,3],[5,4]];
+  const operation = { tool:'pencil',layer:'ink',swatch:'gold',points };
+  const patch = makePatch(editor,'clean-stroke',{ ...operation,pixelPerfect:true });
+  assert.equal(editor.previewEdit(patch).targets[0].pixelCount,4);
+  const output = editor.apply(patch), [receipt] = editor.receipts();
+  assert.equal(receipt.affectedTargets[0].pixelPerfect,true);
+  assert.deepEqual(receipt.affectedTargets[0].runs,[[1,2,1],[2,3,1],[3,4,1],[4,5,1]]);
+  assert.equal(editor.sample([3,1],{ mode:'layer',layer:'ink' }).swatch,'other');
+  assert.equal(editor.sample([4,3]).swatch,'gold');
+  assert.deepEqual(ink.createPixelEditor(doc).replay(receipt),output);
+  assert.equal(editor.undo(),true);
+  assert.equal(editor.sample([4,3],{ mode:'layer',layer:'ink' }).swatch,null);
+  assert.throws(()=>editor.apply(makePatch(editor,'raw-stroke',operation)),
+    error => error.receipt.conflicts[0].code === 'protected-pixel');
+  const plain = ink.createPixelEditor(design);
+  plain.apply(makePatch(plain,'raw-stroke',operation));
+  assert.equal(plain.sample([3,1]).swatch,'gold');
+  assert.throws(()=>plain.apply(makePatch(plain,'bad-option',{ ...operation,pixelPerfect:'yes' })),/boolean pencil option/);
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(),'ink-pixel-perfect-'));
+  t.after(()=>fs.rmSync(directory,{ recursive:true,force:true }));
+  const input = path.join(directory,'drawing.json'), request = path.join(directory,'patch.json');
+  const edited = path.join(directory,'edited.json'), saved = path.join(directory,'receipt.json');
+  fs.writeFileSync(input,JSON.stringify(doc));
+  fs.writeFileSync(request,JSON.stringify(patch));
+  const cli = (...args) => execFileSync(process.execPath,['cli/ink-studio.js','pixel-art',...args],
+    { cwd:path.resolve(__dirname,'..'),encoding:'utf8' });
+  fs.writeFileSync(saved,cli('edit',input,request,'--out',edited));
+  const replayed = path.join(directory,'replayed.json');
+  assert.equal(cli('replay',input,saved,'--out',replayed),fs.readFileSync(saved,'utf8'));
+  assert.equal(fs.readFileSync(replayed,'utf8'),fs.readFileSync(edited,'utf8'));
 });
 
 test('eyedropper reads exact swatch identity and the chosen cel below the visible composite', () => {

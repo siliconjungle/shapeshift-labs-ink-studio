@@ -138,6 +138,31 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     await firstFrame();
     assert.equal(await browser.evaluate("document.querySelector('.ink-guide-toggles').hidden"),true);
 
+    const canvasBounds = await screen(browser,main);
+    const cornerPath = [[15,12],[16,12],[16,13]].map(([x,y])=>place(canvasBounds,x,y));
+    const [from,corner,to] = cornerPath;
+    const color = [39,58,71,255], clear = [0,0,0,0];
+    assert.equal(await browser.evaluate("document.querySelector('#pixel-perfect').checked"),true);
+    await mouse('mousePressed',from,{ button:'left',buttons:1,clickCount:1 });
+    await mouse('mouseMoved',corner,{ button:'left',buttons:1 });
+    assert.deepEqual(await raster(browser,preview,16,12),color);
+    await mouse('mouseMoved',to,{ button:'left',buttons:1 });
+    assert.deepEqual(await raster(browser,main,16,12),clear);
+    assert.deepEqual(await raster(browser,preview,16,12),clear);
+    await mouse('mouseReleased',to,{ button:'left',clickCount:1 });
+    assert.deepEqual(await raster(browser,preview,15,12),color);
+    assert.deepEqual(await raster(browser,preview,16,13),color);
+    await click(browser,'#undo');
+    assert.deepEqual(await raster(browser,preview,15,12),clear);
+    assert.deepEqual(await raster(browser,preview,16,13),clear);
+    await click(browser,'#pixel-perfect');
+    await mouse('mousePressed',from,{ button:'left',buttons:1,clickCount:1 });
+    await mouse('mouseMoved',corner,{ button:'left',buttons:1 });
+    await mouse('mouseReleased',to,{ button:'left',clickCount:1 });
+    assert.deepEqual(await raster(browser,preview,16,12),color);
+    assert.deepEqual(await raster(browser,preview,16,13),color);
+    await click(browser,'#undo');
+
     const tick = place(await screen(browser,main),18,18);
     const dab = async () => {
       await mouse('mousePressed',tick,{ button:'left',buttons:1,clickCount:1 });

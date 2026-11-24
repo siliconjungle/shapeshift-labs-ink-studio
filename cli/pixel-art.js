@@ -501,9 +501,12 @@ function edit(design, frame, patch, context) {
 
 function editRasterTool(design,frame,patch,destination,context) {
   const { operation } = patch;
-  if (patch.edits !== undefined || !fields(operation,['tool','layer','at','points','swatch']))
+  if (patch.edits !== undefined || !fields(operation,['tool','layer','at','points','swatch','pixelPerfect']))
     throw new TypeError('A raster tool needs a layer or cel and a pencil, eraser or fill operation');
   const { tool, swatch } = operation, fill = tool === 'fill', erase = tool === 'eraser';
+  const { pixelPerfect } = operation;
+  if (pixelPerfect !== undefined && (tool !== 'pencil' || typeof pixelPerfect !== 'boolean'))
+    throw new TypeError('Pixel-perfect cleanup is a boolean pencil option');
   const { width,height } = frame;
   const layer = patch.cel === undefined ? operation.layer : frame.cels &&
     [...frame.cels].find(([,id]) => id === patch.cel)?.[0];
@@ -534,15 +537,17 @@ function editRasterTool(design,frame,patch,destination,context) {
   if (fill) {
     changed = old === slot ? [] : RasterTools.region(width,height,points[0],p => usable(p) && captured.slots[p] === old).sort();
   } else {
-    const visited = new Set([first]);
-    for (let i = 1; i < points.length; i++)
-      RasterTools.segment(points[i-1],points[i],(x,y) => { visited.add(y*width+x); });
+    const visited = new Set();
+    const recordPixel = (x,y) => { visited.add(y*width+x); };
+    const stroke = RasterTools.freehand(recordPixel,{ pixelPerfect });
+    for (const point of points) stroke.add(point);
+    recordPixel(...stroke.tip());
     for (const p of visited) check(p);
     changed = [...visited].filter(p => captured.slots[p] !== slot).sort((a,b) => a-b);
   }
   const runs = RasterTools.runs(width,changed), cel = frame.cels?.get(layer) ?? (frame.id && frame.id+'/'+layer);
   context?.onRasterTool?.({ destination:destination.id, kind:'raster', tool,frame:frame.id ?? null, layer,
-    cel:cel ?? null, pixelCount:changed.length,runs });
+    cel:cel ?? null, ...(pixelPerfect && { pixelPerfect }), pixelCount:changed.length,runs });
   if (!runs.length) return design;
   const mark = erase ? { clear:true,runs } : { swatch,runs };
   const revised = frame.id === undefined

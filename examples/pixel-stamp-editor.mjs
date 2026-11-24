@@ -5,7 +5,8 @@ const { stonePaint, flowingInk, bubble, glint, starTwinkle, line, fill, rect } =
 const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
 const state = { frame:0, swatch:0, tool:'pencil', points:[], undo:[] };
-let drawingPointer;
+let drawingPointer, pencilStroke;
+const maxPencilPixels = 4096;
 let sharedGuides, frameGuides, guideItems = [];
 const limit = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
 const notify = message => { $('status').textContent = message; };
@@ -13,6 +14,11 @@ const saveUndo = () => {
   state.undo.push({ data:structuredClone(state.doc), frame:state.frame });
   if (state.undo.length > 24) state.undo.shift();
 };
+
+function resetStroke() {
+  state.points = [];
+  pencilStroke = undefined;
+}
 
 function load(data) {
   const { width, height, palette } = stamp.prepare(data);
@@ -25,7 +31,7 @@ function load(data) {
   state.doc = { ...rest, frames:frames ?? [{ slots, rows, strokes, duration:1 / (data.fps ?? 12) }] };
   state.frame = 0;
   state.swatch = 0;
-  state.points = [];
+  resetStroke();
   update();
 }
 
@@ -33,8 +39,11 @@ function activeStrokes() {
   const { points, tool } = state;
   const brushWidth = limit(Number($('width').value) || 1,1,24);
   const slot = tool === 'erase' ? null : state.swatch;
+  if (tool === 'pencil') {
+    const tip = pencilStroke?.tip();
+    return tip ? [...points,tip].map(([x,y])=>rect(slot,x,y,1,1)) : [];
+  }
   if (!points.length) return [];
-  if (tool === 'pencil') return points.map(([x,y])=>rect(slot,x,y,1,1));
   if (tool === 'polygon') {
     return points.length === 1 ? [rect(slot,points[0][0],points[0][1],1,1)] :
       points.length === 2 ? [line(slot,points)] : [fill(slot,points.map(([x,y]) => [x+.5,y+.5]))];
@@ -62,6 +71,7 @@ function draw() {
   $('current').value = `Frame ${state.frame+1} / ${count}`;
   $('duration').value = +(current.duration ?? 1/(state.doc.fps ?? 12)).toFixed(4);
   $('width').disabled = !['brush','erase'].includes(state.tool);
+  $('pixel-perfect').disabled = state.tool !== 'pencil';
   $('remove').disabled = count === 1;
   $('duplicate').disabled = count >= 2048 || (count+1)*width*height > 2**20;
   $('finish-shape').disabled = state.tool !== 'polygon' || state.points.length < 3;
@@ -108,7 +118,7 @@ function edit(callback) {
 }
 
 function commitStroke() {
-  if (!state.points.length) return;
+  if (!state.points.length && !pencilStroke?.tip()) return;
   const current = state.doc.frames[state.frame], slots = frameSlots(current);
   savePixels(current,slots);
 }
@@ -117,7 +127,7 @@ function savePixels(current,slots) {
   edit(() => {
     const { rows,strokes,...frame } = current;
     state.doc.frames[state.frame] = { ...frame,slots,duration:current.duration ?? 1/(state.doc.fps ?? 12) };
-    state.points = [];
+    resetStroke();
   });
 }
 
@@ -193,7 +203,7 @@ function saveGuides(scope,list) {
   edit(() => {
     const target = scope === 'all' ? state.doc : state.doc.frames[state.frame];
     target.guides = list;
-    state.points = [];
+    resetStroke();
   });
 }
 
@@ -249,15 +259,27 @@ function resizeCanvas(width,height) {
   });
   edit(() => {
     state.doc = { ...doc,width,height,frames };
-    state.points = [];
+    resetStroke();
   });
 }
 
-function pencilSegment([x,y],[toX,toY]) {
-  paintTools.segment([x,y],[toX,toY],(nextX,nextY) => {
-    if (state.points.length>=4096) return false;
-    state.points.push([nextX,nextY]);
-  });
+function startPencil(at) {
+  resetStroke();
+  pencilStroke = paintTools.freehand((x,y) => {
+    if (state.points.length >= maxPencilPixels-1) return false;
+    state.points.push([x,y]);
+  },{ pixelPerfect:$('pixel-perfect').checked });
+  pencilStroke.add(at);
+}
+
+function extendPencil(event) {
+  const tip = pencilStroke.tip();
+  for (const sample of [...(event.getCoalescedEvents?.() ?? []),event]) {
+    if (state.points.length >= maxPencilPixels-1) break;
+    const at = view.pixelAt(sample.clientX,sample.clientY,{ clamp:true });
+    if (at) pencilStroke.add(at);
+  }
+  return pencilStroke.tip() !== tip;
 }
 
 art.addEventListener('pointerdown',event => {
@@ -271,27 +293,33 @@ art.addEventListener('pointerdown',event => {
   } else {
     art.setPointerCapture(event.pointerId);
     drawingPointer = event.pointerId;
-    state.points = [at];
+    if (state.tool === 'pencil') startPencil(at);
+    else state.points = [at];
   }
   draw();
 });
 art.addEventListener('pointermove',event => {
-  if (drawingPointer !== event.pointerId || state.points.length >= (state.tool === 'pencil' ? 4096 : 120)) return;
+  if (drawingPointer !== event.pointerId) return;
+  if (pencilStroke) {
+    if (extendPencil(event)) draw();
+    return;
+  }
+  if (state.points.length >= 120) return;
   const at=view.pixelAt(event.clientX,event.clientY,{ clamp:true }), last=state.points.at(-1);
   if (!at || !last || last[0]===at[0] && last[1]===at[1]) return;
-  if (state.tool === 'pencil') pencilSegment(last,at);
-  else state.points.push(at);
+  state.points.push(at);
   draw();
 });
 art.addEventListener('pointerup',event => {
   if (drawingPointer !== event.pointerId) return;
+  if (pencilStroke) extendPencil(event);
   drawingPointer = undefined;
   commitStroke();
 });
 art.addEventListener('lostpointercapture',event => {
   if (drawingPointer !== event.pointerId) return;
   drawingPointer = undefined;
-  state.points = [];
+  resetStroke();
   draw();
 });
 $('finish-shape').addEventListener('click',commitStroke);
@@ -307,14 +335,14 @@ $('tools').addEventListener('click',event => {
   const { tool } = event.target.dataset;
   if (!tool) return;
   state.tool=tool;
-  state.points=[];
+  resetStroke();
   $('tools').querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed',button.dataset.tool===tool));
   notify(tool === 'polygon' ? 'Click the corners, then close the shape.' : '');
   draw();
 });
 $('play').addEventListener('click',() => {
   if (state.play !== undefined) { stop(); return; }
-  state.points=[];
+  resetStroke();
   const { entries, at } = stamp.prepare(state.doc), start=performance.now();
   const elapsed=entries.slice(0,state.frame).reduce((sum, entry)=>sum+entry.duration,0);
   const stopAt=entries.reduce((sum, entry)=>sum+entry.duration,0);
@@ -329,7 +357,7 @@ $('play').addEventListener('click',() => {
   draw();
   state.play=requestAnimationFrame(step);
 });
-$('scrub').addEventListener('input',()=>{ stop(); state.frame=Number($('scrub').value)-1; state.points=[]; draw(); });
+$('scrub').addEventListener('input',()=>{ stop(); state.frame=Number($('scrub').value)-1; resetStroke(); draw(); });
 $('duration').addEventListener('change',()=>edit(()=>{
   state.doc.frames[state.frame].duration=limit(Number($('duration').value) || .01,.01,60);
 }));
@@ -347,7 +375,7 @@ $('undo').addEventListener('click',()=>{
   const snapshot=state.undo.pop();
   state.doc=snapshot.data;
   state.frame=snapshot.frame;
-  state.points=[];
+  resetStroke();
   update();
 });
 $('color').addEventListener('change',()=>edit(()=>{ state.doc.palette[state.swatch]=$('color').value; }));

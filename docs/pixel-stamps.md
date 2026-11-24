@@ -13,6 +13,12 @@ of that exact swatch or transparency on the current frame. It previews holds and
 the same JSON the renderer reads. The star, glint, and bubble studies let you
 open each separately drawn size.
 
+**Pixel-perfect pencil** starts enabled. As you draw, a one-pixel elbow
+resolves to a diagonal when the next pixel makes the middle one redundant.
+Both views show the resolved stroke before you release. Single taps and
+stroke endpoints stay in place. Turn the option off to draw square
+corners. Previously painted pixels stay in place during cleanup.
+
 The main canvas zooms in whole steps. Use **−**, **+**, and **Fit**, or
 Ctrl-scroll or ⌘-scroll around the cursor. Middle-drag, use **Pan** and drag,
 or focus the canvas and use the arrow keys to move it. The grid appears at

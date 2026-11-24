@@ -107,6 +107,13 @@ identity in the active layer. Protection and clipping stop a fill, and
 invalidate a pencil or eraser path that touches them. Preview and receipts
 report the changed source pixels even when an upper layer covers them.
 
+Set `pixelPerfect: true` in a pencil operation to clean the freehand path
+as it is rasterized. When two one-pixel steps turn a right angle, Ink
+omits the middle pixel and joins the neighbors diagonally. Straight lines,
+diagonal runs, taps, and stroke endpoints retain their pixels. Cleanup
+only filters the current stroke. Use the ordinary pencil operation for an
+exact square elbow.
+
 ```sh
 node cli/ink-studio.js pixel-art sample document.json --frame front --at 20,14
 node cli/ink-studio.js pixel-art sample document.json --frame front --at 20,14 --mode layer --layer jacket

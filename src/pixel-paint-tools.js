@@ -44,6 +44,34 @@ const PixelPaintTools = (() => {
     }
   }
 
+  function corner(previous,[x,y],[nextX,nextY]) {
+    if (!previous) return false;
+    const dx = x - previous[0], dy = y - previous[1];
+    const sx = nextX - x, sy = nextY - y;
+    return (Math.abs(dx) === 1 && dy === 0 && sx === 0 && Math.abs(sy) === 1) ||
+      (dx === 0 && Math.abs(dy) === 1 && Math.abs(sx) === 1 && sy === 0);
+  }
+
+  function freehand(emit,{ pixelPerfect = false } = {}) {
+    let previous, tip;
+    // Hold the newest pixel until the next pixel can resolve its corner.
+    function add(point) {
+      if (!tip) {
+        tip = point.slice();
+        return;
+      }
+      segment(tip,point,(x,y) => {
+        const next = [x,y];
+        if (!pixelPerfect || !corner(previous,tip,next)) {
+          if (emit(...tip) === false) return false;
+          previous = tip;
+        }
+        tip = next;
+      });
+    }
+    return { add, tip:() => tip };
+  }
+
   function runs(width,indices) {
     const result = [];
     for (const p of indices) {
@@ -54,7 +82,7 @@ const PixelPaintTools = (() => {
     return result;
   }
 
-  return Object.freeze({ four,eight,visit,region,segment,runs });
+  return Object.freeze({ four,eight,visit,region,segment,freehand,runs });
 })();
 
 if (typeof module !== 'undefined') module.exports = PixelPaintTools;
