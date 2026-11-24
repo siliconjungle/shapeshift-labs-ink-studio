@@ -2,6 +2,7 @@ import { mountPixelGridCanvas } from '../src/pixel-grid-canvas.mjs';
 import { mountPixelOnionSkin } from '../src/pixel-onion-skin.mjs';
 import { mountPixelRangePlayer } from '../src/pixel-range-player.mjs';
 import * as playbackModule from '../src/pixel-playback-ranges.js';
+import * as directionalModule from '../src/pixel-directional-views.js';
 import { mountPixelMotionPanel } from '../src/pixel-motion-panel.mjs';
 import { mountPixelCraftPanel } from '../src/pixel-craft-panel.mjs';
 import { mountPixelInspector } from '../src/pixel-inspector.mjs';
@@ -10,6 +11,7 @@ import { colors,openPNG,readPNG,savePNG } from './pixel-stamp-png.mjs';
 
 const palettes = paletteModule.default ?? globalThis[Symbol.for('ink-studio.pixel-palette')];
 const ranges = playbackModule.default ?? globalThis[Symbol.for('ink-studio.pixel-playback-ranges')];
+const directional = directionalModule.default ?? globalThis[Symbol.for('ink-studio.pixel-directional-views')];
 const stamp = KIT.pixelStamps, guideTool = KIT.pixelGuides, paintTools = KIT.pixelPaintTools;
 const brushes = KIT.pixelBrushes, selections = KIT.pixelSelections, transforms = KIT.pixelSelectionTransforms;
 const canvasTransforms = KIT.pixelCanvasTransforms, adjustments = KIT.pixelAdjustments;
@@ -142,6 +144,7 @@ function load(data) {
     return { ...frame,cels };
   });
   const revised = { ...rest,swatchIds,frames:loaded };
+  directional.prepare(revised.directional,new Set(loaded.map(frame=>frame.id)),new Set(swatchIds));
   if (stack) validateStackDeck(revised,stack);
   else { validateProtection(revised); workshopRules(revised); }
   stop();
@@ -787,8 +790,9 @@ function draw() {
   const boundSelection = doc.artRules?.profiles.some(profile=>profile.exceptions?.some(exception=>
     exception.selection && frame.selections?.some(selection=>selection.id === exception.selection)));
   const taggedEndpoint = !!frame.id && doc.tags?.some(tag=>tag.start === frame.id || tag.end === frame.id);
-  $('remove').disabled = count === 1 || !!boundFrame || !!boundSelection || !!taggedEndpoint;
-  $('remove').title = taggedEndpoint ? 'Used as a playback tag endpoint' : '';
+  const registeredView = doc.directional?.views.some(view=>view.frame === frame.id);
+  $('remove').disabled = count === 1 || !!boundFrame || !!boundSelection || !!taggedEndpoint || !!registeredView;
+  $('remove').title = registeredView ? 'Registered directional view' : taggedEndpoint ? 'Used as a playback tag endpoint' : '';
   $('duplicate').disabled = count >= 2048 || (count+1)*width*height > 2**20;
   showShapeControls();
   showAdjustmentPreview();
@@ -1369,6 +1373,7 @@ function transformCanvas(operation,bindingPolicy) {
         ...(saved && { selections:saved.map(row=>({ ...row,pixels:canvasTransforms.region(map,row.pixels).pixels })) }) };
     });
     if (mapping.rows) revised.protectedDetails = mapping.rows;
+    if (doc.directional) revised.directional = directional.remap(doc.directional,map);
     if (doc.sharedSelections) revised.sharedSelections = doc.sharedSelections.map(row=>
       ({ ...row,pixels:canvasTransforms.region(map,row.pixels).pixels }));
     if (doc.guides) revised.guides = guideTool.prepare(canvasTransforms.guides(map,doc.guides));
@@ -2189,6 +2194,7 @@ function paletteEdit(operation,selected) {
   const roles = doc.swatchRoles && swatchIds.map(id=>doc.swatchRoles[doc.swatchIds.indexOf(id)] ?? null);
   const next = { ...base,frames,palette:palette.swatches.map(row=>row.color),swatchIds,
     ...palettes.stampMetadata(palette),...(roles && { swatchRoles:roles }) };
+  directional.prepare(next.directional,new Set(next.frames.map(frame=>frame.id)),new Set(next.swatchIds));
   assertProtectionUnchanged(doc,next,state.stack);
   if (state.stack) validateStackDeck(next,state.stack);
   else workshopRules(next);

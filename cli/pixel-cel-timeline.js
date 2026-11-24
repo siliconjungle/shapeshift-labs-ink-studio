@@ -177,13 +177,15 @@ function describe(design,revision,lookup = index(design.frames)) {
         ...(cel.hold !== undefined && { hold:cel.hold,source:lookup.sources.get(id) }) };
     })
   }));
-  return structuredClone({ format:'ink-studio/pixel-cel-timeline',version:1,revision,frames,layers,tags:tagsFor(design),linkGroups:groups(lookup),totalDurationMs:frames.at(-1).endMs });
+  return structuredClone({ format:'ink-studio/pixel-cel-timeline',version:1,revision,frames,layers,tags:tagsFor(design),
+    ...(design.directional && { directional:design.directional }),linkGroups:groups(lookup),totalDurationMs:frames.at(-1).endMs });
 }
 
 const operations = {
   'add-frame':['frame','durationMs','label','before'],
   duration:['frame','durationMs'],
   'set-tag':['tag'],
+  'set-directional':['directional'],
   'remove-tag':['tag'],
   'layer-offset':['layer','offset'],
   'cel-offset':['frame','layer','offset'],
@@ -198,7 +200,13 @@ const operations = {
 function edit(design,op) {
   if (!record(op) || !Object.hasOwn(operations,op.type) || !fields(op,['type',...operations[op.type]]) ||
       op.replace !== undefined && typeof op.replace !== 'boolean')
-    throw new TypeError('Choose add-frame, duration, set-tag, remove-tag, layer-offset, cel-offset, blank, duplicate, hold, unlink, move, copy, edit-cels, or write-cels');
+    throw new TypeError('Choose add-frame, duration, set-tag, remove-tag, set-directional, layer-offset, cel-offset, blank, duplicate, hold, unlink, move, copy, edit-cels, or write-cels');
+  if (op.type === 'set-directional') {
+    const { directional,...rest } = design;
+    if (op.directional === undefined) throw new TypeError('Set a directional view set or pass null to remove it');
+    return { design:op.directional === null ? rest : { ...design,directional:op.directional },
+      report:{ destination:'timeline',kind:'timeline',tool:op.type,before:directional ?? null,after:op.directional } };
+  }
   if (op.type === 'set-tag' || op.type === 'remove-tag') {
     const tags = new Map((design.tags ?? []).map(tag=>[tag.id,tag]));
     const key = op.type === 'set-tag' ? op.tag?.id : op.tag, before = tags.get(key);

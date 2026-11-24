@@ -192,6 +192,67 @@ edited. Linked cels with the same resulting drawing keep sharing it.
 When their results differ, links are split and reported so unselected
 exposures retain their original appearance.
 
+## Edit a set of directional views
+
+Open a sprite atlas as a version 2 pixel document. Each view has a frame ID
+and its own editable cel on the native grid. Use the existing editor or
+revision-checked pixel commands to paint a view. Use the same document palette
+and `approvedSwatches` list across the set.
+
+```sh
+ink-studio pixel-art directions open relay-atlas/atlas.json --out relay-views.json
+ink-studio pixel-art directions review relay-views.json --out angles.json --review angles.html
+ink-studio pixel-art directions export relay-views.json --base relay-atlas/atlas.json --out relay-painted/atlas.json
+```
+
+The offline review shows adjacent angles at 1× or integer zoom. It pairs
+neighboring headings around each elevation, including the wraparound, and
+connects adjacent elevations within the same pose. Align comparisons by the
+pivot or a named part anchor. The report records native pixel runs for
+coverage, color, and alpha differences, and lists visible colors outside the
+approved palette. Each drawing stays independently editable.
+
+Set `directional` in a version 2 document, or use a revision-checked
+`timeline` operation with `type: "set-directional"` and a `directional`
+value. Pass `null` to remove the registration. For example, these frames
+share one pose and one latch anchor.
+
+```json
+{
+  "version": 1,
+  "approvedSwatches": ["iron", "lamp"],
+  "partAnchors": [
+    { "id": "latch-pin", "part": "latch", "point": [0.12, 0.18, 0.05] }
+  ],
+  "views": [
+    { "frame": "front", "pose": 0, "yaw": 0, "pitch": 0, "pivot": [16, 16], "unitsPerPixel": 0.025 },
+    { "frame": "quarter", "pose": 0, "yaw": 0.785398, "pitch": 0, "pivot": [16, 16], "unitsPerPixel": 0.025,
+      "anchors": { "latch-pin": [20, 9] }, "handoff": "exact" }
+  ]
+}
+```
+
+Yaw and pitch are in radians. A shared anchor's XYZ is local to the asset
+pivot and projects into each drawing. Set a view's XY override when its
+hand-drawn placement differs. `handoff: "exact"` keeps the nearest authored
+tile on both sides of a switch involving that view. Use it for intentionally
+different clusters, holes, or highlights when the atlas uses depth reprojection.
+
+After defining `latch-pin`, run the review with `--anchor latch-pin` to
+compare the drawings around that part. To paint in the browser workshop,
+run `pixel-art stack export relay-views.json --out deck.json` and open
+`deck.json` in the workshop. Import the saved deck with
+`pixel-art stack import edited-deck.json --out relay-views.json` before
+reviewing or exporting the edited atlas.
+
+Atlas import supports up to 512 tiles and 255 exact visible colors. Export
+requires approved visible colors and a common duration for the angles of
+each pose. Omit `--base` for a color-only nearest-view atlas. To carry depth,
+normals, and emission through a repaint, pass a baked base with matching
+poses, angles, pivots, and scales. Added coverage without registered depth gets
+an exact handoff. Runtime cel transitions, scenery edits, and bump paint need
+a baked base before their maps can be carried through this workflow.
+
 ## Register frames and align texture pixels
 
 Version 2 documents can carry a top-level `guides` list. Guide IDs are

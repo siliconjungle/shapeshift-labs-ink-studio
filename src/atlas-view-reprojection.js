@@ -183,10 +183,11 @@ const AtlasViewReprojection = (() => {
     const length=Math.hypot(...ray);
     if (!(length>0)) return null;
     const direction=Array.from(ray,v=>v/length);
-    if (atlas.effect(primary) || atlas.fringe?.(primary,time) || atlas.transition?.(primary,time) ||
+    if (primary.handoff === 'exact' || atlas.effect(primary) || atlas.fringe?.(primary,time) || atlas.transition?.(primary,time) ||
         primary.rect.width*primary.rect.height>pixelLimit || dot(primary.basis.normal,direction)<minCosine) return null;
     if (distance===Infinity && dot(primary.basis.normal,direction)>1-1e-12) return null;
     let other = pair(primary,candidates,direction);
+    if (other?.handoff === 'exact') return null;
     if (other && (other.rect.width*other.rect.height>pixelLimit || atlas.effect(other) ||
         atlas.fringe?.(other,time) || atlas.transition?.(other,time))) other=null;
     const yaw=Math.round(Math.atan2(direction[0],direction[2])/angleStep);
