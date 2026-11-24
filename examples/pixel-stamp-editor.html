@@ -424,6 +424,63 @@
         </details>
       </section>
       <section>
+        <h2>Adjustments</h2>
+        <details class="selection-group">
+          <summary>Adjust pixels</summary>
+          <div class="guide-controls" id="adjustment-settings">
+            <label>Scope<select id="adjustment-scope">
+              <option value="selection">Active selection</option><option value="frame" selected>Current frame</option>
+              <option value="range">Frame range</option>
+            </select></label>
+            <div class="canvas-size" id="adjustment-range" hidden>
+              <label>First frame<input id="adjustment-start" type="number" min="1" value="1"></label>
+              <label>Last frame<input id="adjustment-end" type="number" min="1" placeholder="Last"></label>
+            </div>
+            <label>Adjustment<select id="adjustment-type">
+              <option value="curves">Curves</option><option value="hue-saturation">Hue and saturation</option>
+              <option value="gradient">Gradient</option><option value="replace">Color replacement</option>
+              <option value="dither">Dither</option><option value="outline">Outline</option>
+            </select></label>
+            <label data-adjustment="curves hue-saturation gradient">Colors<select id="adjustment-match">
+              <option value="exact">Exact RGB</option><option value="palette">Match palette</option>
+            </select></label>
+            <label data-adjustment="curves">Channel<select id="adjustment-channel">
+              <option value="rgb">RGB</option><option value="red">Red</option>
+              <option value="green">Green</option><option value="blue">Blue</option>
+            </select></label>
+            <label data-adjustment="curves">Curve points (0–1)<input id="adjustment-curve" type="text" value="[[0,0],[0.5,0.65],[1,1]]"></label>
+            <div class="canvas-size" data-adjustment="hue-saturation" hidden>
+              <label>Hue, degrees<input id="adjustment-degrees" type="number" value="30" step="1"></label>
+              <label>Saturation factor<input id="adjustment-saturation" type="number" min="0" max="4" step=".1" value="1"></label>
+            </div>
+            <label data-adjustment="gradient replace dither outline" hidden>
+              <span id="adjustment-first-label">First swatch</span><select id="adjustment-first"></select>
+            </label>
+            <label data-adjustment="gradient replace dither" hidden>
+              <span id="adjustment-second-label">Second swatch</span><select id="adjustment-second"></select>
+            </label>
+            <label data-adjustment="gradient" hidden>Direction<select id="adjustment-axis">
+              <option value="x">Horizontal</option><option value="y">Vertical</option>
+            </select></label>
+            <label data-adjustment="dither" hidden>Pattern<select id="adjustment-pattern">
+              <option value="bayer">Bayer 4×4</option><option value="checker">Checker</option>
+            </select></label>
+            <div class="canvas-size" data-adjustment="outline" hidden>
+              <label>Radius<input id="adjustment-radius" type="number" min="1" max="512" value="1"></label>
+              <label>Side<select id="adjustment-side"><option value="outside">Outside</option>
+                <option value="inside">Inside</option><option value="both">Both</option>
+              </select></label>
+            </div>
+          </div>
+          <div class="row">
+            <button id="adjustment-preview">Preview</button>
+            <button id="adjustment-apply" disabled>Apply adjustment</button>
+            <button id="adjustment-cancel" disabled>Cancel preview</button>
+          </div>
+          <output id="adjustment-info" aria-live="polite"></output>
+        </details>
+      </section>
+      <section>
         <h2>Timing</h2>
         <label class="side-label"><span>Hold, seconds</span><input id="duration" type="number" min="0.01" max="60" step="0.01"></label>
         <label class="side-label"><span>Playback</span><select id="playback"><option value="loop">Loop</option><option value="once">Once</option></select></label>

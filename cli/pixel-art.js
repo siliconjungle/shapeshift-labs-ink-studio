@@ -11,6 +11,7 @@ const PixelBrushes = require('../src/pixel-brushes.js');
 const PixelSelections = require('../src/pixel-selections.js');
 const PixelTransforms = require('../src/pixel-selection-transforms.js');
 const CanvasTransforms = require('../src/pixel-canvas-transforms.js');
+const PixelAdjustments = require('../src/pixel-adjustments.js');
 const PixelColors = require('../src/pixel-raster-colors.js');
 const PixelPalette = require('../src/pixel-palette.js');
 const PaletteExtract = require('../src/palette-extract.js');
@@ -590,10 +591,11 @@ function edit(design, frame, patch, context) {
     { expected:frame.revision, actual:revision });
   const route = Destinations.resolve(design,patch.destination);
   if (design.version === 2 && patch.frame !== frame.id &&
-      (patch.frame !== undefined || (patch.cel === undefined && !['guides','canvas','palette'].includes(route.destination.kind))))
+      (patch.frame !== undefined || (patch.cel === undefined && !['guides','canvas','palette','adjustments'].includes(route.destination.kind))))
     throw Preview.conflict('wrong-frame','Pixel edit needs the observed frame ID',{ expected:patch.frame, actual:frame.id });
   if (patch.sourceRevision !== undefined && (!route.binding || !isRevision(patch.sourceRevision)))
     throw Preview.conflict('invalid-source-revision','An inspected sourceRevision must be a SHA-256 digest for a scene destination');
+  if (route.destination.kind === 'adjustments') return editAdjustment(design,patch,context);
   if (route.destination.kind === 'canvas') return editCanvas(design,patch,context);
   if (route.destination.kind === 'palette') return editPalette(design,patch,context);
   if (route.destination.kind === 'guides') return editGuides(design,patch);
@@ -913,6 +915,58 @@ function brushChanges(design,frame,brush,override,{ points,samples,shading },{ s
     marks:[...bySwatch].map(([swatch,pixels])=>({ swatch,runs:RasterTools.runs(width,pixels) })) };
 }
 
+function editAdjustment(design,patch,context) {
+  if (design.version !== 2) throw new TypeError('Upgrade to a version 2 document before using scoped adjustments');
+  const { operation } = patch;
+  if (patch.frame !== undefined || patch.cel !== undefined || patch.edits !== undefined ||
+      !fields(operation,['scope','adjustment']) || !fields(operation.scope,['frame','frames','layer','selection']))
+    throw new TypeError('Use an adjustment and a scope with one frame or an inclusive frame range');
+  const { scope,adjustment } = operation, { width,height } = design;
+  const { frame,frames,layer,selection } = scope;
+  if ((frame === undefined) === (frames === undefined) || (frame !== undefined && !name(frame)) ||
+      (frames !== undefined && (!Array.isArray(frames) || frames.length !== 2 || !Array.from(frames).every(name))) ||
+      (layer !== undefined && !design.layers.some(row=>row.id === layer)) ||
+      (selection !== undefined && !name(selection)))
+    throw new TypeError('Choose known frame endpoints and an optional layer and saved selection');
+  const [first,last] = (frames ?? [frame,frame]).map(id=>design.frames.findIndex(row=>row.id === id));
+  if (first < 0 || last < first) throw new RangeError('Adjustment frame range must be known and in document order');
+  const selected = selection === undefined ? null : namedSelection(design,selection);
+  if (selected?.frame !== undefined && (first !== last || selected.frame !== design.frames[first].id))
+    throw new RangeError('Pixel selection belongs to frame '+selected.frame);
+  const mask = selected && PixelSelections.fromPixels(width,height,selected.pixels);
+  const palette = paletteEntries(design.palette,design.version), editor = PixelColors.paletteEditor(palette);
+  const prepared = PixelAdjustments.prepare(adjustment,editor), revision = fingerprint(design);
+  const targets = [];
+  const revisedFrames = design.frames.map((row,i)=>{
+    if (i < first || i > last) return row;
+    const before = targets.length;
+    const captured = compileFrame(design,row,revision,palette,layer ?? true), cels = { ...row.cels };
+    for (const [id,cel] of Object.entries(row.cels)) {
+      if (layer !== undefined && id !== layer) continue;
+      const source = captured.layerSources.get(id), writes = prepared.apply(width,height,source,mask);
+      if (!writes.size) continue;
+      const changed = [...writes.keys()];
+      for (const p of changed) if (captured.locks[p] || source.clipping && !source.clipping[p])
+        throw Preview.conflict(captured.locks[p] ? 'protected-pixel' : 'clipped-pixel',
+          'Adjustment cannot change this pixel',{ frame:row.id,layer:id,at:[p%width,Math.floor(p/width)] });
+      cels[id] = { ...cel,marks:[...cel.marks,...rasterWriteMarks(width,source,editor.palette,writes,changed)] };
+      targets.push({ frame:row.id,layer:id,cel:celId(row,id,cel),pixelCount:changed.length,
+        runs:RasterTools.runs(width,changed) });
+    }
+    return targets.length === before ? row : { ...row,cels };
+  });
+  const added = editor.palette.slice(palette.length);
+  const revised = targets.length ? { ...design,frames:revisedFrames,...(added.length && {
+    palette:{ ...design.palette,...Object.fromEntries(added.map(row=>[row.id,row.color])) }
+  }) } : design;
+  if (targets.length) validate(revised);
+  context?.onEditTarget?.({ destination:'adjustments',kind:'adjustments',tool:adjustment.type,scope,
+    frames:design.frames.slice(first,last+1).map(row=>row.id),cels:targets,
+    pixelCount:targets.reduce((n,row)=>n+row.pixelCount,0),
+    ...(added.length && { addedSwatches:added.map(row=>row.id) }) });
+  return revised;
+}
+
 function editPalette(design,patch,context) {
   if (design.version !== 2) throw new TypeError('Upgrade the document to version 2 before editing the palette');
   if (patch.edits !== undefined || patch.frame !== undefined || patch.cel !== undefined)
@@ -1098,7 +1152,7 @@ function editWithReceipt(design, patch, context, { runner, options, frameId, sho
         { expected:expected.inputs.documentRevision, actual:documentRevision });
     const frame = compile(design,frameId,patch?.cel);
     const route = Destinations.resolve(design,patch?.destination), { destination,binding } = route;
-    command.frame = ['canvas','palette'].includes(destination.kind) ? null : frame.id ?? null;
+    command.frame = ['canvas','palette','adjustments'].includes(destination.kind) ? null : frame.id ?? null;
     if (shotHitFrame !== undefined && (destination.kind !== 'shot-correction' || !integer(shotHitFrame,0,1e9)))
       throw new TypeError('A shot hit sample needs a shot-correction edit and a nonnegative shot frame');
     const result = edit(design,frame,patch,{
@@ -1327,7 +1381,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     const request = structuredClone(patch);
     if (legacyRevision !== null && request?.revision === legacyRevision) {
       request.revision = fingerprint(design);
-      if (request.frame === undefined && request.cel === undefined && !['canvas','document:canvas','palette','document:palette'].includes(request.destination))
+      if (request.frame === undefined && request.cel === undefined && !['canvas','document:canvas','palette','document:palette','adjustments','document:adjustments'].includes(request.destination))
         request.frame = 'artwork';
     }
     return request;
@@ -1405,7 +1459,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
           sourceChecked:patch.sourceRevision !== undefined || verifiedReplays.has(index) });
       }
       const [painted] = receipt.affectedTargets;
-      if (['canvas','palette','selections'].includes(painted?.kind) || painted?.kind === 'raster' && painted.tool) targetsByKey.set(index,structuredClone(painted));
+      if (['canvas','palette','selections','adjustments'].includes(painted?.kind) || painted?.kind === 'raster' && painted.tool) targetsByKey.set(index,structuredClone(painted));
     }
     const targets = [...targetsByKey.values()];
     let candidate = state().design, scene = sceneEditor?.snapshot(), issues = [];

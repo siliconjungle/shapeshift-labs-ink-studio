@@ -409,6 +409,48 @@ reports the matching runs in preview and receipts. It honors clipping
 and protected pixels. Color locks guard definition changes and global
 remaps. Painting over a locked swatch locally remains available.
 
+### Apply scoped adjustments
+
+Use the `adjustments` destination to change indexed paint on a version 2
+document. Set `scope.frame` to one frame ID or `scope.frames` to the first
+and last frame IDs in document order, both inclusive. Add `layer` to target
+one layer, or omit it to adjust each existing cel independently. A saved
+`selection` can narrow either scope. A frame-specific selection applies
+only to its own frame. Use `document:adjustments` if you already have a
+destination named `adjustments`.
+
+```json
+{
+  "id": "cool-shadows",
+  "revision": "<document revision>",
+  "destination": "adjustments",
+  "operation": {
+    "scope": { "frames": ["approach", "turn"], "layer": "coat", "selection": "folds" },
+    "adjustment": { "type": "hue-saturation", "degrees": 25, "saturation": 0.8 }
+  }
+}
+```
+
+| Type | Controls |
+| --- | --- |
+| `curves` | A master `curve` and/or `channels` keyed by `red`, `green`, or `blue`. Curves take `stops: [[input, output], ...]` in 0–1 and optional `interpolation: "linear", "step", "smooth"`. The master runs first. |
+| `hue-saturation` | Hue `degrees` and a `saturation` factor from 0 to 4. A factor of 1 retains saturation. |
+| `gradient` | Ordered `stops: [[position, swatchIdOrHex], ...]` in 0–1 and optional interpolation. Use `axis: "x"` or `"y"` to span the selection bounds or whole grid. Supply native `from: [x,y]` and `to: [x,y]` points for a custom direction. |
+| `replace` | `map: {sourceId: targetId}`. Matches original swatch IDs and applies mappings simultaneously. |
+| `dither` | `dark` and `light` swatch IDs. Uses brightness to distribute paint on a native-grid `"bayer"` or `"checker"` pattern. |
+| `outline` | A `swatch`, pixel `radius`, and `side: "inside", "outside", "both"`. Traces each cel's painted silhouette and limits the result to the scope. Outer outlines fill empty cells with opaque paint. |
+
+Curves, hue adjustments, and gradients accept `match: "exact"` (the
+default) or `"palette"`. Exact mode reuses matching swatches and adds
+new ones within the 255-swatch limit. Palette mode uses the nearest
+existing color. The adjustments keep original swatch definitions and
+alpha bytes. Outlines leave knockouts and zero-alpha pigment intact.
+
+Preview reports changed runs per cel and any new swatches. If an edit
+would write to a protected or clipped pixel, the entire adjustment is
+rejected. Applying an adjustment across a range is one undoable edit
+with one replay receipt.
+
 ### Symmetry and wraparound
 
 Add `operation.drawing` to any raster-tool patch to mirror or wrap its stroke.

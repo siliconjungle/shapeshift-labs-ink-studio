@@ -43,6 +43,7 @@ function resolve(design, name = 'raster') {
     (name === 'raster' && { id:name,kind:name }) ||
     (['canvas','document:canvas'].includes(name) && { id:'canvas',kind:'canvas' }) ||
     (['palette','document:palette'].includes(name) && { id:'palette',kind:'palette' }) ||
+    (['adjustments','document:adjustments'].includes(name) && { id:'adjustments',kind:'adjustments' }) ||
     (design.version === 2 && ['guides','selections'].includes(name) && { id:name, kind:name });
   if (!destination) throw conflict('unknown-destination','Unknown pixel edit destination ' + name,{ destination:name });
   const binding = destination.binding && design.sceneBindings.find(item => item.id === destination.binding);

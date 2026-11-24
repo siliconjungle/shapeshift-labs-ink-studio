@@ -195,6 +195,7 @@
   K.pixelSelections = PixelSelections;
   K.pixelSelectionTransforms = PixelSelectionTransforms;
   K.pixelCanvasTransforms = PixelCanvasTransforms;
+  K.pixelAdjustments = PixelAdjustments;
   K.pixelBrushes = PixelBrushes;
   K.sprite = {
     scanlineBudget: SpriteScanlineBudget,

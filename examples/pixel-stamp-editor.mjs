@@ -5,14 +5,14 @@ import { colors,openPNG,readPNG,savePNG } from './pixel-stamp-png.mjs';
 const palettes = paletteModule.default ?? globalThis[Symbol.for('ink-studio.pixel-palette')];
 const stamp = KIT.pixelStamps, guideTool = KIT.pixelGuides, paintTools = KIT.pixelPaintTools;
 const brushes = KIT.pixelBrushes, selections = KIT.pixelSelections, transforms = KIT.pixelSelectionTransforms;
-const canvasTransforms = KIT.pixelCanvasTransforms;
+const canvasTransforms = KIT.pixelCanvasTransforms, adjustments = KIT.pixelAdjustments;
 const { stonePaint, flowingInk, bubble, glint, starTwinkle, line, rect } = InkPixelStudies;
 const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
 const state = { frame:0, swatch:0, tool:'pencil', points:[], undo:[] };
 let drawingPointer, pencilStroke, grid;
 let brush, brushTip, brushStroke, selection, selectionDraft, shownMasks;
-let clipboard, transformDraft;
+let clipboard, transformDraft, adjustmentDraft;
 const maxPencilPixels = 4096;
 let sharedGuides, frameGuides, guideItems = [];
 const limit = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
@@ -29,7 +29,7 @@ const saveUndo = (selectionOnly = false) => {
 
 function resetStroke() {
   state.points = [];
-  pencilStroke = brushStroke = selectionDraft = transformDraft = undefined;
+  pencilStroke = brushStroke = selectionDraft = transformDraft = adjustmentDraft = undefined;
 }
 
 const selectionId = value => typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value);
@@ -152,7 +152,7 @@ function selectPixels(query) {
 
 function drawSelection() {
   const active = activeSelection(), draft = transformDraft?.preview?.selection ?? selectionDraft?.preview;
-  const displayed = draft ?? active, busy = drawingPointer !== undefined || !!selectionDraft || !!transformDraft;
+  const displayed = draft ?? active, busy = drawingPointer !== undefined || !!selectionDraft || !!transformDraft || !!adjustmentDraft;
   view.setSelection(displayed?.mask ?? null);
   const type = selectionType(), choosing = state.tool === 'brush-select';
   $('selection-tolerance-label').hidden = !colorSelection(type);
@@ -160,7 +160,7 @@ function drawSelection() {
   $('polygon-selection-actions').hidden = !choosing || type !== 'polygon';
   $('selection-close').disabled = (selectionDraft?.points.length ?? 0) < 3;
   $('selection-cancel').disabled = !selectionDraft;
-  $('selection-clear').disabled = (!!transformDraft || !active && !selectionDraft);
+  $('selection-clear').disabled = (!!adjustmentDraft || !!transformDraft || !active && !selectionDraft);
   $('selection-count').value = displayed ? `${displayed.pixelCount} pixels selected` : '';
   $('capture-brush').disabled = !active?.pixelCount || busy;
   for (const button of $('selection-modifiers').querySelectorAll('button'))
@@ -310,14 +310,14 @@ function copyPixels() {
 
 function copyActiveSelection() {
   const active = activeSelection();
-  if (!active?.pixelCount || transformDraft || selectionDraft || drawingPointer !== undefined) return;
+  if (!active?.pixelCount || adjustmentDraft || transformDraft || selectionDraft || drawingPointer !== undefined) return;
   clipboard = copyPixels();
   notify(`Copied ${active.pixelCount} selected pixels`);
   drawSelection();
 }
 
 function startTransform(fromSelection) {
-  if (transformDraft || drawingPointer !== undefined ||
+  if (adjustmentDraft || transformDraft || drawingPointer !== undefined ||
       (fromSelection ? !activeSelection()?.pixelCount : !clipboard)) return;
   const { width,height } = state.doc, clip = fromSelection ? copyPixels() : clipboard;
   stop();
@@ -457,14 +457,16 @@ function frameSlots(current) {
 function draw() {
   const { width,height } = state.doc;
   const current = state.doc.frames[state.frame];
-  const preview = transformDraft?.preview;
+  const preview = adjustmentDraft
+    ? { palette:adjustmentDraft.palette,...adjustmentDraft.frames.get(state.frame) }
+    : transformDraft?.preview;
   let palette = preview?.palette ?? state.doc.palette, slots = preview?.slots ?? frameSlots(current);
   let alpha = preview?.alpha ?? current.alpha;
-  if (!transformDraft && rgbaPencil() && pencilStroke?.tip()) {
+  if (!adjustmentDraft && !transformDraft && rgbaPencil() && pencilStroke?.tip()) {
     try { ({ palette,slots,alpha } = rgbaStroke(current)); }
     catch (error) { notify(error.message); }
   }
-  if (!transformDraft && state.tool === 'brush-stamp' && brush && (brushStroke || state.points.length)) {
+  if (!adjustmentDraft && !transformDraft && state.tool === 'brush-stamp' && brush && (brushStroke || state.points.length)) {
     try { ({ palette,slots,alpha } = applyBrush(slots,alpha)); }
     catch (error) { notify(error.message); }
   }
@@ -482,6 +484,7 @@ function draw() {
   $('remove').disabled = count === 1;
   $('duplicate').disabled = count >= 2048 || (count+1)*width*height > 2**20;
   showShapeControls();
+  showAdjustmentPreview();
 }
 
 function selectSwatch(index) {
@@ -538,6 +541,7 @@ function update() {
   $('canvas-height').value = state.doc.height;
   showCanvasControls();
   updateRampChoices();
+  updateAdjustmentSwatches();
   $('add-color').disabled = state.doc.palette.length >= colors.limit;
   $('playback').value = state.doc.playback ?? 'loop';
   selectSwatch(Math.min(state.swatch,state.doc.palette.length-1));
@@ -553,7 +557,7 @@ function stop() {
 function edit(callback) {
   stop();
   saveUndo();
-  transformDraft = undefined;
+  transformDraft = adjustmentDraft = undefined;
   callback();
   update();
 }
@@ -1097,7 +1101,7 @@ function extendDynamicBrush(event) {
 }
 
 art.parentElement.addEventListener('pointerdown',event => {
-  if (event.button !== 0 || drawingPointer !== undefined) return;
+  if (event.button !== 0 || drawingPointer !== undefined || adjustmentDraft) return;
   const central = event.target === art;
   if (transformDraft) {
     if (central) beginTransformDrag(event);
@@ -1279,7 +1283,14 @@ $('play').addEventListener('click',() => {
   draw();
   state.play=requestAnimationFrame(step);
 });
-$('scrub').addEventListener('input',()=>{ stop(); state.frame=Number($('scrub').value)-1; resetStroke(); draw(); });
+$('scrub').addEventListener('input',()=>{
+  const preview = adjustmentDraft?.scope === 'range' ? adjustmentDraft : undefined;
+  stop();
+  state.frame = Number($('scrub').value)-1;
+  resetStroke();
+  adjustmentDraft = preview;
+  draw();
+});
 $('duration').addEventListener('change',()=>edit(()=>{
   state.doc.frames[state.frame].duration=limit(Number($('duration').value) || .01,.01,60);
 }));
@@ -1310,6 +1321,107 @@ $('undo').addEventListener('click',()=>{
 });
 $('pencil-color-mode').addEventListener('change',()=>{
   $('pencil-rgb').value = state.doc.palette[state.swatch];
+  draw();
+});
+function showAdjustmentControls() {
+  const type = $('adjustment-type').value;
+  for (const field of $('adjustment-settings').querySelectorAll('[data-adjustment]'))
+    field.hidden = !field.dataset.adjustment.split(' ').includes(type);
+  $('adjustment-range').hidden = $('adjustment-scope').value !== 'range';
+  const labels = { gradient:['Start swatch','End swatch'],replace:['Source swatch','Target swatch'],
+    dither:['Dark swatch','Light swatch'],outline:['Outline swatch',''] };
+  const [first,second] = labels[type] ?? ['', ''];
+  $('adjustment-first-label').textContent = first;
+  $('adjustment-second-label').textContent = second;
+}
+
+function updateAdjustmentSwatches() {
+  for (const [id,slot] of [['adjustment-first',0],['adjustment-second',1]]) {
+    const select = $(id), previous = select.value;
+    select.replaceChildren(...state.doc.swatchIds.map(key=>new Option(swatchTitle(key),key)));
+    select.value = state.doc.swatchIds.includes(previous) ? previous : state.doc.swatchIds[slot] ?? state.doc.swatchIds[0];
+  }
+  showAdjustmentControls();
+}
+
+function showAdjustmentPreview() {
+  $('adjustment-start').max = $('adjustment-end').max = state.doc.frames.length;
+  $('adjustment-preview').disabled = drawingPointer !== undefined || !!transformDraft || !!selectionDraft;
+  $('adjustment-apply').disabled = !adjustmentDraft?.pixelCount;
+  $('adjustment-cancel').disabled = !adjustmentDraft;
+  const { pixelCount,frames } = adjustmentDraft ?? {};
+  $('adjustment-info').value = adjustmentDraft
+    ? `${pixelCount} ${pixelCount === 1 ? 'pixel' : 'pixels'} changed in ${frames.size} ${frames.size === 1 ? 'frame' : 'frames'}` : '';
+}
+
+function readAdjustment() {
+  const type = $('adjustment-type').value, match = $('adjustment-match').value;
+  const value = id=>$('adjustment-'+id).value;
+  const number = id=>$('adjustment-'+id).valueAsNumber;
+  const first = value('first'), second = value('second');
+  if (type === 'curves') {
+    const curve = { stops:JSON.parse(value('curve')) }, channel = value('channel');
+    return { type,match,...(channel === 'rgb' ? { curve } : { channels:{ [channel]:curve } }) };
+  }
+  if (type === 'hue-saturation') return { type,match,degrees:number('degrees'),saturation:number('saturation') };
+  if (type === 'gradient') return { type,match,axis:value('axis'),stops:[[0,first],[1,second]] };
+  if (type === 'replace') return { type,map:{ [first]:second } };
+  if (type === 'dither') return { type,dark:first,light:second,pattern:value('pattern') };
+  return { type,swatch:first,radius:number('radius'),side:value('side') };
+}
+
+function previewAdjustment() {
+  stop();
+  resetStroke();
+  try {
+    const scope = $('adjustment-scope').value, doc = state.doc, { width,height } = doc;
+    const active = activeSelection();
+    if (scope === 'selection' && !active?.pixelCount) throw new Error('Select pixels before previewing this adjustment');
+    const first = scope === 'range' ? $('adjustment-start').valueAsNumber-1 : state.frame;
+    const last = scope === 'range'
+      ? ($('adjustment-end').value ? $('adjustment-end').valueAsNumber : doc.frames.length)-1 : first;
+    if (!Number.isInteger(first) || !Number.isInteger(last) || first < 0 || first > last || last >= doc.frames.length)
+      throw new RangeError('Choose a frame range in order within the animation');
+    const editor = colors.paletteEditor(indexedPalette()), prepared = adjustments.prepare(readAdjustment(),editor);
+    const frames = new Map();
+    let pixelCount = 0;
+    for (let index = first; index <= last; index++) {
+      const current = doc.frames[index], { rows,strokes,alpha:beforeAlpha,...rest } = current;
+      const source = { slots:rasterSlots(width,height,current),alpha:beforeAlpha };
+      const writes = prepared.apply(width,height,source,scope === 'selection' ? active.mask : undefined);
+      if (!writes.size) continue;
+      const slots = source.slots.map(slot=>slot === -2 ? null : slot), alpha = beforeAlpha?.slice() ?? Array(slots.length).fill(255);
+      for (const [p,pixel] of writes) {
+        slots[p] = pixel.slot;
+        alpha[p] = pixel.alpha;
+      }
+      frames.set(index,{ ...rest,slots,...(alpha.some((value,p)=>slots[p] !== null && value !== 255) && { alpha }) });
+      pixelCount += writes.size;
+    }
+    adjustmentDraft = { scope,frames,pixelCount,palette:editor.palette.map(row=>row.color),
+      swatchIds:editor.palette.map(row=>row.id) };
+    notify('');
+  } catch (error) { notify(error.message); }
+  draw();
+}
+
+$('adjustment-settings').addEventListener('change',()=>{
+  showAdjustmentControls();
+  if (adjustmentDraft) previewAdjustment();
+});
+$('adjustment-preview').addEventListener('click',previewAdjustment);
+$('adjustment-apply').addEventListener('click',()=>{
+  const draft = adjustmentDraft;
+  if (!draft?.pixelCount) return;
+  edit(()=>{
+    const frames = state.doc.frames.map((frame,i)=>draft.frames.get(i) ?? frame);
+    state.doc = { ...state.doc,frames,palette:draft.palette,swatchIds:draft.swatchIds };
+    resetStroke();
+  });
+  notify('Applied adjustment');
+});
+$('adjustment-cancel').addEventListener('click',()=>{
+  adjustmentDraft = undefined;
   draw();
 });
 function swatchTitle(id) {
