@@ -1937,7 +1937,7 @@ function makeSculpt(B, rest) {
     if (style) B.describePixelStyle?.(first, end, style, pair);
     const surfaceId = effective.surfaceId ?? (effective === material ? undefined : effective.surface?.id) ?? material.surfaceId;
     const baseId = effective.materialId ?? material.materialId;
-    const paint = first<end && owner?.mat.sdfPaint?.locate(sample.slice(1,4),sample.slice(4,7));
+    const paint = first<end && owner?.mat?.sdfPaint?.locate(sample.slice(1,4),sample.slice(4,7));
     if (paint?.tint && B.tintSplatColors)
       B.tintSplatColors(first,end,paint.tint,owner.sdfPaintBase??=new Map(),baseId);
     B.describeSplats?.(first, end, {
