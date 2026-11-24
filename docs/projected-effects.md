@@ -73,6 +73,11 @@ channel with `frame.sample(name, u, v)`, or copy its grid with
 detect a change even while the scene is paused. Hosts can also provide their
 own field with `channels`, `revision` and `frame(time).sample(name, u, v)`,
 including a wrapper around an existing fluid solver.
+Use `stampMany([...])` to submit several stamps as one change. If any stamp
+is invalid, the field keeps its previous state.
+
+For timed contacts with separate print, pressure and ripple channels, use
+[Terrain trails](terrain-trails.md). Its field can also drive these layers.
 
 ## Surface layers
 

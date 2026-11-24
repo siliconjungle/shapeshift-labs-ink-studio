@@ -416,6 +416,7 @@ All checked-in guides, indexed by title and section headings.
 - [Exact take clock](../take-clock.md)
 - [Target inspection effects](../target-inspection.md)
 - [Targeted interactions](../targeted-interactions.md)
+- [Terrain trails](../terrain-trails.md)
 - [Where the pixels live](../texel-coverage.md)
 - [Thread, stitch and woven rendering](../textile-rendering.md)
 - [Textured surfaces](../textured-surfaces.md)

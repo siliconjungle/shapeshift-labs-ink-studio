@@ -330,6 +330,8 @@ circuits and frost that travel through corners and forks.
 [Rigid phase changes](docs/coupled-phase-changes.md#freeze-liquid-into-rigid-pieces) share mass and heat between liquid fields and movable solid parcels.
 [Directional contact marks](docs/contact-marks.md) pin hand-drawn flashes
 and skids at the point of contact, with their own clock through a pose hold.
+[Terrain trails](docs/terrain-trails.md) turn timed contacts into footprints,
+displaced vegetation pixels, and expanding ripples on a shared native grid.
 
 Reuse unchanged bake inputs in the editor and pass `--asset-cache DIR` to retain diorama bake results across CLI runs. [Incremental baking](docs/scene-editor.md#incremental-baking)
 

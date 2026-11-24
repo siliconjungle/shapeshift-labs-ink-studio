@@ -48,6 +48,11 @@
     function stamp(options) {
       append([prepare(options)]);
     }
+    function stampMany(items) {
+      if (!Array.isArray(items) || items.length + events.length > 4096)
+        throw new RangeError('Effect field exceeds its stamp budget');
+      if (items.length) append(Array.from(items, prepare));
+    }
     function stroke({ keys, spacing = 0.05, ...options } = {}) {
       scalar(0.001, 1e5, 'Stroke time spacing', spacing);
       if (!Array.isArray(keys) || keys.length < 2 || keys.length > 1024 ||
@@ -72,7 +77,7 @@
     }
     if (!Array.isArray(stamps) || stamps.length > 4096 || !Array.isArray(strokes) || strokes.length > 4096)
       throw new TypeError('Effect fields need bounded stamp and stroke lists');
-    if (stamps.length) append(Array.from(stamps, prepare));
+    stampMany(stamps);
     strokes.forEach(stroke);
 
     function frame(time) {
@@ -129,7 +134,7 @@
       return previous;
     }
     return Object.freeze({
-      channels: Object.freeze(names), frame, stamp, stroke,
+      channels: Object.freeze(names), frame, stamp, stampMany, stroke,
       get revision() { return revision; },
       clear() {
         events.length = 0;

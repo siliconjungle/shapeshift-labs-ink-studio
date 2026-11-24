@@ -25,8 +25,8 @@ jobs:
           tests/render-compatibility.test.js tests/rebirth-examples.test.js
           tests/additional-light-emitters.test.js tests/color-lut.test.js
           tests/color-space.test.js tests/uv-atlas-slip.test.js
-      - name: Portable project smoke in Chrome and the CLI
+      - name: Browser and headless rendering smoke tests
         run: |
           chrome="$(command -v google-chrome)"
           "$chrome" --version
-          INK_TEST_CHROME="$chrome" node --test tests/agent-project.test.js tests/project-bundles.test.js
+          INK_TEST_CHROME="$chrome" node --test tests/agent-project.test.js tests/project-bundles.test.js tests/terrain-trails.test.js

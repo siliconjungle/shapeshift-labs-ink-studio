@@ -33,6 +33,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.tab2` | function | `(fn, box, cell)` | [source](../../src/kit/kw-erode.js) |
 
+## KIT.terrainTrails
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.terrainTrails` | namespace |  |  |
+| `KIT.terrainTrails.create` | function | `({ width, height, cell = 1, origin = [0, 0], contacts = [], print: printOptions = {}, press: pressOptions = {}, ripple: rippleOptions = {} } = {})` | [guide](../terrain-trails.md), [source](../../src/kit/pan-terrain-trails.js) |
+
 ## KIT.tex
 
 | Member | Kind | Signature or value | Guides and source |
