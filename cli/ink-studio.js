@@ -1425,6 +1425,8 @@ const CMD = {
         '  pixel-art brush <design.json> --selection id|--rect x,y,w,h --out brush.json   capture a portable indexed brush',
         '    dynamics options: --stabilization ms --pressure light,full --velocity pxPerSecond,slow,fast',
         '  pixel-art snap <design.json> --at x,y [--frame id] [--radius pixels]   resolve document guides',
+        '  pixel-art motion <design.json> [--plan plan.json] [--layer id] [--out report.json] [--review review.html]   check native animation samples',
+        '  pixel-art motion <scene> --views plan.json [--subject object] [--w n --h n] [--out report.json] [--review review.html]   check authored views',
         '  pixel-art rules <design.json> [--frame id] [--layer id] [--art-shot id] [--out report.json]   inspect asset art rules and scene settings',
         '  pixel-art lint <design.json> [--frame id] [--art-shot id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings',
         '  pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint',
@@ -4175,9 +4177,31 @@ const CMD = {
       }) }));
       return sceneInspection ? { ...frame,scene:world.id,time:t } : frame;
     }
+    function captureMotion(id,raw,subject) {
+      if (subject !== undefined && (typeof subject !== 'string' || !subject.trim()))
+        throw new TypeError('--subject needs a scene object ID');
+      const Motion = require('../src/pixel-motion-checks.js'), Review = require('./pixel-motion-review.js');
+      const w = num('w',160), h = num('h',96), { options,samples } = Review.plan(raw,'scene',w,h);
+      const world = buildPreview(id), surface = options.alignment === 'surface', history = R.sequenceHistory(lib().KIT);
+      const passes = ['objectId','coverage',...(surface ? ['surfaceMotion','surfaceMotionValid','partMotion','partMotionValid'] : [])];
+      let matched = false;
+      const images = samples.map((row,index)=>{
+        pose(world,row.time);
+        let camera;
+        const image = R.render(world,view({ ...history,...row.camera,lockCamera:!!row.camera,w,h,px:1,t:row.time,
+          passes,transparent:true,renderGrid:false,cameraGuides:false,resetRenderHistory:index === 0 || !!row.cut,
+          shotFrame:frame=>{ camera = frame.camera; } }));
+        if (image.w !== w || image.h !== h || !camera)
+          throw new RangeError('Motion capture changed the native art grid or did not report its camera');
+        if (subject !== undefined && image.passes?.objects?.includes(subject)) matched = true;
+        return Review.fromRender({ ...image,camera },row,subject);
+      });
+      if (subject !== undefined && !matched) throw new RangeError('Unknown visible motion subject '+subject);
+      return { images,report:{ ...Motion.audit(images,options),source:id,...(subject !== undefined && { subject }) } };
+    }
     if (pos[0] === 'session') return PixelArt.sessionCommand(pos.slice(1),opt,{ scene:editScene,capture });
     PixelArt.command(pos,opt,outputFile,{
-      capture,
+      capture,captureMotion,
       world: id => buildPreview(id),
       scene:editScene
     });

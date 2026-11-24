@@ -1441,6 +1441,70 @@ styles, and selective edge filter. Edge supersampling applies to eligible
 splats and finite curves. Existing explicit render overrides still take
 precedence. Render recipes record the source document and selected scope.
 
+## Check motion at native art resolution
+
+Open **Motion checks** in the Workshop to review committed animation frames.
+**Show finding** jumps to the flagged frame and outlines the affected art
+pixels. Use **Compare sample** to jump to the same evidence in the surrounding
+frames and read its RGBA. The 1× view shows the source artwork.
+
+The checks group evidence on the native grid.
+
+- **Highlight drift** pairs nearby small clusters of the same color, size,
+  and owner. By default it looks for bright accents beside darker pixels.
+  Supply `highlights` as hex colors to name the highlights to track.
+- **Unstable clusters** flag splits or merges of overlapping,
+  four-connected clusters with the same color and owner.
+- **Lost gaps** flags small enclosed openings of up to nine pixels and
+  named protected gaps when their previous transparent cells fill.
+  A plan can also name open gaps with `gaps: [[x,y],...]` on a sample.
+- **Flicker** flags a pixel that changes abruptly and returns to its
+  previous RGBA over three comparable samples. Cuts break that chain.
+
+```sh
+node cli/ink-studio.js pixel-art motion walk.json --out motion.json --review motion.html
+node cli/ink-studio.js pixel-art motion walk.json --plan walk-check.json --layer ink
+node cli/ink-studio.js pixel-art motion scene.json --views cameras.json --subject courier --w 160 --h 96 --review camera-review.html
+```
+
+Without a plan, the document path checks its frames in order. The Workshop
+and CLI use a single registration guide, or a single pivot if no
+registration guide exists. Registration shifts must be whole art pixels.
+If a frame needs a specific guide, choose it by ID in a version 1 plan.
+
+```json
+{
+  "version": 1,
+  "samples": [
+    { "frame": "plant", "guide": "foot-a" },
+    { "frame": "rise", "guide": "foot-b" },
+    { "frame": "land", "guide": "foot-c" }
+  ],
+  "settings": {
+    "highlights": ["#ffe2a0"],
+    "drift": 0.5,
+    "ignore": [
+      { "sample": "rise", "kind": "flicker", "rect": [11, 7, 2, 1], "reason": "The visor blinks on this pose." }
+    ]
+  }
+}
+```
+
+For rendered views, each sample instead needs `id`, `time`, and optional
+`camera` fields such as `yaw`, `pitch`, `dist`, `target` and `ortho`.
+Provide explicit `anchor: [x,y]` coordinates to register moving views,
+or use `settings.alignment: "surface"` to follow the renderer's valid
+mesh, traced surface, and splat part motion. Surface alignment tracks
+visible paint. Use registered alignment for transparent gaps. Use
+`"screen"` to compare fixed screen positions. Mark the first sample after
+a cut with `"cut": true`. The report records skipped transitions, accepted
+observations with reasons, and any capped findings. One review accepts up
+to 128 samples and eight million total art pixels.
+
+The SDK exposes `editor.motion({ plan, layer })` for an animation document.
+Use `KIT.pixelMotionChecks.audit(samples, settings)` with aligned RGBA
+buffers from other capture tools.
+
 ## Inspect, revise and reuse
 
 `pixel-art draw` writes the same diagnostics in `report.json`, along with

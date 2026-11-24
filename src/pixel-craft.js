@@ -373,7 +373,7 @@ const PixelCraft = (() => {
 
   // Evaluate point contacts and enclosed alpha pockets only on the authored grid.
   function topology(w,h,colors,bg,owners) {
-    const tangent = new Uint8Array(w*h), hole = new Uint8Array(w*h);
+    const tangent = new Uint8Array(w*h);
     const paint = (x,y)=>inside(x,y,w,h) && !bg[y*w+x];
     const alike = (a,b)=>colors[a] === colors[b] && owners?.[a] === owners?.[b];
     const support = (x,y)=>cardinal.reduce((count,[dx,dy])=>
@@ -395,6 +395,11 @@ const PixelCraft = (() => {
         tangent[a] = tangent[b] = 1;
       }
     }
+    return { tangent,hole:pockets(w,h,bg) };
+  }
+
+  function pockets(w,h,bg,limit = 9) {
+    const hole = new Uint8Array(w*h);
     const seen = new Uint8Array(w*h);
     for (let p = 0; p < bg.length; p++) {
       if (!bg[p] || seen[p]) continue;
@@ -411,9 +416,9 @@ const PixelCraft = (() => {
           pocket.push(q);
         }
       }
-      if (!external && pocket.length <= 9) for (const i of pocket) hole[i] = 1;
+      if (!external && pocket.length <= limit) for (const i of pocket) hole[i] = 1;
     }
-    return { tangent,hole };
+    return hole;
   }
 
   function rows(pixels,w) {
@@ -475,6 +480,6 @@ const PixelCraft = (() => {
     return { image,result,diagnostics:regions(result.mark,w,h,locks,owners,layerIds) };
   }
 
-  return Object.freeze({ lint,lintMap,backgroundMask,colOf,analyze,regions,kinds });
+  return Object.freeze({ lint,lintMap,backgroundMask,colOf,analyze,regions,pockets,kinds });
 })();
 if (typeof module !== 'undefined') module.exports = PixelCraft;

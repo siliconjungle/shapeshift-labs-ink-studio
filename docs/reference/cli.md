@@ -243,6 +243,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art brush <design.json> --selection id|--rect x,y,w,h --out brush.json   capture a portable indexed brush
     dynamics options: --stabilization ms --pressure light,full --velocity pxPerSecond,slow,fast
   pixel-art snap <design.json> --at x,y [--frame id] [--radius pixels]   resolve document guides
+  pixel-art motion <design.json> [--plan plan.json] [--layer id] [--out report.json] [--review review.html]   check native animation samples
+  pixel-art motion <scene> --views plan.json [--subject object] [--w n --h n] [--out report.json] [--review review.html]   check authored views
   pixel-art rules <design.json> [--frame id] [--layer id] [--art-shot id] [--out report.json]   inspect asset art rules and scene settings
   pixel-art lint <design.json> [--frame id] [--art-shot id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings
   pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint
@@ -673,6 +675,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio pixel-art import` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art inspect` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art lint` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art motion` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art palette` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art palette export` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art palette extract` · [source](../../cli/pixel-art.js)

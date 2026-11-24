@@ -23,6 +23,7 @@ const markup = `
         </div>
         <div class="ink-grid-selection" aria-hidden="true" hidden><canvas hidden></canvas></div>
         <canvas class="ink-grid-diagnostic" aria-hidden="true" hidden></canvas>
+        <canvas class="ink-grid-diagnostic ink-grid-motion" aria-hidden="true" hidden></canvas>
         <div class="ink-grid-cursor" aria-hidden="true" hidden></div>
       </div>
     </div>
@@ -47,7 +48,7 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   const canvas = find('.ink-grid-main'), preview = find('.ink-grid-reference canvas');
   const art = canvas.getContext('2d'), sample = preview.getContext('2d');
   const lines = find('.ink-grid-lines'), cursor = find('.ink-grid-cursor');
-  const diagnostic = find('.ink-grid-diagnostic'), marks = diagnostic.getContext('2d');
+  const diagnostic = find('.ink-grid-diagnostic'), motion = find('.ink-grid-motion');
   const selection = find('.ink-grid-selection'), selectedPixels = selection.querySelector('canvas').getContext('2d');
   const repeats = find('.ink-grid-repeats');
   const mirrorLines = [find('.ink-grid-mirror-x'),find('.ink-grid-mirror-y')];
@@ -107,15 +108,17 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
       selection.style.setProperty('--ink-selection-'+field,bounds[i]);
   }
 
-  function setDiagnostic(finding) {
-    diagnostic.hidden = !finding;
+  function setDiagnostic(finding,channel) {
+    const overlay = channel === 'motion' ? motion : diagnostic;
+    overlay.hidden = !finding;
     if (!finding) return;
     const [x,y,w,h] = finding.bounds;
-    diagnostic.width = w;
-    diagnostic.height = h;
+    overlay.width = w;
+    overlay.height = h;
     for (const [i,field] of ['x','y','width','height'].entries())
-      diagnostic.style.setProperty('--ink-diagnostic-'+field,finding.bounds[i]);
-    marks.fillStyle = '#f6bd4e70';
+      overlay.style.setProperty('--ink-diagnostic-'+field,finding.bounds[i]);
+    const marks = overlay.getContext('2d');
+    marks.fillStyle = channel === 'motion' ? '#b195ff70' : '#f6bd4e70';
     for (const [row,col,length] of finding.runs) marks.fillRect(col-x,row-y,length,1);
   }
 
@@ -212,13 +215,13 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
     paintView();
   }
 
-  function focusRegion([x,y,w,h]) {
+  function focusRegion([x,y,w,h],channel) {
     fitting = false;
     const fit = Math.floor(Math.min((viewport.clientWidth-32)/w,(viewport.clientHeight-32)/h));
     zoom = clamp(Math.min(fit,Math.max(zoom,12)),1,maxZoom);
     showPoint(null);
     move(viewport.clientWidth/2-(x+w/2)*zoom,viewport.clientHeight/2-(y+h/2)*zoom);
-    diagnostic.scrollIntoView({ block:'nearest',inline:'nearest' });
+    (channel === 'motion' ? motion : diagnostic).scrollIntoView({ block:'nearest',inline:'nearest' });
   }
 
   function setZoom(value,x = viewport.clientWidth / 2,y = viewport.clientHeight / 2) {

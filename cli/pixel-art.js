@@ -22,6 +22,8 @@ const PaletteExtract = require('../src/palette-extract.js');
 const SelectionSources = require('./pixel-selection-sources.js');
 const PNG = require('./png.js');
 const Craft = require('../src/pixel-craft.js');
+const Motion = require('../src/pixel-motion-checks.js');
+const MotionReview = require('./pixel-motion-review.js');
 const ArtRules = require('../src/pixel-art-rules.js');
 const Cleanup = require('../src/pixel-cleanup.js');
 const files = require('./asset-files.js');
@@ -1715,6 +1717,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     inspect: (coordinate,options = {}) => inspect(state().design,coordinate,options,
       { ...editContext(options,false),sceneRef:sceneEditor && sceneName }),
     lint: (options = {}) => lintDesign(state().design,options),
+    motion: (options = {}) => motionDocument(state().design,options).report,
     artRules: (options = {}) => structuredClone(artRulesReport(state().design,options)),
     sample: (coordinate,options = {}) => samplePixel(state().design,coordinate,options,editContext(options,false)),
     captureBrush: options => captureBrush(state().design,options),
@@ -1967,6 +1970,52 @@ function lintDesign(design,{ frame,layer,cel,kind,finding,shot } = {}) {
   return { ...report,...(layer !== undefined && { layer }) };
 }
 
+function motionDocument(design,{ plan,layer } = {}) {
+  documentShape(design);
+  if (design.version !== 2) throw new TypeError('Motion checks need a version 2 pixel animation');
+  const { width,height,frames } = design, revision = fingerprint(design);
+  const palette = paletteEntries(design.palette,2), byId = new Map();
+  let elapsed = 0;
+  for (const frame of frames) {
+    byId.set(frame.id,{ frame,time:elapsed/1000 });
+    elapsed += frame.durationMs;
+  }
+  const prepared = MotionReview.plan(plan,'document',width,height,frames.map(frame=>({ frame:frame.id })));
+  const images = prepared.samples.map(row=>{
+    const entry = byId.get(row.frame);
+    if (!entry) throw new RangeError('Unknown motion frame '+row.frame);
+    const raster = compileFrame(design,entry.frame,revision,palette,layer);
+    const { guides,durationMs } = raster;
+    const gaps = [...(row.gaps ?? []),...(raster.protectedDetails ?? [])
+      .filter(row=>row.kind === 'gap').flatMap(row=>row.pixels)];
+    return Motion.fromRaster(craftLayer(raster,layer),{
+      ...row,id:row.id ?? row.frame,label:row.label ?? entry.frame.label ?? row.id ?? row.frame,
+      time:entry.time,durationMs,anchor:row.anchor ?? Motion.registration(guides,row.guide),gaps
+    });
+  });
+  return { images,report:{ ...Motion.audit(images,prepared.options),revision,
+    ...(layer !== undefined && { layer }) } };
+}
+
+function motionCommand(source,opt,captureMotion) {
+  if (opt.views === undefined ? opt.subject !== undefined : opt.layer !== undefined)
+    throw new TypeError('Choose --layer for a pixel document or --subject for scene views');
+  const plans = [opt.plan,opt.views].filter(value=>value !== undefined);
+  if (plans.length > 1 || plans.some(value=>typeof value !== 'string'))
+    throw new TypeError('Use --plan for a document or --views for a rendered scene');
+  const outputs = [opt.out,opt.review].filter(value=>value !== undefined);
+  if (outputs.some(value=>typeof value !== 'string' || [source,...plans].some(file=>path.resolve(file) === path.resolve(value))) ||
+      new Set(outputs.map(file=>path.resolve(file))).size !== outputs.length ||
+      opt.review !== undefined && !/\.html$/i.test(opt.review))
+    throw new TypeError('Write the motion report and HTML review to separate paths');
+  const plan = plans.length ? read(plans[0]) : undefined;
+  const { images,report } = opt.views === undefined ? motionDocument(read(source),{ plan,layer:opt.layer }) :
+    captureMotion(source,plan,opt.subject);
+  if (opt.review) MotionReview.writeReview(path.resolve(opt.review),images,report);
+  if (opt.out) files.json(path.resolve(opt.out),report);
+  else process.stdout.write(JSON.stringify(report,null,2)+'\n');
+}
+
 function draw(frame,directory,{ layer,colorMode,rules,shot } = {}) {
   const indexed = stamp(frame,layer), art = PNG.encodePaint(indexed,colorMode);
   const result = review(craftLayer(frame,layer),{ rules,shot,layer }), { w,h,rgb } = result.overlay;
@@ -2086,7 +2135,7 @@ function trace(frame, object, scene) {
   return design;
 }
 
-const actions = ['trace','import','upgrade','validate','targets','draw','canvas','inspect','lint','rules','sample','select','snap','brush','copy',
+const actions = ['trace','import','upgrade','validate','targets','draw','canvas','inspect','lint','rules','motion','sample','select','snap','brush','copy',
   'preview','edit','replay'];
 const sessionActions = ['init','status','begin','apply','preview','commit','cancel','undo','redo',
   'inspect','sample','select','snap','brush','copy','targets','export'];
@@ -2150,14 +2199,15 @@ function inspectCoordinate(raw) {
   return raw.split(',').map(Number);
 }
 
-function command(pos,opt,outputFile,{ capture, world, scene }) {
+function command(pos,opt,outputFile,{ capture, captureMotion, world, scene }) {
   if (pos[0] === 'stack') return stackCommand(pos.slice(1),opt);
   if (pos[0] === 'palette') return paletteCommand(pos.slice(1),opt);
   const [action, source, patch] = pos;
   const writing = action === 'edit' || action === 'replay';
   if (!actions.includes(action) ||
       pos.length !== (writing || ['preview','select'].includes(action) ? 3 : 2))
-    throw new TypeError('Use pixel-art trace, import, upgrade, validate, targets, draw, canvas, inspect, lint, rules, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
+    throw new TypeError('Use pixel-art trace, import, upgrade, validate, targets, draw, canvas, inspect, lint, rules, motion, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
+  if (action === 'motion') return motionCommand(source,opt,captureMotion);
   if (action === 'trace') {
     if (typeof opt.subject !== 'string' || !opt.subject.trim()) throw new TypeError('Trace needs --subject object-id');
     const design = trace(capture(source), opt.subject, source);
