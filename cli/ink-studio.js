@@ -1443,7 +1443,7 @@ const CMD = {
         '  pixel-art timeline <design.json>           list frame timing and layer-by-frame cels',
         '  pixel-art targets <design.json> --destination id --scene <bound scene>   list stable scene targets',
         '    --query splats.json [--source-view view.json] [--limit N]   pick splats by footprint, contribution, part, material or rest bounds',
-        '  pixel-art preview <design.json> <edit.json> [--scene <bound scene>] [--exact] [--shot-hit-frame n] [--limit n] [--out report.json]   dry run a proposed edit',
+        '  pixel-art preview <design.json> <edit.json> [--scene <bound scene>] [--limit n] [--splat-diagnostics] [--exact [--shot-hit-frame n] [--out report.json]]   dry run a proposed edit',
         '  pixel-art paint export <design.json> --destination id --scene scene.json --out directory [--frame id]   export chart paint and binding data',
         '  pixel-art paint preview <design.json> <binding.json> <edited.png> --scene scene.json [--out report.json] [--review review.html] [--limit N]   review the source diff',
         '  pixel-art paint apply <design.json> <binding.json> <edited.png> --scene scene.json --approval digest --out scene.json   commit the approved diff',

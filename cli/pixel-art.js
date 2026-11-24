@@ -3169,7 +3169,7 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
   if (action === 'preview') {
     const limit = opt.limit === undefined ? undefined : typeof opt.limit === 'string' ? Number(opt.limit) : NaN;
     const report = previewEdit(design,read(patch),context,{ frameId:opt.frame,limit,...exactOptions(opt) });
-    if (opt.out !== undefined) {
+    if (opt.exact === true && opt.out !== undefined) {
       if (!reference(opt.out) || [source,patch,opt.scene,sourceViewFile].some(input=>
         reference(input) && path.resolve(input) === path.resolve(opt.out)))
         throw new RangeError('Write the preview report to a separate output path');
