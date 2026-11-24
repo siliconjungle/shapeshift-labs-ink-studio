@@ -114,5 +114,27 @@
     }
     return K.mesh.make(positions, triangles, null, tmat, mats);
   }
-  A.geometry = { builder, toKitMesh };
+  function closestTrianglePoint(p, t) {
+    const dx = V.sub(p, t.a);
+    const uu = V.dot(t.u, t.u), uv = V.dot(t.u, t.v), vv = V.dot(t.v, t.v);
+    const pu = V.dot(t.u, dx), pv = V.dot(t.v, dx), det = uu * vv - uv * uv;
+    const a = (pu * vv - pv * uv) / det, b = (pv * uu - pu * uv) / det;
+    if (a >= 0 && b >= 0 && a + b <= 1) return { at: V.mad(V.mad(t.a, t.u, a), t.v, b), weights: [1 - a - b, a, b] };
+    const triangle = [t.a, t.b, t.c];
+    let score = Infinity, best;
+    for (let i = 0; i < 3; i++) {
+      const j = (i + 1) % 3, from = triangle[i], delta = V.sub(triangle[j], from);
+      const k = Math.max(0, Math.min(1, V.dot(delta, V.sub(p, from)) / V.dot(delta, delta)));
+      const at = V.mad(from, delta, k), distance = V.dist(p, at);
+      if (distance >= score) continue;
+      score = distance;
+      const weights = [0, 0, 0];
+      weights[i] = 1 - k;
+      weights[j] = k;
+      best = { at, weights };
+    }
+    return best;
+  }
+
+  A.geometry = { builder, toKitMesh, closestTrianglePoint };
 })(KIT);

@@ -98,34 +98,13 @@
     const root = tree(triangles);
     const boxDistance = (p, node) => node ? p.reduce((sum, n, i) =>
       sum + Math.max(node.min[i] - n, n - node.max[i], 0) ** 2, 0) : Infinity;
-    function closest(p, t) {
-      const dx = V.sub(p, t.a);
-      const uu = V.dot(t.u, t.u), uv = V.dot(t.u, t.v), vv = V.dot(t.v, t.v);
-      const pu = V.dot(t.u, dx), pv = V.dot(t.v, dx), det = uu * vv - uv * uv;
-      const a = (pu * vv - pv * uv) / det, b = (pv * uu - pu * uv) / det;
-      if (a >= 0 && b >= 0 && a + b <= 1) return { at: V.mad(V.mad(t.a, t.u, a), t.v, b), weights: [1 - a - b, a, b] };
-      const triangle = [t.a, t.b, t.c];
-      let score = Infinity, best;
-      for (let i = 0; i < 3; i++) {
-        const j = (i + 1) % 3, from = triangle[i], delta = V.sub(triangle[j], from);
-        const k = Math.max(0, Math.min(1, V.dot(delta, V.sub(p, from)) / V.dot(delta, delta)));
-        const at = V.mad(from, delta, k), distance = V.dist(p, at);
-        if (distance >= score) continue;
-        score = distance;
-        const weights = [0, 0, 0];
-        weights[i] = 1 - k;
-        weights[j] = k;
-        best = { at, weights };
-      }
-      return best;
-    }
     function sample(p) {
       if (!point(p)) throw new TypeError('Attribute queries need a finite XYZ point');
       let best = maxDistance ** 2, hit;
       function visit(node, lower) {
         if (!node || lower > best) return;
         if (node.items) for (const triangle of node.items) {
-          const result = closest(p, triangle), d = V.dist(p, result.at) ** 2;
+          const result = P.geometry.closestTrianglePoint(p, triangle), d = V.dist(p, result.at) ** 2;
           if (d < best || (d === best && (!hit || triangle.f < hit.triangle.f))) {
             best = d;
             hit = { triangle, ...result };

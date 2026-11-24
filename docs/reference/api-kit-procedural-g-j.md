@@ -347,6 +347,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.geometry.clipHeightMesh` | function | `(mesh, height, options = {})` | [source](../../src/kit/p10b-height-clipping.js) |
 | `KIT.procedural.geometry.clipPlanarFaces` | function | `(faces, planes)` | [source](../../src/kit/p29-convex-face-clipping.js) |
 | `KIT.procedural.geometry.clipSurface` | function | `(mesh, planes)` | [source](../../src/kit/p05-convex-clipping.js) |
+| `KIT.procedural.geometry.closestTrianglePoint` | function | `(p, t)` | [source](../../src/kit/p02-procedural-mesh.js) |
 | `KIT.procedural.geometry.convexPerimeter` | function | `(outline, {offset = 0, drift = [0,0], below = 0, above = 0, miterLimit = Infinity} = {})` | [source](../../src/kit/pay-inclined-perimeter.js) |
 | `KIT.procedural.geometry.delaunay` | function | `(input, { constraints = [], maxChecks = 16000000, maxFlips = 30000 } = {})` | [source](../../src/kit/p48-delaunay.js) |
 | `KIT.procedural.geometry.distanceTransform` | function | `(mask, { size, spacing = 1, signed = false, indices = true, maxCells = 3000000 } = {})` | [source](../../src/kit/p68-distance-transform.js) |

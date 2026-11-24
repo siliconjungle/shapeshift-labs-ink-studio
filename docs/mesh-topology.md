@@ -63,6 +63,85 @@ convex or concave rings on their dominant projection, retaining
 collinear boundary corners and authored winding. A repeated vertex,
 self-intersection, or collapsed projection is a validation error.
 
+## Record correspondence through an edit
+
+`KIT.meshTopology.editWithCorrespondence(before, patch)` returns the
+edited `document` and a versioned `correspondence` receipt.
+`KIT.meshTopology.correspond(before, after, options)` compares two
+independently saved topology documents. The existing `edit` result
+still contains the topology document.
+
+```sh
+ink-studio mesh-topology edit before.json patch.json --out after.json --report correspondence.json
+ink-studio mesh-topology correspond before.json after.json --out correspondence.json
+```
+
+The receipt groups faces, corners, and authored boundary edges. Each
+group lists its source IDs, target IDs, status, and individual links.
+The statuses are `retained`, `replaced`, `split`, `merged`, `reworked`
+(many-to-many), `deleted`, `created`, and `unresolved`. Deleted and
+created groups have no accepted link under the comparison's settings.
+
+Stable IDs are exact within one logical mesh. Ink can also verify a
+complete shared boundary partition, a continuous edge chain between
+the original endpoints, and shared vertex IDs within related faces.
+An edge split reports each child's interval along the coarse edge.
+For a more complex edit, such as remeshing through new interior
+vertices, supply lineage from the tool that performed the operation.
+Put it in the patch as `lineage`, pass it in the SDK's options, or use
+`--lineage links.json` when writing a receipt.
+
+```json
+{
+  "faces": [
+    { "from": "cover", "to": "cover-left" },
+    { "from": "cover", "to": "cover-right" }
+  ]
+}
+```
+
+Each lineage link references an existing source and target ID in its
+domain. Authored and topology-based links have confidence 1 and give
+their evidence method explicitly.
+
+### Project an unmatched revision
+
+Pass `options.projection` or `--projection settings.json` with a
+positive `maxDistance` in scene units. Projection proposes one-to-one
+matches for elements that lack exact or authored links. Use
+`matchIds: false` in the SDK or `--match-ids off` in the CLI if an import
+reuses index-derived IDs.
+
+```json
+{ "maxDistance": 0.08, "minNormalDot": 0.8, "maxUVDistance": 0.05 }
+```
+
+Face matches compare material, winding, and reciprocal surface
+samples. The receipt includes the farthest sample in each direction
+with the hit triangle's corner IDs and barycentric weights. Edge
+matches compare endpoints, orientation, and incident materials.
+Corner matches require a related face and compare position and UV.
+Each accepted projected link has confidence below 1.
+
+`minConfidence` defaults to 0.5. Competing scores within the
+`ambiguity` margin of 0.05 stay unresolved, along with low-confidence
+or non-reciprocal candidates. Read the candidate evidence in
+`domains.<domain>.unresolved`. When the `maxChecks` budget runs out,
+the receipt marks projection incomplete and keeps the exact links.
+The default budget is 250,000 checks.
+
+## Run the correspondence demo
+
+The relay comparison highlights a cover split, a merged service
+plate, and a removed clip. The shape stays on the same art grid.
+A second report follows the revised panel through a reimport that
+changes every element ID and shifts the surface slightly.
+
+```sh
+node examples/topology-correspondence.cjs topology-correspondence-review
+ink-studio mesh-topology correspond topology-correspondence-review/after.json topology-correspondence-review/reimport.json --projection topology-correspondence-review/projection.json
+```
+
 ## Render, pick, and import indexed geometry
 
 - Put the result of `KIT.meshTopology.toSceneMesh` in the scene's

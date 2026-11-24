@@ -209,7 +209,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
      --gaussian-footprint legacy|compensated --gaussian-projection affine|ray --gaussian-variance 0.3
   mesh <file.obj|.gltf|.glb>  import and inspect as splats (--uv requires textured GLB stamps, --uv off uses geometry)
   mesh-topology inspect|triangulate <mesh.json> [--out file.json]   inspect authored connectivity or derive triangles
-  mesh-topology edit <mesh.json> <patch.json> [--out file.json]      update vertices or polygon rings by ID
+  mesh-topology edit <mesh.json> <patch.json> [--out file.json] [--report map.json]   edit polygon topology with an optional correspondence receipt
+  mesh-topology correspond <before.json> <after.json> [--lineage links.json] [--projection settings.json] [--match-ids on|off] [--out map.json]   map stable and projected elements
   mesh-uv inspect|simplify <mesh> --out <directory|mesh.json>   inspect UV maps or reduce with seam locks
   scenery pack <scene.js> --out asset.inkscenery   pack indexed meshes and textures from a scenery hook
   scenery inspect <asset.inkscenery>   decode the pack and report its transfer sizes
@@ -954,7 +955,6 @@ These options are read by CLI code. Follow each source link for the accepted val
 - `--place` · [cli/world.js](../../cli/world.js)
 - `--positions` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--preset-root` · [cli/music-instrument-benchmark.js](../../cli/music-instrument-benchmark.js)
-- `--projection` · [cli/depth.js](../../cli/depth.js)
 - `--protected-seams` · [cli/mesh-uv.js](../../cli/mesh-uv.js)
 - `--quiet` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--ratio` · [cli/mesh-uv.js](../../cli/mesh-uv.js)

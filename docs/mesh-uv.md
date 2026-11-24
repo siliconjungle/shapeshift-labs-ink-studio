@@ -80,6 +80,9 @@ positions in the selected material texture's native size.
 To use the same path on artist topology in a sculpt bake, opt into
 `KIT.model.fromSculpt(sculpt, { topology, simplifyTopology: true, targetTriangles })`.
 
+For stable-ID correspondence and projected evidence through ordinary polygon
+edits, use [mesh topology receipts](mesh-topology.md#record-correspondence-through-an-edit).
+
 ## Reproduce the demo
 
 ```sh
