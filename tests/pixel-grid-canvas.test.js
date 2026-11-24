@@ -248,7 +248,7 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
       angle.value = 90;
       angle.dispatchEvent(new Event('change',{ bubbles:true }));
     });
-    const savedBrush = await evaluate(browser,async () => {
+    const saveBrush = () => evaluate(browser,async () => {
       const createURL = URL.createObjectURL, clickLink = HTMLAnchorElement.prototype.click;
       let writing;
       try {
@@ -261,6 +261,7 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
         HTMLAnchorElement.prototype.click = clickLink;
       }
     });
+    const savedBrush = await saveBrush();
     assert.deepEqual(savedBrush.anchor,[1,1]);
     assert.deepEqual(savedBrush.settings,{ angle:90,size:[2,2],swatch:{ mode:'original' } });
     assert.deepEqual(savedBrush.slots,[0,null,null,1]);
@@ -286,6 +287,30 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     assert.equal(await browser.evaluate("document.querySelectorAll('.swatch').length"),4);
     await click(browser,'#undo');
     assert.equal(await browser.evaluate("document.querySelectorAll('.swatch').length"),3);
+
+    await click(browser,'#brush-dynamics');
+    await evaluate(browser,() => {
+      for (const [id,value] of Object.entries({ width:5,height:5,stabilization:0,light:.2,fast:1 }))
+        document.getElementById('brush-'+id).value = value;
+      document.getElementById('brush-fast').dispatchEvent(new Event('change',{ bubbles:true }));
+    });
+    assert.deepEqual((await saveBrush()).settings.dynamics,
+      { stabilization:0,pressure:[.2,1],velocity:{ speed:120,size:[1,1] } });
+    const pen = (type,x,y,force) => mouse(type,anchor(x,y),
+      { pointerType:'pen',force,button:'left',buttons:type === 'mouseReleased' ? 0 : 1,clickCount:1 });
+    await pen('mousePressed',10.25,25,.05);
+    assert.deepEqual(await raster(browser,preview,10,25),[81,74,110,255]);
+    assert.deepEqual(await raster(browser,preview,10,24),clear);
+    await pen('mouseMoved',25.75,25,1);
+    assert.deepEqual(await raster(browser,preview,26,23),[81,74,110,255]);
+    await pen('mouseReleased',25.75,25,0);
+    assert.deepEqual(await raster(browser,main,26,23),[81,74,110,255]);
+    assert.deepEqual(await raster(browser,preview,18,25),[81,74,110,255]);
+    await click(browser,'#undo');
+    assert.deepEqual(await raster(browser,preview,10,25),clear);
+    assert.deepEqual(await raster(browser,preview,26,23),clear);
+    await tap(30,25);
+    assert.deepEqual(await raster(browser,preview,30,23),[81,74,110,255]);
   });
 });
 

@@ -512,9 +512,9 @@ function edit(design, frame, patch, context) {
 
 function editRasterTool(design,frame,patch,destination,context) {
   const { operation } = patch;
-  if (patch.edits !== undefined || !fields(operation,['tool','layer','at','points','swatch','pixelPerfect','shape','brush']))
+  if (patch.edits !== undefined || !fields(operation,['tool','layer','at','points','samples','swatch','pixelPerfect','shape','brush']))
     throw new TypeError('A raster tool needs a layer or cel and a pencil, eraser, fill, shape or brush operation');
-  const { tool,swatch,pixelPerfect,shape,brush } = operation;
+  const { tool,swatch,pixelPerfect,shape,brush,samples } = operation;
   const fill = tool === 'fill', erase = tool === 'eraser', precise = tool === 'shape', brushing = tool === 'brush';
   if (pixelPerfect !== undefined && (tool !== 'pencil' || typeof pixelPerfect !== 'boolean'))
     throw new TypeError('Pixel-perfect cleanup is a boolean pencil option');
@@ -531,9 +531,11 @@ function editRasterTool(design,frame,patch,destination,context) {
   if ((brush !== undefined) !== brushing) throw new TypeError('A brush operation needs a saved brush');
   if (precise ? operation.at !== undefined || operation.points !== undefined : shape !== undefined)
     throw new TypeError('Put shape geometry in the shape operation');
+  if (samples !== undefined && (!brushing || operation.at !== undefined || operation.points !== undefined))
+    throw new TypeError('Sampled brush motion replaces both at and points');
   const single = fill || brushing && operation.at !== undefined;
   const points = single ? [operation.at] : operation.points;
-  if (!precise) {
+  if (!precise && samples === undefined) {
     if (single ? operation.points !== undefined : operation.at !== undefined ||
         !Array.isArray(points) || !integer(points.length,1,4096))
       throw new TypeError('Fill needs a seed pixel. Brush accepts one position or a path. Pencil and eraser need a path.');
@@ -551,7 +553,7 @@ function editRasterTool(design,frame,patch,destination,context) {
   }
   let changed, added = [], brushMarks = [];
   if (brushing) {
-    const result = brushChanges(design,frame,brush,slot,points,captured.slots,check);
+    const result = brushChanges(design,frame,brush,slot,{ points,samples },captured.slots,check);
     ({ changed,added,marks:brushMarks } = result);
   } else if (precise) {
     const mask = require('../index.js').load().KIT.pixelShapes.raster(width,height,shape);
@@ -593,9 +595,11 @@ function editRasterTool(design,frame,patch,destination,context) {
   return revised;
 }
 
-function brushChanges(design,frame,brush,override,points,current,check) {
+function brushChanges(design,frame,brush,override,{ points,samples },current,check) {
   const { width,height } = frame, stamps = new Map();
-  PixelBrushes.stroke(width,height,PixelBrushes.footprint(brush),points,(p,slot)=>{ stamps.set(p,slot); });
+  const emit = (p,slot) => { stamps.set(p,slot); };
+  if (samples === undefined) PixelBrushes.stroke(width,height,PixelBrushes.footprint(brush),points,emit);
+  else PixelBrushes.dynamicStroke(width,height,brush,samples,emit);
   for (const p of stamps.keys()) check(p);
   const original = paletteEntries(design.palette,design.version);
   const used = new Set(stamps.values());
@@ -1078,6 +1082,15 @@ function writeBrush(design,opt,source) {
   const settings = {};
   if (opt.angle !== undefined) settings.angle = typeof opt.angle === 'string' && opt.angle.trim() ? Number(opt.angle) : NaN;
   if (opt.size !== undefined) settings.size = tuple('size',2);
+  if (opt.stabilization !== undefined || opt.pressure !== undefined || opt.velocity !== undefined) {
+    const [speed,slow,fast] = tuple('velocity',3) ?? [];
+    settings.dynamics = {
+      ...(opt.stabilization !== undefined && { stabilization:typeof opt.stabilization === 'string' &&
+        opt.stabilization.trim() ? Number(opt.stabilization) : NaN }),
+      ...(opt.pressure !== undefined && { pressure:tuple('pressure',2) }),
+      ...(speed !== undefined && { velocity:{ speed,size:[slow,fast] } })
+    };
+  }
   if (opt.tint !== undefined) {
     const entry = typeof opt.tint === 'string' && Object.hasOwn(design.palette ?? {},opt.tint) && design.palette[opt.tint];
     if (!entry) throw new RangeError('Choose a known swatch for --tint');

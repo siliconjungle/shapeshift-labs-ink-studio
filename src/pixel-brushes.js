@@ -5,6 +5,10 @@ const PixelBrushes = (() => {
   const integer = (n,lo,hi) => Number.isSafeInteger(n) && n >= lo && n <= hi;
   const fields = (value,keys) => value && Object.getPrototypeOf(value) === Object.prototype &&
     Object.keys(value).every(key => keys.includes(key));
+  const bounded = (n,lo,hi) => Number.isFinite(n) && n >= lo && n <= hi;
+  const clamp = (n,lo,hi) => Math.max(lo,Math.min(hi,n));
+  const scaleRange = pair => Array.isArray(pair) && pair.length === 2 &&
+    Array.from(pair).every(n => bounded(n,0,4));
   const xy = (point,width,height) => Array.isArray(point) && point.length === 2 &&
     integer(point[0],0,width-1) && integer(point[1],0,height-1);
   const color = value => typeof value === 'string' && /^#[a-f\d]{6}$/i.test(value);
@@ -22,13 +26,20 @@ const PixelBrushes = (() => {
         !brush.slots.some(slot => slot !== null))
       throw new TypeError('A pixel brush needs a painted indexed shape and a native anchor');
     const { settings } = brush, tone = settings?.swatch;
-    if (!fields(settings,['angle','size','swatch']) || !Number.isFinite(settings.angle) ||
+    if (!fields(settings,['angle','size','swatch','dynamics']) || !Number.isFinite(settings.angle) ||
         Math.abs(settings.angle) > 360000 || !Array.isArray(settings.size) || settings.size.length !== 2 ||
         !Array.from(settings.size).every(n => integer(n,1,512)) ||
         !fields(tone,['mode','id','color']) ||
         !(tone.mode === 'original' && Object.keys(tone).length === 1 ||
           tone.mode === 'tint' && swatch({ color:tone.color,id:tone.id })))
       throw new TypeError('A pixel brush needs a finite angle, a bounded size and original or tint swatch settings');
+    const { dynamics } = settings;
+    if (dynamics !== undefined && (!fields(dynamics,['stabilization','pressure','velocity']) ||
+        dynamics.stabilization !== undefined && !bounded(dynamics.stabilization,0,500) ||
+        dynamics.pressure !== undefined && !scaleRange(dynamics.pressure) ||
+        dynamics.velocity !== undefined && (!fields(dynamics.velocity,['speed','size']) ||
+          !bounded(dynamics.velocity.speed,1,10000) || !scaleRange(dynamics.velocity.size))))
+      throw new TypeError('Brush dynamics need stabilization in 0–500 ms, size scales in 0–4 and velocity speed in 1–10000 px/s');
     return brush;
   }
 
@@ -71,8 +82,12 @@ const PixelBrushes = (() => {
   }
 
   function footprint(raw) {
-    const { width,height,anchor,slots,settings } = validate(raw);
-    const [w,h] = settings.size, sx = w/width, sy = h/height;
+    const brush = validate(raw);
+    return rasterTip(brush,brush.settings.size);
+  }
+
+  function rasterTip({ width,height,anchor,slots,settings },[w,h],charge) {
+    const sx = w/width, sy = h/height;
     const ox = anchor[0]+.5, oy = anchor[1]+.5, turn = ((settings.angle%360)+360)%360;
     const exact = turn%90 === 0, radians = turn*Math.PI/180;
     const cos = exact ? [1,0,-1,0][turn/90] : Math.cos(radians);
@@ -80,8 +95,11 @@ const PixelBrushes = (() => {
     const corners = [-ox,width-ox].flatMap(x => [-oy,height-oy].map(y =>
       [cos*x*sx-sin*y*sy,sin*x*sx+cos*y*sy]));
     const xs = corners.map(p=>p[0]), ys = corners.map(p=>p[1]), tip = [];
-    for (let y = Math.floor(Math.min(...ys)); y <= Math.ceil(Math.max(...ys)); y++)
-      for (let x = Math.floor(Math.min(...xs)); x <= Math.ceil(Math.max(...xs)); x++) {
+    const left = Math.floor(Math.min(...xs)), right = Math.ceil(Math.max(...xs));
+    const top = Math.floor(Math.min(...ys)), bottom = Math.ceil(Math.max(...ys));
+    charge?.((right-left+1)*(bottom-top+1));
+    for (let y = top; y <= bottom; y++)
+      for (let x = left; x <= right; x++) {
         const u = Math.floor((cos*x+sin*y)/sx+ox), v = Math.floor((-sin*x+cos*y)/sy+oy);
         if (!integer(u,0,width-1) || !integer(v,0,height-1)) continue;
         const slot = slots[v*width+u];
@@ -97,15 +115,94 @@ const PixelBrushes = (() => {
     let cost = 0;
     function dab(x,y) {
       if ((cost += tip.length) > 8e6) throw new RangeError('Brush stroke exceeds its native pixel budget');
-      for (const [dx,dy,slot] of tip) {
-        const u=x+dx, v=y+dy;
-        if (integer(u,0,width-1) && integer(v,0,height-1)) emit(v*width+u,slot);
-      }
+      place(width,height,tip,x,y,emit);
     }
     const path = tools.freehand(dab);
     for (const point of points) path.add(point);
     const last = path.tip();
     if (last) dab(...last);
+  }
+
+  function place(width,height,tip,x,y,emit) {
+    for (const [dx,dy,slot] of tip) {
+      const u = x+dx, v = y+dy;
+      if (integer(u,0,width-1) && integer(v,0,height-1)) emit(v*width+u,slot);
+    }
+  }
+
+  function beginDynamicStroke(width,height,raw,emit) {
+    if (!integer(width,1,512) || !integer(height,1,512) || typeof emit !== 'function')
+      throw new TypeError('Brush dynamics need a native canvas and pixel callback');
+    const brush = validate(raw), { size } = brush.settings;
+    const { stabilization = 0,pressure = [1,1],velocity } = brush.settings.dynamics ?? {};
+    let previous, position, anchor, scale, lastDab, lastTip, lastSize, count = 0, cost = 0, ended = false;
+    const smallTips = new Map();
+    const mix = (a,b,t) => a+(b-a)*t;
+    function charge(work) {
+      if ((cost += work) > 8e6) throw new RangeError('Brush stroke exceeds its native pixel budget');
+    }
+
+    function dab(x,y,value) {
+      const dimensions = size.map(n => clamp(Math.round(n*value),1,512)), key = dimensions.join(',');
+      if (lastDab?.[0] === x && lastDab[1] === y && lastSize === key) return;
+      if (key !== lastSize) {
+        lastTip = smallTips.get(key) ?? rasterTip(brush,dimensions,charge);
+        if (lastTip.length <= 4096 && smallTips.size < 16) smallTips.set(key,lastTip);
+        lastSize = key;
+      }
+      charge(lastTip.length+1);
+      place(width,height,lastTip,x,y,emit);
+      lastDab = [x,y];
+    }
+
+    function extend(next,nextScale) {
+      const at = next.map((n,i) => clamp(Math.round(n),0,(i === 0 ? width : height)-1));
+      const steps = anchor && Math.max(Math.abs(at[0]-anchor[0]),Math.abs(at[1]-anchor[1]));
+      if (steps) {
+        let step = 0;
+        tools.segment(anchor,at,(x,y) => dab(x,y,mix(scale,nextScale,++step/steps)));
+      } else dab(...at,nextScale);
+      anchor = at;
+      scale = nextScale;
+    }
+
+    function add(sample) {
+      if (ended || count >= 4096 || !fields(sample,['at','pressure','time']) ||
+          !Array.isArray(sample.at) || sample.at.length !== 2 ||
+          !bounded(sample.at[0],-.5,width-.5) || !bounded(sample.at[1],-.5,height-.5) ||
+          !bounded(sample.pressure,0,1) || !bounded(sample.time,previous?.time ?? 0,Number.MAX_SAFE_INTEGER))
+        throw new RangeError('Brush samples need in-grid positions, pressure in 0–1 and ordered elapsed milliseconds (up to 4096 samples)');
+      const at = sample.at.slice();
+      const elapsed = previous ? sample.time-previous.time : 0;
+      const distance = previous ? Math.hypot(at[0]-previous.at[0],at[1]-previous.at[1]) : 0;
+      const speed = distance ? (elapsed ? distance*1000/elapsed : Infinity) : 0;
+      const velocityScale = velocity ? mix(...velocity.size,Math.min(1,speed/velocity.speed)) : 1;
+      const nextScale = mix(...pressure,sample.pressure)*velocityScale;
+      // Smooth in continuous art space and quantize only when placing a dab.
+      const follow = previous && stabilization ? -Math.expm1(-elapsed/stabilization) : 1;
+      position = position ? position.map((n,i) => mix(n,at[i],follow)) : at;
+      extend(position,nextScale);
+      previous = { at,time:sample.time };
+      count++;
+    }
+
+    function finish() {
+      if (!count) throw new RangeError('A dynamic brush stroke needs at least one sample');
+      if (ended) return;
+      // Bring the stabilized path to the release point without changing its last size.
+      extend(previous.at,scale);
+      ended = true;
+    }
+
+    return { add,finish };
+  }
+
+  function dynamicStroke(width,height,brush,samples,emit) {
+    if (!Array.isArray(samples) || !integer(samples.length,1,4096))
+      throw new RangeError('A dynamic brush stroke needs 1–4096 samples');
+    const stroke = beginDynamicStroke(width,height,brush,emit);
+    for (const sample of samples) stroke.add(sample);
+    stroke.finish();
   }
 
   function resolvePalette(brush,entries,{ limit = 255,named = false,used } = {}) {
@@ -134,7 +231,7 @@ const PixelBrushes = (() => {
     return { palette,mapping };
   }
 
-  return Object.freeze({ format,validate,capture,footprint,stroke,resolvePalette });
+  return Object.freeze({ format,validate,capture,footprint,stroke,beginDynamicStroke,dynamicStroke,resolvePalette });
 })();
 
 if (typeof module !== 'undefined') module.exports = PixelBrushes;

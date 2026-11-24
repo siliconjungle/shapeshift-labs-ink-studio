@@ -7,7 +7,7 @@ const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
 const state = { frame:0, swatch:0, tool:'pencil', points:[], undo:[] };
 let drawingPointer, pencilStroke;
-let brush, brushTip, selection;
+let brush, brushTip, brushStroke, selection;
 const maxPencilPixels = 4096;
 let sharedGuides, frameGuides, guideItems = [];
 const limit = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
@@ -23,7 +23,7 @@ const saveUndo = () => {
 
 function resetStroke() {
   state.points = [];
-  pencilStroke = undefined;
+  pencilStroke = brushStroke = undefined;
 }
 
 function load(data) {
@@ -76,7 +76,7 @@ function draw() {
   const { width,height } = state.doc;
   const current = state.doc.frames[state.frame];
   let palette = state.doc.palette, slots = frameSlots(current);
-  if (state.tool === 'brush-stamp' && brush && state.points.length) {
+  if (state.tool === 'brush-stamp' && brush && (brushStroke || state.points.length)) {
     try { ({ palette,slots } = applyBrush(slots)); }
     catch (error) { notify(error.message); }
   }
@@ -154,6 +154,10 @@ function savePixels(current,slots,palette = state.doc.palette) {
 
 function setBrush(next) {
   const tip = brushes.footprint(next);
+  if (state.tool === 'brush-stamp' && drawingPointer !== undefined) {
+    drawingPointer = undefined;
+    resetStroke();
+  }
   brush = next;
   brushTip = tip;
   $('brush-settings').hidden = false;
@@ -171,15 +175,29 @@ function showBrushSettings() {
   $('brush-swatch').value = brush.settings.swatch.mode;
   $('brush-tint').value = brush.settings.swatch.color ?? state.doc.palette[state.swatch];
   $('brush-tint-controls').hidden = brush.settings.swatch.mode !== 'tint';
+  const { dynamics } = brush.settings;
+  $('brush-dynamics').checked = dynamics !== undefined;
+  $('brush-dynamics-settings').hidden = dynamics === undefined;
+  $('brush-stabilization').value = dynamics?.stabilization ?? (dynamics ? 0 : 40);
+  [$('brush-light').value,$('brush-full').value] = dynamics?.pressure ?? (dynamics ? [1,1] : [.25,1]);
+  $('brush-speed').value = dynamics?.velocity?.speed ?? 120;
+  [$('brush-slow').value,$('brush-fast').value] = dynamics?.velocity?.size ?? (dynamics ? [1,1] : [1,.6]);
 }
 
 function updateBrushSettings() {
   const mode = $('brush-swatch').value, color = $('brush-tint').value;
   const saved = brush.settings.swatch;
+  const dynamics = $('brush-dynamics').checked ? {
+    stabilization:$('brush-stabilization').valueAsNumber,
+    pressure:[$('brush-light').valueAsNumber,$('brush-full').valueAsNumber],
+    velocity:{ speed:$('brush-speed').valueAsNumber,size:[$('brush-slow').valueAsNumber,$('brush-fast').valueAsNumber] }
+  } : undefined;
   try {
     setBrush({ ...brush,anchor:[$('brush-x').valueAsNumber,$('brush-y').valueAsNumber],
       settings:{ angle:$('brush-angle').valueAsNumber,size:[$('brush-width').valueAsNumber,$('brush-height').valueAsNumber],
-        swatch:mode === 'tint' ? { mode,color,...(saved.color?.toLowerCase() === color && saved.id && { id:saved.id }) } : { mode } } });
+        swatch:mode === 'tint' ? { mode,color,...(saved.color?.toLowerCase() === color && saved.id && { id:saved.id }) } : { mode },
+        ...(dynamics && { dynamics }) } });
+    draw();
     notify('');
   } catch (error) {
     showBrushSettings();
@@ -188,12 +206,12 @@ function updateBrushSettings() {
 }
 
 function applyBrush(slots) {
-  const { width,height,palette:colors } = state.doc, dab = new Map();
-  brushes.stroke(width,height,brushTip,state.points,(p,slot)=>{ dab.set(p,slot); });
+  const { width,height,palette:colors } = state.doc, dabs = brushStroke?.dabs ?? new Map();
+  if (!brushStroke) brushes.stroke(width,height,brushTip,state.points,(p,slot)=>{ dabs.set(p,slot); });
   const { palette,mapping } = brushes.resolvePalette(brush,colors.map(color=>({ color })),
-    { limit:48,used:new Set(dab.values()) });
+    { limit:48,used:new Set(dabs.values()) });
   let changed = false;
-  for (const [p,source] of dab) {
+  for (const [p,source] of dabs) {
     const next = mapping[source];
     if (slots[p] === next) continue;
     slots[p] = next;
@@ -205,6 +223,7 @@ function applyBrush(slots) {
 function commitBrush() {
   const { width,height } = state.doc, current = state.doc.frames[state.frame];
   try {
+    brushStroke?.path.finish();
     const { slots,palette,changed } = applyBrush(stamp.paint(width,height,current));
     if (changed) savePixels(current,slots,palette);
     else { resetStroke(); draw(); }
@@ -463,6 +482,36 @@ function extendPencil(event) {
   return pencilStroke.tip() !== tip;
 }
 
+function startDynamicBrush(event) {
+  resetStroke();
+  const { width,height } = state.doc, dabs = new Map();
+  brushStroke = { dabs,start:event.timeStamp,
+    path:brushes.beginDynamicStroke(width,height,brush,(p,slot)=>{ dabs.set(p,slot); }) };
+  extendDynamicBrush(event);
+}
+
+function extendDynamicBrush(event) {
+  try {
+    for (const input of [...(event.getCoalescedEvents?.() ?? []),event]) {
+      const at = view.positionAt(input.clientX,input.clientY,{ clamp:true });
+      if (!at) continue;
+      const { last,start,path } = brushStroke, ending = event.type === 'pointerup';
+      const samePosition = last && at[0] === last.at[0] && at[1] === last.at[1];
+      if (ending && samePosition) continue;
+      const pressure = event.pointerType === 'pen' ?
+        (ending && input.pressure === 0 ? last?.pressure ?? 1 : input.pressure) : 1;
+      const time = Math.max(last?.time ?? 0,input.timeStamp-start);
+      if (samePosition && pressure === last.pressure && time === last.time) continue;
+      const sample = { at,pressure,time };
+      path.add(sample);
+      brushStroke.last = sample;
+    }
+  } catch (error) {
+    resetStroke();
+    notify(error.message);
+  }
+}
+
 art.addEventListener('pointerdown',event => {
   if (event.button !== 0 || drawingPointer !== undefined) return;
   const at = view.pixelAt(event.clientX,event.clientY,{ snap:state.tool !== 'eyedropper' });
@@ -480,6 +529,7 @@ art.addEventListener('pointerdown',event => {
   art.setPointerCapture(event.pointerId);
   drawingPointer = event.pointerId;
   if (state.tool === 'pencil') startPencil(at);
+  else if (state.tool === 'brush-stamp' && brush?.settings.dynamics) startDynamicBrush(event);
   else {
     state.points = [at];
     if (state.tool === 'brush-select') selection = { frame:state.frame,bounds:rectangleBetween(at,at) };
@@ -490,6 +540,11 @@ art.addEventListener('pointermove',event => {
   if (drawingPointer !== event.pointerId) return;
   if (pencilStroke) {
     if (extendPencil(event)) draw();
+    return;
+  }
+  if (brushStroke) {
+    extendDynamicBrush(event);
+    draw();
     return;
   }
   if (state.points.length >= 120) return;
@@ -510,6 +565,10 @@ art.addEventListener('pointerup',event => {
     if (at) selection = { frame:state.frame,bounds:rectangleBetween(state.points[0],at) };
     resetStroke();
     draw();
+  } else if (brushStroke) {
+    extendDynamicBrush(event);
+    if (brushStroke) commitBrush();
+    else draw();
   } else if (state.tool === 'brush-stamp' && state.points.length) {
     const at = view.pixelAt(event.clientX,event.clientY,{ clamp:true });
     if (at && state.points.length < 120) state.points.push(at);

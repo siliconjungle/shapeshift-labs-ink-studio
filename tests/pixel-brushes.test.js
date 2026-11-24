@@ -69,6 +69,76 @@ test('a brush paints its saved colors into another palette and the edit replays 
   assert.deepEqual(Object.keys(guarded.snapshot().palette),['red','base']);
 });
 
+function solidBrush(settings) {
+  return brushes.capture({ width:1,height:1,rect:[0,0,1,1],read:()=>({ color:'#cc382d' }),settings });
+}
+
+test('dynamic brush rounds half pixels upward and catches up to the release after smoothing', () => {
+  const brush = solidBrush({ dynamics:{ stabilization:100 } });
+  const samples = [{ at:[1.5,3.49],pressure:1,time:0 },{ at:[4.49,9],pressure:1,time:10 },
+    { at:[9.5,3.5],pressure:1,time:20 }];
+  const pixels = [];
+  const stroke = brushes.beginDynamicStroke(20,16,brush,p=>pixels.push([p%20,Math.floor(p/20)]));
+  samples.forEach(stroke.add);
+  assert.deepEqual(pixels,[[2,3],[2,4],[3,4]]);
+  stroke.finish();
+  assert.deepEqual(pixels,[[2,3],[2,4],...Array.from({ length:8 },(_,i)=>[i+3,4])]);
+  const batch = [];
+  brushes.dynamicStroke(20,16,brush,JSON.parse(JSON.stringify(samples)),p=>batch.push([p%20,Math.floor(p/20)]));
+  assert.deepEqual(batch,pixels);
+
+  const unstabilized = [];
+  brushes.dynamicStroke(20,16,solidBrush(),samples,p=>unstabilized.push(p));
+  assert.ok(unstabilized.includes(9*20+4));
+  assert.ok(!batch.some(([,y])=>y === 9));
+});
+
+test('pressure and native pixel speed multiply size and interpolate across fast strokes', () => {
+  const brush = solidBrush({ size:[5,5],dynamics:{ pressure:[.2,1],velocity:{ speed:100,size:[1,.2] } } });
+  function pixels(endTime) {
+    const result = new Set();
+    brushes.dynamicStroke(20,16,brush,[{ at:[4,7],pressure:0,time:0 },{ at:[14,7],pressure:1,time:endTime }],
+      p=>result.add(p));
+    return result;
+  }
+  assert.deepEqual([...pixels(50)],Array.from({ length:11 },(_,i)=>7*20+4+i));
+  assert.deepEqual(pixels(0),pixels(50));
+  const slow = pixels(500);
+  assert.ok(!slow.has(6*20+4));
+  assert.ok(slow.has(6*20+10));
+  assert.ok(slow.has(5*20+14));
+  assert.throws(()=>solidBrush({ dynamics:{ velocity:{ speed:0,size:[1,1] } } }),/Brush dynamics/);
+
+  const sample = { at:[2,2],pressure:.5,time:15 };
+  for (const invalid of [{ time:14 },{ pressure:1.01 },{ at:[20,8] }]) {
+    assert.throws(()=>brushes.dynamicStroke(20,16,brush,[sample,{ ...sample,...invalid }],()=>{}),/ordered elapsed milliseconds/);
+  }
+});
+
+test('sampled edits preview, replay and undo atomically and still respect protected details', () => {
+  const editor = ink.createPixelEditor(target);
+  const brush = solidBrush({ size:[5,5],dynamics:{ pressure:[.2,1] } });
+  const samples = [{ at:[2.49,4.49],pressure:0,time:0 },{ at:[6.5,4.49],pressure:1,time:120 }];
+  const patch = pathFor(editor,'pressure-stroke',brush,{ samples });
+  const preview = editor.previewEdit(patch);
+  assert.ok(preview.pixelCount > 5);
+  const painted = editor.apply(patch);
+  const [receipt] = editor.receipts();
+  assert.deepEqual(receipt.command.patch.operation.samples,samples);
+  assert.deepEqual(ink.createPixelEditor(target).replay(receipt),painted);
+  assert.equal(editor.sample([2,4]).color,'#cc382d');
+  assert.equal(editor.sample([7,2]).color,'#cc382d');
+  assert.equal(editor.undo(),true);
+  assert.deepEqual(editor.snapshot(),target);
+
+  assert.throws(()=>editor.apply(pathFor(editor,'mixed-placement',brush,{ samples,points:[[0,0]] })),
+    /replaces both at and points/);
+  const guarded = ink.createPixelEditor({ ...target,protectedDetails:[{ id:'hold',pixels:[[7,2]] }] });
+  assert.throws(()=>guarded.apply(pathFor(guarded,'blocked-pressure',brush,{ samples })),
+    error=>error.receipt?.conflicts[0].code === 'protected-pixel');
+  assert.deepEqual(Object.keys(guarded.snapshot().palette),['red','base']);
+});
+
 test('CLI brush capture, reuse and replay preserve saved anchor, angle, size and tint', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-brushes-'));
   t.after(()=>fs.rmSync(dir,{ recursive:true,force:true }));
@@ -83,6 +153,16 @@ test('CLI brush capture, reuse and replay preserve saved anchor, angle, size and
   assert.deepEqual(brush.anchor,[0,1]);
   assert.deepEqual(brush.settings,{ angle:90,size:[4,3],swatch:{ mode:'tint',id:'gold',color:'#e4bd42' } });
   fs.writeFileSync(file('patch'),JSON.stringify(pathFor(ink.createPixelEditor(target),'place',brush,{ at:[4,4] })));
+  fs.writeFileSync(file('receipt'),cli('edit',file('target'),file('patch'),'--out',file('edited')));
+  assert.equal(cli('replay',file('target'),file('receipt'),'--out',file('replayed')),fs.readFileSync(file('receipt'),'utf8'));
+  assert.equal(fs.readFileSync(file('edited'),'utf8'),fs.readFileSync(file('replayed'),'utf8'));
+
+  cli('brush',file('source'),'--selection','badge','--cel','drawing','--stabilization','40',
+    '--pressure','.25,1','--velocity','120,1,.6','--out',file('dynamic'));
+  const dynamic = JSON.parse(fs.readFileSync(file('dynamic'),'utf8'));
+  assert.deepEqual(dynamic.settings.dynamics,{ stabilization:40,pressure:[.25,1],velocity:{ speed:120,size:[1,.6] } });
+  const samples = [{ at:[2.25,4],pressure:.15,time:0 },{ at:[5.5,4.25],pressure:1,time:85 }];
+  fs.writeFileSync(file('patch'),JSON.stringify(pathFor(ink.createPixelEditor(target),'sampled',dynamic,{ samples })));
   fs.writeFileSync(file('receipt'),cli('edit',file('target'),file('patch'),'--out',file('edited')));
   assert.equal(cli('replay',file('target'),file('receipt'),'--out',file('replayed')),fs.readFileSync(file('receipt'),'utf8'));
   assert.equal(fs.readFileSync(file('edited'),'utf8'),fs.readFileSync(file('replayed'),'utf8'));

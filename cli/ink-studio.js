@@ -1404,6 +1404,7 @@ const CMD = {
         '  pixel-art canvas <design.json> --out canvas.html [--frame id]   inspect native art and its 1× preview',
         '  pixel-art sample <design.json> --at x,y [--mode composite|layer|source]   sample art or a bound material channel',
         '  pixel-art brush <design.json> --selection id|--rect x,y,w,h --out brush.json   capture a portable indexed brush',
+        '    dynamics options: --stabilization ms --pressure light,full --velocity pxPerSecond,slow,fast',
         '  pixel-art snap <design.json> --at x,y [--frame id] [--radius pixels]   resolve document guides',
         '  pixel-art draw|inspect|edit <design.json> [--frame id]   work on a native indexed frame',
         '  pixel-art edit <design.json> <edit.json> --out result.json   write an edit and print its receipt',

@@ -34,7 +34,12 @@ colors and transparent gaps. Set the brush-local anchor, size, angle,
 and swatch mode in the brush controls. **Stamp brush** places the anchor
 at the pointer. Click for one dab or drag a stroke. **Save brush** and
 **Open brush** exchange the same brush JSON with the document tools.
-[Brush capture and placement](pixel-art-authoring.md#capture-and-reuse-a-pixel-brush)
+
+Enable **Brush dynamics** to set the stabilization time and map pen pressure
+and pointer speed to brush size. Mouse and touch use full pressure. The
+stabilized stroke previews on both canvases while you draw and ends at your
+release pixel. Brush JSON also saves the dynamics.
+[Brush capture and dynamics](pixel-art-authoring.md#brush-dynamics)
 
 The main canvas zooms in whole steps. Use **−**, **+**, and **Fit**, or
 Ctrl-scroll or ⌘-scroll around the cursor. Middle-drag, use **Pan** and drag,

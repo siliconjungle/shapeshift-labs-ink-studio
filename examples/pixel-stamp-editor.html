@@ -139,6 +139,21 @@
             <label class="row">Tint <input id="brush-tint" type="color"></label>
             <button type="button" id="brush-active-color">Use active swatch</button>
           </div>
+          <label class="row" style="display:flex"><input id="brush-dynamics" type="checkbox"> Brush dynamics</label>
+          <div class="guide-controls" id="brush-dynamics-settings" hidden>
+            <div class="canvas-size">
+              <label>Stabilization (ms)<input id="brush-stabilization" type="number" min="0" max="500" step="any"></label>
+              <label>Fast speed (px/s)<input id="brush-speed" type="number" min="1" max="10000" step="any"></label>
+            </div>
+            <div class="canvas-size">
+              <label>Light pressure ×<input id="brush-light" type="number" min="0" max="4" step="any"></label>
+              <label>Full pressure ×<input id="brush-full" type="number" min="0" max="4" step="any"></label>
+            </div>
+            <div class="canvas-size">
+              <label>Slow size ×<input id="brush-slow" type="number" min="0" max="4" step="any"></label>
+              <label>Fast size ×<input id="brush-fast" type="number" min="0" max="4" step="any"></label>
+            </div>
+          </div>
         </div>
         <div class="row" style="margin-top:12px">
           <label class="file-button">Open brush<input type="file" id="open-brush" accept=".json,application/json"></label>

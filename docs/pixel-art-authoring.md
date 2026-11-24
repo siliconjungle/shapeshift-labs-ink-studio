@@ -204,6 +204,57 @@ colors to the target palette as part of the same undo step. Supply a target
 `swatch` ID on the operation to override the saved colors. Preview and
 receipts retain the placement, affected pixels, and palette additions.
 
+### Brush dynamics
+
+Save pressure and speed size mappings and a stabilizer with the brush.
+
+```sh
+node cli/ink-studio.js pixel-art brush document.json --selection badge --size 12,8 \
+  --stabilization 40 --pressure .25,1 --velocity 120,1,.6 --out dynamic-brush.json
+```
+
+The corresponding optional `brush.settings.dynamics` is
+
+```json
+{
+  "stabilization": 40,
+  "pressure": [0.25, 1],
+  "velocity": { "speed": 120, "size": [1, 0.6] }
+}
+```
+
+Stabilization is a follow time from 0 to 500 milliseconds. Zero follows
+the input immediately. Pressure maps light to full, and velocity maps
+stationary to the specified fast speed in native pixels per second.
+The two linear size factors multiply. Omitted mappings use a factor of
+one, and each authored factor can be 0–4. Each dab rounds the scaled
+width and height to integer pixels and clamps them to 1–512. Brush angle,
+anchor, indexed colors, and transparency apply as usual.
+
+For a document edit, embed the brush and supply `operation.samples` in
+place of `at` or `points`. Each sample specifies a native pixel-center
+coordinate, pressure in 0–1, and elapsed milliseconds from the start of
+the stroke. The top-left pixel center is `[0, 0]`, and positions may extend
+up to half a pixel beyond the first and last centers. Use pressure `1`
+for a device without pressure data.
+
+```json
+[
+  { "at": [3.25, 5], "pressure": 0.2, "time": 0 },
+  { "at": [8.5, 5.25], "pressure": 0.7, "time": 55 },
+  { "at": [12, 8], "pressure": 1, "time": 115 }
+]
+```
+
+Use 1–4096 samples with nondecreasing times. A move at the same timestamp
+reaches the fast size immediately. Ink stabilizes the positions before
+rounding to the nearest art pixel, with half-pixel ties rounding up.
+It connects the resulting anchors on the grid, interpolates size across
+each span, and brings the stroke to the last sampled anchor on release.
+Preview, edit, replay, and working sessions use the same rules. Receipts
+retain the samples and saved mappings. The `at` and `points` forms
+continue to use the brush's fixed size.
+
 ## Author a drawing
 
 ```json
