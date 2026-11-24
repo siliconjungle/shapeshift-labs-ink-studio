@@ -22,6 +22,10 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   palette distributions <reference.png> [--scene scene | --render frame.png] [--out directory]
   palette error <scene> [--threshold .06] [--heatmap-max .20] [--region-limit 20] [--out directory]
   palette inspect <scene> --at x,y [--out report.json]   explain the palette choice at one art pixel
+  effect-recipe search [words] [--input kind-or-id] [--renderer webgl2,headless] [--json]  find runnable effect recipes
+  effect-recipe open <id|file.json> [--out example.json]  copy an editable recipe
+  effect-recipe render <id|file.json> [--inputs edits.json] [--sample index] --out frame.png  export a recipe frame
+  effect-recipe check [id|file.json] [--chrome executable] [--out report.json]  compare WebGL preview with PNG export
   effect inspect <scene> --at x,y [--t seconds] [--out report.json]   trace a rendered pixel to its material response and contact
   palette fit <fit.json> [--format png|data] [--tile]   fit two approved swatches and preview at native size
   palette dither-review <fit.json> [--out directory]   compare approved pairs and flag strong texture
@@ -623,6 +627,10 @@ art options: --palette-remap off --color-curves off --lut <file.cube|file.json|o
 
 These entries are checked against their command dispatchers. Where a dispatcher declares its accepted options, those appear alongside the command.
 
+- `ink-studio effect-recipe check` · `--chrome`, `--out` · [source](../../cli/effect-recipes.js)
+- `ink-studio effect-recipe open` · `--out` · [source](../../cli/effect-recipes.js)
+- `ink-studio effect-recipe render` · `--inputs`, `--sample`, `--out` · [source](../../cli/effect-recipes.js)
+- `ink-studio effect-recipe search` · `--input`, `--renderer`, `--json` · [source](../../cli/effect-recipes.js)
 - `ink-studio graph batch` · `--inputs`, `--at`, `--seed`, `--out`, `--json`, `--resume`, `--progress`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries` · [source](../../cli/graph-cli.js)
 - `ink-studio graph capture` · `--out`, `--adapters`, `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio graph clip` · `--inputs`, `--seed`, `--out`, `--output`, `--from`, `--to`, `--fps`, `--warmup`, `--cuts`, `--clock`, `--format`, `--render-options`, `--capture-options`, `--json`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries` · [source](../../cli/graph-cli.js)

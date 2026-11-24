@@ -120,6 +120,7 @@ All checked-in guides, indexed by title and section headings.
 - [Editable simulation inputs](../editable-simulation-inputs.md)
 - [Editable effect clips](../effect-clips.md)
 - [Effect palette ramps](../effect-palettes.md)
+- [Effect recipe library](../effect-recipes.md)
 - [Traveling emission bands](../emission-bands.md)
 - [Engraving and tonal art maps](../engraving.md)
 - [Environment inspection](../environment-inspector.md)
