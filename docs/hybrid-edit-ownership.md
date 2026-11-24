@@ -153,3 +153,10 @@ card with depth and normals. It then supplies revised atlas and fringe
 snapshots independently. The comparison has the live asset in its top
 row and the baked card below. The rebuild report shows which outputs each
 step replaced, and the cut receipt records the authored destination.
+
+To replay the exported cut preview with the CLI, run this from the output
+directory.
+
+```sh
+ink-studio pixel-art preview pixel-document.json cut-patch.json --scene scene.json --exact
+```

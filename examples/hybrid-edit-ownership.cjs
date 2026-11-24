@@ -127,7 +127,10 @@ function run(dir) {
     return { solid: { value: solid, revision: { shape, coverage: shape } },
       enamel: { value: enamel, revision: pigment }, fringe: { value: fibers, revision: detail } };
   }
-  const source = ink.createSceneEditor(scene), editor = ink.createPixelEditor(document, { sceneEditor: source });
+  const sceneRef = 'scene.json';
+  const portableDocument = { ...document, sceneBindings: document.sceneBindings.map(binding => ({ ...binding, scene: sceneRef })) };
+  const source = ink.createSceneEditor(scene);
+  const editor = ink.createPixelEditor(portableDocument, { sceneEditor: source, sceneRef });
   const before = source.snapshot(), rust = atlas(false), teal = atlas(true), full = fringe(35), trimmed = fringe(16);
   const initial = snapshot(before, 0, rust, 0, full, 0);
   const address = { object: 'relay', part: 'housing', channel: 'shape' };
@@ -168,7 +171,7 @@ function run(dir) {
   json('ownership', manifest);
   json('scene', scene);
   json('route', route);
-  json('pixel-document', document);
+  json('pixel-document', portableDocument);
   json('cut-patch', patch);
   json('cut-preview', preview);
   json('cut-receipt', receipt);
