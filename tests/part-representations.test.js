@@ -125,11 +125,15 @@ test('edited splat parts stay live while unedited parts use their distant cards'
   assert(frame.passes.partId.some((part, i) => part === hood && frame.passes.surfaceKind[i] === 3));
   assert(!frame.passes.partId.some((part, i) => part === hood && frame.passes.surfaceKind[i] === 4));
 
+  const baked = ink.bakeSplatFit(world, splatFit);
+  ink.render(baked, { ...view, dist: 13, spriteReconstructionFrame: value => { plan = value; } });
+  assert.equal(plan.states.find(state => state.part === 'hood').reason, 'source-edited');
+
   const { spriteAtlas } = require('../cli/sprite-atlas.js');
   const atlas = spriteAtlas(world, { width: 24, height: 24, directions: 1, pivot: [1.12, 0, 0],
     view: { raw: true, splatFit, pixelSelection: { object: 'signal', part: 'hood', isolated: true } } });
   assert.match(atlas.metadata.splatFitRevision, /^[a-f0-9]{64}$/);
-  rows[2].sprite.asset = api.asset({ atlas, range: [4, 8] });
+  rows[2].sprite.asset = api.asset({ atlas: require('../src/atlas-sprites.js').compile(atlas), range: [4, 8] });
   api.bindParts(world, rows);
   const fresh = ink.render(world, { ...view, dist: 13, splatFit, spriteReconstructionFrame: value => { plan = value; } });
   assert.equal(plan.states.find(state => state.part === 'hood').sprite, 1);

@@ -12,6 +12,7 @@ const source = Symbol('splat fit source');
 const footprintRows = Symbol('edited footprint rows');
 const rowAttributes = Symbol('edited splat attributes');
 const sourceTopology = Symbol('source splat topology');
+const bakedFit = Symbol('baked splat fit');
 const baseWorld = world => world[source] ?? world;
 
 const format='ink-studio/splat-fit';
@@ -356,7 +357,11 @@ function bake(world,asset=world.look?.splatFit) {
     const {styles,indices}=rendered.splatFootprints;
     result.splatFootprints=Footprints.layout(rendered.count,styles,indices,frames);
   }
-  if (fit.editedRows) result.splatLodProtected=fit.editedRows;
+  if (fit.editedRows) {
+    result.splatLodProtected = Uint8Array.from(fit.editedRows, (edited, i) => edited || rendered.splatLodProtected?.[i] || 0);
+    result[bakedFit] = { revision: fit.revision, retainGeometry: editedSubjects(rendered,fit) };
+  }
+  if (fit.emission) result.splatBakedEmission = new Map([...(world.splatBakedEmission ?? []), ...fit.emission]);
   delete result.renderSdfs;
   delete result.referenceSdfs;
   return keep.length===rendered.count ? result : Provenance.subset(result,keep);
@@ -364,7 +369,7 @@ function bake(world,asset=world.look?.splatFit) {
 
 const subjectLookups = new WeakMap();
 function editedSubjects(world,fit) {
-  if (!fit?.editedRows) return;
+  if (!fit?.editedRows) return world[bakedFit]?.retainGeometry;
   if (subjectLookups.has(fit)) return subjectLookups.get(fit);
   const before=Targets.index(sourceWorld(world,fit)).row, after=Targets.index(world).row;
   const objects=new Set(), parts=new Set();
@@ -385,6 +390,10 @@ function editedSubjects(world,fit) {
   return includes;
 }
 
+function sourceRevision(world, asset) {
+  return prepare(world,asset)?.revision ?? world[bakedFit]?.revision;
+}
+
 function editedFootprint(world,row) {
   return world[footprintRows]?.[row] ? footprintAt(world.splatFootprints,row) : undefined;
 }
@@ -395,4 +404,4 @@ function lifecycle(world,row) {
 }
 
 const editedAttributes = (world,row) => world[rowAttributes]?.get(row);
-module.exports={format,prepare,bake,editedSubjects,topologyEditable,sourceWorld,lifecycle,editedAttributes,footprintAt,footprintFor,editedFootprint,eligible,paintable,sceneId,rgb24,unit,pigmentAt,validEmission,roughnessAt,materialProfiles,renderWorld,baseWorld};
+module.exports={format,prepare,bake,editedSubjects,sourceRevision,topologyEditable,sourceWorld,lifecycle,editedAttributes,footprintAt,footprintFor,editedFootprint,eligible,paintable,sceneId,rgb24,unit,pigmentAt,validEmission,roughnessAt,materialProfiles,renderWorld,baseWorld};

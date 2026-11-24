@@ -44,9 +44,7 @@ bool spriteGeometry(int code, vec2 at) {
         limits[0] <= 0 || limits[1] <= limits[0])
       throw new RangeError(projectedRange === undefined ? 'Sprite reconstruction needs increasing positive near and far distances' :
         'Sprite reconstruction needs an increasing positive projected texel range');
-    const splatFitRevision = atlas?.metadata?.splatFitRevision;
-    if (splatFitRevision !== undefined && !/^[a-f0-9]{64}$/.test(splatFitRevision))
-      throw new TypeError('Invalid sprite atlas splat fit revision');
+    const { splatFitRevision } = source;
     const result = Object.freeze({ atlas:source, ...(splatFitRevision && {splatFitRevision}), [projectedRange===undefined ? 'range' : 'projectedRange']:Object.freeze(limits.slice()) });
     assets.add(result);
     return result;

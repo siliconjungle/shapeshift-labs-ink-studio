@@ -135,11 +135,13 @@ const AtlasSprites = (() => {
     const { metadata:m,images }=source??{};
     const { width,height,scenery:painted,frames=painted===undefined?undefined:[{rect:{x:0,y:0,width,height}}],
       encodings={},normalSpace=typeof encodings.normal==='string'?'asset':'view',
-      emissionMode=typeof encodings.emission==='string'?'baked':'add', depthFormat='rgb24',outputPalette }=m??{};
+      emissionMode=typeof encodings.emission==='string'?'baked':'add', depthFormat='rgb24',outputPalette,splatFitRevision }=m??{};
     if (!integer(width,1,8192)||!integer(height,1,8192)||!Array.isArray(frames)||!frames.length||frames.length>32768)
       throw new RangeError('Sprite atlas needs valid dimensions and view frames');
     if (!['view','asset'].includes(normalSpace)||!['baked','add'].includes(emissionMode)||!['rgb24','gray'].includes(depthFormat))
       throw new RangeError('Invalid sprite atlas map encoding');
+    if (splatFitRevision !== undefined && (typeof splatFitRevision !== 'string' || !/^[a-f0-9]{64}$/.test(splatFitRevision)))
+      throw new TypeError('Invalid sprite atlas splat fit revision');
     const cutoutMipmaps=cutouts.prepare(m.cutoutMipmaps), viewBlend=reprojection.mode(m.viewBlend);
     if (cutoutMipmaps && painted !== undefined) throw new TypeError('Cutout mipmaps need a card or impostor atlas');
     if (outputPalette!==undefined && (!Array.isArray(outputPalette) || !outputPalette.length || outputPalette.length>64 ||
@@ -327,7 +329,7 @@ const AtlasSprites = (() => {
       ...(transition&&{transition:transition.frame}),
       ...(transition?.silhouetteIds.length&&{silhouettes:transition.silhouetteIds,
         silhouette:(view,time,id)=>transition.silhouetteIds.includes(id) ? transition.frame(view,time,id) : null}),
-      playback, viewBlend,
+      playback, viewBlend, ...(splatFitRevision && {splatFitRevision}),
       ...(maps.depth && !scenery && { reproject(primary,direction,options) {
         const views=groups.get(primary.frame).map(view=>edits?.held.get(view)??view);
         return reprojection.resolve(this,primary,views,direction,{...options,basis});

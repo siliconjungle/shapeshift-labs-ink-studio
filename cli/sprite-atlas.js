@@ -70,7 +70,7 @@ function spriteAtlas(world, options = {}) {
       (pose !== undefined && typeof pose !== 'function'))
     throw new RangeError('Invalid sprite atlas dimensions, timing, directions, pivot or maps');
   const view = {protectedPixels:false,...authoredView};
-  const splatFitRevision = SplatFit.prepare(world,view.splatFit ?? world.look?.splatFit)?.revision;
+  const splatFitRevision = SplatFit.sourceRevision(world,view.splatFit ?? world.look?.splatFit);
   const requested = [...new Set(maps)], viewBlend=AtlasSprites.viewBlend(authoredBlend);
   const depthReprojection=viewBlend==='depth-reprojected';
   if (depthReprojection && (!requested.includes('depth') || width*height>AtlasSprites.reprojectionPixelLimit))

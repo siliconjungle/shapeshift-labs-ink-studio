@@ -2083,8 +2083,9 @@ function renderFrame(world, o, preparedPalettes) {
     const value=fitted.pigment[row];
     return value ? RenderStages.unpack(value-1) : undefined;
   });
-  const splatEmission = fitted?.emission && new Map();
-  for (const [i,linear] of fitted?.emission ?? []) {
+  const emissionEdits = fitted?.emission ?? world.splatBakedEmission;
+  const splatEmission = emissionEdits && new Map();
+  for (const [i,linear] of emissionEdits ?? []) {
     const display=texelEmissionDisplay(linear.map(n=>Math.min(1,n)));
     const tint=emissionCurve ? LightingChannels.emission(emissionCurve,display) : display;
     if (!world.renderMetadata?.muteEmission?.[i] && tint.some(Boolean))

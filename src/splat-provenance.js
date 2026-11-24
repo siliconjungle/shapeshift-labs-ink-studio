@@ -229,6 +229,11 @@ const SplatProvenance = (() => {
     }
     const remap = new Map(indices.map((source, i) => [source, i]));
     if (world.curveLod) result.curveLod = curveLod(world.curveLod, i => remap.get(i));
+    if (world.splatBakedEmission) {
+      result.splatBakedEmission = new Map();
+      for (const [source, linear] of world.splatBakedEmission)
+        if (remap.has(source)) result.splatBakedEmission.set(remap.get(source), linear);
+    }
     function take(source, stride, Type) {
       const out = new Type(indices.length * stride);
       for (let i = 0; i < indices.length; i++) out.set(source.subarray(indices[i] * stride, (indices[i] + 1) * stride), i * stride);
