@@ -414,7 +414,7 @@ const SceneMeshes = (() => {
     return trace;
   }
 
-  function projector(mesh,{at,normal,up,size,depth},{V,procedural:{spatial}}) {
+  function projector(mesh,{at,normal,up,size,depth,minFacing=.25},{V,procedural:{spatial}}) {
     const {rest,indices}=read(mesh), right=V.cross(up,normal), faces=[];
     const points=Array.from({length:rest.length/3},(_,i)=>{
       const p=V.sub(rest.subarray(i*3,i*3+3),at);
@@ -434,7 +434,10 @@ const SceneMeshes = (() => {
       index([V.dot(p,right),V.dot(p,up),0],row=>candidates.push(row.f));
       candidates.sort((a,b)=>a-b);
       return intersect(mesh,{origin:V.mad(point,normal,depth),direction,maxDistance:depth*2},
-        {V,rayBox:spatial.rayBox,restSpace:true,candidates},hit=>V.dot(hit.normal,normal)>.25);
+        {V,rayBox:spatial.rayBox,restSpace:true,candidates},hit=>{
+          const cosine=V.dot(hit.normal,normal);
+          return cosine>0 && cosine>=minFacing;
+        });
     };
   }
 
@@ -445,13 +448,16 @@ const SceneMeshes = (() => {
     return {p:[0,1,2].map(k=>a[k]*weights[0]+b[k]*weights[1]+c[k]*weights[2]),n:V.norm(area)};
   }
 
-  function clipUV(mesh, {min,max,material}) {
-    if (![min,max].every(point=>Array.isArray(point)&&point.length===2&&Array.from(point).every(Number.isFinite)) ||
-        !max.every((value,k)=>value-min[k]>=1e-8))
+  function clipUV(mesh, {min,max,material,clip:limit}) {
+    const valid=(min,max)=>[min,max].every(point=>Array.isArray(point)&&point.length===2&&Array.from(point).every(Number.isFinite)) &&
+        max.every((value,k)=>value-min[k]>=1e-8);
+    if (!valid(min,max) || limit!==undefined&&!valid(limit?.min,limit?.max))
       throw new RangeError('Mesh UV clipping needs a finite ordered rectangle');
     const {indices,uvs,rest,materials,faceMaterials}=read(mesh), slot=materials.indexOf(material);
     if (material!==undefined && slot<0) throw new RangeError('Unknown mesh material '+material);
     const points=[], texture=[], triangles=[], anchors=[];
+    const lo=limit ? min.map((n,k)=>Math.max(n,limit.min[k])) : min;
+    const hi=limit ? max.map((n,k)=>Math.min(n,limit.max[k])) : max;
     function clip(polygon,axis,edge,sign) {
       const result=[];
       for (let i=0;i<polygon.length;i++) {
@@ -465,13 +471,14 @@ const SceneMeshes = (() => {
       }
       return result;
     }
-    for (let face=0;face<mesh.triangles;face++) {
+    const count=hi.every((n,k)=>n>lo[k]) ? mesh.triangles : 0;
+    for (let face=0;face<count;face++) {
       if (slot>=0 && (faceMaterials?.[face]??0)!==slot) continue;
       const vertices=Array.from(indices.subarray(face*3,face*3+3));
       let polygon=vertices.map((i,j)=>({uv:[uvs[i*2],uvs[i*2+1]],weights:[0,1,2].map(k=>Number(j===k))}));
-      if ([0,1].some(axis=>polygon.every(({uv})=>uv[axis]<min[axis]) || polygon.every(({uv})=>uv[axis]>max[axis])))
+      if ([0,1].some(axis=>polygon.every(({uv})=>uv[axis]<lo[axis]) || polygon.every(({uv})=>uv[axis]>hi[axis])))
         continue;
-      for (let k=0;k<2;k++) polygon=clip(clip(polygon,k,min[k],1),k,max[k],-1);
+      for (let k=0;k<2;k++) polygon=clip(clip(polygon,k,lo[k],1),k,hi[k],-1);
       if (polygon.length<3) continue;
       const root=anchors.length, [a]=polygon;
       const faces=[];

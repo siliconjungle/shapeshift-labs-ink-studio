@@ -271,7 +271,10 @@
   }
   DIO.surfaceChart = (solid,frame) => {
     const project = K.procedural.surfaceState.projection(solid.surfaceState,{coordinatesOnly:true}), space = solidSpace(solid,frame);
-    return space ? (point,normal)=>project(space.inverse(point),space.inverseDirection(normal)) : project;
+    if (!space) return project;
+    const locate = (point,normal)=>project(space.inverse(point),space.inverseDirection(normal));
+    locate.inspect = (chart,point,normal)=>project.inspect(chart,space.inverse(point),space.inverseDirection(normal));
+    return locate;
   };
   DIO.solidTransform = solidTransform;
   const lev = (a, b) => {

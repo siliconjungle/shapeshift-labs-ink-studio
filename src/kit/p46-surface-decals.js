@@ -49,28 +49,40 @@
   }
 
   function restAnchor(a) {
-    need(fields(a,['object','part','node','socket','at','normal','up','size','depth','bias','maxStep']),
+    need(fields(a,['object','part','node','socket','at','normal','up','size','depth','bias','maxStep','minFacing']),
       'an anchor needs a part-local projector');
-    const {at,normal,up=[0,1,0],size,depth=.12,bias=.002}=a;
+    const {at,normal,up=[0,1,0],size,depth=.12,bias=.002,minFacing}=a;
     const maxStep=a.maxStep??Math.max(size?.[0]??1,size?.[1]??1)*.25;
     need(vector(at,3,n=>range(n,-1e6,1e6)) && vector(normal,3,n=>range(n,-1e6,1e6)) &&
       vector(up,3,n=>range(n,-1e6,1e6)) && V.len(normal)>1e-7 && V.len(V.cross(normal,up))>1e-7 &&
       vector(size,2,n=>range(n,.001,1000)) && range(depth,.001,100) && range(bias,0,depth) &&
       range(maxStep,.0001,2000),'invalid projector axes, size, depth, bias or maxStep');
+    need(minFacing===undefined||range(minFacing,1e-6,1),'a projection facing cosine must be greater than zero and at most one');
     const attachment=a.node===undefined ? null : hierarchy.reference({node:a.node,...(a.socket!==undefined && {socket:a.socket})});
     need(a.socket===undefined || attachment,'a socket needs an anchor node');
     const n=V.norm(normal), right=V.norm(V.cross(up,n));
-    return {...target(a),...attachment,at:at.slice(),normal:n,up:V.cross(n,right),size:size.slice(),depth,bias,maxStep};
+    return {...target(a),...attachment,at:at.slice(),normal:n,up:V.cross(n,right),size:size.slice(),depth,bias,maxStep,
+      ...(minFacing!==undefined&&{minFacing})};
   }
 
   function uvAnchor(a) {
-    need(fields(a,['object','part','uv','material','bias']) && fields(a.uv,['min','max']),
+    need(fields(a,['object','part','uv','material','bias','chart']) && fields(a.uv,['min','max']),
       'a mesh UV anchor needs a receiver and a UV rectangle');
-    const {uv:{min,max},material,bias=.002}=a;
+    const {uv:{min,max},material,bias=.002,chart}=a;
     need([min,max].every(point=>vector(point,2,n=>range(n,-256,257))) &&
       max.every((n,k)=>n-min[k]>=1e-8) && min.every((n,k)=>n<1&&max[k]>0) &&
       (material===undefined||label(material)) && range(bias,0,1),'invalid UV extent, material or bias');
-    return {...target(a),uv:{min:min.slice(),max:max.slice()},...(material!==undefined&&{material}),bias};
+    let bounds;
+    if (chart!==undefined) {
+      need(fields(chart,['min','max','padding']) && [chart.min,chart.max].every(p=>vector(p,2,k=>range(k,0,1))),
+        'a mesh brush chart needs unit UV bounds');
+      const {min,max,padding=[0,0]}=chart;
+      need(vector(padding,2,n=>range(n,0,.5)) && max.every((n,k)=>n-min[k]-2*padding[k]>=1e-8),
+        'mesh brush padding must leave a writable UV rectangle');
+      bounds={min:min.slice(),max:max.slice(),padding:padding.slice()};
+    }
+    return {...target(a),uv:{min:min.slice(),max:max.slice()},...(material!==undefined&&{material}),bias,
+      ...(bounds&&{chart:bounds})};
   }
 
   function fromBrush({id,tip,anchor,pixelSize,grid,opacity,lifetime}={}) {
@@ -142,7 +154,8 @@
       if (!a.uv) return buildEntry(spec,group);
       const mesh=group.sources.get('mesh')?.mesh;
       need(mesh,'a UV decal needs an indexed mesh receiver');
-      const geometry=meshes.clipUV(mesh,{...a.uv,material:a.material});
+      const chart=a.chart, clip=chart&&{min:chart.min.map((n,k)=>n+chart.padding[k]),max:chart.max.map((n,k)=>n-chart.padding[k])};
+      const geometry=meshes.clipUV(mesh,{...a.uv,material:a.material,clip});
       uvTriangles+=geometry.triangles.length/3;
       need(uvTriangles<=32768,'the UV decal bundle exceeds 32768 clipped triangles');
       return {spec,group,geometry,triangles:0,
@@ -270,8 +283,8 @@
     const surface=typeof field?.current==='function' ? field.current() : field;
     let projection=entry.projections.get(receiver);
     if (!projection || projection.surface!==surface) {
-      const normal=a.normal, direction=V.mul(normal,-1);
-      const adapter=surface ? CurveGrowth.sdfSurface({field:surface,reach:a.depth,minFacing:.25}) : undefined;
+      const normal=a.normal, direction=V.mul(normal,-1), minFacing=a.minFacing??.25;
+      const adapter=surface ? CurveGrowth.sdfSurface({field:surface,reach:a.depth,minFacing}) : undefined;
       const context=adapter?.context({});
       const meshProject=kind==='mesh' && meshes.projector(receiver.mesh,a,K);
       const picker=kind==='splats' && splatPicker(receiver);
@@ -285,10 +298,14 @@
         const normals=receiver.source.renderMetadata?.normals;
         function outward(i) {
           const vector=normals && normals.subarray(i*3,i*3+3);
-          return vector && V.len(vector)>.5 ? V.norm(vector) : normal;
+          return vector && V.len(vector)>.5 ? V.norm(vector) : a.minFacing===undefined ? normal : null;
         }
         const hit=picker.ray({...ray,meshes:false,brickMeshes:false,water:false,threshold:.12,
-          accept:row=>row.kind==='splat' && row.alpha>=.12 && V.dot(normal,outward(row.index))>.25}).dominant;
+          accept:row=>{
+            if (row.kind!=='splat' || row.alpha<.12) return false;
+            const n=outward(row.index);
+            return !!n && V.dot(normal,n)>=minFacing;
+          }}).dominant;
         return hit && {p:hit.point,n:outward(hit.index)};
       });
       projection={surface,rows,depth:rows.map(hit=>hit && V.dot(hit.p,normal))};

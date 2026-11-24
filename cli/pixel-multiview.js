@@ -14,6 +14,8 @@ const files = require('./asset-files.js');
 const { indexedValue } = require('./pixel-edit-destinations.js');
 
 const format = 'ink-studio/pixel-multiview';
+const backface=1, grazing=2, depthLimit=3, padding=4, otherChart=5;
+const reasons=['','backface','grazing-angle','projection-depth','protected-chart-padding','different-chart'];
 const id = value=>typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value);
 const integer = (value,min,max)=>Number.isSafeInteger(value) && value >= min && value <= max;
 const record = value=>value && Object.getPrototypeOf(value) === Object.prototype;
@@ -30,8 +32,22 @@ const compareName = (a,b)=>a<b ? -1 : Number(a>b);
 const cameraKey = ({sourceView:{camera,frame}})=>JSON.stringify([camera.matrix,camera.focal,camera.orthographic,
   camera.near,camera.far,frame.time,frame.poseTime,frame.cameraTime,frame.skyTime]);
 
-function prepare(raw,design,binding) {
-  if (!keys(raw,['format','version','id','destination','frame','size','resolve','overrides','views','sourceRevision','documentRevision']) ||
+function projectionSettings(raw,size,chart,api) {
+  const {minFacing=.15,maxDepth,padding=[0,0]}=raw ?? {};
+  if (raw!==undefined && !keys(raw,['minFacing','maxDepth','padding']) ||
+      !Number.isFinite(minFacing)||minFacing<0||minFacing>1 ||
+      maxDepth!==undefined && (!Number.isFinite(maxDepth)||maxDepth<=0||maxDepth>1e4) ||
+      !Array.isArray(padding)||padding.length!==2 ||
+      !Array.from(padding).every((n,k)=>integer(n,0,Math.floor((size[k]-1)/2))))
+    throw new RangeError('Projection needs a facing cosine, optional positive depth, and two padding insets that leave chart cells');
+  const bounds=api.editBounds(chart), depth=Math.min(chart.depth??.035,maxDepth??Infinity);
+  const inset=padding.map((n,k)=>Math.max(n,Math.ceil(bounds.min[k]*size[k]-1e-10)));
+  return {minFacing,maxDepth:depth,chartFacing:chart.minFacing??.5,padding,inset,
+    stamp:{maxDepth:depth,frontOnly:true}};
+}
+
+function prepare(raw,design,binding,chart,api) {
+  if (!keys(raw,['format','version','id','destination','frame','size','resolve','overrides','views','sourceRevision','documentRevision','projection']) ||
       raw.format !== format || raw.version !== 1 || !id(raw.id) || !Array.isArray(raw.views) ||
       !integer(raw.views.length,2,16) || !Array.isArray(raw.size) || raw.size.length !== 2 ||
       !integer(raw.size[0],1,256) || !integer(raw.size[1],1,128) ||
@@ -60,8 +76,7 @@ function prepare(raw,design,binding) {
     }
     return { ...sample,approved,weight,marks };
   });
-  if (!views.some(view=>view.approved && view.marks.length))
-    throw new RangeError('Approve at least one view with marks');
+  const inspecting = !views.some(view=>view.approved && view.marks.length);
   const overrides = new Map(), [w,h] = raw.size;
   if (raw.overrides !== undefined && !Array.isArray(raw.overrides)) throw new TypeError('Multiview overrides need a list');
   for (const row of raw.overrides ?? []) {
@@ -71,13 +86,16 @@ function prepare(raw,design,binding) {
       throw new TypeError('A conflict override needs a unique chart cell, approved view ID and document pixel');
     overrides.set(row.cell[1]*w+row.cell[0],row);
   }
-  return { views,overrides,grid,size:raw.size,policy:raw.resolve ?? 'review' };
+  return { views,overrides,grid,size:raw.size,policy:raw.resolve ?? 'review',inspecting,
+    projection:projectionSettings(raw.projection,raw.size,chart,api) };
 }
 
-function inspectFrame(frame,binding,chart,locate,[width,height]) {
+function inspectFrame(frame,binding,chart,locate,{size:[width,height],projection}) {
   const { w,h,passes,sourceView } = frame, eye = fromView(sourceView.camera.matrix);
-  const cell = new Int32Array(w*h).fill(-1), facing = new Float32Array(w*h);
-  const adjacentChart = new Uint8Array(w*h), owner = new Uint8Array(w*h);
+  const cell = new Int32Array(w*h).fill(-1), mapped = cell.slice(), facing = new Float32Array(w*h);
+  const chartFacing = new Float32Array(w*h), distance = new Float32Array(w*h);
+  const blocked = new Uint8Array(w*h), padded = new Uint8Array(w*h), owner = new Uint8Array(w*h);
+  const {minFacing,maxDepth,chartFacing:restFacing,inset:[padX,padY]}=projection;
   const inScope = hit=>hit && Targets.objectScope(binding,hit);
   const splatRows = new Map(passes.splatSources?.slice(1).map(hit=>[hit.renderRow,hit]));
   for (let p=0; p<cell.length; p++) {
@@ -95,19 +113,29 @@ function inspectFrame(frame,binding,chart,locate,[width,height]) {
     const worldNormal = surface?.geometricNormal && unit(surface.geometricNormal);
     if (!source || !normal || !worldNormal) continue;
     const toEye = sourceView.camera.orthographic ? eye.back : unit(eye.eye.map((n,i)=>n-surface.position[i]));
-    if (!toEye || !(dot(worldNormal,toEye) > .15)) continue;
+    if (!toEye) continue;
     const direct = source.kind === 'mesh' && source.chart === chart && source.uv;
-    const hit = direct ? { chart,uv:source.uv } : source.rest && locate(source.rest,normal);
-    if (!hit) continue;
-    if (hit.chart !== chart) {
-      adjacentChart[p] = 1;
+    const assigned = direct ? { chart,uv:source.uv,distance:0,facing:1 } : source.rest && locate(source.rest,normal);
+    if (assigned && assigned.chart !== chart) {
+      blocked[p]=otherChart;
       continue;
     }
-    const [u,v] = hit.uv;
-    cell[p] = Math.min(height-1,Math.floor((1-v)*height))*width+Math.min(width-1,Math.floor(u*width));
-    facing[p] = dot(worldNormal,toEye);
+    const hit=assigned || source.rest && locate.inspect(chart,source.rest,normal);
+    if (!hit) continue;
+    const [u,v] = hit.uv, x=Math.min(width-1,Math.floor(u*width)), y=Math.min(height-1,Math.floor((1-v)*height));
+    const cosine=dot(worldNormal,toEye);
+    mapped[p] = y*width+x;
+    facing[p] = cosine;
+    chartFacing[p]=hit.facing;
+    distance[p]=hit.distance;
+    padded[p]=Number(x<padX || x>=width-padX || y<padY || y>=height-padY);
+    if (cosine<=0 || hit.facing<=0) blocked[p]=backface;
+    else if (cosine<minFacing || hit.facing<restFacing) blocked[p]=grazing;
+    else if (hit.distance>maxDepth+1e-8) blocked[p]=depthLimit;
+    else if (padded[p]) blocked[p]=padding;
+    else if (assigned) cell[p]=mapped[p];
   }
-  return { w,h,cell,owner,facing,adjacentChart };
+  return { w,h,cell,mapped,owner,facing,chartFacing,distance,blocked,padded,chartSize:[width,height] };
 }
 
 function markValue(mark,definition,palette,api) {
@@ -135,9 +163,11 @@ function addMarks(view,grid,before,binding,design,definition,api,protect,candida
     const index = sourceAt ? sourceAt[1]*before.w+sourceAt[0] : -1, cell = before.cell[index];
     const hidden = Bindings.staleAt(binding,mark.at) ? 'stale-binding-pixel' :
       protect(mark.at) ?? (!sourceAt ? 'outside-registration' :
-        cell < 0 ? before.owner[index] ? 'unverified-chart-hit' : 'outside-visible-target' : null);
+        cell < 0 ? reasons[before.blocked[index]] || (before.owner[index] ? 'unverified-chart-hit' : 'outside-visible-target') : null);
     if (hidden) {
-      rejected.push({ at:mark.at,sourceAt:sourceAt ?? null,reason:hidden });
+      rejected.push({ at:mark.at,sourceAt:sourceAt ?? null,reason:hidden,
+        ...(before.mapped[index]>=0&&{cell:xy(before.mapped[index],before.chartSize[0]),
+          facing:before.facing[index],chartFacing:before.chartFacing[index],distance:before.distance[index]}) });
       continue;
     }
     if (!candidates.has(cell)) candidates.set(cell,[]);
@@ -163,14 +193,15 @@ function resolveCells(candidates,plan) {
   return { chosen,conflicts };
 }
 
-function stamps(chosen,[w,h]) {
+function stamps(chosen,[w,h],projection) {
   const swatches = new Map();
   for (const [cell,{ value }] of chosen) {
     const key = JSON.stringify(value);
     if (!swatches.has(key)) swatches.set(key,{value,cells:new Set()});
     swatches.get(key).cells.add(cell);
   }
-  return [...swatches.values()].map(({value,cells})=>({ value,brush:{ kind:'bitmap',min:[0,0],max:[1,1],
+  return [...swatches.values()].map(({value,cells})=>({ value,projection,
+    brush:{ kind:'bitmap',min:[0,0],max:[1,1],
     rows:Array.from({length:h},(_,y)=>Array.from({length:w},(_,x)=>cells.has(y*w+x) ? '#' : '.').join('')) } }));
 }
 
@@ -189,7 +220,8 @@ function channelEvidence(frame,channel) {
 }
 
 function diagnostics(before,after,chosen,contested,rejected,channel) {
-  const { w,h } = before, masks = { changed:[],seams:[],chartEdges:[],bleed:[],conflict:[],rejected:[] };
+  const { w,h,chartSize:[width,height],mapped,blocked,padded } = before;
+  const masks = { changed:[],seams:[],chartEdges:[],padding:[],grazing:[],backfaces:[],depthLimit:[],bleed:[],conflict:[],rejected:[] };
   const skipped = new Set(rejected.flatMap(row=>row.sourceAt ? [row.sourceAt[1]*w+row.sourceAt[0]] : []));
   for (let p=0; p<w*h; p++) {
     const sample = chosen.get(before.cell[p]), {bytes,stride,depth} = before.evidence;
@@ -203,9 +235,17 @@ function diagnostics(before,after,chosen,contested,rejected,channel) {
     }
     if (contested.has(before.cell[p])) masks.conflict.push(p);
     if (skipped.has(p)) masks.rejected.push(p);
-    if (!sample) continue;
+    if (!sample && mapped[p]<0) continue;
     const x = p%w, neighbors = [x>0 ? p-1 : -1,x+1<w ? p+1 : -1,p-w,p+w];
-    if (neighbors.some(q=>before.adjacentChart[q])) masks.chartEdges.push(p);
+    if (mapped[p]>=0) {
+      const [u,v]=xy(mapped[p],width), rim=u===0||v===0||u===width-1||v===height-1;
+      if (neighbors.some(q=>q>=0 && q<w*h && (blocked[q]===otherChart || rim&&mapped[q]<0))) masks.chartEdges.push(p);
+      if (padded[p]) masks.padding.push(p);
+      if (blocked[p]===grazing) masks.grazing.push(p);
+      if (blocked[p]===backface) masks.backfaces.push(p);
+      if (blocked[p]===depthLimit) masks.depthLimit.push(p);
+    }
+    if (!sample) continue;
     if (neighbors.some(q=>{
       const other = chosen.get(before.cell[q]);
       return other && other.view !== sample.view && JSON.stringify(other.value) !== JSON.stringify(sample.value);
@@ -220,8 +260,8 @@ function png(frame,view) {
   return PNG.encode(width,height,rgba,4).toString('base64');
 }
 
-function review(raw,design,{ binding,destination,source,solid,definition,api },{ render,preview,revision,frame,protect,includeImages }) {
-  const plan = prepare(raw,design,binding);
+function review(raw,design,{ binding,destination,source,solid,target,definition,api },{ render,preview,revision,frame,protect,includeImages }) {
+  const plan = prepare(raw,design,binding,target,api);
   if (raw.documentRevision !== undefined && raw.documentRevision !== revision)
     throw new RangeError('Multiview approvals were recorded against a different pixel document revision');
   if (raw.sourceRevision !== undefined && raw.sourceRevision !== source.sourceRevision)
@@ -230,12 +270,12 @@ function review(raw,design,{ binding,destination,source,solid,definition,api },{
   const locate = KIT.diorama.surfaceChart(solid,makeBuilder(0,[0]).frame), candidates = new Map();
   const capture = render();
   const baseline = plan.views.map((view,i)=>{
-    const rendered = capture(view,i,plan.grid), before = inspectFrame(rendered,binding,destination.chart,locate,plan.size);
+    const rendered = capture(view,i,plan.grid), before = inspectFrame(rendered,binding,destination.chart,locate,plan);
     before.evidence = channelEvidence(rendered,destination.channel);
     const marks = addMarks(view,[design.width,design.height],before,binding,design,definition,api,protect,candidates);
     return { view,before,marks,key:cameraKey(rendered),...(includeImages && { png:png(rendered,view) }) };
   });
-  const { chosen,conflicts } = resolveCells(candidates,plan), projected = stamps(chosen,plan.size);
+  const { chosen,conflicts } = resolveCells(candidates,plan), projected = stamps(chosen,plan.size,plan.projection.stamp);
   const proposed = projected.length && { id:raw.id,frame,destination:raw.destination,revision,
     sourceRevision:source.sourceRevision,operation:{ stamps:projected } };
   const candidate = proposed && preview(proposed), amended = candidate ? render(candidate) : capture;
@@ -245,7 +285,7 @@ function review(raw,design,{ binding,destination,source,solid,definition,api },{
     const rendered = candidate && amended(view,i,plan.grid);
     if (rendered && cameraKey(rendered) !== key)
       throw new RangeError('Multiview preview changed the camera or clock for '+view.id);
-    const after = rendered ? inspectFrame(rendered,binding,destination.chart,locate,plan.size) : before;
+    const after = rendered ? inspectFrame(rendered,binding,destination.chart,locate,plan) : before;
     if (rendered) after.evidence = channelEvidence(rendered,destination.channel);
     const finding = diagnostics(before,after,chosen,contested,marks.rejected,destination.channel);
     if (includeImages) images.push({ before:original,after:rendered ? png(rendered,view) : original });
@@ -254,11 +294,12 @@ function review(raw,design,{ binding,destination,source,solid,definition,api },{
   const unresolved = conflicts.filter(row=>!row.winner).length;
   const rejected = views.reduce((total,row)=>total+row.rejected.length,0);
   const ready = !!candidate && !unresolved && !rejected;
+  const {stamp,...projection}=plan.projection;
   return { patch:ready ? proposed : null,images,report:{
     format:'ink-studio/pixel-multiview-report',version:1,scene:binding.scene,binding:binding.id,frame,
     destination:destination.id,chart:destination.chart,channel:destination.channel,grid:plan.grid,size:plan.size,
-    documentRevision:revision,sourceRevision:source.sourceRevision,status:ready ? 'ready' : 'needs-review',
-    resolution:plan.policy,cells:chosen.size,conflicts,unresolved,rejected,views
+    documentRevision:revision,sourceRevision:source.sourceRevision,status:plan.inspecting ? 'inspection' : ready ? 'ready' : 'needs-review',
+    projection,resolution:plan.policy,cells:chosen.size,conflicts,unresolved,rejected,views
   } };
 }
 

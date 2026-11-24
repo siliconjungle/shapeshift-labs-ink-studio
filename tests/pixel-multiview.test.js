@@ -7,6 +7,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { setTimeout:pause } = require('node:timers/promises');
 const { withChrome } = require('../cli/canvas-grid-chrome.js');
+const { KIT } = require('..').load();
 
 const cli = (...args)=>execFileSync(process.execPath,['cli/ink-studio.js','pixel-art',...args],
   { cwd:path.resolve(__dirname,'..'),encoding:'utf8',stdio:['ignore','pipe','pipe'] });
@@ -118,8 +119,84 @@ test('unverified, protected and stale view marks require review before a patch c
   assert.equal(fs.existsSync(file('edit.json')),false);
 });
 
+test('inspection exposes chart edges and padding without paint, and checks signed facing and depth',t=>{
+  const { file,save,scene,plan,assemble } = fixture(t);
+  const face=scene.solids[0].surfaceState.charts.face;
+  Object.assign(face,{padding:[.08,.06],twoSided:true,depth:.08});
+  face.origin[2]=.25;
+  save('scene.json',scene);
+  const [front,quarter,back]=plan.views;
+  Object.assign(back,{camera:{yaw:Math.PI},marks:[mark(39,'cyan')]});
+  for (const view of plan.views) view.approved=false;
+  plan.projection={minFacing:.98,maxDepth:.035,padding:[0,1]};
+  const inspection=assemble('--sdf-assist','on');
+  assert.equal(inspection.status,'inspection');
+  assert.equal(inspection.cells,0);
+  assert.deepEqual(inspection.projection.inset,[1,1]);
+  assert.ok(inspection.views[0].counts.chartEdges>0);
+  assert.ok(inspection.views[0].counts.padding>0);
+  assert.ok(inspection.views[1].counts.grazing>0);
+  assert.ok(inspection.views[2].counts.backfaces>0);
+  assert.throws(()=>assemble('--sdf-assist','on','--patch',file('inspect.json')),error=>error.status===2);
+  assert.ok(!fs.existsSync(file('inspect.json')));
+
+  const [y,x]=inspection.views[0].runs.padding[0];
+  front.marks=[{at:[x,y],swatch:'cyan'},mark(39,'cyan')];
+  for (const view of plan.views) view.approved=true;
+  plan.projection.maxDepth=.01;
+  const depth=assemble('--sdf-assist','on');
+  assert.equal(depth.status,'needs-review');
+  assert.equal(depth.views[0].rejected[1].reason,'projection-depth');
+  assert.ok(depth.views[0].rejected[1].distance>.01);
+  assert.equal(depth.views[1].rejected[0].reason,'grazing-angle');
+  assert.ok(depth.views[1].rejected[0].facing<.98);
+  assert.equal(depth.views[2].rejected[0].reason,'backface');
+  assert.ok(depth.views[2].rejected[0].chartFacing<0);
+  plan.projection.maxDepth=.035;
+  const padded=assemble('--sdf-assist','on');
+  assert.equal(padded.views[0].rejected[0].reason,'protected-chart-padding');
+  assert.equal(padded.views[0].accepted,1);
+});
+
+test('the applied patch preserves authored edge paint and keeps the projected depth and side limits',t=>{
+  const { file,save,read,scene,plan,assemble } = fixture(t);
+  const state=scene.solids[0].surfaceState, face=state.charts.face;
+  const full={kind:'rect',min:[0,0],max:[1,1]};
+  Object.assign(face,{padding:[.08,.06],twoSided:true,depth:.08,
+    stamps:[{channel:'paint',value:'#ee935f',brush:{...full,max:[.08,1]}}]});
+  save('scene.json',scene);
+  plan.views[0].marks=[mark(39,'cyan')];
+  plan.views[1].approved=false;
+  plan.projection={maxDepth:.03,padding:[1,1]};
+  const report=assemble('--sdf-assist','on','--patch',file('edit.json'));
+  assert.equal(report.status,'ready');
+  const [stamp]=read('edit.json').operation.stamps;
+  assert.deepEqual(stamp.projection,{maxDepth:.03,frontOnly:true});
+  cli('edit',file('design.json'),file('edit.json'),'--scene',file('scene.json'),'--out',file('edited.json'));
+  const applied=read('edited.json').solids[0].surfaceState;
+  assert.deepEqual(applied.charts.face.stamps[1].clip,{min:[.08,.06],max:[.92,.94]});
+  assert.deepEqual(applied.charts.face.stamps[0],face.stamps[0]);
+  const atY=stamp.brush.rows.findIndex(row=>row.includes('#')), atX=stamp.brush.rows[atY].indexOf('#');
+  const center=[-.8+1.6*(atX+.5)/8,-.7+1.4*(1-(atY+.5)/8),.23];
+  const locate=KIT.procedural.surfaceState.projection(applied);
+  const sample=(p,normal)=>locate(p,normal)?.values.paint;
+  assert.deepEqual(sample(center,[0,0,1]).color,[0x55,0xdb,0xca].map(n=>n/255));
+  assert.equal(sample([center[0],center[1],.28],[0,0,1]),null);
+  assert.equal(sample(center,[0,0,-1]),null);
+
+  const direct={id:'clear-chart',frame:'art',destination:'paint',revision:report.documentRevision,
+    operation:{stamp:{brush:full,mode:'clear'}}};
+  save('scene.json',read('edited.json'));
+  save('direct.json',direct);
+  cli('edit',file('design.json'),file('direct.json'),'--scene',file('scene.json'),'--out',file('cleared.json'));
+  const cleared=KIT.procedural.surfaceState.projection(read('cleared.json').solids[0].surfaceState);
+  assert.equal(cleared(center,[0,0,1]).values.paint,null);
+  assert.ok(cleared([-.76,0,.23],[0,0,1]).values.paint);
+});
+
 test('the offline review overlays seams and bleed on the held-out view',{skip:!process.env.INK_TEST_CHROME},async t=>{
-  const { directory,file,assemble } = fixture(t);
+  const { directory,file,assemble,plan } = fixture(t);
+  plan.projection={padding:[1,1]};
   const report = assemble('--review',file('review.html'));
   const [y,x] = report.views[2].runs.bleed[0];
   await withChrome(directory,{hardware:true},async browser=>{
@@ -139,5 +216,14 @@ test('the offline review overlays seams and bleed on the held-out view',{skip:!p
     }
     assert.ok(shown);
     assert.match(await browser.evaluate("document.querySelector('#status').textContent"),/0 approved marks.*possible bleed pixels/);
+    assert.ok(report.views[2].runs.padding.length);
+    const [padY,padX]=report.views[2].runs.padding[0];
+    await browser.evaluate("document.querySelector('#overlay').value='padding'; document.querySelector('#overlay').dispatchEvent(new Event('change'))");
+    for (let i=0;i<100;i++) {
+      shown=await browser.evaluate(`document.querySelector('.ink-grid-diagnostic').getContext('2d').getImageData(${padX},${padY},1,1).data[3]`);
+      if (shown) break;
+      await pause(30);
+    }
+    assert.ok(shown);
   });
 });

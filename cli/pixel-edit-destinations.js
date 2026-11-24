@@ -224,7 +224,8 @@ function channelSource(route, context) {
   const { chart,channel } = destination, sampler = api.restSampler(target,definitions);
   return { destination:destination.id, binding:binding.id, frame:binding.frame,
     scene:binding.scene,object:solid.id, ...(binding.part !== undefined && { part:binding.part }),
-    chart,channel,...(layer && { layer:layer.id }),...definition,sourceRevision:source.sourceRevision,...(binding.canvas && { canvas:binding.canvas }),
+    chart,channel,...(target.padding!==undefined&&{padding:target.padding}),...(layer && { layer:layer.id }),...definition,
+    sourceRevision:source.sourceRevision,...(binding.canvas && { canvas:binding.canvas }),
     sample:uv => sampler.sample(uv)[channel] };
 }
 
@@ -237,20 +238,23 @@ function solidEdit(edit, destination, binding, editor, frame) {
     const stamps = fields(operation,['stamp']) ? [operation.stamp] :
       fields(operation,['stamps']) ? operation.stamps : null;
     if (!Array.isArray(stamps) || !stamps.length || stamps.length > 256 ||
-        !Array.from(stamps).every(stamp=>fields(stamp,['brush','value','mode','strength','window'])))
+        !Array.from(stamps).every(stamp=>fields(stamp,['brush','value','mode','strength','window','projection'])))
       throw new TypeError('A surface channel edit needs one or more native UV stamps');
     const palette = Object.fromEntries(frame.paletteEntries.map(row=>[row.id,row.color]));
+    const {KIT}=require('../index.js').load();
+    const clip=target.padding?.some(Boolean)&&KIT.procedural.surfaceState.editBounds(target);
     const painted = stamps.map(stamp=>{
-      if (channel !== 'pigment' || stamp.mode === 'clear') return {...stamp,channel};
+      const update={...stamp,channel,...(clip&&{clip})};
+      if (channel !== 'pigment' || stamp.mode === 'clear') return update;
       if (stamp.value===undefined && stamp.brush?.kind==='retained') {
-        const tip=require('../index.js').load().KIT.pixelBrushes.retained(stamp.brush.tip);
+        const tip=KIT.pixelBrushes.retained(stamp.brush.tip);
         for (const slot of new Set(tip.slots)) if (slot>=0) {
           const {id:swatch,color}=tip.palette[slot];
           indexedValue({swatch,color},palette);
         }
-        return {...stamp,channel};
+        return update;
       }
-      return {...stamp,channel,value:indexedValue(stamp.value,palette)};
+      return {...update,value:indexedValue(stamp.value,palette)};
     });
     editor.setSurfaceState({ ...state, charts:{ ...state.charts,
       [chart]:{ ...target, stamps:[...(target.stamps ?? []),...painted] }
