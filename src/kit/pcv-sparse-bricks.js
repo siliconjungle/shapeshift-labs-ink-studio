@@ -94,11 +94,12 @@
         publish(next, key, brick);
         return snapshot(next);
       }
-      function edit({ bounds, sdf, operation = 'paint', smooth = 0, material, medium, maxSamples = 524288 } = {}) {
+      function edit({ bounds, sdf, operation = 'paint', smooth = 0, material, medium, weight, maxSamples = 524288 } = {}) {
         if (!coordinate(bounds?.min, pointOK) || !coordinate(bounds?.max, pointOK) ||
             bounds.min.some((v, axis) => v > bounds.max[axis]) ||
             !['paint', 'union', 'subtract'].includes(operation) ||
             (sdf !== undefined || operation !== 'paint') && typeof sdf !== 'function' ||
+            weight !== undefined && typeof weight !== 'function' ||
             !field(smooth) || smooth < 0 || material !== undefined && !label(material) ||
             medium !== undefined && !label(medium) || !integer(maxSamples) || maxSamples < 1 || maxSamples > 4000000)
           throw new TypeError('Invalid bounded sparse brush');
@@ -108,17 +109,21 @@
         if (counts.reduce((a, b) => a * b, 1) > maxSamples) throw new RangeError('Sparse brush exceeds its sample budget');
         const touched = new Map();
         for (let k = low[2]; k <= high[2]; k++) for (let j = low[1]; j <= high[1]; j++) for (let i = low[0]; i <= high[0]; i++) {
-          const xyz = [i * cell, j * cell, k * cell], brush = sdf ? checked(sdf(...xyz)) : -1;
+          const xyz = [i * cell, j * cell, k * cell], influence = weight ? weight(...xyz) : 1;
+          if (!finite(influence) || influence < 0 || influence > 1) throw new RangeError('Sparse brush weights must be in [0, 1]');
+          if (!influence) continue;
+          const brush = sdf ? checked(sdf(...xyz)) : -1;
           const [key, index] = location(i, j, k), previous = map.get(key) ?? empty;
           const old = entry(previous.offset, index);
           let offset = old;
           if (operation !== 'paint') {
             const baseline = checked(base(...xyz)), value = baseline + old;
             const edited = operation === 'union' ? smoothMin(value, brush, smooth) : -smoothMin(-value, brush, smooth);
-            offset = Math.fround(checked(edited - baseline));
+            const next = checked(edited - baseline);
+            offset = Math.fround(checked(influence === 1 ? next : mix(old, next, influence)));
           }
-          const m = brush <= 0 && material !== undefined ? material : entry(previous.material, index);
-          const water = brush <= 0 && medium !== undefined ? medium : entry(previous.medium, index);
+          const m = influence >= .5 && brush <= 0 && material !== undefined ? material : entry(previous.material, index);
+          const water = influence >= .5 && brush <= 0 && medium !== undefined ? medium : entry(previous.medium, index);
           if (offset === old && m === entry(previous.material, index) && water === entry(previous.medium, index)) continue;
           if (!touched.has(key)) {
             const unpack = (channel, Type) => channel != null && typeof channel === 'object' ?

@@ -1355,6 +1355,7 @@ const CMD = {
         '  render or clip --multiprojection plan.json   use local projection for named mesh surfaces',
         '  path-ink <scene> --plan look.json --out frame.png [--t 0 | --from 0 --to 2 --fps 12]',
         '  sdf-reference <scene> --out directory [--t 0,1.2 --w 192 --h 120 --samples 32 --bounces 3]',
+        '  sculpt-masks <scene> [--plan file.json --out directory --object id --t 1.2]   apply and review retained sculpt masks',
         '  sdf-shape-review <scene> [--out directory --object id --profile file.json --t 1.2 --fail-on-flags]   compare direct and remeshed SDF views',
         '  pose-correctives capture <scene> --plan sculpt.json --t 1 --out correction.json',
         '  pose-correctives review <scene> --out directory [--from 0 --to 2.4 --fps 10]',
@@ -2395,6 +2396,21 @@ const CMD = {
       seed:num('trace-seed',1),exposure:num('reference-exposure',1) });
     const report = api.review(buildPreview(pos[0],{ retainReferenceSdf:true }),directory,{ ...settings,pose,view });
     console.log('Traced',report.frames.length,'native reference frames. Wrote',directory);
+  },
+  'sculpt-masks'() {
+    if (pos.length!==1 || opt.out!==undefined && typeof opt.out!=='string' ||
+        opt.plan!==undefined && typeof opt.plan!=='string' || opt.t===true)
+      die('Use sculpt-masks <scene> [--plan file.json --out directory --object id --t seconds]');
+    const directory=outputFile('sculpt-mask-review'), time=num('t',0);
+    if (!Number.isFinite(time) || time<0 || time>3600) die('Sculpt mask review time must be 0–3600 seconds');
+    const plan=opt.plan===undefined ? {format:'ink-studio/sculpt-mask-plan',version:1} :
+      JSON.parse(fs.readFileSync(path.resolve(opt.plan),'utf8'));
+    const world=buildPreview(pos[0]);
+    pose(world,time);
+    const report=require('./sculpt-masks.js').run(world,plan,directory,{
+      time,objectId:opt.object,kit:lib(),inputs:[pos[0],opt.plan].filter(Boolean)
+    });
+    console.log(report.object,'·',report.frames.length,'native views. Wrote',directory);
   },
   'sdf-shape-review'() {
     if (pos.length!==1 || opt.out!==undefined && typeof opt.out!=='string' ||

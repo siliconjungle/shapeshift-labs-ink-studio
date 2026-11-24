@@ -471,10 +471,12 @@ function renderFrame(world, o, preparedPalettes) {
   const probeView = o[probeCamera];
   const brickAPI=world.brickMeshes && require('../index.js').load().KIT.procedural.brickMeshes;
   const brickFrames=brickAPI?.frame(world,o.brickMeshes) ?? [];
+  const sdfBrickFrames=brickFrames.filter(row=>!row.sculpt?.visibilityActive);
+  const sdfBrickObjects=new Set(sdfBrickFrames.map(row=>row.objectId));
   const brickCasters=brickFrames.flatMap(({assets})=>assets.shadow ? [assets.shadow] : []);
   if (counters && brickFrames.length && !o.reflectionPlane && !probeView)
     counters.brickMeshes=brickFrames.map(({objectId,revision,work})=>({objectId,revision,work}));
-  const useSdf = sdfSettings && (world.renderSdfs?.length || brickFrames.length) && !o.reflectionPlane?.select && !probeView?.allow;
+  const useSdf = sdfSettings && (world.renderSdfs?.length || sdfBrickFrames.length) && !o.reflectionPlane?.select && !probeView?.allow;
   const transparency = SplatOrder.transparency(o.stableTransparency ?? look.stableTransparency);
   const blendDepth = transparency?.mode === 'blend' ? transparency.depthTolerance : 0;
   const planarFootprints=(o.splatFootprints??look.splatFootprints)!==false&&world.splatFootprints?.styles?.some(p=>p.depth==='plane');
@@ -1230,11 +1232,11 @@ function renderFrame(world, o, preparedPalettes) {
       captureFogOwners,
       lightingTargets:artLighting || o.bounceProbes!==false &&
         (o.bounceProbes===true?world.bounceProbes:o.bounceProbes??world.bounceProbes)?.geometry,
-      omit:useSdf && brickFrames.length ? (object,material,point)=>sdfSettings.allows({object,entity:object,material},point) : undefined });
+      omit:useSdf && sdfBrickFrames.length ? (object,material,point)=>sdfBrickObjects.has(object) && sdfSettings.allows({object,entity:object,material},point) : undefined });
   const localProjectionHits=surfaceFragments.some(sample=>sample.localProjection) && new Uint8Array(W*H);
   if (localProjectionHits) for (const sample of surfaceFragments) if (sample.localProjection) localProjectionHits[sample.p]=1;
   const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip,
-    editable:brickFrames,sourceBinding:captureSourceSurface || !!pixelSelection,allow:isolate?.matches,coverage:fittedCoverage,
+    editable:sdfBrickFrames,sourceBinding:captureSourceSurface || !!pixelSelection,allow:isolate?.matches,coverage:fittedCoverage,
     overrideRows:sdfOverrides.length ? sdfOverrides : undefined,
     captureRestNormal:passSelection.has('sourceRestNormal'),trackSdf:trackFields && ((field,point)=>trackFields.set(JSON.stringify(field),point)),
     visible:geometryMask ? (row,x,y)=>spriteLOD.geometry(geometryMask.codes[row],x,y) : undefined}) : null;

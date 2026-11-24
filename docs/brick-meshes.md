@@ -155,6 +155,73 @@ and leaves the published snapshot intact. Successful revisions list the
 feature IDs checked in `work.checkedFeatures`. Sparse edits outside the
 protected regions still rebuild only their affected bricks.
 
+## Retained sculpt masks and face sets
+
+Use the same sculpt mask document for successive strokes on a live SDF
+brick mesh. Give the document to `brickMeshes.create({ sculptMasks })` or
+publish it later with `controller.setSculptMasks(document)`. Use `null`
+to clear it.
+
+```js
+const masks = KIT.procedural.sculptMasks.prepare({
+  format: 'ink-studio/sculpt-masks',
+  version: 1,
+  masks: [
+    { id: 'trim', volumes: [{ kind: 'box', min: [-1.4, 0, -.5], max: [-1, 3, .7] }] },
+    { id: 'panel', feather: .24, volumes: [{ kind: 'sphere', center: [0, 1.5, .3], radius: .8 }] }
+  ],
+  faceSets: [{ id: 'bronze-trim', mask: 'trim' }, { id: 'front-panel', mask: 'panel' }],
+  controls: { locked: ['bronze-trim'], isolate: [], hidden: [] }
+});
+gate.setSculptMasks(masks);
+const edited = gate.edit({ ...brush, masks: ['panel'] });
+console.log(edited.sculpt.faceSets, edited.work.sculpt);
+```
+
+A mask joins one or more rest-space boxes and spheres in the signed field's
+coordinates. Feathering ramps from zero at the volume boundary inward over
+the specified model-space distance. Optional `strength` scales influence
+from zero to one. Overlapping named brush masks use their strongest weight.
+Separate face-set IDs hold the named assignments even when the feather
+or strength changes. Material and medium labels switch at half weight.
+
+- **Isolate** shows the chosen sets and limits brush influence to their union.
+- **Hide** removes the sets from the displayed mesh, depth proxies, derived
+  splats, and picking. Brush samples in those sets are skipped. The signed
+  collision and signed shadow sources continue to describe the full shape.
+- **Lock** skips samples in the selected volumes and a two-cell halo for
+  the dual-contour fit. The existing protected-feature check rejects a
+  publication that changes a locked face's geometry or material, including
+  direct snapshot swaps. Failures report the face set ID.
+
+A face gets its set memberships from its owned lattice crossing. Existing
+crossings keep a local `faceId` across remeshing. Newly exposed faces take
+their memberships from the same authored volumes. Untouched bricks retain
+their mesh handles and labels. Control changes publish a revision with no
+geometry extraction. Lock and hide override brush selection and isolation.
+
+Inspect a revision with `sculpt.sample([x, y, z], { masks })`,
+`sculpt.face(brickKey, sourceTriangle)`, or `assets.pick(ray)`. Pick hits
+carry the face ID, contributing set IDs, brick ID and source triangle.
+`work.sculpt` reports relabeled bricks, changed display chunks, verified
+locks, and visible triangle count. Use `brickMeshes.fullView(revision)` for
+a read-only view of the complete shape. Direct SDF assist uses the
+displayed mesh while hide or isolate is active. Shape reviews use the
+full view for matched direct and mesh captures.
+
+Replay the [ceramic panel demo](../examples/sculpt-masks/README.md) or inspect
+your own scene. A version 1 plan accepts `capture`, `masks`, `controls`, and
+`stroke` actions. Supply a retained `document` for `masks`, a replacement
+`controls` object for `controls`, and a bounded `brush` for `stroke`.
+A stroke's optional `volume` uses the same box or sphere format. The CLI
+writes native PNGs, a comparison sheet, the final mask document and a JSON
+report with point weights and remesh work.
+
+```sh
+node cli/ink-studio.js sculpt-masks examples/sculpt-masks/workshop.js \
+  --plan examples/sculpt-masks/plan.json --out studio/out/sculpt-mask-review
+```
+
 ## Validate the shape from several angles
 
 Run the review at the edit time you want to inspect.

@@ -1,0 +1,198 @@
+{
+  "format": "ink-studio/sculpt-mask-plan",
+  "version": 1,
+  "w": 176,
+  "h": 112,
+  "probes": [
+    {
+      "id": "locked-bronze",
+      "point": [
+        -1.11,
+        1.5,
+        0.45
+      ],
+      "masks": [
+        "carving-window"
+      ]
+    },
+    {
+      "id": "full-ceramic",
+      "point": [
+        0.0,
+        1.5,
+        0.37
+      ],
+      "masks": [
+        "carving-window"
+      ]
+    },
+    {
+      "id": "feather-shoulder",
+      "point": [
+        1.3,
+        1.5,
+        0.37
+      ],
+      "masks": [
+        "carving-window"
+      ]
+    },
+    {
+      "id": "cover",
+      "point": [
+        2,
+        1.5,
+        0.51
+      ],
+      "masks": [
+        "carving-window"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "id": "01-panel-lock",
+      "kind": "masks",
+      "document": {
+        "format": "ink-studio/sculpt-masks",
+        "version": 1,
+        "masks": [
+          {
+            "id": "trim-volume",
+            "volumes": [
+              {
+                "kind": "box",
+                "min": [
+                  -1.33,
+                  0.3,
+                  -0.7
+                ],
+                "max": [
+                  -0.92,
+                  2.8,
+                  0.8
+                ]
+              }
+            ]
+          },
+          {
+            "id": "cover-volume",
+            "volumes": [
+              {
+                "kind": "box",
+                "min": [
+                  1.49,
+                  0.3,
+                  -0.7
+                ],
+                "max": [
+                  2.7,
+                  2.8,
+                  0.8
+                ]
+              }
+            ]
+          },
+          {
+            "id": "carving-window",
+            "feather": 0.36,
+            "volumes": [
+              {
+                "kind": "box",
+                "min": [
+                  -1.47,
+                  0.63,
+                  -0.6
+                ],
+                "max": [
+                  1.48,
+                  2.49,
+                  1.01
+                ]
+              }
+            ]
+          }
+        ],
+        "faceSets": [
+          {
+            "id": "bronze-trim",
+            "mask": "trim-volume"
+          },
+          {
+            "id": "side-cover",
+            "mask": "cover-volume"
+          },
+          {
+            "id": "carving",
+            "mask": "carving-window"
+          }
+        ],
+        "controls": {
+          "locked": [
+            "bronze-trim"
+          ]
+        }
+      }
+    },
+    {
+      "id": "02-feathered-cut",
+      "kind": "stroke",
+      "brush": {
+        "operation": "subtract",
+        "material": "exposed-clay",
+        "bounds": {
+          "min": [
+            -1.73,
+            0.67,
+            -0.58
+          ],
+          "max": [
+            1.54,
+            2.42,
+            0.8
+          ]
+        },
+        "volume": {
+          "kind": "box",
+          "min": [
+            -1.56,
+            0.9,
+            0.03
+          ],
+          "max": [
+            1.36,
+            2.16,
+            0.8
+          ]
+        },
+        "masks": [
+          "carving-window"
+        ]
+      }
+    },
+    {
+      "id": "03-hidden-cover",
+      "kind": "controls",
+      "controls": {
+        "locked": [
+          "bronze-trim"
+        ],
+        "hidden": [
+          "side-cover"
+        ]
+      }
+    },
+    {
+      "id": "04-isolate-carving",
+      "kind": "controls",
+      "controls": {
+        "locked": [
+          "bronze-trim"
+        ],
+        "isolate": [
+          "carving"
+        ]
+      }
+    }
+  ]
+}

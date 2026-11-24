@@ -352,7 +352,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.geometry.delaunay` | function | `(input, { constraints = [], maxChecks = 16000000, maxFlips = 30000 } = {})` | [source](../../src/kit/p48-delaunay.js) |
 | `KIT.procedural.geometry.distanceTransform` | function | `(mask, { size, spacing = 1, signed = false, indices = true, maxCells = 3000000 } = {})` | [source](../../src/kit/p68-distance-transform.js) |
 | `KIT.procedural.geometry.dualContour` | function | `(field,bounds,options)` | [source](../../src/kit/p75-regular-dual-surfaces.js) |
-| `KIT.procedural.geometry.dualGrid` | function | `(field, rawBounds, { method = 'dualContour', cell = 0.12, iso = 0, normal, refine = 2, maxCells = 250000, maxSamples = 3800000, latticeBounds, ownedEdges, topology = true, captureField = false } = {})` | [source](../../src/kit/p75-regular-dual-surfaces.js) |
+| `KIT.procedural.geometry.dualGrid` | function | `(field, rawBounds, { method = 'dualContour', cell = 0.12, iso = 0, normal, refine = 2, maxCells = 250000, maxSamples = 3800000, latticeBounds, ownedEdges, topology = true, captureField = false, crossingKeys = false } = {})` | [source](../../src/kit/p75-regular-dual-surfaces.js) |
 | `KIT.procedural.geometry.fitExteriorOutline` | function | `({outline,required=null})` | [source](../../src/kit/paw-recessed-profile.js) |
 | `KIT.procedural.geometry.fitMonotoneOutline` | function | `({ outline, required = null })` | [source](../../src/kit/paz-monotone-outline.js) |
 | `KIT.procedural.geometry.fourD` | namespace |  | [guide](../four-dimensional.md) |

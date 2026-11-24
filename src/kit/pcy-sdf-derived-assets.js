@@ -48,7 +48,7 @@
     return Object.freeze(builder.finish({id:mesh.id,dither:0},{consumePendingPaint:false}));
   }
 
-  function assemble(chunks,trace,options,previousShape) {
+  function assemble(chunks,trace,options,previousShape,describe) {
     const meshes=Object.freeze(chunks.flatMap(chunk=>chunk.mesh ? [chunk.mesh] : []));
     const {objectId,bounds}=trace;
     const shape=previousShape ?? (() => {
@@ -77,7 +77,7 @@
           const hit=K.sceneMeshes.rayQuery(mesh,K)({origin,direction:axis,maxDistance:nearest?.distance ?? maxDistance});
           if (hit && (!nearest || hit.distance<nearest.distance)) nearest=hit;
         }
-        return nearest ?? null;
+        return nearest ? describe?.(nearest) ?? nearest : null;
       }
     });
     return {assets,shape};

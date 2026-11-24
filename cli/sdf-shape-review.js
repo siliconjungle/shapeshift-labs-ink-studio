@@ -204,9 +204,9 @@ function reviewSdfShape(world,directory,options={}) {
   if (typeof directory!=='string' || !directory.trim()) throw new TypeError('SDF shape review needs an output directory');
   const kit=options.kit ?? require('../index.js').load(), api=kit.KIT.procedural.brickMeshes;
   const rows=api.frame(world);
-  const snapshot=options.objectId===undefined && rows.length===1 ? rows[0] : rows.find(row=>row.objectId===options.objectId);
-  if (!snapshot) throw new RangeError('SDF shape review needs one selected brick field. Supply its object ID when the scene has several.');
-  const plan=settings({...options,objectId:snapshot.objectId},snapshot.bricks.cell);
+  const selected=options.objectId===undefined && rows.length===1 ? rows[0] : rows.find(row=>row.objectId===options.objectId);
+  if (!selected) throw new RangeError('SDF shape review needs one selected brick field. Supply its object ID when the scene has several.');
+  const snapshot=api.fullView(selected), plan=settings({...options,objectId:snapshot.objectId},snapshot.bricks.cell);
   const {w,h,time,views,coverageSamples:s,epsilon,steps,limits}=plan;
   const extent=Math.hypot(...snapshot.bounds.max.map((n,i)=>n-snapshot.bounds.min[i]))/2;
   const {objectId,revision,bounds,work}=snapshot;

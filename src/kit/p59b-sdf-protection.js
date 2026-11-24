@@ -52,6 +52,11 @@
     return chunk.indices.slice(3*index,3*index+3).map(vertex=>chunk.positions.slice(3*vertex,3*vertex+3));
   }
 
+  function faceKey(chunk,index,material=true,points=triangle(chunk,index)) {
+    const key=points.map(p=>p.join(',')).sort().join('/');
+    return material ? key+':'+chunk.faceMaterials[index] : key;
+  }
+
   function faces(chunks,guard,cell,firstOnly=false) {
     const faces=[];
     for (const chunk of chunks) {
@@ -60,8 +65,7 @@
         const points=triangle(chunk,index);
         if (!intersects(points,guard.bounds)) continue;
         if (firstOnly) return true;
-        const key=points.map(p=>p.join(',')).sort().join('/');
-        faces.push(guard.kind==='seam' ? key+':'+chunk.faceMaterials[index] : key);
+        faces.push(faceKey(chunk,index,guard.kind==='seam',points));
       }
     }
     return firstOnly ? false : faces.sort();
@@ -90,6 +94,11 @@
     throw Object.assign(new RangeError('Protected '+kind+' '+id+': '+reason),{code:'protected-sdf-feature',feature:id,kind,reason});
   }
 
+  function retainFaces(guard,before,after) {
+    if (before.length!==after.length || after.some((face,i)=>face!==before[i]))
+      failure(guard,'protected geometry or seam material changed');
+  }
+
   function verify(guards,chunks,bricks,previous,dirty) {
     const checked=[];
     for (const guard of guards) {
@@ -106,8 +115,8 @@
         if (!next.length) failure(guard,'no protected mesh faces at this lattice resolution');
         if (previous) {
           const old=faces(previous.chunks,guard,bricks.cell);
-          if (old.length!==next.length || next.some((face,i)=>face!==old[i]) ||
-              probes.some(p=>Math.sign(bricks.distance(...p))!==Math.sign(previous.bricks.distance(...p))))
+          retainFaces(guard,old,next);
+          if (probes.some(p=>Math.sign(bricks.distance(...p))!==Math.sign(previous.bricks.distance(...p))))
             failure(guard,'protected geometry or seam material changed');
         }
       }
@@ -116,5 +125,5 @@
     return checked;
   }
 
-  P.sdfProtection=Object.freeze({check,blocked,verify});
+  P.sdfProtection=Object.freeze({check,blocked,verify,faceKey,retainFaces});
 })(KIT);

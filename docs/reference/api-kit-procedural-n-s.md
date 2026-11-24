@@ -1553,6 +1553,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.tube` | function | `(start, end, { radius = .2, sides = 12, color: tint = '#b7bccb' } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-mesh.js) |
 | `KIT.procedural.sceneGraph.world` | function | `(objects, { seed = 0, lights = [], camera: view, background = '#171d30', look = {}, palette: authoredPalette, style = {}, surfaces } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-scene.js) |
 
+## KIT.procedural.sculptMasks
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.sculptMasks` | namespace |  |  |
+| `KIT.procedural.sculptMasks.compile` | function | `(raw)` | [source](../../src/kit/p59c-sculpt-masks.js) |
+| `KIT.procedural.sculptMasks.field` | function | `(shape)` | [source](../../src/kit/p59c-sculpt-masks.js) |
+| `KIT.procedural.sculptMasks.prepare` | function | `(raw = {})` | [guide](../brick-meshes.md#retained-sculpt-masks-and-face-sets), [source](../../src/kit/p59c-sculpt-masks.js) |
+
 ## KIT.procedural.sdfBrushSurfaces
 
 | Member | Kind | Signature or value | Guides and source |
@@ -1567,7 +1576,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.sdfDerivedAssets` | namespace |  |  |
-| `KIT.procedural.sdfDerivedAssets.assemble` | function | `(chunks,trace,options,previousShape)` | [source](../../src/kit/pcy-sdf-derived-assets.js) |
+| `KIT.procedural.sdfDerivedAssets.assemble` | function | `(chunks,trace,options,previousShape,describe)` | [source](../../src/kit/pcy-sdf-derived-assets.js) |
 | `KIT.procedural.sdfDerivedAssets.paint` | function | `(bake,source,base)` | [source](../../src/kit/pcy-sdf-derived-assets.js) |
 | `KIT.procedural.sdfDerivedAssets.settings` | function | `(raw={})` | [source](../../src/kit/pcy-sdf-derived-assets.js) |
 | `KIT.procedural.sdfDerivedAssets.splatWorld` | function | `(snapshot,options={})` | [source](../../src/kit/pcy-sdf-derived-assets.js) |
@@ -1591,6 +1600,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sdfProtection` | namespace |  |  |
 | `KIT.procedural.sdfProtection.blocked` | function | `(guards,corners,change)` | [source](../../src/kit/p59b-sdf-protection.js) |
 | `KIT.procedural.sdfProtection.check` | function | `(value)` | [source](../../src/kit/p59b-sdf-protection.js) |
+| `KIT.procedural.sdfProtection.faceKey` | function | `(chunk,index,material=true,points=triangle(chunk,index))` | [source](../../src/kit/p59b-sdf-protection.js) |
+| `KIT.procedural.sdfProtection.retainFaces` | function | `(guard,before,after)` | [source](../../src/kit/p59b-sdf-protection.js) |
 | `KIT.procedural.sdfProtection.verify` | function | `(guards,chunks,bricks,previous,dirty)` | [source](../../src/kit/p59b-sdf-protection.js) |
 
 ## KIT.procedural.signalRecovery

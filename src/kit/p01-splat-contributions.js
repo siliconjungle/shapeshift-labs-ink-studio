@@ -179,13 +179,14 @@
       visit(tree);
       const meshOptions={V,rayBox:P.spatial.rayBox};
       const fields=P.brickMeshes?.frame(world,brickMeshes) ?? [];
-      const fieldMeshes=fields.flatMap(field=>field.assets.meshes);
-      for (const mesh of [...K.sceneMeshes.list(world,meshes,additionalMeshes),...fieldMeshes]) {
+      const fieldMeshes=new Map(fields.flatMap(field=>field.assets.meshes.map(mesh=>[mesh,field])));
+      for (const mesh of [...K.sceneMeshes.list(world,meshes,additionalMeshes),...fieldMeshes.keys()]) {
+        const field=fieldMeshes.get(mesh), identify=row=>field ? P.brickMeshes.describeHit(field,row) : row;
         const hit=K.sceneMeshes.intersect(mesh,{origin,direction:d,maxDistance},meshOptions,row=>{
           const depth=back ? V.dot(V.sub(sectionCamera.eye,row.point),back)-(sectionCamera.setback??0) : row.distance;
-          return (!section || Cutaway.margin(section,...row.point,depth)>=0) && (!accept || accept(row));
+          return (!section || Cutaway.margin(section,...row.point,depth)>=0) && (!accept || accept(identify(row)));
         });
-        if (hit) hits.push(hit);
+        if (hit) hits.push(identify(hit));
       }
       if(extraHits)for(const hit of extraHits({origin,direction:d,maxDistance}))if(!accept||accept(hit))hits.push(hit);
       hits.sort((a,b)=>a.distance-b.distance||b.index-a.index);
