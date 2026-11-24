@@ -88,6 +88,47 @@ test('SDF changes reproject the same decal and withdraw it when the surface move
   assert.equal(binding.sample(1).layers[0],initial);
 });
 
+test('rest projectors enforce the authored facing cosine and depth on mesh and SDF receivers',()=>{
+  const {KIT:K,makeBuilder}=kit, object='receiver';
+  const positions=[-1,-1,-.3,1,-1,.7,-1,1,-.3,1,1,.7];
+  const mesh=K.sceneMeshes.create({id:object,positions,uvs:[0,1,1,1,0,0,1,0],
+    indices:[0,1,2,1,3,2],materials:[{id:'enamel'}]});
+  const count=(kind,limits)=>{
+    const world=makeBuilder(0,[0]).finish();
+    const anchor={object,at:[0,0,.2],normal:[0,0,1],size:[.35,.35],depth:.2,...limits};
+    const binding=K.surfaceDecals.bind(world,{format:K.surfaceDecals.format,version:1,decals:[
+      {id:'paint',anchor,image:{width:1,height:1,pixels:[255,255,255,255]},grid:[5,5]}
+    ]},{receivers:[{object,representation:kind,
+      ...(kind==='mesh' ? {mesh} : {field:{distance:(x,_y,z)=>z-.2-x*.5}})}]});
+    return binding.sample(0).report[0].triangles;
+  };
+  for (const kind of ['mesh','sdf']) {
+    assert.ok(count(kind,{minFacing:.7})>0,kind);
+    assert.equal(count(kind,{minFacing:.95}),0,kind);
+    assert.equal(count(kind,{normal:[0,0,-1]}),0,kind);
+    assert.equal(count(kind,{at:[0,0,.36],depth:.03}),0,kind);
+  }
+});
+
+test('a UV decal clips to its padded chart and keeps its original texture registration',()=>{
+  const {world,mesh,api,object,part}=fixture(kit), {KIT:K}=kit;
+  api.dispose();
+  const brush={min:[0,0],max:[1,1]}, chart={min:[0,0],max:[.5,1],padding:[.12,.08]};
+  const hit=K.sceneMeshes.clipUV(mesh,{...brush,clip:{min:[.12,.08],max:[.38,.92]}});
+  assert.ok(hit.triangles.length>0);
+  for (let i=0;i<hit.points.length/3;i++) {
+    close(hit.uvs[i*2],(hit.points[i*3]+1)/2);
+    close(hit.uvs[i*2+1],(.75-hit.points[i*3+1])/1.5);
+  }
+  const bound=K.surfaceDecals.bind(world,{format:K.surfaceDecals.format,version:1,decals:[
+    {id:'patch',anchor:{object,part,uv:brush,chart},image:{width:1,height:1,pixels:[251,193,50,255]}}
+  ]},{receivers:[{object,part,representation:'mesh',mesh}]});
+  const [layer]=bound.sample(0).layers, xs=layer.vertices.filter((_,i)=>i%5===0);
+  close(Math.min(...xs),-.76);
+  close(Math.max(...xs),-.24);
+  assert.deepEqual(bound.document.decals[0].anchor.chart,chart);
+});
+
 test('headless renders the decal only on the front of its selected receiver and respects scene depth',()=>{
   const {world,api,object,part}=fixture(kit), {KIT:K}=kit;
   const x=64,y=48;

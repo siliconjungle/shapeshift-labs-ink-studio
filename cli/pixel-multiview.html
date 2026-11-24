@@ -27,6 +27,7 @@ select { font:inherit; color:inherit; background:#253437; border:1px solid #4760
   <div id="canvas"></div>
   <p id="status" role="status"></p>
   <details id="choices"><summary>Conflicting samples</summary><ul id="conflicts"></ul></details>
+  <details id="rejections"><summary>Rejected marks</summary><ul id="rejected"></ul></details>
 </main>
 <script type="module">
 /*SCRIPTS*/
@@ -34,13 +35,20 @@ const { report,images } = /*DATA*/;
 const native = mountPixelGridCanvas(document.querySelector('#canvas'));
 const camera = document.querySelector('#view'), image = document.querySelector('#image'), overlay = document.querySelector('#overlay');
 const status = document.querySelector('#status'), choices = document.querySelector('#choices');
+const rejections = document.querySelector('#rejections'), rejected = document.querySelector('#rejected');
 const labels = { changed:report.channel.startsWith('mask:') ? 'Projected mask' : 'Changed surface',seams:'View seams',chartEdges:'Chart edges',bleed:'Possible bleed',
+  padding:'Protected padding',backfaces:'Backfaces',grazing:'Grazing angles',depthLimit:'Depth limit',
   conflict:'Conflicting samples',rejected:'Rejected marks' };
 const colors = { changed:'#72d4ea99',seams:'#ffbc6499',chartEdges:'#e2de7799',bleed:'#ff6c9299',
+  padding:'#70adff99',backfaces:'#a09fbd99',grazing:'#f8a65799',depthLimit:'#ff717199',
   conflict:'#da9af399',rejected:'#fa866d99' };
+const reasons={'backface':'Backface','grazing-angle':'Grazing angle','projection-depth':'Beyond projection depth',
+  'protected-chart-padding':'Protected chart padding','different-chart':'Different chart'};
 camera.replaceChildren(...report.views.map(row=>new Option(row.id)));
 overlay.replaceChildren(new Option('None','none'),...Object.entries(labels).map(([key,label])=>new Option(label,key)));
 if (report.unresolved) overlay.value = 'conflict';
+else if (report.status==='inspection') overlay.value = 'chartEdges';
+else if (report.rejected) overlay.value = 'rejected';
 choices.hidden = !report.conflicts.length;
 for (const row of report.conflicts) {
   const li = document.createElement('li');
@@ -65,8 +73,17 @@ async function draw() {
     context.drawImage(next,0,0);
     native.setFrame({ width,height,rgba:context.getImageData(0,0,width,height).data });
     native.setDiagnostic(key === 'none' ? null : { bounds:[0,0,width,height],runs:row.runs[key],color:colors[key] },'multiview');
-    status.textContent = (report.status === 'ready' ? 'Patch ready for review' : 'Needs review')+
-      ' · '+row.accepted+' approved marks · '+row.counts.seams+' seam pixels · '+row.counts.bleed+' possible bleed pixels';
+    status.textContent = ({ready:'Patch ready for review',inspection:'Chart inspection'}[report.status] ?? 'Needs review')+
+      ' · '+row.accepted+' approved marks · '+row.counts.chartEdges+' chart edge pixels · '+row.counts.seams+
+      ' seam pixels · '+row.counts.bleed+' possible bleed pixels';
+    rejections.hidden=!row.rejected.length;
+    rejected.replaceChildren(...row.rejected.map(mark=>{
+      const li=document.createElement('li');
+      li.textContent=mark.at.join(', ')+' · '+(reasons[mark.reason]??mark.reason)+
+        (mark.cell ? ' · chart cell '+mark.cell.join(', ')+' · depth '+mark.distance.toFixed(4)+
+          ' · facing '+mark.facing.toFixed(3) : '');
+      return li;
+    }));
   } catch (error) {
     if (token === request) status.textContent = error.message;
   }

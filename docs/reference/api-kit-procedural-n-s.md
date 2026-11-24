@@ -1812,6 +1812,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.surfaceState.bind` | function | `(material,locate,palette)` | [source](../../src/kit/pa9-surface-state.js) |
 | `KIT.procedural.surfaceState.channels` | function | `(extra={})` | [source](../../src/kit/pa9-surface-state.js) |
 | `KIT.procedural.surfaceState.correspondence` | function | `(corners,weights)` | [source](../../src/kit/pa9-surface-state.js) |
+| `KIT.procedural.surfaceState.editBounds` | function | `({padding}={})` | [source](../../src/kit/pa9-surface-state.js) |
 | `KIT.procedural.surfaceState.full` | namespace |  |  |
 | `KIT.procedural.surfaceState.full.max` | value | `array` |  |
 | `KIT.procedural.surfaceState.full.min` | value | `array` |  |

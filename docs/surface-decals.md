@@ -127,3 +127,25 @@ optional `anchor.up`, `depth`, and node or socket. `pixelSize` is then
 measured in scene units. The existing conforming projector follows posed
 mesh triangles, reprojects when an SDF snapshot changes, and supports
 rigid node or socket attachments on splat receivers.
+
+## Control projection and chart padding
+
+For a rest projector, set `anchor.minFacing` to the minimum cosine
+between the projector's outward normal and the receiving normal. The
+default is `0.25`. Larger values reject grazing surfaces. An explicit
+facing threshold on a splat receiver requires recorded surface normals.
+`anchor.depth` limits how far on either side of the rest projector Ink
+searches for a surface. `anchor.maxStep` limits how far neighboring
+samples can separate in that direction before triangles are clipped.
+
+For a mesh UV decal or brush, supply the receiving atlas rectangle and
+its reserved margins in `anchor.chart`.
+
+```js
+const chart = { min: [0.25, 0], max: [0.5, 0.5], padding: [0.01, 0.015] };
+```
+
+The padding is measured in mesh UV units on each side. Ink clips the
+decal to the writable portion of that rectangle and keeps the brush's
+original UV registration through clipping and skinning. The mesh's
+material selector is also available when multiple materials share UVs.

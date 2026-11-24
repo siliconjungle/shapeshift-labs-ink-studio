@@ -1681,8 +1681,9 @@ has a choice.
 
 The HTML review switches between the actual before and proposed native
 renders for each camera. View seam overlays show neighboring pixels that
-received different values from different cameras. Chart edge overlays
-identify approaches to the neighboring rest chart. Possible bleed marks
+received different values from different cameras. The chart edge overlay
+shows visible chart boundaries, including boundaries with neighboring
+charts, across the whole view. Possible bleed marks
 changes to the selected signal outside the resolved chart cells, including
 where a splat footprint carries a change beyond its intended boundary. These
 are review signals and can include intentional boundaries.
@@ -1696,6 +1697,38 @@ one undoable transaction.
 node cli/ink-studio.js pixel-art edit gate-ink.json hinge-edit.json \
   --scene gate.json --out gate-painted.json
 ```
+
+### Control projection and protect chart padding
+
+For a chart inspection, list the cameras without approving any marks.
+The report and HTML review still show the chart edges and padding. A plan
+can include this optional `projection` block.
+
+```json
+{ "minFacing": 0.35, "maxDepth": 0.04, "padding": [2, 1] }
+```
+
+- `minFacing` is the cosine between the geometric normal and the
+  direction toward the camera. The default is `0.15`. Increase it
+  to reject more shallow views. Ink rejects hits whose normal faces away
+  from the camera or the authored chart's outward normal.
+- `maxDepth` is the allowed distance on either side of the chart plane,
+  measured in the solid's rest-space units. The chart's own `depth`
+  remains the upper limit. The exported stamp keeps the effective depth
+  and front-only rule when the scene is rendered again.
+- `padding` reserves whole cells on each U and V edge of the plan grid.
+  On the authored chart, `padding: [0.04, 0.06]` reserves normalized
+  UV margins for all subsequent pixel edits, including direct brushes
+  and clear operations. Multiview rejects cells touching those margins.
+  Existing paint in the padding stays in place.
+
+The HTML overlays show protected padding, grazing angles, backfaces, and
+hits beyond the depth limit. Rejected marks include their reason and,
+where available, the chart cell, facing measurements, and projection
+distance. Chart definitions also accept `minFacing` for the receiving
+surface's local alignment with the chart normal. Its default is `0.5`.
+For projector and atlas controls on retained decals, see
+[Surface decals](surface-decals.md#control-projection-and-chart-padding).
 
 ## Paint individual material channels
 

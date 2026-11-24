@@ -21,6 +21,12 @@
   const inside=(p,box)=>p.every((v,i)=>v>=box.min[i]&&v<=box.max[i]);
   const window=box=>keys(box,['min','max'])&&uv(box.min)&&uv(box.max)&&box.max.every((v,i)=>v>box.min[i]);
   const into=(point,box=full)=>point.map((v,i)=>box.min[i]+v*(box.max[i]-box.min[i]));
+  function editBounds({padding}={}) {
+    if (padding===undefined) return full;
+    check(uv(padding)&&Array.from(padding).every(n=>finite(n)&&n<.5),
+      'Rest chart padding needs two normalized insets in [0, 0.5)');
+    return {min:padding.slice(),max:padding.map(n=>1-n)};
+  }
 
   function channels(extra={}) {
     check(record(extra)&&Object.keys(extra).length<=16,'Expected a bounded surface channel table');
@@ -134,11 +140,19 @@
     }};
   }
   function stamp(spec,size,definitions,chart) {
-    check(keys(spec,['channel','value','mode','strength','brush','window'])&&own(definitions,spec.channel),
+    check(keys(spec,['channel','value','mode','strength','brush','window','clip','projection'])&&own(definitions,spec.channel),
       'Unknown surface channel or stamp arguments');
-    const {channel,mode='set',strength=1,window:chartWindow=full}=spec, type=definitions[channel].type;
+    const {channel,mode='set',strength=1,window:chartWindow=full,clip,projection}=spec, type=definitions[channel].type;
     check(window(chartWindow)&&unit(strength)&&['set','add','clear'].includes(mode)&&
       (mode!=='add'||type==='number'&&!definitions[channel].material),'Invalid surface stamp mode, strength or window');
+    check(clip===undefined||window(clip),'A surface stamp clip needs ordered unit UV bounds');
+    check(projection===undefined || keys(projection,['maxDepth','frontOnly']) &&
+      (projection.maxDepth===undefined || finite(projection.maxDepth)&&projection.maxDepth>0&&projection.maxDepth<=1e4) &&
+      (projection.frontOnly===undefined || typeof projection.frontOnly==='boolean'),
+      'A surface stamp projection needs a positive depth limit and/or a front-only flag');
+    const allows=(p,distance,facing)=>inside(p,chartWindow)&&(!clip||inside(p,clip))&&
+      (!projection||(projection.maxDepth===undefined||distance<=projection.maxDepth+1e-8)&&
+        (!projection.frontOnly||facing>0));
     const schema=definitions[channel];
     if (spec.brush?.kind==='retained') {
       const tip=retainedBrush(spec.brush,chart);
@@ -151,13 +165,13 @@
         }
         return table;
       },new Map());
-      return {channel,mode,value,amount:p=>inside(p,chartWindow)&&tip.read(p)>=0?strength:0,
+      return {channel,mode,value,amount:(p,distance,facing)=>allows(p,distance,facing)&&tip.read(p)>=0?strength:0,
         ...(fromTip&&{sample:p=>colors.get(tip.read(p))})};
     }
     const value=mode==='clear'?undefined:valueOf(schema,spec.value,mode==='add');
     const span=chartWindow.max.map((v,i)=>v-chartWindow.min[i]);
     const weight=mask(spec.brush,size.map((v,i)=>v*span[i]));
-    return {channel,mode,strength,value,amount:p=>inside(p,chartWindow)?
+    return {channel,mode,strength,value,amount:(p,distance,facing)=>allows(p,distance,facing)?
       weight(p.map((v,i)=>clamp((v-chartWindow.min[i])/span[i],0,1)))*strength:0};
   }
   function stampList(list,size,definitions,chart) {
@@ -175,12 +189,12 @@
   }
   function prepare(list=[],{size=[1,1],definitions=defaults,chart}={}) {
     const rows=stampList(list,size,definitions,chart);
-    return Object.freeze({sample(point) {
+    return Object.freeze({sample(point,{distance=0,facing=1}={}) {
       check(uv(point),'Surface sampling needs unit UV coordinates');
       const values=Object.fromEntries(Object.entries(definitions).map(([key,schema])=>[key,schema.type==='color'?null:schema.default]));
       for(const row of rows){
         const {channel,mode,amount}=row;
-        const a=amount(point);
+        const a=amount(point,distance,facing);
         if(!a)continue;
         const value=row.sample?row.sample(point):row.value;
         const schema=definitions[channel], before=values[channel];
@@ -297,46 +311,51 @@
       'Expected one to 32 named rest surface charts');
     const {V}=K, definitions=materialChannels(spec);
     const projectors=Object.entries(clone(spec.charts)).map(([chart,row])=>{
-      check(name(chart)&&keys(row,['origin','u','v','depth','twoSided','stamps']),'Invalid rest surface chart '+chart);
-      const {origin,u,v,depth=.035,twoSided=false,stamps=[]}=row;
-      check([origin,u,v].every(xyz)&&finite(depth)&&depth>0&&depth<=1e4&&typeof twoSided==='boolean',
-        'Surface chart needs a finite origin, UV axes and positive depth');
+      check(name(chart)&&keys(row,['origin','u','v','depth','twoSided','stamps','minFacing','padding']),'Invalid rest surface chart '+chart);
+      const {origin,u,v,depth=.035,twoSided=false,minFacing=.5,stamps=[]}=row;
+      check([origin,u,v].every(xyz)&&finite(depth)&&depth>0&&depth<=1e4&&typeof twoSided==='boolean'&&unit(minFacing),
+        'Surface chart needs a finite origin, UV axes, positive depth and a facing cosine from 0 to 1');
+      editBounds(row);
       const cross=V.cross(u,v), uu=V.dot(u,u), vv=V.dot(v,v), uv=V.dot(u,v), det=V.dot(cross,cross);
       check(det>1e-12&&det>uu*vv*1e-10,'Surface chart UV axes must span a plane');
       const n=V.norm(cross), sampler=coordinatesOnly ? null : restSampler({origin,u,v,depth,stamps},definitions);
-      return {chart,sampler,u,v,point(point,normal) {
+      function inspect(point,normal,eligible) {
         const delta=V.sub(point,origin), distance=Math.abs(V.dot(delta,n)), facing=V.dot(n,normal);
-        if(distance>depth||(twoSided?Math.abs(facing):facing)<.5)return null;
+        if(eligible&&(distance>depth||(twoSided?Math.abs(facing):facing)<minFacing||!twoSided&&facing<=0))return null;
         const a=V.dot(delta,u), b=V.dot(delta,v);
         const p=[(vv*a-uv*b)/det,(uu*b-uv*a)/det];
         if(p.some(value=>value< -1e-6||value>1+1e-6))return null;
-        return {distance,uv:p.map(value=>clamp(value,0,1))};
-      }};
+        return {chart,distance,facing,uv:p.map(value=>clamp(value,0,1))};
+      }
+      return {chart,sampler,u,v,inspect};
     });
+    const byName=new Map(projectors.map(row=>[row.chart,row]));
     const locate=(point,normal)=>{
-      let best, distance=Infinity;
+      let best, match;
       for(const row of projectors){
-        const hit=row.point(point,normal);
-        if(hit&&hit.distance<distance){best={row,uv:hit.uv};distance=hit.distance;}
+        const hit=row.inspect(point,normal,true);
+        if(hit&&(!match||hit.distance<match.distance)){best=row;match=hit;}
       }
       if(!best)return null;
-      const {row,uv}=best, values=row.sampler?.sample(uv);
-      if(!values)return {chart:row.chart,uv};
+      const {chart,uv}=match, values=best.sampler?.sample(uv,match);
+      if(!values)return match;
       let paintedNormal;
       if(values.normal){
-        const n=V.norm(normal), u=V.norm(V.mad(row.u,n,-V.dot(row.u,n)),V.perp(n));
-        const across=V.cross(n,u), v=V.dot(across,row.v)<0 ? V.mul(across,-1) : across;
+        const n=V.norm(normal), u=V.norm(V.mad(best.u,n,-V.dot(best.u,n)),V.perp(n));
+        const across=V.cross(n,u), v=V.dot(across,best.v)<0 ? V.mul(across,-1) : across;
         const [x,y,z]=values.normal.value;
         const mapped=V.norm(V.mad(V.mad(V.mul(n,z),u,x),v,y),n);
         paintedNormal=V.norm(V.mad(n,V.sub(mapped,n),values.normal.coverage),n);
       }
-      return {chart:row.chart,uv,values,normal,...(paintedNormal&&{paintedNormal}),
+      return {chart,uv,values,normal,...(paintedNormal&&{paintedNormal}),
         ...(locate.hasInkControls&&{inkControls:inkAt(values)})};
     };
-    return Object.assign(locate,{maskNames:spec.masks?.slice()??[],
+    return Object.assign(locate,{inspect:(chart,point,normal)=>byName.get(chart)?.inspect(point,normal,false)??null,
+      maskNames:spec.masks?.slice()??[],
       hasOpacity:Object.values(spec.charts).some(chart=>chart.stamps?.some(stamp=>stamp.channel==='opacity')),
       hasNormal:Object.values(spec.charts).some(chart=>chart.stamps?.some(stamp=>stamp.channel==='normal')),
       hasInkControls:Object.values(spec.charts).some(chart=>chart.stamps?.some(stamp=>inkNames.includes(stamp.channel)))});
   }
-  P.surfaceState=Object.freeze({channels,materialChannels,valueOf,prepare,restSampler,correspondence,projection,bind,appearance,ramp,window,into,isUv:uv,full});
+  P.surfaceState=Object.freeze({channels,materialChannels,valueOf,prepare,restSampler,correspondence,projection,editBounds,
+    bind,appearance,ramp,window,into,isUv:uv,full});
 })(KIT);
