@@ -246,6 +246,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint
   pixel-art inspect|edit <design.json> [--frame id]   work on a native indexed frame
   pixel-art edit <design.json> <edit.json> --out result.json   write an edit and print its receipt
+  pixel-art stack export <document.json> --out deck.json   open in the layer Workshop
+  pixel-art stack import <deck.json> --out document.json
+    layers destination: add, update, reorder, set-cel, remove, merge-down, flatten-group, and flatten
     adjustments destination: curves, hue-saturation, gradient, replace, dither, and outline by scope
     canvas destination: crop, trim, pad, resize, or resample all frames
   pixel-art replay <design.json> <receipt.json> --out result.json   verify and reproduce an edit with the same options
@@ -681,6 +684,9 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio pixel-art session targets` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session undo` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art snap` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art stack` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art stack export` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art stack import` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art targets` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art trace` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art upgrade` · [source](../../cli/pixel-art.js)
