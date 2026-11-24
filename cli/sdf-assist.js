@@ -42,7 +42,7 @@ function bind(world, data, settings,allow,sourceBinding,coverage,overrideRows) {
   const labels = TargetSelectors.index(world), rows = [];
   const normals = world.renderMetadata?.normals;
   const boned = new Set(world.anim?.boned ?? []), owned = world.anim?.geometryOwned, rig = world.anim?.rig;
-  const { nearest } = require('../index.js').load().KIT.procedural.attributes;
+  const { attributes:{nearest},sdfBrushSurfaces } = require('../index.js').load().KIT.procedural;
   const sources = [];
   function opaque(i, rest, posed) {
     const q=i*16, flags=Math.round(rest[q+11]);
@@ -80,7 +80,7 @@ function bind(world, data, settings,allow,sourceBinding,coverage,overrideRows) {
       }
       if (part.records.length) parts.set(owner,part);
     }
-    if (selected) sources.push({...geometry,parts,motion,sourceIndex,ownerIndices,paintKeys:sourceBinding&&new Map()});
+    if (selected) sources.push({...geometry,parts,motion,sourceIndex,ownerIndices,appearanceKeys:sourceBinding&&new Map(),sdfBrushSurfaces});
   }
   for (const [sourceIndex,original] of (world.renderSdfs ?? []).entries()) {
     if (!(original.rows instanceof Map) || typeof original.distance !== 'function' || typeof original.locate !== 'function') continue;
@@ -119,13 +119,14 @@ function trace(source, ray, near, far, settings, clip, visible, x, y, sourceBind
     }
     let normal;
     if ((!clip || clip(point)) && (!source.accepts || source.accepts(...point))) {
-      let row, fieldOwner;
+      let row, fieldOwner, materialOwner;
       if (source.surfaceAt) {
         normal=normalAt(field,point,epsilon);
         if (normal) row=source.surfaceAt(point,normal);
       } else {
         const {body,owner} = source.locate(...point);
         fieldOwner = body ?? owner;
+        materialOwner = owner;
         const part = source.parts.get(owner) ?? source.parts.get(body);
         if (part && (normal=normalAt(field,point,epsilon)))
           row=part.nearest.sample(point,i=>facing(part.records[i],normal))?.values;
@@ -133,20 +134,23 @@ function trace(source, ray, near, far, settings, clip, visible, x, y, sourceBind
       if (row && (row.i<0 || !visible || visible(row.i,x,y)) && settings.allows(row.target,point)) {
         const rest = source.motion?.rest(...point) ?? point;
         const state = fieldOwner?.mat.surfaceState, program = fieldOwner?.mat.sdfPaint;
-        const localNormal = (program || state?.hasOpacity || state?.hasNormal || state?.hasInkControls) &&
+        const generated=materialOwner?.mat.sdfNewSurface;
+        const localNormal = (generated || program || state?.hasOpacity || state?.hasNormal || state?.hasInkControls) &&
           (source.motion?.restNormal(...normal) ?? normal);
         const length = localNormal && Math.hypot(...localNormal);
         const normalAtRest = length && localNormal.map(n=>n/length);
         const paint = normalAtRest && state?.locate(rest,normalAtRest);
         const materialPaint = normalAtRest && program?.locate(rest,normalAtRest);
+        const surface=normalAtRest && generated?.locate(rest,normalAtRest);
+        const appearance=surface ? source.sdfBrushSurfaces.appearance(surface,materialPaint) : materialPaint;
         const opacity = paint?.values?.opacity;
         if (opacity && opacity.value < 1 && opacity.coverage > 0) return null;
         const shadingNormal = paint?.paintedNormal && (source.motion?.normal(...paint.paintedNormal) ?? paint.paintedNormal);
-        const materialId = (program || row.baseColor!==undefined) && (materialPaint?.material ?? row.target.material);
+        const materialId = (generated || program || row.baseColor!==undefined) && (appearance?.material ?? row.target.material);
         return {z:along*axial,position:point,normal,row,objectPosition:rest,...(shadingNormal&&{shadingNormal}),
-          ...(materialId && {materialId}),...(materialPaint?.tint && {materialTint:materialPaint.tint}),
+          ...(materialId && {materialId}),...(appearance?.tint && {materialTint:appearance.tint}),...(surface && {uv:surface.uv}),
           ...(state?.hasInkControls && {inkControls:paint?.inkControls ?? neutralInk}),
-          ...(sourceBinding && { source:{ ...sdfSource(source,fieldOwner,row,rest,materialPaint),...(captureRestNormal && {restNormal:source.motion?.restNormal(...normal) ?? normal}) } })};
+          ...(sourceBinding && { source:{ ...sdfSource(source,fieldOwner,row,rest,materialPaint,surface?.details),...(captureRestNormal && {restNormal:source.motion?.restNormal(...normal) ?? normal}) } })};
       }
     }
     along+=6*epsilon/Math.max(.12,normal ? Math.abs(dot(normal,direction)) : 1);
@@ -160,19 +164,21 @@ function fieldAddress(source,owner,object) {
   return index === undefined ? null : [source.sourceIndex,index];
 }
 
-function sdfSource(source,owner,row,rest,paint) {
+function sdfSource(source,owner,row,rest,paint,generatedSurface) {
   const target = owner ? ownerLabel(owner) : row.target;
   const field = fieldAddress(source,owner,target.object);
   const identity = { kind:'sdf',object:target.object,entity:target.entity,part:target.part,field };
   let key = owner ?? row.part;
   if (paint) {
     const masks = Object.fromEntries(Object.entries(paint.masks ?? {}).filter(([,value])=>value!==null));
-    if (paint.material || Object.keys(masks).length) {
+    if (paint.material || Object.keys(masks).length)
       identity.paint = { ...(paint.material && {material:paint.material}),masks };
-      const index = JSON.stringify([field,identity.paint]);
-      if (!source.paintKeys.has(index)) source.paintKeys.set(index,{});
-      key = source.paintKeys.get(index);
-    }
+  }
+  if (generatedSurface) identity.generatedSurface=generatedSurface;
+  if (identity.paint || generatedSurface) {
+    const index=JSON.stringify([field,identity.paint,generatedSurface]);
+    if (!source.appearanceKeys.has(index)) source.appearanceKeys.set(index,{});
+    key=source.appearanceKeys.get(index);
   }
   return { key,identity,coordinate:owner?.sourceLocal?.(rest) ?? rest };
 }

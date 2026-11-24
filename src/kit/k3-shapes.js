@@ -110,6 +110,16 @@
           return solid?.mat.surfaceState?.locate(point, normal);
         } } };
       }
+      if (A.concat(Bl).some(solid=>solid.mat.sdfNewSurface)) {
+        const cut=kind.startsWith('cut') || kind==='engrave' || kind==='groove', common=kind.startsWith('common');
+        mat={ ...mat,sdfNewSurface:{ locate(point,normal) {
+          const left=fa(...point), right=fb(...point);
+          if (cut && -right>=left) return;
+          const sources=cut || (common ? left>=right : left<=right) ? A : Bl;
+          const solid=sources.reduce((best,row)=>!best || S.psd(row,...point)<S.psd(best,...point) ? row : best,null);
+          return solid?.mat.sdfNewSurface?.locate(point,normal);
+        } } };
+      }
       const p = {
         bc: bd.bc,
         br: bd.br + r,

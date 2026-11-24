@@ -2685,11 +2685,63 @@ the latest source revision, and this operation:
 ```
 
 `updateBrush` accepts depth, direction, profile, falloff, and smoothing
-radius. It rebuilds the stroke from the saved anchors, evaluates the
+radius. With shape settings it rebuilds the stroke from the saved anchors, evaluates the
 source before that modifier, and keeps the stroke's ID and stack
 position. The preview describes the retuned stroke in its capture frame.
 The usual revision, preview, undo, and receipt paths apply. Stored strokes
 from before anchor capture still build as retained geometry.
+
+### Finish the faces created by a cut or relief
+
+An explicit shape brush accepts `surface.wall` for the sides of the stroke
+and `surface.cap` for its floor or tip. Put the settings alongside `mode`
+and `depth` in `operation.brush`. The visible face inherits the solid's
+appearance where you leave its settings unspecified.
+
+```json
+{
+  "brush": {
+    "mode": "carve",
+    "depth": 0.2,
+    "direction": "normal",
+    "selection": "notch",
+    "surface": {
+      "wall": {
+        "material": "metal",
+        "coordinates": "stroke",
+        "edge": { "width": 0.025, "material": "accent" },
+        "lighting": { "gain": 0.8, "flatten": 0.25 }
+      },
+      "cap": {
+        "material": "ember",
+        "coordinates": "rest"
+      }
+    }
+  }
+}
+```
+
+- `material` uses a named scene palette role.
+- `stroke` coordinates are normalized to the native stencil grid across
+  caps. On each wall, U follows the corresponding native-grid axis and V
+  runs along the sweep from entry to tip. `rest` projects the solid's rest
+  position onto the two axes closest to the face plane, in solid-rest units.
+- `edge` replaces the role within a band along the join with the prior
+  surface. Width is measured in solid-rest units from 0.001 to 2. The band
+  changes shading while preserving the shape and silhouette.
+- `lighting.gain` scales the surface color from 0 to 2. `lighting.flatten`
+  reduces baked shading variation from 0 to 1 by moving the ramp input
+  toward its midpoint. These controls feed the normal shot lighting and
+  finishing passes.
+
+Use `updateBrush` with an existing stroke ID and only `surface` to replace
+its finish while keeping its retained columns. Pass `surface: null` to
+restore the inherited appearance. A shape retune keeps the finish if you
+omit `surface`. Native SDF inspection shows the stroke ID, face, edge band,
+lighting and UV of each hit under `geometry.generatedSurface` and
+`geometry.uv`. Baked splats carry the color at their sampling resolution.
+A later `sdf-material` paint stroke can replace the local palette role and
+add mask values while keeping the face coordinates and lighting response.
 
 ### Paint an SDF material boundary
 

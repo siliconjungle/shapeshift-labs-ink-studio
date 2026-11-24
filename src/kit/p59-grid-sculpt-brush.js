@@ -16,10 +16,10 @@
   const finite = (n,min,max) => Number.isFinite(n) && n>=min && n<=max;
 
   function settings(raw,mode) {
-    if (!allowed(raw,['depth','direction','profile','falloff','radius']) || !modes.includes(mode) ||
+    if (!allowed(raw,['depth','direction','profile','falloff','radius','surface']) || !modes.includes(mode) ||
         !finite(raw.depth,.005,20))
       throw new TypeError('SDF shape operations need a supported mode and depth from .005 to 20');
-    const { depth,direction='view',profile='flat',falloff={pixels:0},radius } = raw;
+    const { depth,direction='view',profile='flat',falloff={pixels:0},radius,surface } = raw;
     if (!['view','normal'].includes(direction) && (!vec(direction) || V.len(direction)<1e-8))
       throw new TypeError('SDF brush direction needs view, normal, or a nonzero outward XYZ axis');
     if (!profiles.includes(profile) && !(Array.isArray(profile) && profile.length>=2 && profile.length<=16 &&
@@ -31,7 +31,8 @@
       throw new RangeError('Brush falloff needs a width from 0 to 64 pixels and linear or smoothstep');
     if (radius!==undefined && (mode!=='smooth' || !Number.isSafeInteger(radius) || !finite(radius,1,8)))
       throw new RangeError('Smoothing radius needs 1–8 pixels');
-    return { depth,direction:Array.isArray(direction) ? V.norm(direction) : direction,profile,
+    K.procedural.sdfBrushSurfaces.check(surface);
+    return { ...(surface!==undefined && {surface}),depth,direction:Array.isArray(direction) ? V.norm(direction) : direction,profile,
       falloff:{pixels:falloff.pixels,curve:falloff.curve ?? 'smoothstep'},...(mode==='smooth' && {radius:radius ?? 1}) };
   }
 
@@ -146,7 +147,7 @@
 
   function columnFromCorners(corners, validate=false) {
     const center = corners.reduce((sum,p)=>V.mad(sum,p,1/8),[0,0,0]);
-    const planes = faces.map(indices=>{
+    const planes = faces.map((indices,index)=>{
       const [a,b,c,d] = indices.map(i=>corners[i]);
       const cross = V.cross(V.sub(b,a),V.sub(c,a));
       let n = V.norm(cross);
@@ -155,7 +156,7 @@
       if (validate && (V.len(cross)<1e-14 || V.dot(n,V.sub(center,a))>=-1e-8 ||
           Math.abs(V.dot(n,V.sub(d,a)))>1e-7 || corners.some(p=>V.dot(n,V.sub(p,a))>1e-7)))
         throw new RangeError('Shape operation column must be finite, convex, and have planar faces');
-      return { a,b,c,d,n,offset:V.dot(n,a),u,v };
+      return { index,a,b,c,d,n,offset:V.dot(n,a),u,v };
     });
     return { ...boundsOf(corners),center,planes };
   }
@@ -176,26 +177,35 @@
     return Math.sqrt(a*a+b*b+c*c);
   }
 
-  function distance(node,x,y,z,best) {
+  function distance(node,x,y,z,best,contact) {
     const lower = outside(node,x,y,z);
     if (lower>0 && lower>=best) return best;
     if (node.planes) {
-      let d = -Infinity;
-      for (const { n,offset } of node.planes) d = Math.max(d,n[0]*x+n[1]*y+n[2]*z-offset);
-      return Math.min(best,lower>0 ? Math.max(lower,d) : d);
+      let d = -Infinity, plane;
+      for (const face of node.planes) {
+        const { n,offset }=face, value=n[0]*x+n[1]*y+n[2]*z-offset;
+        if (value>d) { d=value; plane=face; }
+      }
+      const result=lower>0 ? Math.max(lower,d) : d;
+      if (contact && result<best) Object.assign(contact,{plane,at:node.at});
+      return Math.min(best,result);
     }
-    return distance(node.right,x,y,z,distance(node.left,x,y,z,best));
+    return distance(node.right,x,y,z,distance(node.left,x,y,z,best,contact),contact);
   }
 
   function prepare(brush, mode, change) {
     const retained = check(brush,mode);
     const cells = retained.version===1 ? retained.cells.map(cell=>column(retained.projection,retained.grid,cell)) :
-      retained.columns.filter(row=>!change || change===row.change).map(row=>columnFromCorners(row.corners));
+      retained.columns.filter(row=>!change || change===row.change).map(row=>({ ...columnFromCorners(row.corners),at:row.at }));
     if (!cells.length) return null;
     const root = tree(cells.slice());
     const bounds = { min:root.min,max:root.max };
     const sd = (x,y,z)=>distance(root,x,y,z,Infinity);
-    return { bounds,sd,solid(S,mat) {
+    return { bounds,sd,site([x,y,z]) {
+      const contact={};
+      distance(root,x,y,z,Infinity,contact);
+      return contact;
+    },solid(S,mat) {
       return S.add({ bc:V.mul(V.add(root.min,root.max),.5),br:V.dist(root.min,root.max)/2,geometryBounds:bounds,sd,
         sample(visit) {
           let samples = 0;

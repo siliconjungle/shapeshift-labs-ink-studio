@@ -74,17 +74,21 @@
       return { material,masks, ...(material && { tint:tones.get(material) ?? register(material) }) };
     }
     function register(role) {
-      const ramp=roles[role].map(index=>[palette[index]>>16&255,palette[index]>>8&255,palette[index]&255].map(n=>n/255));
-      const tint = rgb=>{
-        const shade=Math.max(0,Math.min(1,.2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2]))*(ramp.length-1);
-        const i=Math.floor(shade);
-        return V.lerp(ramp[i],ramp[Math.min(i+1,ramp.length-1)],shade-i);
-      };
+      const tint=ramp(roles[role],palette);
       tones.set(role,tint);
       return tint;
     }
     return { locate };
   }
 
-  K.procedural.sdfMaterialPaint = { prepare,values,maxCells,maxStrokes };
+  function ramp(indices,palette) {
+    const colors=indices.map(index=>[palette[index]>>16&255,palette[index]>>8&255,palette[index]&255].map(n=>n/255));
+    return rgb=>{
+      const shade=Math.max(0,Math.min(1,.2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2]))*(colors.length-1);
+      const i=Math.floor(shade);
+      return V.lerp(colors[i],colors[Math.min(i+1,colors.length-1)],shade-i);
+    };
+  }
+
+  K.procedural.sdfMaterialPaint = { prepare,values,ramp,maxCells,maxStrokes };
 })(KIT);

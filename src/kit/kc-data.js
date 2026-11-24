@@ -1048,7 +1048,10 @@
         fields(modifier, at, def, { id: 'str', label: 'str', enabled: 'bool' });
         if (Object.hasOwn(modifier, 'do')) bad(at + '.do', 'a sculpt modifier uses kind');
         if (kind === 'grid-brush') {
-          try { K.procedural.gridSculptBrush.check(modifier.brush,modifier.mode); }
+          try {
+            K.procedural.gridSculptBrush.check(modifier.brush,modifier.mode);
+            K.procedural.sdfBrushSurfaces.check(modifier.brush.settings?.surface,st.roles);
+          }
           catch (error) { bad(at + '.brush',error.message); }
         }
         if (kind === 'fold') {
@@ -1792,9 +1795,12 @@
               const { brush,mode } = modifier, api = K.procedural.gridSculptBrush;
               const changes = brush.version===1 ? [mode] : ['cut','add'].filter(change=>brush.columns.some(row=>row.change===change));
               for (const change of changes) {
-                const operand = api.prepare(brush,mode,change).solid(S,p.mat);
-                const cut = change==='cut';
-                p = S.join(cut ? 'cut' : 'union',p,operand,{ ...options,r:0,mat:p.mat,mask:cut });
+                const before=p, psd=S.psd, field=api.prepare(brush,mode,change);
+                const cut=change==='cut', operand=field.solid(S,before.mat);
+                const surface=K.procedural.sdfBrushSurfaces.attach(brush.settings?.surface,modifier.id,change,brush.grid,
+                  field,(x,y,z)=>psd(before,x,y,z),before.mat.sdfNewSurface,st0.roles,B.P);
+                p = S.join(cut ? 'cut' : 'union',before,operand,{ ...options,r:0,mat:before.mat,mask:cut });
+                if (surface) p.mat={ ...p.mat,sdfNewSurface:surface };
               }
             } else if (modifier.kind === 'join' || modifier.kind === 'mask') {
               const operand = sub(modifier.shape);

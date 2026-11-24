@@ -21,7 +21,7 @@ const footprintKeys = ['pixels','selection','camera','minFacing','time'];
 function prepare(raw,frame,binding,api) {
   const { maxCells,modes } = api;
   const legacy = ['add','cut'].includes(raw?.mode);
-  const controls = ['direction','profile','falloff','radius'];
+  const controls = ['direction','profile','falloff','radius','surface'];
   const keys = ['mode','depth',...footprintKeys,...(legacy ? [] : controls)];
   if (!fields(raw,keys) || !legacy && !modes.includes(raw.mode) ||
       !finite(raw.depth,.005,20))
@@ -150,8 +150,9 @@ function localProjection(projection,toLocal,V) {
 }
 
 function project(editor,solid,frame,binding,raw,layer) {
-  const { V,procedural:{gridSculptBrush:api} } = require('../index.js').load().KIT;
+  const { V,diorama,procedural:{gridSculptBrush:api,sdfBrushSurfaces} } = require('../index.js').load().KIT;
   const footprint = prepare(raw,frame,binding,api), { mode,depth,grid,settings,time } = footprint;
+  if (settings?.surface) sdfBrushSurfaces.check(settings.surface,diorama.sceneMaterials(editor.snapshot()).roles);
   const legacyBounds = new Map();
   const {projection,candidates,skipped,carried,lookup} = captureFootprint(editor,solid,frame,binding,footprint,layer,
     settings ? { singleOwner:true } : { accept(hit,projection) {
@@ -226,24 +227,32 @@ function fromAttachment({ mode,settings,grid,attachment,owner,binding,skipped,ap
 }
 
 function update(editor,key,solid,binding,raw) {
-  const { KIT } = require('../index.js').load(), { V } = KIT, api = KIT.procedural.gridSculptBrush;
-  const keys = ['id','depth','direction','profile','falloff','radius'];
+  const { V,diorama,procedural:{gridSculptBrush:api,sdfBrushSurfaces} } = require('../index.js').load().KIT;
+  const keys = ['id','depth','direction','profile','falloff','radius','surface'];
   if (!fields(raw,keys) || typeof raw.id!=='string' || Object.keys(raw).length<2 ||
       raw.falloff!==undefined && (!fields(raw.falloff,['pixels','curve']) || !Object.keys(raw.falloff).length))
     throw new TypeError('A brush update needs a modifier ID and editable brush settings');
   const modifiers = solid.modifiers ?? [], index = modifiers.findIndex(row=>row.id===raw.id);
   const prior = modifiers[index];
   if (prior?.kind!=='grid-brush') throw new RangeError('Unknown grid brush modifier: '+raw.id);
-  const { mode,brush:{ grid,attachment } } = prior;
+  const { mode,brush } = prior, { grid,attachment } = brush;
+  if (brush.version!==2) throw conflict('missing-brush-attachment','This stroke has no retained parameter anchors',
+    { binding:binding.id,modifier:raw.id });
+  const { id,surface,...settingsPatch } = raw, old = brush.settings;
+  const settings = api.settings({ ...old,...settingsPatch,
+    surface:surface===null ? undefined : surface ?? old.surface,falloff:{ ...old.falloff,...raw.falloff } },mode);
+  if (settings.surface) sdfBrushSurfaces.check(settings.surface,diorama.sceneMaterials(editor.snapshot()).roles);
+  if (Object.keys(settingsPatch).length===0) {
+    editor.updateModifier(id,{ brush:{ ...brush,settings } },key);
+    return { mode,grid,settings,appearanceOnly:true,projectedPixels:brush.columns.length,
+      ...(attachment && {attachment:{ ...attachment.source,time:attachment.time }}) };
+  }
   if (!attachment) throw conflict('missing-brush-attachment','This stroke has no retained parameter anchors',
     { binding:binding.id,modifier:raw.id });
   if (attachment.source.object!==solid.id || attachment.source.part!==(solid.part??null))
     throw conflict('brush-source-changed','The stroke is attached to a different source solid or part',
       { binding:binding.id,modifier:raw.id,...attachment.source });
 
-  const { id,...settingsPatch } = raw;
-  const old = prior.brush.settings;
-  const settings = api.settings({ ...old,...settingsPatch,falloff:{ ...old.falloff,...raw.falloff } },mode);
   const fork = editor.fork();
   fork.setModifiers(modifiers.slice(0,index),key);
   const input = fork.build(undefined,{ retainRenderSdf:true,retainPartRenderSdf:Boolean(solid.part) });

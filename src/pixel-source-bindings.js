@@ -17,6 +17,7 @@ const PixelSourceBindings = (() => {
     let geometry = null;
     if (surface && source.kind === 'sdf' && coordinates?.every(Number.isFinite)) {
       geometry = { ...source,local:coordinates,rest:surface.restPosition,material:surface.material,
+        ...(surface.uv && {uv:surface.uv}),
         depth:surface.depth,coverage:surface.coverage };
     } else if (surface?.kind === 'mesh' && (source.kind === 'mesh' || surface.uv)) {
       geometry = { kind:'mesh',object:surface.object,part:surface.part,...source,

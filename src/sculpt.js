@@ -181,21 +181,30 @@ function makeSculpt(B, rest) {
   S.materialAt = (material, point, normal) => {
     if (!material) return material;
     const base = baseMaterialAt(material,point,normal), paint = material.sdfPaint?.locate(point,normal);
-    if (!paint) return base;
-    const { material:role,masks,tint } = paint, model = base.model ?? {};
-    const changed = { ...model.masks };
-    for (const [name,value] of Object.entries(masks ?? {})) if (value!==null) changed[name]=value;
-    const rgb = model.color ?? [1,1,1];
-    return { ...base,...(role && { materialId:role }),model:{
-      ...model,...(tint && { color:tint(rgb) }),...(Object.keys(changed).length && { masks:changed }) } };
+    const surface = material.sdfNewSurface?.locate(point,normal);
+    const appearance=surface ? KIT.procedural.sdfBrushSurfaces.appearance(surface,paint) : paint;
+    if (!appearance) return base;
+    const { material:role,masks,tint }=appearance;
+    const next={ ...base,...(role && { materialId:role }),
+      ...(surface && { surfaceUV:surface.uv,generatedSurface:surface.details }) };
+    if (masks || tint) {
+      const model=(typeof base.model==='function' ? base.model(point,normal) : base.model) ?? {};
+      const changed={ ...model.masks };
+      for (const [name,value] of Object.entries(masks ?? {})) if (value!==null) changed[name]=value;
+      next.model={ ...model,...(tint && { color:tint(model.color ?? [1,1,1]) }),
+        ...(Object.keys(changed).length && { masks:changed }) };
+    }
+    return next;
   };
   S.mapSurfaceState = (material, inverse, pullNormal, pushNormal) => {
-    const state = material?.surfaceState, paint = material?.sdfPaint;
-    if (!state && !paint) return material;
-    return { ...material,...(paint && { sdfPaint:{ locate(point,normal,epsilon) {
+    const state = material?.surfaceState, paint = material?.sdfPaint, surface = material?.sdfNewSurface;
+    if (!state && !paint && !surface) return material;
+    const map = program=>({ locate(point,normal,...options) {
       const rest = inverse(point);
-      return paint.locate(rest,pullNormal ? pullNormal(normal,rest,point) : normal,epsilon);
-    } } }), ...(state && { surfaceState: { ...state, locate(point, normal) {
+      return program.locate(rest,pullNormal ? pullNormal(normal,rest,point) : normal,...options);
+    } });
+    return { ...material,...(paint && { sdfPaint:map(paint) }),...(surface && {sdfNewSurface:map(surface)}),
+      ...(state && { surfaceState: { ...state, locate(point, normal) {
       const rest = inverse(point);
       const hit = state.locate(rest, pullNormal ? pullNormal(normal, rest, point) : normal);
       return hit && pushNormal ? { ...hit,normal,
@@ -230,7 +239,7 @@ function makeSculpt(B, rest) {
       if (lowerBound) solid.lowerBound = (x, y, z, limit) => scale * lowerBound(...inverse([x, y, z]), limit / scale);
       if (along) solid.along = (x, y, z) => along(...inverse([x, y, z]));
       if (mat.rf) solid.mat = { ...mat, rf: (x, y, z) => mat.rf(...inverse([x, y, z])) };
-      if (mat.surfaceState || mat.sdfPaint) {
+      if (mat.surfaceState || mat.sdfPaint || mat.sdfNewSurface) {
         const axes = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map(direction);
         solid.mat = S.mapSurfaceState(solid.mat, inverse,
           normal => axes.map(axis => axis[0] * normal[0] + axis[1] * normal[1] + axis[2] * normal[2]), direction);
@@ -1937,12 +1946,17 @@ function makeSculpt(B, rest) {
     if (style) B.describePixelStyle?.(first, end, style, pair);
     const surfaceId = effective.surfaceId ?? (effective === material ? undefined : effective.surface?.id) ?? material.surfaceId;
     const baseId = effective.materialId ?? material.materialId;
-    const paint = first<end && owner?.mat?.sdfPaint?.locate(sample.slice(1,4),sample.slice(4,7));
-    if (paint?.tint && B.tintSplatColors)
-      B.tintSplatColors(first,end,paint.tint,owner.sdfPaintBase??=new Map(),baseId);
+    let appearance;
+    if (first<end && (owner?.mat?.sdfPaint || owner?.mat?.sdfNewSurface)) {
+      const point=sample.slice(1,4), normal=sample.slice(4,7);
+      const paint=owner.mat.sdfPaint?.locate(point,normal), surface=owner.mat.sdfNewSurface?.locate(point,normal);
+      appearance=surface ? KIT.procedural.sdfBrushSurfaces.appearance(surface,paint) : paint;
+    }
+    if (appearance?.tint && B.tintSplatColors)
+      B.tintSplatColors(first,end,appearance.tint,owner.sdfPaintBase??=new Map(),baseId);
     B.describeSplats?.(first, end, {
       object: owner?.renderOwner ?? owner,
-      material: paint?.material ?? baseId ?? material,
+      material: appearance?.material ?? baseId ?? material,
       target: renderTarget(owner, surfaceId)
     });
     const albedo = pigment ?? effective.albedo ?? effective.r?.at(-1) ?? material.albedo ?? material.r?.at(-1);
