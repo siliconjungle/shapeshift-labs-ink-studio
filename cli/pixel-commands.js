@@ -1,0 +1,141 @@
+'use strict';
+
+const path = require('node:path');
+const Destinations = require('./pixel-edit-destinations.js');
+
+const format = 'ink-studio/pixel-command';
+const edits = Object.freeze(['apply','draw','mask','recolor','transform']);
+const travel = Object.freeze(['commit','cancel','undo','redo']);
+const paintTools = ['pencil','eraser','fill','shape','brush','rgba','cleanup'];
+const canvasTools = ['crop','trim','pad','resize','resample'];
+const recolorTools = ['swatch','remap-indices'];
+const renderOptions = Object.freeze({
+  'shot-corrections':'shotCorrections','splat-fit':'splatFit','scan-paint':'scanPaint'
+});
+const exportArtifacts = Object.freeze([
+  'document','scene','layer-deck','stamp','png','preset',...Object.keys(renderOptions)
+]);
+const members = {
+  validate:[],inspect:['at','options'],select:['query','options'],
+  ...Object.fromEntries(edits.map(action=>[action,['patch','options']])),
+  preview:['edit','options'],begin:['label'],...Object.fromEntries(travel.map(action=>[action,[]])),
+  replay:['receipt'],export:['artifact','options']
+};
+
+const record = value=>value && Object.getPrototypeOf(value) === Object.prototype;
+const text = value=>typeof value === 'string' && !!value.trim();
+const fields = (value,allowed)=>record(value) && Object.keys(value).every(key=>allowed.includes(key));
+const envelope = (action,details)=>({ ...details,format,version:1,action });
+
+function prepare(command) {
+  if (!record(command) || command.format !== format || command.version !== 1 ||
+      typeof command.action !== 'string' || !Object.hasOwn(members,command.action) ||
+      !fields(command,['format','version','action',...members[command.action]]))
+    throw new TypeError('Use a version 1 Ink pixel command with fields for its action');
+  return command;
+}
+
+function optionsFor(options,keys) {
+  if (options !== undefined && !fields(options,keys))
+    throw new TypeError('Unknown options for this pixel command');
+  return options;
+}
+
+function request(design,command) {
+  const { action,patch } = command;
+  if (!record(patch)) throw new TypeError('A pixel edit command needs a guarded patch object');
+  if (action === 'apply') return patch;
+
+  const { operation } = patch;
+  let destination = patch.destination;
+  if (destination === undefined) {
+    if (action === 'mask') destination = 'selections';
+    else if (action === 'recolor' && recolorTools.includes(operation?.type)) destination = 'palette';
+    else if (action === 'transform' && canvasTools.includes(operation?.type)) destination = 'canvas';
+    else destination = 'raster';
+  }
+  const { kind,channel } = Destinations.resolve(design,destination).destination;
+  if (action === 'draw' && (kind === 'surface-channel' || kind === 'raster' &&
+      (paintTools.includes(operation?.tool) || operation === undefined && Array.isArray(patch.edits))))
+    return { ...patch,destination };
+  if (action === 'mask' && (kind === 'selections' || kind === 'surface-channel' && channel.startsWith('mask:')))
+    return { ...patch,destination };
+  if (action === 'recolor') {
+    if (kind === 'palette' && recolorTools.includes(operation?.type) ||
+        kind === 'surface-channel' && ['paint','pigment'].includes(channel)) return { ...patch,destination };
+    if (kind === 'raster' && record(operation) && [undefined,'replace-swatch'].includes(operation.tool))
+      return { ...patch,destination,operation:{ ...operation,tool:'replace-swatch' } };
+  }
+  if (action === 'transform') {
+    if (kind === 'canvas') return { ...patch,destination };
+    if (kind === 'raster' && record(operation) && [undefined,'transform','paste'].includes(operation.tool))
+      return { ...patch,destination,operation:{ ...operation,tool:operation.tool ?? 'transform' } };
+  }
+  throw new TypeError('Pixel '+action+' command does not accept this destination or operation');
+}
+
+function exportArtifact(editor,artifact,options,context) {
+  if (!exportArtifacts.includes(artifact)) throw new TypeError('Unknown pixel export artifact '+artifact);
+  if (artifact === 'preset') {
+    const {preset,out,directory} = optionsFor(options,['preset','out','directory']) ?? {};
+    if (!record(preset) || !text(out) || directory !== undefined && !text(directory))
+      throw new TypeError('A preset export needs a preset object, an output directory, and an optional auxiliary base directory');
+    const root = context.directory ?? process.cwd();
+    return { artifact,data:editor.exportPreset(preset,{ out:path.resolve(root,out),
+      directory:path.resolve(root,directory ?? '.'),inputs:context.inputs }) };
+  }
+  if (artifact === 'png') {
+    const settings = optionsFor(options,['frame','cel','layer','colorMode']);
+    return { artifact,encoding:'base64',data:editor.png(settings).toString('base64') };
+  }
+  if (artifact === 'stamp') return { artifact,data:editor.stamp(optionsFor(options,['frame','cel','layer','references'])) };
+  let data;
+  if (Object.hasOwn(renderOptions,artifact)) {
+    const { scene } = optionsFor(options,['scene']) ?? {};
+    data = editor.renderOptions(scene)[renderOptions[artifact]];
+  } else {
+    optionsFor(options,[]);
+    if (artifact === 'document') data = editor.snapshot();
+    else if (artifact === 'layer-deck') data = editor.layerDeck();
+    else data = editor.sceneEditor?.snapshot();
+  }
+  if (data === undefined) throw new Error('No session artifact named '+artifact);
+  return { artifact,data };
+}
+
+function execute(editor,design,raw,context = {}) {
+  const command = prepare(raw), {action,options} = command;
+  if (edits.includes(action) || action === 'replay') {
+    if (action === 'replay') editor.replay(command.receipt,context);
+    else editor.apply(request(design,command),{ ...context,...optionsFor(options,['shotHitFrame']) });
+    return editor.receipts().at(-1);
+  }
+  if (travel.includes(action)) {
+    const changed = editor[action]();
+    return { changed,history:editor.history() };
+  }
+  switch (action) {
+    case 'validate':
+      return editor.describe();
+    case 'inspect':
+      return editor.inspect(command.at,{ ...context,...optionsFor(options,['frame','cel','binding','destinations','references']) });
+    case 'select':
+      return editor.select(command.query,{ ...context,...optionsFor(options,['frame','layer','cel']) });
+    case 'preview': {
+      const settings = { ...context,...optionsFor(options,['limit']) };
+      if (command.edit === undefined) return editor.previewChanges(settings);
+      const proposed = prepare(command.edit);
+      if (!edits.includes(proposed.action)) throw new TypeError('Preview needs a pixel edit command');
+      optionsFor(proposed.options,['shotHitFrame']);
+      return editor.previewEdit(request(design,proposed),settings);
+    }
+    case 'begin':
+      if (command.label !== undefined && !text(command.label)) throw new TypeError('A pixel transaction label needs text');
+      editor.begin(command.label);
+      return { history:editor.history() };
+    case 'export':
+      return exportArtifact(editor,command.artifact ?? 'document',options,context);
+  }
+}
+
+module.exports = { execute,envelope,edits,travel };

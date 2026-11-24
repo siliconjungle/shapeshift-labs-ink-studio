@@ -295,7 +295,11 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art replay <design.json> <receipt.json> --out result.json   verify and reproduce an edit with the same options
             --scene <bound scene> for native edits; --shot-hit-frame <index> to sample skipped shot hits
   pixel-art session init <directory> <design.json> [--scene scene.json]   start a persistent edit session
-  pixel-art session <status|begin|apply|preview|commit|cancel|undo|redo|inspect|sample|select|snap|brush|copy|timeline|targets|export> <directory>
+  pixel-art session run <directory> <command.json> [--scene scene.json | --source-view view.json] [--out result.json]   run the same command object as the SDK
+  pixel-art session <apply|draw|mask|recolor|transform> <directory> <patch.json>   stage or apply a guarded edit
+  pixel-art session <status|begin|preview|commit|cancel|undo|redo|validate|inspect|sample|select|snap|brush|copy|timeline|targets> <directory>
+  pixel-art session export <directory> [--artifact document|scene|layer-deck|stamp|png|shot-corrections|splat-fit|scan-paint] --out file
+  pixel-art session export <directory> --artifact preset --preset preset.json --out directory
   lint <id ...> [--map]              pixel-art lint: orphans, doubles, jaggies, banding, pillow shading, noise, colours
   review <id> [--ref pic --px 2]     a sheet of fixed shots (four sides, top, low, far, near, close), beside the last one
   sweep <scene> <plan.json> --out directory   render still and clip contact sheets across settings and seeds
@@ -743,18 +747,24 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio pixel-art session cancel` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session commit` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session copy` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art session draw` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session export` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session init` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session inspect` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art session mask` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session preview` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art session recolor` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session redo` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art session run` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session sample` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session select` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session snap` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session status` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session targets` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session timeline` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art session transform` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session undo` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art session validate` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art slices` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art slices export` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art slices inspect` · [source](../../cli/pixel-art.js)
@@ -872,7 +882,6 @@ These options are read by CLI code. Follow each source link for the accepted val
 - `--allow-unresolved` · [cli/music-editorial.js](../../cli/music-editorial.js)
 - `--alpha-mask` · [cli/depth.js](../../cli/depth.js)
 - `--art-timecode-in` · [cli/ink-studio.js](../../cli/ink-studio.js)
-- `--artifact` · [cli/pixel-art.js](../../cli/pixel-art.js)
 - `--as` · [cli/world.js](../../cli/world.js)
 - `--aspect` · [cli/render-grid.js](../../cli/render-grid.js)
 - `--atlas` · [cli/mesh-uv.js](../../cli/mesh-uv.js)

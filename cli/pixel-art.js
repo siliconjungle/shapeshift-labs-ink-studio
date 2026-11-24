@@ -41,6 +41,7 @@ const Destinations = require('./pixel-edit-destinations.js');
 const Preview = require('./pixel-edit-preview.js');
 const SplatPreview = require('./pixel-splat-preview.js');
 const Sessions = require('./pixel-edit-session.js');
+const PixelCommands = require('./pixel-commands.js');
 const { isRevision } = require('./pixel-edit-revisions.js');
 
 const format = 'ink-studio/pixel-art';
@@ -2095,6 +2096,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
 
   const editor = Object.freeze({
     sceneEditor,
+    execute: (command,context) => PixelCommands.execute(editor,state().design,command,context),
     snapshot: () => structuredClone(state().design),
     serialize: (space = 2) => JSON.stringify(state().design,null,space),
     describe: () => validate(state().design),
@@ -2707,8 +2709,8 @@ function trace(frame, object, scene) {
 
 const actions = ['capture','trace','import','upgrade','validate','timeline','targets','draw','canvas','inspect','lint','rules','motion','track','correct','reprobe','multiview','sample','select','snap','brush','copy',
   'preview','edit','replay'];
-const sessionActions = ['init','status','begin','apply','preview','commit','cancel','undo','redo',
-  'inspect','sample','select','snap','brush','copy','timeline','targets','export'];
+const sessionActions = ['init','status','run','begin',...PixelCommands.edits,'preview',...PixelCommands.travel,
+  'validate','inspect','sample','select','snap','brush','copy','timeline','targets','export'];
 const paletteActions = ['export','extract','import'];
 const stackActions = ['export','import'];
 
@@ -3094,14 +3096,72 @@ function splatDiagnosticOptions(opt) {
   return { at:coordinates('at'),rect:coordinates('rect') };
 }
 
+function sessionOutput(directory,file,inputs = []) {
+  if (!reference(file)) throw new TypeError('--out needs a file path');
+  const out = path.resolve(file);
+  // Resolve existing ancestors so path aliases cannot overwrite a checkpoint.
+  function real(file) {
+    try { return fs.realpathSync(file); }
+    catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      return path.join(real(path.dirname(file)),path.basename(file));
+    }
+  }
+  const destination = real(out);
+  if (path.dirname(destination) === fs.realpathSync(directory) && /^checkpoint-\d+\.json$/.test(path.basename(destination)))
+    throw new RangeError('Choose an output outside the session checkpoints');
+  if (inputs.filter(reference).some(file=>real(path.resolve(file)) === destination))
+    throw new RangeError('Write the pixel command output separately from its inputs');
+  return out;
+}
+
+function exportSessionArtifact(editor,directory,opt) {
+  const out = sessionOutput(directory,opt.out), artifact = opt.artifact ?? 'document';
+  if (artifact === 'preset') {
+    if (!reference(opt.preset)) throw new TypeError('Use --preset with a pixel export preset JSON file');
+    const preset = read(opt.preset), base = path.dirname(path.resolve(opt.preset));
+    return editor.execute(PixelCommands.envelope('export',{ artifact, options:{ preset,out,directory:base } }),
+      { inputs:[opt.preset] }).data;
+  }
+  if (opt.preset !== undefined) throw new TypeError('Choose --artifact preset when using --preset');
+  const options = artifact === 'png' || artifact === 'stamp' ? {
+    frame:opt.frame,cel:opt.cel,layer:opt.layer,
+    ...(artifact === 'png' && { colorMode:opt['color-mode'] }),
+    ...(artifact === 'stamp' && { references:opt.references === true })
+  } : ['shot-corrections','splat-fit','scan-paint'].includes(artifact) ? { scene:opt.scene } : undefined;
+  const { data,encoding } = editor.execute(PixelCommands.envelope('export',{ artifact,options }));
+  if (encoding === 'base64') files.write(out,Buffer.from(data,'base64'));
+  else files.json(out,data);
+  return { artifact,file:out };
+}
+
+function runSessionPixelCommand(editor,directory,input,opt,capture,attachedScene) {
+  const sceneRef = opt.scene, sourceFile = opt['source-view'];
+  if (Object.keys(opt).some(key=>!['scene','source-view','out'].includes(key)) ||
+      [sceneRef,sourceFile].some(value=>value !== undefined && !reference(value)))
+    throw new TypeError('Use pixel-art session run <directory> <command.json> [--scene scene.json | --source-view view.json] [--out result.json]');
+  const inputs = [input,sceneRef,sourceFile].filter(reference);
+  const out = opt.out === undefined ? undefined : sessionOutput(directory,opt.out,inputs);
+  const view = sourceFile && ViewSource.unpack(read(sourceFile));
+  const captureSelection = view ? ()=>view : sceneRef && capture ? settings=>capture(sceneRef,{
+    ...settings,...(editor.sceneEditor && sameScene(attachedScene,sceneRef) && { sourceWorld:editor.sceneEditor.build() })
+  }) : undefined;
+  const command = read(input);
+  const result = editor.execute(command,{ captureSelection,sceneRef,
+    directory:path.dirname(path.resolve(input)),inputs:[...inputs,...(out ? [out] : [])] });
+  if (command.action === 'preview' && !result.valid) process.exitCode = 2;
+  return { result,out };
+}
+
 function sessionCommand(pos,opt,{ scene,capture,view }) {
   const [action,directory,input] = pos;
-  const argc = ['init','apply','select'].includes(action) ? 3 : 2;
+  const argc = ['init','run','select',...PixelCommands.edits].includes(action) ? 3 : 2;
   if (pos.length !== argc || !sessionActions.includes(action))
-    throw new TypeError('Use pixel-art session init, status, begin, apply, preview, commit, cancel, undo, redo, inspect, sample, select, snap, brush, copy, timeline, targets, or export');
+    throw new TypeError('Use a pixel-art session command. See ink-studio help for session actions.');
 
   const captureSelection = reference(opt.scene) && capture ? settings=>capture(opt.scene,settings) : undefined;
-  let editor, result;
+  const run = (action,details,context)=>editor.execute(PixelCommands.envelope(action,details),context);
+  let editor, result, reportFile;
   if (action === 'init') {
     const design = read(input);
     const sceneRef = opt.scene;
@@ -3112,33 +3172,38 @@ function sessionCommand(pos,opt,{ scene,capture,view }) {
     const binding = bindings.find(row => row.scene === sceneRef) ??
       bindings.find(row => sceneLocation && path.resolve(row.scene) === sceneLocation);
     const sceneEditor = sceneLocation && scene(sceneLocation).editor;
-    editor = createEditor(design,{ sessionDirectory:directory, sceneEditor, sceneLocation, sceneRef:binding?.scene ?? sceneRef });
+    editor = createEditor(design,{ sessionDirectory:directory,sceneEditor,sceneLocation,sceneRef:binding?.scene ?? sceneRef });
   } else {
+    let attachedScene;
     editor = openEditorSession(directory,{ resolveScene(retained,historyLimit) {
+      attachedScene = retained.ref;
       return retained.location && scene(retained.location,retained.source,historyLimit).editor;
     } });
-    if (action === 'begin') {
-      if (opt.label !== undefined && !reference(opt.label)) throw new TypeError('--label needs a transaction name');
-      editor.begin(opt.label);
-    } else if (action === 'apply') {
+    if (action === 'run') {
+      ({ result,out:reportFile } = runSessionPixelCommand(editor,directory,input,opt,capture,attachedScene));
+    } else if (action === 'begin') {
+      run(action,{ label:opt.label });
+    } else if (PixelCommands.edits.includes(action)) {
       const sample = opt['shot-hit-frame'];
       const shotHitFrame = sample === undefined ? undefined : typeof sample === 'string' && /^\d+$/.test(sample)
         ? Number(sample) : NaN;
-      editor.apply(read(input),{ shotHitFrame,captureSelection });
-      result = editor.receipts().at(-1);
+      result = run(action,{ patch:read(input),options:{ shotHitFrame } },{ captureSelection });
     } else if (action === 'preview') {
       const limit = opt.limit === undefined ? undefined : typeof opt.limit === 'string' ? Number(opt.limit) : NaN;
-      result = editor.previewChanges({ limit,view,diagnostics:splatDiagnosticOptions(opt),time:opt.t===undefined ? undefined : typeof opt.t==='string' ? Number(opt.t) : NaN });
+      result = run(action,{ options:{limit} },{ view,diagnostics:splatDiagnosticOptions(opt),
+        time:opt.t===undefined ? undefined : typeof opt.t==='string' ? Number(opt.t) : NaN });
       if (!result.valid) process.exitCode = 2;
+    } else if (action === 'validate') {
+      result = run(action);
     } else if (action === 'inspect') {
-      result = editor.inspect(inspectCoordinate(opt.at),{ frame:opt.frame,cel:opt.cel,
-        binding:opt.binding,destinations:destinationList(opt.destination),references:opt.references === true,captureSelection });
+      result = run(action,{ at:inspectCoordinate(opt.at),options:{ frame:opt.frame,cel:opt.cel,
+        binding:opt.binding,destinations:destinationList(opt.destination),references:opt.references === true } },{ captureSelection });
     } else if (action === 'sample') {
       const { coordinate,options } = sampleOptions(opt);
       result = editor.sample(coordinate,options);
     } else if (action === 'select') {
       const { frame,layer,cel } = opt;
-      result = editor.select(read(input),{ frame,layer,cel,captureSelection });
+      result = run(action,{ query:read(input),options:{ frame,layer,cel } },{ captureSelection });
     } else if (action === 'copy') {
       const { selection,frame,layer,cel } = opt;
       result = editor.copySelection({ selection,frame,layer,cel });
@@ -3146,7 +3211,7 @@ function sessionCommand(pos,opt,{ scene,capture,view }) {
       result = writeBrush(editor.snapshot(),opt,path.resolve(directory));
     } else if (action === 'snap') {
       const { point,radius } = snapOptions(opt);
-      result = editor.snap(point,{ frame:opt.frame, radius });
+      result = editor.snap(point,{ frame:opt.frame,radius });
     } else if (action === 'timeline') {
       result = editor.timeline();
     } else if (action === 'targets') {
@@ -3159,26 +3224,16 @@ function sessionCommand(pos,opt,{ scene,capture,view }) {
         capture && (settings=>capture(settings.scene,settings));
       result = editor.targets(opt.destination,{limit,query,frame:opt.frame,captureSelection:captureTargets});
     } else if (action === 'export') {
-      if (!reference(opt.out)) throw new TypeError('--out needs a file path');
-      const out = path.resolve(opt.out), artifact = opt.artifact ?? 'document';
-      if (path.dirname(out) === path.resolve(directory) && /^checkpoint-\d+\.json$/.test(path.basename(out)))
-        throw new RangeError('Choose an output outside the session checkpoints');
-      let data;
-      if (artifact === 'document') data = editor.snapshot();
-      else if (artifact === 'scene') data = editor.sceneEditor?.snapshot();
-      else if (['shot-corrections','splat-fit','scan-paint'].includes(artifact))
-        data = editor.renderOptions(opt.scene)[{'shot-corrections':'shotCorrections','splat-fit':'splatFit','scan-paint':'scanPaint'}[artifact]];
-      if (data === undefined) throw new Error('No session artifact named ' + artifact);
-      files.json(out,data);
-      result = { artifact, file:out };
-    } else if (action !== 'status') {
-      const changed = editor[action]();
-      result = { ...editor.sessionStatus(), history:editor.history(), changed };
+      result = exportSessionArtifact(editor,directory,opt);
+    } else if (PixelCommands.travel.includes(action)) {
+      const history = run(action);
+      result = { ...editor.sessionStatus(),...history };
     }
   }
   const status = editor.sessionStatus();
   if (!status.saved) throw new Error(status.error);
-  process.stdout.write(JSON.stringify(result ?? { ...status, history:editor.history(),
+  if (reportFile) files.json(reportFile,result);
+  else process.stdout.write(JSON.stringify(result ?? { ...status, history:editor.history(),
     documentRevision:editor.describe().revision },null,2)+'\n');
 }
 

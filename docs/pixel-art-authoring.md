@@ -1659,6 +1659,72 @@ stored state. Export the pixel document with `--artifact document` or choose
 `scene`, `shot-corrections`, or `splat-fit` for the retained native artifact.
 Keep the entire session directory when copying a working session.
 
+## Run the same editing commands from the CLI and SDK
+
+A version 1 `ink-studio/pixel-command` object runs against the active
+document or draft. Pass it to `editor.execute(command)` on a fresh or
+reopened editor, or save it as JSON and pass it to a CLI session.
+
+```sh
+ink-studio pixel-art session init work drawing.ink.json
+ink-studio pixel-art session run work command.json
+```
+
+```js
+const editor = openPixelEditorSession('work');
+const result = editor.execute(command);
+```
+
+| Action | Command fields and result |
+| --- | --- |
+| `inspect` | `at: [x,y]` and optional `options` with `frame`, `cel`, `binding`, `destinations`, or `references`. Returns pixel ownership and source evidence. |
+| `select` | `query` and optional `options` with `frame`, `layer`, or `cel`. Returns the resolved selection. |
+| `draw` | `patch` with a raster tool, guarded pixel edits, or a bound surface-channel operation. |
+| `mask` | `patch` with `operation: { id, query }` to save a selection. Explicit surface mask destinations accept the native surface operation. |
+| `recolor` | `patch` with a local swatch replacement, a global swatch or index remap, or an explicit bound paint or pigment destination. |
+| `transform` | `patch` for a selection transform, paste, or whole-canvas change. |
+| `apply` | Any existing guarded `patch`, including timeline, layers, and source geometry. |
+| `preview` | Set `edit` to a complete edit command to preview it without staging. Omit `edit` to review the pending transaction. Use `options.limit` to cap the pixel list. |
+| `begin`, `commit`, `cancel`, `undo`, `redo` | Use an optional `label` on `begin`. Returns the current history and, for the other actions, whether it changed. |
+| `export` | Choose `artifact` and its `options`. Returns a document, layer deck, stamp, PNG, retained scene artifact, or saved export preset report. |
+| `validate` | Returns revisions, frames and IDs for the current document. |
+| `replay` | Pass a `receipt` from a shared edit command to verify and reproduce it. |
+
+A draw, mask, recolor, transform, or apply command takes the regular Ink
+patch fields and returns a pixel edit receipt. Keep `id` and `revision` on
+each patch. Supply the frame, cel, and source revision where the destination
+requires them. Edits join an open transaction or commit individually.
+For example, save a rectangular mask using the revision returned by
+`validate`.
+
+```json
+{
+  "format": "ink-studio/pixel-command",
+  "version": 1,
+  "action": "mask",
+  "patch": {
+    "id": "pick-badge",
+    "revision": "<document revision>",
+    "frame": "artwork",
+    "operation": { "id": "badge", "query": { "type": "rectangle", "rect": [12, 5, 6, 4] } }
+  }
+}
+```
+
+The CLI accepts `--source-view view.json` for a captured native scene view.
+For the same capture in the SDK, pass
+`{ renderFrame: unpackPixelSourceView(savedView) }` as the second argument
+to `execute`. Source edits use the attached scene editor. In a CLI session,
+attach it with `session init --scene scene.json`.
+
+A PNG result from `execute` or `session run` carries base64 in `data`. Use
+`session export work --artifact png --frame artwork --out art.png` to write
+the PNG directly. Preset commands take `options: { preset, out, directory }`.
+Relative paths resolve from the command file in the CLI, and from
+`context.directory` or the working directory in the SDK. The direct CLI
+shortcuts `session draw`, `session mask`, `session recolor`, and
+`session transform` take the patch JSON by itself.
+
 ## Preview before committing
 
 Use `pixels.previewEdit(patch)` to check a proposed patch against the working
