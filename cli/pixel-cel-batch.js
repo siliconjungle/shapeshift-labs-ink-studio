@@ -83,6 +83,29 @@ function prepare(operation,swatches) {
   return type === 'mask' ? { type,mode:mode ?? 'keep' } : { type,mode,...settings };
 }
 
+function prepareWrites(operation,swatches,width,height) {
+  if (!fields(operation,['type','cels']) || !Array.isArray(operation.cels) || !operation.cels.length)
+    throw new TypeError('Cel writing needs a list of edited cels');
+  const cels = new Map();
+  for (const row of operation.cels) {
+    if (!fields(row,['cel','pixels']) || !Timeline.celName(row.cel) || cels.has(row.cel) ||
+        !Array.isArray(row.pixels) || !row.pixels.length || row.pixels.length > width*height)
+      throw new TypeError('Cel writing needs a distinct cel ID and a native pixel list for each cel');
+    const pixels = new Map();
+    for (const pixel of row.pixels) {
+      if (!fields(pixel,['at','swatch']) || !Array.isArray(pixel.at) || pixel.at.length !== 2 ||
+          !Array.from(pixel.at).every((n,i)=>Number.isSafeInteger(n) && n >= 0 && n < [width,height][i]) ||
+          pixel.swatch !== null && !swatches.has(pixel.swatch))
+        throw new TypeError('Cel pixels need a native coordinate and a known swatch or null');
+      const p = pixel.at[1]*width+pixel.at[0];
+      if (pixels.has(p)) throw new RangeError('Cel writing repeats a pixel at '+pixel.at.join(','));
+      pixels.set(p,{ slot:pixel.swatch === null ? -1 : swatches.get(pixel.swatch),alpha:255 });
+    }
+    cels.set(row.cel,pixels);
+  }
+  return cels;
+}
+
 function masks(design,scope,selected,settings) {
   const { selection,selections } = scope, masks = new Map(), bySelection = new Map();
   if (selection === undefined && selections === undefined) {
@@ -125,6 +148,8 @@ function coverage(source,p) {
 
 function writesFor(frame,source,mask,settings) {
   const { type } = settings;
+  if (type === 'pixels') return new Map([...settings.pixels].filter(([p,{ slot }])=>
+    source.slots[p] !== slot || coverage(source,p) !== 255));
   if (type === 'nudge') return nudge(frame,source,mask,settings.offset);
   if (type === 'cleanup') {
     const { type, ...options } = settings;
@@ -160,4 +185,4 @@ function plan(frame,source,mask,settings) {
   return { writes,changed,changes };
 }
 
-module.exports = { select,prepare,masks,plan };
+module.exports = { select,prepare,prepareWrites,masks,plan };

@@ -118,3 +118,31 @@ test('WebGL captures a surface pin and preserves the exact painted RGB through a
   assert.deepEqual(gloss,[255,255,255]);
   assert.deepEqual(corrected,cream);
 });
+
+test('WebGL applies exact tracked shot keys and skips the gaps',{ skip:!process.env.INK_TEST_CHROME },()=>{
+  const { rows } = runWebGL({},fixture,(kit,build,backend)=>{
+    const { world,w,h } = build(kit), render = backend(w,h,{ raw:true,offscreen:true });
+    try {
+      let anchor;
+      render.draw(world,{ captureShotCorrectionSurface:true,shotCorrectionSurfaceFrame:surface=>{ anchor = surface.pin(26,18); } });
+      const shotCorrections = { size:[w,h],fps:12,corrections:[{ id:'keyed',frames:[0,3],
+        keys:[{ frame:0,pixels:[{ anchor,color:'#fff1bc' }] },{ frame:2,pixels:[{ anchor,color:'#de6c55' }] }] }] };
+      const baseline = render.sample({ pixel:[26,18] }).pixel;
+      return { rows:[0,1,2,3].map(shotCorrectionFrame=>{
+        let report;
+        render.draw(world,{ shotCorrections,shotCorrectionFrame,shotCorrectionsFrame:sample=>{ report = sample; } });
+        return { report,pixel:render.sample({ pixel:[26,18] }).pixel,baseline };
+      }) };
+    } finally { render.close(); }
+  });
+  for (const [i,row] of rows.entries()) {
+    if (i % 2) {
+      assert.deepEqual(row.report.corrections,[]);
+      assert.deepEqual(row.pixel,row.baseline);
+    } else {
+      assert.equal(row.report.corrections[0].key,i);
+      assert.equal(row.report.corrections[0].painted,1);
+      assert.deepEqual(row.pixel.slice(0,3),i === 0 ? cream : [222,108,85]);
+    }
+  }
+});

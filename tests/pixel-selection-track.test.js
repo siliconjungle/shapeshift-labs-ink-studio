@@ -247,3 +247,70 @@ test('the correction review jumps to unresolved frames and retains scene evidenc
       assert.equal(await browser.evaluate("document.querySelectorAll('#samples button').length"),3);
     });
   });
+
+test('a motion edit attaches projected paint to explicit cels and keeps other holds unchanged',t=>{
+  const space = workspace(t), { document,input,planFile,run } = correctionDemo(space);
+  document.layers.push({ id:'accent' });
+  document.frames[0].cels.ink.id = 'reference-ink';
+  document.frames[1].cels.ink = { id:'moving-ink',hold:'reference-ink' };
+  document.frames[1].cels.accent = { id:'moving-accent',marks:[] };
+  document.frames[2].cels.ink = { id:'quiet-hold',hold:'moving-ink' };
+  fs.writeFileSync(input,JSON.stringify(document));
+  const { layer,samples,...old } = JSON.parse(fs.readFileSync(planFile));
+  const plan = { ...old,version:2,target:{ kind:'cels' },samples:samples.map(({ frame,...view },i)=>({
+    ...view,...(i === 1 ? { cels:['moving-ink','moving-accent'] } : i === 2 ? { cels:['quiet-hold'] } : {})
+  })),marks:old.marks.slice(0,1) };
+  fs.writeFileSync(planFile,JSON.stringify(plan));
+  const preview = run('--review',space.file('motion.html'));
+  assert.equal(preview.target,'cels');
+  assert.deepEqual(preview.frames[1].marks.map(({ at,cel })=>({ at,cel })),[
+    { at:[40,24],cel:'moving-ink' },{ at:[40,24],cel:'moving-accent' }
+  ]);
+  assert.equal(preview.frames[2].marks[0].reason,'occluded');
+  const patchFile = space.file('edit-cels.json'), documentFile = space.file('revised.json');
+  const applied = run('--apply',documentFile,'--patch',patchFile,'--approval',preview.approval);
+  const patch = JSON.parse(fs.readFileSync(patchFile)), revised = JSON.parse(fs.readFileSync(documentFile));
+  const editor = require('..').createPixelEditor(document);
+  assert.equal(patch.operation.type,'write-cels');
+  assert.deepEqual(editor.apply(patch),revised);
+  assert.equal(applied.resultRevision,editor.timeline().revision);
+  assert.equal(editor.snapshot().frames[2].cels.ink.hold,'reference-ink');
+  assert.equal(editor.sample([32,24],{ frame:'hidden',mode:'layer',layer:'ink' }).swatch,'bronze');
+  assert.equal(editor.sample([40,24],{ frame:'shifted',mode:'layer',layer:'accent' }).swatch,'light');
+  editor.undo();
+  assert.deepEqual(editor.snapshot(),document);
+});
+
+test('a tracked shot emits exact keys and skips occlusion and unauthored frames',t=>{
+  const space = workspace(t), { planFile,run,source } = correctionDemo(space);
+  const prior = JSON.parse(fs.readFileSync(planFile));
+  const plan = { format:prior.format,version:2,id:'moving-accent',binding:prior.binding,
+    target:{ kind:'shot',frames:[0,3],fps:1 },marks:prior.marks.slice(0,1),
+    samples:prior.samples.slice(0,3).map(({ frame,...view },shotFrame)=>({ ...view,shotFrame })) };
+  fs.writeFileSync(planFile,JSON.stringify(plan));
+  const preview = run('--review',space.file('shot.html'));
+  assert.equal(preview.artifact,'shot-corrections');
+  assert.deepEqual(preview.frames.map(row=>[row.frame,row.counts.verified,row.counts.unresolved]),[[0,1,0],[1,1,0],[2,0,1]]);
+  assert.deepEqual(preview.frames[1].marks[0].at,[40,24]);
+  assert.equal(preview.frames[1].marks[0].pin.splat,'moving-rest');
+  const asset = space.file('shot.json');
+  run('--apply',asset,'--approval',preview.approval);
+  const corrections = JSON.parse(fs.readFileSync(asset));
+  assert.deepEqual(corrections.corrections[0].keys.map(row=>[row.frame,row.pixels.length]),[[0,1],[1,1],[2,0]]);
+  const ink = require('..');
+  const kit = ink.load(), build = () => require(source)(kit).build();
+  for (const [t,position] of [[0,[32,24]],[1,[40,24]],[2,null],[3,null]]) {
+    const world = build();
+    require('../cli/diarama-pose.js').pose(world,t,{ kit });
+    const options = { w:64,h:48,px:1,t,raw:true };
+    const current = ink.render(world,{ ...options,shotCorrections:corrections });
+    if (position) {
+      const index = (position[1]*64+position[0])*3;
+      assert.deepEqual(Array.from(current.rgb.slice(index,index+3)),[247,202,132]);
+      assert.equal(current.shotCorrections.corrections[0].painted,1);
+    } else assert.deepEqual(current.rgb,ink.render(world,options).rgb);
+  }
+  plan.samples[1].time = 1.5;
+  fs.writeFileSync(planFile,JSON.stringify(plan));
+  assert.throws(()=>run(),/times on the shot clock/);
+});

@@ -90,6 +90,13 @@ in renderer options to address an exact frame when scrubbing.
 Corrections are applied in document order. Add or replace a correction
 by ID using `paint`, and save the returned document as JSON.
 
+For separate frame keys, use `keys: [{ frame, pixels: [{ anchor, color }] }]`
+in place of the held `anchor` and offset `pixels`. Each pixel uses its
+own stable splat ID and exact RGB. Ink checks the original splat owner
+and depth at that key. Frames between keys keep the rendered image.
+Generate these keys from witnessed native pixels with
+[tracked edits on moving parts](pixel-art-authoring.md#place-a-tracked-edit-on-a-moving-part).
+
 Node exposes a `shotCorrections` report with the shot frame,
 projected anchor locations, and painted or clipped pixel counts.
 Both renderers support `shotCorrectionsFrame(report)`. In WebGL,

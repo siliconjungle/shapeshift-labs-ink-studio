@@ -1682,6 +1682,63 @@ or filtered atlas samples without direct texel provenance, and points
 with no sampled counterpart stay unresolved. Native edits to the
 original representation still require a valid source address.
 
+## Place a tracked edit on a moving part
+
+A version 2 `pixel-tracked-correction` plan uses the same named binding,
+native marks, and camera samples as selection tracking. The first sample
+sets the reference view. `frame` defaults to the binding's document frame,
+or to the document's first frame when the binding has no frame.
+
+```json
+{
+  "format": "ink-studio/pixel-tracked-correction",
+  "version": 2,
+  "id": "enamel-accent",
+  "binding": "capsule",
+  "target": { "kind": "cels" },
+  "marks": [{ "kind": "highlight", "at": [36, 32], "swatch": "signal" }],
+  "samples": [
+    { "id": "reference", "time": 0 },
+    { "id": "turn", "time": 0.5, "cels": ["turn/ink", "turn/accent"] }
+  ]
+}
+```
+
+| Target | How the edit is placed | Apply output |
+| --- | --- | --- |
+| `cels` | Each sample can name existing cel IDs on one document frame. Visible correspondences write exact swatches or clear pixels. A sample with no cel IDs supplies tracking evidence only. | Updated pixel document. |
+| `rest` | Provide `destination` for a bound paint or pigment surface channel and `size: [width, height]` for its chart grid. Project color marks from the reference into rest space and review the results in the other sample poses. | Updated editable scene with retained chart paint. |
+| `shot` | Provide inclusive integer `frames: [first, last]`, `fps`, and optional `startTime` and `depthTolerance`. Each sample supplies a strictly increasing `shotFrame` and `time` equal to `startTime + shotFrame / fps`. | Shot corrections for `render` or `clip --shot-corrections`. |
+
+For cels, the reference sample can write to cels on the reference document
+frame. Later samples may write to several layers of their own frame.
+Ink checks locks, clipping, and cel offsets at the destination and keeps
+unselected linked exposures intact. Mesh, SDF, splat, and registered
+representation correspondences use the existing tracking passes.
+
+Rest paint follows deformation where the scene supports the bound rest
+chart. Supply the same projection options as a multiview plan to constrain
+facing, depth, and chart padding. Rest and shot targets use colored marks.
+The cels target also supports erasures and flanked gaps.
+
+Shot keys use a verified stable splat pin for each pixel. Rendering checks
+the pin's owner and depth at the keyed frame. Unauthored frames and
+unresolved hits leave the picture as rendered. Use the authored camera
+and grid for the shot. See [native shot correction rendering](cluster-coherence.md#paint-an-exact-correction).
+
+```sh
+node cli/ink-studio.js pixel-art correct document.json motion.json \
+  --out evidence.json --review review.html
+approval=$(node -p "require('./evidence.json').approval")
+node cli/ink-studio.js pixel-art correct document.json motion.json \
+  --approval "$approval" --apply result.json
+```
+
+Apply captures the scene again and checks the approval against the current
+document and evidence. Add `--patch edit.json` with approval for the
+`cels` or `rest` target to use the ordinary preview, undo, and replay
+workflow. Use the same renderer settings for preview and apply.
+
 ## Approve and apply a tracked correction
 
 Use `pixel-art correct` to carry exact swatch writes and erasures from an

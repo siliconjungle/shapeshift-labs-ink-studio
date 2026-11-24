@@ -89,9 +89,17 @@ const reasons = {
   'protected-pixel':'The destination pixel is protected',
   'locked-layer':'The destination layer is locked',
   'clipped-pixel':'The destination is outside the layer mask',
+  'outside-cel':'The destination is outside the shifted cel',
+  'no-stable-shot-pin':'The shot pixel has no verified stable splat pin',
   occluded:'Occluded'
 };
-const applied = report.mode === 'applied';
+const applied = report.mode === 'applied', showCel = report.target === 'cels';
+if (showCel) {
+  const title = document.createElement('th');
+  title.scope = 'col';
+  title.textContent = 'Cel';
+  document.querySelector('thead tr').prepend(title);
+}
 document.querySelector('#after-title').textContent = applied ? 'Corrected frame' : 'Correction preview';
 summary.textContent = (applied ? report.counts.verified + ' applied' : report.counts.verified + ' ready to apply') +
   ' · ' + report.counts.unchanged + ' already correct · ' + report.unresolvedFrames.length + ' frames need review';
@@ -149,7 +157,7 @@ async function show() {
     frame.counts.verified + (applied ? ' applied' : ' verified') + ' · ' + frame.counts.unresolved + ' unresolved';
   table.replaceChildren(...frame.marks.map(mark => {
     const tr = document.createElement('tr');
-    for (const text of [mark.kind,position(mark.reference),position(mark.at),describe(mark)])
+    for (const text of [...(showCel ? [mark.cel] : []),mark.kind,position(mark.reference),position(mark.at),describe(mark)])
       tr.insertCell().textContent = text;
     tr.lastChild.dataset.status = mark.status;
     return tr;

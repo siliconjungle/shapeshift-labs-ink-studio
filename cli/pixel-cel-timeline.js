@@ -198,7 +198,7 @@ const operations = {
 function edit(design,op) {
   if (!record(op) || !Object.hasOwn(operations,op.type) || !fields(op,['type',...operations[op.type]]) ||
       op.replace !== undefined && typeof op.replace !== 'boolean')
-    throw new TypeError('Choose add-frame, duration, set-tag, remove-tag, layer-offset, cel-offset, blank, duplicate, hold, unlink, move, copy, or edit-cels');
+    throw new TypeError('Choose add-frame, duration, set-tag, remove-tag, layer-offset, cel-offset, blank, duplicate, hold, unlink, move, copy, edit-cels, or write-cels');
   if (op.type === 'set-tag' || op.type === 'remove-tag') {
     const tags = new Map((design.tags ?? []).map(tag=>[tag.id,tag]));
     const key = op.type === 'set-tag' ? op.tag?.id : op.tag, before = tags.get(key);

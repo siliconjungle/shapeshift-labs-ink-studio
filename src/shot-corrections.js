@@ -34,13 +34,33 @@ const ShotCorrections = (() => {
     const ids = new Set();
     let count = 0;
     const rows = Array.from(corrections, row => {
-      check(keys(row, ['id', 'frames', 'anchor', 'pixels', 'depthTolerance']) && idOK(row.id) && !ids.has(row.id),
+      check(keys(row, ['id', 'frames', 'anchor', 'pixels', 'keys', 'depthTolerance']) && idOK(row.id) && !ids.has(row.id),
         'corrections need unique IDs');
-      const { id, frames, pixels, depthTolerance } = row;
+      const { id, frames, pixels, keys: keyed, depthTolerance } = row;
       check(pair(frames, n => integer(n, 0, 1e9)) && frames[0] <= frames[1],
         'frame range needs ordered inclusive shot frames');
       check(depthTolerance === undefined || Number.isFinite(depthTolerance) && depthTolerance > 0 && depthTolerance <= 4096,
         'invalid depth tolerance');
+      if (keyed !== undefined) {
+        check(row.anchor === undefined && pixels === undefined && Array.isArray(keyed) && keyed.length > 0 && keyed.length <= 128,
+          'keyed corrections need up to 128 exact shot keys');
+        let previous = -1;
+        const framesKeys = Array.from(keyed, key => {
+          check(keys(key,['frame','pixels']) && integer(key.frame,frames[0],frames[1]) && key.frame > previous &&
+            Array.isArray(key.pixels) && key.pixels.length <= 4096 && (count += key.pixels.length) <= 16384,
+          'shot keys need ascending frames and bounded pixel lists');
+          previous = key.frame;
+          const marks = Array.from(key.pixels, mark => {
+            check(keys(mark,['anchor','color']) && typeof mark.anchor?.splat === 'string' && typeof mark.color === 'string' && /^#[\da-f]{6}$/i.test(mark.color),
+              'keyed pixels need a native splat pin and exact #rrggbb color');
+            return Object.freeze({ anchor:anchor(mark.anchor),color:mark.color.toLowerCase() });
+          });
+          return Object.freeze({ frame:key.frame,pixels:Object.freeze(marks) });
+        });
+        ids.add(id);
+        return Object.freeze({ id,frames:Object.freeze(frames.slice()),keys:Object.freeze(framesKeys),
+          ...(depthTolerance !== undefined && { depthTolerance }) });
+      }
       check(Array.isArray(pixels) && pixels.length <= 4096 && (count += pixels.length) <= 16384,
         'correction paint exceeds its pixel budget');
       const written = new Set();
@@ -98,8 +118,7 @@ const ShotCorrections = (() => {
     const frame = frameIndex(plan, time, shotCorrectionFrame), target = selectors.index(world).row;
     let byId;
     const corrections = [], edits = new Map();
-    for (const { id, frames, anchor, pixels: ink, depthTolerance } of plan.corrections) {
-      if (frame < frames[0] || frame > frames[1]) continue;
+    function projectInk(id, anchor, ink, depthTolerance, exact = false) {
       let row = anchor.splat;
       if (typeof row === 'string') {
         byId ??= splats.identities(world);
@@ -115,8 +134,7 @@ const ShotCorrections = (() => {
           const reason = !rule ? 'missing-anchor' : !inScope ? 'anchor-outside-target' : 'anchor-not-projected';
           for (const [dx,dy] of ink) skippedHits.push({ offset:[dx,dy], at:null, reason });
         }
-        corrections.push({ id, at: null, painted: 0, clipped: ink.length, ...(skippedHits && { skippedHits }) });
-        continue;
+        return { id, at: null, painted: 0, clipped: ink.length, ...(skippedHits && { skippedHits }) };
       }
       const [u, v, scale, z] = center;
       const x0 = Math.floor(u) + anchor.offset[0], y0 = Math.floor(v) + anchor.offset[1];
@@ -132,7 +150,7 @@ const ShotCorrections = (() => {
           reason = 'no-surface';
         else if (Math.abs(depth[p] - plane) > distance) reason = 'depth-mismatch';
         else {
-          if (!matches.has(owner)) matches.set(owner, domain ? selectors.matches(domain, target(owner - 1)) : owner - 1 === row);
+          if (!matches.has(owner)) matches.set(owner, !exact && domain ? selectors.matches(domain, target(owner - 1)) : owner - 1 === row);
           if (!matches.get(owner)) reason = 'different-owner';
         }
         if (reason) {
@@ -142,8 +160,27 @@ const ShotCorrections = (() => {
         edits.set(p, parseInt(color.slice(1), 16));
         painted++;
       }
-      corrections.push({ id, at: [x0, y0], painted, clipped: ink.length - painted,
-        ...(skippedHits && { skippedHits }) });
+      return { id, at: [x0, y0], painted, clipped: ink.length - painted,
+        ...(skippedHits && { skippedHits }) };
+    }
+    for (const row of plan.corrections) {
+      const { id,frames,anchor,pixels,keys,depthTolerance } = row;
+      if (frame < frames[0] || frame > frames[1]) continue;
+      if (!keys) {
+        corrections.push(projectInk(id,anchor,pixels,depthTolerance));
+        continue;
+      }
+      const key = keys.find(row=>row.frame === frame);
+      if (!key) continue;
+      const report = { id,at:null,painted:0,clipped:0,key:frame,...(id === shotCorrectionHits && { skippedHits:[] }) };
+      for (const { anchor,color } of key.pixels) {
+        const mark = projectInk(id,anchor,[[0,0,color]],depthTolerance,true);
+        report.at ??= mark.at;
+        report.painted += mark.painted;
+        report.clipped += mark.clipped;
+        if (report.skippedHits) report.skippedHits.push(...mark.skippedHits);
+      }
+      corrections.push(report);
     }
     return { edits, frame, corrections };
   }

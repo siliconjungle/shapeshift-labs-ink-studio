@@ -295,7 +295,7 @@ function review(raw,design,{ binding,destination,source,solid,target,definition,
   const rejected = views.reduce((total,row)=>total+row.rejected.length,0);
   const ready = !!candidate && !unresolved && !rejected;
   const {stamp,...projection}=plan.projection;
-  return { patch:ready ? proposed : null,images,report:{
+  return { patch:ready ? proposed : null,artifact:ready ? candidate : undefined,images,report:{
     format:'ink-studio/pixel-multiview-report',version:1,scene:binding.scene,binding:binding.id,frame,
     destination:destination.id,chart:destination.chart,channel:destination.channel,grid:plan.grid,size:plan.size,
     documentRevision:revision,sourceRevision:source.sourceRevision,status:plan.inspecting ? 'inspection' : ready ? 'ready' : 'needs-review',

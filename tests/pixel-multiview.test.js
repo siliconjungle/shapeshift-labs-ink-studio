@@ -227,3 +227,33 @@ test('the offline review overlays seams and bleed on the held-out view',{skip:!p
     assert.ok(shown);
   });
 });
+
+test('a tracked rest edit writes chart paint and verifies it on a moved part',t=>{
+  const { file,save,read,scene,design } = fixture(t);
+  scene.parts = { shell:{ joint:[0,0,0] } };
+  scene.solids[0].part = 'shell';
+  design.sceneBindings[0].part = 'shell';
+  scene.timeline = { duration:1,tracks:[{ target:'/poses/shell/translation',
+    keys:[{ time:0,value:[0,0,0],ease:'linear' },{ time:1,value:[.3,0,0] }] }] };
+  save('scene.json',scene);
+  save('design.json',design);
+  const plan = { format:'ink-studio/pixel-tracked-correction',version:2,id:'tracked-surface',binding:'plate',
+    target:{ kind:'rest',destination:'paint',size:[8,8] },marks:[{ kind:'highlight',at:[38,27],swatch:'orange' }],
+    samples:[{ id:'reference',time:0 },{ id:'posed',time:1 }] };
+  save('track.json',plan);
+  const run = (...args)=>JSON.parse(cli('correct',file('design.json'),file('track.json'),'--sdf-assist','posed',...args));
+  const preview = run('--review',file('motion.html'));
+  assert.equal(preview.target,'rest');
+  assert.equal(preview.status,'ready');
+  assert.equal(preview.views[0].accepted,1);
+  assert.ok(preview.views[1].counts.changed > 0);
+  const applied = run('--apply',file('posed.json'),'--patch',file('track-edit.json'),'--approval',preview.approval);
+  assert.equal(applied.resultRevision,preview.resultRevision);
+  assert.deepEqual(read('scene.json'),scene);
+  assert.equal(read('posed.json').solids[0].surfaceState.charts.face.stamps[0].value,'#ee935f');
+  assert.equal(read('track-edit.json').sourceRevision,preview.sourceRevision);
+  scene.solids[0].surfaceState.charts.face.depth = .05;
+  save('scene.json',scene);
+  assert.throws(()=>run('--apply',file('rejected.json'),'--approval',preview.approval),/approval is stale/);
+  assert.equal(fs.existsSync(file('rejected.json')),false);
+});

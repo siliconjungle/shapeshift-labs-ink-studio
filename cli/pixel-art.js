@@ -1145,7 +1145,7 @@ function editTimeline(design,patch,context) {
   if (design.version !== 2) throw new TypeError('Upgrade to a version 2 document before editing the cel timeline');
   if (patch.frame !== undefined || patch.cel !== undefined || patch.edits !== undefined)
     throw new TypeError('Timeline edits use frame and layer addresses inside their operation');
-  const { design:revised,report } = patch.operation?.type === 'edit-cels'
+  const { design:revised,report } = ['edit-cels','write-cels'].includes(patch.operation?.type)
     ? editCelBatch(design,patch.operation) : Timeline.edit(design,patch.operation);
   assertProtectionUnchanged(design,revised);
   validate(revised);
@@ -1155,7 +1155,9 @@ function editTimeline(design,patch,context) {
 
 function editCelBatch(design,operation) {
   const palette = paletteEntries(design.palette,2), swatches = new Map(palette.map(({ id },i)=>[id,i]));
-  const settings = CelBatch.prepare(operation,swatches), { scope } = operation;
+  const pixelWrites = operation.type === 'write-cels' && CelBatch.prepareWrites(operation,swatches,design.width,design.height);
+  const scope = pixelWrites ? { cels:[...pixelWrites.keys()] } : operation.scope;
+  const settings = pixelWrites ? { type:'pixels' } : CelBatch.prepare(operation,swatches);
   const stack = LayerStack.prepare(design.layers), lookup = Timeline.index(design.frames);
   const selected = CelBatch.select(design,scope,lookup,stack), masks = CelBatch.masks(design,scope,selected,settings);
   const revisions = new Map(), frames = [];
@@ -1172,7 +1174,8 @@ function editCelBatch(design,operation) {
       try {
         requireWritableLayer(stack.rows.get(layer));
         const source = captured.layerSources.get(layer);
-        const { writes,changed,changes } = CelBatch.plan(captured,source,masks.get(item.id),settings);
+        const { writes,changed,changes } = CelBatch.plan(captured,source,masks.get(item.id),
+          pixelWrites ? { ...settings,pixels:pixelWrites.get(cel) } : settings);
         if (changed.length) {
           const marks = rasterWriteMarks(captured.width,source,palette,writes,changed);
           revisions.set(cel,withRasterMarks(captured,item,layer,marks,lookup));
@@ -1195,7 +1198,7 @@ function editCelBatch(design,operation) {
   }
   const revised = byFrame.size ? { ...design,frames:design.frames.map(frame=>byFrame.has(frame.id)
     ? { ...frame,cels:{ ...frame.cels,...Object.fromEntries(byFrame.get(frame.id)) } } : frame) } : design;
-  return { design:revised,report:{ destination:'timeline',kind:'timeline',tool:'edit-cels',edit:settings.type,scope,
+  return { design:revised,report:{ destination:'timeline',kind:'timeline',tool:operation.type,edit:settings.type,scope,
     frames,pixelCount,...(links.length && { links }) } };
 }
 
@@ -2262,23 +2265,40 @@ function trackCommand(source,opt,captureTrack) {
   else process.stdout.write(JSON.stringify(report,null,2)+'\n');
 }
 
-function correctCommand(source, planFile, opt, captureTrack) {
-  const { apply,approval,out,review } = opt;
-  if ((apply === undefined) !== (approval === undefined) || approval !== undefined && !isRevision(approval) ||
+function correctCommand(source,planFile,opt,{ captureTrack,captureMultiview,scene,world }) {
+  const { apply,approval,out,review,patch } = opt, design = read(source), plan = read(planFile);
+  const hasWrite = apply !== undefined || patch !== undefined;
+  if (hasWrite !== (approval !== undefined) || approval !== undefined && !isRevision(approval) ||
+      patch !== undefined && (plan?.version !== 2 || plan.target?.kind === 'shot') ||
       [opt.scene,opt.binding,opt.frame,opt.w,opt.h,opt.t].some(value => value !== undefined))
-    throw new TypeError('Use pixel-art correct <document.json> <plan.json> with --apply <document.json> and --approval <digest> to commit');
-  const design = read(source), plan = read(planFile);
+    throw new TypeError('Use pixel-art correct <document.json> <plan.json> with --apply or --patch and --approval <digest> to commit');
   documentShape(design);
-  const binding = design.sceneBindings?.find(row => row.id === plan?.binding);
-  const inputs = [source,planFile,binding?.scene].filter(reference).map(file => path.resolve(file));
-  const outputs = [apply,out,review].filter(value => value !== undefined);
-  if (outputs.some(file => !reference(file) || inputs.includes(path.resolve(file))) ||
-      new Set(outputs.map(file => path.resolve(file))).size !== outputs.length ||
+  const binding = design.sceneBindings?.find(row=>row.id === plan?.binding);
+  const inputs = [source,planFile,binding?.scene].filter(reference).map(file=>path.resolve(file));
+  const outputs = [apply,patch,out,review].filter(value=>value !== undefined);
+  if (outputs.some(file=>!reference(file) || inputs.includes(path.resolve(file))) ||
+      new Set(outputs.map(file=>path.resolve(file))).size !== outputs.length ||
       review !== undefined && !/\.html$/i.test(review))
     throw new TypeError('Write the corrected document, report and HTML review to separate output paths');
-  const result = TrackedCorrection.run(design,plan,{ compile,edit,captureTrack,approval,includeImages:!!review });
-  if (review) TrackedCorrection.writeReview(path.resolve(review),result.images,result.report);
-  if (apply) files.json(path.resolve(apply),result.document);
+  const options = { compile,edit,captureTrack,world,approval,includeImages:!!review,
+    rest(raw,binding,includeImages) {
+      const route = Destinations.resolve(design,raw.destination);
+      if (route.binding?.id !== binding.id)
+        throw new RangeError('A rest edit needs a surface-channel destination on its tracked binding');
+      return reviewMultiview(design,raw,route,binding.scene,{ scene,captureMultiview,includeImages });
+    }
+  };
+  const result = plan?.version === 2 ? TrackedCorrection.runMotion(design,plan,options) : TrackedCorrection.run(design,plan,options);
+  const artifact = result.artifact ?? result.document;
+  if (apply && !artifact || patch && !result.patch)
+    throw new RangeError('No tracked edits are ready to write. Review the unresolved marks.');
+  if (review) {
+    if (result.reviewKind === 'rest')
+      require('./pixel-multiview.js').writeReview(path.resolve(review),result.report,result.images);
+    else TrackedCorrection.writeReview(path.resolve(review),result.images,result.report);
+  }
+  if (apply) files.json(path.resolve(apply),artifact);
+  if (patch) files.json(path.resolve(patch),result.patch);
   if (out) files.json(path.resolve(out),result.report);
   else process.stdout.write(JSON.stringify(result.report,null,2)+'\n');
 }
@@ -2345,14 +2365,26 @@ function multiviewCommand(source,planFile,opt,{ scene,captureMultiview }) {
       new Set(outputs.map(file=>path.resolve(file))).size !== outputs.length ||
       review !== undefined && !/\.html$/i.test(review))
     throw new TypeError('Write the multiview report, patch and HTML review to separate paths');
+  const Multiview = require('./pixel-multiview.js');
+  const result = reviewMultiview(design,raw,route,sceneRef,{ scene,captureMultiview,includeImages:!!review });
+  if (review) Multiview.writeReview(path.resolve(review),result.report,result.images);
+  if (out) files.json(path.resolve(out),result.report);
+  else process.stdout.write(JSON.stringify(result.report,null,2)+'\n');
+  if (patch && result.patch) files.json(path.resolve(patch),result.patch);
+  else if (patch) process.exitCode = 2;
+}
+
+function reviewMultiview(design,raw,route,sceneRef,{ scene,captureMultiview,includeImages }) {
+  const { binding,layer,destination } = route;
+  if (destination.kind !== 'surface-channel') throw new TypeError('Rest edits need a surface-channel destination');
   const original = scene(sceneRef), context = { scene:()=>original };
   const target = Destinations.surfaceSource(route,context);
   const compiled = compile(design,raw.frame ?? binding.frame,undefined,layer?.kind === 'surface' ? layer.id : undefined);
   if (binding.frame !== undefined && binding.frame !== compiled.id) throw new RangeError('Multiview edit belongs to frame '+binding.frame);
   const clipping = layer?.kind === 'surface' && compiled.layerSources?.get(layer.id)?.clipping;
   const Multiview = require('./pixel-multiview.js');
-  const result = Multiview.review(raw,design,{ ...route,...target },{
-    revision:compiled.revision,frame:compiled.id,includeImages:!!review,
+  return Multiview.review(raw,design,{ ...route,...target },{
+    revision:compiled.revision,frame:compiled.id,includeImages,
     render:(candidate = original.editor.snapshot())=>captureMultiview(sceneRef,candidate),
     preview:request=>edit(design,compiled,request,{
       scene:()=>({ editor:original.editor.fork(),revision:original.revision })
@@ -2362,11 +2394,6 @@ function multiviewCommand(source,planFile,opt,{ scene,captureMultiview }) {
       return compiled.locks[p] ? 'protected-pixel' : clipping && !clipping[p] ? 'clipped-pixel' : null;
     }
   });
-  if (review) Multiview.writeReview(path.resolve(review),result.report,result.images);
-  if (out) files.json(path.resolve(out),result.report);
-  else process.stdout.write(JSON.stringify(result.report,null,2)+'\n');
-  if (patch && result.patch) files.json(path.resolve(patch),result.patch);
-  else if (patch) process.exitCode = 2;
 }
 
 function draw(frame,directory,{ layer,colorMode,rules,shot } = {}) {
@@ -2557,7 +2584,7 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
       pos.length !== (writing || ['preview','select','multiview','correct'].includes(action) ? 3 : 2))
     throw new TypeError('Use pixel-art capture, trace, import, upgrade, validate, timeline, targets, draw, canvas, inspect, lint, rules, motion, track, correct, reprobe, multiview, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
   if (action === 'track') return trackCommand(source,opt,captureTrack);
-  if (action === 'correct') return correctCommand(source,patch,opt,captureTrack);
+  if (action === 'correct') return correctCommand(source,patch,opt,{ captureTrack,captureMultiview,scene,world });
   if (action === 'reprobe') return reprobeCommand(source,opt,capture);
   if (action === 'multiview') return multiviewCommand(source,patch,opt,{ scene,captureMultiview });
   const sourceViewFile = opt['source-view'];
