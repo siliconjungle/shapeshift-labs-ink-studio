@@ -258,6 +258,21 @@
       throw new RangeError('A transform needs finite XYZ vectors and uniform scale from 0.02 to 20');
     return { translation, rotation, scale, pivot };
   }
+  function solidSpace(s, frame) {
+    const transform = solidTransform(s.transform);
+    if (!transform) return null;
+    const { translation, rotation, scale, pivot = s.at ?? [0, 0, 0] } = transform;
+    const { V,M } = K, basis = M.tr(frame(...rotation).flat()), inverseBasis = M.tr(basis);
+    const direction = vector => M.app(basis,vector), inverseDirection = vector => M.app(inverseBasis,vector);
+    const translatedPivot = V.add(pivot,translation);
+    return { scale,direction,inverseDirection,
+      point:vector=>V.mad(translatedPivot,direction(V.sub(vector,pivot)),scale),
+      inverse:vector=>V.mad(pivot,inverseDirection(V.sub(vector,translatedPivot)),1/scale) };
+  }
+  DIO.surfaceChart = (solid,frame) => {
+    const project = K.procedural.surfaceState.projection(solid.surfaceState,{coordinatesOnly:true}), space = solidSpace(solid,frame);
+    return space ? (point,normal)=>project(space.inverse(point),space.inverseDirection(normal)) : project;
+  };
   DIO.solidTransform = solidTransform;
   const lev = (a, b) => {
     const d = [];
@@ -1562,18 +1577,8 @@
     }
     const made = {},
       make = (s, held) => {
-        const transform = solidTransform(s.transform);
-        const recipe = () => makeSolid(s, held);
-        let p;
-        if (transform) {
-          const { translation, rotation, scale, pivot = s.at ?? [0, 0, 0] } = transform;
-          const basis = M.tr(B.frame(...rotation).flat()), inverseBasis = M.tr(basis);
-          const direction = vector => M.app(basis, vector);
-          const translatedPivot = V.add(pivot, translation);
-          const point = vector => V.mad(translatedPivot, direction(V.sub(vector, pivot)), scale);
-          const inverse = vector => V.mad(pivot, M.app(inverseBasis, V.sub(vector, translatedPivot)), 1 / scale);
-          p = S.transformSolids({ point, inverse, direction, scale }, recipe);
-        } else p = recipe();
+        const space = solidSpace(s,B.frame), recipe = () => makeSolid(s,held);
+        const p = space ? S.transformSolids(space,recipe) : recipe();
         if (s.id) made[s.id] = p;
         return p;
       },
