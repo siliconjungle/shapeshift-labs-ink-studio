@@ -252,6 +252,92 @@ then publishes one revision through dirty-brick extraction. The field
 keeps its existing material assignments. Separate mirrored regions keep
 separate work bounds when they do not overlap.
 
+## Reproject sculpt detail after a coarse edit
+
+Keep a coarse brick snapshot for the form and edit a separate fine pass
+with `edit` or `sculpt`. Capture signed relief as a portable, versioned
+surface chart. The chart stores the height and normal of the reference
+surface and the distance to the sculpted surface at each sample. Keep the
+original layer for subsequent reprojections so resolution errors do not
+accumulate.
+
+```js
+const base = panel.current().bricks;
+panel.sculpt(fineStroke);
+const layer = panel.captureDetail(base, {
+  chart: {
+    origin: [0, 1.2, 0.25],
+    normal: [0, 0, 1],
+    tangent: [1, 0, 0],
+    size: [45, 25],
+    spacing: base.cell
+  },
+  depth: 0.35,
+  maxRelief: 0.15
+});
+
+// Build the new form from the coarse reference.
+const newForm = base.edit(coarseBrush);
+const preview = panel.previewDetail(layer, newForm, { reach: 0.4, minWall: 0.14 });
+console.log(preview.report.counts, preview.report.dirty);
+const revised = panel.commitDetail(preview);
+```
+
+Select one chart per locally continuous patch. The normal points out of
+the surface. The tangent sets the chart's horizontal axis. Chart spacing
+defaults to the fine cell size. Capture `depth` is the half-range on either
+side of the chart origin. `maxRelief` limits the signed distance from the
+coarse reference to a fine surface. Both use model-space units. The transfer
+searches within `reach` of the previous surface. Supply a `targetFrame`
+with `origin`, `normal`, and `tangent` to register a chart that moved or
+turned with the broad edit.
+
+Each destination sample reports one of these outcomes.
+
+| Status | Meaning |
+| --- | --- |
+| `applied` | The nonzero relief passed the transfer checks at this chart sample |
+| `flat` | A valid correspondence has zero signed relief |
+| `edge` | The outer chart row fades to zero |
+| `fold` | The trace encountered multiple surface sheets or the normals disagreed |
+| `thin-wall` | The measured wall cannot retain the minimum thickness after the relief is applied |
+| `lost-correspondence` | No reliable outward surface was found within the capture or transfer range |
+| `masked` | A retained mask or lock excluded the sample |
+
+The report includes source coordinates, matched target coordinates when
+available, and exact lattice changes. Transfer fades the outer texel and
+leaves samples alone where interpolation touches a rejected chart point.
+Wall and fold checks operate at capture resolution. Use smaller charts
+around tight folds or narrow features. The stored layer can be loaded
+again with `KIT.procedural.sculptDetail.prepare(layer)`.
+
+The preview leaves the controller as it was. Commit checks that the
+preview belongs to the current revision, then publishes through the
+usual dirty-brick, protection, and derived asset paths. The fine
+transfer changes shape and keeps the new form's material and medium
+assignments. `previewDetail` accepts the optional `masks` filter from
+the other sculpt tools.
+
+The lower-level `sculptDetail.capture(coarse, detailed, settings)`
+also accepts different coarse and fine brick pitches.
+`sculptDetail.project(layer, target, options)` returns a candidate
+snapshot and a report. The target must be at least as fine as the captured
+detail. To project onto an independently edited coarser field, sample it
+as the base of a new fine lattice with
+`sparseBricks.create({ cell: layer.cell, base: coarse.distance })`.
+
+Run the [tide gauge demo](../examples/multires-sculpt-detail/README.md)
+to author fine and coarse strokes independently with a version 1
+`ink-studio/sculpt-detail-plan`. Each plan stroke supplies union or
+subtract, a bounded box or sphere, and optional smoothing. The CLI
+writes matched native-grid renders, a chart diagnostics PNG, a native
+depth-change PNG, the retained layer, and a JSON report.
+
+```sh
+node cli/ink-studio.js sculpt-detail examples/multires-sculpt-detail/tide-panel.js \
+  --plan examples/multires-sculpt-detail/plan.json --out studio/out/tide-detail
+```
+
 ## Validate the shape from several angles
 
 Run the review at the edit time you want to inspect.

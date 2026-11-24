@@ -1,0 +1,25 @@
+{
+  "format": "ink-studio/sculpt-detail-plan",
+  "version": 1,
+  "w": 162,
+  "h": 110,
+  "coarseCell": 0.12,
+  "chart": {"origin": [0, 0, 0.18], "normal": [0, 0, 1], "tangent": [1, 0, 0], "size": [65, 29]},
+  "depth": 0.24,
+  "maxRelief": 0.18,
+  "fine": [
+    {"operation": "subtract", "volume": {"kind": "box", "min": [-1.78, -0.663, 0.052], "max": [1.78, -0.537, 0.38]}, "bounds": {"min": [-1.98, -0.75, -0.016], "max": [1.98, -0.45, 0.32]}, "smooth": 0.025},
+    {"operation": "subtract", "volume": {"kind": "box", "min": [-1.78, -0.343, 0.052], "max": [1.78, -0.217, 0.38]}, "bounds": {"min": [-1.98, -0.43, -0.016], "max": [1.98, -0.13, 0.32]}, "smooth": 0.025},
+    {"operation": "subtract", "volume": {"kind": "box", "min": [-1.78, -0.023, 0.052], "max": [1.78, 0.103, 0.38]}, "bounds": {"min": [-1.98, -0.11, -0.016], "max": [1.98, 0.19, 0.32]}, "smooth": 0.025},
+    {"operation": "subtract", "volume": {"kind": "box", "min": [-1.78, 0.297, 0.052], "max": [1.78, 0.423, 0.38]}, "bounds": {"min": [-1.98, 0.21, -0.016], "max": [1.98, 0.51, 0.32]}, "smooth": 0.025},
+    {"operation": "subtract", "volume": {"kind": "box", "min": [-1.78, 0.567, 0.052], "max": [1.78, 0.693, 0.38]}, "bounds": {"min": [-1.98, 0.48, -0.016], "max": [1.98, 0.78, 0.32]}, "smooth": 0.025}
+  ],
+  "coarse": [
+    {"operation": "union", "volume": {"kind": "sphere", "center": [0, -0.02, -0.4], "radius": 0.9}, "bounds": {"min": [-1.04, -1.06, -0.55], "max": [1.04, 1.03, 0.62]}, "smooth": 0.16},
+    {"operation": "subtract", "volume": {"kind": "box", "min": [-1.57, -0.38, -0.74], "max": [-1.09, 0.25, 0.57]}, "bounds": {"min": [-1.83, -0.6, -0.55], "max": [-0.85, 0.48, 0.54]}, "smooth": 0.035},
+    {"operation": "subtract", "volume": {"kind": "box", "min": [0.97, -0.66, -0.71], "max": [1.78, 0.39, 0.066]}, "bounds": {"min": [0.78, -0.86, -0.55], "max": [2, 0.63, 0.17]}, "smooth": 0.033},
+    {"operation": "union", "volume": {"kind": "box", "min": [0.81, 0.47, 0.31], "max": [1.48, 1.15, 0.46]}, "bounds": {"min": [0.64, 0.28, 0.12], "max": [1.64, 1.33, 0.63]}, "smooth": 0.03},
+    {"operation": "union", "volume": {"kind": "box", "min": [0.81, 1.04, 0.12], "max": [1.48, 1.15, 0.4]}, "bounds": {"min": [0.64, 0.84, 0.0], "max": [1.67, 1.32, 0.54]}, "smooth": 0.035}
+  ],
+  "transfer": {"reach": 0.4, "minWall": 0.15, "minNormalDot": 0.7}
+}

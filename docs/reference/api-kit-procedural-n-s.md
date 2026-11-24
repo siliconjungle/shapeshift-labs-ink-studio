@@ -1553,6 +1553,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.tube` | function | `(start, end, { radius = .2, sides = 12, color: tint = '#b7bccb' } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-mesh.js) |
 | `KIT.procedural.sceneGraph.world` | function | `(objects, { seed = 0, lights = [], camera: view, background = '#171d30', look = {}, palette: authoredPalette, style = {}, surfaces } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-scene.js) |
 
+## KIT.procedural.sculptDetail
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.sculptDetail` | namespace |  |  |
+| `KIT.procedural.sculptDetail.capture` | function | `(coarse,detailed,raw)` | [source](../../src/kit/pcv8-sculpt-detail.js) |
+| `KIT.procedural.sculptDetail.prepare` | function | `(layer)` | [guide](../brick-meshes.md#reproject-sculpt-detail-after-a-coarse-edit), [source](../../src/kit/p59e-sdf-detail-chart.js) |
+| `KIT.procedural.sculptDetail.project` | function | `(raw,coarse,{reach,minWall,minNormalDot=.65,targetFrame,weight,maxSamples=524288}={})` | [source](../../src/kit/pcv8-sculpt-detail.js) |
+
 ## KIT.procedural.sculptMasks
 
 | Member | Kind | Signature or value | Guides and source |

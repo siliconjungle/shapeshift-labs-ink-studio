@@ -36,7 +36,7 @@
     if (materialSlots.size!==colors.length) throw new RangeError('Brick mesh material IDs must be distinct');
     const assetsAPI=P.sdfDerivedAssets, assetOptions=assetsAPI.settings(derived);
     const guards=freeze(P.data.clone(P.sdfProtection.check(protection)));
-    const {cell,brickSize}=initial, paintInputs=new WeakMap();
+    const {cell,brickSize}=initial, paintInputs=new WeakMap(), detailPreviews=new WeakMap();
     let currentMasks=sculptMasks==null ? null : P.sculptMasks.compile(sculptMasks);
     const snap=n=>{
       const q=n/cell, near=Math.round(q);
@@ -290,12 +290,36 @@
         edited=edited.edit({ bounds,operation:'reshape',transform,weight:influence,maxSamples });
       return update(edited);
     }
+    function captureDetail(coarse,settings) {
+      return P.sculptDetail.capture(coarse,current.bricks,{...settings,object:objectId});
+    }
+
+    function previewDetail(layer,coarse,{masks,...settings}={}) {
+      if (!P.sparseBricks.sharesBase(initial,coarse))
+        throw new TypeError('Detail preview needs a coarse snapshot from the original brick field');
+      if (layer?.object!==undefined && layer.object!==objectId)
+        throw new RangeError('Detail layer belongs to a different object');
+      const from=current, plan=P.sculptDetail.project(layer,coarse,{...settings,weight:influenceFor(masks)});
+      const preview=Object.freeze({revision:from.revision,report:plan.report});
+      detailPreviews.set(preview,{from,snapshot:plan.snapshot});
+      return preview;
+    }
+
+    function commitDetail(preview) {
+      const plan=detailPreviews.get(preview);
+      if (!plan || plan.from!==current)
+        throw Object.assign(new RangeError('Detail preview is stale or belongs to another brick mesh'),{code:'stale-detail-preview'});
+      const result=update(plan.snapshot);
+      detailPreviews.delete(preview);
+      return result;
+    }
+
     function setSculptMasks(document) {
       const compiled=document==null ? null : P.sculptMasks.compile(document);
       if (JSON.stringify(compiled?.document)===JSON.stringify(currentMasks?.document)) return current;
       return publishRevision(current.bricks,compiled);
     }
-    const controller=Object.freeze({current:()=>current,update,edit,sculpt,setSculptMasks});
+    const controller=Object.freeze({current:()=>current,update,edit,sculpt,captureDetail,previewDetail,commitDetail,setSculptMasks});
     update(initial);
     controls.add(controller);
     return controller;
