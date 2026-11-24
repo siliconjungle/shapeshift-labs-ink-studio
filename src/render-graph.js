@@ -1178,7 +1178,7 @@ const RenderGraph = (() => {
     }
     function finish(scene, output) {
       const outputSwatch = swatchAt(output);
-      return { format: 'ink-studio/effect-pixel', version: 1, backend, scene: world.id ?? null,
+      return { format: 'ink-studio/effect-pixel', version: 1, backend, scene: world.spec?.id ?? world.id ?? null,
         pixel: at.slice(), width: w, height: h, time, receiver,
         baseSwatch: swatchAt(scene), outputSwatch,
         winner: winner && { ...winner, matchesOutput: winner.swatch === outputSwatch }, passes };

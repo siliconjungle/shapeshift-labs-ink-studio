@@ -35,6 +35,7 @@ test('headless traces a swatch to the receiver, field texel and exact contact', 
     return ink.inspectEffectPixel(world, { at,t,w,h,px:1 });
   };
   const report = read(points.ripple);
+  assert.equal(report.scene,'silt-lock');
   assert.equal(report.outputSwatch,'#a8dfcf');
   assert.equal(report.receiver.material,'water');
   assert.equal(report.winner.event.id,'wheel-2');

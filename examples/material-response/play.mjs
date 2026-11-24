@@ -110,7 +110,7 @@ async function open(read) {
     end = world.timeline?.duration || world.materialResponse.duration;
     scrub.max = end;
     pixel = undefined;
-    cases.hidden = world.id !== 'silt-lock';
+    cases.hidden = next.spec?.id !== 'silt-lock';
     details.hidden = decisions.hidden = true;
     if (cases.hidden) {
       summary.textContent = 'Click the scene or enter a pixel.';
