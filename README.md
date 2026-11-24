@@ -729,6 +729,10 @@ console.log(world.count);
 
 The file example assumes the current working directory is this repository. OBJ supports a companion MTL; glTF supports companion buffers; GLB is read from binary data. Material and vertex colors become palette ramps. Texture images are not imported. Open meshes become sheets with thickness. Imported geometry becomes a distance-field solid, so it can join, be carved, receive materials and break like authored geometry.
 
+Use [editable mesh topology](docs/mesh-topology.md) to retain polygon rings,
+shared edges, and face-corner UVs while deriving indexed triangles for an
+Ink scene. The CLI can inspect or patch the same topology document.
+
 ## Exporting GLB models
 
 ```sh

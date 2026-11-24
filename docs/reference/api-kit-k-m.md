@@ -193,6 +193,19 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.mesh.solid` | function | `(S, mesh, mat, o)` | [guide](../field-fabrication.md#shells), [source](../../src/kit/kb-mesh.js) |
 | `KIT.mesh.toObj` | function | `(mesh)` | [guide](../field-fabrication.md#shells), [source](../../src/kit/kb-mesh.js) |
 
+## KIT.meshTopology
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.meshTopology` | namespace |  | [guide](../mesh-topology.md#author-and-edit-a-polygon) |
+| `KIT.meshTopology.create` | function | `(source)` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
+| `KIT.meshTopology.edit` | function | `(source, { vertices = [], faces = [], removeVertices = [], removeFaces = [] } = {})` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
+| `KIT.meshTopology.fromIndexed` | function | `({ id, positions, indices, uvs, materials = ['default'], faceMaterials } = {})` | [guide](../mesh-topology.md#render-pick-and-import-indexed-geometry), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
+| `KIT.meshTopology.inspect` | function | `(source)` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
+| `KIT.meshTopology.toSceneMesh` | function | `(source, { materials, objectId, partId } = {})` | [guide](../mesh-topology.md#render-pick-and-import-indexed-geometry), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
+| `KIT.meshTopology.triangleSource` | function | `(mesh, triangle)` | [guide](../mesh-topology.md#render-pick-and-import-indexed-geometry), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
+| `KIT.meshTopology.triangulate` | function | `(source)` | [guide](../mesh-topology.md#render-pick-and-import-indexed-geometry), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
+
 ## KIT.mist
 
 | Member | Kind | Signature or value | Guides and source |

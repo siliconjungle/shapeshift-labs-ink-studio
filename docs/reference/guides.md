@@ -194,6 +194,7 @@ All checked-in guides, indexed by title and section headings.
 - [Portable material response recipes](../material-response.md)
 - [Surface materialisation](../materialisation.md)
 - [Procedural math fields](../math-fields.md)
+- [Editable mesh topology](../mesh-topology.md)
 - [UV and seam inspection](../mesh-uv.md)
 - [Mixed-resolution compositing](../mixed-resolution.md)
 - [Mixing essentials](../mixing-essentials.md)

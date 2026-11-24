@@ -395,7 +395,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.geometry.surfaceNets` | function | `(field,bounds,options)` | [source](../../src/kit/p75-regular-dual-surfaces.js) |
 | `KIT.procedural.geometry.toKitMesh` | function | `(mesh, resolveMaterial)` | [source](../../src/kit/p02-procedural-mesh.js) |
 | `KIT.procedural.geometry.topology` | function | `(mesh)` | [source](../../src/kit/pao-mesh-paths.js) |
-| `KIT.procedural.geometry.triangulate2D` | function | `(points)` | [source](../../src/kit/p04-profile-triangulation.js) |
+| `KIT.procedural.geometry.triangulate2D` | function | `(points, { retainBoundary = false } = {})` | [source](../../src/kit/p04-profile-triangulation.js) |
 | `KIT.procedural.geometry.triangulatePolygon` | function | `(rings, options = {})` | [source](../../src/kit/p48-delaunay.js) |
 
 ## KIT.procedural.grammar

@@ -3,7 +3,7 @@
 (function (K) {
   const A = K.procedural,
     EPS = 1e-10;
-  A.geometry.triangulate2D = points => {
+  A.geometry.triangulate2D = (points, { retainBoundary = false } = {}) => {
     if (
       !Array.isArray(points) ||
       points.length < 3 ||
@@ -27,6 +27,7 @@
           c = ids[(i + 1) % ids.length],
           turn = cross(points[a], points[b], points[c]);
         if (Math.abs(turn) < EPS) {
+          if (retainBoundary) continue;
           ids.splice(i, 1);
           found = true;
           break;
