@@ -98,6 +98,17 @@
   box-shadow: inset 0 0 0 1px #13201d;
 }
 .ink-grid-guides { inset: 0; overflow: clip; }
+.ink-grid-selection {
+  position: absolute;
+  left: calc(var(--ink-grid-cell) * var(--ink-selection-x));
+  top: calc(var(--ink-grid-cell) * var(--ink-selection-y));
+  width: calc(var(--ink-grid-cell) * var(--ink-selection-width));
+  height: calc(var(--ink-grid-cell) * var(--ink-selection-height));
+  box-sizing: border-box;
+  border: 1px dashed #ccf6e8;
+  box-shadow: 0 0 0 1px #102126;
+  pointer-events: none;
+}
 .ink-grid-guides > div {
   position: absolute;
   left: calc(var(--ink-grid-cell) * var(--guide-x));

@@ -1,11 +1,13 @@
 import { mountPixelGridCanvas } from '../src/pixel-grid-canvas.mjs';
 
 const stamp = KIT.pixelStamps, guideTool = KIT.pixelGuides, paintTools = KIT.pixelPaintTools;
+const brushes = KIT.pixelBrushes;
 const { stonePaint, flowingInk, bubble, glint, starTwinkle, line, rect } = InkPixelStudies;
 const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
 const state = { frame:0, swatch:0, tool:'pencil', points:[], undo:[] };
 let drawingPointer, pencilStroke;
+let brush, brushTip, selection;
 const maxPencilPixels = 4096;
 let sharedGuides, frameGuides, guideItems = [];
 const limit = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
@@ -13,6 +15,7 @@ const notify = message => { $('status').textContent = message; };
 const dragShapes = new Set(['line','rect','ellipse']);
 const vertexShapes = new Set(['curve','polygon']);
 const shapeType = () => $('shape-type').value;
+const rectangleBetween = ([x,y],[u,v]) => [Math.min(x,u),Math.min(y,v),Math.abs(x-u)+1,Math.abs(y-v)+1];
 const saveUndo = () => {
   state.undo.push({ data:structuredClone(state.doc), frame:state.frame });
   if (state.undo.length > 24) state.undo.shift();
@@ -34,6 +37,7 @@ function load(data) {
   state.doc = { ...rest, frames:frames ?? [{ slots, rows, strokes, duration:1 / (data.fps ?? 12) }] };
   state.frame = 0;
   state.swatch = 0;
+  selection = undefined;
   resetStroke();
   update();
 }
@@ -63,14 +67,23 @@ function frameSlots(current) {
     }
     return slotData;
   }
+  if (state.tool === 'brush-select' || state.tool === 'brush-stamp') return slotData;
   const marks=activeStrokes();
   return marks.length ? stamp.paint(width,height,{slots:slotData,strokes:marks}) : slotData;
 }
 
 function draw() {
-  const { width, height, palette } = state.doc;
+  const { width,height } = state.doc;
   const current = state.doc.frames[state.frame];
-  view.setFrame(stamp.image({ width,height,palette,slots:frameSlots(current) }));
+  let palette = state.doc.palette, slots = frameSlots(current);
+  if (state.tool === 'brush-stamp' && brush && state.points.length) {
+    try { ({ palette,slots } = applyBrush(slots)); }
+    catch (error) { notify(error.message); }
+  }
+  view.setFrame(stamp.image({ width,height,palette,slots }));
+  const selected = selection?.frame === state.frame ? selection.bounds : null;
+  view.setSelection(state.tool === 'brush-select' ? selected : null);
+  $('capture-brush').disabled = !selected || state.tool !== 'brush-select' || drawingPointer !== undefined;
   drawGuides(current);
   const count = state.doc.frames.length;
   $('scrub').max = count;
@@ -130,13 +143,108 @@ function commitStroke() {
   savePixels(current,slots);
 }
 
-function savePixels(current,slots) {
+function savePixels(current,slots,palette = state.doc.palette) {
   edit(() => {
     const { rows,strokes,...frame } = current;
     state.doc.frames[state.frame] = { ...frame,slots,duration:current.duration ?? 1/(state.doc.fps ?? 12) };
+    state.doc.palette = palette;
     resetStroke();
   });
 }
+
+function setBrush(next) {
+  const tip = brushes.footprint(next);
+  brush = next;
+  brushTip = tip;
+  $('brush-settings').hidden = false;
+  $('save-brush').disabled = false;
+  document.querySelector('[data-tool="brush-stamp"]').disabled = false;
+  showBrushSettings();
+}
+
+function showBrushSettings() {
+  [$('brush-x').value,$('brush-y').value] = brush.anchor;
+  $('brush-x').max = brush.width-1;
+  $('brush-y').max = brush.height-1;
+  [$('brush-width').value,$('brush-height').value] = brush.settings.size;
+  $('brush-angle').value = brush.settings.angle;
+  $('brush-swatch').value = brush.settings.swatch.mode;
+  $('brush-tint').value = brush.settings.swatch.color ?? state.doc.palette[state.swatch];
+  $('brush-tint-controls').hidden = brush.settings.swatch.mode !== 'tint';
+}
+
+function updateBrushSettings() {
+  const mode = $('brush-swatch').value, color = $('brush-tint').value;
+  const saved = brush.settings.swatch;
+  try {
+    setBrush({ ...brush,anchor:[$('brush-x').valueAsNumber,$('brush-y').valueAsNumber],
+      settings:{ angle:$('brush-angle').valueAsNumber,size:[$('brush-width').valueAsNumber,$('brush-height').valueAsNumber],
+        swatch:mode === 'tint' ? { mode,color,...(saved.color?.toLowerCase() === color && saved.id && { id:saved.id }) } : { mode } } });
+    notify('');
+  } catch (error) {
+    showBrushSettings();
+    notify(error.message);
+  }
+}
+
+function applyBrush(slots) {
+  const { width,height,palette:colors } = state.doc, dab = new Map();
+  brushes.stroke(width,height,brushTip,state.points,(p,slot)=>{ dab.set(p,slot); });
+  const { palette,mapping } = brushes.resolvePalette(brush,colors.map(color=>({ color })),
+    { limit:48,used:new Set(dab.values()) });
+  let changed = false;
+  for (const [p,source] of dab) {
+    const next = mapping[source];
+    if (slots[p] === next) continue;
+    slots[p] = next;
+    changed = true;
+  }
+  return { slots,palette:palette.map(entry=>entry.color),changed };
+}
+
+function commitBrush() {
+  const { width,height } = state.doc, current = state.doc.frames[state.frame];
+  try {
+    const { slots,palette,changed } = applyBrush(stamp.paint(width,height,current));
+    if (changed) savePixels(current,slots,palette);
+    else { resetStroke(); draw(); }
+    notify('');
+  } catch (error) {
+    resetStroke();
+    draw();
+    notify(error.message);
+  }
+}
+
+$('capture-brush').addEventListener('click',() => {
+  const { width,height,palette } = state.doc;
+  const slots = stamp.paint(width,height,state.doc.frames[state.frame]);
+  try {
+    setBrush(brushes.capture({ width,height,rect:selection.bounds,
+      read(x,y) {
+        const slot = slots[y*width+x];
+        return slot === null ? null : { color:palette[slot] };
+      } }));
+    chooseTool('brush-stamp');
+    notify('Captured brush');
+  } catch (error) { notify(error.message); }
+});
+$('brush-settings').addEventListener('change',updateBrushSettings);
+$('brush-active-color').addEventListener('click',() => {
+  $('brush-tint').value = state.doc.palette[state.swatch];
+  updateBrushSettings();
+});
+$('open-brush').addEventListener('change',async event => {
+  const [file] = event.target.files;
+  if (!file) return;
+  try {
+    setBrush(JSON.parse(await file.text()));
+    chooseTool('brush-stamp');
+    notify('Opened '+file.name);
+  } catch (error) { notify(error.message); }
+  finally { event.target.value = ''; }
+});
+$('save-brush').addEventListener('click',() => saveJson('pixel-brush.json',brush));
 
 function currentShape(points = state.points) {
   const [first] = points;
@@ -151,8 +259,7 @@ function currentShape(points = state.points) {
   if (type === 'staircase') return { type,from:first,axis:$('shape-axis').value,
     direction:[Number($('shape-dir-x').value),Number($('shape-dir-y').value)],
     lengths:$('shape-lengths').value.split(',').map(value=>Number(value.trim())) };
-  const [x,y] = first, [u,v] = last;
-  return { type,rect:[Math.min(x,u),Math.min(y,v),Math.abs(x-u)+1,Math.abs(y-v)+1],fill,...(!fill && { width }) };
+  return { type,rect:rectangleBetween(first,last),fill,...(!fill && { width }) };
 }
 
 function paintShape(slots,shape) {
@@ -332,6 +439,7 @@ function resizeCanvas(width,height) {
   });
   edit(() => {
     state.doc = { ...doc,width,height,frames };
+    selection = undefined;
     resetStroke();
   });
 }
@@ -372,7 +480,10 @@ art.addEventListener('pointerdown',event => {
   art.setPointerCapture(event.pointerId);
   drawingPointer = event.pointerId;
   if (state.tool === 'pencil') startPencil(at);
-  else state.points = [at];
+  else {
+    state.points = [at];
+    if (state.tool === 'brush-select') selection = { frame:state.frame,bounds:rectangleBetween(at,at) };
+  }
   draw();
 });
 art.addEventListener('pointermove',event => {
@@ -384,7 +495,9 @@ art.addEventListener('pointermove',event => {
   if (state.points.length >= 120) return;
   const at=view.pixelAt(event.clientX,event.clientY,{ clamp:true }), last=state.points.at(-1);
   if (!at || !last || last[0]===at[0] && last[1]===at[1]) return;
-  if (state.tool === 'shape') state.points[1] = at;
+  if (state.tool === 'brush-select') {
+    selection = { frame:state.frame,bounds:rectangleBetween(state.points[0],at) };
+  } else if (state.tool === 'shape') state.points[1] = at;
   else state.points.push(at);
   draw();
 });
@@ -392,7 +505,16 @@ art.addEventListener('pointerup',event => {
   if (drawingPointer !== event.pointerId) return;
   if (pencilStroke) extendPencil(event);
   drawingPointer = undefined;
-  if (state.tool === 'shape' && state.points.length && dragShapes.has(shapeType())) {
+  if (state.tool === 'brush-select' && state.points.length) {
+    const at = view.pixelAt(event.clientX,event.clientY,{ clamp:true });
+    if (at) selection = { frame:state.frame,bounds:rectangleBetween(state.points[0],at) };
+    resetStroke();
+    draw();
+  } else if (state.tool === 'brush-stamp' && state.points.length) {
+    const at = view.pixelAt(event.clientX,event.clientY,{ clamp:true });
+    if (at && state.points.length < 120) state.points.push(at);
+    commitBrush();
+  } else if (state.tool === 'shape' && state.points.length && dragShapes.has(shapeType())) {
     const at = view.pixelAt(event.clientX,event.clientY,{ clamp:true });
     if (at) state.points[1] = at;
     finishShape(currentShape());
@@ -401,6 +523,7 @@ art.addEventListener('pointerup',event => {
 art.addEventListener('lostpointercapture',event => {
   if (drawingPointer !== event.pointerId) return;
   drawingPointer = undefined;
+  if (state.tool === 'brush-select') selection = undefined;
   resetStroke();
   draw();
 });
@@ -418,14 +541,15 @@ $('canvas-size').addEventListener('submit',event => {
     notify(`Canvas ${width} × ${height} px`);
   } catch (error) { notify(error.message); }
 });
-$('tools').addEventListener('click',event => {
-  const { tool } = event.target.dataset;
-  if (!tool) return;
+function chooseTool(tool) {
   state.tool=tool;
   resetStroke();
-  $('tools').querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed',button.dataset.tool===tool));
+  document.querySelectorAll('[data-tool]').forEach(button => button.setAttribute('aria-pressed',button.dataset.tool===tool));
   notify('');
   draw();
+}
+for (const id of ['tools','brush-tools']) $(id).addEventListener('click',event => {
+  if (event.target.dataset.tool) chooseTool(event.target.dataset.tool);
 });
 $('play').addEventListener('click',() => {
   if (state.play !== undefined) { stop(); return; }
@@ -462,6 +586,7 @@ $('undo').addEventListener('click',()=>{
   const snapshot=state.undo.pop();
   state.doc=snapshot.data;
   state.frame=snapshot.frame;
+  selection = undefined;
   resetStroke();
   update();
 });
@@ -491,13 +616,14 @@ $('import').addEventListener('change',async event=>{
   catch (error) { notify(error.message); }
   finally { event.target.value=''; }
 });
-$('export').addEventListener('click',()=>{
-  const url=URL.createObjectURL(new Blob([JSON.stringify(state.doc,null,2)],{type:'application/json'}));
+function saveJson(filename,data) {
+  const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
   const link=document.createElement('a');
   link.href=url;
-  link.download=`${$('preset').value}-stamp.json`;
+  link.download=filename;
   link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
   notify(`Saved ${link.download}`);
-});
+}
+$('export').addEventListener('click',()=>saveJson(`${$('preset').value}-stamp.json`,state.doc));
 load(stonePaint());

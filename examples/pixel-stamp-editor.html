@@ -116,6 +116,36 @@
         <div class="row" style="margin-top:12px"><button id="undo" disabled>Undo</button></div>
       </section>
       <section>
+        <h2>Reusable brush</h2>
+        <div class="row" id="brush-tools">
+          <button type="button" data-tool="brush-select" aria-pressed="false">Select pixels</button>
+          <button type="button" id="capture-brush" disabled>Capture</button>
+          <button type="button" data-tool="brush-stamp" aria-pressed="false" disabled>Stamp brush</button>
+        </div>
+        <div class="guide-controls" id="brush-settings" hidden style="margin-top:12px">
+          <div class="canvas-size">
+            <label>Anchor X<input id="brush-x" type="number" min="0" step="1"></label>
+            <label>Anchor Y<input id="brush-y" type="number" min="0" step="1"></label>
+          </div>
+          <div class="canvas-size">
+            <label>Width<input id="brush-width" type="number" min="1" max="512" step="1"></label>
+            <label>Height<input id="brush-height" type="number" min="1" max="512" step="1"></label>
+            <label>Angle (°)<input id="brush-angle" type="number" step="any"></label>
+          </div>
+          <label>Swatches<select id="brush-swatch">
+            <option value="original">Captured colors</option><option value="tint">Single tint</option>
+          </select></label>
+          <div class="row" id="brush-tint-controls" hidden>
+            <label class="row">Tint <input id="brush-tint" type="color"></label>
+            <button type="button" id="brush-active-color">Use active swatch</button>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <label class="file-button">Open brush<input type="file" id="open-brush" accept=".json,application/json"></label>
+          <button type="button" id="save-brush" disabled>Save brush</button>
+        </div>
+      </section>
+      <section>
         <h2>Canvas size</h2>
         <form class="canvas-size" id="canvas-size">
           <label>Width<input type="number" id="canvas-width" min="1" max="512" step="1" required></label>

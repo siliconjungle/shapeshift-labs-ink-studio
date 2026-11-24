@@ -17,6 +17,7 @@ const markup = `
         <canvas class="ink-grid-main" aria-label="Native pixel canvas"></canvas>
         <div class="ink-grid-lines" aria-hidden="true" hidden></div>
         <div class="ink-grid-guides" aria-hidden="true" hidden></div>
+        <div class="ink-grid-selection" aria-hidden="true" hidden></div>
         <div class="ink-grid-cursor" aria-hidden="true" hidden></div>
       </div>
     </div>
@@ -41,6 +42,7 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   const canvas = find('.ink-grid-main'), preview = find('.ink-grid-reference canvas');
   const art = canvas.getContext('2d'), sample = preview.getContext('2d');
   const lines = find('.ink-grid-lines'), cursor = find('.ink-grid-cursor');
+  const selection = find('.ink-grid-selection');
   const guidesLayer = find('.ink-grid-guides'), guideToggles = find('.ink-guide-toggles');
   const showGuides = find('[data-view="guides"]'), snapGuides = find('[data-view="snap"]');
   const zoomLabel = find('.ink-grid-zoom'), dimensions = find('.ink-grid-dimensions');
@@ -57,6 +59,13 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
     cursor.hidden = !at || zoom < 2;
     coordinates.value = at ? `X ${at[0]} · Y ${at[1]}${hits.length ? ' · '+hits.join(', ') : ''}` : 'X — · Y —';
     if (at) cursor.style.translate = `${at[0] * zoom}px ${at[1] * zoom}px`;
+  }
+
+  function setSelection(bounds) {
+    selection.hidden = !bounds;
+    if (!bounds) return;
+    for (const [i,field] of ['x','y','width','height'].entries())
+      selection.style.setProperty('--ink-selection-'+field,bounds[i]);
   }
 
   function setGuides(rows = []) {
@@ -234,6 +243,6 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   const observer = new ResizeObserver(() => { if (fitting) fit(); else move(left,top); });
   observer.observe(viewport);
   paintView();
-  return Object.freeze({ canvas, setFrame, setGuides, setZoom, fit, pixelAt,
+  return Object.freeze({ canvas, setFrame, setGuides, setSelection, setZoom, fit, pixelAt,
     dispose() { events.abort(); observer.disconnect(); host.replaceChildren(); host.classList.remove('ink-grid-canvas'); } });
 }

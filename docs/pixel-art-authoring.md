@@ -171,6 +171,39 @@ The receipt keeps the exact shape arguments and the resolved pixel runs.
 For reusable staircases in authored layers, the existing `steps` mark
 accepts the same start, axis, direction, and lengths.
 
+## Capture and reuse a pixel brush
+
+Capture a named selection or a rectangle from a drawing. The brush keeps
+the selected pixels' exact shape and colors. It leaves the artwork under
+unselected and transparent cells untouched.
+
+```sh
+node cli/ink-studio.js pixel-art brush document.json --selection badge --frame front \
+  --anchor 0,1 --angle 90 --size 12,8 --out badge-brush.json
+node cli/ink-studio.js pixel-art brush document.json --rect 20,14,6,4 --layer jacket \
+  --tint indigo --out jacket-brush.json
+```
+
+Capture looks at the visible composite by default. Use `--layer` or
+`--cel` for the pixels on an individual layer. For an open working
+session, use `pixel-art session brush <directory>` with the same flags.
+The SDK accepts `pixels.captureBrush({ selection, anchor, settings })` or
+can take a native `rect` or explicit `pixels` instead of a selection ID.
+
+The versioned brush JSON stores a compact indexed shape and its palette.
+Its anchor is local to the captured shape, starting at its top-left pixel.
+The size describes its dimensions before rotation, and positive angles
+turn clockwise about the anchor. Brush transformations use nearest-neighbor
+sampling on the native grid. The saved swatch mode keeps captured colors or
+applies one tint.
+
+Embed the saved brush JSON in `operation.brush` with `tool: "brush"` in a
+raster patch. Use `at: [x, y]` for a dab or `points` for a stroke. The
+placement coordinate is where the anchor lands. Ink adds any missing brush
+colors to the target palette as part of the same undo step. Supply a target
+`swatch` ID on the operation to override the saved colors. Preview and
+receipts retain the placement, affected pixels, and palette additions.
+
 ## Author a drawing
 
 ```json

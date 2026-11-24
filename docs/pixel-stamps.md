@@ -28,6 +28,14 @@ in order. Apply or cancel the preview from the Draw panel. Text and
 staircases use a click to place the configured shape at its native anchor.
 Each placed shape has one undo step.
 
+In **Reusable brush**, choose **Select pixels** and drag a rectangle on
+the canvas. **Capture** turns it into a portable brush with its original
+colors and transparent gaps. Set the brush-local anchor, size, angle,
+and swatch mode in the brush controls. **Stamp brush** places the anchor
+at the pointer. Click for one dab or drag a stroke. **Save brush** and
+**Open brush** exchange the same brush JSON with the document tools.
+[Brush capture and placement](pixel-art-authoring.md#capture-and-reuse-a-pixel-brush)
+
 The main canvas zooms in whole steps. Use **−**, **+**, and **Fit**, or
 Ctrl-scroll or ⌘-scroll around the cursor. Middle-drag, use **Pan** and drag,
 or focus the canvas and use the arrow keys to move it. The grid appears at

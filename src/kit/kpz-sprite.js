@@ -192,6 +192,7 @@
   K.pixelStamps = PixelStamps;
   K.pixelGuides = PixelGuides;
   K.pixelPaintTools = PixelPaintTools;
+  K.pixelBrushes = PixelBrushes;
   K.sprite = {
     scanlineBudget: SpriteScanlineBudget,
     atlas: AtlasSprites.compile,

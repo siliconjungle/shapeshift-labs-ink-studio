@@ -224,6 +224,68 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     assert.deepEqual(await raster(browser,preview,18,18),[0,0,0,0]);
     await click(browser,'#undo');
     assert.deepEqual(await raster(browser,preview,18,18),[230,219,182,255]);
+
+    await evaluate(browser,() => {
+      const preset = document.querySelector('#preset');
+      preset.value = 'blank';
+      preset.dispatchEvent(new Event('change'));
+    });
+    await click(browser,'[data-tool="pencil"]');
+    await tap(8,8);
+    await click(browser,'.swatch:nth-child(3)');
+    await tap(9,9);
+    await click(browser,'[data-tool="brush-select"]');
+    await press(anchor(8,8));
+    await mouse('mouseMoved',anchor(9,9),{ button:'left',buttons:1 });
+    await release(anchor(9,9));
+    assert.equal(await browser.evaluate("document.querySelector('.ink-grid-selection').hidden"),false);
+    await click(browser,'#capture-brush');
+    assert.equal(await browser.evaluate("document.querySelector('[data-tool=brush-stamp]').getAttribute('aria-pressed')"),'true');
+    await evaluate(browser,() => {
+      document.querySelector('#brush-x').value = 1;
+      document.querySelector('#brush-y').value = 1;
+      const angle = document.querySelector('#brush-angle');
+      angle.value = 90;
+      angle.dispatchEvent(new Event('change',{ bubbles:true }));
+    });
+    const savedBrush = await evaluate(browser,async () => {
+      const createURL = URL.createObjectURL, clickLink = HTMLAnchorElement.prototype.click;
+      let writing;
+      try {
+        URL.createObjectURL = blob => { writing = blob.text(); return createURL.call(URL,blob); };
+        HTMLAnchorElement.prototype.click = function () {};
+        document.querySelector('#save-brush').click();
+        return JSON.parse(await writing);
+      } finally {
+        URL.createObjectURL = createURL;
+        HTMLAnchorElement.prototype.click = clickLink;
+      }
+    });
+    assert.deepEqual(savedBrush.anchor,[1,1]);
+    assert.deepEqual(savedBrush.settings,{ angle:90,size:[2,2],swatch:{ mode:'original' } });
+    assert.deepEqual(savedBrush.slots,[0,null,null,1]);
+    await press(anchor(20,20));
+    assert.deepEqual(await raster(browser,preview,20,20),[230,219,182,255]);
+    assert.deepEqual(await raster(browser,preview,21,19),color);
+    await release(anchor(20,20));
+    assert.deepEqual(await raster(browser,preview,21,20),clear);
+    await click(browser,'#undo');
+    assert.deepEqual(await raster(browser,preview,20,20),clear);
+    assert.deepEqual(await raster(browser,preview,9,9),[230,219,182,255]);
+
+    const brushFile = path.join(directory,'loaded-brush.json');
+    fs.writeFileSync(brushFile,JSON.stringify({ format:'ink-studio/pixel-brush',version:1,
+      width:1,height:1,anchor:[0,0],palette:[{ color:'#ffffff' }],slots:[0],
+      settings:{ angle:90,size:[1,1],swatch:{ mode:'tint',color:'#514a6e',id:'lavender' } } }));
+    const { root } = await browser.send('DOM.getDocument',{ depth:0 });
+    const { nodeId } = await browser.send('DOM.querySelector',{ nodeId:root.nodeId,selector:'#open-brush' });
+    await browser.send('DOM.setFileInputFiles',{ nodeId,files:[brushFile] });
+    await until(browser,"document.querySelector('#brush-tint').value === '#514a6e'");
+    await tap(21,22);
+    assert.deepEqual(await raster(browser,preview,21,22),[81,74,110,255]);
+    assert.equal(await browser.evaluate("document.querySelectorAll('.swatch').length"),4);
+    await click(browser,'#undo');
+    assert.equal(await browser.evaluate("document.querySelectorAll('.swatch').length"),3);
   });
 });
 
