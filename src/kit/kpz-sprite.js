@@ -200,6 +200,7 @@
   K.pixelInspection = PixelInspection;
   K.pixelProtection = PixelProtection;
   K.pixelCraft = PixelCraft;
+  K.pixelCleanup = PixelCleanup;
   K.pixelBrushes = PixelBrushes;
   K.sprite = {
     scanlineBudget: SpriteScanlineBudget,

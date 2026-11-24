@@ -14,7 +14,7 @@ const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
 let readInspection;
 const inspector = mountPixelInspector($('pixel-inspection'),view,at=>readInspection?.(at));
-const craft = KIT.pixelCraft;
+const craft = KIT.pixelCraft, cleanup = KIT.pixelCleanup;
 const craftPanel = mountPixelCraftPanel($('craft-diagnostics'),view,craft.kinds,{
   inspect(at) {
     stop();
@@ -37,7 +37,7 @@ const flatStack = layerStack.prepare([{ id:'paint',label:'Paint' }]);
 const state = { frame:0, swatch:0, tool:'pencil', points:[], undo:[] };
 let drawingPointer, pencilStroke, grid;
 let brush, brushTip, brushStroke, selection, selectionDraft, shownMasks;
-let clipboard, transformDraft, adjustmentDraft, shownProtection;
+let clipboard, transformDraft, adjustmentDraft, shownProtection, shownCleanup;
 const maxPencilPixels = 4096;
 let sharedGuides, frameGuides, guideItems = [];
 const limit = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
@@ -205,6 +205,8 @@ function drawSelection() {
   $('selection-clear').disabled = (!!adjustmentDraft || !!transformDraft || !active && !selectionDraft);
   $('selection-count').value = displayed ? `${displayed.pixelCount} pixels selected` : '';
   $('capture-brush').disabled = !active?.pixelCount || busy;
+  $('cleanup-preview').disabled = !active?.pixelCount || !layerWritable() || drawingPointer !== undefined ||
+    !!transformDraft || !!selectionDraft || !!adjustmentDraft && adjustmentDraft.scope !== 'cleanup';
   for (const button of $('selection-modifiers').querySelectorAll('button'))
     button.disabled = busy || !active && button.dataset.selectionModifier !== 'invert';
   const rows = savedMasks(), menu = $('selection-saved');
@@ -711,6 +713,7 @@ function draw() {
   $('duplicate').disabled = count >= 2048 || (count+1)*width*height > 2**20;
   showShapeControls();
   showAdjustmentPreview();
+  showCleanupPreview();
 }
 
 function selectSwatch(index) {
@@ -770,6 +773,9 @@ function update() {
   showCanvasControls();
   updateRampChoices();
   updateAdjustmentSwatches();
+  const donor = $('cleanup-swatch'), before = donor.value;
+  donor.replaceChildren(new Option('Auto',''),...state.doc.swatchIds.map(id=>new Option(swatchTitle(id),id)));
+  donor.value = state.doc.swatchIds.includes(before) ? before : '';
   $('add-color').disabled = state.doc.palette.length >= colors.limit;
   $('playback').value = state.doc.playback ?? 'loop';
   selectSwatch(Math.min(state.swatch,state.doc.palette.length-1));
@@ -1833,12 +1839,83 @@ function updateAdjustmentSwatches() {
 function showAdjustmentPreview() {
   $('adjustment-start').max = $('adjustment-end').max = state.doc.frames.length;
   $('adjustment-preview').disabled = !layerWritable() || drawingPointer !== undefined || !!transformDraft || !!selectionDraft;
-  $('adjustment-apply').disabled = !adjustmentDraft?.pixelCount;
-  $('adjustment-cancel').disabled = !adjustmentDraft;
-  const { pixelCount,frames } = adjustmentDraft ?? {};
-  $('adjustment-info').value = adjustmentDraft
+  const draft = adjustmentDraft?.scope === 'cleanup' ? undefined : adjustmentDraft;
+  $('adjustment-apply').disabled = !draft?.pixelCount;
+  $('adjustment-cancel').disabled = !draft;
+  const { pixelCount,frames } = draft ?? {};
+  $('adjustment-info').value = draft
     ? `${pixelCount} ${pixelCount === 1 ? 'pixel' : 'pixels'} changed in ${frames.size} ${frames.size === 1 ? 'frame' : 'frames'}` : '';
 }
+
+function showCleanupPreview() {
+  const kind = $('cleanup-kind').value;
+  $('cleanup-mode-label').hidden = kind !== 'cluster';
+  $('cleanup-swatch-label').hidden = kind !== 'fragment';
+  const plan = adjustmentDraft?.cleanup;
+  $('cleanup-apply').disabled = $('cleanup-cancel').disabled = !plan;
+  $('cleanup-info').value = plan ? plan.changes.length+' of '+plan.maxChanges+' pixels' : '';
+  const region = $('cleanup-diff');
+  region.hidden = !plan;
+  if (plan === shownCleanup) return;
+  shownCleanup = plan;
+  const label = pixel=>pixel.rgba ? pixel.swatch+' · #'+pixel.rgba.slice(0,3)
+    .map(byte=>byte.toString(16).padStart(2,'0')).join('')+' · α '+pixel.rgba[3] : pixel.state;
+  const rows = (plan?.changes ?? []).map(change=>{
+    const row = document.createElement('tr');
+    for (const value of [change.at.join(', '),label(change.before),label(change.after)])
+      row.insertCell().textContent = value;
+    return row;
+  });
+  region.querySelector('tbody').replaceChildren(...rows);
+}
+
+function previewCleanup() {
+  const selected = activeSelection();
+  if (!selected?.pixelCount || !layerWritable() || drawingPointer !== undefined || transformDraft || selectionDraft) return;
+  stop();
+  resetStroke();
+  try {
+    const doc = state.doc, current = activeCel(), { width,height } = doc;
+    const { slots,opacity,colors,locks } = craftFrame(doc,state.frame,state.layer);
+    const kind = $('cleanup-kind').value, swatch = $('cleanup-swatch').value;
+    const plan = cleanup.plan({ width,height,slots,alpha:opacity,colors,locks,swatches:doc.swatchIds },selected.mask,{
+      kind,maxChanges:$('cleanup-budget').valueAsNumber,
+      ...(kind === 'cluster' && { mode:$('cleanup-mode').value }),
+      ...(kind === 'fragment' && swatch && { swatch })
+    });
+    if (!plan.changes.length) notify('No pixels to change');
+    else {
+      const next = slots.map(slot=>slot < 0 ? null : slot);
+      const alpha = current.alpha?.slice() ?? Array(next.length).fill(255);
+      for (const [p,pixel] of plan.writes) {
+        next[p] = pixel.slot < 0 ? null : pixel.slot;
+        alpha[p] = pixel.alpha;
+      }
+      layerConflict(next,alpha,current.knockouts);
+      adjustmentDraft = { scope:'cleanup',cleanup:plan,pixelCount:plan.changes.length,
+        frames:new Map([[state.frame,{ slots:next,alpha,knockouts:current.knockouts }]]),
+        palette:doc.palette,swatchIds:doc.swatchIds };
+      notify('');
+    }
+  } catch (error) { notify(error.message); }
+  draw();
+}
+
+$('cleanup-settings').addEventListener('change',()=>{
+  if (adjustmentDraft?.cleanup) previewCleanup();
+  else showCleanupPreview();
+});
+$('cleanup-preview').addEventListener('click',previewCleanup);
+$('cleanup-apply').addEventListener('click',()=>{
+  if (!adjustmentDraft?.cleanup) return;
+  const { slots,alpha } = adjustmentDraft.frames.get(state.frame);
+  if (savePixels(activeCel(),slots,state.doc.palette,alpha)) notify('Applied cleanup');
+});
+$('cleanup-cancel').addEventListener('click',()=>{
+  if (!adjustmentDraft?.cleanup) return;
+  adjustmentDraft = undefined;
+  draw();
+});
 
 function readAdjustment() {
   const type = $('adjustment-type').value, match = $('adjustment-match').value;
@@ -1899,7 +1976,7 @@ $('adjustment-settings').addEventListener('change',()=>{
 $('adjustment-preview').addEventListener('click',previewAdjustment);
 $('adjustment-apply').addEventListener('click',()=>{
   const draft = adjustmentDraft;
-  if (!draft?.pixelCount) return;
+  if (!draft?.pixelCount || draft.scope === 'cleanup') return;
   const doc = state.doc, frames = doc.frames.map((frame,i)=>{
     const cel = draft.frames.get(i);
     if (!cel) return frame;

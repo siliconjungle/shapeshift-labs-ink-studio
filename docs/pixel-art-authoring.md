@@ -1305,6 +1305,56 @@ and complete `[row, column, length]` runs. A finding that touches a protected
 detail also provides the runs available for selection. IDs refer to the
 current frame and revision. Run the linter again after changing the art.
 
+## Clean up a selected area
+
+In the Workshop, select an area in the active layer and open
+**Clean up selected pixels** under **Adjustments**. Use **Preview cleanup**
+to see the repaired art and a table of every changed coordinate with its
+before and after swatch, RGB, and alpha. Apply the preview as one undoable
+edit, or cancel it to return to the original art.
+
+| Operation | Selection and result |
+| --- | --- |
+| Stair | Select one thin, monotone staircase in a single swatch. Include the nearby empty cells that the repair can use. Ink evens the steps between the original endpoints and carries each pixel's coverage to its new position. |
+| Fragment | Select a single isolated painted pixel. Ink recolors it to join a neighboring cluster and preserves its alpha. Choose a neighboring swatch explicitly if two clusters have equal support. |
+| Outline | Select the inside corners flagged as doubles. Ink removes extra pixels where the thin stroke stays connected. |
+| Cluster | Include part of one four-connected swatch cluster. Grow into selected empty neighbors or shrink selected edge pixels by one step. Shrink preserves connectivity and grow preserves the gap between separate clusters of the same swatch. |
+
+The selection is the write boundary. Cleanup can read the surrounding
+art to judge continuity. Each repair targets one cel. A protected or
+clipped write or an exceeded pixel budget rejects the whole repair.
+The default budget is 64 changed pixels. Choose a budget from 1 to 256
+and select up to 2,048 pixels.
+
+Send a raster cleanup operation through the normal `pixel-art preview`,
+`edit`, and `replay` commands, or use the same operation with the SDK.
+
+```json
+{
+  "id": "thin-visor",
+  "revision": "<revision from pixel-art validate>",
+  "frame": "front",
+  "operation": {
+    "tool": "cleanup",
+    "kind": "outline",
+    "layer": "ink",
+    "selection": "visor-edge",
+    "maxChanges": 4
+  }
+}
+```
+
+Use `pixels: [[x,y],...]` in place of a saved `selection`. Use a top-level
+`cel` ID in place of the operation's `layer` to address a specific cel.
+A cluster operation also needs `mode: "grow"` or `mode: "shrink"`.
+For fragment or cluster cleanup, `at: [x,y]` picks the seed inside the
+selection. Fragment cleanup accepts an optional destination `swatch`.
+
+The preview and receipt include the complete authored diff in the target's
+`changes` array, including changes beneath other layers. Each side carries
+its swatch ID, RGBA bytes, and cell state. The regular preview also shows
+the resulting composite changes.
+
 ## Inspect, revise and reuse
 
 `pixel-art draw` writes the same diagnostics in `report.json`, along with

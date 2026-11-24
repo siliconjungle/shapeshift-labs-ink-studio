@@ -910,6 +910,32 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     await until(browser,`${diagnostic}.dataset.finding === 'orphan-2-0'`);
     assert.equal(await browser.evaluate("document.querySelector('.ink-grid-diagnostic').hidden"),true);
 
+    const cleanupFile = path.join(directory,'workshop-cleanup.json');
+    fs.writeFileSync(cleanupFile,JSON.stringify({ width:4,height:3,swatchIds:['ink','rust'],palette:['#142839','#c65126'],
+      frames:[{ slots:slots([4,0],[5,0],[6,1],[8,0],[9,0]),duration:.25 }] }));
+    await browser.send('DOM.setFileInputFiles',{ nodeId:imported.nodeId,files:[cleanupFile] });
+    await until(browser,"document.querySelector('#status').textContent === 'Opened workshop-cleanup.json'");
+    await until(browser,`${diagnostic}.dataset.finding === 'orphan-2-1'`);
+    const cleanupOriginal = await download('#export');
+    await click(browser,'[data-diagnostic-select]');
+    await evaluate(browser,()=>document.querySelector('#cleanup-tools').open = true);
+    await change('cleanup-kind','fragment');
+    await click(browser,'#cleanup-preview');
+    await until(browser,"document.querySelector('#cleanup-info').value === '1 of 64 pixels'");
+    assert.match(await browser.evaluate("document.querySelector('#cleanup-diff tbody').textContent"),
+      /2, 1.*rust · #c65126 · α 255.*ink · #142839 · α 255/);
+    assert.deepEqual(await raster(browser,preview,2,1),[20,40,57,255]);
+    assert.deepEqual(await download('#export'),cleanupOriginal);
+    await click(browser,'#cleanup-cancel');
+    assert.deepEqual(await raster(browser,preview,2,1),[198,81,38,255]);
+    await click(browser,'#cleanup-preview');
+    await click(browser,'#cleanup-apply');
+    assert.equal((await download('#export')).frames[0].slots[6],0);
+    await until(browser,`${diagnostic}.dataset.finding === ''`);
+    await click(browser,'#undo');
+    assert.deepEqual(await download('#export'),cleanupOriginal);
+
+
 
 
 
