@@ -22,6 +22,7 @@ The package includes geometry, materials, lighting, animation, character control
 - [Retained authoring](#retained-authoring)
 - [Editable 3D drawing](#editable-3d-drawing)
 - [Headless world simulation](docs/headless-worlds.md)
+- [Playable and editable Inkwell Rebirth scenes](examples/inkwell-rebirth/README.md)
 - [Editable starter recipes](examples/starter-recipes/README.md)
 - [Rendering and command reference](#rendering-and-command-reference)
 - [Searchable public reference](docs/reference/index.md)

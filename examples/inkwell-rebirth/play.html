@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Inkwell Rebirth scenes · Ink Studio</title>
+<style>
+  :root { color-scheme: dark; background: #0c1119; color: #e4ebed; font: 16px system-ui, sans-serif; }
+  body { margin: 0; }
+  main { max-width: 1000px; margin: auto; padding: 32px 20px; }
+  a { color: #a4cac3; }
+  h1 { font: 500 clamp(28px, 5vw, 44px) Georgia, serif; margin: 0 0 18px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-bottom: 12px; }
+  button, select { background: #1c2b37; color: inherit; border: 1px solid #51677a; border-radius: 5px; padding: .45rem .75rem; font: inherit; }
+  canvas { display: block; width: 100%; aspect-ratio: 8 / 5; touch-action: none; image-rendering: pixelated; background: #101621; }
+  canvas:focus-visible { outline: 2px solid #eecf88; outline-offset: 4px; }
+  p { color: #aebcc8; font-size: .9rem; }
+  output { display: block; min-height: 1.3em; color: #d9b388; }
+</style>
+<main>
+  <h1>Inkwell Rebirth</h1>
+  <div class="controls">
+    <label>Scene <select id="scene"></select></label>
+    <button id="play" disabled>Pause</button>
+    <button id="reset" disabled>Reset camera</button>
+    <label id="follow-control" hidden><input id="follow" type="checkbox"> Follow the pilgrim</label>
+  </div>
+  <canvas id="view" width="240" height="150" tabindex="0" aria-label="Live scene"></canvas>
+  <p id="controls">Drag to orbit. Scroll to zoom.</p>
+  <output id="status" role="status">Loading Ink Studio…</output>
+  <p><a href="README.md">Scene sources and export commands</a></p>
+</main>
+<script src="../../dist/ink-studio.browser.js"></script>
+<script src="motion.js"></script>
+<script src="inferno-support.js"></script>
+<script src="garden-support.js"></script>
+<script src="kana-glyphs.js"></script>
+<script src="hush-wood.js"></script>
+<script src="afterimage-harbor.js"></script>
+<script src="burning-sand.js"></script>
+<script src="frozen-angel.js"></script>
+<script src="garden.js"></script>
+<script src="last-transmission.js"></script>
+<script src="gallery.js"></script>
+<script type="module" src="play.mjs"></script>
+</html>

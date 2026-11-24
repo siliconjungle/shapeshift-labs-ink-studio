@@ -42,6 +42,10 @@ Its live browser player schedules section assets and cues from the same
 adaptive score intents. The native full-route prints remain the
 reference for offline mix verification.
 
+For a smaller picture-led workflow, change the canopy material in
+[Inkwell Rebirth’s Garden](../examples/inkwell-rebirth/README.md). The same scene
+source drives the live view and the headless clip.
+
 ## Edit or replay a production
 
 ```sh
