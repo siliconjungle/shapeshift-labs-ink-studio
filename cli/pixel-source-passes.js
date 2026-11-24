@@ -16,6 +16,7 @@ function splatTargets(world, row=Targets.index(world).row) {
 }
 
 function rowRevision(world,row) {
+  world = SplatFit.baseWorld(world);
   const hash = createHash('sha256');
   const data = Provenance.restData(world);
   for (const [key,values,stride,start = 0] of [

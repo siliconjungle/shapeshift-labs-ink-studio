@@ -48,8 +48,12 @@ function sourceChanges(scene, before, after) {
 function sourceTarget({ destination,binding,layer }, patch) {
   if (!binding) return;
   const splats = destination.kind === 'splat-attributes' && Array.isArray(patch.operation?.splats) ? patch.operation.splats : null;
-  const channels = splats?.filter(row=>row && (row.pigment!==undefined || row.coverage!==undefined))
-    .map(({splat,pigment,coverage})=>({splat,...(pigment!==undefined&&{pigment}),...(coverage!==undefined&&{coverage})}));
+  const channels = splats?.flatMap(row=>{
+    if (!row) return [];
+    const values=Object.fromEntries(['pigment','coverage','material','roughness','emission']
+      .filter(key=>row[key]!==undefined).map(key=>[key,row[key]]));
+    return Object.keys(values).length ? [{splat:row.splat,...values}] : [];
+  });
   return {
     id:patch.id, destination:destination.id, kind:destination.kind,
     scene:binding.scene, binding:binding.id, object:binding.object,
@@ -61,6 +65,8 @@ function sourceTarget({ destination,binding,layer }, patch) {
       frame:patch.frame, pixels:patch.edits.map(edit => ({ at:edit?.at, from:edit?.from, to:edit?.to }))
     }),
     ...(splats && {splats:splats.map(change=>change?.splat)}),
+    ...(splats && patch.operation.paint!==undefined && {paint:patch.operation.paint}),
+    ...(splats && patch.operation.falloff!==undefined && {falloff:patch.operation.falloff}),
     ...(channels?.length && {channels})
   };
 }

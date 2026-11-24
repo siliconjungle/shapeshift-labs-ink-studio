@@ -149,3 +149,105 @@ test('session footprint queries use the retained splat fit from the current edit
   assert.notEqual(after.sourceRevision,before.sourceRevision);
   assert(after.splats.every(row=>!before.splats.some(old=>old.id===row.id)));
 });
+
+test('a material brush paints bound source splats with falloff and renders the restored state on undo',()=>{
+  const B=makeBuilder(1,[0x151a2b,0x26353c,0xb87d41]);
+  const finish={layers:{gloss:{type:'specular',roughness:.3,strength:.8}}};
+  for (const [i,id,x,material,opacity] of [
+    [0,'center',-1.2,'iron',3],[1,'blend',0,'iron',.55],
+    [2,'edge',1.2,'iron',3],[3,'donor',2.5,'brass',3]
+  ]) {
+    if (material==='brass') B.surfaceNext(finish,0,0,1,[1,0,1]);
+    B.iso(x,0,0,.48,B.P[material==='iron' ? 1 : 2],opacity,{splatId:id});
+    B.describeSplats(i,i+1,{object:'model',material,target:{entity:'plant'}});
+  }
+  const world=B.finish({id:'splat-pick',cam:{target:[.65,0,0],dist:6,ortho:true,yaw:0,pitch:0,sway:0},dither:0});
+  const doc=design('splat-pick',{size:[64,48],offset:[0,0],scale:[1,1]});
+  Object.assign(doc,{width:64,height:48});
+  const editor=ink.createPixelEditor(doc);
+  const renderOptions={...view,passes:['sourceSplat','materialId','pigment','emission']};
+  const render=extra=>ink.render(world,{...renderOptions,...editor.renderOptions('splat-pick'),...extra});
+  const baseline=render();
+  const context={world:()=>world,captureSelection:render};
+  const targets=query=>editor.targets('splats',{...context,query});
+  const selected=targets({material:'iron',paintableOnly:true});
+  assert.deepEqual(selected.splats.map(row=>[row.id,row.paintable]),[['blend',true],['center',true],['edge',true]]);
+  const centers=Object.fromEntries(selected.splats.map(({id,at})=>[id,at]));
+  const patch={id:'brush',destination:'splats',frame:'front',revision:editor.describe().revision,
+    sourceRevision:selected.sourceRevision,operation:{
+      splats:[{splat:'center'},{splat:'blend',weight:.5},{splat:'edge'}],
+      paint:{pigment:'mint',material:'brass',roughness:.85,coverage:.4,emission:[0,.18,.05]},
+      falloff:{center:centers.center,radius:2.4}
+    }};
+  const preview=editor.previewEdit(patch,context);
+  assert.equal(preview.valid,true);
+  const hits=preview.targets[0].paintHits;
+  assert.equal(hits[0].weight,1);
+  assert(Math.abs(hits[1].weight-.25)<1e-6);
+  assert.deepEqual(hits[1].channels,['pigment','coverage','roughness','emission']);
+  assert(hits[2].weight<1e-6);
+  assert.deepEqual(editor.renderOptions('splat-pick'),{});
+  assert.throws(()=>editor.apply({...patch,operation:{...patch.operation,
+    splats:[...patch.operation.splats,{splat:'missing'}]}},context),/missing, ambiguous, or outside/);
+  assert.deepEqual(editor.renderOptions('splat-pick'),{});
+  const fit=editor.apply(patch,context);
+  const center=fit.attributes.find(([id])=>id==='center')[1];
+  assert.deepEqual(center,{material:'brass',pigment:0x38ac99,coverage:.4,roughness:.85,emission:[0,.18,.05]});
+  const [blend]=targets({material:'iron',region:{min:[-.1,-.1,-.1],max:[.1,.1,.1]}}).splats;
+  assert.equal(blend.id,'blend');
+  assert(Math.abs(blend.coverage-.85)<1e-6);
+  assert(Math.abs(blend.roughness-.5875)<1e-6);
+  assert.notEqual(blend.pigment,'#26353c');
+  assert.notEqual(blend.pigment,'#38ac99');
+  assert.deepEqual(targets({material:'brass'}).splats.map(row=>row.id),['center','donor']);
+  const painted=render();
+  assert.notDeepEqual(painted.rgb,baseline.rgb);
+  assert(painted.passes.emission.some(value=>value>.1));
+  const slot=painted.passes.splatSources.findIndex(row=>row?.id==='center' && row.material==='brass');
+  assert(slot>0);
+  const pixel=Math.floor(painted.passes.sourceSplat.indexOf(slot)/4);
+  assert(pixel>=0);
+  const footprint=targets({material:'brass',footprint:{at:[pixel%64,Math.floor(pixel/64)]},paintableOnly:true});
+  assert(footprint.splats.some(row=>row.id==='center'));
+  const receipt=editor.receipts().at(-1);
+  assert.deepEqual(receipt.affectedTargets[0].splats,hits);
+  assert.deepEqual(ink.createPixelEditor(doc).replay(receipt,context),fit);
+  assert.equal(editor.undo(),true);
+  assert.deepEqual(render().rgb,baseline.rgb);
+  assert.equal(editor.redo(),true);
+  assert.deepEqual(render().rgb,painted.rgb);
+
+  const clear={...patch,id:'clear',sourceRevision:targets({}).sourceRevision,operation:{
+    splats:[{splat:'center',material:null,pigment:null,roughness:null,emission:null,coverage:1}]
+  }};
+  editor.apply(clear,context);
+  const restored=targets({material:'iron'}).splats.find(row=>row.id==='center');
+  assert.deepEqual([restored.pigment,restored.coverage,restored.roughness,restored.emission],['#26353c',1,.5,[0,0,0]]);
+});
+
+test('splat material assignment uses the slot finish and roughness changes the rendered highlight',()=>{
+  const B=makeBuilder(0,[0x212120,0x433629]);
+  const finish={layers:{gloss:{type:'specular',roughness:.12,strength:.8}}};
+  B.surfaceNext(finish,0,0,1,[1,0,1]);
+  B.iso(0,0,0,.7,B.P[1],3,{splatId:'brass'});
+  B.describeSplats(0,1,{object:'model',material:'brass',target:{entity:'plant'}});
+  B.axial(1.4,0,0,[0,0,1],.1,.7,B.P[0],3,{splatId:'iron'},true);
+  B.describeSplats(1,2,{object:'model',material:'iron',target:{entity:'plant'}});
+  const world=B.finish({id:'splat-pick',cam:{target:[.4,0,0],dist:4,ortho:true,yaw:0,pitch:0,sway:0},dither:0});
+  const editor=ink.createPixelEditor(design('splat-pick',{size:[64,48],offset:[31,24],scale:[1,1]}));
+  const context={world:()=>world};
+  const patch={destination:'splats',frame:'front',revision:editor.describe().revision};
+  const paint=(id,values)=>editor.apply({...patch,id,operation:{splats:[{splat:'iron',...values}]}},context);
+  const render=splatFit=>ink.render(world,{...view,raw:true,splatFit,passes:['sourceSplat','materialId','pigment']});
+  const reassigned=render(paint('assign',{material:'brass'}));
+  const soft=render(paint('rougher',{roughness:.9}));
+  const index=reassigned.passes.splatSources.findIndex(row=>row?.id==='iron');
+  const p=reassigned.passes.materialId.findIndex((material,i)=>
+    material && reassigned.passes.sourceSplat[i*4]===index);
+  assert(p>=0 && Number.isInteger(p));
+  assert.equal(reassigned.passes.materials[reassigned.passes.materialId[p]],'brass');
+  assert.equal(reassigned.passes.pigment[p],0x433629+1);
+  assert(soft.rgb[p*3]>reassigned.rgb[p*3],`highlight ${reassigned.rgb[p*3]} -> ${soft.rgb[p*3]}`);
+  assert.deepEqual(reassigned.passes.pigment,soft.passes.pigment);
+  assert.deepEqual(reassigned.passes.materialId,soft.passes.materialId);
+});

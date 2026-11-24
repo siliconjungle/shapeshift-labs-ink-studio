@@ -15,13 +15,13 @@ const fields = (value,keys) => record(value) && Object.keys(value).every(key=>ke
 const vector = value => Array.isArray(value) && value.length===3 && Array.from(value).every(Number.isFinite);
 
 function prepare(query, grid, recall) {
-  if (!fields(query,['part','material','region','footprint','minContribution','editableOnly']))
-    throw new TypeError('A splat query needs part, material, region, footprint, minContribution or editableOnly');
-  const {part,material,region,footprint,minContribution,editableOnly=false}=query;
+  if (!fields(query,['part','material','region','footprint','minContribution','editableOnly','paintableOnly']))
+    throw new TypeError('A splat query needs part, material, region, footprint, minContribution, editableOnly or paintableOnly');
+  const {part,material,region,footprint,minContribution,editableOnly=false,paintableOnly=false}=query;
   if (part!==undefined && !Targets.name(part) ||
       material!==undefined && !Targets.name(material) && !Number.isSafeInteger(material) ||
-      minContribution!==undefined && !SplatFit.unit(minContribution) || typeof editableOnly!=='boolean')
-    throw new TypeError('Choose valid part and material IDs, a contribution from 0 to 1, and a boolean editableOnly');
+      minContribution!==undefined && !SplatFit.unit(minContribution) || (typeof editableOnly!=='boolean' || typeof paintableOnly!=='boolean'))
+    throw new TypeError('Choose valid part and material IDs, a contribution from 0 to 1, and boolean editableOnly and paintableOnly filters');
   if (region!==undefined && (!fields(region,['min','max']) || !vector(region.min) || !vector(region.max) ||
       region.min.some((low,k)=>low>region.max[k])))
     throw new TypeError('A splat region needs inclusive XYZ min and max in rest space');
@@ -38,17 +38,20 @@ function prepare(query, grid, recall) {
   } else if (minContribution!==undefined) {
     mask=new Uint8Array(grid[0]*grid[1]).fill(1);
   }
-  return {query,grid,mask,minimum:minContribution??0,editableOnly};
+  return {query,grid,mask,minimum:minContribution??0,editableOnly,paintableOnly};
 }
 
 function select(world,binding,plan,context) {
-  const {query,editableOnly,mask}=plan, {region,part,material}=query;
+  const {query,editableOnly,paintableOnly,mask}=plan, {region,part,material}=query;
   const rest=Provenance.restData(world), identities=Provenance.identities(world,{fresh:true});
-  const authored=Targets.index(world).row, row=splatTargets(world,authored), chosen=new Map();
+  const authored=Targets.index(world).row, chosen=new Map();
+  const effective=SplatFit.renderWorld(world,SplatFit.prepare(world,world.look?.splatFit));
+  const row=splatTargets(effective);
   const inScope=target=>!!Targets.objectScope(binding,target) &&
     (part===undefined || target.part===part) && (material===undefined || target.material===material);
   const editable=i=>!!Targets.objectScope(binding,authored(i)) && SplatFit.eligible(world,i);
-  const eligible=i=>!editableOnly || editable(i);
+  const eligible=i=>(!editableOnly || editable(i)) &&
+    (!paintableOnly || !!Targets.objectScope(binding,authored(i)) && SplatFit.paintable(world,i));
   const choice=(id,index)=>({id,index,editable:editable(index)});
   function inRegion(index) {
     return !region || region.min.every((low,k)=>rest[index*16+k]>=low && rest[index*16+k]<=region.max[k]);

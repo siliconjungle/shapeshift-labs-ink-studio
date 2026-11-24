@@ -1551,6 +1551,9 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
         sourceRevision = revision;
         if (patch.sourceRevision === undefined) warnings.push(sourceWarning(route.binding.id));
       },
+      onSplat(splat) {
+        if (splat.weight!==undefined) (target.paintHits ??= []).push(splat);
+      },
       onEditTarget: target => targets.push(target),
       world:binding => context.world(binding),
       scene(binding) {
@@ -1746,12 +1749,14 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
       const receipt = draft.receipts[index];
       const patch = receipt.command.patch, route = Destinations.resolve(draft.design,patch.destination);
       const target = Preview.sourceTarget(route,patch);
+      const [painted] = receipt.affectedTargets;
       if (target) {
         const key = JSON.stringify([target.scene,target.destination,target.id]);
+        const paintHits = painted?.kind === 'splat-attributes' && painted.splats.filter(row=>row.weight!==undefined);
         targetsByKey.set(key,{ ...target, sourceRevision:receipt.inputs.sourceRevision,
-          sourceChecked:patch.sourceRevision !== undefined || verifiedReplays.has(index) });
+          sourceChecked:patch.sourceRevision !== undefined || verifiedReplays.has(index),
+          ...(paintHits?.length && {paintHits}) });
       }
-      const [painted] = receipt.affectedTargets;
       if (['canvas','palette','selections','adjustments','layers','protection','art-rules'].includes(painted?.kind) || painted?.kind === 'raster' && painted.tool) targetsByKey.set(index,structuredClone(painted));
     }
     const targets = [...targetsByKey.values()];

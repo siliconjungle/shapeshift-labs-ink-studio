@@ -378,9 +378,10 @@ const SurfaceLook = (() => {
       return shadowBandPaint.level((nl + wrap) / (1 + wrap), light, bias);
     },
     specular(layer, q) {
-      const { nt, ht, hb, nl, light } = q;
+      const { nt, ht, hb, nl, light, roughness } = q;
       if (nl <= 0 || nt <= 0 || light <= 0) return 0;
-      return bell(ht / nt, layer.roughness[0]) * bell(hb / nt, layer.roughness[1]) * light;
+      const override=Number.isFinite(roughness) ? Math.max(.001,roughness) : undefined;
+      return bell(ht / nt, override??layer.roughness[0]) * bell(hb / nt, override??layer.roughness[1]) * light;
     },
     fiber(layer, q) {
       const tilt =
@@ -861,6 +862,7 @@ const SurfaceLook = (() => {
       reflectionDepth:sample.reflectionDepth, reflectionPixelAngle:sample.reflectionPixelAngle,
       sky: sample.sky, skyOverlay: sample.skyOverlay, skyReflectionSource: sample.skyReflectionSource,
       skyNormal: sample.skyNormal, skyView: sample.skyView, skyAccess: sample.skyAccess ?? 1,
+      roughness: sample.roughness,
       nt: dot(n, half),
       nl: dot(n, sun),
       light: visibility

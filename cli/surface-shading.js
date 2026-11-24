@@ -190,6 +190,7 @@ function surfaceShading(world, options, camera) {
     const liveVisibility=camera.sunVisibility?.(i,x,y,z);
     const storedVisibility=surfaceData[offset+4]*(camera.cloudShadow?.(x,y,z)??1)*sample.skyAccess;
     sample.visibility=liveVisibility??(art?.curves.shadow?.(storedVisibility)??storedVisibility);
+    sample.roughness=world.splatRoughness?.[i];
     sample.shadowBandBias=options.shadowBandPaint === false ? 0 : inkControls?.[0] ?? world.renderMetadata?.inkControls?.[i*4];
     const tx = surfaceData[offset + 5],
       ty = surfaceData[offset + 6],
