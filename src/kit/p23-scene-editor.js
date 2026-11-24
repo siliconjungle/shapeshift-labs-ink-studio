@@ -431,6 +431,8 @@
       setPrefabInstance,
       refreshPrefabs,
       meshTopology,
+      selectMeshTopology: (object, request, { part, visibility } = {}) =>
+        K.meshTopology.select(meshTopology(object, part).document, request, { visibility }),
       editMeshTopology,
       hybridRoute: address => A.hybridOwnership.route(snapshot().hybridOwnership, address),
       setBrushRegion,

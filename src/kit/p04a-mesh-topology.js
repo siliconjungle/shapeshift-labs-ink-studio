@@ -5,7 +5,7 @@
   const maxCornersPerFace = 128;
   const epsilon = 1e-10;
   const documents = new WeakMap();
-  const renderSources = new WeakMap();
+  const renderSources = new WeakMap(), revisions = new WeakMap();
   const name = value => typeof value === 'string' && Boolean(value.trim());
   const list = value => Array.isArray(value) || (ArrayBuffer.isView(value) && !(value instanceof DataView));
   const unit = value => Number.isFinite(value) && value >= 0 && value <= 1;
@@ -217,13 +217,23 @@
       return options?.get(id) ?? { id };
     });
     const mesh = K.sceneMeshes.create({ id: meshId ?? doc.id, objectId, partId, ...geometry, materials: definitions });
-    renderSources.set(mesh, triangleSources);
+    renderSources.set(mesh, { document: doc, triangles: triangleSources });
     return mesh;
   }
 
   function triangleSource(mesh, triangle) {
-    return Number.isSafeInteger(triangle) && triangle >= 0 ? renderSources.get(mesh)?.[triangle] ?? null : null;
+    return Number.isSafeInteger(triangle) && triangle >= 0 ? renderSources.get(mesh)?.triangles[triangle] ?? null : null;
   }
 
-  K.meshTopology = frozen({ create, edit, inspect, fromIndexed, triangulate, toSceneMesh, triangleSource });
+  function revision(source) {
+    const doc = create(source);
+    if (!revisions.has(doc)) {
+      const text = JSON.stringify(doc), { hash } = K.procedural.data;
+      revisions.set(doc, [text.length, hash(text), hash(text, 0x9e3779b9)].map(n => n.toString(36)).join('-'));
+    }
+    return revisions.get(doc);
+  }
+
+  const sourceDocument = mesh => renderSources.get(mesh)?.document ?? null;
+  K.meshTopology = frozen({ create, edit, inspect, fromIndexed, triangulate, toSceneMesh, triangleSource, sourceDocument, revision });
 })(KIT);

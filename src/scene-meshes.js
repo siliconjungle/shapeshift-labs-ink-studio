@@ -130,7 +130,7 @@ const SceneMeshes = (() => {
     const atlas = Sprite.make(atlasWidth(tiles),maxEdge), regions = [];
     for (const tile of tiles) regions[tile.index] = atlas.reserve(tile.width,tile.height,tile.paint,{normal:tile.normal});
     const uvs = Float32Array.from(uvInput), source = Uint32Array.from(indices);
-    const drawIndices = new Uint32Array(source.length), semantic=[], blocks=[];
+    const drawIndices = new Uint32Array(source.length), drawTriangles = new Uint32Array(triangles), semantic=[], blocks=[];
     if(tiles.reduce((sum,tile)=>sum+(tile.chain?tile.width*tile.height:0),0)>2**20)
       throw new RangeError('Mesh semantic mipmaps exceed the texel budget');
     let cursor = 0;
@@ -138,6 +138,7 @@ const SceneMeshes = (() => {
       if (!faces.length) continue;
       const offset = cursor;
       for (const face of faces) {
+        drawTriangles[cursor / 3] = face;
         drawIndices.set(source.subarray(face*3,face*3+3),cursor);
         cursor += 3;
       }
@@ -156,7 +157,7 @@ const SceneMeshes = (() => {
       complete:blocks.reduce((sum,row)=>sum+row.end-row.first,0)===source.length };
     layer.sceneMeshId = id;
     const restBounds=bounds(positions);
-    const data = { positions, rest:positions, restBounds, uvs, indices:source, drawIndices, layer, regions, revision:0,
+    const data = { positions, rest:positions, restBounds, uvs, indices:source, drawIndices, drawTriangles, layer, regions, revision:0,
       materials:rows.map(row => row.id), faceMaterials:faceMaterials && Uint8Array.from(faceMaterials), bounds:restBounds,
       ...(scanSources && {scanSources,scanInfo:new Map()}) };
     return Object.freeze({ id, objectId, partId, vertices, triangles,
@@ -470,6 +471,11 @@ const SceneMeshes = (() => {
     return (y*layer.width+x)*4;
   }
 
+  function sourceTriangle(mesh, drawTriangle) {
+    const { drawTriangles } = read(mesh);
+    return Number.isSafeInteger(drawTriangle) && drawTriangle >= 0 ? drawTriangles[drawTriangle] : undefined;
+  }
+
   function trianglePigment(mesh,triangle) {
     const {uvs,indices,regions,layer,materials,faceMaterials}=read(mesh);
     if (!Number.isSafeInteger(triangle) || triangle<0 || triangle>=mesh.triangles)
@@ -628,6 +634,6 @@ const SceneMeshes = (() => {
   }
 
   return Object.freeze({create,fromObjectTexels,updateObjectTexels,scanFrame:Mips.scanFrame,scanMaterial,paintMeshes,pose,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
-    simulationFrame:(...args)=>simulationAPI().frame(...args),depthProxy,proxyPlan,trianglePigment,intersect,rayQuery,projector,sampleProjection,clipUV,revision:mesh=>read(mesh).revision});
+    simulationFrame:(...args)=>simulationAPI().frame(...args),depthProxy,proxyPlan,sourceTriangle,trianglePigment,intersect,rayQuery,projector,sampleProjection,clipUV,revision:mesh=>read(mesh).revision});
 })();
 if (typeof module !== 'undefined') module.exports = SceneMeshes;

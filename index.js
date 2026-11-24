@@ -251,6 +251,7 @@ module.exports = {
     return require('./cli/story-exchange.js').replay(module.exports.readProjectBundle(file),module.exports.load().KIT,options);
   },
   describeRenderFrame: (world, frame) => require('./src/render-contract.js').describe(world, frame),
+  captureMeshTopologyVisibility: require('./cli/mesh-topology-visibility.js').captureMeshTopologyVisibility,
   capturePixelScan: require('./cli/pixel-scan.js').capturePixelScan,
   createCameraAtlas(options) {
     return module.exports.load().KIT.cameraAtlas.raster(options, (world, frame) => {

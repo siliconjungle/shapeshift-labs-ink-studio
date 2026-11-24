@@ -250,4 +250,4 @@ if (require.main === module) run(process.argv[2] ?? 'output/gatehouse-revision')
   process.stderr.write(error.stack + '\n');
   process.exitCode = 1;
 });
-module.exports = { run };
+module.exports = { run, sourceScene };

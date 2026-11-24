@@ -198,12 +198,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.meshTopology` | namespace |  | [guide](../mesh-topology.md#author-and-edit-a-polygon) |
+| `KIT.meshTopology.captureVisibility` | function | `(mesh, frame, camera)` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04d-topology-selection.js) |
 | `KIT.meshTopology.correspond` | function | `(before, after, { lineage = {}, projection, matchIds = true } = {})` | [guide](../mesh-topology.md#record-correspondence-through-an-edit), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04c-topology-correspondence.js) |
 | `KIT.meshTopology.create` | function | `(source)` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
 | `KIT.meshTopology.edit` | function | `(source, { vertices = [], faces = [], removeVertices = [], removeFaces = [] } = {})` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
 | `KIT.meshTopology.editWithCorrespondence` | function | `(source, patch, { lineage = patch?.lineage, projection } = {})` | [guide](../mesh-topology.md#record-correspondence-through-an-edit), [guide](../mesh-topology.md#edit-topology-in-a-scene-transaction), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04c-topology-correspondence.js) |
 | `KIT.meshTopology.fromIndexed` | function | `({ id, positions, indices, uvs, materials = ['default'], faceMaterials } = {})` | [guide](../mesh-topology.md#render-pick-and-import-indexed-geometry), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
 | `KIT.meshTopology.inspect` | function | `(source)` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
+| `KIT.meshTopology.revision` | function | `(source)` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
+| `KIT.meshTopology.select` | function | `(source, request, { visibility } = {})` | [guide](../mesh-topology.md#select-authored-components), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04d-topology-selection.js) |
+| `KIT.meshTopology.sourceDocument` | function | `(mesh)` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
 | `KIT.meshTopology.toSceneMesh` | function | `(source, { materials, objectId, partId, meshId } = {})` | [guide](../mesh-topology.md#render-pick-and-import-indexed-geometry), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
 | `KIT.meshTopology.triangleSource` | function | `(mesh, triangle)` | [guide](../mesh-topology.md#render-pick-and-import-indexed-geometry), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
 | `KIT.meshTopology.triangulate` | function | `(source)` | [guide](../mesh-topology.md#render-pick-and-import-indexed-geometry), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |

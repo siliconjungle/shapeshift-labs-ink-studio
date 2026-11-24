@@ -65,6 +65,76 @@ convex or concave rings on their dominant projection, retaining
 collinear boundary corners and authored winding. A repeated vertex,
 self-intersection, or collapsed projection is a validation error.
 
+## Select authored components
+
+`KIT.meshTopology.select(document, query, options)` returns stable vertex,
+edge, or face IDs. Use `sceneEditor.selectMeshTopology(object, query,
+{ part, visibility })` to query the current scene snapshot or an open
+draft. `mesh-topology inspect` lists IDs for authored edges, including
+edges without a hand-written name.
+
+```json
+{
+  "domain": "edges",
+  "filter": {
+    "materials": ["rim-bevel"],
+    "seam": true,
+    "crease": { "min": 24 },
+    "visibility": "visible"
+  }
+}
+```
+
+A query starts with all elements of `domain` or with explicit `ids`.
+It applies traversal, then `grow`, `shrink`, `convert`, and the filter.
+Supply a saved result as `from` to start the next query from those IDs.
+The result carries the mesh ID and topology revision. A saved selection
+for a changed revision is rejected so it cannot silently target an edit.
+
+| Operation | Behavior |
+| --- | --- |
+| `traverse: "loop"` | From an edge seed, follow opposite edges through regular four-valence quad vertices. An open-edge seed follows the rim where the boundary is unbranched. |
+| `traverse: "ring"` | From an edge seed, cross each incident quad to its opposite edge. Stops at non-quad faces and nonmanifold branches. |
+| `traverse: "boundary"` | In the edge domain, follow open boundaries. In the face domain, return the edge perimeter of the selected faces, including open sides. |
+| `traverse: "island"` | Follow connected faces across shared edges, edges across shared vertices, or vertices across shared edges. |
+| `grow` / `shrink` | Add or remove up to 128 steps of neighbors. Shrink starts where the selection meets unselected components or an open rim. |
+| `convert` | Convert to `vertices`, `edges`, or `faces`. `match: "any"` accepts a target with one selected incident element. `match: "all"` requires all of its incident elements in the original domain. |
+
+Filters use any named material on an incident face. A UV seam compares
+the UVs at both shared endpoints. A crease measures the angle in degrees
+between the geometric normals of two incident polygons. A face or vertex
+matches seam and crease filters when one of its edges meets those tests.
+
+Visibility uses the frontmost geometry at the requested native grid and
+camera. An edge or vertex needs a visible sample on one of its authored
+triangles within one art pixel of that component. Vertex proximity uses
+the surrounding square so diagonal pixel neighbors can support a corner. `"hidden"` selects
+components without supporting samples in that view, including ones
+outside the view or too small to resolve. Re-capture after changing the
+camera, pose, or occluders.
+
+```sh
+ink-studio mesh-topology select scene.json rim-query.json --object gatehouse-portal --view view.json --out rim-edges.json
+ink-studio mesh-topology select scene.json face-query.json --object gatehouse-portal --from rim-edges.json --view view.json --out rim-faces.json
+```
+
+Use `--object` for a scene with editable topology or pass the topology
+document itself. `view.json` can set `w`, `h`, `t`, and camera options.
+The Node SDK exposes `captureMeshTopologyVisibility(world, object, view)`
+with the native frame and a portable `visibility` record. Save that
+record and pass it to `--visibility` to reuse the exact selection view.
+The toolkit-level `captureVisibility(mesh, frame, camera)` uses an
+editable mesh, native `sourceSurface` passes, and the matching raster
+camera with its focal length.
+
+Run the gatehouse example for a filtered bevel edit, the sign's island
+and boundary, and a quad panel showing the same seed as a loop and ring.
+
+```sh
+node examples/mesh-component-selection.cjs component-selection-review
+ink-studio mesh-topology select component-selection-review/mesh.json component-selection-review/rim-query.json --visibility component-selection-review/visible.json
+```
+
 ## Record correspondence through an edit
 
 `KIT.meshTopology.editWithCorrespondence(before, patch)` returns the

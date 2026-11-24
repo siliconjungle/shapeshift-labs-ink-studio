@@ -16,6 +16,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.bakeSplatFit` | function | `(world,asset=world.look?.splatFit)` | [source](../../cli/splat-fit-asset.js) |
 | `node.bundle` | function | `({ format = 'script', profile = 'development' } = {})` | [guide](../../README.md#embedding-and-custom-scene-collections), [guide](../build-profiles.md#bake-and-render-in-the-browser), [guide](../build-profiles.md#play-baked-frames), [guide](../simulation-workers.md#browser-integration), [source](../../index.js) |
 | `node.captureLightGroups` | function | `(world, { groups, view = {} } = {})` | [source](../../cli/light-groups.js) |
+| `node.captureMeshTopologyVisibility` | function | `(world, object, view = {})` | [source](../../cli/mesh-topology-visibility.js) |
 | `node.capturePixelScan` | function | `(world, { at, target, w = 96, h = 64, fov = .72, time = 0, sdfAssist } = {})` | [guide](../pixel-scanner.md), [source](../../cli/pixel-scan.js) |
 | `node.checkPaletteShot` | function | `(world,options={})` | [guide](../palette-recipes.md#run-palette-checks-in-ci), [source](../../cli/palette-checks.js) |
 | `node.compareCurveModes` | function | `(world, options = {}, receive)` | [source](../../cli/curve-compare.js) |
