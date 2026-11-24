@@ -5,6 +5,7 @@ import * as playbackModule from '../src/pixel-playback-ranges.js';
 import * as directionalModule from '../src/pixel-directional-views.js';
 import * as tilemapModule from '../src/pixel-tilemap.js';
 import { mountTilemap } from './pixel-stamp-tilemap.mjs';
+import { mountTileNeighbors } from './pixel-stamp-neighbors.mjs';
 import { mountPixelMotionPanel } from '../src/pixel-motion-panel.mjs';
 import { mountPixelCraftPanel } from '../src/pixel-craft-panel.mjs';
 import { mountPixelInspector } from '../src/pixel-inspector.mjs';
@@ -22,10 +23,11 @@ const protection = KIT.pixelProtection, layerStack = KIT.pixelLayerStack, stackF
 const { stonePaint, flowingInk, bubble, glint, starTwinkle, line, rect } = InkPixelStudies;
 const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
+const tileNeighbors = mountTileNeighbors($('tile-neighbor-controls'),{ Tilemap,view,edit:openTileFrame });
 const onionSkin = mountPixelOnionSkin($('onion-skin'),view);
 const nativePlayer = mountPixelRangePlayer(view.playbackHost,view,ranges);
 let nativeSourceKey, tagFormKey, tagFormDoc;
-let placementSource, placementsByTile = new Map();
+let placementSource, placementsByTile = new Map(), variantFrames = new Set(), neighborSource;
 let readInspection;
 const inspector = mountPixelInspector($('pixel-inspection'),view,at=>readInspection?.(at));
 const craft = KIT.pixelCraft, artRules = KIT.pixelArtRules, cleanup = KIT.pixelCleanup;
@@ -153,6 +155,7 @@ function load(data) {
   if (stack) validateStackDeck(revised,stack);
   else { validateProtection(revised); workshopRules(revised); }
   stop();
+  tileNeighbors.reset();
   if (state.doc) saveUndo();
   state.doc = revised;
   state.layer = stack && [...stack.rows.values()].reverse().find(row=>row.kind === 'paint' || row.kind === 'surface')?.id;
@@ -736,6 +739,16 @@ function draw() {
     }
   } else image = stamp.image({ width,height,palette,slots,alpha });
   view.setFrame(image);
+  updateTileNeighbors(frame.id,()=>{
+    if (!isolated && !references) return image;
+    try {
+      const composite = renderStack(state.doc,state.stack,frame,palette,{ id:state.layer,cel:{ slots,alpha,knockouts } });
+      return layerStack.image(composite,composite.packed);
+    } catch (error) {
+      notify(error.message);
+      return workshopTileImage(frame.id);
+    }
+  });
   const doc = state.doc, index = state.frame, activeLayer = state.layer;
   const sourceKey = JSON.stringify([craftRevision,isolated ? activeLayer : null,references]);
   function readFrame(i) {
@@ -801,10 +814,12 @@ function draw() {
     placementSource = doc.tilemap;
     placementsByTile = new Map();
     for (const { tile } of doc.tilemap?.cells ?? []) placementsByTile.set(tile,(placementsByTile.get(tile) ?? 0)+1);
+    variantFrames = Tilemap.variantReferences(doc.tilemap?.variants);
   }
   const placements = placementsByTile.get(frame.id) ?? 0;
-  $('remove').disabled = count === 1 || !!boundFrame || !!boundSelection || !!taggedEndpoint || !!registeredView || placements > 0;
-  $('remove').title = placements ? 'Placed on the tilemap' :
+  const variant = variantFrames.has(frame.id);
+  $('remove').disabled = count === 1 || !!boundFrame || !!boundSelection || !!taggedEndpoint || !!registeredView || placements > 0 || variant;
+  $('remove').title = placements ? 'Placed on the tilemap' : variant ? 'Used by a tile variant' :
     registeredView ? 'Registered directional view' : taggedEndpoint ? 'Used as a playback tag endpoint' : '';
   if (doc.tilemap) tilePanel.editing(frame.label ?? frame.id ?? 'Unregistered frame',placements);
   $('duplicate').disabled = count >= 2048 || (count+1)*width*height > 2**20;
@@ -1783,7 +1798,8 @@ function validateStackDeck(doc,stack = layerStack.prepare(doc.layers)) {
   const frameIds = new Set(frames.flatMap(frame=>frame.id === undefined ? [] : [frame.id]));
   if (frameIds.size !== frames.filter(frame=>frame.id !== undefined).length)
     throw new RangeError('Layer deck frame IDs must be unique');
-  Tilemap.prepare(doc.tilemap,frameIds,width,height);
+  const tilemap = Tilemap.prepare(doc.tilemap,frameIds,width,height);
+  if (tilemap?.variants.size) tilePresentation(doc,tilemap);
   validateSavedMasks(width,height,doc.sharedSelections);
   const details = doc.protectedDetails ?? [];
   const ids = frames.map(frame=>frame.id);
@@ -2377,14 +2393,46 @@ function occupiedTile(doc,at) {
   return doc.frames.find(frame=>frame.id === id);
 }
 
+function tilePresentation(doc,grid) {
+  const durations = new Map(doc.frames.map(frame=>[frame.id,Math.max(1,Math.round((frame.duration ?? 1/(doc.fps ?? 12))*1000))]));
+  return Tilemap.presentation(grid,id=>durations.get(id),ranges.plan);
+}
+
+function workshopTileImage(id) {
+  const frame = state.doc.frames.find(frame=>frame.id === id), composed = renderStack(state.doc,state.stack,frame);
+  return layerStack.image(composed,composed.packed);
+}
+
+function openTileFrame(id) {
+  const index = state.doc.frames.findIndex(frame=>frame.id === id);
+  if (index < 0) return;
+  stop();
+  resetStroke();
+  state.frame = index;
+  draw();
+  $('canvas-view').querySelector('.ink-grid-viewport').focus({ preventScroll:true });
+}
+
+function updateTileNeighbors(frame,image) {
+  const doc = state.doc, at = tilePanel.selection();
+  if (tilePanel.active() || !at || !doc.tilemap || !frame) { tileNeighbors.setSource(); return; }
+  if (neighborSource?.revision !== craftRevision || neighborSource?.tilemap !== doc.tilemap) {
+    const grid = Tilemap.prepare(doc.tilemap,new Set(frameIds(doc)),doc.width,doc.height), images = new Map();
+    const read = id=>{
+      if (!images.has(id)) images.set(id,workshopTileImage(id));
+      return images.get(id);
+    };
+    neighborSource = { revision:craftRevision,tilemap:doc.tilemap,grid,resolver:tilePresentation(doc,grid),read };
+  }
+  if (!neighborSource.resolver.contains(at,frame)) { tileNeighbors.setSource(); return; }
+  tileNeighbors.setSource({ ...neighborSource,at,editing:{ frame,image:image() } });
+}
+
 const tilePanel = mountTilemap(document.querySelector('main'),{
-  Tilemap,segment:paintTools.segment,stop,notify,
-  read:()=>({ doc:state.doc,frame:state.doc.frames[state.frame].id,canUndo:state.undo.length > 0 }),
-  readTile(id) {
-    const frame = state.doc.frames.find(frame=>frame.id === id);
-    const composed = renderStack(state.doc,state.stack,frame);
-    return layerStack.image(composed,composed.packed);
-  },
+  Tilemap,segment:paintTools.segment,notify,
+  stop() { stop(); tileNeighbors.setSource(); },
+  read:()=>({ doc:state.doc,frame:state.doc.frames[state.frame].id,canUndo:state.undo.length > 0,time:tileNeighbors.time() }),
+  presentation:tilePresentation,readTile:workshopTileImage,
   readTileArt:workshopTileArt,
   create(width,height) {
     const doc = state.doc, used = new Set(frameIds(doc)), tilemap = { version:1,width,height,cells:[] };
@@ -2411,15 +2459,7 @@ const tilePanel = mountTilemap(document.querySelector('main'),{
     tilePanel.refresh();
     notify((id === null ? 'Erased ' : 'Placed ')+changes.length+(changes.length === 1 ? ' cell' : ' cells'));
   },
-  edit(id) {
-    const index = state.doc.frames.findIndex(frame=>frame.id === id);
-    if (index < 0) return;
-    stop();
-    resetStroke();
-    state.frame = index;
-    draw();
-    $('canvas-view').querySelector('.ink-grid-viewport').focus({ preventScroll:true });
-  },
+  edit:openTileFrame,
   add() {
     const doc = state.doc;
     if ($('duplicate').disabled) throw new RangeError('Tile artwork exceeds the workshop frame budget');
@@ -2454,6 +2494,8 @@ const tilePanel = mountTilemap(document.querySelector('main'),{
   },
   reuse(at,id) {
     const doc = state.doc, source = occupiedTile(doc,at), match = doc.frames.find(frame=>frame.id === id);
+    const grid = Tilemap.prepare(doc.tilemap,new Set(frameIds(doc)),doc.width,doc.height);
+    if (!Tilemap.sameBehavior(grid,source.id,id)) throw new RangeError('Reuse needs matching tile animation and neighbor rules');
     if (!match || match === source || !Tilemap.sameArt(workshopTileArt(source),workshopTileArt(match)))
       throw new RangeError('Choose a different tile with exactly matching artwork and protection');
     const { tilemap } = Tilemap.place(doc.tilemap,new Set(frameIds(doc)),doc.width,doc.height,[at],id);

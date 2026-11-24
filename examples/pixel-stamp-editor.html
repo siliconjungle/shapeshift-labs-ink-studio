@@ -36,6 +36,12 @@
   #tilemap-picked { outline:2px solid #ffd38e; outline-offset:-2px; }
   #tilemap-position { margin:8px 0 0; min-height:1.4em; }
   #tilemap-choice { max-width:min(100%,22rem); }
+  #tile-neighbor-controls { display:grid; gap:8px; }
+  #tile-neighbor-controls[hidden] { display:none; }
+  #tile-neighbor-cells { margin:7px 0 0; padding-inline-start:22px; }
+  #tile-neighbor-resolved { image-rendering:pixelated; width:max-content; max-width:100%; max-height:128px;
+    background:repeating-conic-gradient(#263539 0% 25%,#36464a 0% 50%) 0 / 12px 12px; }
+  #tile-neighbor-edges { font:12px/1.45 ui-monospace,monospace; }
   #pixel-workspace[hidden] { display:none; }
   .side-label { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:12px; }
   .side-label span, .muted, output { color:var(--quiet); }
@@ -131,6 +137,18 @@
   <div class="layout" id="pixel-workspace">
     <div class="paint">
       <div id="canvas-view"></div>
+      <div class="timeline" id="tile-neighbor-controls" hidden>
+        <div class="row">
+          <label><input id="tile-neighbor-show" type="checkbox" checked> Actual neighbors</label>
+          <label>Preview time <input id="tile-neighbor-time" type="number" min="0" step=".001" value="0"> s</label>
+          <button id="tile-neighbor-play" type="button">Play tiles</button>
+          <button id="tile-neighbor-edit" type="button" hidden>Edit resolved frame</button>
+        </div>
+        <output id="tile-neighbor-summary"></output>
+        <canvas id="tile-neighbor-resolved" aria-label="Resolved center tile at native size" hidden></canvas>
+        <output id="tile-neighbor-edges"></output>
+        <details><summary>Cells and variants</summary><ul id="tile-neighbor-cells"></ul></details>
+      </div>
       <div class="row timeline" id="art-shot-control" hidden>
         <label>Art shot <select id="art-shot"></select></label>
       </div>

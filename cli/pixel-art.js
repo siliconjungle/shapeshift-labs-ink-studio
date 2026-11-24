@@ -16,6 +16,7 @@ const LayerStack = require('../src/pixel-layer-stack.js');
 const Timeline = require('./pixel-cel-timeline.js');
 const Directional = require('../src/pixel-directional-views.js');
 const Tilemap = require('../src/pixel-tilemap.js');
+const Playback = require('../src/pixel-playback-ranges.js');
 const CelBatch = require('./pixel-cel-batch.js');
 const PixelInspection = require('../src/pixel-inspection.js');
 const ViewSource = require('../src/pixel-view-source.js');
@@ -135,7 +136,8 @@ function documentShape(design) {
   const timed = Timeline.timing(frames);
   if (design.tags !== undefined) Timeline.validateTags(design,timed);
   if (design.directional !== undefined) Directional.prepare(design.directional,frameIds,new Set(Object.keys(palette)));
-  Tilemap.prepare(design.tilemap,frameIds,width,height);
+  const tilemap = Tilemap.prepare(design.tilemap,frameIds,width,height);
+  if (tilemap?.variants.size) tilemapPresentation(design,tilemap);
   const lookup = Timeline.index(frames);
   namedRegions(selections,'Pixel selections',width,height,frameIds);
   Protection.validate(protectedDetails,width,height,[...frameIds]);
@@ -369,7 +371,8 @@ function tilemapReport(design,xy) {
   const lookup = documentShape(design), grid = mapGrid(design);
   const { width,height,w,h,placed } = grid;
   const tile = xy ? Tilemap.pick(grid,xy) : undefined;
-  const matches = tile ? Tilemap.exactMatches(design.frames.map(frame=>frame.id),tile,tileArtReader(design,lookup)) : [];
+  const candidates = tile ? design.frames.map(frame=>frame.id).filter(id=>Tilemap.sameBehavior(grid,tile,id)) : [];
+  const matches = candidates.length > 1 ? Tilemap.exactMatches(candidates,tile,tileArtReader(design,lookup)) : [];
   const usage = new Map();
   for (const id of placed.values()) usage.set(id,(usage.get(id) ?? 0)+1);
   return { format:'ink-studio/pixel-tilemap-report',version:1,revision:fingerprint(design),
@@ -378,12 +381,30 @@ function tilemapReport(design,xy) {
     ...(xy && { picked:{ at:[...xy],tile },exactMatches:matches }) };
 }
 
-function tilemapRaster(design) {
-  const lookup = documentShape(design), grid = mapGrid(design), compileOne = frameCompiler(design,lookup);
-  return Tilemap.raster(grid,id=>{
+function tilemapReader(design,lookup) {
+  const compileOne = frameCompiler(design,lookup);
+  return id=>{
     const frame = compileOne(id);
     return LayerStack.image(frame,frame.colors);
-  });
+  };
+}
+
+function tilemapPresentation(design,grid) {
+  const durations = new Map(design.frames.map(frame=>[frame.id,frame.durationMs]));
+  return Tilemap.presentation(grid,id=>durations.get(id),Playback.plan);
+}
+
+function tilemapRaster(design,{ time = 0 } = {}) {
+  Tilemap.elapsed(time);
+  const lookup = documentShape(design), grid = mapGrid(design);
+  return Tilemap.raster(grid,tilemapReader(design,lookup),tilemapPresentation(design,grid),time);
+}
+
+function tilemapNeighborhood(design,at,{ time = 0 } = {}) {
+  const lookup = documentShape(design), grid = mapGrid(design);
+  const { cells,images,seams } = Tilemap.neighborhood(grid,at,tilemapPresentation(design,grid),time,tilemapReader(design,lookup));
+  return { format:'ink-studio/pixel-tilemap-neighborhood',version:1,revision:fingerprint(design),at:[...at],time,
+    tileSize:[grid.tileWidth,grid.tileHeight],cells,seams,raster:Tilemap.neighborhoodRaster(grid,images) };
 }
 
 function validate(design) {
@@ -1220,7 +1241,7 @@ function editTimeline(design,patch,context) {
 function editTileSharing(design,operation) {
   if (!fields(operation,['type','at','tile']) || !name(operation.tile))
     throw new TypeError('Tile sharing needs a cell coordinate and a tile frame ID');
-  const { type,at,tile } = operation, source = Tilemap.pick(mapGrid(design),at);
+  const { type,at,tile } = operation, grid = mapGrid(design), source = Tilemap.pick(grid,at);
   if (source === null) throw new RangeError('Pick an occupied tilemap cell');
   const ids = new Set(design.frames.map(frame=>frame.id)), lookup = Timeline.index(design.frames);
   let revised = design;
@@ -1241,6 +1262,7 @@ function editTileSharing(design,operation) {
     ids.add(tile);
   } else {
     if (tile === source || !ids.has(tile)) throw new RangeError('Reuse a different existing tile frame');
+    if (!Tilemap.sameBehavior(grid,source,tile)) throw new RangeError('Reuse needs matching tile animation and neighbor rules');
     const read = tileArtReader(design,lookup);
     if (!Tilemap.sameArt(read(source),read(tile))) throw new RangeError('The selected tile artwork and protection must match exactly');
   }
@@ -2037,7 +2059,8 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     layerDeck: () => structuredClone(layerDeck(state().design)),
     timeline: () => timelineReport(state().design),
     tilemap: at => tilemapReport(state().design,at),
-    tilemapRaster: () => tilemapRaster(state().design),
+    tilemapRaster: options => tilemapRaster(state().design,options),
+    tilemapNeighborhood: (at,options) => tilemapNeighborhood(state().design,at,options),
     extractPalette: ({ frame,layer,...options } = {})=>extractPalette(
       stampImage(stamp(compile(state().design,frame,undefined,layer),layer),{ preserveHidden:true }),options),
     inspect: (coordinate,options = {}) => inspect(state().design,coordinate,options,
@@ -2677,15 +2700,25 @@ function inspectCoordinate(raw) {
 }
 
 function tilemapCommand([action,source,...rest],opt) {
-  const options = { inspect:['out','at'],draw:['out'] };
+  const options = { inspect:['out','at'],draw:['out','t'],neighbors:['out','at','t','image'] };
+  const targets = [opt.out,opt.image].filter(reference).map(file=>path.resolve(file));
   if (!Object.hasOwn(options,action) || !reference(source) || rest.length ||
       Object.entries(opt).some(([key,value])=>!options[action].includes(key) || !reference(value)) ||
-      (opt.out && path.resolve(source) === path.resolve(opt.out)) || action === 'draw' && !/\.png$/i.test(opt.out ?? ''))
-    throw new TypeError('Use pixel-art tilemap inspect <document> [--at x,y] or tilemap draw <document> --out map.png');
-  const design = read(source);
+      targets.includes(path.resolve(source)) || new Set(targets).size !== targets.length ||
+      action === 'draw' && !/\.png$/i.test(opt.out ?? '') ||
+      action === 'neighbors' && (!opt.at || opt.image && !/\.png$/i.test(opt.image)))
+    throw new TypeError('Use pixel-art tilemap inspect <document>, draw <document> --out map.png or neighbors <document> --at x,y');
+  const design = read(source), time = opt.t === undefined ? 0 : Number(opt.t);
   if (action === 'draw') {
-    const { w,h,rgba } = tilemapRaster(design);
+    const { w,h,rgba } = tilemapRaster(design,{ time });
     files.write(path.resolve(opt.out),PNG.encode(w,h,rgba,4));
+    return;
+  }
+  if (action === 'neighbors') {
+    const { raster:{w,h,rgba},...report } = tilemapNeighborhood(design,inspectCoordinate(opt.at),{ time });
+    if (opt.image) files.write(path.resolve(opt.image),PNG.encode(w,h,rgba,4));
+    if (opt.out) files.json(path.resolve(opt.out),report);
+    else console.log(JSON.stringify(report,null,2));
     return;
   }
   const report = tilemapReport(design,opt.at === undefined ? undefined : inspectCoordinate(opt.at));

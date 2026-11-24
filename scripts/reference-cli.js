@@ -61,7 +61,7 @@ function runtimeSubcommands(cliDirectory, commands) {
     add('pixel-art palette', file, withoutFlags(paletteActions));
     add('pixel-art stack', file, withoutFlags(stackActions));
     add('pixel-art directions', 'pixel-directional-views.js', withoutFlags(['open','review','export']));
-    add('pixel-art tilemap', file, withoutFlags(['inspect','draw']));
+    add('pixel-art tilemap', file, withoutFlags(['inspect','draw','neighbors']));
   }
   for (const [group, file, start, end] of [
     ['music', 'music-composer.js', 'function musicCommand('],

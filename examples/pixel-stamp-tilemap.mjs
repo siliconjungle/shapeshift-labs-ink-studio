@@ -1,4 +1,4 @@
-export function mountTilemap(host,{ Tilemap,segment,read,readTile,readTileArt,create,place,edit,add,variant,reuse,undo,stop,notify }) {
+export function mountTilemap(host,{ Tilemap,segment,read,presentation,readTile,readTileArt,create,place,edit,add,variant,reuse,undo,stop,notify }) {
   const get = id=>host.querySelector('#'+id);
   const canvas = get('tilemap-canvas'), context = canvas.getContext('2d');
   const plane = get('tilemap-plane'), choice = get('tilemap-choice'), tool = get('tilemap-tool');
@@ -54,7 +54,8 @@ export function mountTilemap(host,{ Tilemap,segment,read,readTile,readTileArt,cr
     const id = picked && Tilemap.pick(grid,picked), { doc } = read();
     if (!id) picked = undefined;
     const frames = new Map(doc.frames.filter(frame=>frame.id !== undefined).map(frame=>[frame.id,frame]));
-    const matches = id ? Tilemap.exactMatches(frames.keys(),id,key=>readTileArt(frames.get(key))) : [];
+    const candidates = id ? [...frames.keys()].filter(key=>Tilemap.sameBehavior(grid,id,key)) : [];
+    const matches = candidates.length > 1 ? Tilemap.exactMatches(candidates,id,key=>readTileArt(frames.get(key))) : [];
     const previous = exact.value;
     exact.replaceChildren(...(matches.length ? matches.map(id=>tileOption(frames.get(id))) : [new Option('No exact matches','')]));
     if (matches.includes(previous)) exact.value = previous;
@@ -65,7 +66,7 @@ export function mountTilemap(host,{ Tilemap,segment,read,readTile,readTileArt,cr
   }
 
   function refresh(preferred) {
-    const { doc,canUndo } = read(), enabled = !!doc.tilemap;
+    const { doc,canUndo,time } = read(), enabled = !!doc.tilemap;
     if (!enabled) { mode = 'pixels'; picked = undefined; }
     const placing = mode === 'map';
     get('tilemap-new').hidden = enabled;
@@ -93,7 +94,7 @@ export function mountTilemap(host,{ Tilemap,segment,read,readTile,readTileArt,cr
     image = Tilemap.raster(grid,id=>{
       const tile = raster(id);
       return { width:tile.width,height:tile.height,rgba:tile.data };
-    });
+    },presentation(doc,grid),time);
     const { w,h,rgba } = image;
     if (canvas.width !== w) canvas.width = w;
     if (canvas.height !== h) canvas.height = h;
@@ -240,6 +241,7 @@ export function mountTilemap(host,{ Tilemap,segment,read,readTile,readTileArt,cr
 
   return {
     show,active:()=>mode === 'map',
+    selection:()=>picked?.slice(),
     refresh() { tiles = new Map(); stroke = undefined; refresh(); },
     editing(label,count) { get('tilemap-editing').value = count ? label+' · '+countLabel(count) : label; },
     image:()=>image

@@ -342,6 +342,58 @@ The first operation takes a fresh frame ID. The second takes an existing
 match and checks the artwork again at commit time. Each operation records
 the old and new cell reference and undoes in one step.
 
+### Preview seams and neighboring tiles
+
+Use **Pick** on a map cell and open **Edit every instance** or
+**Make a local variant**. The editable tile stays in the center of the
+pixel canvas, surrounded by its eight actual neighbors. Empty cells and
+the area outside the map are transparent. The preview shows shared brush
+changes on any surrounding placement using the same frame. Toggle
+**Actual neighbors** to switch back to the isolated canvas.
+
+The four edge readouts count facing texels with different alpha and
+facing visible texels with different RGB. These counts help find breaks in
+coverage and abrupt color changes while you paint. **Cells and variants**
+lists the placement ID and resolved artwork for each neighbor.
+
+To preview animated or rule-driven tiles, add optional `variants` to
+the version 1 `tilemap` object. For example, this road uses a cap when it
+connects on the east and an animated straight when it connects on both sides.
+
+```json
+{
+  "road": {
+    "connects": ["road", "plaza"],
+    "neighbors": { "E": "east-cap", "EW": "straight" }
+  },
+  "straight": {
+    "animation": { "frames": ["straight", "straight-lit"], "direction": "forward", "loop": true }
+  }
+}
+```
+
+Use masks in `NESW` order, or `none` for an isolated cell. A missing
+mask uses the placed tile's artwork. A rule connects to placements named
+in `connects`, which defaults to its own tile ID. Each cell applies one
+neighbor rule, then plays the resulting tile's animation using the
+document's frame durations. Animations support forward, reverse, and
+ping-pong playback. Exact tile reuse also checks animation and neighbor
+behavior.
+
+Enter a time in seconds or choose **Play tiles** to see the variants in
+context. When the center resolves to another frame, its native-size preview
+appears below the canvas. Choose **Edit resolved frame** to paint that frame
+in place. Placement and sharing tools use the placed tile ID. Variant
+definitions travel with the pixel document and the workshop layer deck.
+
+```sh
+ink-studio pixel-art tilemap neighbors map.json --at 2,2 --t 0.24 --out seams.json --image context.png
+ink-studio pixel-art tilemap draw map.json --t 0.24 --out map-at-time.png
+```
+
+`editor.tilemapNeighborhood([2, 2], { time: 0.24 })` returns the resolved
+cells, four seam counts, and a transparent native 3×3 tile raster.
+
 ## Register frames and align texture pixels
 
 Version 2 documents can carry a top-level `guides` list. Guide IDs are

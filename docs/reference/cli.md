@@ -241,7 +241,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art directions review <document.json> [--anchor id] [--out report.json] [--review review.html]   compare adjacent views
   pixel-art directions export <document.json> --out atlas.json [--base registered-atlas.json]   export approved views
   pixel-art tilemap inspect <document.json> [--at x,y] [--out report.json]   inspect cell references
-  pixel-art tilemap draw <document.json> --out map.png   render shared tiles on the native grid
+  pixel-art tilemap draw <document.json> --out map.png [--t seconds]   render the native tilemap
+  pixel-art tilemap neighbors <document.json> --at x,y [--t seconds] [--out report.json] [--image preview.png]   review actual neighbors and seams
   pixel-art palette export <document.json> --out palette.json
   pixel-art palette extract <image.png|document.json> --out palette.json [--size 32] [--alpha visible|opaque|all]
   pixel-art palette import <document.json> <palette.json> --out revised.json
@@ -752,6 +753,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio pixel-art tilemap` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art tilemap draw` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art tilemap inspect` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art tilemap neighbors` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art timeline` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art trace` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art track` · [source](../../cli/pixel-art.js)

@@ -33,10 +33,59 @@ const pixel = ({w,rgba},x,y)=>Array.from(rgba.subarray((y*w+x)*4,(y*w+x)*4+4));
 const patch = (editor,operation)=>({
   id:'tilemap-stroke',destination:'timeline',revision:editor.tilemap().revision,operation
 });
+const neighbors = {
+  ...source,
+  frames:[
+    { id:'road',durationMs:100,cels:{ art:{ marks:[{swatch:'stone',at:[1,1]}] } } },
+    { id:'road-copy',durationMs:100,cels:{ art:{ marks:[{swatch:'stone',at:[1,1]}] } } },
+    { id:'bank',durationMs:100,cels:{ art:{ marks:[
+      {swatch:'gold',at:[0,0]}, {swatch:'gold',at:[0,1]}, {alpha:1,runs:[[1,0,1]]}
+    ] } } },
+    { id:'junction',durationMs:100,cels:{} },
+    { id:'glow-a',durationMs:80,cels:{ art:{ marks:[{swatch:'stone',at:[2,0]}] } } },
+    { id:'glow-b',durationMs:120,cels:{ art:{ marks:[{swatch:'gold',runs:[[0,2,1],[1,2,1]]}] } } }
+  ],
+  tilemap:{
+    version:1,width:4,height:3,cells:[
+      {at:[0,1],tile:'road'}, {at:[1,1],tile:'road'}, {at:[2,1],tile:'bank'}, {at:[2,0],tile:'bank'}
+    ],
+    variants:{
+      road:{ connects:['road','bank'],neighbors:{ E:'junction',EW:'junction' } },
+      junction:{ animation:{ frames:['glow-a','glow-b'] } }
+    }
+  }
+};
 function workspace(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-tilemap-'));
   t.after(()=>fs.rmSync(dir,{ force:true,recursive:true }));
   return dir;
+}
+
+async function withWorkshop(t,use) {
+  const dir = workspace(t), [{ file:bundle }] = build('development',dir);
+  const examples = path.join(root,'examples'), file = path.join(dir,'workshop.html');
+  const url = relative=>pathToFileURL(path.resolve(examples,relative)).href;
+  fs.writeFileSync(file,fs.readFileSync(path.join(examples,'pixel-stamp-editor.html'),'utf8')
+    .replace('../dist/ink-studio.browser.js',pathToFileURL(bundle).href)
+    .replace('../src/pixel-grid-canvas.css',url('../src/pixel-grid-canvas.css'))
+    .replace('src="pixel-stamp-studies.js"','src="'+url('pixel-stamp-studies.js')+'"')
+    .replace('src="pixel-stamp-editor.mjs"','src="'+url('pixel-stamp-editor.mjs')+'"'));
+  await withChrome(dir,{hardware:true},async browser=>{
+    await browser.send('Emulation.setDeviceMetricsOverride',{ width:1200,height:1200,deviceScaleFactor:1,mobile:false });
+    await browser.send('Page.navigate',{ url:pathToFileURL(file).href });
+    for (let i=0;i<100 && !await browser.evaluate('document.querySelector(".ink-grid-dimensions")?.value');i++) await pause(25);
+    assert(await browser.evaluate('document.querySelector(".ink-grid-dimensions").value'));
+    await use(browser);
+  });
+}
+
+async function openWorkshopDeck(browser,design) {
+  const deck = createPixelEditor(design).layerDeck();
+  await browser.evaluate(`{ const dt = new DataTransfer();
+    dt.items.add(new File([${JSON.stringify(JSON.stringify(deck))}],"map.json",{type:"application/json"}));
+    const input = document.getElementById("import"); input.files = dt.files; input.dispatchEvent(new Event("change")); }`);
+  for (let i=0;i<100 && !await browser.evaluate('document.getElementById("status").textContent.includes("Opened map.json")');i++) await pause(25);
+  assert.match(await browser.evaluate('document.getElementById("status").textContent'),/Opened map.json/);
 }
 
 test('placement strokes and tile pixels share undo, replay, preview and the saved document',()=>{
@@ -207,30 +256,14 @@ test('CLI inspects map cells and writes an exact transparent PNG',t=>{
 });
 
 test('the workshop paints a placement stroke, picks its tile and edits every instance',{skip:!process.env.INK_TEST_CHROME},async t=>{
-  const dir = workspace(t), [{ file:bundle }] = build('development',dir);
-  const examples = path.join(root,'examples'), file = path.join(dir,'workshop.html');
-  const url = relative=>pathToFileURL(path.resolve(examples,relative)).href;
-  fs.writeFileSync(file,fs.readFileSync(path.join(examples,'pixel-stamp-editor.html'),'utf8')
-    .replace('../dist/ink-studio.browser.js',pathToFileURL(bundle).href)
-    .replace('../src/pixel-grid-canvas.css',url('../src/pixel-grid-canvas.css'))
-    .replace('src="pixel-stamp-studies.js"','src="'+url('pixel-stamp-studies.js')+'"')
-    .replace('src="pixel-stamp-editor.mjs"','src="'+url('pixel-stamp-editor.mjs')+'"'));
-  const deck = createPixelEditor(source).layerDeck();
-  await withChrome(dir,{hardware:true},async browser=>{
+  await withWorkshop(t,async browser=>{
     const run = expression=>browser.evaluate(expression);
     const click = id=>run('document.getElementById('+JSON.stringify(id)+').click()');
-    await browser.send('Emulation.setDeviceMetricsOverride',{ width:1200,height:1200,deviceScaleFactor:1,mobile:false });
-    await browser.send('Page.navigate',{ url:pathToFileURL(file).href });
-    for (let i=0;i<100 && !await run('document.querySelector(".ink-grid-dimensions")?.value');i++) await pause(25);
-    assert(await run('document.querySelector(".ink-grid-dimensions").value'));
     await click('tilemap-new');
     assert.equal(await run('document.getElementById("tilemap-create").hidden'),false);
     await run('document.getElementById("tilemap-create").requestSubmit()');
     assert.equal(await run('document.getElementById("tilemap-workspace").hidden'),false);
-    await run(`const dt = new DataTransfer();
-      dt.items.add(new File([${JSON.stringify(JSON.stringify(deck))}],"map.json",{type:"application/json"}));
-      const input = document.getElementById("import"); input.files = dt.files; input.dispatchEvent(new Event("change"));`);
-    for (let i=0;i<100 && !await run('document.getElementById("status").textContent.includes("Opened map.json")');i++) await pause(25);
+    await openWorkshopDeck(browser,source);
     assert.equal(await run('document.getElementById("pixel-workspace").hidden'),true);
     const read = (x,y)=>run(`Array.from(document.getElementById("tilemap-canvas").getContext("2d").getImageData(${x},${y},1,1).data)`);
     assert.deepEqual(await read(1,1),wall);
@@ -324,5 +357,102 @@ test('the workshop paints a placement stroke, picks its tile and edits every ins
     assert.deepEqual(await read(7,1),gold);
     await click('tilemap-undo');
     assert.equal(await run('document.getElementById("tilemap-pick-label").value'),'2, 0 · wall-variant');
+  });
+});
+
+test('neighbors resolve a bounded native window and report asymmetric alpha and RGB seams',()=>{
+  const editor = createPixelEditor(neighbors), a = editor.tilemapNeighborhood([1,1]), b = editor.tilemapNeighborhood([1,1],{time:.08});
+  assert.deepEqual([a.raster.w,a.raster.h],[9,6]);
+  assert.deepEqual(a.cells[4],{at:[1,1],offset:[0,0],tile:'road',variant:'junction',frame:'glow-a',mask:'EW',step:0});
+  assert.equal(a.cells[2].tile,'bank');
+  assert.equal(a.cells[7].tile,null);
+  assert.equal(b.cells[4].frame,'glow-b');
+  assert.equal(b.cells[3].mask,'E');
+  assert.equal(b.cells[3].frame,'glow-b');
+  assert.deepEqual(a.seams[1],{ side:'E',at:[2,1],length:2,coverage:1,color:1 });
+  assert.deepEqual(b.seams[1],{ side:'E',at:[2,1],length:2,coverage:1,color:0 });
+  assert.deepEqual(editor.tilemapNeighborhood([1,1],{ time:.2 }).cells,a.cells);
+  assert.equal(editor.tilemapNeighborhood([0,0]).cells[0].outside,true);
+  assert.throws(()=>editor.tilemapNeighborhood([4,0]),/inside the tilemap/);
+  assert.throws(()=>editor.tilemapRaster({time:-1}),/nonnegative seconds/);
+  const map = editor.tilemapRaster({time:.08});
+  for (let y=0;y<b.raster.h;y++) for (let x=0;x<b.raster.w;x++) assert.deepEqual(pixel(b.raster,x,y),pixel(map,x,y));
+  const imported = createPixelEditor(documentFromDeck(editor.layerDeck())).tilemapNeighborhood([1,1],{time:.08});
+  assert.deepEqual(imported.cells,b.cells);
+  assert.deepEqual(imported.seams,b.seams);
+  assert.deepEqual(imported.raster,b.raster);
+});
+
+test('tile rules validate references and protect exact reuse from changing connectivity',()=>{
+  const doc = structuredClone(neighbors), editor = createPixelEditor(doc);
+  assert.deepEqual(editor.tilemap([1,1]).exactMatches,[]);
+  const conflicting = patch(editor,{ type:'reuse-exact-tile',at:[1,1],tile:'road-copy' });
+  assert.match(editor.previewEdit(conflicting).conflicts[0].message,/animation and neighbor rules/);
+  doc.tilemap.variants.road.connects = ['road','road-copy','bank'];
+  doc.tilemap.variants['road-copy'] = { ...doc.tilemap.variants.road,connects:['road','road-copy'] };
+  assert.deepEqual(createPixelEditor(doc).tilemap([1,1]).exactMatches,[]);
+  doc.tilemap.variants.road.neighbors.WE = 'bank';
+  assert.throws(()=>createPixelEditor(doc),/canonical NESW/);
+  delete doc.tilemap.variants.road.neighbors.WE;
+  doc.tilemap.variants.junction.animation.frames.push('unknown');
+  assert.throws(()=>createPixelEditor(doc),/known frames/);
+});
+
+test('CLI exports native neighbor PNG and report at the same time',t=>{
+  const dir = workspace(t), file = path.join(dir,'map.json'), png = path.join(dir,'context.png');
+  fs.writeFileSync(file,JSON.stringify(neighbors));
+  const cli = (...args)=>execFileSync(process.execPath,[path.join(root,'cli/ink-studio.js'),'pixel-art','tilemap',...args],{encoding:'utf8'});
+  const result = JSON.parse(cli('neighbors',file,'--at','1,1','--t','.08','--image',png));
+  assert.equal(result.cells[4].frame,'glow-b');
+  assert.equal(result.seams[1].coverage,1);
+  const actual = PNG.raster(png), { raster } = createPixelEditor(neighbors).tilemapNeighborhood([1,1],{time:.08});
+  assert.deepEqual([actual.w,actual.h],[raster.w,raster.h]);
+  assert.deepEqual(Uint8Array.from(actual.data),raster.rgba);
+});
+
+test('the workshop seeks tile variants and paints the resolved frame with live neighbors',{skip:!process.env.INK_TEST_CHROME},async t=>{
+  await withWorkshop(t,async browser=>{
+    await openWorkshopDeck(browser,neighbors);
+    const run = expression=>browser.evaluate(expression);
+    const click = id=>run('document.getElementById('+JSON.stringify(id)+').click()');
+    const where = (selector,x,y)=>run(`(()=>{ const c=document.querySelector(${JSON.stringify(selector)}), r=c.getBoundingClientRect();
+      return { x:r.left+(${x}+.5)*r.width/c.width,y:r.top+(${y}+.5)*r.height/c.height }; })()`);
+    const mouse = (type,point)=>browser.send('Input.dispatchMouseEvent',{ type,...point,button:'left',
+      buttons:type === 'mousePressed' ? 1 : 0,clickCount:1 });
+    const read = (selector,x,y)=>run(`Array.from(document.querySelector(${JSON.stringify(selector)}).getContext('2d').getImageData(${x},${y},1,1).data)`);
+    await run('document.getElementById("tilemap-tool").value="pick"');
+    const focus = await where('#tilemap-canvas',4,3);
+    await mouse('mousePressed',focus);
+    await mouse('mouseReleased',focus);
+    await click('tilemap-edit-tile');
+    assert.equal(await run('document.getElementById("tile-neighbor-controls").hidden'),false);
+    assert.match(await run('document.getElementById("tile-neighbor-summary").value'),/EW → junction · Cel 1 glow-a/);
+    assert.deepEqual(await read('#tile-neighbor-resolved',2,0),wall);
+    assert.deepEqual(await read('.ink-grid-neighbors canvas:nth-child(5)',0,0),gold);
+    await run(`{ const input=document.getElementById("tile-neighbor-time");
+      input.value=".08"; input.dispatchEvent(new Event("input")); }`);
+    assert.match(await run('document.getElementById("tile-neighbor-summary").value'),/Cel 2 glow-b/);
+    assert.deepEqual(await read('.ink-grid-neighbors canvas:nth-child(4)',2,0),gold);
+    await click('tile-neighbor-edit');
+    assert.equal(await run('document.getElementById("tilemap-editing").value'),'glow-b');
+    assert.match(await run('document.getElementById("tile-neighbor-edges").value'),/E 1\/2 alpha, 0 RGB/);
+    await run('document.querySelectorAll(".swatch")[0].click()');
+    const center = await where('#canvas-view .ink-grid-main',2,0);
+    await mouse('mousePressed',center);
+    assert.deepEqual(await read('.ink-grid-neighbors canvas:nth-child(4)',2,0),wall);
+    assert.match(await run('document.getElementById("tile-neighbor-edges").value'),/E 1\/2 alpha, 1 RGB/);
+    await mouse('mouseReleased',center);
+    assert.equal(await run('document.getElementById("remove").disabled'),true);
+    await click('tile-neighbor-play');
+    for (let i=0;i<20 && !await run('document.getElementById("tile-neighbor-time").valueAsNumber > .08');i++) await pause(25);
+    assert(await run('document.getElementById("tile-neighbor-time").valueAsNumber > .08'));
+    await click('tile-neighbor-play');
+    await run(`{ const input=document.getElementById("tile-neighbor-time");
+      input.value=".08"; input.dispatchEvent(new Event("input")); }`);
+    await click('tile-neighbor-show');
+    assert.equal(await run('document.querySelector(".ink-grid-neighbors").hidden'),true);
+    await click('tile-neighbor-show');
+    await click('tilemap-place');
+    assert.deepEqual(await read('#tilemap-canvas',5,2),wall);
   });
 });

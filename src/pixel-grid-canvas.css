@@ -89,18 +89,19 @@
   background: none;
   pointer-events: none;
 }
-.ink-grid-repeats, .ink-grid-mirrors { position: absolute; inset: 0; pointer-events: none; }
-.ink-grid-repeats canvas {
+.ink-grid-repeats, .ink-grid-neighbors, .ink-grid-mirrors { position: absolute; inset: 0; pointer-events: none; }
+.ink-grid-repeats canvas, .ink-grid-neighbors canvas {
   position: absolute;
-  pointer-events: auto;
-  cursor: crosshair;
   left: calc(100% * var(--tile-x));
   top: calc(100% * var(--tile-y));
   width: 100%;
   height: 100%;
   outline: 1px solid #526565;
 }
-.ink-grid-repeats:not(:empty) + .ink-grid-main {
+.ink-grid-repeats canvas { pointer-events: auto; cursor: crosshair; }
+.ink-grid-neighbors canvas { outline:none; }
+.ink-grid-neighbors:not([hidden]) + .ink-grid-main,
+.ink-grid-repeats:not(:empty) + .ink-grid-neighbors[hidden] + .ink-grid-main {
   position: relative;
   outline: 1px solid #b3d6bb;
 }

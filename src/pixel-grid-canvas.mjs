@@ -15,6 +15,7 @@ const markup = `
     <div class="ink-grid-viewport" tabindex="0" role="group" aria-label="Canvas viewport">
       <div class="ink-grid-plane">
         <div class="ink-grid-repeats" aria-hidden="true"></div>
+        <div class="ink-grid-neighbors" aria-hidden="true" hidden></div>
         <canvas class="ink-grid-main" aria-label="Native pixel canvas"></canvas>
         <canvas class="ink-grid-onion" aria-hidden="true" hidden></canvas>
         <div class="ink-grid-lines" aria-hidden="true" hidden></div>
@@ -60,6 +61,8 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   const diagnosticLayer = channel => channel === 'source-hits' ? sourceHits : channel === 'motion' ? motion : diagnostic;
   const selection = find('.ink-grid-selection'), selectedPixels = selection.querySelector('canvas').getContext('2d');
   const repeats = find('.ink-grid-repeats');
+  const neighbors = find('.ink-grid-neighbors');
+  let neighborImages, neighborCanvases;
   const mirrorLines = [find('.ink-grid-mirror-x'),find('.ink-grid-mirror-y')];
   const guidesLayer = find('.ink-grid-guides'), guideToggles = find('.ink-guide-toggles');
   const showGuides = find('[data-view="guides"]'), snapGuides = find('[data-view="snap"]');
@@ -190,6 +193,36 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
     }
   }
 
+  function setNeighbors(images) {
+    const showing = !!images, changed = showing === neighbors.hidden;
+    if (showing) {
+      if (!neighborCanvases) {
+        neighborCanvases = Array.from({length:9},(_,index)=>{
+          if (index === 4) return null;
+          const tile = host.ownerDocument.createElement('canvas');
+          tile.style.setProperty('--tile-x',index%3-1);
+          tile.style.setProperty('--tile-y',Math.floor(index/3)-1);
+          neighbors.append(tile);
+          return tile.getContext('2d');
+        });
+      }
+      for (const [index,tile] of neighborCanvases.entries()) {
+        if (!tile) continue;
+        const source = images[index], canvas = tile.canvas;
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+        } else if (neighborImages?.[index] === source) continue;
+        if (source) tile.putImageData(new ImageData(new Uint8ClampedArray(source.rgba),width,height),0,0);
+        else tile.clearRect(0,0,width,height);
+      }
+    }
+    neighborImages = images;
+    neighbors.hidden = !showing;
+    repeats.hidden = showing;
+    if (changed && fitting) fit();
+  }
+
   function paintView() {
     plane.style.translate = `${left}px ${top}px`;
     plane.style.setProperty('--ink-grid-cell',`${zoom}px`);
@@ -205,8 +238,9 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   function fit() {
     fitting = true;
     if (!width || !height) return;
-    const next = clamp(Math.floor(Math.min((viewport.clientWidth - 28) / width,
-      (viewport.clientHeight - 28) / height)),1,maxZoom);
+    const span = neighbors.hidden ? 1 : 3;
+    const next = clamp(Math.floor(Math.min((viewport.clientWidth - 28) / (width*span),
+      (viewport.clientHeight - 28) / (height*span))),1,maxZoom);
     const x = Math.round((viewport.clientWidth - width * next) / 2);
     const y = Math.round((viewport.clientHeight - height * next) / 2);
     if (next !== zoom || x !== left || y !== top) showPoint(null);
@@ -385,6 +419,6 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   const observer = new ResizeObserver(() => { if (fitting) fit(); else move(left,top); });
   observer.observe(viewport);
   paintView();
-  return Object.freeze({ canvas, playbackHost, setFrame, setPreviewFrame, setOnionSkin, setGuides, setDrawing, setSelection, setDiagnostic, focusRegion, setZoom, fit, pixelAt, positionAt,
+  return Object.freeze({ canvas, playbackHost, setFrame, setPreviewFrame, setOnionSkin, setGuides, setDrawing, setNeighbors, setSelection, setDiagnostic, focusRegion, setZoom, fit, pixelAt, positionAt,
     dispose() { events.abort(); observer.disconnect(); host.replaceChildren(); host.classList.remove('ink-grid-canvas'); } });
 }
