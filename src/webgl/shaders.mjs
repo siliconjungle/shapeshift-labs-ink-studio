@@ -530,7 +530,8 @@ uniform bool u_geometryDepth;` : ''}
 in float v_gl; in float v_as; in float v_ast;
 ${ascii ? ascii.fsDecl : 'uniform float u_gly;\n'}uniform float u_crisp, u_hard;
 flat in vec4 v_fm; flat in vec4 v_ft; flat in float v_fk; flat in float v_lit; flat in float v_ix; uniform vec3 u_fpal[${scenePaletteSize}]; uniform vec3 u_fog;
-${materialStyles ? `flat in vec4 v_pixelStyle; flat in float v_pixelFog; uniform float u_materialGridScale;
+${materialStyles || pbr ? 'uniform float u_materialGridScale;' : ''}
+${materialStyles ? `flat in vec4 v_pixelStyle; flat in float v_pixelFog;
 ${materialStyleThreshold}` : ''}
 uniform float u_idx, u_gaussianNormalCutoff;
 uniform bool u_paintPass,u_historyOwner; flat in int v_paint;
@@ -556,6 +557,22 @@ flat in vec3 v_pbrCenter;
 uniform mat4 u_pbrView;
 uniform float u_pbrReach;
 ${pbr}
+PbrTap pbrSplatTap(vec2 pixel,vec3 normal){
+  vec2 screen=(pixel-u_viewport*.5)/u_focal;
+  mat3 toWorld=transpose(mat3(u_pbrView));
+  bool ortho=u_ortho>0.5;
+  vec3 ray=ortho?vec3(0,0,-1):vec3(screen,-1);
+  vec3 origin=ortho?vec3(screen,0):vec3(0);
+  vec3 direction=toWorld*ray, from=toWorld*(origin-u_pbrView[3].xyz);
+  vec3 point=v_pbrCenter;
+  float facing=dot(normal,direction);
+  if(abs(facing)>1e-7){
+    float travel=dot(normal,point-from)/facing;
+    float centerDepth=-(u_pbrView*vec4(point,1)).z;
+    if(travel>=0.0&&abs(travel-centerDepth)<=u_pbrReach)point=from+travel*direction;
+  }
+  return PbrTap(point,normal,normal,-direction,1.0);
+}
 ` : ''}
 ${environment ? environmentMediaSource(emitterFog) + 'flat in float v_envAxial;' : ''}
 ${portal || cutaway ? axialPosition : ''}
@@ -739,22 +756,16 @@ ${facingColors ? 'rgb = facingFragment(rgb, u_fog, u_viewport, u_focal, u_ortho 
 ${relighting ? 'if (v_relight.w > 0.0) rgb = mix(min(vec3(1.0), rgb * v_relight.xyz), u_fog, v_relight.w - 1.0);' : ''}
 ${pbr ? `
   if(abs(v_pbrRow.w)>=1.0){
-    vec2 screen=(gl_FragCoord.xy-u_viewport*.5)/u_focal;
-    mat3 toWorld=transpose(mat3(u_pbrView));
-    bool ortho=u_ortho>0.5;
-    vec3 ray=ortho?vec3(0,0,-1):vec3(screen,-1);
-    vec3 origin=ortho?vec3(screen,0):vec3(0);
-    vec3 direction=toWorld*ray, from=toWorld*(origin-u_pbrView[3].xyz);
-    vec3 point=v_pbrCenter;
     vec3 normal=pbrDecodeNormal(v_pbrRow.xy);
-    float facing=dot(normal,direction);
-    if(abs(facing)>1e-7){
-      float travel=dot(normal,point-from)/facing;
-      float centerDepth=-(u_pbrView*vec4(point,1)).z;
-      if(travel>=0.0&&abs(travel-centerDepth)<=u_pbrReach)point=from+travel*direction;
+    PbrTap center=pbrSplatTap(gl_FragCoord.xy,normal);
+    PbrTap taps[4];
+    if(pbrSampleSpecular)for(int j=0;j<4;j++){
+      vec2 offset=pbrTapOffset(gl_FragCoord.xy,u_materialGridScale,j);
+      taps[j]=pbrSplatTap(gl_FragCoord.xy+offset,normal);
+      ${cutaway ? 'if(sectionMargin(taps[j].position,sectionAxial)<0.0)taps[j].coverage=0.0;' : ''}
     }
-    rgb=pbrShade(int(v_pbrRow.w),v_pbrPigment.rgb,normal,normal,vec3(0),-direction,point,
-      fract(abs(v_pbrRow.w))*2.0,0.0,0.0,vec3(0));
+    rgb=pbrShade(int(v_pbrRow.w),v_pbrPigment.rgb,normal,normal,vec3(0),center.view,center.position,
+      fract(abs(v_pbrRow.w))*2.0,0.0,0.0,vec3(0),taps);
     rgb=mix(rgb,u_fog,${optical?'hasOptical?0.0:':''}v_pbrPigment.a);
   }` : ''}
 ${optical ? `

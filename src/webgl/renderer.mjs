@@ -879,7 +879,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       if (pbrDefinition && !toolkit.KIT?.pbr) throw new Error('PBR materials need the Ink Studio KIT');
       const pbrRampOverrides = frame.surfaceLightRamps ?? look.surfaceLightRamps;
       const pbr = toolkit.KIT?.pbr?.prepare(pbrDefinition, frame.pbrLights, {
-        palette:world.pal, paletteRoles:world.paletteRoles, surfaceLightRamps:pbrRampOverrides
+        palette:world.pal, paletteRoles:world.paletteRoles, surfaceLightRamps:pbrRampOverrides,
+        specularSampling:frame.pbrSpecularSampling
       });
       const boundaryView = plane === zero && !cover && !reflectionCapture;
       const liveBoundaryDefinition = boundaryView && (frame.livePixelBoundaries ?? look.livePixelBoundaries);
@@ -1582,6 +1583,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       }
       const shader = pipeline.programFor({
         pbr: !!pbr,
+        pbrSpecularSampling:pbr?.specularSampling,
         water: !!wet, airPockets: wet?.airPockets, layered: wet?.layered, atlas: wet?.atlas, portal: plane !== zero || !!cover,
         gaussianDegree: gaussianUniforms ? harmonics.degree : undefined, gaussianFilter:!!gaussianProfile, splatPaint: !!splatPaint, gaussianProxy:!!proxy, depthMeshProxy:!!depthProxy, gaussianMaterials:!!gaussianMaterial, coverageVote:!!vote, coverageFilter:!!filterBuffers?.centerMatte, surfaceOrder:!!ordering,
         instances: !!plan, contributions:coverage && !!constraints, masked, textured:constraints?.textured, layeredGlass,
@@ -1764,7 +1766,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           strandLOD:toolkit.KIT.curveSplats.strandLod.glsl,print:engravingAPI?.print?.glsl,pbrGLSL:K.pbr?.glsl
         });
         const curveOptions = { clip, section, wet, water, env, layeredGlass,engraving,
-          pbrUniforms,bindPbr:surfaceFrame.bindPbr,
+          pbrUniforms,bindPbr:surfaceFrame.bindPbr,pbrSpecularSampling:pbr?.specularSampling,
           glass:layeredGlass ? glassBoundary.textures[0] : undefined,historyOwner,
           fog:{ color:surfaceFrame.fog,range:[fog.start ?? 1,fog.max ?? 0] },
           proxy:depthProxy && depthMeshPass.prepare(surfaceFrame,width,height) };

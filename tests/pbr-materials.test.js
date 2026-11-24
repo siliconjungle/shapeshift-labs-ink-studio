@@ -110,8 +110,9 @@ async function headless() {
   const render = options => read(ink.render(world, { ...view, ...options }));
   const lit = render(), sidelit = render({ pbrLights:light }), off = render({ pbrMaterials:false });
   const ramps = Object.fromEntries(Object.entries(rampFrames(definition)).map(([name,settings])=>[name,render(settings)]));
+  const footprint = render({pbrSpecularSampling:true});
   edit();
-  return { lit,sidelit,off,...ramps,edited:render() };
+  return { lit,sidelit,off,...ramps,footprint,edited:render() };
 }
 
 test('shared materials relight five carriers and preserve named projections on the art grid',async () => {
@@ -145,8 +146,9 @@ test('native WebGL matches headless material, projection and live texel edits', 
       const lit = sample(), sidelit = sample({pbrLights:light}), off = sample({pbrMaterials:false});
       const ramps = Object.fromEntries(Object.entries(new Function('return ('+rampSource+')')()(definition))
         .map(([name,settings])=>[name,sample(settings)]));
+      const footprint = sample({pbrSpecularSampling:true});
       edit();
-      return {lit,sidelit,off,...ramps,edited:sample()};
+      return {lit,sidelit,off,...ramps,footprint,edited:sample()};
     } finally { painter.close(); }
   },{...inputs,rampSource:rampFrames.toString()});
   for (const [mode, colors] of Object.entries(expected)) {
@@ -155,6 +157,14 @@ test('native WebGL matches headless material, projection and live texel edits', 
         JSON.stringify({mode,name,expected:rgb,actual:actual[mode][name]}));
     }
   }
+});
+
+test('the copper wire sweep reduces the area affected by split highlights on the art grid', () => {
+  const {sweep} = require('../examples/pbr-materials/specular-sweep.cjs');
+  const [center,coverage] = sweep();
+  assert(coverage.clusterPixels < center.clusterPixels / 2);
+  assert(coverage.splits <= center.splits);
+  assert.equal(coverage.flicker,0);
 });
 
 test('PBR lighting ramps reuse strict surface ramp validation', () => {
@@ -249,6 +259,18 @@ test('portable bindings validate and a swatch is driven by the highlight respons
   const plan = pbr.prepare(definition);
   const sample = { color:[1,1,1], normal:[0,0,1], view:[0,0,1], position:[0,0,0] };
   const lit = pbr.shade(plan,plan.resolve(),sample);
+  const footprintPlan = pbr.prepare({...definition,specularSampling:true,materials:{
+    cobalt:{...definition.materials.cobalt,lightingRamp:{stops:[[0,'#000000'],[1,'#000000']]}}
+  }});
+  const tap = {...sample,coverage:1};
+  const shade = highlightSamples => pbr.shade(footprintPlan,footprintPlan.resolve(),{...sample,highlightSamples});
+  const full = shade([tap,tap,tap,tap]);
+  const partial = shade([tap,null,null,null]);
+  const missed = shade([null,null,null,null]);
+  assert.deepEqual(full,lit);
+  assert(partial.every((channel,i)=>channel>missed[i] && channel<full[i]));
+  assert.equal(pbr.prepare({...definition,specularSampling:true},[],{specularSampling:false}).specularSampling,false);
+  assert.throws(()=>pbr.prepare({...definition,specularSampling:'on'}),/specularSampling needs a boolean/);
   assert.deepEqual(lit.map(n=>Math.round(n*255)),[96,215,206]);
   const sideways = pbr.prepare(definition,[{direction:[1,0,0]}]);
   assert.deepEqual(pbr.shade(sideways,sideways.resolve(),sample),[0,0,0]);

@@ -96,7 +96,7 @@ const PbrMaterials = (() => {
     if (!Array.isArray(value) || value.length > limit) throw new RangeError(label + ' supports up to ' + limit + ' entries');
     return value;
   }
-  function prepare(definition, lightsOverride, {palette = [], paletteRoles = {}, surfaceLightRamps} = {}) {
+  function prepare(definition, lightsOverride, {palette = [], paletteRoles = {}, surfaceLightRamps, specularSampling} = {}) {
     if (definition == null || definition === false) return null;
     record(definition, 'PBR recipe');
     const entries = Object.entries(record(definition.materials, 'Named PBR materials'));
@@ -133,6 +133,8 @@ const PbrMaterials = (() => {
       intensity: number(settings.intensity ?? .45, 'Environment intensity', 0, 16)
     };
     const exposure = number(definition.exposure ?? 1, 'PBR exposure', 0, 32);
+    const sampleSpecular = specularSampling ?? definition.specularSampling ?? false;
+    if(typeof sampleSpecular!=='boolean') throw new TypeError('PBR specularSampling needs a boolean');
     const projections = boundedList(definition.projections ?? [], MAX_PROJECTIONS, 'PBR projections')
       .map(value => projection(value, value.material === undefined ? 0 : id(value.material)));
     function resolve(target) {
@@ -142,7 +144,7 @@ const PbrMaterials = (() => {
       return defaultId;
     }
     return {
-      materials, lights, environment, exposure, projections, resolve,
+      materials, lights, environment, exposure, projections, resolve, specularSampling:sampleSpecular,
       surface(chart) {
         return resolve(chart && {
           object:chart.objectId, entity:chart.objectId, material:chart.materialId,
@@ -167,6 +169,23 @@ const PbrMaterials = (() => {
     const distribution = 1 / (Math.PI * ax * ay * denominator * denominator);
     const length = (w, nw) => Math.hypot(dot(t, w) * ax, dot(b, w) * ay, nw);
     return .5 * distribution / Math.max(1e-6, nl * length(v, nv) + nv * length(light, nl));
+  }
+  const tapPositions = [[.25,.25],[.75,.25],[.25,.75],[.75,.75]];
+  function footprint(x, y, scale, sample) {
+    const left=Math.floor(x/scale)*scale, top=Math.floor(y/scale)*scale;
+    return tapPositions.map(([u,v])=>sample(left+u*scale,top+v*scale));
+  }
+  function shine(l,frame,nl,{half,s,f0,axes,coatFresnel}) {
+    const base=lobe(half,l,frame,nl,axes[0],axes[1]);
+    const top=coatFresnel ? coatFresnel*lobe(half,l,frame,nl,axes[2],axes[2]) : 0;
+    return f0.map(fresnel=>base*mix(fresnel,1,s)*(1-coatFresnel)+top);
+  }
+  function highlightSwatch(m, response) {
+    const level=clamp(response), ramp=m.highlightRamp;
+    return {
+      weight:ramp ? m.highlightWeight*(ramp.amount?.(level)??level) : response>m.threshold ? m.highlightWeight : 0,
+      color:ramp ? toLinear(ramp.tint(level)) : m.highlight
+    };
   }
   function shade(plan, id, sample) {
     const m = plan.materials[id - 1];
@@ -205,26 +224,64 @@ const PbrMaterials = (() => {
     });
     const aspect = Math.sqrt(1 - .9 * m.anisotropy);
     const a = Math.max(.012, rough * rough), ac = Math.max(.012, m.coatRoughness ** 2);
+    const axes=[a/aspect,a*aspect,ac], taps=plan.specularSampling && sample.highlightSamples;
+    const visibilityAt=(index,point,normal)=>sample.receiveShadow!==false && plan.shadows ?
+      plan.shadows.visibility(index,point,normal) : 1;
     let highlight = 0, incidence = 0;
     for (const [index,light] of plan.lights.entries()) {
       const l = light.direction, nl = dot(n, l);
       const response = m.diffuseRamp ? clamp((nl+m.wrap)/(1+m.wrap))*light.rampIntensity : 0;
       if(nl<=0 && !response)continue;
-      const visibility = sample.receiveShadow!==false && plan.shadows ?
-        plan.shadows.visibility(index,sample.position,unit(sample.shadowNormal??ZERO,n)) : 1;
+      const visibility = visibilityAt(index,sample.position,unit(sample.shadowNormal??ZERO,n));
       incidence=Math.max(incidence,response*visibility);
       if (nl <= 0 || !visibility) continue;
-      const h = unit(v.map((value, i) => value + l[i]), n), s = schlick(dot(v, h));
-      const specular = lobe(h, l, frame, nl, a / aspect, a * aspect);
+      const half = unit(v.map((value, i) => value + l[i]), n), s = schlick(dot(v, half));
       const coatFresnel = coat * mix(.04, 1, s);
-      const top = coatFresnel ? coatFresnel * lobe(h, l, frame, nl, ac, ac) : 0;
+      const specular = taps ? ZERO : shine(l,frame,nl,{half,s,f0,axes,coatFresnel});
       for (let i = 0; i < 3; i++) {
         const irradiance = light.color[i] * nl * visibility, fresnel = mix(f0[i], 1, s);
-        const spec = specular * fresnel;
         const diffuse = base[i] * (1 - metal) * (1 - fresnel) / Math.PI;
-        rgb[i] += irradiance * ((diffuse + spec) * (1 - coatFresnel) + top);
-        highlight = Math.max(highlight, irradiance * (spec * (1 - coatFresnel) + top));
+        rgb[i] += irradiance * (diffuse*(1-coatFresnel)+specular[i]);
+        highlight = Math.max(highlight,irradiance*specular[i]);
       }
+    }
+    const accent=[0,0,0];
+    let cover=0;
+    if(taps){
+      const cap=1/Math.max(1e-4,plan.exposure);
+      // Each tap represents a quarter pixel. Widen the lobe when normals
+      // move substantially within that area, where a single tap could alias.
+      const spread=Math.max(0,...taps.map(tap=>tap?.normal && tap.coverage>0 ?
+        1-Math.abs(dot(n,unit(tap.normal,n))) : 0));
+      const sampledAxes=axes.map(axis=>Math.hypot(axis,.5*Math.sqrt(spread)));
+      for(const tap of taps){
+        if(!tap || !(tap.coverage>0))continue;
+        const basis=shadingFrame(tap.normal,sample.tangent,tap.view), specular=[0,0,0];
+        let response=0;
+        for(const [index,light] of plan.lights.entries()){
+          const l=light.direction,nl=dot(basis.n,l);
+          if(nl<=0)continue;
+          const visibility=visibilityAt(index,tap.position,unit(tap.shadowNormal??ZERO,basis.n));
+          if(!visibility)continue;
+          const half=unit(basis.v.map((value,i)=>value+l[i]),basis.n),s=schlick(dot(basis.v,half));
+          const lobeColor=shine(l,basis,nl,{half,s,f0,axes:sampledAxes,coatFresnel:coat*mix(.04,1,s)});
+          for(let i=0;i<3;i++){
+            const value=lobeColor[i]*light.color[i]*nl*visibility;
+            specular[i]+=value;
+            response=Math.max(response,value);
+          }
+        }
+        const swatch=highlightSwatch(m,response), area=tap.coverage/tapPositions.length;
+        cover+=swatch.weight*area;
+        for(let i=0;i<3;i++){
+          rgb[i]+=Math.min(cap,specular[i])*area;
+          accent[i]+=swatch.color[i]*swatch.weight*area;
+        }
+      }
+    }else{
+      const swatch=highlightSwatch(m,highlight);
+      cover=swatch.weight;
+      for(let i=0;i<3;i++)accent[i]=swatch.color[i]*cover;
     }
     let display = rgb.map(channel => clamp(channel * plan.exposure));
     if (m.diffuseRamp) {
@@ -233,11 +290,7 @@ const PbrMaterials = (() => {
       display = rgb.map((channel,i) => clamp(mix(clamp((channel-emission[i])*plan.exposure),swatch[i],weight) +
         emission[i]*plan.exposure));
     }
-    const level = clamp(highlight), ramp = m.highlightRamp;
-    const weight = ramp ? m.highlightWeight * (ramp.amount?.(level) ?? level) :
-      highlight > m.threshold ? m.highlightWeight : 0;
-    const swatch = ramp ? toLinear(ramp.tint(level)) : m.highlight;
-    return toDisplay(display.map((channel, i) => mix(channel, swatch[i], weight)));
+    return toDisplay(display.map((channel,i)=>channel*(1-cover)+accent[i]));
   }
 
   function rampTable(plan) {
@@ -326,6 +379,16 @@ uniform int u_pbrLights, u_pbrProjections;
 uniform vec4 u_pbrMaterial[${MAX_MATERIALS * 5}], u_pbrLight[${MAX_LIGHTS * 2}], u_pbrProjection[${MAX_PROJECTIONS * 7}];
 uniform vec4 u_pbrSky, u_pbrHorizon;
 uniform vec3 u_pbrGround;
+#ifdef INK_PBR_FOOTPRINT
+const bool pbrSampleSpecular=true;
+#else
+const bool pbrSampleSpecular=false;
+#endif
+struct PbrTap { vec3 position; vec3 normal; vec3 shadowNormal; vec3 view; float coverage; };
+vec2 pbrTapOffset(vec2 pixel,float scale,int index){
+  vec2 fraction=vec2(float(index&1),float(index>>1))*.5+.25;
+  return (floor(pixel/scale)+fraction)*scale-pixel;
+}
 uniform highp sampler2D u_pbrRows;
 uniform highp int u_pbrRampOffset;
 uniform vec4 u_pbrShadow[16];
@@ -415,8 +478,48 @@ float pbrLobe(vec3 h,vec3 l,vec3 n,vec3 t,vec3 b,vec3 v,float nl,float nv,vec2 a
   float ll=length(vec3(vec2(dot(t,l),dot(b,l))*a,nl));
   return 0.5*d/max(1e-6,nl*lv+nv*ll);
 }
+vec3 pbrShine(vec3 h,vec3 l,vec3 n,vec3 t,vec3 b,vec3 v,float nl,float nv,vec3 axes,
+              vec3 f0,float s,float coatFresnel) {
+  float base=pbrLobe(h,l,n,t,b,v,nl,nv,axes.xy);
+  float top=coatFresnel>0.0?coatFresnel*pbrLobe(h,l,n,t,b,v,nl,nv,vec2(axes.z)):0.0;
+  return base*mix(f0,vec3(1),s)*(1.0-coatFresnel)+top;
+}
+vec4 pbrHighlight(int rampId,vec4 swatch,float strength,float response) {
+  if(rampId>0){
+    float level=clamp(response,0.0,1.0);
+    vec4 ramp=pbrRamp(rampId,pbrRampRow(rampId-1),level,level);
+    float weight=ramp.a*strength;
+    return vec4(pbrLinear(ramp.rgb)*weight,weight);
+  }
+  float weight=response>swatch.a?strength:0.0;
+  return vec4(swatch.rgb*weight,weight);
+}
+vec3 pbrTapShine(PbrTap tap,vec3 tangent,vec3 f0,vec3 axes,
+                  float coat,bool receiveShadow,out float response){
+  vec3 v=pbrUnit(tap.view,vec3(0,0,1)),n=pbrUnit(tap.normal,v);
+  if(dot(n,v)<0.0)n=-n;
+  vec3 stable=normalize(cross(abs(n.y)<0.9?vec3(0,1,0):vec3(1,0,0),n));
+  vec3 t=pbrUnit(tangent-dot(tangent,n)*n,stable),b=cross(n,t);
+  float nv=max(1e-4,dot(n,v));
+  vec3 sum=vec3(0);
+  response=0.0;
+  for(int i=0;i<u_pbrLights;i++){
+    vec3 light=u_pbrLight[i*2].xyz;
+    float nl=dot(n,light);
+    if(nl<=0.0)continue;
+    float visibility=receiveShadow?pbrVisibility(i,tap.position,pbrUnit(tap.shadowNormal,n),light):1.0;
+    if(visibility<=0.0)continue;
+    vec3 h=pbrUnit(v+light,n);
+    float s=pbrSchlick(dot(v,h));
+    vec3 color=pbrShine(h,light,n,t,b,v,nl,nv,axes,f0,s,coat*mix(0.04,1.0,s))*
+      (u_pbrLight[i*2+1].rgb*(nl*visibility));
+    sum+=color;
+    response=max(response,max(color.r,max(color.g,color.b)));
+  }
+  return sum;
+}
 vec3 pbrShade(int id,vec3 pigment,vec3 normal,vec3 shadowNormal,vec3 tangent,vec3 view,vec3 at,
-              float sampledRoughness,float sampledMetalness,float sampledCoat,vec3 sampledEmission) {
+              float sampledRoughness,float sampledMetalness,float sampledCoat,vec3 sampledEmission,PbrTap taps[4]) {
   if (id==0) return pigment;
   bool receiveShadow=id>0;
   id=abs(id);
@@ -457,6 +560,7 @@ vec3 pbrShade(int id,vec3 pigment,vec3 normal,vec3 shadowNormal,vec3 tangent,vec
   vec3 reflected=fresnel*reflectedEnv*(1.0-0.5*rough);
   vec3 rgb=emission+u_pbrSky.a*((diffuse+reflected)*(1.0-coatView)+coatView*reflectedEnv);
   float aspect=sqrt(1.0-0.9*controls.a), a=max(0.012,rough*rough), ac=max(0.012,finish.x*finish.x);
+  vec3 axes=vec3(a/aspect,a*aspect,ac);
   float highlight=0.0, incidence=0.0;
   int diffuseRamp=int(finish.z), specularRamp=int(finish.w);
   vec4 diffuseInfo=diffuseRamp>0?pbrRampRow(diffuseRamp-1):vec4(0);
@@ -471,29 +575,39 @@ vec3 pbrShade(int id,vec3 pigment,vec3 normal,vec3 shadowNormal,vec3 tangent,vec
     if (nl<=0.0||visibility<=0.0) continue;
     vec3 h=pbrUnit(v+light,n);
     float s=pbrSchlick(dot(v,h)), coatFresnel=coat*mix(0.04,1.0,s);
-    vec3 spec=mix(f0,vec3(1),s)*pbrLobe(h,light,n,t,b,v,nl,nv,vec2(a/aspect,a*aspect));
-    float top=coatFresnel>0.0?coatFresnel*pbrLobe(h,light,n,t,b,v,nl,nv,vec2(ac)):0.0;
+    vec3 spec=pbrSampleSpecular?vec3(0):pbrShine(h,light,n,t,b,v,nl,nv,axes,f0,s,coatFresnel);
     vec3 direct=base*(1.0-metal)*(1.0-mix(f0,vec3(1),s))/3.141592654;
     vec3 irradiance=u_pbrLight[i*2+1].rgb*(nl*visibility);
-    rgb+=irradiance*((direct+spec)*(1.0-coatFresnel)+top);
-    vec3 shine=irradiance*(spec*(1.0-coatFresnel)+top);
+    rgb+=irradiance*(direct*(1.0-coatFresnel)+spec);
+    vec3 shine=irradiance*spec;
     highlight=max(highlight,max(shine.r,max(shine.g,shine.b)));
   }
   float exposure=u_pbrHorizon.a;
+  vec4 accent=vec4(0);
+  if(pbrSampleSpecular){
+    float cap=1.0/max(1e-4,exposure);
+    float spread=0.0;
+    for(int j=0;j<4;j++)if(taps[j].coverage>0.0)
+      spread=max(spread,1.0-abs(dot(n,pbrUnit(taps[j].normal,n))));
+    vec3 sampledAxes=sqrt(axes*axes+vec3(.25*spread));
+    for(int j=0;j<4;j++){
+      if(taps[j].coverage<=0.0)continue;
+      float response;
+      float area=taps[j].coverage*.25;
+      vec3 sampled=pbrTapShine(taps[j],tangent,f0,sampledAxes,coat,receiveShadow,response);
+      rgb+=min(vec3(cap),sampled)*area;
+      accent+=pbrHighlight(specularRamp,swatch,finish.y,response)*area;
+    }
+  }else accent=pbrHighlight(specularRamp,swatch,finish.y,highlight);
   vec3 display=clamp(rgb*exposure,0.0,1.0);
   if(diffuseRamp>0){
     vec4 ramp=pbrRamp(diffuseRamp,diffuseInfo,incidence,1.0);
     display=clamp(mix(clamp((rgb-emission)*exposure,0.0,1.0),pbrLinear(ramp.rgb),ramp.a*diffuseInfo.z)+
       emission*exposure,0.0,1.0);
   }
-  if(specularRamp>0){
-    float level=clamp(highlight,0.0,1.0);
-    vec4 ramp=pbrRamp(specularRamp,pbrRampRow(specularRamp-1),level,level);
-    return pbrDisplay(mix(display,pbrLinear(ramp.rgb),ramp.a*finish.y));
-  }
-  return pbrDisplay(mix(display,swatch.rgb,highlight>swatch.a?finish.y:0.0));
+  return pbrDisplay(display*(1.0-accent.a)+accent.rgb);
 }
 `;
-  return Object.freeze({ prepare, shade, uniforms, rampTable, glsl, splatNormal, splatBindings, encodeNormal, shadows });
+  return Object.freeze({ prepare, shade, footprint, uniforms, rampTable, glsl, splatNormal, splatBindings, encodeNormal, shadows });
 })();
 if (typeof module !== 'undefined') module.exports = PbrMaterials;

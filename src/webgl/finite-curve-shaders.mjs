@@ -354,8 +354,26 @@ void main() {
       mat3 toWorld=transpose(mat3(u_curveView));
       vec3 at=toWorld*(origin+travel*ray-u_curveView[3].xyz);
       vec3 normal=toWorld*curvePbrNormal(hit.row,origin,ray,travel);
+      PbrTap taps[4];
+      if(pbrSampleSpecular)for(int j=0;j<4;j++){
+        taps[j].coverage=0.0;
+        vec2 delta=pbrTapOffset(gl_FragCoord.xy,u_curveArtScale,j);
+        vec2 tapFilm=film+delta*2.0/u_curveViewport*u_curveInvProjection;
+        vec3 tapOrigin=u_curveOrtho?vec3(tapFilm,0):vec3(0);
+        vec3 tapRay=u_curveOrtho?vec3(0,0,-1):normalize(vec3(tapFilm,-1));
+        vec2 limits=vec2(u_curveNear,min(u_curveFar,opaque+1e-4))/(-tapRay.z);
+        Hit tap;
+        if(!clipRay(u_curveEntry,tapOrigin,tapRay,limits)||!clipRay(u_curveCover,tapOrigin,tapRay,limits)||
+            !curveHit(hit.row,tapOrigin,tapRay,limits,tap))continue;
+        if(proxyDepth<1.0&&projectedDepth(tap.depth)>proxyDepth+2e-7)continue;
+        float distance=tap.depth/(-tapRay.z);
+        vec3 point=toWorld*(tapOrigin+tapRay*distance-u_curveView[3].xyz);
+        ${section ? 'if(sectionMargin(point,tap.depth-u_curveSetback)<0.0)continue;' : ''}
+        vec3 tapNormal=toWorld*curvePbrNormal(hit.row,tapOrigin,tapRay,distance);
+        taps[j]=PbrTap(point,tapNormal,tapNormal,-toWorld*tapRay,min(1.0,tap.alpha/max(1e-5,hit.alpha)));
+      }
       rgb=pbrShade(int(controls.w),rgb,normal,normal,toWorld*spanRow(hit.row,1).xyz,-toWorld*ray,at,
-        fract(abs(controls.w))*2.0,0.0,0.0,pbrLinear(controls.rgb));
+        fract(abs(controls.w))*2.0,0.0,0.0,pbrLinear(controls.rgb),taps);
     }` : ''}
     ${engraving ? `
     int slot=int(curveMark(hit.row,4).w);

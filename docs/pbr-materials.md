@@ -48,6 +48,7 @@ Use `ink-studio render scene.json --pbr-materials finish.json --raw --px1 --out 
 | `lightingRamp`, `rampStrength`, `wrap` | Optional material light ramp, blend strength and terminator wrap. Strength and wrap default to 1 and 0. |
 | `highlight` | Optional `lightingRamp` and `strength`, or a single `color` with `threshold` and `strength`. Both modes sample the linear direct specular response. |
 | `lights` | Up to four directional lights in world space. `direction` points toward the light. `color` and `intensity` default to white and 1. |
+| `specularSampling` | Enable four-sample specular coverage on the native art grid. Defaults to false. |
 | `environment`, `exposure` | Optional ambient and reflection colors and a linear exposure multiplier. |
 | `projections` | Up to eight bounded world-space finish stamps. Place each with `origin`, full `u` and `v` spans and a two-sided `reach`. `feather` is a fraction of the projection width and height. Apply `opacity` and any combination of `baseColor`, `roughness`, `metalness`, `coating` and `emission` before lighting. |
 
@@ -92,6 +93,18 @@ renderer.render(world, { pbrLights: lights });
 The browser and headless renderer use the same directional shadow map rasterizer. It reads opaque splats, retained mesh and texel geometry with texture cutouts, [painted shadow casters](painted-cutout-shadows.md), and finite curves authored with `shadow.cast`. Finite curves can transmit light through their authored `shadow.transmittance`. Use `look.shadowArt` to select casters and receivers by their geometry IDs and to apply the existing shadow gain steps.
 
 Visibility scales the diffuse ramp's light response and the direct specular response separately for each light. A covered key can pick a shadow swatch while an unobstructed fill continues to illuminate the same receiver. Environment light and emission stay available in the shadow. Use `pbrShadows: false` or `--pbr-shadows off` to review the same shot with the caster geometry and light directions still visible.
+
+## Specular coverage on the art grid
+
+Set `pbrMaterials.specularSampling: true` to author the setting in a scene. Override it per frame with `pbrSpecularSampling` in WebGL or headless, or pass `--pbr-specular-sampling on|off` to the render CLI.
+
+Ink evaluates direct highlights at four positions in each art pixel. Each hit contributes its share of the highlight and any authored highlight ramp before the palette resolves. The normal spread within the pixel widens very narrow lobes, and each sample uses that light's visibility. Finite curves sample the visible span's geometry at each position. Meshes, texels, projections and ordinary splats use the local surface plane. Diffuse shading, depth, silhouette coverage and draw order still use the regular renderer. The samples are deterministic and depend only on the current frame.
+
+Run the [copper-wire sweep](../examples/pbr-materials/specular-sweep.cjs) to generate a scrub-able comparison and measure cluster splits and one-frame flicker at native resolution with Ink's [motion checks](pixel-art-authoring.md#check-motion-at-native-art-resolution).
+
+```sh
+node examples/pbr-materials/specular-sweep.cjs wire-sweep.html
+```
 
 ## Carrier channels
 

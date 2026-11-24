@@ -155,8 +155,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.pbr` | namespace |  |  |
 | `KIT.pbr.encodeNormal` | function | `(n)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
+| `KIT.pbr.footprint` | function | `(x, y, scale, sample)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
 | `KIT.pbr.glsl` | value | `string` |  |
-| `KIT.pbr.prepare` | function | `(definition, lightsOverride, {palette = [], paletteRoles = {}, surfaceLightRamps} = {})` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
+| `KIT.pbr.prepare` | function | `(definition, lightsOverride, {palette = [], paletteRoles = {}, surfaceLightRamps, specularSampling} = {})` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
 | `KIT.pbr.rampTable` | function | `(plan)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
 | `KIT.pbr.shade` | function | `(plan, id, sample)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
 | `KIT.pbr.shadows` | namespace |  |  |

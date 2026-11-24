@@ -391,7 +391,8 @@ function renderFrame(world, o, preparedPalettes) {
   if (!Number.isFinite(lensScale) || lensScale <= 0) throw new RangeError('Lens scale must be finite and positive');
   const look = world.look || {};
   const pbr = PbrMaterials.prepare(o.pbrMaterials ?? look.pbrMaterials, o.pbrLights, {
-    palette:world.pal, paletteRoles:world.paletteRoles, surfaceLightRamps:o.surfaceLightRamps ?? look.surfaceLightRamps
+    palette:world.pal, paletteRoles:world.paletteRoles, surfaceLightRamps:o.surfaceLightRamps ?? look.surfaceLightRamps,
+    specularSampling:o.pbrSpecularSampling
   });
   const cutaway = Cutaway.prepare(o.cutaway ?? look.cutaway);
   const detailBudget = !o.raw && DetailBudgets.prepare(look.detailBudgets);
@@ -2118,6 +2119,16 @@ function renderFrame(world, o, preparedPalettes) {
     if (!world.renderMetadata?.muteEmission?.[i] && tint.some(Boolean))
       splatEmission.set(i,{linear:emissionCurve ? toLinearSrgb(tint) : linear,tint});
   }
+  function pbrPlaneSamples(x,y,position,normal,shadowNormal,z){
+    if(!pbr.specularSampling)return undefined;
+    const plane=shadowNormal ?? normal;
+    return PbrMaterials.footprint(x,y,artScale,(u,v)=>{
+      const ray=rayAt(u,v);
+      const point=plane?.some(Boolean) ? surfacePoint(ray,plane,...position,z,R) : position;
+      if(geometryClip && !geometryClip(point))return null;
+      return {position:point,normal,shadowNormal,view:ray.direction.map(n=>-n),coverage:1};
+    });
+  }
   function spriteSample(sprite) {
     const {z,alpha,position,protection} = sprite, i = sprite.sdf ? sprite.row.i : -1;
     const rule = i<0 ? protection : subject?.(i);
@@ -2166,6 +2177,7 @@ function renderFrame(world, o, preparedPalettes) {
       if (pbrMaterial) color=PbrMaterials.shade(pbr,pbrMaterial,{
         color:physicalPigment,position,normal:sprite.normal,roughness:world.splatRoughness?.[i],
         receiveShadow:pbr.shadows?.receives?.(i),
+        highlightSamples:pbrPlaneSamples(sprite.p%W+.5,Math.floor(sprite.p/W)+.5,position,sprite.normal,undefined,z),
         view:pbrView ?? eye.map((value,k)=>value-position[k])
       });
       if (emitted) color=addLinearTint(color,emitted.linear);
@@ -2196,6 +2208,7 @@ function renderFrame(world, o, preparedPalettes) {
       color = PbrMaterials.shade(pbr, sprite.pbrMaterial, {
         color: sprite.color, position, normal: sprite.normal, tangent: sprite.pbrTangent,
         shadowNormal:sprite.biasNormal,receiveShadow:sprite.pbrReceives,
+        highlightSamples:pbrPlaneSamples(sprite.p%W+.5,Math.floor(sprite.p/W)+.5,position,sprite.normal,sprite.biasNormal,z),
         view: pbrView ?? eye.map((value, k) => value - position[k]), roughness: sprite.semantic?.roughness,
         metalness: sprite.semantic?.metalness, emission: sprite.semantic?.emission
       });
@@ -2871,9 +2884,18 @@ function renderFrame(world, o, preparedPalettes) {
           const position = exact?.position ?? (curveHit || planeHit ?
             ray.origin.map((value, k) => value + ray.direction[k] * surfaceZ / ray.axial) :
             normal?.some(Boolean) ? surfacePoint(ray, normal, x, y, z, -cz, R) : [x, y, z]);
+          const highlightSamples = pbr.specularSampling && curveHit ?
+            PbrMaterials.footprint(ix+.5,iy+.5,artScale,(sx,sy)=>{
+              const tap=CurveSplat.sampleAt(curve,rayAt,sx,sy,near,true);
+              if(!tap)return null;
+              const ray=rayAt(sx,sy), at=ray.origin.map((value,k)=>value+ray.direction[k]*tap.depth/ray.axial);
+              if(geometryClip && !geometryClip(at))return null;
+              return {position:at,normal:tap.normal,view:ray.direction.map(n=>-n),
+                coverage:Math.min(1,tap.alpha/Math.max(1e-5,curveHit.alpha))};
+            }) : pbrPlaneSamples(ix+.5,iy+.5,position,normal,undefined,surfaceZ);
           const rgb = PbrMaterials.shade(pbr, pbrMaterial, {
             color: physicalPigment, position, normal, tangent: curve?.axis,
-            receiveShadow:pbrReceives,
+            receiveShadow:pbrReceives,highlightSamples,
             view: ray.direction.map(n => -n), roughness: roughness ?? world.splatRoughness?.[i],
             emission: curveEmission ? toLinearSrgb(Array.from(curveEmission)) : undefined
           });

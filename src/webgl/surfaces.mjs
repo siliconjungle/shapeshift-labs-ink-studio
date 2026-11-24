@@ -90,7 +90,7 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
     const shaders = sharedShaders?.cache ?? new Map();
     const program = sharedShaders?.program ?? resources.program;
     function shaderFor(wet, section, lighting, normalMapped, environment, paletteSampling, styledProjection, maskedPart, glassLayers,
-      anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr) {
+      anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr,pbrSpecularSampling) {
       const chart = lighting && !normalMapped;
       const marks=anchors || engraving, rest=marks||simulation||objectTexels, needsFrame=normalMapped||semantic||pbr;
       const key = [
@@ -106,7 +106,7 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
         paletteSampling,
         styledProjection,
         maskedPart,
-        glassLayers,anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr
+        glassLayers,anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr,pbrSpecularSampling
       ].join('/');
       if (shaders.has(key)) return shaders.get(key);
       const shader = program(
@@ -169,7 +169,8 @@ ${chart ? 'uniform highp sampler2DArray u_surfaceLit;uniform int u_surfaceLightC
 ${normalMapped ? 'uniform highp sampler2D u_surfaceNormalMap;uniform bool u_hasSurfaceNormalMap;' : ''}
 ${needsFrame ? 'uniform bool u_surfaceNormals;uniform vec3 u_surfaceEye;' : ''}
 ${semantic ? semanticSource : ''}
-${pbr ? 'uniform int u_surfacePbr;uniform bool u_pbrOrtho;uniform vec3 u_pbrBack;'+pbrGLSL : ''}
+${pbr ? 'uniform int u_surfacePbr;uniform bool u_pbrOrtho;uniform vec3 u_pbrBack;uniform float u_pbrArtScale;\n'+
+  (pbrSpecularSampling?'#define INK_PBR_FOOTPRINT\n':'')+pbrGLSL : ''}
 ${rest?'in vec3 v_rest;':''}
 ${marks?'flat in vec2 v_marks;':''}
 ${simulation?simulationMaterialSource:''}
@@ -285,9 +286,17 @@ void main(){
   if(u_surfacePbr!=0){
     float det=uvDx.x*uvDy.y-uvDx.y*uvDy.x;
     vec3 tangent=(dpdx*uvDy.y-dpdy*uvDx.y)*sign(det);
+    PbrTap taps[4];
+    if(pbrSampleSpecular)for(int j=0;j<4;j++){
+      vec2 offset=pbrTapOffset(gl_FragCoord.xy,u_pbrArtScale,j);
+      vec3 at=v_world+dpdx*offset.x+dpdy*offset.y;
+      float coverage=1.0;
+      ${section ? 'if(sectionMargin(at,v_depth)<0.0)coverage=0.0;' : ''}
+      taps[j]=PbrTap(at,normal,geometricNormal,u_pbrOrtho?u_pbrBack:u_surfaceEye-at,coverage);
+    }
     rgb=pbrShade(u_surfacePbr,${simulation?'pbrPigment':'ink.rgb'},normal,geometricNormal,tangent,
       u_pbrOrtho?u_pbrBack:u_surfaceEye-v_world,v_world,
-      ${semantic?'u_semanticOn?detail.a:.45,u_semanticOn?metalness:0.,0.,u_semanticOn?emission:vec3(0)':'0.45,0.0,0.0,vec3(0)'});
+      ${semantic?'u_semanticOn?detail.a:.45,u_semanticOn?metalness:0.,0.,u_semanticOn?emission:vec3(0)':'0.45,0.0,0.0,vec3(0)'},taps);
   }` : ''}
   ${engraving ? `
   if(v_marks.y>0.0){
@@ -765,7 +774,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       if(etched || anchors || simulation || objectTexels)bindMarks(atlas,anchors,etched,simulation);
       if(etched)etched.bind();
       const shader = shaderFor(wet, section, lit, normalMapped, environment, useSampling, projections.length > 0, Boolean(geometryCode), glassLayers,
-        !!anchors,!!etched,!!semantic,simulation,!!blockRanges,objectTexels,!!pbr);
+        !!anchors,!!etched,!!semantic,simulation,!!blockRanges,objectTexels,!!pbr,!!pbr?.specularSampling);
       if (pbr) bindPbr();
       gl.useProgram(shader.p);
       shader.set({
@@ -781,7 +790,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         u_surfaceLit: 24,
         ...(normalMapped && {u_surfaceNormalMap:24,u_hasSurfaceNormalMap:!!atlas.normalPixels}),
         ...((normalMapped||semantic||pbr)&&{u_surfaceNormals:surfaceNormals,u_surfaceEye:eye??eyeFromView(view)}),
-        ...(pbr&&{...pbrUniforms,u_pbrOrtho:!!ortho,u_pbrBack:back}),
+        ...(pbr&&{...pbrUniforms,u_pbrOrtho:!!ortho,u_pbrBack:back,u_pbrArtScale:samplingScale}),
         ...(semantic&&{u_semanticAtlas:semanticUnit,u_semanticLevels:semanticMipmaps!==false,u_semanticScale:samplingScale,
           u_semanticEye:eye??eyeFromView(view),u_semanticBack:back,u_semanticOrtho:!!ortho}),
         ...(simulation&&{u_simMasks:simulationUnit}),
