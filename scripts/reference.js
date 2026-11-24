@@ -249,9 +249,9 @@ function differences(directory, output) {
 }
 
 async function main(args) {
-  if (args.some(argument => argument !== '--check') || args.length > 1)
+  if (args.some(argument => !['--check', '--quiet'].includes(argument)) || new Set(args).size !== args.length)
     throw new TypeError('Use npm run docs:build or npm run docs:check');
-  const check = args[0] === '--check';
+  const check = args.includes('--check');
   const directory = path.join(root, destination);
   const output = await generate();
   const { changed, extra } = differences(directory, output);
@@ -268,7 +268,8 @@ async function main(args) {
     for (const [file, content] of changed) fs.writeFileSync(path.join(directory, file), content);
     for (const file of extra) fs.unlinkSync(path.join(directory, file));
   }
-  console.log((check ? 'Verified' : 'Generated') + ' ' + output.size + ' public reference files.');
+  if (!args.includes('--quiet'))
+    console.log((check ? 'Verified' : 'Generated') + ' ' + output.size + ' public reference files.');
 }
 
 if (require.main === module) main(process.argv.slice(2)).catch(error => {
