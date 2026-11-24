@@ -22,8 +22,15 @@ function retain({ location, gltf, bin }, onFile) {
   return require('../index.js').load().KIT.authoring.gltfAssets.create({ document: gltf, binary: bin });
 }
 
-function readGltfAsset(file) {
-  return retain(readGltfSource(file));
+function readGltfAsset(file, { onFile } = {}) {
+  return retain(readGltfSource(file), onFile);
+}
+
+async function readAssetRevisionPart(file, instance, placement, { onFile, decodeImage } = {}) {
+  const { gltfAssetPart } = await import('../src/gaussian-gltf.mjs');
+  return gltfAssetPart(readGltfAsset(file, { onFile }), instance, placement, {
+    toolkit: require('../index.js').load(), decodeImage: decodeImage ?? require('./gltf-image.js')
+  });
 }
 
 async function readGaussianGltf(file, { optional, onFile, decodeImage, ...options } = {}) {
@@ -49,4 +56,4 @@ function writeGltfAsset(source, { out } = {}) {
   return { file };
 }
 
-module.exports = { readGltfAsset, readGaussianGltf, writeGltfAsset };
+module.exports = { readGltfAsset, readAssetRevisionPart, readGaussianGltf, writeGltfAsset };

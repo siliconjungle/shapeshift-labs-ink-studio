@@ -96,13 +96,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.preflightStoryDocument` | function | `(document, {story} = {})` | [source](../../cli/story-document.js) |
 | `node.previewTimeline` | function | `(world, { timeline = world.animationTimeline, width, height, frames, before = false, maps = ['silhouette'], view = {}, yaw, pivot } = {})` | [guide](../animation-timeline.md#library), [guide](../animation-timeline.md), [source](../../cli/animation-timeline.js) |
 | `node.readAsset` | function | `(file, options = {})` | [guide](../headless-authoring.md#glb-cutouts-and-uv-surface-stamps), [guide](../headless-authoring.md#textured-sdf-reconstruction), [source](../../index.js) |
+| `node.readAssetRevisionPart` | function | `(file, instance, placement, { onFile, decodeImage } = {})` | [source](../../cli/gltf-asset.js) |
 | `node.readAudiovisualTake` | function | `(file,{kit=require('../index.js').load(),...options}={})` | [guide](../audiovisual-takes.md#library), [source](../../cli/audiovisual-take.js) |
 | `node.readDataInputs` | function | `(file)` | [source](../../index.js) |
 | `node.readEffectClip` | function | `(file,options={})` | [guide](../effect-clips.md#run-headlessly-and-reuse-a-group), [source](../../cli/effect-clip.js) |
 | `node.readEnvironmentImage` | function | `(id, file)` | [guide](../environment-packs.md#package-artwork-and-revise-a-pack), [source](../../cli/horizon-bands.js) |
 | `node.readGaussianGltf` | function | `(file, { optional, onFile, decodeImage, ...options } = {})` | [guide](../gaussian-gltf.md#api), [source](../../cli/gltf-asset.js) |
 | `node.readGaussianSplat` | function | `(file, options = {})` | [guide](../webgpu-graphs.md#import-gaussian-splats), [source](../../cli/gaussian-splats.js) |
-| `node.readGltfAsset` | function | `(file)` | [source](../../cli/gltf-asset.js) |
+| `node.readGltfAsset` | function | `(file, { onFile } = {})` | [source](../../cli/gltf-asset.js) |
 | `node.readGraphProject` | function | `(file, options={})` | [guide](../graph-clips.md#node-api), [guide](../headless-authoring.md#persistent-sessions), [source](../../cli/graph-project.js) |
 | `node.readHorizonBands` | function | `(file, dependency)` | [guide](../layered-horizon.md), [source](../../cli/horizon-bands.js) |
 | `node.readMesh` | function | `(file, { attributes = false, uvSet = 0 } = {})` | [guide](../../README.md#importing-meshes), [source](../../index.js) |

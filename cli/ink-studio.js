@@ -42,6 +42,7 @@ const importedAssets = new Map();
 const gaussianFile = file => /\.(ply|spz|gsz)$/i.test(file);
 const gaussianScenes = new Map();
 const gaussianGltfScenes = new Map();
+const sceneAssetParts = new Map();
 const sceneryFile = file => /\.inkscenery$/i.test(file);
 const sceneryScenes = new Map();
 const lib = () => A || (A = cfg.load ? cfg.load() : require('../index.js').load());
@@ -146,7 +147,8 @@ function dataScene(file, override, { installedPacks = false } = {}) {
         .find(q => fs.existsSync(q) && fs.statSync(q).isFile());
       if (f) assets[s.asset] = require('../index.js').readMesh(f);
     }
-  problems ??= K.diorama.check(spec, { assets, prefabs });
+  const assetPartImports = sceneAssetParts.get(path.resolve(file));
+  problems ??= K.diorama.check(spec, { assets, prefabs, assetPartImports });
   if (problems.length) console.error(K.diorama.report(problems));
   if (problems.some(p => p.level === 'error'))
     die('not built: ' + problems.filter(p => p.level === 'error').length + ' mistake(s) in ' + file);
@@ -154,7 +156,7 @@ function dataScene(file, override, { installedPacks = false } = {}) {
   if (cacheDirectory !== undefined && (typeof cacheDirectory !== 'string' || !cacheDirectory.length))
     die('--asset-cache expects a directory');
   const bakeCache = cacheDirectory && require('./bake-cache.js').open(path.resolve(cacheDirectory), require('../index.js'), K.authoring.bakeCache);
-  const env={assets,prefabs,bakeCache,resolveSpriteAtlas};
+  const env={assets,prefabs,bakeCache,resolveSpriteAtlas,assetPartImports};
   const descriptor=K.diorama.scene(spec,env);
   const atlases=new Map();
   return { ...descriptor, project: project?.metadata, lookPreviewPacks:spec.assetPacks,
@@ -1402,6 +1404,10 @@ const CMD = {
         '    --geometry-masks [settings.json|off]   bake slope, cavity, exposure and thickness into the registered atlas',
         '    --rebake-from <material-bake.json> [--chart-edits <plan.json>]   update selected or changed UV charts',
         '  interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets',
+        '    --manifest <revision.json>   attach an Ink asset revision to tagged glTF data',
+        '  asset-part manifest <asset.gltf|.glb> [--out revision.json]   show stable asset IDs',
+        '  asset-part preview <scene.json> <instance> <asset.gltf|.glb> [--expect N] [--out report.json]   check a replacement',
+        '  asset-part replace <scene.json> <instance> <asset.gltf|.glb> [--expect N] --out <next-scene.json>   save one part revision',
         '                              [--res 0.08 --texture-size 1024 --triangles 16000 --duration 4 --fps 30]',
         '  scan-mesh <depth.png|depth.json> --image aligned.png --out prop.glb   recover an opaque mesh with residual splats',
         '             [--diffuse map.png --normal map.png --roughness value|map.png --capture-layer]  export relightable scan maps',
@@ -2534,6 +2540,9 @@ const CMD = {
     if (opt.out) lut.write(opt.out, definition);
     else process.stdout.write(JSON.stringify(definition) + '\n');
   },
+  'asset-part'() {
+    return require('./asset-part.js').command(pos, opt, lib());
+  },
   interchange() {
     const [input] = pos, { out } = opt;
     if (pos.length !== 1 || typeof out !== 'string')
@@ -2542,8 +2551,13 @@ const CMD = {
       if (path.resolve(input) === path.resolve(out)) throw new Error('Choose an output different from the input asset');
       const studio = require('../index.js');
       let result;
-      if (/\.(gltf|glb)$/i.test(input)) result = studio.writeGltfAsset(studio.readGltfAsset(input), { out });
-      else if (/\.json$/i.test(input)) {
+      if (/\.(gltf|glb)$/i.test(input)) {
+        const asset = studio.readGltfAsset(input), manifest = opt.manifest;
+        if (manifest !== undefined && typeof manifest !== 'string') throw new TypeError('--manifest needs a revision JSON file');
+        result = studio.writeGltfAsset(manifest === undefined ? asset : asset.withRevision(
+          JSON.parse(fs.readFileSync(manifest, 'utf8'))), { out });
+      } else if (/\.json$/i.test(input)) {
+        if (opt.manifest !== undefined) throw new TypeError('--manifest applies to glTF and GLB');
         const manifest = JSON.parse(fs.readFileSync(input, 'utf8'));
         if (manifest?.layers) result = studio.writeRasterAsset(studio.readRasterAsset(input), { out });
         else if (manifest?.files?.color) result = studio.writeSpriteAtlas(studio.readSpriteAtlas(input), { out });
@@ -3950,6 +3964,12 @@ const CMD = {
   },
   validate() {
     if (!pos[0]) die('validate which file?');
+    if (sceneAssetParts.has(path.resolve(pos[0]))) {
+      const descriptor = scene(pos[0]), result = { valid: true, id: descriptor.id };
+      if (opt.out) require('./asset-files.js').json(path.resolve(opt.out), result);
+      else console.log(opt.json ? JSON.stringify(result) : pos[0] + ': sound');
+      return;
+    }
     const io = require('./look.js');
     if (!opt.world && (opt.kind === 'look' || io.isSource(pos[0])))
       return io.report(io.assertValid(io.inspectSource(pos[0], opt, lib())), opt, pos[0]);
@@ -5084,6 +5104,17 @@ async function run() {
         cam:{target:high.map((value,i)=>(value+low[i])/2),dist:span*2.05,yaw:.24,pitch:.22,ortho:true}
       })
     });
+  }
+  const sceneFiles = cmd === 'snap' ? pos : cmd === 'pixel-art' ? pixelInputs :
+    ['render', 'turn', 'sheet', 'clip', 'atlas', 'passes', 'surface-pixel', 'validate'].includes(cmd) ? pos.slice(0, 1) : [];
+  for (const file of new Set(sceneFiles.filter(file => /\.json$/i.test(file)))) {
+    if (!fs.existsSync(file)) continue;
+    let source;
+    try { source = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { continue; }
+    if (source?.assetParts === undefined) continue;
+    const onFile = shot?.dependency;
+    const imported = await require('./asset-part.js').loadSceneParts(source, file, { toolkit: lib(), onFile });
+    sceneAssetParts.set(path.resolve(file), imported);
   }
   const gltfInputs = cmd === 'pixel-art' ? pixelInputs : cmd === 'snap' ? pos :
     ['render','turn','sheet','clip','passes','surface-pixel','inspect-gltf'].includes(cmd) ? pos.slice(0,1) : [];

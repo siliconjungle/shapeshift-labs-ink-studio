@@ -717,6 +717,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.assetReferences.validRef` | function | `(value)` | [source](../../src/kit/p23z-asset-references.js) |
 | `KIT.authoring.assetReferences.validSlots` | function | `(value)` | [source](../../src/kit/p23z-asset-references.js) |
 | `KIT.authoring.assetReferences.visual` | function | `(document, type, resolve)` | [source](../../src/kit/p23z-asset-references.js) |
+| `KIT.authoring.assetRevisions` | namespace |  |  |
+| `KIT.authoring.assetRevisions.checkScene` | function | `(scene, imports = {})` | [source](../../src/kit/p91a-asset-revisions.js) |
+| `KIT.authoring.assetRevisions.format` | value | `string = "ink-studio/asset-revision"` |  |
+| `KIT.authoring.assetRevisions.install` | function | `(world, imports)` | [guide](../asset-interchange.md#replace-one-part-in-a-scene), [source](../../src/kit/p91a-asset-revisions.js) |
+| `KIT.authoring.assetRevisions.manifest` | function | `(raw)` | [guide](../asset-interchange.md#stable-asset-revisions), [source](../../src/kit/p91a-asset-revisions.js) |
+| `KIT.authoring.assetRevisions.placements` | function | `(scene)` | [source](../../src/kit/p91a-asset-revisions.js) |
+| `KIT.authoring.assetRevisions.preview` | function | `(scene, { instance, current, next, file, expect } = {})` | [guide](../asset-interchange.md#replace-one-part-in-a-scene), [source](../../src/kit/p91a-asset-revisions.js) |
+| `KIT.authoring.assetRevisions.replace` | function | `(scene, options)` | [guide](../asset-interchange.md#replace-one-part-in-a-scene), [source](../../src/kit/p91a-asset-revisions.js) |
+| `KIT.authoring.assetRevisions.resolve` | function | `(id, raw, source)` | [source](../../src/kit/p91a-asset-revisions.js) |
 | `KIT.authoring.assetSurfaces` | namespace |  | [guide](../headless-authoring.md#textured-sdf-reconstruction) |
 | `KIT.authoring.assetSurfaces.field` | function | `(raw, options = {})` | [source](../../src/kit/p93-asset-surfaces.js) |
 | `KIT.authoring.assetSurfaces.splat` | function | `(builder, raw, options = {})` | [guide](../headless-authoring.md#glb-cutouts-and-uv-surface-stamps), [source](../../src/kit/p93-asset-surfaces.js) |
@@ -772,6 +781,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.environments.references` | function | `(source)` | [source](../../src/kit/p94-environment-packs.js) |
 | `KIT.authoring.environments.rendererSettings` | function | `(source)` | [source](../../src/kit/p94-environment-packs.js) |
 | `KIT.authoring.environments.requireImage` | function | `(catalog, ref)` | [source](../../src/kit/p94-environment-packs.js) |
+| `KIT.authoring.gltfAssetRevisions` | namespace |  |  |
+| `KIT.authoring.gltfAssetRevisions.affineFrame` | function | `(matrix)` | [source](../../src/kit/p91b-gltf-asset-revisions.js) |
+| `KIT.authoring.gltfAssetRevisions.describe` | function | `(document, sample)` | [source](../../src/kit/p91b-gltf-asset-revisions.js) |
 | `KIT.authoring.gltfAssets` | namespace |  | [guide](../gaussian-gltf.md#api) |
 | `KIT.authoring.gltfAssets.create` | function | `(source)` | [guide](../asset-interchange.md#gltf-and-glb), [source](../../src/kit/p91-gltf-interchange.js) |
 | `KIT.authoring.gltfAssets.is` | function | `(value)` | [source](../../src/kit/p91-gltf-interchange.js) |
@@ -1362,7 +1374,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.diorama` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.brushField` | function | `(spec, env)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
-| `KIT.diorama.build` | function | `(source, env, modelOptions)` | [guide](../../README.md#scenes-as-json), [guide](../destruction.md#breakable-groups-from-authored-parts), [guide](../parameter-bindings.md#dioramas), [guide](../scene-editor.md), [guide](../scene-editor.md#incremental-baking), [source](../../src/kit/kc-data.js) |
+| `KIT.diorama.build` | function | `(source, env, modelOptions)` | [guide](../../README.md#scenes-as-json), [guide](../asset-interchange.md#replace-one-part-in-a-scene), [guide](../destruction.md#breakable-groups-from-authored-parts), [guide](../parameter-bindings.md#dioramas), [guide](../scene-editor.md), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.check` | function | `(source, env)` | [guide](../../README.md#scenes-as-json), [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.kinds` | namespace |  | [guide](../../README.md#scenes-as-json), [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.arch` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |

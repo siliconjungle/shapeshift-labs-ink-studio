@@ -10,6 +10,12 @@ const elements = {
   5123: [2, 'getUint16', 65535], 5125: [4, 'getUint32'], 5126: [4, 'getFloat32']
 };
 const unsigned = [5121, 5123, 5125], float = [5126], maxPoints = 4_000_000;
+const supported = [gaussianGltfExtension, 'KHR_mesh_quantization', 'KHR_texture_transform', 'KHR_materials_unlit'];
+
+function checkExtensions(document) {
+  const missing = (document.extensionsRequired ?? []).filter(name => !supported.includes(name));
+  if (missing.length) throw new TypeError('Unsupported required glTF extensions: ' + missing.join(', '));
+}
 const countValid = n => Number.isSafeInteger(n) && n >= 0;
 const clamp = n => Math.min(1, Math.max(0, n));
 
@@ -31,7 +37,7 @@ function makeAccessors(document, binary) {
     return offset + start;
   }
   return function accessor(id, type, allowed, normalized, label) {
-    const a = accessors[id], width = type === 'SCALAR' ? 1 : Number(type.slice(-1));
+    const a = accessors[id], width = type === 'SCALAR' ? 1 : type === 'MAT4' ? 16 : Number(type.slice(-1));
     if (a?.type !== type || !allowed.includes(a.componentType) ||
         (a.componentType === 5126 ? !!a.normalized : normalized !== undefined && !!a.normalized !== normalized) ||
         !countValid(a.count) || !a.count || a.count > maxPoints)
@@ -277,6 +283,90 @@ async function meshMaterial(kit, document, binary, part, accessor, vertexCount, 
   return { uvs, material:{ id, texture:{ width,height,pixels:rgba },...maps } };
 }
 
+function restSkin(kit, info, skin, accessor, placement) {
+  if (!skin) return null;
+  const bind = skin.inverseBindMatrices === undefined ? null :
+    accessor(skin.inverseBindMatrices, 'MAT4', float, false, 'inverse bind matrices');
+  if (bind && bind.count !== info.joints.length) throw new RangeError('Each glTF joint needs one inverse bind matrix');
+  const { compose, inverse } = kit.sceneGraph, unplace = inverse(placement);
+  const affine = kit.authoring.gltfAssetRevisions.affineFrame;
+  const matrices = info.joints.flatMap((joint, i) => {
+    const rest = bind ? compose(joint, affine(Array.from({ length: 16 }, (_, j) => bind.get(i, j)))) : joint;
+    const { matrix, position } = compose(placement, compose(rest, unplace));
+    return [...matrix, ...position];
+  });
+  return {
+    matrices,
+    influences(primitive, count) {
+      const attr = primitive.attributes;
+      const joints = accessor(attr.JOINTS_0, 'VEC4', [5121, 5123], false, 'JOINTS_0');
+      const weights = accessor(attr.WEIGHTS_0, 'VEC4', [5121, 5123, 5126], true, 'WEIGHTS_0');
+      if (joints.count !== count || weights.count !== count || attr.JOINTS_1 !== undefined || attr.WEIGHTS_1 !== undefined)
+        throw new RangeError('Asset part skinning needs up to four glTF influences per vertex');
+      return Array.from({ length: count }, (_, i) => Array.from({ length: 4 }, (_, j) => {
+        const joint = joints.get(i, j);
+        if (joint >= info.joints.length) throw new RangeError('glTF skin influence references an unknown joint');
+        return [joint, weights.get(i, j)];
+      }));
+    }
+  };
+}
+
+// Build just the selected part in its Ink placement, using the shared native mesh importer.
+export async function gltfAssetPart(source, instance, placement, { toolkit, decodeImage = browserImage } = {}) {
+  const kit = toolkit?.KIT ?? toolkit;
+  if (!kit?.authoring?.assetRevisions || !kit.sceneMeshes) throw new TypeError('Asset parts need an Ink Studio KIT');
+  const asset = kit.authoring.gltfAssets.create(source), revision = asset.assetRevision();
+  const part = kit.authoring.assetRevisions.resolve(instance, placement, revision);
+  const info = revision.part(part.part), { document, binary } = asset.snapshot();
+  checkExtensions(document);
+  const node = document.nodes[info.node], mesh = document.meshes[node.mesh];
+  if (mesh.primitives.some(row => row.targets?.length ||
+      row.extensions?.[gaussianGltfExtension] || ![4, 5, 6].includes(row.mode ?? 4)))
+    throw new TypeError('Scene asset placement needs triangle primitives without morph targets');
+
+  const accessor = makeAccessors(document, binary), cached = new Map();
+  const scanSurface = hasScanSurfaceGltf(document);
+  const reflected = kit.M.det(part.transform.matrix) < 0;
+  const { matrix: m, position: p } = part.transform;
+  const matrix = [m[0], m[3], m[6], 0, m[1], m[4], m[7], 0, m[2], m[5], m[8], 0, ...p, 1];
+  const positions = [], indices = [], uvs = [], faceMaterials = [], materials = [], influences = [];
+  const skin = restSkin(kit, info, document.skins?.[node.skin], accessor, part.transform);
+  const slots = new Map(), allowed = document.extensionsUsed?.includes('KHR_mesh_quantization') ? [5120, 5121, 5122, 5123, 5126] : float;
+  for (const [index, primitive] of mesh.primitives.entries()) {
+    const point = accessor(primitive.attributes?.POSITION, 'VEC3', allowed, undefined, 'POSITION');
+    const order = triangles(primitive.mode ?? 4, readIndices(primitive, point, accessor));
+    if (positions.length / 3 + point.count > 750000 || indices.length + order.length > 750000)
+      throw new RangeError('Asset part exceeds the native mesh geometry budget');
+    const id = info.slots[index] ?? null;
+    const { uvs: texture, material } = await meshMaterial(kit, document, binary, primitive, accessor,
+      point.count, decodeImage, cached, scanSurface, matrix);
+    if (!slots.has(id)) {
+      let materialId = id;
+      if (materialId === null) {
+        let i = 0;
+        do { materialId = 'asset-default-' + i++; } while (info.materials.includes(materialId));
+      }
+      slots.set(id, materials.length);
+      materials.push({ ...material, id: materialId });
+    }
+    if (skin) for (const row of skin.influences(primitive, point.count)) influences.push(row);
+    const offset = positions.length / 3;
+    for (let i = 0; i < point.count; i++) {
+      positions.push(...position(matrix, point.get(i, 0), point.get(i, 1), point.get(i, 2)));
+      uvs.push(texture[i * 2], texture[i * 2 + 1]);
+    }
+    for (let i = 0; i < order.length; i += 3) {
+      indices.push(order[i] + offset, order[i + (reflected ? 2 : 1)] + offset, order[i + (reflected ? 1 : 2)] + offset);
+      faceMaterials.push(slots.get(id));
+    }
+  }
+  const native = kit.sceneMeshes.create({ id: 'asset-part/' + instance, objectId: instance, partId: part.part,
+    positions, uvs, indices, faceMaterials, materials });
+  if (skin) kit.sceneMeshes.skin(native, influences).pose(skin.matrices);
+  return { part, meshes: [native] };
+}
+
 export async function gaussianGltfWorld(source, { toolkit, scene, clip, time = 0, maxSplats = maxPoints, decodeImage = browserImage } = {}) {
   const kit = toolkit?.KIT ?? toolkit;
   if (!kit?.authoring?.gltfAssets || !kit.sceneMeshes) throw new TypeError('Gaussian glTF import needs an Ink Studio KIT');
@@ -288,9 +378,7 @@ export async function gaussianGltfWorld(source, { toolkit, scene, clip, time = 0
   const { document, binary } = asset.snapshot();
   const scanSurface = hasScanSurfaceGltf(document);
   if (!scanSurface && !hasGaussianGltf(document)) throw new TypeError('No KHR_gaussian_splatting primitive in glTF');
-  const supported = [gaussianGltfExtension,'KHR_mesh_quantization','KHR_texture_transform','KHR_materials_unlit'];
-  const missing = (document.extensionsRequired ?? []).filter(name => !supported.includes(name));
-  if (missing.length) throw new TypeError('Unsupported required glTF extensions: ' + missing.join(', '));
+  checkExtensions(document);
   if (!countValid(maxSplats) || maxSplats < 1 || maxSplats > maxPoints) throw new RangeError('Invalid Gaussian glTF splat limit');
   const accessor = makeAccessors(document,binary), rows = [], nodes = asset.sample(time, { clip, scene });
   let count = 0, degree = 0;

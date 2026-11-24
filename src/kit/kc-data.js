@@ -227,6 +227,7 @@
     style: 'style',
     palette: 'list',
     assetPacks: 'list',
+    assetParts: 'obj',
     environmentPreset: 'obj',
     roles: 'obj',
     camera: 'obj',
@@ -431,6 +432,13 @@
         }
     };
     keys(spec, '', TOP);
+    if (spec.assetParts !== undefined) {
+      try {
+        K.authoring.assetRevisions.checkScene(spec, env?.assetPartImports);
+      } catch (error) {
+        bad('assetParts', error.message);
+      }
+    }
     if (typeof spec.id !== 'string' || !/^[a-z0-9-]+$/.test(spec.id))
       bad('id', 'a diorama needs an id of small letters, digits and dashes', 'for example "old-shrine"');
     const st = styleOf(spec);
@@ -1520,6 +1528,11 @@
       motion = spec.motion || [],
       lamps = effects.filter(e => e.do === 'lamp'),
       loose = effects.some(e => ['dust', 'embers', 'smoke', 'sparks', 'rain'].includes(e.do)) || !!spec.tap;
+    function bindAssetParts(world) {
+      if (spec.assetParts === undefined) return;
+      const imported = Object.fromEntries(Object.keys(spec.assetParts).map(id => [id, env.assetPartImports[id]]));
+      K.authoring.assetRevisions.install(world, imported);
+    }
     function bindBreakables(world) {
       try {
         return K.authoring.breakables.bind(world, spec, presentation.breakables);
@@ -1574,6 +1587,7 @@
         marksSystem = K.dataMarks.bind(world, marks, dataMarks, { first, query: marksQuery });
       }
       world.spec = source;
+      bindAssetParts(world);
       bindBreakables(world);
       bindDecals(world);
       if (dataInputs) world.dataInputs = dataInputs;
@@ -1999,6 +2013,7 @@
       W.spriteAtlases = W.spriteAtlases.map(placement => typeof placement?.atlas === 'string' ?
         K.sprite.placeAtlas({ ...placement, atlas: env.resolveSpriteAtlas(placement.atlas) }) : placement);
     if (staticBake && !baked) cache.write('splats', bakeKey, cacheAPI.pack(W));
+    bindAssetParts(W);
     if (pool) W.qualityParticleRanges = [{ first: pool.first, count: pool.n }];
     bindBreakables(W);
     const marksSystem = marks && K.dataMarks.bind(W, marks, dataMarks, { first: firstMark, query: marksQuery });

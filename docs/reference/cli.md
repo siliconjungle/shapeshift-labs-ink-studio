@@ -218,6 +218,10 @@ ink-studio <command> <diorama id | lab/file.js> [options]
     --geometry-masks [settings.json|off]   bake slope, cavity, exposure and thickness into the registered atlas
     --rebake-from <material-bake.json> [--chart-edits <plan.json>]   update selected or changed UV charts
   interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets
+    --manifest <revision.json>   attach an Ink asset revision to tagged glTF data
+  asset-part manifest <asset.gltf|.glb> [--out revision.json]   show stable asset IDs
+  asset-part preview <scene.json> <instance> <asset.gltf|.glb> [--expect N] [--out report.json]   check a replacement
+  asset-part replace <scene.json> <instance> <asset.gltf|.glb> [--expect N] --out <next-scene.json>   save one part revision
                               [--res 0.08 --texture-size 1024 --triangles 16000 --duration 4 --fps 30]
   scan-mesh <depth.png|depth.json> --image aligned.png --out prop.glb   recover an opaque mesh with residual splats
              [--diffuse map.png --normal map.png --roughness value|map.png --capture-layer]  export relightable scan maps

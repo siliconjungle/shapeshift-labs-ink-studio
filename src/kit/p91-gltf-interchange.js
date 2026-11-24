@@ -203,7 +203,20 @@
       });
     }
 
-    return Object.freeze({ [brand]: true, sample,
+    let revision;
+    function assetRevision() {
+      if (revision === undefined) revision = K.authoring.gltfAssetRevisions.describe(document, sample);
+      return revision;
+    }
+    function withRevision(manifest) {
+      const next = structuredClone(document);
+      next.extras = { ...next.extras, inkStudio: { ...next.extras?.inkStudio, assetRevision: manifest } };
+      const asset = create({ document: next, binary });
+      if (!asset.assetRevision()) throw new TypeError('Supply an asset revision manifest');
+      return asset;
+    }
+
+    return Object.freeze({ [brand]: true, sample, assetRevision, withRevision,
       snapshot: () => ({ document: structuredClone(document), binary: binary.slice() }),
       withDocument: next => create({ document: next, binary })
     });
