@@ -39,7 +39,13 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
 #timeline button:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
 #timeline output { display:block; margin-top:6px; font:13px ui-monospace,monospace; overflow-wrap:anywhere; }
 #timeline-links { margin:6px 0; overflow-wrap:anywhere; }
-#timeline-unlink { color:#b3d6bb; }
+#timeline-unlink, #batch-download { color:#b3d6bb; }
+#timeline-batch { margin-top:10px; }
+#batch-form { margin-top:6px; }
+#batch-form input { inline-size:75px; }
+#timeline [data-batch-cel] { display:none; margin-inline-start:6px; accent-color:#b3d6bb; }
+#timeline:has(#timeline-batch[open]) [data-batch-cel] { display:inline-block; }
+#batch-form [hidden] { display:none; }
 /*PIXEL_GRID_CSS*/
 </style>
 </head>
@@ -69,6 +75,34 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
     <p id="timeline-links" aria-live="polite" hidden></p>
     <button id="timeline-source" type="button" hidden>Open source drawing</button>
     <a id="timeline-unlink" hidden>Download unlink edit</a>
+    <details id="timeline-batch">
+      <summary>Batch edit cels</summary>
+      <p>Select cels in the timeline and download an edit to preview and apply with the CLI.</p>
+      <div id="batch-form" class="sample-controls">
+        <label>Edit <select id="batch-kind"><option value="palette-swap">Palette swap</option><option value="nudge">Nudge</option>
+          <option value="mask">Mask</option><option value="cleanup">Cleanup</option></select></label>
+        <span data-batch-fields="palette-swap">
+          <label>From <select id="batch-from"></select></label>
+          <label>To <select id="batch-to"></select></label>
+        </span>
+        <span data-batch-fields="nudge" hidden>
+          <label>X <input id="batch-x" type="number" min="-4096" max="4096" step="1" value="1"></label>
+          <label>Y <input id="batch-y" type="number" min="-4096" max="4096" step="1" value="0"></label>
+        </span>
+        <label data-batch-fields="mask" hidden>Mask mode <select id="batch-mask"><option value="keep">Keep inside</option>
+          <option value="erase">Erase inside</option></select></label>
+        <span data-batch-fields="cleanup" hidden>
+          <label>Repair <select id="batch-repair"><option value="stair">Staircase</option><option value="fragment">Fragment</option>
+            <option value="outline">Outline</option><option value="cluster">Cluster</option></select></label>
+          <label id="batch-cluster" hidden>Cluster mode <select id="batch-mode"><option value="grow">Grow</option>
+            <option value="shrink">Shrink</option></select></label>
+          <label>Limit per cel <input id="batch-budget" type="number" min="1" max="256" step="1" value="8"></label>
+        </span>
+        <label>Saved selection <select id="batch-mask-id"></select></label>
+        <output id="batch-count" aria-live="polite"></output>
+        <a id="batch-download" hidden>Download batch edit</a>
+      </div>
+    </details>
   </details>
   <div id="craft-diagnostics"></div>
   <div class="sample-controls" id="scene-hit-controls" hidden>
@@ -89,7 +123,7 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
 /*PIXEL_ONION_MODULE*/
 /*PIXEL_PLAYBACK_MODULES*/
 /*PIXEL_INSPECT_MODULES*/
-const { frames,timeline,palette,materials,definitions,layerIds,rulesSource,sceneBindings,reviewBinding,scene:embeddedScene } = /*PIXEL_GRID_DATA*/;
+const { frames,timeline,palette,materials,definitions,layerIds,rulesSource,sceneBindings,reviewBinding,batchSelections,scene:embeddedScene } = /*PIXEL_GRID_DATA*/;
 const view = mountPixelGridCanvas(document.querySelector('#canvas'),{ guideTool:PixelGuides });
 const onionSkin = mountPixelOnionSkin(document.querySelector('#onion-skin'),view);
 const nativePlayer = mountPixelRangePlayer(view.playbackHost,view,PixelPlaybackRanges);
@@ -287,7 +321,16 @@ function mountTimeline() {
         mode.value = 'layer';
         draw();
       });
-      tr.insertCell().append(button);
+      const td = tr.insertCell();
+      td.append(button);
+      if (cell.cel && !row.locked) {
+        const pick = document.createElement('input');
+        pick.type = 'checkbox';
+        pick.dataset.batchCel = cell.cel;
+        pick.dataset.frame = cell.frame;
+        pick.setAttribute('aria-label','Select '+cell.cel+' for batch edit');
+        td.append(pick);
+      }
       timelineButtons.push({ button,index,layer:row,cell,group });
       if (cell.cel) buttonsByCel.set(cell.cel,button);
     }
@@ -325,6 +368,55 @@ function syncTimeline() {
   } else {
     unlinkEdit.removeAttribute('href');
   }
+}
+
+function mountBatchEdits() {
+  if (!timeline) return;
+  const form = document.querySelector('#batch-form'), find = id=>form.querySelector('#batch-'+id);
+  const timelineTable = document.querySelector('#timeline table');
+  const from = find('from'), to = find('to');
+  for (const menu of [from,to]) menu.replaceChildren(...palette.map(row=>new Option(row.label ?? row.id,row.id)));
+  to.selectedIndex = Math.min(1,palette.length-1);
+  const saved = find('mask-id'), count = find('count'), download = find('download'), kind = find('kind');
+  const checks = [...timelineTable.querySelectorAll('[data-batch-cel]')];
+
+  function update() {
+    const checked = checks.filter(input=>input.checked);
+    const cels = checked.map(input=>input.dataset.batchCel), frames = new Set(checked.map(input=>input.dataset.frame));
+    const old = saved.value, options = batchSelections.filter(row=>!row.frame || frames.size === 1 && frames.has(row.frame));
+    saved.replaceChildren(new Option('Whole cel',''),...options.map(row=>new Option(row.id,row.id)));
+    if (options.some(row=>row.id === old)) saved.value = old;
+    count.value = cels.length+' '+(cels.length === 1 ? 'cel' : 'cels');
+    for (const section of form.querySelectorAll('[data-batch-fields]')) section.hidden = section.dataset.batchFields !== kind.value;
+    const type = kind.value, edit = { type };
+    let valid = cels.length > 0;
+    if (type === 'palette-swap') {
+      edit.map = { [from.value]:to.value };
+      valid &&= from.value !== to.value;
+    } else if (type === 'nudge') {
+      edit.offset = ['x','y'].map(id=>find(id).valueAsNumber);
+      valid &&= ['x','y'].every(id=>find(id).value !== '' && find(id).validity.valid);
+    } else if (type === 'mask') {
+      edit.mode = find('mask').value;
+      valid &&= !!saved.value;
+    } else {
+      edit.kind = find('repair').value;
+      edit.maxChanges = find('budget').valueAsNumber;
+      find('cluster').hidden = edit.kind !== 'cluster';
+      if (edit.kind === 'cluster') edit.mode = find('mode').value;
+      valid &&= !!saved.value && find('budget').value !== '' && find('budget').validity.valid;
+    }
+    download.hidden = !valid;
+    if (!valid) { download.removeAttribute('href'); return; }
+    const scope = { cels,...(saved.value && { selection:saved.value }) };
+    const patch = { id:'edit-selected-cels',revision:timeline.revision,destination:'timeline',
+      operation:{ type:'edit-cels',scope,edit } };
+    download.href = 'data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify(patch,null,2)+'\n');
+    download.download = 'edit-selected-cels.json';
+  }
+  timelineTable.addEventListener('change',update);
+  form.addEventListener('input',update);
+  update();
 }
 
 async function decodeFrame(frame) {
@@ -375,6 +467,7 @@ document.querySelector('#frame-control').hidden = frames.length < 2;
 select.addEventListener('change',draw);
 layer.addEventListener('change',()=>{ selectedCelLayer = layer.value; syncTimeline(); });
 mountTimeline();
+mountBatchEdits();
 nativePlayer.setSource({ key:frames,timingKey:frames,frames,loop:true,readFrame:i=>decodeFrame(frames[i]),
   tags:timeline && timeline.frames.length === frames.length ? timeline.tags : [] });
 draw();

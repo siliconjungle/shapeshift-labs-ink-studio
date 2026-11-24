@@ -63,6 +63,7 @@ persistent sessions use the existing pixel edit workflow.
 | `duration` | `frame`, `durationMs`. Retimes the chosen frame and the starts of later frames. |
 | `set-tag` | `tag` with `id`, `start`, `end`, and optional `label`, `direction`, and `loop`. Creates or updates a named inclusive playback range. |
 | `remove-tag` | `tag` with the ID of the range to remove. |
+| `edit-cels` | `scope` and `edit`. Apply one palette swap, nudge, mask, or cleanup to selected cels and report the exact differences by frame and layer. |
 | `blank` | `frame`, `layer`. Creates an explicit transparent cel or clears the current cel. Clearing keeps the cel ID and updates any frames holding it. |
 | `duplicate` | `from`, optional `to`. Defaults to an independent copy on the next frame of the same layer. |
 | `hold` | `from`, `to`. Links to the source drawing by ID and gives the held cel its own placement. |
@@ -140,6 +141,56 @@ node cli/ink-studio.js pixel-art edit document.json unlink-pause-ink.json --out 
 A raster edit targeted directly at a held cell still creates independent
 artwork. Use the explicit unlink operation to detach exactly one exposure
 from an imported chain of holds.
+
+### Edit several cels in one operation
+
+Use `edit-cels` in a revision-checked `timeline` patch. Choose exact cel IDs
+with `scope.cels`, or give `scope.layers` and an inclusive `scope.frames`
+pair. Use `scope.tag` in place of the frame pair to edit every frame covered
+by a playback tag once in document order. Empty slots in a frame-and-layer
+scope are listed in the report.
+
+```json
+{
+  "id": "recolor-walk",
+  "revision": "<revision from pixel-art timeline>",
+  "destination": "timeline",
+  "operation": {
+    "type": "edit-cels",
+    "scope": { "frames": ["start", "contact"], "layers": ["ink", "shadow"] },
+    "edit": { "type": "palette-swap", "map": { "red": "green", "green": "red" } }
+  }
+}
+```
+
+| Edit | Settings |
+| --- | --- |
+| `palette-swap` | `map` from swatch IDs to existing swatch IDs. Mappings apply simultaneously and preserve alpha. |
+| `nudge` | Integer `offset: [x, y]` in canvas pixels. Moves the scoped artwork and cutouts. A move that would lose selected art beyond the canvas edges is rejected. |
+| `mask` | `mode: "keep"` keeps the area inside the selection. `mode: "erase"` clears the area inside. Defaults to `keep`. |
+| `cleanup` | Use a bounded cleanup `kind` and optional `maxChanges` per cel. Cluster repairs take `mode: "grow"` or `"shrink"`. The same seed and donor options are available as in single-cel cleanup. |
+
+Set `scope.selection` to share a saved selection or `scope.selections` to
+map each frame ID to its own saved selection. Mask and cleanup require a
+selection. Palette swap and nudge default to the whole on-canvas cel.
+
+Open **Batch edit cels** in the offline timeline to select cells and
+download a patch. Use the same preview and commit workflow for downloaded
+patches and hand-authored frame ranges.
+
+```sh
+node cli/ink-studio.js pixel-art preview document.json edit-selected-cels.json
+node cli/ink-studio.js pixel-art edit document.json edit-selected-cels.json --out revised.json
+```
+
+Preview targets and edit receipts list per-frame and per-cel counts and
+before/after states, swatch IDs, alpha, and native `[row, column, length]`
+runs. The cel diff includes hidden layers and stays complete when the
+preview's composite pixel listing is limited. The operation is atomic.
+Conflicts include the frame, layer, and cel involved when a cel cannot be
+edited. Linked cels with the same resulting drawing keep sharing it.
+When their results differ, links are split and reported so unselected
+exposures retain their original appearance.
 
 ## Register frames and align texture pixels
 

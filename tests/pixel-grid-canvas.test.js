@@ -1202,7 +1202,7 @@ test('offline cel timeline navigates linked exposures and shows timing and offse
   const directory = workspace(t), source = path.join(directory,'day.json'), file = path.join(directory,'day.html');
   fs.writeFileSync(source,JSON.stringify({
     format:'ink-studio/pixel-art',version:2,width:3,height:2,pixelAspect:[1,1],
-    palette:{ red:'#bd2020' },layers:[{ id:'lines' },{ id:'ink',label:'Ink',offset:[1,0] }],
+    palette:{ red:'#bd2020',gold:'#e2b648' },layers:[{ id:'lines' },{ id:'ink',label:'Ink',offset:[1,0] }],
     tags:[{ id:'reverse',start:'rise',end:'rest',direction:'reverse',loop:false }],
     frames:[
       { id:'rise',durationMs:120,cels:{ ink:{ marks:[{ swatch:'red',at:[0,1] }] } } },
@@ -1248,6 +1248,24 @@ test('offline cel timeline navigates linked exposures and shows timing and offse
     assert.equal(await browser.evaluate("document.querySelector('#frames').selectedIndex"),0);
     await click(browser,'[data-native-follow]');
     assert.deepEqual(await raster(browser,preview,1,1),[189,32,32,255]);
+
+    await click(browser,'#timeline-batch summary');
+    await click(browser,'[data-batch-cel="rise/ink"]');
+    await click(browser,'[data-batch-cel="rest/ink"]');
+    const batch = await browser.evaluate("JSON.parse(decodeURIComponent(document.querySelector('#batch-download').href.split(',')[1]))");
+    assert.equal(batch.destination,'timeline');
+    assert.deepEqual(batch.operation,{ type:'edit-cels',scope:{ cels:['rise/ink','rest/ink'] },
+      edit:{ type:'palette-swap',map:{ red:'gold' } } });
+    const editFile = path.join(directory,'batch.json'), revised = path.join(directory,'revised.json');
+    fs.writeFileSync(editFile,JSON.stringify(batch));
+    const runBatch = (...args)=>JSON.parse(execFileSync(process.execPath,[path.join(root,'cli/ink-studio.js'),
+      'pixel-art',...args],{ encoding:'utf8' }));
+    const report = runBatch('preview',source,editFile);
+    assert.equal(report.valid,true);
+    assert.deepEqual(report.targets[0].frames.map(row=>[row.frame,row.pixelCount]),[['rise',1],['rest',1]]);
+    const receipt = runBatch('edit',source,editFile,'--out',revised);
+    assert.deepEqual(receipt.affectedTargets,report.targets);
+    assert.equal(runBatch('sample',revised,'--frame','rest','--at','1,0').swatch,'gold');
   });
 });
 

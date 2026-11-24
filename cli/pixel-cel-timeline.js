@@ -80,6 +80,42 @@ function hasHolds(design) {
   return design?.version === 2 && design.frames.some(frame=>Object.values(frame.cels).some(cel=>cel.hold !== undefined));
 }
 
+function preserveBatchLinks(lookup,replacements) {
+  const roots = new Set([...replacements.keys()].map(key=>lookup.sources.get(key))), changes = [];
+  if (!roots.size) return changes;
+  for (const { source,holds } of groups(lookup)) {
+    if (!roots.has(source.cel)) continue;
+    const members = [source.cel,...holds.map(row=>row.cel)];
+    const drawingKey = cel=>JSON.stringify([cel.slots ?? null,cel.marks]);
+    const originalDrawing = drawingKey(lookup.cels.get(source.cel));
+    const keepers = new Map(), partition = new Map();
+    for (const key of members) {
+      const replacement = replacements.get(key);
+      const drawing = replacement ? drawingKey(replacement) : originalDrawing;
+      if (!keepers.has(drawing)) keepers.set(drawing,key);
+      partition.set(key,keepers.get(drawing));
+    }
+    for (const key of members) {
+      const original = lookup.cels.get(key), keeper = partition.get(key);
+      const hold = keeper === key ? undefined : partition.get(original.hold) === keeper ? original.hold : keeper;
+      if (hold !== original.hold) {
+        changes.push({ ...lookup.locations.get(key),before:original.hold ?? null,after:hold ?? null });
+        if (hold === undefined) {
+          const materialized = replacements.get(key) ?? independent(original,lookup);
+          replacements.set(key,structuredClone(materialized));
+        } else {
+          const { marks,slots,hold:prior,...placement } = original;
+          replacements.set(key,{ ...placement,hold });
+        }
+      } else if (hold !== undefined) {
+        // The source carries this edit for the whole partition.
+        replacements.delete(key);
+      }
+    }
+  }
+  return changes;
+}
+
 function linkChanges(before,after) {
   if (before === after || before.version !== 2 || after.version !== 2 || !hasHolds(before) && !hasHolds(after)) return;
   const prior = index(before.frames), next = index(after.frames);
@@ -162,7 +198,7 @@ const operations = {
 function edit(design,op) {
   if (!record(op) || !Object.hasOwn(operations,op.type) || !fields(op,['type',...operations[op.type]]) ||
       op.replace !== undefined && typeof op.replace !== 'boolean')
-    throw new TypeError('Choose add-frame, duration, set-tag, remove-tag, layer-offset, cel-offset, blank, duplicate, hold, unlink, move, or copy');
+    throw new TypeError('Choose add-frame, duration, set-tag, remove-tag, layer-offset, cel-offset, blank, duplicate, hold, unlink, move, copy, or edit-cels');
   if (op.type === 'set-tag' || op.type === 'remove-tag') {
     const tags = new Map((design.tags ?? []).map(tag=>[tag.id,tag]));
     const key = op.type === 'set-tag' ? op.tag?.id : op.tag, before = tags.get(key);
@@ -305,4 +341,4 @@ function localMarks(width,height,marks,[dx,dy],layer) {
     }) });
 }
 
-module.exports = { celName,celId,getCel,index,availableId,timing,offset,content,independent,describe,edit,translate,localMarks,linkChanges,validateTags };
+module.exports = { celName,celId,getCel,index,availableId,timing,offset,content,independent,describe,edit,translate,localMarks,linkChanges,validateTags,preserveBatchLinks };

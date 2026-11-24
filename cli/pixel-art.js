@@ -14,6 +14,7 @@ const CanvasTransforms = require('../src/pixel-canvas-transforms.js');
 const PixelAdjustments = require('../src/pixel-adjustments.js');
 const LayerStack = require('../src/pixel-layer-stack.js');
 const Timeline = require('./pixel-cel-timeline.js');
+const CelBatch = require('./pixel-cel-batch.js');
 const PixelInspection = require('../src/pixel-inspection.js');
 const ViewSource = require('../src/pixel-view-source.js');
 const SourceBindings = require('../src/pixel-source-bindings.js');
@@ -1144,11 +1145,58 @@ function editTimeline(design,patch,context) {
   if (design.version !== 2) throw new TypeError('Upgrade to a version 2 document before editing the cel timeline');
   if (patch.frame !== undefined || patch.cel !== undefined || patch.edits !== undefined)
     throw new TypeError('Timeline edits use frame and layer addresses inside their operation');
-  const { design:revised,report } = Timeline.edit(design,patch.operation);
+  const { design:revised,report } = patch.operation?.type === 'edit-cels'
+    ? editCelBatch(design,patch.operation) : Timeline.edit(design,patch.operation);
   assertProtectionUnchanged(design,revised);
   validate(revised);
   context?.onEditTarget?.(report);
   return revised;
+}
+
+function editCelBatch(design,operation) {
+  const palette = paletteEntries(design.palette,2), swatches = new Map(palette.map(({ id },i)=>[id,i]));
+  const settings = CelBatch.prepare(operation,swatches), { scope } = operation;
+  const stack = LayerStack.prepare(design.layers), lookup = Timeline.index(design.frames);
+  const selected = CelBatch.select(design,scope,lookup,stack), masks = CelBatch.masks(design,scope,selected,settings);
+  const revisions = new Map(), frames = [];
+  let pixelCount = 0;
+  for (const item of design.frames) {
+    const layers = selected.get(item.id);
+    if (!layers) continue;
+    const missingLayers = layers.filter(layer=>!getCel(item,layer)), cels = [];
+    const frameReport = { frame:item.id,pixelCount:0,cels,missingLayers };
+    const captured = compileFrame(design,item,undefined,palette,true,undefined,lookup);
+    for (const layer of layers) {
+      const cel = captured.cels.get(layer);
+      if (cel === undefined) continue;
+      try {
+        requireWritableLayer(stack.rows.get(layer));
+        const source = captured.layerSources.get(layer);
+        const { writes,changed,changes } = CelBatch.plan(captured,source,masks.get(item.id),settings);
+        if (changed.length) {
+          const marks = rasterWriteMarks(captured.width,source,palette,writes,changed);
+          revisions.set(cel,withRasterMarks(captured,item,layer,marks,lookup));
+        }
+        cels.push({ cel,layer,pixelCount:changed.length,changes });
+        frameReport.pixelCount += changed.length;
+      } catch (error) {
+        const conflicts = Preview.conflicts(error).map(issue=>({ ...issue,frame:item.id,layer,cel }));
+        throw Object.assign(error,{ conflicts });
+      }
+    }
+    frames.push(frameReport);
+    pixelCount += frameReport.pixelCount;
+  }
+  const links = Timeline.preserveBatchLinks(lookup,revisions), byFrame = new Map();
+  for (const [key,cel] of revisions) {
+    const { frame,layer } = lookup.locations.get(key);
+    if (!byFrame.has(frame)) byFrame.set(frame,new Map());
+    byFrame.get(frame).set(layer,cel);
+  }
+  const revised = byFrame.size ? { ...design,frames:design.frames.map(frame=>byFrame.has(frame.id)
+    ? { ...frame,cels:{ ...frame.cels,...Object.fromEntries(byFrame.get(frame.id)) } } : frame) } : design;
+  return { design:revised,report:{ destination:'timeline',kind:'timeline',tool:'edit-cels',edit:settings.type,scope,
+    frames,pixelCount,...(links.length && { links }) } };
 }
 
 function editLayers(design,patch,context) {
@@ -2393,7 +2441,8 @@ function canvasReview(design,frameId,file,sources,scene,artShot,reviewBinding) {
   const sceneRef = scene?.sourceView?.source ?? scene?.scene;
   const sceneBindings = sceneRef === undefined ? [] : (design.sceneBindings ?? []).filter(row=>sameScene(row.scene,sceneRef));
   const timeline = lookup && Timeline.describe(design,revision,lookup);
-  const data = JSON.stringify({ frames:deck,timeline,palette,materials,definitions,scene:scene && ViewSource.pack(scene),
+  const batchSelections = (timeline ? design.selections ?? [] : []).map(({ id,frame })=>({ id,frame }));
+  const data = JSON.stringify({ frames:deck,timeline,palette,materials,definitions,batchSelections,scene:scene && ViewSource.pack(scene),
     sceneBindings,reviewBinding,layerIds,rulesSource }).replaceAll('<','\\u003c');
   files.write(file,template.replace('/*PIXEL_GRID_CSS*/',() => browserSource('css'))
     .replace('/*PIXEL_GUIDES_MODULE*/',() => fs.readFileSync(path.join(__dirname,'../src/pixel-guides.js'),'utf8'))
