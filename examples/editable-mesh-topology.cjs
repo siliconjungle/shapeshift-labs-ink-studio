@@ -108,7 +108,7 @@ function main(directory) {
     PNG.write(path.join(directory, name + '.png'), frame.w, frame.h, frame.rgb);
     frames.push(upscale(frame, 2));
   }
-  const sheet = grid(frames, 2, ['original', 'revised']);
+  const sheet = grid(frames, 2);
   PNG.write(path.join(directory, 'comparison.png'), sheet.w, sheet.h, sheet.rgb);
   json('report', reports);
 }
