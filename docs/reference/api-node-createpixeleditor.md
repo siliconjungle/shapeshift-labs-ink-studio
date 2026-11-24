@@ -9,6 +9,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `node.createPixelEditor().apply` | function | `(patch,context)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
+| `node.createPixelEditor().applyBatch` | function | `(raw,context)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().artRules` | function | `(options = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().begin` | function | `(label)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().cancel` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../src/kit/p23-authoring-document.js) |
@@ -32,9 +33,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createPixelEditor().previewChanges` | function | `(options = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().previewEdit` | function | `(patch,options = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().receipts` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
+| `node.createPixelEditor().recordBatch` | function | `(context)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().redo` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../src/kit/p23-authoring-document.js) |
 | `node.createPixelEditor().renderOptions` | function | `(scene = sceneName)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().replay` | function | `(raw,context)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
+| `node.createPixelEditor().replayBatch` | function | `(raw,context)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
+| `node.createPixelEditor().revalidateBatch` | function | `(raw,context = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().sample` | function | `(coordinate,options = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().sceneEditor` | value | `undefined` | [guide](../pixel-art-authoring.md) |
 | `node.createPixelEditor().select` | function | `(query,options)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |

@@ -20,6 +20,7 @@ const optionFields = {
   select:['frame','layer','cel','targetRevision'],
   edit:['shotHitFrame'],
   preview:['limit','exact','shotHitFrame'],
+  'revalidate-batch':['limit','exact'],
   export:{ preset:['preset','out','directory'],png:['frame','cel','layer','colorMode'],
     stamp:['frame','cel','layer','references'],render:['scene'] }
 };
@@ -27,9 +28,11 @@ const members = {
   validate:[],inspect:['at','options'],select:['query','options'],
   ...Object.fromEntries(edits.map(action=>[action,['patch','options']])),
   preview:['edit','options'],begin:['label'],...Object.fromEntries(travel.map(action=>[action,[]])),
-  replay:['receipt'],export:['artifact','options']
+  replay:['receipt'],batch:['revision','label','commands'],'record-batch':[],
+  'replay-batch':['batch'],'revalidate-batch':['batch','options'],export:['artifact','options']
 };
-const requiredFields = { inspect:['at'],select:['query'],replay:['receipt'],
+const requiredFields = { inspect:['at'],select:['query'],replay:['receipt'],batch:['revision','commands'],
+  'replay-batch':['batch'],'revalidate-batch':['batch'],
   ...Object.fromEntries(edits.map(action=>[action,['patch']])) };
 
 function contract() {
@@ -131,6 +134,14 @@ function execute(editor,design,raw,context = {}) {
     return { changed,history:editor.history() };
   }
   switch (action) {
+    case 'batch':
+      return editor.applyBatch({revision:command.revision,label:command.label,commands:command.commands},context);
+    case 'record-batch':
+      return editor.recordBatch(context);
+    case 'replay-batch':
+      return editor.replayBatch(command.batch,context);
+    case 'revalidate-batch':
+      return editor.revalidateBatch(command.batch,{...context,...optionsFor(options,optionFields['revalidate-batch'])});
     case 'validate':
       return editor.describe();
     case 'inspect':
@@ -154,4 +165,12 @@ function execute(editor,design,raw,context = {}) {
   }
 }
 
-module.exports = { execute,envelope,edits,travel,contract };
+function batchCommand(command) {
+  prepare(command);
+  if (!edits.includes(command.action)) throw new TypeError('A batch step must be a pixel edit command');
+  optionsFor(command.options,optionFields.edit);
+  if (!record(command.patch)) throw new TypeError('A batch step needs a pixel edit patch');
+  return command;
+}
+
+module.exports = { execute,envelope,edits,travel,contract,request,batchCommand };

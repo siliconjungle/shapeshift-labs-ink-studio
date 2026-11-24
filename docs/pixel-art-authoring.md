@@ -1741,6 +1741,10 @@ const result = editor.execute(command);
 | `export` | Choose `artifact` and its `options`. Returns a document, layer deck, stamp, PNG, retained scene artifact, or saved export preset report. |
 | `validate` | Returns revisions, frames and IDs for the current document. |
 | `replay` | Pass a `receipt` from a shared edit command to verify and reproduce it. |
+| `batch` | Apply ordered `commands` in one transaction from the supplied `revision`. Use an optional `label` for undo history. Returns a batch receipt. |
+| `record-batch` | Verify and export the edit steps in the open draft. |
+| `replay-batch` | Pass a recorded `batch` to verify and apply it in one transaction. |
+| `revalidate-batch` | Review a recorded `batch` on the current asset. Returns a proposed receipt when the steps pass validation. |
 
 A draw, mask, recolor, transform, or apply command takes the regular Ink
 patch fields and returns a pixel edit receipt. Keep `id` and `revision` on
@@ -1949,6 +1953,69 @@ receipt, call `pixels.replay(receipt)` on an editor opened on the original
 inputs. Attach the original scene to replay surface or SDF edits and supply
 any host world callback used by the original edit. Replay multiple receipts in
 their recorded order to reproduce a sequence of edits.
+
+### Record, replay, and revalidate a batch
+
+Send a `batch` command through `editor.execute` or `pixel-art session run`.
+A batch takes one observed document revision and 1–256 edit commands in
+execution order. Each step may provide its own document revision. Omit it
+to use the staged revision immediately before that step. Explicit pixel,
+source, and intent guards are checked in the ordinary edit path.
+
+```js
+const request = (action, fields = {}) => ({
+  format: 'ink-studio/pixel-command', version: 1, action, ...fields
+});
+const batch = editor.execute(request('batch', {
+  revision: editor.describe().revision,
+  label: 'Retouch the gate',
+  commands: [request('draw', { patch: paint }), request('apply', { patch: cut })]
+}));
+```
+
+Save the returned batch receipt. It records starting and ending revisions
+for the pixel document, the attached scene and its dependencies, and
+retained render sidecars. Each step retains its normal resolved targets
+and hit evidence. `replay-batch` checks the starting revisions, each step
+receipt, and the final revisions before committing. A conflict rolls the
+whole batch back. Successful batches are one undo entry. Step indices in
+failure reports are zero-based.
+
+To capture an existing open draft, use `record-batch` before committing it.
+Ink verifies the steps in a detached editor and returns a receipt only if
+they reproduce the draft. Record scene changes as bound pixel edit steps
+for portable replay. An open draft remains available after recording.
+
+When replay reports stale revisions, call `revalidate-batch` with the old
+receipt. Ink checks the commands on a detached copy of the current asset.
+It refreshes revision and selection evidence, keeps explicit pixel guards,
+and rejects changes to the resolved destination or target identity. The
+result includes a preview and any changed target or hit evidence. Pass
+`options: { exact: true }` for a full art-grid and scene diff. To apply an
+approved preview, send `replay-batch` with the returned `batch` field.
+
+```js
+const review = editor.execute(request('revalidate-batch', {
+  batch: recorded, options: { exact: true }
+}));
+if (review.valid) {
+  // Review the diff before submitting the replacement batch for replay.
+  console.log(review.preview);
+}
+```
+
+For the CLI, save the command envelopes as JSON. `--out` saves the batch
+receipt or revalidation report, and status 2 indicates a conflict.
+
+```sh
+ink-studio pixel-art session run work batch-command.json --out receipt.json
+ink-studio pixel-art session run changed revalidate-command.json --out review.json
+ink-studio pixel-art session run changed replay-command.json
+```
+
+Pass `--scene` or `--source-view` for steps that read render evidence.
+For dynamic SDK captures, `captureWithWorld(settings, world)` receives
+the attached editor's staged world, including retained render options.
 
 ## Author a version 2 document
 

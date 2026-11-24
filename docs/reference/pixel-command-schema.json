@@ -50,6 +50,18 @@
       "$ref": "#/$defs/replayCommand"
     },
     {
+      "$ref": "#/$defs/batchCommand"
+    },
+    {
+      "$ref": "#/$defs/record-batchCommand"
+    },
+    {
+      "$ref": "#/$defs/replay-batchCommand"
+    },
+    {
+      "$ref": "#/$defs/revalidate-batchCommand"
+    },
+    {
       "$ref": "#/$defs/exportCommand"
     }
   ],
@@ -5388,6 +5400,275 @@
       ],
       "additionalProperties": true
     },
+    "batchState": {
+      "type": "object",
+      "properties": {
+        "documentRevision": {
+          "$ref": "#/$defs/revision"
+        },
+        "legacyRevision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/revision"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "renderRevision": {
+          "$ref": "#/$defs/revision"
+        },
+        "scene": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "revision": {
+                  "$ref": "#/$defs/revision"
+                }
+              },
+              "required": [
+                "ref",
+                "revision"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "documentRevision",
+        "legacyRevision",
+        "renderRevision",
+        "scene"
+      ],
+      "additionalProperties": false
+    },
+    "batchReceipt": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "ink-studio/pixel-edit-batch"
+        },
+        "version": {
+          "const": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "inputs": {
+          "$ref": "#/$defs/batchState"
+        },
+        "outputs": {
+          "$ref": "#/$defs/batchState"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/replayReceipt"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "revalidatedFrom": {
+          "$ref": "#/$defs/revision"
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "label",
+        "inputs",
+        "outputs",
+        "steps",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "batchRejection": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "ink-studio/pixel-batch-rejection"
+        },
+        "version": {
+          "const": 1
+        },
+        "action": {
+          "enum": [
+            "batch",
+            "record-batch",
+            "replay-batch"
+          ]
+        },
+        "recordedRevision": {
+          "$ref": "#/$defs/revision"
+        },
+        "failedStep": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "editReceipt": {
+          "$ref": "#/$defs/editReceipt"
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "action",
+        "conflicts"
+      ],
+      "additionalProperties": false
+    },
+    "batchRevalidation": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "ink-studio/pixel-batch-revalidation"
+        },
+        "version": {
+          "const": 1
+        },
+        "recordedRevision": {
+          "$ref": "#/$defs/revision"
+        },
+        "valid": {
+          "type": "boolean"
+        },
+        "batch": {
+          "$ref": "#/$defs/batchReceipt"
+        },
+        "preview": {
+          "$ref": "#/$defs/previewResult"
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "before": {
+                "type": "object"
+              },
+              "after": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "step",
+              "before",
+              "after"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "failedStep": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "editReceipt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/editReceipt"
+            },
+            {
+              "$ref": "#/$defs/batchRejection"
+            }
+          ]
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "valid",
+        "conflicts"
+      ],
+      "additionalProperties": false,
+      "if": {
+        "properties": {
+          "valid": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "batch",
+          "preview",
+          "changes"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "batch"
+          ]
+        }
+      }
+    },
     "replayReceipt": {
       "allOf": [
         {
@@ -8441,6 +8722,474 @@
         }
       ]
     },
+    "batchCommand": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "ink-studio/pixel-command"
+        },
+        "version": {
+          "const": 1
+        },
+        "action": {
+          "const": "batch"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/batchStep"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "action",
+        "revision",
+        "commands"
+      ],
+      "additionalProperties": false,
+      "examples": [
+        {
+          "label": "Paint two badges",
+          "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+          "commands": [
+            {
+              "patch": {
+                "id": "example-draw",
+                "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                "frame": "art",
+                "operation": {
+                  "tool": "pencil",
+                  "layer": "ink",
+                  "points": [
+                    [
+                      2,
+                      1
+                    ],
+                    [
+                      3,
+                      1
+                    ]
+                  ],
+                  "swatch": "amber"
+                }
+              },
+              "format": "ink-studio/pixel-command",
+              "version": 1,
+              "action": "draw"
+            },
+            {
+              "patch": {
+                "id": "other-badge",
+                "frame": "art",
+                "operation": {
+                  "tool": "pencil",
+                  "layer": "ink",
+                  "points": [
+                    [
+                      4,
+                      2
+                    ]
+                  ],
+                  "swatch": "amber"
+                }
+              },
+              "format": "ink-studio/pixel-command",
+              "version": 1,
+              "action": "draw"
+            }
+          ],
+          "format": "ink-studio/pixel-command",
+          "version": 1,
+          "action": "batch"
+        }
+      ]
+    },
+    "record-batchCommand": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "ink-studio/pixel-command"
+        },
+        "version": {
+          "const": 1
+        },
+        "action": {
+          "const": "record-batch"
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "action"
+      ],
+      "additionalProperties": false,
+      "examples": [
+        {
+          "format": "ink-studio/pixel-command",
+          "version": 1,
+          "action": "record-batch"
+        }
+      ]
+    },
+    "replay-batchCommand": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "ink-studio/pixel-command"
+        },
+        "version": {
+          "const": 1
+        },
+        "action": {
+          "const": "replay-batch"
+        },
+        "batch": {
+          "$ref": "#/$defs/batchReceipt"
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "action",
+        "batch"
+      ],
+      "additionalProperties": false,
+      "examples": [
+        {
+          "batch": {
+            "format": "ink-studio/pixel-edit-batch",
+            "version": 1,
+            "label": "Paint two badges",
+            "inputs": {
+              "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+              "legacyRevision": null,
+              "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+              "scene": null
+            },
+            "outputs": {
+              "documentRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a",
+              "legacyRevision": null,
+              "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+              "scene": null
+            },
+            "steps": [
+              {
+                "format": "ink-studio/pixel-edit-receipt",
+                "version": 1,
+                "command": {
+                  "runner": "sdk",
+                  "action": "edit",
+                  "options": {},
+                  "patch": {
+                    "id": "example-draw",
+                    "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                    "frame": "art",
+                    "operation": {
+                      "tool": "pencil",
+                      "layer": "ink",
+                      "points": [
+                        [
+                          2,
+                          1
+                        ],
+                        [
+                          3,
+                          1
+                        ]
+                      ],
+                      "swatch": "amber"
+                    },
+                    "destination": "raster"
+                  },
+                  "frame": "art"
+                },
+                "inputs": {
+                  "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49"
+                },
+                "status": "applied",
+                "affectedTargets": [
+                  {
+                    "destination": "raster",
+                    "kind": "raster",
+                    "tool": "pencil",
+                    "frame": "art",
+                    "layer": "ink",
+                    "cel": "art/ink",
+                    "pixelCount": 2,
+                    "runs": [
+                      [
+                        1,
+                        2,
+                        2
+                      ]
+                    ]
+                  }
+                ],
+                "skippedHits": [],
+                "outputs": {
+                  "kind": "raster",
+                  "documentRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb",
+                  "artifactRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb"
+                }
+              },
+              {
+                "format": "ink-studio/pixel-edit-receipt",
+                "version": 1,
+                "command": {
+                  "runner": "sdk",
+                  "action": "edit",
+                  "options": {},
+                  "patch": {
+                    "id": "other-badge",
+                    "revision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb",
+                    "frame": "art",
+                    "operation": {
+                      "tool": "pencil",
+                      "layer": "ink",
+                      "points": [
+                        [
+                          4,
+                          2
+                        ]
+                      ],
+                      "swatch": "amber"
+                    },
+                    "destination": "raster"
+                  },
+                  "frame": "art"
+                },
+                "inputs": {
+                  "documentRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb"
+                },
+                "status": "applied",
+                "affectedTargets": [
+                  {
+                    "destination": "raster",
+                    "kind": "raster",
+                    "tool": "pencil",
+                    "frame": "art",
+                    "layer": "ink",
+                    "cel": "art/ink",
+                    "pixelCount": 1,
+                    "runs": [
+                      [
+                        2,
+                        4,
+                        1
+                      ]
+                    ]
+                  }
+                ],
+                "skippedHits": [],
+                "outputs": {
+                  "kind": "raster",
+                  "documentRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a",
+                  "artifactRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a"
+                }
+              }
+            ],
+            "revision": "41672a3d6da1677da8d932636987d3940c3bb26205ba866b07485ac653275f4d"
+          },
+          "format": "ink-studio/pixel-command",
+          "version": 1,
+          "action": "replay-batch"
+        }
+      ]
+    },
+    "revalidate-batchCommand": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "ink-studio/pixel-command"
+        },
+        "version": {
+          "const": 1
+        },
+        "action": {
+          "const": "revalidate-batch"
+        },
+        "batch": {
+          "$ref": "#/$defs/batchReceipt"
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "exact": {
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "action",
+        "batch"
+      ],
+      "additionalProperties": false,
+      "examples": [
+        {
+          "batch": {
+            "format": "ink-studio/pixel-edit-batch",
+            "version": 1,
+            "label": "Paint two badges",
+            "inputs": {
+              "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+              "legacyRevision": null,
+              "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+              "scene": null
+            },
+            "outputs": {
+              "documentRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a",
+              "legacyRevision": null,
+              "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+              "scene": null
+            },
+            "steps": [
+              {
+                "format": "ink-studio/pixel-edit-receipt",
+                "version": 1,
+                "command": {
+                  "runner": "sdk",
+                  "action": "edit",
+                  "options": {},
+                  "patch": {
+                    "id": "example-draw",
+                    "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                    "frame": "art",
+                    "operation": {
+                      "tool": "pencil",
+                      "layer": "ink",
+                      "points": [
+                        [
+                          2,
+                          1
+                        ],
+                        [
+                          3,
+                          1
+                        ]
+                      ],
+                      "swatch": "amber"
+                    },
+                    "destination": "raster"
+                  },
+                  "frame": "art"
+                },
+                "inputs": {
+                  "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49"
+                },
+                "status": "applied",
+                "affectedTargets": [
+                  {
+                    "destination": "raster",
+                    "kind": "raster",
+                    "tool": "pencil",
+                    "frame": "art",
+                    "layer": "ink",
+                    "cel": "art/ink",
+                    "pixelCount": 2,
+                    "runs": [
+                      [
+                        1,
+                        2,
+                        2
+                      ]
+                    ]
+                  }
+                ],
+                "skippedHits": [],
+                "outputs": {
+                  "kind": "raster",
+                  "documentRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb",
+                  "artifactRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb"
+                }
+              },
+              {
+                "format": "ink-studio/pixel-edit-receipt",
+                "version": 1,
+                "command": {
+                  "runner": "sdk",
+                  "action": "edit",
+                  "options": {},
+                  "patch": {
+                    "id": "other-badge",
+                    "revision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb",
+                    "frame": "art",
+                    "operation": {
+                      "tool": "pencil",
+                      "layer": "ink",
+                      "points": [
+                        [
+                          4,
+                          2
+                        ]
+                      ],
+                      "swatch": "amber"
+                    },
+                    "destination": "raster"
+                  },
+                  "frame": "art"
+                },
+                "inputs": {
+                  "documentRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb"
+                },
+                "status": "applied",
+                "affectedTargets": [
+                  {
+                    "destination": "raster",
+                    "kind": "raster",
+                    "tool": "pencil",
+                    "frame": "art",
+                    "layer": "ink",
+                    "cel": "art/ink",
+                    "pixelCount": 1,
+                    "runs": [
+                      [
+                        2,
+                        4,
+                        1
+                      ]
+                    ]
+                  }
+                ],
+                "skippedHits": [],
+                "outputs": {
+                  "kind": "raster",
+                  "documentRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a",
+                  "artifactRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a"
+                }
+              }
+            ],
+            "revision": "41672a3d6da1677da8d932636987d3940c3bb26205ba866b07485ac653275f4d"
+          },
+          "options": {
+            "exact": true
+          },
+          "format": "ink-studio/pixel-command",
+          "version": 1,
+          "action": "revalidate-batch"
+        }
+      ]
+    },
     "exportCommand": {
       "type": "object",
       "properties": {
@@ -8702,6 +9451,436 @@
           "format": "ink-studio/pixel-command",
           "version": 1,
           "action": "export"
+        }
+      ]
+    },
+    "batchStep": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "format": {
+              "const": "ink-studio/pixel-command"
+            },
+            "version": {
+              "const": 1
+            },
+            "action": {
+              "const": "apply"
+            },
+            "patch": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/id"
+                },
+                "revision": {
+                  "$ref": "#/$defs/revision"
+                },
+                "frame": {
+                  "$ref": "#/$defs/id"
+                },
+                "cel": {
+                  "$ref": "#/$defs/celId"
+                },
+                "destination": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "sourceRevision": {
+                  "$ref": "#/$defs/revision"
+                },
+                "operation": {
+                  "type": "object"
+                },
+                "edits": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/pixelEdit"
+                  },
+                  "minItems": 1,
+                  "maxItems": 4096
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": true
+            },
+            "options": {
+              "type": "object",
+              "properties": {
+                "shotHitFrame": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000000
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "format",
+            "version",
+            "action",
+            "patch"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "format": {
+              "const": "ink-studio/pixel-command"
+            },
+            "version": {
+              "const": 1
+            },
+            "action": {
+              "const": "draw"
+            },
+            "patch": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/id"
+                },
+                "revision": {
+                  "$ref": "#/$defs/revision"
+                },
+                "frame": {
+                  "$ref": "#/$defs/id"
+                },
+                "cel": {
+                  "$ref": "#/$defs/celId"
+                },
+                "destination": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "sourceRevision": {
+                  "$ref": "#/$defs/revision"
+                },
+                "operation": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/rasterPaintOperation"
+                    },
+                    {
+                      "$ref": "#/$defs/surfaceOperation"
+                    }
+                  ]
+                },
+                "edits": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/pixelEdit"
+                  },
+                  "minItems": 1,
+                  "maxItems": 4096
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": true,
+              "oneOf": [
+                {
+                  "required": [
+                    "operation"
+                  ]
+                },
+                {
+                  "required": [
+                    "edits"
+                  ]
+                }
+              ]
+            },
+            "options": {
+              "type": "object",
+              "properties": {
+                "shotHitFrame": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000000
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "format",
+            "version",
+            "action",
+            "patch"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "format": {
+              "const": "ink-studio/pixel-command"
+            },
+            "version": {
+              "const": 1
+            },
+            "action": {
+              "const": "mask"
+            },
+            "patch": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/id"
+                },
+                "revision": {
+                  "$ref": "#/$defs/revision"
+                },
+                "frame": {
+                  "$ref": "#/$defs/id"
+                },
+                "cel": {
+                  "$ref": "#/$defs/celId"
+                },
+                "destination": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "sourceRevision": {
+                  "$ref": "#/$defs/revision"
+                },
+                "operation": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/selectionsOperation"
+                    },
+                    {
+                      "$ref": "#/$defs/surfaceOperation"
+                    }
+                  ]
+                },
+                "edits": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/pixelEdit"
+                  },
+                  "minItems": 1,
+                  "maxItems": 4096
+                }
+              },
+              "required": [
+                "id",
+                "operation"
+              ],
+              "additionalProperties": true,
+              "not": {
+                "required": [
+                  "edits"
+                ]
+              }
+            },
+            "options": {
+              "type": "object",
+              "properties": {
+                "shotHitFrame": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000000
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "format",
+            "version",
+            "action",
+            "patch"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "format": {
+              "const": "ink-studio/pixel-command"
+            },
+            "version": {
+              "const": 1
+            },
+            "action": {
+              "const": "recolor"
+            },
+            "patch": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/id"
+                },
+                "revision": {
+                  "$ref": "#/$defs/revision"
+                },
+                "frame": {
+                  "$ref": "#/$defs/id"
+                },
+                "cel": {
+                  "$ref": "#/$defs/celId"
+                },
+                "destination": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "sourceRevision": {
+                  "$ref": "#/$defs/revision"
+                },
+                "operation": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/swatchReplacement"
+                    },
+                    {
+                      "$ref": "#/$defs/paletteRecolor"
+                    },
+                    {
+                      "$ref": "#/$defs/surfaceOperation"
+                    }
+                  ]
+                },
+                "edits": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/pixelEdit"
+                  },
+                  "minItems": 1,
+                  "maxItems": 4096
+                }
+              },
+              "required": [
+                "id",
+                "operation"
+              ],
+              "additionalProperties": true,
+              "not": {
+                "required": [
+                  "edits"
+                ]
+              }
+            },
+            "options": {
+              "type": "object",
+              "properties": {
+                "shotHitFrame": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000000
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "format",
+            "version",
+            "action",
+            "patch"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "format": {
+              "const": "ink-studio/pixel-command"
+            },
+            "version": {
+              "const": 1
+            },
+            "action": {
+              "const": "transform"
+            },
+            "patch": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/id"
+                },
+                "revision": {
+                  "$ref": "#/$defs/revision"
+                },
+                "frame": {
+                  "$ref": "#/$defs/id"
+                },
+                "cel": {
+                  "$ref": "#/$defs/celId"
+                },
+                "destination": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "sourceRevision": {
+                  "$ref": "#/$defs/revision"
+                },
+                "operation": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/rasterTransform"
+                    },
+                    {
+                      "$ref": "#/$defs/canvasOperation"
+                    }
+                  ]
+                },
+                "edits": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/pixelEdit"
+                  },
+                  "minItems": 1,
+                  "maxItems": 4096
+                }
+              },
+              "required": [
+                "id",
+                "operation"
+              ],
+              "additionalProperties": true,
+              "not": {
+                "required": [
+                  "edits"
+                ]
+              }
+            },
+            "options": {
+              "type": "object",
+              "properties": {
+                "shotHitFrame": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000000
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "format",
+            "version",
+            "action",
+            "patch"
+          ],
+          "additionalProperties": false
         }
       ]
     }
@@ -10632,6 +11811,1239 @@
                 "documentRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb",
                 "artifactRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb"
               }
+            }
+          }
+        ]
+      },
+      "batch": {
+        "request": "#/$defs/batchCommand",
+        "result": "#/$defs/batchReceipt",
+        "required": [
+          "revision",
+          "commands"
+        ],
+        "evidence": {
+          "/inputs": "The exact starting document, attached scene and retained render sidecars.",
+          "/steps": "Ordered pixel edit receipts with their own revisions, resolved targets and skipped hits.",
+          "/outputs": "The exact document, attached scene and sidecars after the transaction.",
+          "/revision": "Integrity digest of the recorded transaction and its evidence."
+        },
+        "examples": [
+          {
+            "command": {
+              "label": "Paint two badges",
+              "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+              "commands": [
+                {
+                  "patch": {
+                    "id": "example-draw",
+                    "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                    "frame": "art",
+                    "operation": {
+                      "tool": "pencil",
+                      "layer": "ink",
+                      "points": [
+                        [
+                          2,
+                          1
+                        ],
+                        [
+                          3,
+                          1
+                        ]
+                      ],
+                      "swatch": "amber"
+                    }
+                  },
+                  "format": "ink-studio/pixel-command",
+                  "version": 1,
+                  "action": "draw"
+                },
+                {
+                  "patch": {
+                    "id": "other-badge",
+                    "frame": "art",
+                    "operation": {
+                      "tool": "pencil",
+                      "layer": "ink",
+                      "points": [
+                        [
+                          4,
+                          2
+                        ]
+                      ],
+                      "swatch": "amber"
+                    }
+                  },
+                  "format": "ink-studio/pixel-command",
+                  "version": 1,
+                  "action": "draw"
+                }
+              ],
+              "format": "ink-studio/pixel-command",
+              "version": 1,
+              "action": "batch"
+            },
+            "setup": [],
+            "result": {
+              "format": "ink-studio/pixel-edit-batch",
+              "version": 1,
+              "label": "Paint two badges",
+              "inputs": {
+                "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                "legacyRevision": null,
+                "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                "scene": null
+              },
+              "outputs": {
+                "documentRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a",
+                "legacyRevision": null,
+                "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                "scene": null
+              },
+              "steps": [
+                {
+                  "format": "ink-studio/pixel-edit-receipt",
+                  "version": 1,
+                  "command": {
+                    "runner": "sdk",
+                    "action": "edit",
+                    "options": {},
+                    "patch": {
+                      "id": "example-draw",
+                      "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                      "frame": "art",
+                      "operation": {
+                        "tool": "pencil",
+                        "layer": "ink",
+                        "points": [
+                          [
+                            2,
+                            1
+                          ],
+                          [
+                            3,
+                            1
+                          ]
+                        ],
+                        "swatch": "amber"
+                      },
+                      "destination": "raster"
+                    },
+                    "frame": "art"
+                  },
+                  "inputs": {
+                    "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49"
+                  },
+                  "status": "applied",
+                  "affectedTargets": [
+                    {
+                      "destination": "raster",
+                      "kind": "raster",
+                      "tool": "pencil",
+                      "frame": "art",
+                      "layer": "ink",
+                      "cel": "art/ink",
+                      "pixelCount": 2,
+                      "runs": [
+                        [
+                          1,
+                          2,
+                          2
+                        ]
+                      ]
+                    }
+                  ],
+                  "skippedHits": [],
+                  "outputs": {
+                    "kind": "raster",
+                    "documentRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb",
+                    "artifactRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb"
+                  }
+                },
+                {
+                  "format": "ink-studio/pixel-edit-receipt",
+                  "version": 1,
+                  "command": {
+                    "runner": "sdk",
+                    "action": "edit",
+                    "options": {},
+                    "patch": {
+                      "id": "other-badge",
+                      "revision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb",
+                      "frame": "art",
+                      "operation": {
+                        "tool": "pencil",
+                        "layer": "ink",
+                        "points": [
+                          [
+                            4,
+                            2
+                          ]
+                        ],
+                        "swatch": "amber"
+                      },
+                      "destination": "raster"
+                    },
+                    "frame": "art"
+                  },
+                  "inputs": {
+                    "documentRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb"
+                  },
+                  "status": "applied",
+                  "affectedTargets": [
+                    {
+                      "destination": "raster",
+                      "kind": "raster",
+                      "tool": "pencil",
+                      "frame": "art",
+                      "layer": "ink",
+                      "cel": "art/ink",
+                      "pixelCount": 1,
+                      "runs": [
+                        [
+                          2,
+                          4,
+                          1
+                        ]
+                      ]
+                    }
+                  ],
+                  "skippedHits": [],
+                  "outputs": {
+                    "kind": "raster",
+                    "documentRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a",
+                    "artifactRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a"
+                  }
+                }
+              ],
+              "revision": "41672a3d6da1677da8d932636987d3940c3bb26205ba866b07485ac653275f4d"
+            }
+          }
+        ]
+      },
+      "record-batch": {
+        "request": "#/$defs/record-batchCommand",
+        "result": "#/$defs/batchReceipt",
+        "required": [],
+        "evidence": {
+          "/inputs": "The exact starting document, attached scene and retained render sidecars.",
+          "/steps": "Ordered pixel edit receipts with their own revisions, resolved targets and skipped hits.",
+          "/outputs": "The exact document, attached scene and sidecars after the transaction.",
+          "/revision": "Integrity digest of the recorded transaction and its evidence."
+        },
+        "examples": [
+          {
+            "command": {
+              "format": "ink-studio/pixel-command",
+              "version": 1,
+              "action": "record-batch"
+            },
+            "setup": [
+              {
+                "label": "Paint the badge",
+                "format": "ink-studio/pixel-command",
+                "version": 1,
+                "action": "begin"
+              },
+              {
+                "patch": {
+                  "id": "example-draw",
+                  "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                  "frame": "art",
+                  "operation": {
+                    "tool": "pencil",
+                    "layer": "ink",
+                    "points": [
+                      [
+                        2,
+                        1
+                      ],
+                      [
+                        3,
+                        1
+                      ]
+                    ],
+                    "swatch": "amber"
+                  }
+                },
+                "format": "ink-studio/pixel-command",
+                "version": 1,
+                "action": "draw"
+              }
+            ],
+            "result": {
+              "format": "ink-studio/pixel-edit-batch",
+              "version": 1,
+              "label": "Paint the badge",
+              "inputs": {
+                "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                "legacyRevision": null,
+                "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                "scene": null
+              },
+              "outputs": {
+                "documentRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb",
+                "legacyRevision": null,
+                "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                "scene": null
+              },
+              "steps": [
+                {
+                  "format": "ink-studio/pixel-edit-receipt",
+                  "version": 1,
+                  "command": {
+                    "runner": "sdk",
+                    "action": "edit",
+                    "options": {},
+                    "patch": {
+                      "id": "example-draw",
+                      "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                      "frame": "art",
+                      "operation": {
+                        "tool": "pencil",
+                        "layer": "ink",
+                        "points": [
+                          [
+                            2,
+                            1
+                          ],
+                          [
+                            3,
+                            1
+                          ]
+                        ],
+                        "swatch": "amber"
+                      },
+                      "destination": "raster"
+                    },
+                    "frame": "art"
+                  },
+                  "inputs": {
+                    "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49"
+                  },
+                  "status": "applied",
+                  "affectedTargets": [
+                    {
+                      "destination": "raster",
+                      "kind": "raster",
+                      "tool": "pencil",
+                      "frame": "art",
+                      "layer": "ink",
+                      "cel": "art/ink",
+                      "pixelCount": 2,
+                      "runs": [
+                        [
+                          1,
+                          2,
+                          2
+                        ]
+                      ]
+                    }
+                  ],
+                  "skippedHits": [],
+                  "outputs": {
+                    "kind": "raster",
+                    "documentRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb",
+                    "artifactRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb"
+                  }
+                }
+              ],
+              "revision": "8e948bb3bf8a983eccbe1704ee1bcec09e9386f5fa880fbbaffe88c112ec790e"
+            }
+          }
+        ]
+      },
+      "replay-batch": {
+        "request": "#/$defs/replay-batchCommand",
+        "result": "#/$defs/batchReceipt",
+        "required": [
+          "batch"
+        ],
+        "evidence": {
+          "/inputs": "The exact starting document, attached scene and retained render sidecars.",
+          "/steps": "Ordered pixel edit receipts with their own revisions, resolved targets and skipped hits.",
+          "/outputs": "The exact document, attached scene and sidecars after the transaction.",
+          "/revision": "Integrity digest of the recorded transaction and its evidence."
+        },
+        "examples": [
+          {
+            "command": {
+              "batch": {
+                "format": "ink-studio/pixel-edit-batch",
+                "version": 1,
+                "label": "Paint two badges",
+                "inputs": {
+                  "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                  "legacyRevision": null,
+                  "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                  "scene": null
+                },
+                "outputs": {
+                  "documentRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a",
+                  "legacyRevision": null,
+                  "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                  "scene": null
+                },
+                "steps": [
+                  {
+                    "format": "ink-studio/pixel-edit-receipt",
+                    "version": 1,
+                    "command": {
+                      "runner": "sdk",
+                      "action": "edit",
+                      "options": {},
+                      "patch": {
+                        "id": "example-draw",
+                        "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                        "frame": "art",
+                        "operation": {
+                          "tool": "pencil",
+                          "layer": "ink",
+                          "points": [
+                            [
+                              2,
+                              1
+                            ],
+                            [
+                              3,
+                              1
+                            ]
+                          ],
+                          "swatch": "amber"
+                        },
+                        "destination": "raster"
+                      },
+                      "frame": "art"
+                    },
+                    "inputs": {
+                      "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49"
+                    },
+                    "status": "applied",
+                    "affectedTargets": [
+                      {
+                        "destination": "raster",
+                        "kind": "raster",
+                        "tool": "pencil",
+                        "frame": "art",
+                        "layer": "ink",
+                        "cel": "art/ink",
+                        "pixelCount": 2,
+                        "runs": [
+                          [
+                            1,
+                            2,
+                            2
+                          ]
+                        ]
+                      }
+                    ],
+                    "skippedHits": [],
+                    "outputs": {
+                      "kind": "raster",
+                      "documentRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb",
+                      "artifactRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb"
+                    }
+                  },
+                  {
+                    "format": "ink-studio/pixel-edit-receipt",
+                    "version": 1,
+                    "command": {
+                      "runner": "sdk",
+                      "action": "edit",
+                      "options": {},
+                      "patch": {
+                        "id": "other-badge",
+                        "revision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb",
+                        "frame": "art",
+                        "operation": {
+                          "tool": "pencil",
+                          "layer": "ink",
+                          "points": [
+                            [
+                              4,
+                              2
+                            ]
+                          ],
+                          "swatch": "amber"
+                        },
+                        "destination": "raster"
+                      },
+                      "frame": "art"
+                    },
+                    "inputs": {
+                      "documentRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb"
+                    },
+                    "status": "applied",
+                    "affectedTargets": [
+                      {
+                        "destination": "raster",
+                        "kind": "raster",
+                        "tool": "pencil",
+                        "frame": "art",
+                        "layer": "ink",
+                        "cel": "art/ink",
+                        "pixelCount": 1,
+                        "runs": [
+                          [
+                            2,
+                            4,
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "skippedHits": [],
+                    "outputs": {
+                      "kind": "raster",
+                      "documentRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a",
+                      "artifactRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a"
+                    }
+                  }
+                ],
+                "revision": "41672a3d6da1677da8d932636987d3940c3bb26205ba866b07485ac653275f4d"
+              },
+              "format": "ink-studio/pixel-command",
+              "version": 1,
+              "action": "replay-batch"
+            },
+            "setup": [],
+            "result": {
+              "format": "ink-studio/pixel-edit-batch",
+              "version": 1,
+              "label": "Paint two badges",
+              "inputs": {
+                "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                "legacyRevision": null,
+                "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                "scene": null
+              },
+              "outputs": {
+                "documentRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a",
+                "legacyRevision": null,
+                "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                "scene": null
+              },
+              "steps": [
+                {
+                  "format": "ink-studio/pixel-edit-receipt",
+                  "version": 1,
+                  "command": {
+                    "runner": "sdk",
+                    "action": "edit",
+                    "options": {},
+                    "patch": {
+                      "id": "example-draw",
+                      "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                      "frame": "art",
+                      "operation": {
+                        "tool": "pencil",
+                        "layer": "ink",
+                        "points": [
+                          [
+                            2,
+                            1
+                          ],
+                          [
+                            3,
+                            1
+                          ]
+                        ],
+                        "swatch": "amber"
+                      },
+                      "destination": "raster"
+                    },
+                    "frame": "art"
+                  },
+                  "inputs": {
+                    "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49"
+                  },
+                  "status": "applied",
+                  "affectedTargets": [
+                    {
+                      "destination": "raster",
+                      "kind": "raster",
+                      "tool": "pencil",
+                      "frame": "art",
+                      "layer": "ink",
+                      "cel": "art/ink",
+                      "pixelCount": 2,
+                      "runs": [
+                        [
+                          1,
+                          2,
+                          2
+                        ]
+                      ]
+                    }
+                  ],
+                  "skippedHits": [],
+                  "outputs": {
+                    "kind": "raster",
+                    "documentRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb",
+                    "artifactRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb"
+                  }
+                },
+                {
+                  "format": "ink-studio/pixel-edit-receipt",
+                  "version": 1,
+                  "command": {
+                    "runner": "sdk",
+                    "action": "edit",
+                    "options": {},
+                    "patch": {
+                      "id": "other-badge",
+                      "revision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb",
+                      "frame": "art",
+                      "operation": {
+                        "tool": "pencil",
+                        "layer": "ink",
+                        "points": [
+                          [
+                            4,
+                            2
+                          ]
+                        ],
+                        "swatch": "amber"
+                      },
+                      "destination": "raster"
+                    },
+                    "frame": "art"
+                  },
+                  "inputs": {
+                    "documentRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb"
+                  },
+                  "status": "applied",
+                  "affectedTargets": [
+                    {
+                      "destination": "raster",
+                      "kind": "raster",
+                      "tool": "pencil",
+                      "frame": "art",
+                      "layer": "ink",
+                      "cel": "art/ink",
+                      "pixelCount": 1,
+                      "runs": [
+                        [
+                          2,
+                          4,
+                          1
+                        ]
+                      ]
+                    }
+                  ],
+                  "skippedHits": [],
+                  "outputs": {
+                    "kind": "raster",
+                    "documentRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a",
+                    "artifactRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a"
+                  }
+                }
+              ],
+              "revision": "41672a3d6da1677da8d932636987d3940c3bb26205ba866b07485ac653275f4d"
+            }
+          }
+        ]
+      },
+      "revalidate-batch": {
+        "request": "#/$defs/revalidate-batchCommand",
+        "result": "#/$defs/batchRevalidation",
+        "required": [
+          "batch"
+        ],
+        "evidence": {
+          "/valid": "Whether the recorded edits validate on the current asset.",
+          "/batch": "The proposed replacement receipt pinned to the current asset. Replay it to apply the proposal.",
+          "/preview": "Preview of the proposed transaction against the current asset.",
+          "/changes": "Steps whose resolved targets or hit evidence differ from the old receipt.",
+          "/failedStep": "Zero-based index of a rejected step when available.",
+          "/conflicts": "Why the batch could not be revalidated."
+        },
+        "examples": [
+          {
+            "command": {
+              "batch": {
+                "format": "ink-studio/pixel-edit-batch",
+                "version": 1,
+                "label": "Paint two badges",
+                "inputs": {
+                  "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                  "legacyRevision": null,
+                  "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                  "scene": null
+                },
+                "outputs": {
+                  "documentRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a",
+                  "legacyRevision": null,
+                  "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                  "scene": null
+                },
+                "steps": [
+                  {
+                    "format": "ink-studio/pixel-edit-receipt",
+                    "version": 1,
+                    "command": {
+                      "runner": "sdk",
+                      "action": "edit",
+                      "options": {},
+                      "patch": {
+                        "id": "example-draw",
+                        "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                        "frame": "art",
+                        "operation": {
+                          "tool": "pencil",
+                          "layer": "ink",
+                          "points": [
+                            [
+                              2,
+                              1
+                            ],
+                            [
+                              3,
+                              1
+                            ]
+                          ],
+                          "swatch": "amber"
+                        },
+                        "destination": "raster"
+                      },
+                      "frame": "art"
+                    },
+                    "inputs": {
+                      "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49"
+                    },
+                    "status": "applied",
+                    "affectedTargets": [
+                      {
+                        "destination": "raster",
+                        "kind": "raster",
+                        "tool": "pencil",
+                        "frame": "art",
+                        "layer": "ink",
+                        "cel": "art/ink",
+                        "pixelCount": 2,
+                        "runs": [
+                          [
+                            1,
+                            2,
+                            2
+                          ]
+                        ]
+                      }
+                    ],
+                    "skippedHits": [],
+                    "outputs": {
+                      "kind": "raster",
+                      "documentRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb",
+                      "artifactRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb"
+                    }
+                  },
+                  {
+                    "format": "ink-studio/pixel-edit-receipt",
+                    "version": 1,
+                    "command": {
+                      "runner": "sdk",
+                      "action": "edit",
+                      "options": {},
+                      "patch": {
+                        "id": "other-badge",
+                        "revision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb",
+                        "frame": "art",
+                        "operation": {
+                          "tool": "pencil",
+                          "layer": "ink",
+                          "points": [
+                            [
+                              4,
+                              2
+                            ]
+                          ],
+                          "swatch": "amber"
+                        },
+                        "destination": "raster"
+                      },
+                      "frame": "art"
+                    },
+                    "inputs": {
+                      "documentRevision": "618093d20529bf521ba12da4cab9bbcefcfd0eb6eba353f9c367e220cb14effb"
+                    },
+                    "status": "applied",
+                    "affectedTargets": [
+                      {
+                        "destination": "raster",
+                        "kind": "raster",
+                        "tool": "pencil",
+                        "frame": "art",
+                        "layer": "ink",
+                        "cel": "art/ink",
+                        "pixelCount": 1,
+                        "runs": [
+                          [
+                            2,
+                            4,
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "skippedHits": [],
+                    "outputs": {
+                      "kind": "raster",
+                      "documentRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a",
+                      "artifactRevision": "f253bfb6aae3875b37724767ea4314d9deeac63a36af7d0512c90c8d0f53e51a"
+                    }
+                  }
+                ],
+                "revision": "41672a3d6da1677da8d932636987d3940c3bb26205ba866b07485ac653275f4d"
+              },
+              "options": {
+                "exact": true
+              },
+              "format": "ink-studio/pixel-command",
+              "version": 1,
+              "action": "revalidate-batch"
+            },
+            "setup": [
+              {
+                "patch": {
+                  "id": "border",
+                  "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                  "frame": "art",
+                  "operation": {
+                    "tool": "pencil",
+                    "layer": "ink",
+                    "points": [
+                      [
+                        0,
+                        0
+                      ]
+                    ],
+                    "swatch": "amber"
+                  }
+                },
+                "format": "ink-studio/pixel-command",
+                "version": 1,
+                "action": "draw"
+              }
+            ],
+            "result": {
+              "format": "ink-studio/pixel-batch-revalidation",
+              "version": 1,
+              "recordedRevision": "41672a3d6da1677da8d932636987d3940c3bb26205ba866b07485ac653275f4d",
+              "valid": true,
+              "batch": {
+                "format": "ink-studio/pixel-edit-batch",
+                "version": 1,
+                "label": "Paint two badges",
+                "inputs": {
+                  "documentRevision": "4920cec57c50f14274c25c14d0733faacf1754381193a5d26abbde5e86a0bca9",
+                  "legacyRevision": null,
+                  "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                  "scene": null
+                },
+                "outputs": {
+                  "documentRevision": "6753d9bd62a33cd42b04bd6ee184a1a4b9db2f81fb4a4259969b5462ec231940",
+                  "legacyRevision": null,
+                  "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                  "scene": null
+                },
+                "steps": [
+                  {
+                    "format": "ink-studio/pixel-edit-receipt",
+                    "version": 1,
+                    "command": {
+                      "runner": "sdk",
+                      "action": "edit",
+                      "options": {},
+                      "patch": {
+                        "id": "example-draw",
+                        "revision": "4920cec57c50f14274c25c14d0733faacf1754381193a5d26abbde5e86a0bca9",
+                        "frame": "art",
+                        "operation": {
+                          "tool": "pencil",
+                          "layer": "ink",
+                          "points": [
+                            [
+                              2,
+                              1
+                            ],
+                            [
+                              3,
+                              1
+                            ]
+                          ],
+                          "swatch": "amber"
+                        },
+                        "destination": "raster"
+                      },
+                      "frame": "art"
+                    },
+                    "inputs": {
+                      "documentRevision": "4920cec57c50f14274c25c14d0733faacf1754381193a5d26abbde5e86a0bca9"
+                    },
+                    "status": "applied",
+                    "affectedTargets": [
+                      {
+                        "destination": "raster",
+                        "kind": "raster",
+                        "tool": "pencil",
+                        "frame": "art",
+                        "layer": "ink",
+                        "cel": "art/ink",
+                        "pixelCount": 2,
+                        "runs": [
+                          [
+                            1,
+                            2,
+                            2
+                          ]
+                        ]
+                      }
+                    ],
+                    "skippedHits": [],
+                    "outputs": {
+                      "kind": "raster",
+                      "documentRevision": "d2d4284816ee31df338fcbc346e464967ddab54fbb0dc05547b84649a3559d54",
+                      "artifactRevision": "d2d4284816ee31df338fcbc346e464967ddab54fbb0dc05547b84649a3559d54"
+                    }
+                  },
+                  {
+                    "format": "ink-studio/pixel-edit-receipt",
+                    "version": 1,
+                    "command": {
+                      "runner": "sdk",
+                      "action": "edit",
+                      "options": {},
+                      "patch": {
+                        "id": "other-badge",
+                        "revision": "d2d4284816ee31df338fcbc346e464967ddab54fbb0dc05547b84649a3559d54",
+                        "frame": "art",
+                        "operation": {
+                          "tool": "pencil",
+                          "layer": "ink",
+                          "points": [
+                            [
+                              4,
+                              2
+                            ]
+                          ],
+                          "swatch": "amber"
+                        },
+                        "destination": "raster"
+                      },
+                      "frame": "art"
+                    },
+                    "inputs": {
+                      "documentRevision": "d2d4284816ee31df338fcbc346e464967ddab54fbb0dc05547b84649a3559d54"
+                    },
+                    "status": "applied",
+                    "affectedTargets": [
+                      {
+                        "destination": "raster",
+                        "kind": "raster",
+                        "tool": "pencil",
+                        "frame": "art",
+                        "layer": "ink",
+                        "cel": "art/ink",
+                        "pixelCount": 1,
+                        "runs": [
+                          [
+                            2,
+                            4,
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "skippedHits": [],
+                    "outputs": {
+                      "kind": "raster",
+                      "documentRevision": "6753d9bd62a33cd42b04bd6ee184a1a4b9db2f81fb4a4259969b5462ec231940",
+                      "artifactRevision": "6753d9bd62a33cd42b04bd6ee184a1a4b9db2f81fb4a4259969b5462ec231940"
+                    }
+                  }
+                ],
+                "revalidatedFrom": "41672a3d6da1677da8d932636987d3940c3bb26205ba866b07485ac653275f4d",
+                "revision": "69b19675f2c3963eb09778520c383c8902139d0d449b06abfece22181b3c60d2"
+              },
+              "preview": {
+                "format": "ink-studio/pixel-edit-preview",
+                "version": 1,
+                "valid": true,
+                "pixelCount": 3,
+                "pixels": [
+                  {
+                    "frame": "art",
+                    "at": [
+                      2,
+                      1
+                    ],
+                    "before": {
+                      "layer": null,
+                      "cel": null,
+                      "swatch": null,
+                      "protected": false,
+                      "underneath": {
+                        "layer": null,
+                        "cel": null,
+                        "swatch": null
+                      },
+                      "color": null
+                    },
+                    "after": {
+                      "layer": "ink",
+                      "cel": "art/ink",
+                      "swatch": "amber",
+                      "protected": false,
+                      "underneath": {
+                        "layer": null,
+                        "cel": null,
+                        "swatch": null
+                      },
+                      "color": "#da8c44"
+                    }
+                  },
+                  {
+                    "frame": "art",
+                    "at": [
+                      3,
+                      1
+                    ],
+                    "before": {
+                      "layer": null,
+                      "cel": null,
+                      "swatch": null,
+                      "protected": false,
+                      "underneath": {
+                        "layer": null,
+                        "cel": null,
+                        "swatch": null
+                      },
+                      "color": null
+                    },
+                    "after": {
+                      "layer": "ink",
+                      "cel": "art/ink",
+                      "swatch": "amber",
+                      "protected": false,
+                      "underneath": {
+                        "layer": null,
+                        "cel": null,
+                        "swatch": null
+                      },
+                      "color": "#da8c44"
+                    }
+                  },
+                  {
+                    "frame": "art",
+                    "at": [
+                      4,
+                      2
+                    ],
+                    "before": {
+                      "layer": null,
+                      "cel": null,
+                      "swatch": null,
+                      "protected": false,
+                      "underneath": {
+                        "layer": null,
+                        "cel": null,
+                        "swatch": null
+                      },
+                      "color": null
+                    },
+                    "after": {
+                      "layer": "ink",
+                      "cel": "art/ink",
+                      "swatch": "amber",
+                      "protected": false,
+                      "underneath": {
+                        "layer": null,
+                        "cel": null,
+                        "swatch": null
+                      },
+                      "color": "#da8c44"
+                    }
+                  }
+                ],
+                "sources": [],
+                "targets": [
+                  {
+                    "destination": "raster",
+                    "kind": "raster",
+                    "tool": "pencil",
+                    "frame": "art",
+                    "layer": "ink",
+                    "cel": "art/ink",
+                    "pixelCount": 2,
+                    "runs": [
+                      [
+                        1,
+                        2,
+                        2
+                      ]
+                    ]
+                  },
+                  {
+                    "destination": "raster",
+                    "kind": "raster",
+                    "tool": "pencil",
+                    "frame": "art",
+                    "layer": "ink",
+                    "cel": "art/ink",
+                    "pixelCount": 1,
+                    "runs": [
+                      [
+                        2,
+                        4,
+                        1
+                      ]
+                    ]
+                  }
+                ],
+                "conflicts": [],
+                "diff": {
+                  "cells": [
+                    {
+                      "frame": "art",
+                      "at": [
+                        2,
+                        1
+                      ],
+                      "before": {
+                        "layer": null,
+                        "cel": null,
+                        "swatch": null,
+                        "color": null,
+                        "alpha": 0,
+                        "protected": false
+                      },
+                      "after": {
+                        "layer": "ink",
+                        "cel": "art/ink",
+                        "swatch": "amber",
+                        "color": "#da8c44",
+                        "alpha": 255,
+                        "protected": false
+                      }
+                    },
+                    {
+                      "frame": "art",
+                      "at": [
+                        3,
+                        1
+                      ],
+                      "before": {
+                        "layer": null,
+                        "cel": null,
+                        "swatch": null,
+                        "color": null,
+                        "alpha": 0,
+                        "protected": false
+                      },
+                      "after": {
+                        "layer": "ink",
+                        "cel": "art/ink",
+                        "swatch": "amber",
+                        "color": "#da8c44",
+                        "alpha": 255,
+                        "protected": false
+                      }
+                    },
+                    {
+                      "frame": "art",
+                      "at": [
+                        4,
+                        2
+                      ],
+                      "before": {
+                        "layer": null,
+                        "cel": null,
+                        "swatch": null,
+                        "color": null,
+                        "alpha": 0,
+                        "protected": false
+                      },
+                      "after": {
+                        "layer": "ink",
+                        "cel": "art/ink",
+                        "swatch": "amber",
+                        "color": "#da8c44",
+                        "alpha": 255,
+                        "protected": false
+                      }
+                    },
+                    {
+                      "frame": "art",
+                      "layer": "ink",
+                      "at": [
+                        2,
+                        1
+                      ],
+                      "before": null,
+                      "after": {
+                        "cel": "art/ink",
+                        "swatch": "amber",
+                        "color": "#da8c44",
+                        "alpha": 255,
+                        "knockout": false,
+                        "clip": 255
+                      }
+                    },
+                    {
+                      "frame": "art",
+                      "layer": "ink",
+                      "at": [
+                        3,
+                        1
+                      ],
+                      "before": null,
+                      "after": {
+                        "cel": "art/ink",
+                        "swatch": "amber",
+                        "color": "#da8c44",
+                        "alpha": 255,
+                        "knockout": false,
+                        "clip": 255
+                      }
+                    },
+                    {
+                      "frame": "art",
+                      "layer": "ink",
+                      "at": [
+                        4,
+                        2
+                      ],
+                      "before": null,
+                      "after": {
+                        "cel": "art/ink",
+                        "swatch": "amber",
+                        "color": "#da8c44",
+                        "alpha": 255,
+                        "knockout": false,
+                        "clip": 255
+                      }
+                    }
+                  ],
+                  "grids": [],
+                  "materials": [],
+                  "geometry": [],
+                  "other": [],
+                  "rendered": [],
+                  "renderErrors": [],
+                  "skippedHits": [],
+                  "protection": {
+                    "wouldChange": false,
+                    "details": [],
+                    "geometry": [],
+                    "cells": [],
+                    "renderedCells": [],
+                    "blocked": []
+                  }
+                }
+              },
+              "changes": [],
+              "conflicts": []
             }
           }
         ]

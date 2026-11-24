@@ -1,6 +1,7 @@
 'use strict';
 
 const Commands = require('./pixel-commands.js');
+const Batch = require('./pixel-edit-batch.js');
 const Destinations = require('./pixel-edit-destinations.js');
 const Preset = require('../src/pixel-export-preset.js');
 const { createDefinitions,ref,constant,choice,either,object,nullable,types,array,num,int,tuple,prop } =
@@ -13,7 +14,23 @@ const history = open({ undo:array(text),redo:array(text) });
 const code = name=>name.replace(/-([a-z])/g,(_,letter)=>letter.toUpperCase());
 const pointer = name=>'#/$defs/'+name;
 
+const batchEvidence = ['batchReceipt',{
+  '/inputs':'The exact starting document, attached scene and retained render sidecars.',
+  '/steps':'Ordered pixel edit receipts with their own revisions, resolved targets and skipped hits.',
+  '/outputs':'The exact document, attached scene and sidecars after the transaction.',
+  '/revision':'Integrity digest of the recorded transaction and its evidence.'
+}];
+
 const evidence = {
+  batch:batchEvidence,'record-batch':batchEvidence,'replay-batch':batchEvidence,
+  'revalidate-batch':['batchRevalidation',{
+    '/valid':'Whether the recorded edits validate on the current asset.',
+    '/batch':'The proposed replacement receipt pinned to the current asset. Replay it to apply the proposal.',
+    '/preview':'Preview of the proposed transaction against the current asset.',
+    '/changes':'Steps whose resolved targets or hit evidence differ from the old receipt.',
+    '/failedStep':'Zero-based index of a rejected step when available.',
+    '/conflicts':'Why the batch could not be revalidated.'
+  }],
   inspect:['inspectResult',{
     '/revision':'Document revision for follow-up edits.',
     '/composite':'Visible layer, cel, blended RGB and alpha at the sampled pixel.',
@@ -122,6 +139,10 @@ function examples(createEditor) {
   const { targetRevision } = editor.select(shadow);
   const draw = edit('draw',{tool:'pencil',layer:'ink',points:[[2,1],[3,1]],swatch:'amber'});
   const begin = make('begin',{label:'Paint the badge'}), undo = make('undo');
+  const batch = make('batch',{label:'Paint two badges',revision,commands:[draw,
+    {...draw,patch:{...draw.patch,id:'other-badge',revision:undefined,operation:{...draw.patch.operation,points:[[4,2]]}}}]});
+  const recorded = createEditor(document).execute(batch);
+  const other = {...draw,patch:{...draw.patch,id:'border',operation:{...draw.patch.operation,points:[[0,0]]}}};
   const inputs = {
     validate:[[make('validate')]], inspect:[[make('inspect',{at:[1,1],options:{frame:'art'}})]],
     select:[[make('select',{query:{type:'rectangle',rect:[1,1,2,1]}})],
@@ -138,6 +159,9 @@ function examples(createEditor) {
     begin:[[begin]], commit:[[make('commit'),[begin,draw]]], cancel:[[make('cancel'),[begin,draw]]],
     undo:[[undo,[draw]]],redo:[[make('redo'),[draw,undo]]],
     replay:[[make('replay',{receipt:editor.execute(draw)})]],
+    batch:[[batch]],'record-batch':[[make('record-batch'),[begin,draw]]],
+    'replay-batch':[[make('replay-batch',{batch:recorded})]],
+    'revalidate-batch':[[make('revalidate-batch',{batch:recorded,options:{exact:true}}),[other]]],
     export:[[make('export',{artifact:'document'})],[make('export',{artifact:'png',options:{frame:'art',layer:'ink'}})]]
   };
   return Object.fromEntries(Object.entries(inputs).map(([action,rows])=>[action,rows.map(([command,setup=[]])=>{
@@ -178,8 +202,23 @@ function resultDefinitions(artifacts) {
   };
   const applied = open({...commonReceipt,status:constant('applied'),
     outputs:open({kind:text,documentRevision:revision,artifactRevision:revision})});
+  const batchState = object({documentRevision:revision,legacyRevision:nullable(revision),renderRevision:revision,
+    scene:nullable(object({ref:text,revision},['ref','revision']))},['documentRevision','legacyRevision','renderRevision','scene']);
   return {
-    conflict,history,appliedReceipt:applied,
+    conflict,history,appliedReceipt:applied,batchState,
+    batchReceipt:object({format:constant(Batch.format),version:constant(1),label:text,inputs:ref('batchState'),
+      outputs:ref('batchState'),steps:array(ref('replayReceipt'),1,Batch.maxSteps),revision,revalidatedFrom:revision},
+    ['format','version','label','inputs','outputs','steps','revision']),
+    batchRejection:object({format:constant(Batch.rejectionFormat),version:constant(1),
+      action:choice('batch','record-batch','replay-batch'),recordedRevision:revision,failedStep:natural,
+      conflicts:array(conflict),editReceipt:ref('editReceipt')},['format','version','action','conflicts']),
+    batchRevalidation:{
+      ...object({format:constant(Batch.reviewFormat),version:constant(1),recordedRevision:revision,valid:bool,
+        batch:ref('batchReceipt'),preview:ref('previewResult'),changes:array(open({step:natural,before:obj,after:obj})),
+        failedStep:natural,conflicts:array(conflict),editReceipt:either(ref('editReceipt'),ref('batchRejection'))},
+      ['format','version','valid','conflicts']),
+      if:{properties:{valid:constant(true)}},then:{required:['batch','preview','changes']},else:{not:prop('batch')}
+    },
     replayReceipt:{allOf:[ref('appliedReceipt'),{properties:{command:{properties:{runner:constant('sdk')}}}}]},
     editReceipt:either(ref('appliedReceipt'),open({...commonReceipt,status:constant('rejected'),outputs:{type:'null'},conflicts:array(conflict)})),
     inspectResult:object({revision,frame:id,at:pixel,layer:nullable(id),swatch:nullable(id),protected:bool,
@@ -341,6 +380,7 @@ function buildSchema({ createEditor,surfaceDefinitions }) {
   const editDestinations = addDestinations(defs);
   const samples = examples(createEditor), byAction = {};
   const fields = { at:pixel,query:ref('selectionQuery'),label:text,receipt:ref('replayReceipt'),
+    batch:ref('batchReceipt'),revision,commands:array(ref('batchStep'),1,Batch.maxSteps),
     edit:{oneOf:edits.map(action=>ref(action+'Command'))},artifact:choice(...exportArtifacts) };
   const optionTypes = {frame:id,cel,layer:id,binding:id,destinations:{...array(text),uniqueItems:true},references:bool,
     limit:natural,shotHitFrame:int(0,1e9),exact:bool,targetRevision:revision};
@@ -361,6 +401,11 @@ function buildSchema({ createEditor,surfaceDefinitions }) {
     byAction[action] = {request:pointer(schemaName),result:pointer(result),required:requiredFields[action] ?? [],
       evidence:resultEvidence,examples:samples[action]};
   }
+  defs.batchStep = {oneOf:edits.map(action=>{
+    const command = defs[action+'Command'], patch = defs[action === 'apply' ? 'editPatch' : action+'Patch'];
+    const {examples:_,...shape} = command;
+    return {...shape,properties:{...shape.properties,patch:{...patch,required:patch.required.filter(key=>key!=='revision')}}};
+  })};
   const schema = {
     $schema:'https://json-schema.org/draft/2020-12/schema',
     $id:'https://raw.githubusercontent.com/siliconjungle/shapeshift-labs-ink-studio/main/docs/reference/'+filename,

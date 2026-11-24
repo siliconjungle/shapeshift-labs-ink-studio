@@ -45,7 +45,8 @@ const { pose:poseDiff } = require('./diarama-pose.js');
 const SplatPreview = require('./pixel-splat-preview.js');
 const Sessions = require('./pixel-edit-session.js');
 const PixelCommands = require('./pixel-commands.js');
-const { isRevision } = require('./pixel-edit-revisions.js');
+const Batch = require('./pixel-edit-batch.js');
+const { isRevision,digest } = require('./pixel-edit-revisions.js');
 
 const format = 'ink-studio/pixel-art';
 const receiptFormat = 'ink-studio/pixel-edit-receipt';
@@ -2006,9 +2007,27 @@ function openEditorSession(directory,{ sceneEditor, env, resolveScene } = {}) {
     historyLimit:saved.journal?.historyLimit, sessionDirectory:loaded.directory },loaded);
 }
 
-function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimit, sessionDirectory } = {}, loaded) {
+function revalidatedPatch(editor,step,context) {
+  const patch = structuredClone(step.command.patch);
+  const design = editor.snapshot(), route = Destinations.resolve(design,patch.destination);
+  patch.revision = fingerprint(design);
+  if (patch.frame === undefined && patch.cel === undefined && step.command.frame)
+    patch.frame = step.command.frame;
+  if (route.binding)
+    patch.sourceRevision = editor.targets(patch.destination,{ ...context,limit:1 }).sourceRevision;
+  if (route.destination.kind === 'selections' &&
+      (patch.operation.targetRevision !== undefined || patch.operation.sources !== undefined)) {
+    const { query,layer,cel } = patch.operation;
+    const observed = editor.select(query,{ ...context,frame:patch.frame,layer,cel });
+    if (patch.operation.targetRevision !== undefined) patch.operation.targetRevision = observed.targetRevision;
+    if (patch.operation.sources !== undefined) patch.operation.sources = observed.sources ?? [];
+  }
+  return patch;
+}
+
+function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimit, sessionDirectory } = {}, loaded, forkState) {
   const original = loaded?.contents.baseline ?? openDesign(source);
-  const baseline = { ...original, renderOutputs:{}, receipts:[], verifiedReplays:[] };
+  const baseline = { ...original, ...forkState,renderOutputs:forkState?.renderOutputs ?? {}, receipts:[], verifiedReplays:[] };
   const { authoring } = require('../index.js').load().KIT;
   const journal = sceneEditor === undefined
     ? authoring.document(undefined,{ historyLimit })
@@ -2085,10 +2104,15 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
   }
 
   function editContext(context, grouped) {
+    const sceneRef = context?.sceneRef ?? (sceneEditor ? sceneName : undefined);
+    const captureSelection = context?.captureWithWorld ? settings=>{
+      const world = sceneEditor && sameScene(sceneName,sceneRef) ? sceneEditor.build() : undefined;
+      return context.captureWithWorld(settings,world && withRenderAssets(world,renderOptions(sceneName)));
+    } : context?.captureSelection ?? (context?.renderFrame && (()=>context.renderFrame));
     return {
       time:context?.time,splatView:context?.view,splatDiagnostics:context?.diagnostics,
-      captureSelection:context?.captureSelection ?? (context?.renderFrame && (()=>context.renderFrame)),
-      sceneRef:context?.sceneRef ?? (sceneEditor ? sceneName : undefined),
+      captureSelection,
+      sceneRef,
       renderOptions,ownsWorld:!context?.world,
       scene(binding) {
         if (grouped && !sceneEditor)
@@ -2140,6 +2164,127 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
         throw error;
       }
     });
+  }
+
+  function batchAnchor(draft = state(),sceneSnapshot = sceneEditor?.snapshot()) {
+    return {
+      documentRevision:fingerprint(draft.design),legacyRevision:draft.legacyRevision,
+      renderRevision:digest(draft.renderOutputs),
+      scene:sceneEditor ? { ref:sceneName,revision:digest([sceneSnapshot,sceneDependencies(sceneEditor)]) } : null
+    };
+  }
+
+  function requireNoDraft() {
+    if (journal.pending()) throw Preview.conflict('active-transaction','Finish the open pixel transaction before running a batch');
+  }
+
+  function settleBatch(label,editSteps,finish) {
+    let result;
+    // Check the finalized snapshot after the existing resolution hooks and before commit.
+    const unhook = journal.beforeCommit(()=>{ result = finish(); });
+    try {
+      journal.transact(label,editSteps);
+      return result;
+    } finally { unhook(); }
+  }
+
+  function applyBatch(raw,context) {
+    try {
+      requireNoDraft();
+      const { revision,label,commands } = Batch.plan(raw), inputs = batchAnchor();
+      if (revision !== inputs.documentRevision)
+        throw Preview.conflict('stale-document','Pixel batch needs its observed base revision',
+          { expected:revision,actual:inputs.documentRevision });
+      const receipts = [];
+      return settleBatch(label,()=>{
+        for (const [index,step] of commands.entries()) Batch.runStep(index,()=>{
+          const command = PixelCommands.batchCommand(step), { design } = state();
+          const request = PixelCommands.request(design,command);
+          const patch = request.revision === undefined ? { ...request,revision:fingerprint(design) } : request;
+          apply(patch,{...context,...command.options});
+          receipts.push(state().receipts.at(-1));
+        });
+      },()=>Batch.seal(label,inputs,batchAnchor(),receipts));
+    } catch (error) { return Batch.rejected('batch',error); }
+  }
+
+  function replayBatch(raw,context) {
+    try {
+      requireNoDraft();
+      const recorded = Batch.read(raw,step=>replayReceipt(step,'sdk'));
+      Batch.checkInputs(recorded.inputs,batchAnchor());
+      return settleBatch(recorded.label,()=>{
+        for (const [index,step] of recorded.steps.entries()) Batch.runStep(index,()=>apply(step.command.patch,context,step));
+      },()=>{
+        const actual = batchAnchor();
+        if (!equal(actual,recorded.outputs))
+          throw Preview.conflict('batch-output-mismatch','Replay did not reproduce the recorded transaction outputs',
+            { expected:recorded.outputs,actual });
+        return recorded;
+      });
+    } catch (error) { return Batch.rejected('replay-batch',error,raw?.revision); }
+  }
+
+  function detached(draft = state(),snapshot = sceneEditor?.snapshot(),context = {}) {
+    const scene = sceneEditor?.fork(snapshot);
+    const sandbox = createEditor(draft.design,{sceneEditor:scene,sceneRef:sceneName,historyLimit:0},undefined,{
+      legacyRevision:draft.legacyRevision,renderOutputs:structuredClone(draft.renderOutputs)
+    });
+    const adapters = scene && context.scene ? {...context,scene(binding) {
+      const supplied = context.scene(binding);
+      if (!supplied || supplied.editor !== sceneEditor) return supplied;
+      const revision = supplied.revision === fingerprint(sceneEditor.snapshot()) ?
+        fingerprint(scene.snapshot()) : supplied.revision;
+      return { ...supplied,editor:scene,revision };
+    }} : context;
+    return { sandbox,adapters };
+  }
+
+  function recordBatch(context) {
+    try {
+      const before = journal.transactionBase();
+      if (!before) throw Preview.conflict('missing-transaction','Open a pixel transaction before recording a batch');
+      const content = before.entities[slot]?.content, draft = state();
+      const base = content === undefined ? baseline : JSON.parse(content);
+      const steps = Batch.steps(draft.receipts.slice(base.receipts.length));
+      const label = journal.exportSession().draft.label;
+      const recorded = Batch.seal(label,batchAnchor(base,before.environment),batchAnchor(),steps);
+      const { sandbox,adapters } = detached(base,before.environment,context);
+      try {
+        sandbox.replayBatch(recorded,adapters);
+      } catch (error) {
+        throw Preview.conflict('unrecorded-changes','The draft cannot be reproduced by its pixel edit steps',
+          { cause:Batch.failure(error) });
+      }
+      return recorded;
+    } catch (error) { return Batch.rejected('record-batch',error); }
+  }
+
+  function revalidateBatch(raw,context = {}) {
+    const report = { format:Batch.reviewFormat,version:1,
+      ...(isRevision(raw?.revision) && {recordedRevision:raw.revision}) };
+    try {
+      requireNoDraft();
+      const recorded = Batch.read(raw,step=>replayReceipt(step,'sdk'));
+      const { sandbox,adapters } = detached(state(),sceneEditor?.snapshot(),context);
+      const changes = [];
+      sandbox.begin(recorded.label);
+      for (const [index,step] of recorded.steps.entries()) Batch.runStep(index,()=>{
+        const patch = revalidatedPatch(sandbox,step,adapters);
+        const frame = step.command.options.shotHitFrame;
+        const current = sandbox.execute(PixelCommands.envelope('apply',{patch,options:{shotHitFrame:frame}}),adapters);
+        Batch.verifyTarget(step,current);
+        const evidence = Batch.evidence(step,current);
+        if (evidence) changes.push({step:index,...evidence});
+      });
+      const preview = sandbox.previewChanges({ ...adapters,exact:context.exact ?? false });
+      if (!preview.valid) return { ...report,valid:false,preview,conflicts:preview.conflicts };
+      const fresh = sandbox.recordBatch(adapters);
+      const batch = Batch.seal(fresh.label,fresh.inputs,fresh.outputs,fresh.steps,recorded.revision);
+      return { ...report,valid:true,batch,preview,changes,conflicts:[] };
+    } catch (error) {
+      return { ...report,valid:false,...Batch.failure(error) };
+    }
   }
 
   function previewChanges(options = {}) {
@@ -2280,6 +2425,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
       return inspectTargets(state().design,destination,editContext(options,false),options.limit,options);
     },
     apply: (patch,context) => apply(patch,context),
+    applyBatch,recordBatch,replayBatch,revalidateBatch,
     receipts: () => structuredClone(state().receipts),
     replay(raw,context) {
       const receipt = replayReceipt(raw,'sdk');
@@ -3304,7 +3450,7 @@ function exportSessionArtifact(editor,directory,opt) {
   return { artifact,file:out };
 }
 
-function runSessionPixelCommand(editor,directory,input,opt,capture,attachedScene) {
+function runSessionPixelCommand(editor,directory,input,opt,capture) {
   const sceneRef = opt.scene, sourceFile = opt['source-view'];
   if (Object.keys(opt).some(key=>!['scene','source-view','out'].includes(key)) ||
       [sceneRef,sourceFile].some(value=>value !== undefined && !reference(value)))
@@ -3312,14 +3458,15 @@ function runSessionPixelCommand(editor,directory,input,opt,capture,attachedScene
   const inputs = [input,sceneRef,sourceFile].filter(reference);
   const out = opt.out === undefined ? undefined : sessionOutput(directory,opt.out,inputs);
   const view = sourceFile && ViewSource.unpack(read(sourceFile));
-  const captureSelection = view ? ()=>view : sceneRef && capture ? settings=>capture(sceneRef,{
-    ...settings,...(editor.sceneEditor && sameScene(attachedScene,sceneRef) && { sourceWorld:editor.sceneEditor.build() })
+  const captureWithWorld = sceneRef && capture && !view ? (settings,sourceWorld)=>capture(sceneRef,{
+    ...settings,...(sourceWorld && {sourceWorld})
   }) : undefined;
+  const captureSelection = view ? ()=>view : undefined;
   const command = read(input);
   try {
-    const result = editor.execute(command,{ captureSelection,sceneRef,
+    const result = editor.execute(command,{ captureSelection,captureWithWorld,sceneRef,
       directory:path.dirname(path.resolve(input)),inputs:[...inputs,...(out ? [out] : [])] });
-    if (command.action === 'preview' && !result.valid) process.exitCode = 2;
+    if (['preview','revalidate-batch'].includes(command.action) && !result.valid) process.exitCode = 2;
     return { result,out };
   } catch (error) {
     if (command.action === 'select') return { result:selectConflict(error),out };
@@ -3364,7 +3511,7 @@ function sessionCommand(pos,opt,{ scene,capture,view }) {
         ...settings,...(editor.sceneEditor && sameScene(attachedScene,opt.scene) && { sourceWorld:editor.sceneEditor.build() })
       }) : undefined;
     if (action === 'run') {
-      ({ result,out:reportFile } = runSessionPixelCommand(editor,directory,input,opt,capture,attachedScene));
+      ({ result,out:reportFile } = runSessionPixelCommand(editor,directory,input,opt,capture));
     } else if (action === 'begin') {
       run(action,{ label:opt.label });
     } else if (PixelCommands.edits.includes(action)) {
