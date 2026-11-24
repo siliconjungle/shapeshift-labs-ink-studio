@@ -5487,6 +5487,269 @@
       ],
       "additionalProperties": false
     },
+    "meshCutRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "split": {
+          "type": "boolean"
+        },
+        "tolerance": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "cap": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "none"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "ngon"
+                },
+                "material": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "kind",
+                "material"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "triangles"
+                },
+                "material": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "kind",
+                "material"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "plane": {
+          "type": "object",
+          "properties": {
+            "origin": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "minItems": 3,
+              "items": false
+            },
+            "normal": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "minItems": 3,
+              "items": false
+            }
+          },
+          "required": [
+            "origin",
+            "normal"
+          ],
+          "additionalProperties": false
+        },
+        "knife": {
+          "type": "object",
+          "properties": {
+            "projection": {
+              "type": "object",
+              "properties": {
+                "origin": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "minItems": 3,
+                  "items": false
+                },
+                "right": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "minItems": 3,
+                  "items": false
+                },
+                "up": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "minItems": 3,
+                  "items": false
+                }
+              },
+              "required": [
+                "origin",
+                "right",
+                "up"
+              ],
+              "additionalProperties": false
+            },
+            "path": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 2,
+                "items": false
+              },
+              "minItems": 2,
+              "maxItems": 65
+            },
+            "selection": {
+              "type": "object",
+              "properties": {
+                "format": {
+                  "const": "ink-studio/mesh-selection"
+                },
+                "version": {
+                  "const": 1
+                },
+                "mesh": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "revision": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "domain": {
+                  "enum": [
+                    "vertices",
+                    "edges",
+                    "faces"
+                  ]
+                },
+                "ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  }
+                }
+              },
+              "required": [
+                "format",
+                "version",
+                "mesh",
+                "revision",
+                "domain",
+                "ids"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "projection",
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "plane"
+          ]
+        },
+        {
+          "required": [
+            "knife"
+          ]
+        }
+      ]
+    },
     "meshTopologyOperation": {
       "type": "object",
       "properties": {
@@ -5495,6 +5758,9 @@
         },
         "repair": {
           "$ref": "#/$defs/meshRepairRequest"
+        },
+        "cut": {
+          "$ref": "#/$defs/meshCutRequest"
         },
         "patch": {
           "type": "object",
@@ -5596,6 +5862,26 @@
                           ],
                           "minItems": 2,
                           "items": false
+                        },
+                        "attributes": {
+                          "type": "object",
+                          "properties": {},
+                          "required": [],
+                          "additionalProperties": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                },
+                                "minItems": 1,
+                                "maxItems": 4
+                              }
+                            ]
+                          }
                         }
                       },
                       "required": [
@@ -5767,6 +6053,11 @@
         {
           "required": [
             "repair"
+          ]
+        },
+        {
+          "required": [
+            "cut"
           ]
         }
       ],
@@ -16575,7 +16866,7 @@
         },
         "scope": "Bound frame and scene. Use targets to pin sourceRevision before editing.",
         "evidence": {
-          "/affectedTargets": "Stable element IDs, exact topology changes, transform, snap, and repair evidence, binding impact and bake validity.",
+          "/affectedTargets": "Stable element IDs, exact topology changes, transform, snap, repair, and cut evidence, binding impact and bake validity.",
           "/inputs/sourceRevision": "Observed source fingerprint for the same destination and binding."
         }
       },

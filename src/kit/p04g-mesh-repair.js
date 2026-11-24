@@ -43,6 +43,7 @@
       const compact = [];
       function retain(kept, lost) {
         if (!sameUV(kept.uv, lost.uv)) throw new RangeError('Weld would collapse different corner UVs on ' + face.id);
+        if (!equal(kept.attributes, lost.attributes)) throw new RangeError('Weld would collapse different corner attributes on ' + face.id);
         corners.push({ from: lost.id, to: kept.id });
       }
       for (const corner of ring) {
@@ -72,6 +73,10 @@
     const raw = V.cross(u, v), length = V.len(raw);
     if (!length) throw new RangeError('Dissolve needs a stable face plane');
     const normal = V.mul(raw, 1 / length);
+    const layout = corner => Object.entries(corner.attributes ?? {}).map(([name, data]) => [name, Array.isArray(data) ? data.length : 0]);
+    const attributeLayout = layout(a);
+    if (corners.some(corner => !equal(layout(corner), attributeLayout)))
+      throw new RangeError('Dissolve would merge different corner attribute layouts');
     const channels = [...new Set(corners.flatMap(corner => Object.keys(g.vertices.get(corner.vertex).weights ?? {})))];
     const weight = (corner, channel) => {
       const weights = g.vertices.get(corner.vertex).weights ?? {};
@@ -83,6 +88,12 @@
       const x = V.dot(V.cross(d, v), normal) / length, y = V.dot(V.cross(u, d), normal) / length;
       const uv = a.uv.map((n, i) => n + x * (b.uv[i] - n) + y * (c.uv[i] - n));
       if (!sameUV(corner.uv, uv)) throw new RangeError('Dissolve would change the face UV interpolation');
+      for (const [channel, width] of attributeLayout) {
+        const values = [a, b, c, corner].map(row => width ? row.attributes[channel] : [row.attributes[channel]]);
+        if (values[0].some((start, i) => Math.abs(values[3][i] - start - x * (values[1][i] - start) -
+            y * (values[2][i] - start)) > 1e-6))
+          throw new RangeError('Dissolve would change corner attribute interpolation for ' + channel);
+      }
       for (const channel of channels) {
         const start = weight(a, channel);
         const expected = start + x * (weight(b, channel) - start) + y * (weight(c, channel) - start);

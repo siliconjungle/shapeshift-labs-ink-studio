@@ -394,6 +394,19 @@
       }) });
     }
 
+    function planMeshCut(object, request, { part } = {}) {
+      const row = meshTopology(object, part);
+      requireMeshShapeOwner(object, row.part, snapshot(), 'Cut');
+      return K.meshTopology.planCut(row.document, request);
+    }
+
+    function cutMeshTopology(object, request, options) {
+      const plan = planMeshCut(object, request, options);
+      return freeze({ cut: plan.report, ...(Object.keys(plan.patch).length && {
+        topology: editMeshTopology(object, plan.patch, options)
+      }) });
+    }
+
     function setBrushRegion(region) {
       const value = clone(region);
       const write = () => document.setEnvironment({ brushRegion: value });
@@ -499,6 +512,8 @@
       meshHealth: (object, settings, { part } = {}) => K.meshTopology.health(meshTopology(object, part).document, settings),
       planMeshRepair,
       repairMeshTopology,
+      planMeshCut,
+      cutMeshTopology,
       hybridRoute: address => A.hybridOwnership.route(snapshot().hybridOwnership, address),
       setBrushRegion,
       setBreakables,

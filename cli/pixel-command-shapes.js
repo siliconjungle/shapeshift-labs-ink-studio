@@ -222,14 +222,25 @@ function createDefinitions() {
       tagged('kind','dissolve',{edge:text,keep:text,tolerance:num(0)},['edge']),
       {...tagged('kind','winding',{anchor:text,faces:array(text,1)}),...exactlyOne('anchor','faces')}
     ),1,128)},['revision','operations']),
+    meshCutRequest:{...object({
+      id,revision:text,split:bool,tolerance:{type:'number',exclusiveMinimum:0},
+      cap:either(tagged('kind','none',{}),...['ngon','triangles'].map(kind=>tagged('kind',kind,{material:text},['material']))),
+      plane:object({origin:pos,normal:pos},['origin','normal']),
+      knife:object({projection:object({origin:pos,right:pos,up:pos},['origin','right','up']),
+        path:array(tuple(number,number),2,65),
+        selection:object({format:constant('ink-studio/mesh-selection'),version:constant(1),mesh:text,revision:text,
+          domain:choice('vertices','edges','faces'),ids:array(text)},['format','version','mesh','revision','domain','ids'])
+      },['projection','path'])
+    },['id','revision']),...exactlyOne('plane','knife')},
     meshTopologyOperation:{ ...object({
       transform:ref('meshComponentTransform'),
       repair:ref('meshRepairRequest'),
+      cut:ref('meshCutRequest'),
       patch:{
         ...object({
           vertices:array(object({id:text,position:pos,weights:nullable(object({},[],unit))},['id','position'])),
           faces:array(object({id:text,material:text,corners:array(object({
-            id:text,vertex:text,uv:tuple(unit,unit)
+            id:text,vertex:text,uv:tuple(unit,unit),attributes:object({},[],either(number,array(number,1,4)))
           },['id','vertex']),3,128)},['id','corners'])),
           removeVertices:array(text),removeFaces:array(text),
           lineage:object(Object.fromEntries(['faces','edges','corners'].map(kind=>
@@ -239,7 +250,7 @@ function createDefinitions() {
       },
       projection:object({maxDistance:{type:'number',exclusiveMinimum:0},minNormalDot:unit,maxUVDistance:unit,minConfidence:unit,
         ambiguity:unit,maxChecks:int(1,2000000)},['maxDistance'])
-    }),oneOf:['patch','transform','repair'].map(prop) },
+    }),oneOf:['patch','transform','repair','cut'].map(prop) },
     sdfShapeOperation:either(...[
       ['parameters',obj],['modifier',obj],['updateModifier',object({id:text,patch:obj},['id','patch'])],
       ['protection',array(obj)],['brush',sdfBrush],['updateBrush',{type:'object',required:['id']}]

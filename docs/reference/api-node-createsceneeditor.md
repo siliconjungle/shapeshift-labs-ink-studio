@@ -15,6 +15,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().cacheStats` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().cancel` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().commit` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().cutMeshTopology` | function | `(object, request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().editMeshTopology` | function | `(object, patch, { part, projection, label } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().editSurfaceDecal` | function | `(id, operation)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().fork` | function | `(source = snapshot())` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
@@ -28,6 +29,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().paintShadeNormal` | function | `(stroke, options = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().paintShadowBand` | function | `(stroke, options = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().pick` | function | `(ray, { world, time, reconstruction, sampleWithdrawal } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().planMeshCut` | function | `(object, request, { part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planMeshRepair` | function | `(object, request, { part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planMeshTransform` | function | `(object, request, { part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().preview` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |

@@ -76,6 +76,19 @@
     return { weights: frozen(Object.fromEntries(Object.keys(value).sort().map(channel => [channel, value[channel]]))) };
   }
 
+  function cornerAttributes(value, face) {
+    if (value === undefined) return undefined;
+    if (!value || Object.getPrototypeOf(value) !== Object.prototype)
+      throw new TypeError('Face ' + face + ' needs named corner attributes');
+    const entries = Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+    for (const [channel, data] of entries) {
+      if (!name(channel) || ['__proto__', 'prototype', 'constructor'].includes(channel) ||
+          !(Number.isFinite(data) || Array.isArray(data) && data.length >= 1 && data.length <= 4 && Array.from(data).every(Number.isFinite)))
+        throw new TypeError('Face ' + face + ' corner attributes need finite scalars or vectors of up to four values');
+    }
+    return frozen(Object.fromEntries(entries.map(([key, data]) => [key, Array.isArray(data) ? frozen(data.slice()) : data])));
+  }
+
   function build(source, keepEdges = false) {
     if (documents.has(source)) return source;
     const { format: type = format, version = 1, id, vertices: inputVertices, edges: inputEdges = [], faces: inputFaces } = source ?? {};
@@ -104,13 +117,18 @@
       if (triangles.length + row.corners.length - 2 > maxTriangles)
         throw new RangeError('Mesh topology exceeds the render triangle budget');
       const used = new Set();
+      let layout;
       const face = frozen({ id: key, material, corners: frozen(Array.from(row.corners, corner => {
         const { id: cornerId, vertex, uv = [0, 0] } = corner ?? {};
         if (!name(cornerId) || corners.has(cornerId) || !vertices.has(vertex) || used.has(vertex) || !vector(uv, 2, unit))
           throw new RangeError('Face ' + key + ' needs unique corners, distinct existing vertices and normalized UV pairs');
         corners.add(cornerId);
         used.add(vertex);
-        return frozen({ id: cornerId, vertex, uv: frozen(Array.from(uv)) });
+        const attributes = cornerAttributes(corner.attributes, key);
+        const shape = JSON.stringify(Object.entries(attributes ?? {}).map(([id, data]) => [id, Array.isArray(data) ? data.length : 0]));
+        if (layout !== undefined && layout !== shape) throw new TypeError('Face ' + key + ' must use one corner attribute layout');
+        layout = shape;
+        return frozen({ id: cornerId, vertex, uv: frozen(Array.from(uv)), ...(attributes && { attributes }) });
       })) });
       for (const [i, corner] of face.corners.entries()) {
         const next = face.corners[(i + 1) % face.corners.length];

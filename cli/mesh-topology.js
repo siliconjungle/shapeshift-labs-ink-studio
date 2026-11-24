@@ -63,12 +63,13 @@ function transform(file, input, rest, opt, meshTopology, openEditor) {
 }
 
 function maintenance(action, file, input, rest, opt, meshTopology, openEditor) {
-  const { object, out, report } = opt, repair = action === 'repair';
+  const { object, out, report, pieces } = opt, cutting = action === 'cut', editing = action !== 'health';
   const filenames = [file, input, out, report].filter(value => value !== undefined);
-  if (!file || repair && !input || rest.length || filenames.some(value => typeof value !== 'string' || !value.trim()) ||
-      object !== undefined && (typeof object !== 'string' || !object.trim()) || report && (!repair || !out) ||
+  if (!file || editing && !input || rest.length || filenames.some(value => typeof value !== 'string' || !value.trim()) ||
+      object !== undefined && (typeof object !== 'string' || !object.trim()) || report && (!editing || !out) ||
+      pieces !== undefined && (!cutting || typeof pieces !== 'string' || !pieces.trim()) ||
       ['selection', 'from', 'view', 'visibility', 'projection', 'lineage', 'match-ids'].some(key => opt[key] !== undefined))
-    throw new TypeError('Use mesh-topology health <mesh-or-scene.json> [settings.json] or repair <mesh-or-scene.json> <request.json>');
+    throw new TypeError('Use mesh-topology health <mesh-or-scene.json> [settings.json] or repair|cut <mesh-or-scene.json> <request.json>');
   const inputs = [file, input].filter(Boolean).map(name => path.resolve(name));
   const outputs = [out, report].filter(Boolean).map(name => path.resolve(name));
   if (new Set(outputs).size !== outputs.length || outputs.some(name => inputs.includes(name)))
@@ -81,18 +82,23 @@ function maintenance(action, file, input, rest, opt, meshTopology, openEditor) {
   const doc = row ? row.document : source;
   const write = (file, value) => file ? files.json(path.resolve(file), value) :
     process.stdout.write(JSON.stringify(value, null, 2) + '\n');
-  if (!repair) return write(out, meshTopology.health(doc, settings));
+  if (!editing) return write(out, meshTopology.health(doc, settings));
 
   if (object && out && path.dirname(path.resolve(file)) !== path.dirname(path.resolve(out)))
     throw new RangeError('Write the repaired scene beside its source to preserve relative assets');
   const editor = object && openEditor(file);
-  const plan = editor ? editor.planMeshRepair(object, settings) : meshTopology.planRepair(doc, settings);
-  if (!out) return write(undefined, { patch: plan.patch, report: plan.report });
-  if (!plan.report.canCommit) {
+  const plan = cutting ? (editor ? editor.planMeshCut(object, settings) : meshTopology.planCut(doc, settings)) :
+    (editor ? editor.planMeshRepair(object, settings) : meshTopology.planRepair(doc, settings));
+  const exports = pieces ? plan.pieces.map((_, i) => path.resolve(pieces, 'piece-' + (i + 1) + '.json')) : [];
+  if (exports.some(file => [...inputs, ...outputs].includes(file)))
+    throw new RangeError('Write cut pieces separately from the input and other outputs');
+  if (plan.report.canCommit === false && out) {
     if (report) write(report, plan.report);
     throw new RangeError('Repair would create or worsen a non-manifold edge');
   }
-  const result = editor && editor.repairMeshTopology(object, settings);
+  const result = out && editor && (cutting ? editor.cutMeshTopology(object, settings) : editor.repairMeshTopology(object, settings));
+  for (const [i, file] of exports.entries()) write(file, plan.pieces[i].document);
+  if (!out) return write(undefined, { patch: plan.patch, report: plan.report });
   write(out, editor ? editor.snapshot() : plan.document);
   if (report) write(report, result || plan.report);
 }
@@ -105,8 +111,9 @@ function command([action, file, input, ...rest], opt, { KIT: { meshTopology } },
     else process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }
-  if (action === 'health' || action === 'repair')
+  if (['health', 'repair', 'cut'].includes(action))
     return maintenance(action, file, input, rest, opt, meshTopology, openEditor);
+  if (opt.pieces !== undefined) throw new TypeError('Use --pieces with mesh-topology cut');
   if (action === 'transform') {
     const result = transform(file, input, rest, opt, meshTopology, openEditor);
     if (out) files.json(path.resolve(out), result.document);

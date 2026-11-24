@@ -290,6 +290,82 @@ The middle pane marks the weld in teal, the reversed face in rose, and
 the dissolved edge in amber. The folder contains the health scans before,
 after welding, and after the full repair.
 
+## Cut with a plane or knife path
+
+```sh
+ink-studio mesh-topology cut mesh.json cut.json
+ink-studio mesh-topology cut scene.json cut.json --object housing --out revised.json --report evidence.json --pieces pieces
+```
+
+A cut request carries an `id` and the topology `revision` from a
+selection or health report. Set `plane` to an XYZ `origin` and `normal`
+for an infinite section in stored mesh coordinates. This request sections a housing along Z.
+
+```json
+{
+  "id": "housing-section",
+  "revision": "<mesh revision>",
+  "plane": { "origin": [0, 0, 0], "normal": [0, 0, 1] },
+  "cap": { "kind": "triangles", "material": "cut-metal" }
+}
+```
+
+For a finite knife stroke, supply `knife` instead of `plane`.
+
+```json
+{
+  "projection": { "origin": [0, 0, 0], "right": [1, 0, 0], "up": [0, 1, 0] },
+  "path": [[-0.67, -0.92], [-0.38, -0.22], [0.29, 0.22], [0.63, 0.94]]
+}
+```
+
+Path points are in mesh units along the orthogonal projection axes. A
+path can bend or close by repeating its first point. The knife projects
+through the mesh, or through only the faces indicated by an optional
+saved `knife.selection`. Shared edges still get conforming vertex
+insertions where a selected face meets an unselected one. A finite path
+that stops inside a surface can leave one connected piece with new cut
+edges. Use a simple path of up to 65 points and an optional positive
+`tolerance` in mesh units for plane and cap checks.
+
+Pieces detach by default. Set `split: false` to insert connected cut
+edges. `--pieces` writes separate topology documents alongside the
+combined edit. With no `--out`, the CLI prints a preview patch and report
+without applying the edit. The report lists section edges, boundary
+paths, generated cap faces, and interpolation sources for new vertices.
+
+| Cap | Behavior |
+| --- | --- |
+| `none` | Leave the new boundaries open. This is the default. |
+| `ngon` | Fill each simple closed planar boundary with one polygon. |
+| `triangles` | Triangulate closed planar loops, including nested loops around a bore. |
+
+Capped pieces require a cap `material`. Caps follow the directed
+boundary, get their own planar UV chart, and use new face IDs. Open or
+bent boundaries can be left open. The cutter tessellates altered
+polygons to keep the rendered surface and its attributes continuous.
+Untouched polygons keep their stable IDs. Cut fragments retain explicit
+face, edge, and corner lineage. New vertices interpolate named weights,
+and new corners interpolate UVs and any named scalar or vector
+`attributes` of the source face. Each face uses a consistent corner
+attribute layout. Shared vertices can preserve different values on the
+two sides of a UV seam.
+
+`KIT.meshTopology.planCut(document, request)` returns the candidate
+document, patch, piece documents, and report. Scene SDK hosts can use
+`sceneEditor.planMeshCut(object, request)` and
+`sceneEditor.cutMeshTopology(object, request)`. A pixel patch uses
+`operation: { cut: request }` on a `mesh-topology` destination.
+The scene transaction checks the source revision and hybrid ownership
+and carries the cut into binding and bake review, undo, and replay.
+
+Run `node examples/mesh-cut/render.cjs mesh-cut-review` for the native
+art-grid comparison. For pointer and slider editing, build with
+`npm run build -- development` and open
+`examples/mesh-cut/index.html`. The browser example can load a topology
+JSON file, place a path or move a plane, preview pieces and caps, apply
+or undo the cut, and save the mesh or the replayable request.
+
 ## Record correspondence through an edit
 
 `KIT.meshTopology.editWithCorrespondence(before, patch)` returns the

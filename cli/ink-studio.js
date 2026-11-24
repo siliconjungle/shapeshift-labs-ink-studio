@@ -1402,6 +1402,7 @@ const CMD = {
         '  mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--out file] [--report file]   move, rotate, scale and snap authored components',
         '  mesh-topology health <mesh-or-scene.json> [settings.json] [--object id] [--out report.json]   locate local topology and geometry problems',
         '  mesh-topology repair <mesh-or-scene.json> <request.json> [--object id] [--out file] [--report file]   preview or apply weld, dissolve and winding repairs',
+        '  mesh-topology cut <mesh-or-scene.json> <request.json> [--object id] [--out file] [--report file] [--pieces dir]   preview or apply plane and knife cuts',
         '  mesh-topology correspond <before.json> <after.json> [--lineage links.json] [--projection settings.json] [--match-ids on|off] [--out map.json]   map stable and projected elements',
         '  mesh-uv inspect|simplify <mesh> --out <directory|mesh.json>   inspect UV maps or reduce with seam locks',
         '  scenery pack <scene.js> --out asset.inkscenery   pack indexed meshes and textures from a scenery hook',
@@ -5127,7 +5128,7 @@ async function run() {
   }
   const sceneFiles = cmd === 'snap' ? pos : cmd === 'pixel-art' ? pixelInputs :
     cmd === 'mesh-topology' && (pos[0] === 'select' && typeof opt.view === 'string' ||
-      ['transform', 'repair'].includes(pos[0]) && typeof opt.object === 'string') ? pos.slice(1, 2) :
+      ['transform', 'repair', 'cut'].includes(pos[0]) && typeof opt.object === 'string') ? pos.slice(1, 2) :
     ['render', 'turn', 'sheet', 'clip', 'atlas', 'passes', 'surface-pixel', 'validate'].includes(cmd) ? pos.slice(0, 1) : [];
   for (const file of new Set(sceneFiles.filter(file => /\.json$/i.test(file)))) {
     if (!fs.existsSync(file)) continue;
