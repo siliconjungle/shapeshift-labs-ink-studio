@@ -53,7 +53,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.sculpt().lathe` | function | `(c, h, rf, mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().lights` | value | `array` | [guide](../../README.md#geometry-and-materials) |
 | `KIT.sculpt().lip` | function | `(pts, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/kit/kpx-pixel.js) |
-| `KIT.sculpt().mapSurfaceState` | function | `(material, inverse, pullNormal)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
+| `KIT.sculpt().mapSurfaceState` | function | `(material, inverse, pullNormal, pushNormal)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().mask` | value | `null` | [guide](../../README.md#geometry-and-materials) |
 | `KIT.sculpt().materialAt` | function | `(material, point, normal)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().merge` | value | `number` | [guide](../../README.md#geometry-and-materials) |

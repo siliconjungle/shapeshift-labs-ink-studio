@@ -34,7 +34,7 @@ const { report,images } = /*DATA*/;
 const native = mountPixelGridCanvas(document.querySelector('#canvas'));
 const camera = document.querySelector('#view'), image = document.querySelector('#image'), overlay = document.querySelector('#overlay');
 const status = document.querySelector('#status'), choices = document.querySelector('#choices');
-const labels = { changed:'Changed pigment',seams:'View seams',chartEdges:'Chart edges',bleed:'Possible bleed',
+const labels = { changed:report.channel.startsWith('mask:') ? 'Projected mask' : 'Changed surface',seams:'View seams',chartEdges:'Chart edges',bleed:'Possible bleed',
   conflict:'Conflicting samples',rejected:'Rejected marks' };
 const colors = { changed:'#72d4ea99',seams:'#ffbc6499',chartEdges:'#e2de7799',bleed:'#ff6c9299',
   conflict:'#da9af399',rejected:'#fa866d99' };
@@ -44,7 +44,7 @@ if (report.unresolved) overlay.value = 'conflict';
 choices.hidden = !report.conflicts.length;
 for (const row of report.conflicts) {
   const li = document.createElement('li');
-  const samples = row.samples.map(item=>item.view+' ('+item.pixel.join(', ')+') '+item.value);
+  const samples = row.samples.map(item=>item.view+' ('+item.pixel.join(', ')+') '+(item.value?.swatch ?? item.value));
   li.textContent = 'Chart cell '+row.cell.join(', ')+' · '+samples.join(' · ')+
     ' · '+(row.winner ? 'Selected '+row.winner.view+' ('+row.winner.pixel.join(', ')+')' : 'Needs a choice');
   document.querySelector('#conflicts').append(li);

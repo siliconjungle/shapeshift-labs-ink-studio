@@ -1591,8 +1591,9 @@ guarded pixel edit.
 
 The plan's `size` is the destination chart grid, up to 256 × 128.
 The mark coordinates use the pixel document's grid and its binding
-registration. Color marks take an exact swatch or a `value` of
-`#rrggbb`. Scalar channels take an in-range numeric `value`.
+registration. The legacy `paint` channel takes an exact swatch or a
+`value` of `#rrggbb`. The material channels below also accept numeric
+and vector values.
 Unapproved cameras can verify the proposal from an angle that
 contributed no paint. Set `time` per camera when an authored pose is
 needed. The report provides `documentRevision` and `sourceRevision`
@@ -1617,8 +1618,8 @@ The HTML review switches between the actual before and proposed native
 renders for each camera. View seam overlays show neighboring pixels that
 received different values from different cameras. Chart edge overlays
 identify approaches to the neighboring rest chart. Possible bleed marks
-sampled pigment changes outside the resolved chart cells, including where
-a splat footprint carries a color beyond its intended boundary. These
+changes to the selected signal outside the resolved chart cells, including
+where a splat footprint carries a change beyond its intended boundary. These
 are review signals and can include intentional boundaries.
 
 Apply the reviewed patch through the standard edit path. It writes the
@@ -1630,6 +1631,42 @@ one undoable transaction.
 node cli/ink-studio.js pixel-art edit gate-ink.json hinge-edit.json \
   --scene gate.json --out gate-painted.json
 ```
+
+## Paint individual material channels
+
+Give each `surface-channel` destination a channel on the bound solid's
+rest chart. For example, a named mask on the gate's front chart uses this
+destination.
+
+```json
+{"id":"gate-serial","kind":"surface-channel","binding":"gate","chart":"front","channel":"mask:serial"}
+```
+
+Declare the available names on the solid with `surfaceState.masks`, for
+example `["serial", "seal"]`. Paint those masks independently of the
+material's visible color.
+
+| Channel | Brush value | Where it is used |
+| --- | --- | --- |
+| `pigment` | A palette swatch ID such as `"mint"` | Exact indexed pigment with the swatch ID and its color recorded together |
+| `roughness` | A number from 0 to 1 | Specular roughness. Native splat shading uses 17 steps. Registered bakes sample the authored value |
+| `emission` | Linear RGB such as `[0, 1.6, 0]`, with components from 0 to 64 | Emission signal and visible glow |
+| `normal` | A tangent-space vector such as `[0.35, 0, 1]`, with a nonnegative Z component | Shading normals |
+| `opacity` | A number from 0 to 1 | Native visibility and exported base-color alpha |
+| `mask:<name>` | A number from 0 to 1 | Source sampling and a separate grayscale map in the registered bake |
+
+Use `operation.stamp.value` in an edit or `marks[].value` in a
+multiview plan. Indexed pigment also accepts `marks[].swatch`. Ink
+resolves the swatch against the pixel document and records the exact
+color in the applied stamp. `mode: "clear"` removes that channel's
+override over the brush footprint. The scalar and vector overrides blend
+by brush coverage. Indexed pigment applies at half coverage or higher.
+
+Sample the committed chart with `pixel-art sample --mode source`. A
+pigment sample returns its swatch and color. A roughness, emission,
+normal, or opacity override returns its value and coverage, or `null`
+where the base material is in use. Unpainted named masks return zero.
+For texture and glTF export, see [Registered material baking](registered-material-bake.md).
 
 ## Navigate craft diagnostics
 

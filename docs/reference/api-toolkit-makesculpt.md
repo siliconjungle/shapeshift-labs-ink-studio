@@ -37,7 +37,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.makeSculpt().keepRenderSdf` | value | `boolean` | [guide](../../README.md#geometry-and-materials) |
 | `toolkit.makeSculpt().lathe` | function | `(c, h, rf, mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `toolkit.makeSculpt().lights` | value | `array` | [guide](../../README.md#geometry-and-materials) |
-| `toolkit.makeSculpt().mapSurfaceState` | function | `(material, inverse, pullNormal)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
+| `toolkit.makeSculpt().mapSurfaceState` | function | `(material, inverse, pullNormal, pushNormal)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `toolkit.makeSculpt().mask` | value | `null` | [guide](../../README.md#geometry-and-materials) |
 | `toolkit.makeSculpt().materialAt` | function | `(material, point, normal)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `toolkit.makeSculpt().merge` | value | `number` | [guide](../../README.md#geometry-and-materials) |

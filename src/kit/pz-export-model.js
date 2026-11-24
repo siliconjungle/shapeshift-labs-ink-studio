@@ -121,7 +121,7 @@
 
   function fromSculpt(sculpt, { palette = PAL_HEX, bounds, resolution = 0.08, targetTriangles = 16000,
       guides = [], topology, simplifyTopology = false, fur = {}, ...options } = {}) {
-    const { field, parts, noise } = sculpt.modelSource();
+    const { field, parts, noise,maskNames=[],paintedOpacity } = sculpt.modelSource();
     if (!(targetTriangles === Infinity || Number.isInteger(targetTriangles) && targetTriangles >= 4))
       throw new Error('Target triangles must be an integer of at least four');
     if (!Array.isArray(guides) || guides.some(g => !Array.isArray(g.center) || g.center.length !== 3 ||
@@ -166,7 +166,7 @@
       const p = midpoint(face), [a, b, c] = face.map(i => points[i]);
       const n = V.norm(V.cross(V.sub(b, a), V.sub(c, a)));
       const value = sample(field.surfaceAt(...p).material, p, n);
-      const key = JSON.stringify([value.name, value.color, value.roughness, value.metallic, value.emission, value.masks]);
+      const key = JSON.stringify([value.name, value.color, value.roughness, value.metallic, value.emission, value.masks,value.opacity]);
       if (!shades.has(key)) {
         shades.set(key, materials.length);
         const { normal, ...material } = value;
@@ -184,7 +184,8 @@
       return sample((valid ? field.surfaceAt(...p) : value).material || value.material, p, valid ? n : fallback);
     }
     // An explicit topology can carry its own seams through the high-to-low bake.
-    return { ...mesh, bakeUVs: !!mesh.uvs, materials, faceMaterials, partTags, tagAt, sampleSurface, attachments };
+    return { ...mesh, bakeUVs: !!mesh.uvs, materials, faceMaterials, partTags, tagAt, sampleSurface, attachments,
+      ...(maskNames.length&&{maskNames}),...(paintedOpacity&&{paintedOpacity}) };
   }
 
   function mapModelMeshes(mesh, transform) {

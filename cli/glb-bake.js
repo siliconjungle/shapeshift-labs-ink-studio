@@ -36,6 +36,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
     base: new Uint8Array(count * 3), normal: new Uint8Array(count * 3),
     surface: new Uint8Array(count * 3), emission: new Uint8Array(count * 3)
   };
+  const alpha = previous?.opacity ?? (mesh.paintedOpacity && new Uint8Array(count).fill(255));
   const names = mesh.maskNames ?? [];
   if (registered && (!Array.isArray(names) || !Array.from(names).every(idOK)))
     throw new TypeError('Material mask names must be lowercase IDs');
@@ -93,6 +94,11 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
       const emission = material.emission || [0, 0, 0];
       const roughness = material.roughness ?? 0.8, metallic = material.metallic ?? 0;
       const authoredNormal = material.normal;
+      if (alpha) {
+        const opacity = material.opacity ?? 1;
+        if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) throw new RangeError('Painted opacity must be in [0, 1]');
+        alpha[i] = byte(opacity);
+      }
       if (registered) {
         if(!Array.isArray(color)||color.length!==3||!Array.from(color).every(v=>Number.isFinite(v)&&v>=0&&v<=1) ||
           !Array.isArray(emission)||emission.length!==3||!Array.from(emission).every(v=>Number.isFinite(v)&&v>=0) ||
@@ -159,6 +165,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
       for (let k = 0; k < 3; k++) layer[j * 3 + k] = layer[i * 3 + k];
     }
     for (const layer of masks.values()) layer[j]=layer[i];
+    if(alpha)alpha[j]=alpha[i];
   };
   for (let step = 0; step < padding && front.length; step++) {
     const next = [];
@@ -171,13 +178,23 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
     front = next;
   }
   const textures = Object.fromEntries(Object.entries(pixels).map(([key, data]) => [key, png.encode(size, size, data)]));
+  const translucent = alpha && alpha.some((value,i)=>covered[i]&&value<255);
+  if (alpha) {
+    const rgba = new Uint8Array(count*4);
+    for(let i=0;i<count;i++){
+      rgba.set(pixels.base.subarray(i*3,i*3+3),i*4);
+      rgba[i*4+3]=alpha[i];
+    }
+    textures.base=png.encode(size,size,rgba,4);
+  }
   const registeredMaps = registered && {
     roughness:png.encodeGray(size,size,Uint8Array.from(covered,(_n,i)=>pixels.surface[i*3+1])),
     coverage:png.encodeGray(size,size,footprint),
+    ...(alpha&&{opacity:png.encodeGray(size,size,alpha)}),
     masks:Object.fromEntries(Array.from(masks,([name,data])=>[name,png.encodeGray(size,size,data)]))
   };
   const coverage = previous ? footprint.reduce((n,value)=>n+Number(value!==0),0)/count : used/count;
-  return { textures, strength, coverage, registeredMaps, owners, stamp, sampledTexels:used };
+  return { textures, strength, coverage, registeredMaps, owners, stamp, translucent, sampledTexels:used };
 }
 
 module.exports = bake;

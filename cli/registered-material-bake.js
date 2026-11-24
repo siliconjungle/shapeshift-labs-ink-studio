@@ -38,7 +38,8 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits}) {
       roughness:map('roughness',registeredMaps.roughness,'linear'),
       emission:map('emission',textures.emission,'sRGB'),
       metallicRoughness:map('metallic-roughness',textures.surface,'linear'),
-      coverage:map('coverage',registeredMaps.coverage,'linear')
+      coverage:map('coverage',registeredMaps.coverage,'linear'),
+      ...(registeredMaps.opacity&&{opacity:map('opacity',registeredMaps.opacity,'linear')})
     };
     const masks=Object.fromEntries(Object.entries(registeredMaps.masks).map(([name,bytes])=>[name,map('mask-'+name,bytes,'linear')]));
     const {state,dirty,reproject,previous}=chartBake;

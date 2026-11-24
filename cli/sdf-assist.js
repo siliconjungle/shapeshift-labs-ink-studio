@@ -119,7 +119,14 @@ function trace(source, ray, near, far, settings, clip, visible, x, y, sourceBind
       }
       if (row && (row.i<0 || !visible || visible(row.i,x,y)) && settings.allows(row.target,point)) {
         const rest = source.motion?.rest(...point) ?? point;
-        return {z:along*axial,position:point,normal,row,objectPosition:rest,
+        const state = fieldOwner?.mat.surfaceState;
+        const localNormal = (state?.hasOpacity || state?.hasNormal) && (source.motion?.restNormal(...normal) ?? normal);
+        const length = localNormal && Math.hypot(...localNormal);
+        const paint = length && state.locate(rest,localNormal.map(n=>n/length));
+        const opacity = paint?.values?.opacity;
+        if (opacity && opacity.value < 1 && opacity.coverage > 0) return null;
+        const shadingNormal = paint?.paintedNormal && (source.motion?.normal(...paint.paintedNormal) ?? paint.paintedNormal);
+        return {z:along*axial,position:point,normal,row,objectPosition:rest,...(shadingNormal&&{shadingNormal}),
           ...(sourceBinding && { source:{ ...sdfSource(source,fieldOwner,row,rest),...(captureRestNormal && {restNormal:source.motion?.restNormal(...normal) ?? normal}) } })};
       }
     }

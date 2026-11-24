@@ -19,16 +19,18 @@ Each mesh has a directory with these outputs:
 
 | Map | Encoding |
 | --- | --- |
-| Pigment | sRGB base color without view lighting |
+| Pigment | sRGB base color, with alpha for painted opacity |
 | Normal | RGB tangent-space normals encoded in linear bytes |
 | Roughness | Linear grayscale for editing or import |
 | Metallic-roughness | glTF packing with roughness in green and metallic in blue |
 | Emission | sRGB with the linear intensity scale in the manifest and GLB |
+| Opacity | Linear grayscale for a model with opacity painted on its rest chart |
 | Coverage | Linear grayscale footprint before padding |
 | Named masks | Linear grayscale weights with the same gutter as the material maps |
 
 The GLB embeds the same pigment, normal, metallic-roughness and emission PNG
-bytes. `material-bake.json` records UV and geometry hashes, texture hashes,
+bytes. Painted translucency sets the glTF material to `BLEND`.
+`material-bake.json` records UV and geometry hashes, texture hashes,
 dimensions, padding, emissive strength, and paint coverage by camera. Mesh
 indices follow export order, including attachments. Use
 [semantic mipmaps](semantic-texture-mipmaps.md) to filter these maps on a
@@ -40,6 +42,9 @@ procedural `sampleSurface(point, normal, faceIndex)` can return linear
 `emission`, and `masks` in the same material sample. Declare the names of
 procedural masks in the model's `maskNames` array. Omitted weights are zero.
 Diorama materials can set `normal` and `masks` under `model`.
+Use [material channel painting](pixel-art-authoring.md#paint-individual-material-channels)
+to apply indexed pigment, roughness, emission, normal, opacity, or named
+mask edits to a diorama solid before baking.
 
 ## Project approved paint from several views
 

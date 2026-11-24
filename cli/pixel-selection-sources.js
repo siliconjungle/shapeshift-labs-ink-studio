@@ -143,7 +143,9 @@ function sourceFor(width,height,query,{ capture,material,binding:findBinding,sce
         const uv = CanvasTransforms.uv([width,height],[p%width,Math.floor(p/width)],source.canvas);
         if (!uv) return false;
         const value = source.sample(uv);
-        return inRange(source.type === 'number' ? value : value?.coverage ?? 0,range);
+        const level = source.type === 'indexed' ? Number(!!value) : source.material ? value?.value :
+          source.type === 'number' ? value : value?.coverage ?? 0;
+        return inRange(level,range);
       };
     }
     const frame = capturePasses();

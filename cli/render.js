@@ -2303,7 +2303,9 @@ function renderFrame(world, o, preparedPalettes) {
     const hasSurface = surface?.has(i);
     const hasEmission=(flags & 2)!==0&&!world.renderMetadata?.muteEmission?.[i];
     if(hasEmission&&emissionCurve)[r,g,b]=LightingChannels.emission(emissionCurve,[r,g,b]);
-    const emits = art && (Boolean(curveEmission) || hasEmission && (!emissionCurve || r>0 || g>0 || b>0));
+    const painted = art && !renderMeta?.muteEmission?.[i] && renderMeta?.paintedEmission?.subarray(i*3,i*3+3);
+    const inkEmission = painted && painted.some(Boolean) ? (emissionCurve ? LightingChannels.emission(emissionCurve,painted) : painted) : null;
+    const emits = art && (inkEmission?.some(Boolean) || Boolean(curveEmission) || hasEmission && (!emissionCurve || r>0 || g>0 || b>0));
     const automatic = kind === LightSchedule.emissionKind && d[q + 15] === LightSchedule.emissionMarker;
     const sourceScale = automatic ? LightSchedule.emissionScale(dusk) : 1;
     const scheduled = lamps.length && !(flags & 22) && al >= 1 ? LightSchedule.transfer(lamps, x, y, z) : null;
@@ -2835,7 +2837,7 @@ function renderFrame(world, o, preparedPalettes) {
               sectionZ !== undefined || exact || planeHit ? normalizedDepth(surfaceZ) : dn,
               a,pr,pg,pb,wd,emits,highlight,paletteId,detailParticle,projected,coat,glass,lookPass && { ...lookPass.mark },
               surfaceZ,undefined,fogMix,rule,reflected?.slice(),filteredEdge,1,sectionTint>0,claim,
-              paintStage && paintColor(samplePaint),surfaceMatte,curveEmission]);
+              paintStage && paintColor(samplePaint),surfaceMatte,curveEmission ?? inkEmission]);
         } else if (deferred && (sortedSurfaces || preciseDepth)) {
           if (wantStation && !curveSpan) {
             const frame = curveFrames && curveFrames(i);
@@ -2849,7 +2851,7 @@ function renderFrame(world, o, preparedPalettes) {
             sample: [i, surfaceZ, normalizedDepth(surfaceZ), a, pr, pg, pb,
               wd, emits, highlight, paletteId, detailParticle, projected, coat, glass, lookPass && { ...lookPass.mark },
               opticalDepth, undefined, fogMix, rule, reflected?.slice(), filteredEdge, 1, sectionTint>0, claim,
-              paintStage && paintColor(samplePaint), surfaceMatte, curveEmission, strandHit] };
+              paintStage && paintColor(samplePaint), surfaceMatte, curveEmission ?? inkEmission, strandHit] };
           if (!deferred.has(p)) deferred.set(p, []);
           const layers = deferred.get(p);
           if (entry.curveGroup) {
@@ -2861,7 +2863,7 @@ function renderFrame(world, o, preparedPalettes) {
           layers.push(entry);
         } else composite(p, i, sectionZ ?? exact?.z ?? planeDepth ?? -cz, sectionZ !== undefined || exact || planeHit ? normalizedDepth(surfaceZ) : dn,
           a, pr, pg, pb, wd, emits, highlight, paletteId, detailParticle, projected, coat, glass, lookPass?.mark, opticalDepth,
-          undefined, fogMix, rule, reflected, filteredEdge, 1, sectionTint>0, claim, paintStage && paintColor(samplePaint),surfaceMatte, curveEmission);
+          undefined, fogMix, rule, reflected, filteredEdge, 1, sectionTint>0, claim, paintStage && paintColor(samplePaint),surfaceMatte, curveEmission ?? inkEmission);
       }
     }
   }

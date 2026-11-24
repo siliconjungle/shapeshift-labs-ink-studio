@@ -11,6 +11,7 @@ const { runs } = require('../src/pixel-paint-tools.js');
 const MotionReview = require('./pixel-motion-review.js');
 const PNG = require('./png.js');
 const files = require('./asset-files.js');
+const { indexedValue } = require('./pixel-edit-destinations.js');
 
 const format = 'ink-studio/pixel-multiview';
 const id = value=>typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value);
@@ -106,10 +107,12 @@ function inspectFrame(frame,binding,chart,locate,[width,height]) {
     cell[p] = Math.min(height-1,Math.floor((1-v)*height))*width+Math.min(width-1,Math.floor(u*width));
     facing[p] = dot(worldNormal,toEye);
   }
-  return { w,h,cell,owner,facing,adjacentChart,pigment:passes.pigment };
+  return { w,h,cell,owner,facing,adjacentChart };
 }
 
-function markValue(mark,definition,palette) {
+function markValue(mark,definition,palette,api) {
+  if (definition.type === 'indexed') return indexedValue(mark.swatch ?? mark.value,palette);
+  if (definition.type === 'normal' || definition.type === 'emission') return api.valueOf(definition,mark.value);
   if (definition.type === 'color') {
     const value = mark.swatch === undefined ? mark.value : palette[mark.swatch];
     const color = typeof value === 'string' ? value : value?.color;
@@ -122,13 +125,13 @@ function markValue(mark,definition,palette) {
   return mark.value;
 }
 
-function addMarks(view,grid,before,binding,design,definition,protect,candidates) {
+function addMarks(view,grid,before,binding,design,definition,api,protect,candidates) {
   const rejected = [];
   let accepted = 0;
   if (!view.approved) return { accepted,ignored:view.marks.length,rejected };
   for (const mark of view.marks) {
     const sourceAt = Canvas.sourcePoint(grid,mark.at,binding.canvas)?.map(Math.floor);
-    const value = markValue(mark,definition,design.palette);
+    const value = markValue(mark,definition,design.palette,api);
     const index = sourceAt ? sourceAt[1]*before.w+sourceAt[0] : -1, cell = before.cell[index];
     const hidden = Bindings.staleAt(binding,mark.at) ? 'stale-binding-pixel' :
       protect(mark.at) ?? (!sourceAt ? 'outside-registration' :
@@ -148,7 +151,7 @@ function resolveCells(candidates,plan) {
   const chosen = new Map(), conflicts = [], widest = plan.size[0];
   for (const [cell,rows] of [...candidates].sort((a,b)=>a[0]-b[0])) {
     rows.sort((a,b)=>b.score-a.score || compareName(a.view,b.view) || a.pixel[1]-b.pixel[1] || a.pixel[0]-b.pixel[0]);
-    const mixed = rows.some(row=>row.value !== rows[0].value), override = plan.overrides.get(cell);
+    const mixed = rows.some(row=>JSON.stringify(row.value) !== JSON.stringify(rows[0].value)), override = plan.overrides.get(cell);
     const winner = override ? rows.find(row=>row.view === override.view && row.pixel.every((n,i)=>n === override.pixel[i])) :
       !mixed || plan.policy === 'facing' ? rows[0] : null;
     if (override && !winner) throw new RangeError('Conflict override references an unavailable sample at '+override.cell.join(','));
@@ -163,21 +166,36 @@ function resolveCells(candidates,plan) {
 function stamps(chosen,[w,h]) {
   const swatches = new Map();
   for (const [cell,{ value }] of chosen) {
-    if (!swatches.has(value)) swatches.set(value,new Set());
-    swatches.get(value).add(cell);
+    const key = JSON.stringify(value);
+    if (!swatches.has(key)) swatches.set(key,{value,cells:new Set()});
+    swatches.get(key).cells.add(cell);
   }
-  return [...swatches].map(([value,cells])=>({ value,brush:{ kind:'bitmap',min:[0,0],max:[1,1],
+  return [...swatches.values()].map(({value,cells})=>({ value,brush:{ kind:'bitmap',min:[0,0],max:[1,1],
     rows:Array.from({length:h},(_,y)=>Array.from({length:w},(_,x)=>cells.has(y*w+x) ? '#' : '.').join('')) } }));
 }
 
-function diagnostics(before,after,chosen,contested,rejected) {
+function channelEvidence(frame,channel) {
+  switch(channel) {
+    case 'opacity': return { bytes:frame.passes.surfaceCoverage,stride:1,depth:frame.passes.depth };
+    case 'emission': return { bytes:frame.passes.emission,stride:3 };
+    case 'normal': return { bytes:frame.passes.shadingNormal,stride:3 };
+    case 'roughness': return { bytes:frame.rgb,stride:3 };
+    default: return { bytes:frame.passes.pigment,stride:1 };
+  }
+}
+
+function diagnostics(before,after,chosen,contested,rejected,channel) {
   const { w,h } = before, masks = { changed:[],seams:[],chartEdges:[],bleed:[],conflict:[],rejected:[] };
   const skipped = new Set(rejected.flatMap(row=>row.sourceAt ? [row.sourceAt[1]*w+row.sourceAt[0]] : []));
   for (let p=0; p<w*h; p++) {
-    const sample = chosen.get(before.cell[p]), changed = before.pigment[p] !== after.pigment[p];
+    const sample = chosen.get(before.cell[p]), {bytes,stride,depth} = before.evidence;
+    const depthChanged = depth && Math.abs(depth[p]-after.evidence.depth[p]) > 1e-5;
+    let changed = depthChanged || channel.startsWith('mask:') && !!sample;
+    for (let c=0;c<stride && !changed;c++)
+      changed = Math.abs(bytes[p*stride+c]-after.evidence.bytes[p*stride+c]) > 1e-5;
     if (changed) {
       masks.changed.push(p);
-      if (!sample || before.cell[p] !== after.cell[p]) masks.bleed.push(p);
+      if (!sample || channel !== 'opacity' && before.cell[p] !== after.cell[p]) masks.bleed.push(p);
     }
     if (contested.has(before.cell[p])) masks.conflict.push(p);
     if (skipped.has(p)) masks.rejected.push(p);
@@ -186,7 +204,7 @@ function diagnostics(before,after,chosen,contested,rejected) {
     if (neighbors.some(q=>before.adjacentChart[q])) masks.chartEdges.push(p);
     if (neighbors.some(q=>{
       const other = chosen.get(before.cell[q]);
-      return other && other.view !== sample.view && other.value !== sample.value;
+      return other && other.view !== sample.view && JSON.stringify(other.value) !== JSON.stringify(sample.value);
     })) masks.seams.push(p);
   }
   return { counts:Object.fromEntries(Object.entries(masks).map(([key,indices])=>[key,indices.length])),
@@ -198,7 +216,7 @@ function png(frame,view) {
   return PNG.encode(width,height,rgba,4).toString('base64');
 }
 
-function review(raw,design,{ binding,destination,source,solid,definition },{ render,preview,revision,frame,protect,includeImages }) {
+function review(raw,design,{ binding,destination,source,solid,definition,api },{ render,preview,revision,frame,protect,includeImages }) {
   const plan = prepare(raw,design,binding);
   if (raw.documentRevision !== undefined && raw.documentRevision !== revision)
     throw new RangeError('Multiview approvals were recorded against a different pixel document revision');
@@ -209,7 +227,8 @@ function review(raw,design,{ binding,destination,source,solid,definition },{ ren
   const capture = render();
   const baseline = plan.views.map((view,i)=>{
     const rendered = capture(view,i,plan.grid), before = inspectFrame(rendered,binding,destination.chart,locate,plan.size);
-    const marks = addMarks(view,[design.width,design.height],before,binding,design,definition,protect,candidates);
+    before.evidence = channelEvidence(rendered,destination.channel);
+    const marks = addMarks(view,[design.width,design.height],before,binding,design,definition,api,protect,candidates);
     return { view,before,marks,key:cameraKey(rendered),...(includeImages && { png:png(rendered,view) }) };
   });
   const { chosen,conflicts } = resolveCells(candidates,plan), projected = stamps(chosen,plan.size);
@@ -223,7 +242,8 @@ function review(raw,design,{ binding,destination,source,solid,definition },{ ren
     if (rendered && cameraKey(rendered) !== key)
       throw new RangeError('Multiview preview changed the camera or clock for '+view.id);
     const after = rendered ? inspectFrame(rendered,binding,destination.chart,locate,plan.size) : before;
-    const finding = diagnostics(before,after,chosen,contested,marks.rejected);
+    if (rendered) after.evidence = channelEvidence(rendered,destination.channel);
+    const finding = diagnostics(before,after,chosen,contested,marks.rejected,destination.channel);
     if (includeImages) images.push({ before:original,after:rendered ? png(rendered,view) : original });
     return { id:view.id,approved:view.approved,time:view.time,...marks,...finding };
   });
