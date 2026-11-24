@@ -1671,6 +1671,7 @@ ink-studio pixel-art session run work command.json
 ```
 
 ```js
+const { openPixelEditorSession } = require('.');
 const editor = openPixelEditorSession('work');
 const result = editor.execute(command);
 ```
@@ -1692,10 +1693,11 @@ const result = editor.execute(command);
 
 A draw, mask, recolor, transform, or apply command takes the regular Ink
 patch fields and returns a pixel edit receipt. Keep `id` and `revision` on
-each patch. Supply the frame, cel, and source revision where the destination
-requires them. Edits join an open transaction or commit individually.
-For example, save a rectangular mask using the revision returned by
-`validate`.
+each patch. Supply the applicable frame or cel and the source revision for
+a guarded source change. Edits join an open transaction or commit individually.
+A rejected edit carries its receipt on the SDK error. `session run` returns
+the same receipt and exits with status 2. Save a rectangular mask using the
+revision returned by `validate`.
 
 ```json
 {

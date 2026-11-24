@@ -3147,10 +3147,16 @@ function runSessionPixelCommand(editor,directory,input,opt,capture,attachedScene
     ...settings,...(editor.sceneEditor && sameScene(attachedScene,sceneRef) && { sourceWorld:editor.sceneEditor.build() })
   }) : undefined;
   const command = read(input);
-  const result = editor.execute(command,{ captureSelection,sceneRef,
-    directory:path.dirname(path.resolve(input)),inputs:[...inputs,...(out ? [out] : [])] });
-  if (command.action === 'preview' && !result.valid) process.exitCode = 2;
-  return { result,out };
+  try {
+    const result = editor.execute(command,{ captureSelection,sceneRef,
+      directory:path.dirname(path.resolve(input)),inputs:[...inputs,...(out ? [out] : [])] });
+    if (command.action === 'preview' && !result.valid) process.exitCode = 2;
+    return { result,out };
+  } catch (error) {
+    if (!error.receipt) throw error;
+    process.exitCode = 2;
+    return { result:error.receipt,out };
+  }
 }
 
 function sessionCommand(pos,opt,{ scene,capture,view }) {

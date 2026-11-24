@@ -160,6 +160,13 @@ test('command validation and output guards reject unsafe writes before staging a
   assert.throws(()=>editor.execute({...draw,version:2}),/version 1/);
   assert.throws(()=>editor.execute(command('preview',{edit:command('undo')})),/needs a pixel edit/);
   w.run({...draw,version:2},{status:1});
+  const stale = {...draw,patch:{...draw.patch,revision:'0'.repeat(64)}};
+  let rejected;
+  assert.throws(()=>editor.execute(stale),error=>{
+    rejected = error.receipt;
+    return rejected?.conflicts[0].code === 'stale-document';
+  });
+  assert.deepEqual(w.run(stale,{status:2}),rejected);
   w.run(draw,{extra:['--out',w.file('command.json')],status:1});
   fs.symlinkSync(w.session,w.file('alias'),'dir');
   w.run(draw,{extra:['--out',w.file('alias/checkpoint-1.json')],status:1});
