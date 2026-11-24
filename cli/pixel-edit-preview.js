@@ -60,6 +60,7 @@ function sourceTarget({ destination,binding,layer }, patch) {
     ...(layer?.kind === 'surface' && { layer:layer.id, ...(patch.operation?.pixel !== undefined && { at:patch.operation.pixel }) }),
     ...(binding.part !== undefined && { part:binding.part }),
     ...(destination.chart !== undefined && { chart:destination.chart, channel:destination.channel }),
+    ...(destination.kind === 'scan-material' && {mesh:destination.mesh,material:destination.material}),
     ...(destination.kind === 'decal-layer' && {decal:destination.decal,operation:patch.operation?.type}),
     ...(destination.kind === 'shot-correction' && Array.isArray(patch.edits) && {
       frame:patch.frame, pixels:patch.edits.map(edit => ({ at:edit?.at, from:edit?.from, to:edit?.to }))

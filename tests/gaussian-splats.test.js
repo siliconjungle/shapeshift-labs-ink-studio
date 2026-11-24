@@ -314,3 +314,26 @@ test('WebGL applies a translucent splat mask to its ramp and protects its pixel 
   assert.deepEqual(result.rawPaint, result.raw);
   assert.notDeepEqual(result.covered, result.ramp);
 });
+
+test('the pixel CLI edits a PLY splat while the headless view retains its directional response',t=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-scan-splat-paint-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const file=name=>path.join(dir,name);
+  const cli=(...args)=>execFileSync(process.execPath,[path.resolve(__dirname,'../cli/ink-studio.js'),...args],{stdio:'pipe'});
+  const write=(name,value)=>fs.writeFileSync(file(name),JSON.stringify(value));
+  fs.writeFileSync(file('scan.ply'),ply('binary_little_endian',[0,-.4,0,0,.12,0,0,0,0]));
+  write('document.json',{format:'ink-studio/pixel-art',version:2,width:20,height:20,pixelAspect:[1,1],
+    palette:{mint:'#55aa88'},layers:[{id:'ink'}],frames:[{id:'front',durationMs:100,cels:{}}],
+    sceneBindings:[{id:'scan',scene:file('scan.ply'),object:'gaussian-cloud'}],
+    destinations:[{id:'paint',kind:'splat-attributes',binding:'scan'}]});
+  const binding=['--scene',file('scan.ply')], targets=['pixel-art','targets',file('document.json'),...binding,'--destination','paint'];
+  const report=JSON.parse(cli(...targets));
+  assert.equal(report.splats[0].directionalAppearance,true);
+  write('edit.json',{id:'paint',destination:'paint',frame:'front',revision:report.documentRevision,sourceRevision:report.sourceRevision,
+    operation:{splats:[{splat:report.splats[0].id,pigment:'mint'}]}});
+  assert.equal(JSON.parse(cli('pixel-art','edit',file('document.json'),file('edit.json'),...binding,'--out',file('fit.json'))).status,'applied');
+  assert.equal(JSON.parse(cli(...targets,'--splat-fit',file('fit.json'))).splats[0].pigment,'#55aa88');
+  for (const weight of ['0','1']) cli('render',file('scan.ply'),'--w','52','--h','52','--px','1','--yaw','0','--pitch','0',
+    '--raw','--splat-fit',file('fit.json'),'--scan-appearance',weight,'--out',file(weight+'.png'));
+  assert(!fs.readFileSync(file('0.png')).equals(fs.readFileSync(file('1.png'))));
+});

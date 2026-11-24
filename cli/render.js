@@ -125,7 +125,7 @@ const PixelSourceTracking = require('./pixel-source-tracking.js');
 const SemanticMipmaps = require('../src/semantic-texture-mipmaps.js');
 const texelEmissionDisplay = require('../src/color-space.js').prepare('srgb-linear', 'srgb');
 const toLinearSrgb = require('../src/color-space.js').prepare('srgb', 'srgb-linear');
-function addSplatEmission(rgb, emission) {
+function addLinearTint(rgb, emission) {
   return texelEmissionDisplay(toLinearSrgb(rgb).map((n,k)=>clamp(n+emission[k],0,1)));
 }
 const SimulationMaterialLayers=require('../src/simulation-material-layers.js');
@@ -1178,7 +1178,7 @@ function renderFrame(world, o, preparedPalettes) {
   const reliefMeshes=world.reliefLOD!==undefined ? require('../index.js').load().KIT.procedural.lod.relief.frame(world,o,{
     view:V,width:W/reliefGrid,height:H/reliefGrid,focal:focal/reliefGrid,ortho:Boolean(ortho),near,far:camera.clipFar
   },!reflectionPlane&&!probeView&&(!o.samples||o.worked)?o.reliefLODFrame:undefined) : [];
-  const meshLayers = SceneMeshes.layers(world,o.meshes,reliefMeshes);
+  const meshLayers = SceneMeshes.layers(world,o.meshes,reliefMeshes,o.scanPaint);
   const brickLayers=brickFrames.length ? brickAPI.layers(brickFrames) : [];
   const decals = o.surfaceDecals !== false && world.surfaceDecals?.sample(sceneTime,o).layers;
   const surfaceLayers = meshLayers.length || brickLayers.length || decals?.length ?
@@ -1719,6 +1719,8 @@ function renderFrame(world, o, preparedPalettes) {
   const spotLighting = Array.isArray(volumeLighting?.spots) && volumeLighting.spots.some(light => light?.surfaceIntensity !== undefined)
     ? prepareVolumeLight() : undefined;
   const scanFrame = SemanticMipmaps.scanFrame(o.scanDaylight,o.scanAppearance);
+  const scanSplatView=scanFrame.appearance && world.gaussianHarmonics?.degree && world.gaussianAppearanceDelta &&
+    {eye,back:[V[2],V[6],V[10]],ortho};
   const directLight = AreaRaster.createLighting(areaLights,world,d,occluderAlpha,
       { spots:spotLighting?.surfaceSpots, shadow:spotLighting?.shadow, cutoutShadow, shot:shotLighting, art:artLighting, spill:spillLights });
   const diffuseFrames = (directLight || probes) && sampleFrames(world,t), diffuseNormals = [];
@@ -2129,7 +2131,7 @@ function renderFrame(world, o, preparedPalettes) {
         const gain = contact.sample(receiver, sprite.p, position, sprite.normal);
         color = color.map(value => value*gain);
       }
-      if (emitted) color=addSplatEmission(color,emitted.linear);
+      if (emitted) color=addLinearTint(color,emitted.linear);
       claim = paletteClaim?.(sprite.p,i,paletteId,color[0],color[1],color[2],choices);
       if (contribution?.applies(i, paletteId)) {
         const anchor = fragmentRule(i);
@@ -2312,6 +2314,8 @@ function renderFrame(world, o, preparedPalettes) {
     const lightSlot = i * 4, relit = relight?.[lightSlot + 3];
     const pigment=fitPigment?.(i);
     const basePigment=liveAlbedo || pigment;
+    const directional=scanSplatView ? world.gaussianAppearanceDelta(world,i,scanSplatView) : undefined;
+    const scanResidual=directional?.map(value=>value*scanFrame.appearance);
     let r = basePigment ? basePigment[0] : (pk % 256) / 255,
       g = basePigment ? basePigment[1] : (Math.floor(pk / 256) % 256) / 255,
       b = basePigment ? basePigment[2] : Math.floor(pk / 65536) / 255;
@@ -2344,7 +2348,7 @@ function renderFrame(world, o, preparedPalettes) {
     const painted = art && !renderMeta?.muteEmission?.[i] && renderMeta?.paintedEmission?.subarray(i*3,i*3+3);
     const emitted=splatEmission?.get(i);
     const inkEmission = painted && painted.some(Boolean) ? (emissionCurve ? LightingChannels.emission(emissionCurve,painted) : painted) : null;
-    const emissionTint = emitted && inkEmission ? addSplatEmission(inkEmission,emitted.linear) : emitted?.tint ?? inkEmission;
+    const emissionTint = emitted && inkEmission ? addLinearTint(inkEmission,emitted.linear) : emitted?.tint ?? inkEmission;
     const emits = art && (emissionTint?.some(Boolean) || Boolean(curveEmission) || hasEmission && (!emissionCurve || r>0 || g>0 || b>0));
     const automatic = kind === LightSchedule.emissionKind && d[q + 15] === LightSchedule.emissionMarker;
     const sourceScale = automatic ? LightSchedule.emissionScale(dusk) : 1;
@@ -2516,7 +2520,7 @@ function renderFrame(world, o, preparedPalettes) {
     const reflectInRaster = (planar || localProbeReflection || reflectedSky) && !pixelSurface;
     const finishBeforeFog = !!engrave || reflectInRaster || !pixelSurface && surface?.finishBeforeFog(i);
     const normal = fragmentSurface ? surface.surfaceNormal(i) : null;
-    const centerFog = !emitted && !opticalActive && !finishBeforeFog && !staged?.lit && !liveNormal && !splatFlash && !relit && coverGain === 1;
+    const centerFog = !scanResidual && !emitted && !opticalActive && !finishBeforeFog && !staged?.lit && !liveNormal && !splatFlash && !relit && coverGain === 1;
     if (fogMix && centerFog) {
       r += (fog[0] - r) * fogMix;
       g += (fog[1] - g) * fogMix;
@@ -2812,7 +2816,8 @@ function renderFrame(world, o, preparedPalettes) {
             restNormal:engrave.restNormal,restTangent:engrave.restTangent,screen:[ix+.5,iy+.5]
           });
         }
-        if (emitted && !pixelSurface) [pr,pg,pb]=addSplatEmission([pr,pg,pb],emitted.linear);
+        if (scanResidual && !pixelSurface) [pr,pg,pb]=addLinearTint([pr,pg,pb],scanResidual);
+        if (emitted && !pixelSurface) [pr,pg,pb]=addLinearTint([pr,pg,pb],emitted.linear);
         const claim = paletteClaim?.(p,i,paletteId,pr,pg,pb,materialChoices);
         if (staged?.lit || scoped || glassLook) {
           let sample;
@@ -2845,7 +2850,7 @@ function renderFrame(world, o, preparedPalettes) {
           pg = Lightning.shade(pg, splatFlash[1]);
           pb = Lightning.shade(pb, splatFlash[2]);
         }
-        if (emitted || engrave || opticalActive || staged?.lit || (fragmentSurface && finishBeforeFog) || liveNormal || splatFlash || relit || coverGain < 1) {
+        if (scanResidual || emitted || engrave || opticalActive || staged?.lit || (fragmentSurface && finishBeforeFog) || liveNormal || splatFlash || relit || coverGain < 1) {
           pr += (fog[0] - pr) * fogMix;
           pg += (fog[1] - pg) * fogMix;
           pb += (fog[2] - pb) * fogMix;
@@ -3229,8 +3234,10 @@ function renderFrame(world, o, preparedPalettes) {
           const gain = exact ? contact.sample(receiver, p, exact.position, exact.normal) : contact.sample(receiver, p, point);
           if (gain < 1) rgb = rgb.slice(0, 3).map(value => value*gain);
         }
+        const directional=scanSplatView ? world.gaussianAppearanceDelta(world,i,scanSplatView) : undefined;
+        if (directional) rgb=addLinearTint(rgb,directional.map(value=>value*scanFrame.appearance));
         const emitted=splatEmission?.get(i);
-        if (emitted) rgb=addSplatEmission(rgb,emitted.linear);
+        if (emitted) rgb=addLinearTint(rgb,emitted.linear);
         const claim = paletteClaim?.(p,i,c[5],rgb[0],rgb[1],rgb[2],choices);
         if (contribution?.applies(i, c[5])) {
           const rule = fragmentRule(i);

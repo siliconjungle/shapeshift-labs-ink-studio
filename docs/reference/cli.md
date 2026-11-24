@@ -218,7 +218,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
                               [--res 0.08 --texture-size 1024 --triangles 16000 --duration 4 --fps 30]
   scan-mesh <depth.png|depth.json> --image aligned.png --out prop.glb   recover an opaque mesh with residual splats
              [--diffuse map.png --normal map.png --roughness value|map.png --capture-layer]  export relightable scan maps
-  render <scan.glb> [--scan-appearance 0..1 --scan-daylight off]  control captured color and daylight
+  render <scan.glb> [--scan-paint fit.json --scan-appearance 0..1 --scan-daylight off]  paint and relight registered scans
   depth <map.png|map.json> [--image aligned.png --out-dir folder]  import a depth map as splats, a mesh and an SDF
                               [--size 6 --cells 64 --res 0.09 --hues 6 --shades 4 --up z --spin 0.5 --thick 0.1]; a mesh file also works wherever an id does
   validate <scene|look-file> [--renderer headless|webgl]   check scene content and look bindings

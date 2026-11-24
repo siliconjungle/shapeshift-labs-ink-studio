@@ -330,24 +330,54 @@ function colorChannel(dc, sh, index, channel, basis, linear) {
   return Math.round((linear ? srgbDisplay(value) : value) * 255);
 }
 
-export function gaussianSplatColors(world, index, { eye, back, ortho }) {
+const orthographicBasis=new WeakMap();
+function viewBasis(world,index,{eye,back,ortho},degree,up) {
+  if (ortho) {
+    const previous=orthographicBasis.get(back);
+    if (previous?.degree===degree && previous.up===up && previous.direction.every((n,i)=>n===back[i]))
+      return previous.basis;
+  }
+  const at=index*16;
+  const ray=ortho ? back.map(value=>-value) : eye.map((value,k)=>world.data[at+k]-value);
+  const direction=up==='z' ? [ray[0],-ray[2],ray[1]] : ray;
+  const basis=Math.hypot(...direction) ? shBasis(direction,degree) : null;
+  if (ortho) orthographicBasis.set(back,{degree,up,direction:Array.from(back),basis});
+  return basis;
+}
+
+export function gaussianSplatColors(world, index, view) {
   const { count, degree, dc, sh, up, linear } = world.gaussianHarmonics ?? {};
   if (!Number.isInteger(index) || index < 0 || index >= count || !dc)
     throw new RangeError('Inspecting Gaussian color needs a live imported splat index');
-  const at = index * 16;
-  const ray = ortho ? back.map(value => -value) : eye.map((value, axis) => world.data[at + axis] - value);
-  const direction = up === 'z' ? [ray[0], -ray[2], ray[1]] : ray;
-  const basis = Math.hypot(...direction) ? shBasis(direction, degree) : null;
+  const basis=viewBasis(world,index,view,degree,up);
   return {
     base: [0, 1, 2].map(channel => colorChannel(dc, sh, index, channel, null, linear?.[index])),
     rgb: [0, 1, 2].map(channel => colorChannel(dc, sh, index, channel, basis, linear?.[index]))
   };
 }
 
+const srgbLinear=n=>n<=.04045 ? n/12.92 : ((n+.055)/1.055)**2.4;
+
+export function gaussianAppearanceDelta(world,index,view) {
+  const {count,degree,dc,sh,up,linear,available}=world.gaussianHarmonics;
+  if (!degree || index>=count || available && !available[index]) return;
+  const basis=viewBasis(world,index,view,degree,up);
+  if (!basis) return;
+  const response=[0,0,0];
+  for (let c=0;c<3;c++) {
+    const base=.5+SH0*dc[index*3+c];
+    let observed=base;
+    for (let j=0;j<basis.length;j++) observed+=basis[j]*sh[(index*basis.length+j)*3+c];
+    const a=clamp(base,0,1), b=clamp(observed,0,1);
+    response[c]=linear?.[index] ? b-a : srgbLinear(b)-srgbLinear(a);
+  }
+  return response.some(Boolean) ? response : undefined;
+}
+
 const defaultPalette = [0x0c1217, 0x334552, 0x6f8590, 0xbccdd0, 0xf4f8f5];
 
 export function gaussianSplatWorld(cloud, {
-  size = 6, up = 'y', viewDirection, colorMode = 'baked', palette = defaultPalette
+  size = 6, up = 'y', viewDirection, colorMode = 'baked', palette = defaultPalette, objectId
 } = {}) {
   const { count, positions, scales, rotations, opacity, dc, sh, degree } = cloud;
   checkCount(count, pointLimit);
@@ -361,6 +391,8 @@ export function gaussianSplatWorld(cloud, {
   if (!(Array.isArray(palette) || ArrayBuffer.isView(palette)) || !palette.length || palette.length > 64 ||
       !Array.from(palette).every(color => Number.isInteger(color) && color >= 0 && color <= 0xffffff))
     throw new TypeError('Gaussian palette needs one to 64 packed RGB swatches');
+  if (objectId!==undefined && (typeof objectId!=='string' || !objectId.trim() || objectId.length>256))
+    throw new TypeError('Gaussian object ID needs a nonempty name');
   const pal = Array.from(palette);
   const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   let maxScale = 0;
@@ -421,7 +453,9 @@ export function gaussianSplatWorld(cloud, {
   return {
     count, data, gaussianCloud: true, seed: 1, detail: 14, radius: size, moving: new Int32Array(), back: new Int32Array(),
     bg: [pal[0] >> 16, pal[0] >> 8 & 255, pal[0] & 255], pal,
-    ...(colorMode !== 'baked' && { gaussianHarmonics: { count, degree, dc, sh, normals, up, colorMode } }),
+    ...(objectId!==undefined && {renderMetadata:{objectIds:new Uint32Array(count).fill(1),objects:[null,objectId]}}),
+    ...(colorMode !== 'baked' && { gaussianHarmonics: { count, degree, dc, sh, normals, up, colorMode },
+      gaussianAppearanceDelta }),
     palName: 'Imported Gaussian', dither: 0, fog: { c: 0, start: 1, max: 0 }, outline: { c: 0, edge: 0 },
     cam: { target: [0, 0, 0], yaw: 0, pitch: 0, dist: size * 2.15, sway: 0 }
   };

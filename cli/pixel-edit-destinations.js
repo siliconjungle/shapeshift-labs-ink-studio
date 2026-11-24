@@ -7,9 +7,10 @@ const Footprints = require('../src/splat-footprints.js');
 const FootprintEdits = require('./pixel-splat-footprints.js');
 const RowAttributes = require('./splat-row-attributes.js');
 const Topology = require('./splat-topology.js');
+const ScanPaint = require('./scan-material-paint.js');
 const { observe } = require('./pixel-edit-revisions.js');
 const Provenance = require('../src/splat-provenance.js');
-const { conflict } = require('./pixel-edit-preview.js');
+const { conflict,sourceTarget } = require('./pixel-edit-preview.js');
 const CanvasTransforms = require('../src/pixel-canvas-transforms.js');
 const { staleAt } = require('../src/pixel-source-bindings.js');
 const LayerStack = require('../src/pixel-layer-stack.js');
@@ -30,6 +31,7 @@ const kindFields = new Map([
   ['surface-channel', ['binding','chart','channel']],
   ['decal-layer', ['binding','decal']],
   ['splat-attributes', ['binding']],
+  ['scan-material', ['binding','mesh','material']],
   ['sdf-shape', ['binding']],
   ['sdf-material', ['binding']]
 ]);
@@ -48,6 +50,8 @@ function validate(destinations, bindings) {
     if (destination.kind === 'surface-channel' &&
         (!Targets.name(destination.chart) || !Targets.name(destination.channel)))
       throw new TypeError('A surface channel destination needs a chart and channel');
+    if (destination.kind === 'scan-material' && (!Targets.name(destination.mesh) || !Targets.name(destination.material)))
+      throw new TypeError('A scan material destination needs mesh and material IDs');
     if (destination.kind === 'decal-layer' && (!Targets.name(destination.decal) || destination.decal.length > 128))
       throw new TypeError('A decal layer destination needs a stable decal ID');
     ids.add(destination.id);
@@ -532,6 +536,14 @@ function apply(frame, edit, route, context, readMarks) {
     const apply=edit.operation?.topology!==undefined ? editTopology : splats;
     return apply(frame,edit,binding,source.world,source.revision,context.onSplat);
   }
+  if (destination.kind==='scan-material') {
+    const palette=Object.fromEntries(frame.paletteEntries.map(({id,color})=>[id,color]));
+    const {asset,hits}=ScanPaint.apply(source.world,destination,source.scan,edit.operation,value=>
+      parseInt(indexedValue(value,palette).color.slice(1),16));
+    context.onEditTarget?.({...sourceTarget(route,edit),texels:hits,
+      capturedAppearance:source.scan.captured});
+    return asset;
+  }
   if (destination.kind === 'decal-layer') return decalEdit(frame,edit,route,source.editor);
   const change = destination.kind === 'surface-channel' && layer?.kind === 'surface' &&
     edit.operation?.pixel !== undefined ? { ...edit,operation:surfacePixel(frame,edit.operation,binding,layer) } : edit;
@@ -544,6 +556,8 @@ function targets(route, context, limit, query) {
   const source = observe(route,context);
   checkRevision(binding,source);
   const { world,editor,revision,sourceRevision } = source;
+  if (destination.kind==='scan-material') return {destination:destination.id,binding,revision,sourceRevision,
+    mesh:destination.mesh,material:destination.material,...source.scan};
   if (world) {
     const editing = destination.kind === 'splat-attributes';
     const fit = SplatFit.prepare(world,world.look?.splatFit);
@@ -555,7 +569,9 @@ function targets(route, context, limit, query) {
     const describe = (id,i) => {
       const attributes=editing && RowAttributes.valuesAt(sourceRows,i,fit?.rowAttributes?.get(i));
       const {created,retired}=SplatFit.lifecycle(fittedWorld,i);
-      return { id,...(created && {provenance:created}),...(retired && {retired}), at:attributes?.position ?? Array.from(rest.subarray(i*16,i*16+3)),
+      return { id,...(created && {provenance:created}),...(retired && {retired}),
+        ...(editing && sourceRows.gaussianHarmonics?.degree>0 && (!sourceRows.gaussianHarmonics.available ||
+          sourceRows.gaussianHarmonics.available[i]) && {directionalAppearance:true}), at:attributes?.position ?? Array.from(rest.subarray(i*16,i*16+3)),
       ...(editing && {attributes,transformable:!retired && SplatFit.topologyEditable(sourceRows,i),pigment:'#'+SplatFit.pigmentAt(sourceRows,i,fit).toString(16).padStart(6,'0'),
         paintable:!retired && SplatFit.paintable(sourceRows,i),material:effectiveRow(i).material,roughness:SplatFit.roughnessAt(fittedWorld,i,fit),
         emission:fit?.emission?.get(i)??[0,0,0],coverage:fit?.coverage?.[i]??1,

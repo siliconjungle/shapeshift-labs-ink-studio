@@ -359,7 +359,7 @@ function cell(frame,p) {
 }
 
 function sameScene(ref,requested) {
-  return ref === requested || (typeof requested === 'string' && /\.(?:js|json)$/i.test(ref) &&
+  return ref === requested || (typeof requested === 'string' && /\.(?:js|json|obj|gltf|glb|ply|spz|gsz)$/i.test(ref) &&
     path.resolve(requested) === path.resolve(ref));
 }
 
@@ -1560,7 +1560,10 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
         if (splat.attributes) (target.attributeHits ??= []).push(splat);
         if (splat.topology) (target.topologyHits ??= []).push(splat);
       },
-      onEditTarget: target => targets.push(target),
+      onEditTarget: summary => {
+        if (target && summary.kind==='scan-material') Object.assign(target,summary);
+        else targets.push(summary);
+      },
       world:binding => context.world(binding),
       scene(binding) {
         const { editor,revision } = context.scene(binding);
@@ -1734,7 +1737,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
       if (expected && binding && request.sourceRevision === undefined)
         next.verifiedReplays = [...draft.verifiedReplays,draft.receipts.length];
       if (!binding) Object.assign(next,{ design:result, legacyRevision:null });
-      const option = { 'shot-correction':'shotCorrections', 'splat-attributes':'splatFit' }[destination.kind];
+      const option = { 'shot-correction':'shotCorrections', 'splat-attributes':'splatFit', 'scan-material':'scanPaint' }[destination.kind];
       if (option) next.renderOutputs = { ...draft.renderOutputs,
         [binding.scene]:{ ...renderOptions(binding.scene), [option]:result }
       };
@@ -1772,7 +1775,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
         const footprintHits = splats.filter(row=>row.footprint);
         const attributeHits = splats.filter(row=>row.attributes);
         const topologyHits = splats.filter(row=>row.topology);
-        const summary={ ...target, sourceRevision:receipt.inputs.sourceRevision,
+        const summary={ ...target,...(painted?.kind==='scan-material' && painted), sourceRevision:receipt.inputs.sourceRevision,
           sourceChecked:patch.sourceRevision !== undefined || verifiedReplays.has(index),
           ...(paintHits.length && {paintHits}),
           ...(footprintHits.length && {footprintHits}),
@@ -2507,9 +2510,7 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
   }
   const out = writing && typeof opt.out === 'string' ? path.resolve(opt.out) : undefined;
   function sourceFor(binding) {
-    const sameFile = typeof opt.scene === 'string' && /\.(?:js|json)$/i.test(binding.scene) &&
-      path.resolve(opt.scene) === path.resolve(binding.scene);
-    if (opt.scene !== binding.scene && !sameFile)
+    if (!sameScene(binding.scene,opt.scene))
       throw new TypeError('Pass --scene ' + binding.scene + ' to use the bound source');
     if (out && [source,patch,binding.scene].some(file => path.resolve(file) === out))
       throw new RangeError('Write the scene edit to a separate output from its inputs');
@@ -2726,8 +2727,8 @@ function sessionCommand(pos,opt,{ scene,capture,view }) {
       let data;
       if (artifact === 'document') data = editor.snapshot();
       else if (artifact === 'scene') data = editor.sceneEditor?.snapshot();
-      else if (artifact === 'shot-corrections' || artifact === 'splat-fit')
-        data = editor.renderOptions(opt.scene)[artifact === 'shot-corrections' ? 'shotCorrections' : 'splatFit'];
+      else if (['shot-corrections','splat-fit','scan-paint'].includes(artifact))
+        data = editor.renderOptions(opt.scene)[{'shot-corrections':'shotCorrections','splat-fit':'splatFit','scan-paint':'scanPaint'}[artifact]];
       if (data === undefined) throw new Error('No session artifact named ' + artifact);
       files.json(out,data);
       result = { artifact, file:out };

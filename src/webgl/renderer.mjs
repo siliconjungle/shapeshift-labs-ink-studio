@@ -1379,7 +1379,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         lastReliefMeshes=reliefMeshes;
       }
       const meshLayers = frame.meshes===false || (world.meshes===undefined&&!reliefMeshes.length) ? [] :
-        toolkit.KIT.sceneMeshes.layers(world,frame.meshes,reliefMeshes)
+        toolkit.KIT.sceneMeshes.layers(world,frame.meshes,reliefMeshes,frame.scanPaint)
           .filter(atlas=>!spriteLOD?.hidden(spriteMask?.meshCodes.get(atlas.sceneMeshId)));
       const brickAPI=toolkit.KIT?.procedural?.brickMeshes;
       const brickLayers=world.brickMeshes ? brickAPI.layers(brickAPI.frame(world,frame.brickMeshes)) : [];

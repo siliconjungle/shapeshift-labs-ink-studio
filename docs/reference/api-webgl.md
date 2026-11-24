@@ -49,7 +49,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `webgl.encodeGaussianTurntableNormalPNG` | function | `({ width, height, normal })` | [source](../../src/webgl/gaussian-turntable.mjs) |
 | `webgl.encodeGaussianTurntablePNG` | function | `({ width, height, indices, metadata })` | [source](../../src/webgl/gaussian-turntable.mjs) |
 | `webgl.gaussianGltfWorld` | function | `(source, { toolkit, scene, clip, time = 0, maxSplats = maxPoints, decodeImage = browserImage } = {})` | [guide](../gaussian-gltf.md), [source](../../src/gaussian-gltf.mjs) |
-| `webgl.gaussianSplatWorld` | function | `(cloud, { size = 6, up = 'y', viewDirection, colorMode = 'baked', palette = defaultPalette } = {})` | [source](../../src/gaussian-splats.mjs) |
+| `webgl.gaussianSplatWorld` | function | `(cloud, { size = 6, up = 'y', viewDirection, colorMode = 'baked', palette = defaultPalette, objectId } = {})` | [source](../../src/gaussian-splats.mjs) |
 | `webgl.gaussianSwatchJump` | function | `(before, after)` | [source](../../src/webgl/gaussian-color-inspector.mjs) |
 | `webgl.mountCausalInspection` | function | `(host,{ query, targets=[], selection, options={}, labels={}, controls={}, stylesheet='', defaultStyles=true, formatCondition=sampleValue, formatEvidence=describe }={})` | [source](../../src/webgl/causal-inspection-view.mjs) |
 | `webgl.mountComparisonView` | function | `(host,{ toolkit,session,left,right,labels={},controls={},stylesheet='',defaultStyles=true,input={} }={})` | [source](../../src/webgl/comparison-view.mjs) |

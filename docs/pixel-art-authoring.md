@@ -2175,6 +2175,7 @@ and declared destinations. The edit JSON has `revision`, `frame`, `id`, and
 | `surface-channel` | `operation.stamp` with a rest-UV brush and value or clear mode | Revised JSON diorama with a stamp appended to the chart |
 | `decal-layer` | `operation.type` of `move`, `mask`, `replace`, or `bake` | Revised JSON diorama with the [decal layer](surface-decals.md#edit-a-decal-layer) edited in place |
 | `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and paint, footprint, or transform controls, or an ordered `operation.topology` batch | Splat-fit asset for `render --splat-fit` |
+| `scan-material` | Explicit `operation.texels` on a registered mesh material | Scan paint asset for `render --scan-paint` |
 | `sdf-shape` | `operation.parameters`, a new `operation.modifier`, or `operation.updateModifier` with `id` and `patch` | Revised JSON diorama with edited geometry |
 | `sdf-material` | `operation.material` with a palette role or native material object | Revised JSON diorama with the solid's material changed |
 
@@ -2527,6 +2528,13 @@ rows. Added and cloned rows report their creation edit, and clones
 report the source ID. Undo, redo, and replay use the existing pixel
 editor session. The saved fit renders through `--splat-fit` in the
 software renderer.
+
+### Paint relightable scan materials
+
+Edit explicit pigment, roughness, and tangent normals on a registered
+mesh with a `scan-material` destination. The scan's captured appearance
+stays available during relighting. Gaussian splat paint also retains
+the imported directional coefficients. See the [scan painting workflow](relightable-scans.md#paint-the-material-and-retain-the-capture).
 
 ### Target shot corrections and scene sources
 

@@ -4,7 +4,7 @@ const SceneMeshes = (() => {
   const Mips = typeof SemanticTextureMipmaps === 'undefined' ? require('./semantic-texture-mipmaps.js') : SemanticTextureMipmaps;
   const simulationAPI=()=>typeof SimulationMaterialLayers==='undefined'?require('./simulation-material-layers.js'):SimulationMaterialLayers;
   const state = Symbol.for('ink-studio.sceneMesh');
-  const charts = new WeakMap(), rayQueries = new WeakMap();
+  const charts = new WeakMap(), rayQueries = new WeakMap(), scanPaints = new WeakMap();
   const maxTriangles = 250000;
   const maxEdge = 2048;
   const array = value => Array.isArray(value) || ArrayBuffer.isView(value) && !(value instanceof DataView);
@@ -109,7 +109,16 @@ const SceneMeshes = (() => {
         faceMaterials !== undefined && (!array(faceMaterials) || faceMaterials.length !== triangles ||
           !every(faceMaterials,n => Number.isInteger(n) && n >= 0 && n < materials.length)))
       throw new RangeError('A mesh needs 1 to 64 materials and a material index for each face when using multiple materials');
-    const rows = Array.from(materials,materialOf);
+    const scanSources=materials.some(row=>row?.scan && row.texture?.pixels) && materials.map(row=>{
+      if (!row?.scan || !row.texture?.pixels) return row;
+      const {roughness,normal,emission,scan}=row;
+      return {...row,texture:{...row.texture,pixels:row.texture.pixels.slice()},
+        ...(normal&&{normal:normal.slice()}),...(bytes(roughness)&&{roughness:roughness.slice()}),
+        ...(emission&&{emission:emission.slice()}),scan:{...scan,
+          ...(scan.pixels&&{pixels:scan.pixels.slice(),sourceView:scan.sourceView?.slice()}),
+          ...(scan.angles&&{angles:scan.angles.slice()})}};
+    });
+    const rows = Array.from(scanSources||materials,materialOf);
     if (new Set(rows.map(row => row.id)).size !== rows.length)
       throw new RangeError('Mesh material IDs must be distinct');
     const grouped = rows.map(() => []), used = rows.map((row,index) => ({ ...row,index }));
@@ -147,7 +156,8 @@ const SceneMeshes = (() => {
     layer.sceneMeshId = id;
     const restBounds=bounds(positions);
     const data = { positions, rest:positions, restBounds, uvs, indices:source, drawIndices, layer, regions, revision:0,
-      materials:rows.map(row => row.id), faceMaterials:faceMaterials && Uint8Array.from(faceMaterials), bounds:restBounds };
+      materials:rows.map(row => row.id), faceMaterials:faceMaterials && Uint8Array.from(faceMaterials), bounds:restBounds,
+      ...(scanSources && {scanSources,scanInfo:new Map()}) };
     return Object.freeze({ id, objectId, partId, vertices, triangles,
       materials:Object.freeze(tiles.map(tile=>tile.id).sort()), [state]:data });
   }
@@ -335,8 +345,108 @@ const SceneMeshes = (() => {
     return meshes;
   }
 
-  function layers(world, enabled, additional) {
-    return list(world,enabled,additional).map(mesh => read(mesh).layer);
+  function scanMaterial(mesh,material) {
+    const data=read(mesh), raw=data.scanSources?.find(row=>row.id===material && row.scan && row.texture?.pixels);
+    if (!raw) throw new RangeError('Unknown registered scan material '+material+' on '+mesh.id);
+    if (!data.scanInfo.has(material)) {
+      const {width,height,pixels}=raw.texture, {scan}=raw;
+      // Bind edits to the registered source, including its captured image and UV geometry.
+      let hash=2166136261;
+      const update=value=>{
+        const input=ArrayBuffer.isView(value) ? new Uint8Array(value.buffer,value.byteOffset,value.byteLength) :
+          JSON.stringify(value);
+        for (let i=0;i<input.length;i++)
+          hash=Math.imul(hash^(typeof input==='string' ? input.charCodeAt(i) : input[i]),16777619);
+      };
+      for (const value of [[width,height,material,raw.color,raw.alphaCutoff,raw.mipmaps,scan.sourceView,scan.angles],
+        data.rest,data.uvs,data.indices,data.faceMaterials,pixels,raw.normal,raw.roughness,raw.emission,scan.pixels])
+        if (value!==undefined) update(value);
+      data.scanInfo.set(material,Object.freeze({width,height,captured:!!scan.pixels,registration:(hash>>>0).toString(16).padStart(8,'0'),
+        ...(scan.pixels&&{sourceView:Object.freeze(scan.sourceView.slice()),
+          angles:Object.freeze((scan.angles??[.75,.99]).slice())})}));
+    }
+    return data.scanInfo.get(material);
+  }
+
+  function applyScanPaint(mesh,records) {
+    const data=read(mesh), materials=data.scanSources?.slice();
+    const seen=new Set();
+    for (const row of records) {
+      const {material,registration,texels}=row;
+      const source=scanMaterial(mesh,material);
+      if (registration!==source.registration || seen.has(material) || !Array.isArray(texels) || !texels.length ||
+          texels.length>source.width*source.height)
+        throw new RangeError('Scan paint needs a unique registered material and bounded texel edits');
+      seen.add(material);
+      const slot=data.materials.indexOf(material), raw=materials[slot], {width,height}=source;
+      let pixels, roughness, normal;
+      const touched=new Set();
+      for (const {at,pigment,roughness:finish,normal:direction,...extra} of texels) {
+        if (!Array.isArray(at) || at.length!==2 || !Array.from(at).every((n,i)=>Number.isInteger(n) && n>=0 && n<[width,height][i]) ||
+            Object.keys(extra).length || pigment===undefined && finish===undefined && direction===undefined ||
+            pigment!==undefined && (!Number.isInteger(pigment) || pigment<0 || pigment>0xffffff) ||
+            finish!==undefined && !unit(finish) || direction!==undefined && (!Array.isArray(direction) || direction.length!==3 ||
+              !Array.from(direction).every(Number.isFinite) || !(Math.hypot(...direction)>1e-8) ||
+              !Number.isFinite(Math.hypot(...direction))))
+          throw new RangeError('Invalid registered scan texel edit');
+        const index=at[1]*width+at[0], offset=index*4;
+        if (touched.has(index)) throw new RangeError('Duplicate scan texel edit');
+        touched.add(index);
+        if (pigment!==undefined) {
+          if (!pixels) {
+            pixels=raw.texture.pixels.slice();
+            const tint=raw.color??0xffffff;
+            for (let i=0;i<pixels.length;i+=4) for (let c=0;c<3;c++)
+              pixels[i+c]=Math.round(pixels[i+c]*(tint>>(16-c*8)&255)/255);
+          }
+          pixels.set([pigment>>16,pigment>>8&255,pigment&255],offset);
+        }
+        if (finish!==undefined) {
+          roughness??=bytes(raw.roughness) ? raw.roughness.slice() :
+            new Uint8Array(width*height).fill(Math.round((raw.roughness??.65)*255));
+          roughness[index]=Math.round(finish*255);
+        }
+        if (direction!==undefined) {
+          normal??=raw.normal?.slice()??new Uint8Array(width*height*4);
+          const length=Math.hypot(...direction);
+          normal.set([...direction.map(n=>128+Math.round(127*n/length)),255],offset);
+        }
+      }
+      materials[slot]={...raw,...(pixels&&{color:0xffffff,texture:{...raw.texture,pixels}}),
+        ...(roughness&&{roughness}),...(normal&&{normal})};
+    }
+    const edited=create({id:mesh.id,objectId:mesh.objectId,partId:mesh.partId,positions:data.rest,uvs:data.uvs,
+      indices:data.indices,faceMaterials:data.faceMaterials,materials});
+    return data.positions===data.rest ? edited : pose(edited,data.positions);
+  }
+
+  function paintMeshes(meshes,asset) {
+    if (asset===undefined || asset===false) return meshes;
+    if (asset?.format!=='ink-studio/scan-paint' || asset.version!==1 || !Array.isArray(asset.edits) || asset.edits.length>2048)
+      throw new TypeError('Expected a version 1 scan paint asset');
+    let cache=scanPaints.get(asset);
+    if (!cache) scanPaints.set(asset,cache=new WeakMap());
+    const groups=new Map();
+    for (const row of asset.edits) {
+      if (!name(row?.mesh) || !name(row.material) || !meshes.some(mesh=>mesh.id===row.mesh))
+        throw new RangeError('Scan paint refers to a missing mesh or material');
+      if (!groups.has(row.mesh)) groups.set(row.mesh,[]);
+      groups.get(row.mesh).push(row);
+    }
+    return meshes.map(mesh=>{
+      const records=groups.get(mesh.id);
+      if (!records) return mesh;
+      const revision=read(mesh).revision, previous=cache.get(mesh);
+      if (previous?.revision===revision) return previous.edited;
+      const edited=applyScanPaint(mesh,records);
+      cache.set(mesh,{revision,edited});
+      return edited;
+    });
+  }
+
+  function layers(world, enabled, additional, scanPaint=world.look?.scanPaint) {
+    const meshes=list(world,enabled,additional);
+    return (enabled===false ? meshes : paintMeshes(meshes,scanPaint)).map(mesh=>read(mesh).layer);
   }
 
   function proxyPlan(world, enabled, toleranceOverride) {
@@ -499,7 +609,7 @@ const SceneMeshes = (() => {
     return {anchors, points:Float32Array.from(points), uvs:Float32Array.from(texture), triangles:Uint32Array.from(triangles)};
   }
 
-  return Object.freeze({create,fromObjectTexels,updateObjectTexels,scanFrame:Mips.scanFrame,pose,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
+  return Object.freeze({create,fromObjectTexels,updateObjectTexels,scanFrame:Mips.scanFrame,scanMaterial,paintMeshes,pose,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
     simulationFrame:(...args)=>simulationAPI().frame(...args),depthProxy,proxyPlan,intersect,rayQuery,projector,sampleProjection,clipUV,revision:mesh=>read(mesh).revision});
 })();
 if (typeof module !== 'undefined') module.exports = SceneMeshes;

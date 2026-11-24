@@ -988,6 +988,7 @@ const view = extra =>
       multiprojection: renderAssetOption('multiprojection'),
       tracedLighting: renderAssetOption('traced-lighting'),
       splatFit: renderAssetOption('splat-fit'),
+      scanPaint: renderAssetOption('scan-paint'),
       shotCorrections: renderAssetOption('shot-corrections'),
       stableTransparency: opt['stable-transparency'] === 'blend' ? { mode: 'blend' } : onOffOption('stable-transparency'),
       fragmentBudget: num('fragment-budget'),
@@ -1400,7 +1401,7 @@ const CMD = {
         '                              [--res 0.08 --texture-size 1024 --triangles 16000 --duration 4 --fps 30]',
         '  scan-mesh <depth.png|depth.json> --image aligned.png --out prop.glb   recover an opaque mesh with residual splats',
         '             [--diffuse map.png --normal map.png --roughness value|map.png --capture-layer]  export relightable scan maps',
-        '  render <scan.glb> [--scan-appearance 0..1 --scan-daylight off]  control captured color and daylight',
+        '  render <scan.glb> [--scan-paint fit.json --scan-appearance 0..1 --scan-daylight off]  paint and relight registered scans',
         '  depth <map.png|map.json> [--image aligned.png --out-dir folder]  import a depth map as splats, a mesh and an SDF',
         '                              [--size 6 --cells 64 --res 0.09 --hues 6 --shades 4 --up z --spin 0.5 --thick 0.1]; a mesh file also works wherever an id does',
         '  validate <scene|look-file> [--renderer headless|webgl]   check scene content and look bindings',
@@ -4338,7 +4339,12 @@ const CMD = {
     if (pos[0] === 'session') return PixelArt.sessionCommand(pos.slice(1),opt,{ scene:editScene,capture,view });
     PixelArt.command(pos,opt,outputFile,{
       capture,captureMotion,captureTrack,captureMultiview,view,
-      world: id => buildPreview(id),
+      world(id) {
+        const world=buildPreview(id), scanPaint=renderAssetOption('scan-paint'), splatFit=renderAssetOption('splat-fit');
+        if (scanPaint!==undefined || splatFit!==undefined) world.look={...world.look,
+          ...(scanPaint!==undefined&&{scanPaint}),...(splatFit!==undefined&&{splatFit})};
+        return world;
+      },
       scene:editScene
     });
   },
@@ -4968,7 +4974,8 @@ async function run() {
     shotReplay?.verify();
     return;
   }
-  const splatFiles = cmd === 'snap' ? pos.filter(gaussianFile) : ['render', 'turn', 'sheet', 'clip'].includes(cmd)
+  const pixelInputs=cmd==='pixel-art' ? (pos[0]==='capture' ? [pos[1]] : [opt.scene]).filter(value=>typeof value==='string') : [];
+  const splatFiles = cmd === 'pixel-art' ? pixelInputs.filter(gaussianFile) : cmd === 'snap' ? pos.filter(gaussianFile) : ['render', 'turn', 'sheet', 'clip'].includes(cmd)
     ? pos.slice(0, 1).filter(gaussianFile) : [];
   if (splatFiles.length) {
     const ink = require('../index.js');
@@ -4978,7 +4985,7 @@ async function run() {
       const name = path.basename(file), id = name.replace(/\W+/g, '-');
       gaussianScenes.set(file, {
         id, name, seed: 1,
-        build: () => gaussianSplatWorld(cloud, { size: num('size', 6), up: opt.up })
+        build: () => gaussianSplatWorld(cloud, { size: num('size', 6), up: opt.up, colorMode:cmd==='pixel-art'||opt['scan-appearance']!==undefined||opt['splat-fit']!==undefined ? 'rgb':'baked', objectId:'gaussian-cloud' })
       });
     }
   }
@@ -5000,12 +5007,12 @@ async function run() {
       })
     });
   }
-  const gltfInputs = cmd === 'snap' ? pos :
+  const gltfInputs = cmd === 'pixel-art' ? pixelInputs : cmd === 'snap' ? pos :
     ['render','turn','sheet','clip','passes','surface-pixel','inspect-gltf'].includes(cmd) ? pos.slice(0,1) : [];
   for (const file of new Set(gltfInputs.filter(file=>/\.(gltf|glb)$/i.test(file)))) {
     if (opt.scene === true) die('--scene needs a glTF scene index');
     const world = await require('../index.js').readGaussianGltf(file, {
-      optional:true, scene:opt.scene === undefined ? undefined : num('scene'), onFile:shot?.dependency
+      optional:true, scene:cmd==='pixel-art' || opt.scene === undefined ? undefined : num('scene'), onFile:shot?.dependency
     });
     if (world) {
       const name = path.basename(file);

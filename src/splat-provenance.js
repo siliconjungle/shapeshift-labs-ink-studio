@@ -206,6 +206,13 @@ const SplatProvenance = (() => {
       moving: Int32Array.from(moving), back: Int32Array.from(back) });
   }
 
+  function harmonicRows(input,count,transfer) {
+    const {degree,dc,sh,linear,normals,available}=input, terms=(degree+1)**2-1;
+    return {...input,count,dc:transfer(dc,3,Float32Array),sh:transfer(sh,terms*3,Float32Array),
+      ...(available&&{available:transfer(available,1,Uint8Array)}),
+      ...(linear&&{linear:transfer(linear,1,Uint8Array)}),...(normals&&{normals:transfer(normals,3,Int8Array)})};
+  }
+
   function subset(world, selection) {
     const indices = Array.from(selection);
     if (indices.some(i => !Number.isSafeInteger(i) || i < 0 || i >= world.count) || new Set(indices).size !== indices.length)
@@ -229,6 +236,7 @@ const SplatProvenance = (() => {
     }
     for (const [key, stride, Type] of perSplat) if (world[key]) result[key] = take(world[key], stride, Type);
     if (world.rest instanceof Float32Array) result.rest = take(world.rest,16,Float32Array);
+    if (world.gaussianHarmonics) result.gaussianHarmonics=harmonicRows(world.gaussianHarmonics,indices.length,take);
     if (world.renderMetadata) {
       const source = world.renderMetadata, meta = result.renderMetadata = { ...source };
       for (const [key, stride, Type] of channels) if (source[key]) meta[key] = take(source[key], stride, Type);
@@ -298,6 +306,15 @@ const SplatProvenance = (() => {
       if (row.data) data.set(row.data,offset);
       else data.copyWithin(offset,row.from*16,(row.from+1)*16);
       data.set(row.position,offset);
+    }
+    if (world.gaussianHarmonics) {
+      const input=world.gaussianHarmonics;
+      const harm=patch.gaussianHarmonics=harmonicRows({...input,available:input.available??new Uint8Array(world.count).fill(1)},
+        count,extend);
+      for (const [i,{from}] of additions.entries()) if (from===undefined) {
+        const row=world.count+i, color=patch.data[row*16+7];
+        for (let k=0;k<3;k++) harm.dc[row*3+k]=((color>>(k*8)&255)/255-.5)/.28209479177387814;
+      }
     }
     const F=typeof SplatFootprints==='undefined' ? require('./splat-footprints.js') : SplatFootprints;
     const footprint=F.validate(world);

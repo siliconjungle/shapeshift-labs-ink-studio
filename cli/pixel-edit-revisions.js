@@ -3,6 +3,7 @@
 const { createHash } = require('node:crypto');
 const { signature } = require('./render-row-assets.js');
 const { conflict } = require('./pixel-edit-preview.js');
+const ScanPaint = require('./scan-material-paint.js');
 
 const revisionPattern = /^[a-f0-9]{64}$/;
 const isRevision = value => typeof value === 'string' && revisionPattern.test(value);
@@ -22,16 +23,23 @@ function observe({ destination,binding }, context, { guard = true } = {}) {
     binding.id,binding.scene,binding.object,binding.part,binding.frame,binding.layer,binding.revision];
   if (binding.canvas !== undefined) scope.push(binding.canvas);
   if (kind === 'decal-layer') scope.push(destination.decal);
+  if (kind==='scan-material') {
+    const world=context.world(binding), scan=ScanPaint.source(world,destination,binding);
+    const revision=digest([destination.mesh,destination.material,scan]);
+    return {world,scan,revision,sourceRevision:digest([scope,revision,world.look?.scanPaint])};
+  }
   if (kind === 'shot-correction' || kind === 'splat-attributes') {
     const world = context.world(binding);
     const revision = signature(world,{ fresh:true });
     if (!guard) return { world,revision };
     const posed = world.rest && world.data !== world.rest ? world.data.subarray(0,world.count*16) : undefined;
     // Row order and ownership both matter even when packed colors and geometry match.
-    const sourceRevision = digest([scope,revision,posed,world.cam,world.spec,world.splatIds,world.renderMetadata,
+    const sourceFields = [scope,revision,posed,world.cam,world.spec,world.splatIds,world.renderMetadata,
       world.splatFootprints,world.surfaceData,world.opticalSplats,world.anim?.geometryOwned,
       world.anim?.physicsOwned,world.anim?.rig?.bid,
-      kind === 'shot-correction' ? world.look?.shotCorrections : world.look?.splatFit]);
+      kind === 'shot-correction' ? world.look?.shotCorrections : world.look?.splatFit];
+    if (world.gaussianHarmonics) sourceFields.push(world.gaussianHarmonics);
+    const sourceRevision = digest(sourceFields);
     return { world,revision,sourceRevision };
   }
   const { editor,revision } = context.scene(binding);

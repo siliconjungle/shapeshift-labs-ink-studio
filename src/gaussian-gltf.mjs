@@ -1,3 +1,4 @@
+import { gaussianAppearanceDelta } from './gaussian-splats.mjs';
 // KHR_gaussian_splatting and native triangle primitives share one retained glTF pose.
 import { shBasis, srgbDisplay } from './gaussian-splats.mjs';
 
@@ -386,7 +387,7 @@ export async function gaussianGltfWorld(source, { toolkit, scene, clip, time = 0
   const target = lo.map((n,k) => (n+hi[k])/2), radius = Math.max(...hi.map((n,k) => n-lo[k]),1e-4);
   const pal = [0x101820,0x334552,0x6f8590,0xbccdd0,0xf4f8f5];
   return { count, data, meshes, ...(scanSurface && {scanSurface:true}), ...(count && { gaussianCloud:true, gaussianSort:'cameraDistance',
-      gaussianHarmonics:{ count, degree, dc, sh, linear, up:'y', colorMode:'rgb' } }),
+      gaussianHarmonics:{ count, degree, dc, sh, linear, up:'y', colorMode:'rgb' },gaussianAppearanceDelta }),
     gltfParts:{ ...(count && {extension:gaussianGltfExtension}), ...(scanSurface && {scanSurface:true}), scene:scene ?? document.scene ?? (document.scenes?.length ? 0 : null),
       ...(clip !== undefined && { clip,time }), parts },
     renderMetadata:{ objectIds, objects, targetIds, targets, ...(normals && {normals}) },

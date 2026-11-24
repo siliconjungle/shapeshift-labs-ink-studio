@@ -41,6 +41,57 @@ ink.render(world, { w: 640, h: 480, scanDaylight: false, scanAppearance: 0.4, ar
 
 The `angles` pair contains the cosine at zero and full capture weight. An existing registered Gaussian cloud keeps its own appearance channels independently of the mesh's captured texture.
 
+## Paint the material and retain the capture
+
+Use an Ink pixel document with a `scan-material` destination on the
+imported mesh. Find its object, mesh part, and material IDs with
+`inspect-gltf`. The destination needs `binding`, `mesh`, and `material`
+fields. For example, this operation recolors a texel and adjusts its
+roughness and tangent normal.
+
+```json
+{
+  "texels": [
+    { "at": [12, 16], "pigment": "mint", "roughness": 0.65, "normal": [0.2, 0, 1] }
+  ]
+}
+```
+
+Coordinates address the registered texture in top-down order.
+`pigment` takes a document swatch, `roughness` takes a value from 0 to 1,
+and `normal` takes a tangent-space direction. Use `null` on a channel to
+restore its source value. The edit keeps the source capture, angle
+metadata, and material cutouts. Each edit points at a specific mesh,
+material, and registered source.
+
+```sh
+ink-studio pixel-art targets document.json --scene globe.glb --destination scan-paint
+ink-studio pixel-art preview document.json edit.json --scene globe.glb
+ink-studio pixel-art edit document.json edit.json --scene globe.glb --out scan-paint.json
+ink-studio render globe.glb --scan-paint scan-paint.json --scan-appearance 0 --raw --out relit.png
+ink-studio render globe.glb --scan-paint scan-paint.json --scan-appearance 1 --raw --out reference.png
+```
+
+Pass the current asset with `--scan-paint` when inspecting and editing
+again. The headless renderer and WebGL accept the same `scanPaint` asset.
+With the pixel editor SDK, use `editor.renderOptions(scene)` to draw the
+current edit and `editor.undo()` to restore the previous one.
+
+### Directional Gaussian appearance
+
+Gaussian PLY, SPZ, and glTF sources retain their spherical-harmonic
+coefficients when you edit explicit splat pigment or finish in
+`pixel-art`. Standalone Gaussian files use `gaussian-cloud` as their
+bound object. SDK callers building a standalone cloud use
+`gaussianSplatWorld(cloud, { colorMode: 'rgb', objectId: 'gaussian-cloud' })`.
+The headless renderer evaluates the view-dependent
+difference from the captured base and adds it in linear light after
+material lighting. `scanAppearance: 0` gives the authored material on
+its own, and higher values restore more of the captured directional
+response. A captured mesh uses its registered photograph at the
+recorded angle. The Gaussian response remains attached to its source
+row when you clone or reorder splats.
+
 ## Globe comparison
 
 The demo uses the desktop globe RGB-D crop from the scan-to-mesh example. It fits a smooth normal field to the globe's depth and expresses it as a tangent map for the recovered mesh. The diffuse and roughness images are authored estimates. The original camera exposure remains available separately. [TUM RGB-D benchmark](https://cvg.cit.tum.de/data/datasets/rgbd-dataset)
