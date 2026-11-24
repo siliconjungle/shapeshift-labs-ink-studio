@@ -131,6 +131,7 @@
   }
 
   function seam(g, edge) {
+    if (edge.uvSeam) return true;
     if (edge.uses.length < 2) return false;
     const pairs = edge.uses.map(use => {
       const a = g.corners.get(use.from), b = g.corners.get(use.to);

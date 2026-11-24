@@ -539,6 +539,19 @@
       }) });
     }
 
+    function planMeshUV(object, request, { part } = {}) {
+      return K.meshTopology.uv.plan(meshTopology(object, part).document, request);
+    }
+
+    function editMeshUV(object, request, options) {
+      const plan = planMeshUV(object, request, options);
+      if (!plan.report.canCommit)
+        throw Object.assign(new RangeError('UV edit failed its corner or seam constraints'), { report: plan.report });
+      return freeze({ uv: plan.report, ...(Object.keys(plan.patch).length && {
+        topology: editMeshTopology(object, plan.patch, { label: 'Edit UVs of ' + object, ...options })
+      }) });
+    }
+
     function inspectMeshModifiers(object, { through, part } = {}) {
       meshTopology(object, part);
       return A.meshTopologyScene.evaluator(snapshot().topologyMeshes)(object, through);
@@ -703,6 +716,8 @@
       bevelMeshTopology,
       planMeshShading,
       editMeshShading,
+      planMeshUV,
+      editMeshUV,
       inspectMeshModifiers,
       setMeshModifiers,
       updateMeshModifier,

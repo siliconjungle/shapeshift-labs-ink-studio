@@ -377,7 +377,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.geometry.implicitSurface` | function | `(field, bounds, options)` | [guide](../depth-maps.md#use-the-outputs), [guide](../depth-maps.md#javascript), [source](../../src/kit/p06-implicit-meshing.js) |
 | `KIT.procedural.geometry.implicitTriangles` | function | `(field, bounds, options, emit)` | [source](../../src/kit/p06-implicit-meshing.js) |
 | `KIT.procedural.geometry.inclinedPerimeter` | function | `(outline, pose, { offset = 0, below = 0, above = 0, miterLimit = Infinity } = {})` | [source](../../src/kit/pay-inclined-perimeter.js) |
-| `KIT.procedural.geometry.inspectUV` | function | `(source,{size=1024,padding=4,maxChecks=3000000,protectedSeams=source?.protectedSeams ?? []}={})` | [guide](../mesh-uv.md#reduce-an-authored-mesh), [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
+| `KIT.procedural.geometry.inspectUV` | function | `(source,{size=1024,padding=4,maxChecks=3000000,protectedSeams=source?.protectedSeams ?? [],cutSeams=source?.cutSeams ?? []}={})` | [guide](../mesh-uv.md#reduce-an-authored-mesh), [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
 | `KIT.procedural.geometry.intersectConvexPlans` | function | `(subject, boundary)` | [guide](../procedural.md#intersecting-convex-plans), [source](../../src/kit/paf-convex-plans.js) |
 | `KIT.procedural.geometry.meshPaths` | function | `(mesh, { sources, edgeCost, maxCost = Infinity, maxEdges = 1e6 } = {})` | [source](../../src/kit/pao-mesh-paths.js) |
 | `KIT.procedural.geometry.modelFur` | function | `(mesh, surface, noise, color, { maxLocks = 1000, density = 20 } = {})` | [source](../../src/kit/py-model-fur.js) |

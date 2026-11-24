@@ -89,10 +89,11 @@
     return frozen(Object.fromEntries(entries.map(([key, data]) => [key, Array.isArray(data) ? frozen(data.slice()) : data])));
   }
 
-  function edgeShading({ smooth, crease }) {
-    if (smooth !== undefined && typeof smooth !== 'boolean' || crease !== undefined && !unit(crease))
-      throw new RangeError('Edge smooth needs a boolean and crease needs a weight in [0, 1]');
-    return { ...(smooth !== undefined && { smooth }), ...(crease !== undefined && { crease }) };
+  function edgeSettings({ smooth, crease, uvSeam }) {
+    if (smooth !== undefined && typeof smooth !== 'boolean' || crease !== undefined && !unit(crease) ||
+        uvSeam !== undefined && typeof uvSeam !== 'boolean')
+      throw new RangeError('Edge smooth and UV seam need booleans and crease needs a weight in [0, 1]');
+    return { ...(smooth !== undefined && { smooth }), ...(crease !== undefined && { crease }), ...(uvSeam && { uvSeam }) };
   }
 
   function shadingSettings(source) {
@@ -130,7 +131,7 @@
         throw new RangeError('Edge ' + key + ' needs two distinct vertex IDs');
       const endpoints = edgeKey(...edge.vertices);
       if (authoredEdges.has(endpoints)) throw new RangeError('Duplicate edge endpoints for ' + key);
-      authoredEdges.set(endpoints, { id: key, ...edgeShading(edge) });
+      authoredEdges.set(endpoints, { id: key, ...edgeSettings(edge) });
     }
 
     const corners = new Set(), edges = new Map(), faces = [], triangles = [];
@@ -143,16 +144,18 @@
       const used = new Set();
       let layout;
       const face = frozen({ id: key, material, corners: frozen(Array.from(row.corners, corner => {
-        const { id: cornerId, vertex, uv = [0, 0] } = corner ?? {};
-        if (!name(cornerId) || corners.has(cornerId) || !vertices.has(vertex) || used.has(vertex) || !vector(uv, 2, unit))
-          throw new RangeError('Face ' + key + ' needs unique corners, distinct existing vertices and normalized UV pairs');
+        const { id: cornerId, vertex, uv = [0, 0], uvPinned } = corner ?? {};
+        if (!name(cornerId) || corners.has(cornerId) || !vertices.has(vertex) || used.has(vertex) || !vector(uv, 2, unit) ||
+            uvPinned !== undefined && typeof uvPinned !== 'boolean')
+          throw new RangeError('Face ' + key + ' needs unique corners, distinct existing vertices and normalized UV pairs with optional boolean pins');
         corners.add(cornerId);
         used.add(vertex);
         const attributes = cornerAttributes(corner.attributes, key), normal = cornerNormal(corner.normal);
         const shape = JSON.stringify(Object.entries(attributes ?? {}).map(([id, data]) => [id, Array.isArray(data) ? data.length : 0]));
         if (layout !== undefined && layout !== shape) throw new TypeError('Face ' + key + ' must use one corner attribute layout');
         layout = shape;
-        return frozen({ id: cornerId, vertex, uv: frozen(Array.from(uv)), ...(attributes && { attributes }), ...(normal && { normal }) });
+        return frozen({ id: cornerId, vertex, uv: frozen(Array.from(uv)), ...(attributes && { attributes }),
+          ...(normal && { normal }), ...(uvPinned && { uvPinned }) });
       })) });
       for (const [i, corner] of face.corners.entries()) {
         const next = face.corners[(i + 1) % face.corners.length];
@@ -202,16 +205,16 @@
       const { id, position, weights = prior.get(row.id)?.weights } = row;
       return { id, position, ...(weights !== undefined && weights !== null && { weights }) };
     });
-    const byEdge = index(edges, 'Updated edge shading'), knownEdges = new Set(doc.edges.map(edge => edge.id));
+    const byEdge = index(edges, 'Updated edges'), knownEdges = new Set(doc.edges.map(edge => edge.id));
     for (const [id, edge] of byEdge) {
-      if (!knownEdges.has(id) || Object.keys(edge).some(key => !['id', 'smooth', 'crease'].includes(key)))
-        throw new RangeError('Update smooth or crease on a retained edge ' + id);
+      if (!knownEdges.has(id) || Object.keys(edge).some(key => !['id', 'smooth', 'crease', 'uvSeam'].includes(key)))
+        throw new RangeError('Update smooth, crease, or UV seam on a retained edge ' + id);
     }
     const edgeRows = doc.edges.map(edge => {
       const changes = byEdge.get(edge.id);
       if (!changes) return edge;
-      const { id, vertices, smooth, crease } = { ...edge, ...changes };
-      return { id, vertices, ...edgeShading({ smooth: smooth ?? undefined, crease: crease ?? undefined }) };
+      const { id, vertices, smooth, crease, uvSeam } = { ...edge, ...changes };
+      return { id, vertices, ...edgeSettings({ smooth: smooth ?? undefined, crease: crease ?? undefined, uvSeam }) };
     });
     return build({ ...doc, edges: edgeRows, shading: shading === undefined ? doc.shading : shading,
       vertices: apply(doc.vertices, updates, removeVertices, 'vertices'),

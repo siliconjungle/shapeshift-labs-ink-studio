@@ -164,11 +164,11 @@
   function geometricRecord(row, kind) {
     if (!row) return row;
     if (kind === 'edges') {
-      const { smooth, crease, ...geometry } = row;
+      const { smooth, crease, uvSeam, ...geometry } = row;
       return geometry;
     }
     if (kind === 'corners') {
-      const { normal, ...geometry } = row;
+      const { normal, uvPinned, ...geometry } = row;
       return geometry;
     }
     return kind === 'faces' ? { ...row, corners: row.corners.map(corner => geometricRecord(corner, 'corners')) } : row;

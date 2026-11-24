@@ -1416,6 +1416,10 @@ const CMD = {
         '  mesh-topology modifiers inspect|set|update|apply <mesh-or-scene.json> [stack-or-edit.json] [--object id] [--through id] [--targets file] [--view file] [--preview dir] [--out file] [--report file]   inspect or edit a retained mesh modifier stack',
         '  mesh-topology correspond <before.json> <after.json> [--lineage links.json] [--projection settings.json] [--match-ids on|off] [--out map.json]   map stable and projected elements',
         '  mesh-uv inspect|simplify <mesh> --out <directory|mesh.json>   inspect UV maps or reduce with seam locks',
+        '  mesh-uv import <mesh> --out topology.json [--id id] [--uv-set n] [--join-coincident on|off]   retain triangle corner UVs for editing',
+        '  mesh-uv layout <mesh-or-scene.json> [--object id] [--out file]   inspect stable faces, seam sides, pins and islands',
+        '  mesh-uv select <mesh-or-scene.json> <query.json> [--object id] [--view file] [--preview dir] [--out file]   select UV elements by atlas or model position',
+        '  mesh-uv edit <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file] [--preview dir] [--out file] [--report file]   plan or apply UV cuts, stitches, pins and island transforms',
         '  scenery pack <scene.js> --out asset.inkscenery   pack indexed meshes and textures from a scenery hook',
         '  scenery inspect <asset.inkscenery>   decode the pack and report its transfer sizes',
         '  export-glb <scene.js|.json|.obj|.gltf|.glb> --out model.glb   write UV-mapped geometry with materials, skins and clips',
@@ -4062,6 +4066,12 @@ const CMD = {
     });
   },
   'mesh-uv'() {
+    if (['layout', 'select', 'edit'].includes(pos[0]))
+      return require('./mesh-uv-editor.js').command(pos, opt, lib(), file => {
+        const descriptor = scene(file);
+        if (!descriptor.openEditor) throw new TypeError('UV authoring needs a plain editable scene');
+        return descriptor.openEditor();
+      });
     require('./mesh-uv.js').command(pos,opt,{num,list});
   },
   mesh() {
@@ -5176,6 +5186,7 @@ async function run() {
     });
   }
   const sceneFiles = cmd === 'snap' ? pos : cmd === 'pixel-art' ? pixelInputs :
+    cmd === 'mesh-uv' && ['layout', 'select', 'edit'].includes(pos[0]) && typeof opt.object === 'string' ? pos.slice(1, 2) :
     cmd === 'mesh-topology' && pos[0] === 'modifiers' && typeof opt.object === 'string' ? pos.slice(2, 3) :
     cmd === 'mesh-topology' && (pos[0] === 'select' && typeof opt.view === 'string' ||
       ['transform', 'repair', 'cut', 'boolean', 'retopology', 'face-region', 'edge-edit', 'bevel', 'shading'].includes(pos[0]) && typeof opt.object === 'string') ? pos.slice(1, 2) :

@@ -19,18 +19,22 @@ const MeshUV = (() => {
       throw new TypeError('Use one UV pair per triangle corner');
   }
 
-  function topology(points, triangles, uvs, protectedSeams = []) {
-    if (!Array.isArray(protectedSeams) || protectedSeams.length>1500000 ||
-        !Array.from(protectedSeams).every(edge=>Array.isArray(edge) && edge.length===2 &&
+  function edgeSet(edges, points, label) {
+    if (!Array.isArray(edges) || edges.length>1500000 ||
+        !Array.from(edges).every(edge=>Array.isArray(edge) && edge.length===2 &&
           edge[0]!==edge[1] && Array.from(edge).every(i=>index(i,points.length))))
-      throw new TypeError('Protected seams need pairs of distinct vertex indices');
+      throw new TypeError(label+' need pairs of distinct vertex indices');
+    return new Set(edges.map(([a,b])=>edgeKey(a,b)));
+  }
+
+  function topology(points, triangles, uvs, protectedSeams = [], cutSeams = []) {
+    const authored=edgeSet(protectedSeams,points,'Protected seams'), cuts=edgeSet(cutSeams,points,'UV cuts');
     const positions=new Map();
     const aliases=points.map((p,i)=>{
       const key=p.join('/');
       if (!positions.has(key)) positions.set(key,i);
       return positions.get(key);
     });
-    const authored=new Set(protectedSeams.map(([a,b])=>edgeKey(a,b)));
     const edges=new Map();
     const chart=new Int32Array(triangles.length), parent=new Int32Array(triangles.length);
     for (let i=0;i<parent.length;i++) parent[i]=i;
@@ -48,13 +52,14 @@ const MeshUV = (() => {
       if (!edges.has(key)) edges.set(key,{uses:[], protected:false});
       const edge=edges.get(key);
       if (authored.delete(edgeKey(a,b))) edge.protected=true;
+      if (cuts.delete(edgeKey(a,b))) edge.cut=true;
       edge.uses.push({face,vertices:[a,b],uv:uvs?.[face] ? [uvs[face][from],uvs[face][to]] : null});
     }
-    if (authored.size) throw new RangeError('A protected seam is not a triangle edge');
+    if (authored.size || cuts.size) throw new RangeError('A protected seam or UV cut is not a triangle edge');
     const seams=[], locked=new Set();
     for (const edge of edges.values()) {
       const {uses}=edge, a=uses[0], b=uses[1];
-      const compatible=uses.length===2 && a.uv && b.uv && sameUV(a.uv[0],b.uv[0]) && sameUV(a.uv[1],b.uv[1]);
+      const compatible=!edge.cut && uses.length===2 && a.uv && b.uv && sameUV(a.uv[0],b.uv[0]) && sameUV(a.uv[1],b.uv[1]);
       const kind=uses.length===1?'boundary':uses.length>2?'non-manifold':compatible?'continuous':
         a.uv && b.uv ? 'seam':'unmapped';
       if (compatible) {
@@ -62,7 +67,7 @@ const MeshUV = (() => {
         if (one!==two) parent[Math.max(one,two)]=Math.min(one,two);
       }
       if (kind!=='continuous' || edge.protected)
-        seams.push({kind,protected:edge.protected,position:a.vertices.map(i=>points[i]),uses});
+        seams.push({kind,protected:edge.protected,position:a.vertices.map(i=>points[i]),uses,...(edge.cut && {authored:true})});
       if (kind==='seam' || kind==='non-manifold' || edge.protected) for (const side of uses)
         for (const i of side.vertices) locked.add(i);
     }
@@ -134,7 +139,7 @@ const MeshUV = (() => {
     return {...basic,state:'ok',density:Math.sqrt(det),stretch:Math.max(1,(trace+Math.sqrt(Math.max(0,trace*trace-4*det*det)))/(2*det))};
   }
 
-  function inspect(source,{size=1024,padding=4,maxChecks=3000000,protectedSeams=source?.protectedSeams ?? []}={}) {
+  function inspect(source,{size=1024,padding=4,maxChecks=3000000,protectedSeams=source?.protectedSeams ?? [],cutSeams=source?.cutSeams ?? []}={}) {
     const {points,triangles,uvs}=source??{};
     validate(points,triangles,uvs,true);
     if (!uvs?.some(Boolean)) throw new TypeError('This mesh has no authored UVs in the selected set');
@@ -144,7 +149,7 @@ const MeshUV = (() => {
         !Number.isSafeInteger(maxChecks) || maxChecks<1 || maxChecks>16000000)
       throw new RangeError('UV inspection needs valid texture dimensions, padding and a bounded comparison count');
     const toTexels=uv=>uv.map(([u,v])=>[u*width,v*height]);
-    const {chart,charts,seams}=topology(points,triangles,uvs,protectedSeams);
+    const {chart,charts,seams}=topology(points,triangles,uvs,protectedSeams,cutSeams);
     const faces=triangles.map((ids,id)=>{
       const uv=uvs[id] && toTexels(uvs[id]), box=uv&&bounds(uv);
       return {id,chart:chart[id],uv,box,...metrics(ids.map(i=>points[i]),uv),

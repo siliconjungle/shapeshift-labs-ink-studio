@@ -45,7 +45,8 @@ const meshTopologySubdivision = (function (K) {
         const child = g.fresh('edge');
         lineage?.edges.push({ from: edge.id, to: child });
         edges.push({ id: child, vertices: [vertex, id],
-          ...(edge.smooth !== undefined && { smooth: edge.smooth }), ...(edge.crease !== undefined && { crease: edge.crease }) });
+          ...(edge.smooth !== undefined && { smooth: edge.smooth }), ...(edge.crease !== undefined && { crease: edge.crease }),
+          ...(edge.uvSeam && { uvSeam: true }) });
       }
     }
     for (const [id, row] of atVertex) {

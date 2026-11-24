@@ -1,4 +1,4 @@
-# UV and seam inspection
+# UV inspection and editing
 
 Inspect the artist's UV layout before baking or reducing a mesh.
 Use [registered material baking](registered-material-bake.md) to export
@@ -41,6 +41,114 @@ Pair checks have independent work budgets for overlap and padding.
 the checks completed so far. Large previews sample faces and edges.
 The JSON retains all face metrics and records up to 4,096 example pairs
 per diagnostic.
+
+## Edit an authored layout
+
+A [polygon topology document](mesh-topology.md) keeps stable face, edge and
+corner IDs through UV edits. Start with an existing topology mesh or import
+the corner UVs from a supported inspectable mesh.
+
+```sh
+ink-studio mesh-uv import relay.glb --out relay-topology.json
+ink-studio mesh-uv layout relay-topology.json --out relay-layout.json
+ink-studio mesh-uv edit relay-topology.json uv-edit.json \
+  --out relay-edited.json --report uv-receipt.json --preview uv-review
+ink-studio mesh-uv inspect relay-edited.json --out relay-inspection
+```
+
+Import carries triangle positions, UVs from the selected set, and face
+material names. Use the source material assets with the imported layout.
+Separate positional indices stay separate by default. For UV-split vertices
+on an indexed import, opt into merging exactly coincident points with
+`--join-coincident on`. View independent material sheets separately.
+
+The layout lists authored seams and inferred UV discontinuities, both sides
+of each edge, pinned corners, and UV islands. A cut sets a seam immediately,
+including when the two sides still share the same UV coordinates. It keeps the
+3D polygon and its material in place. The island ID is the first face ID
+in that connected UV region, ordered by ID. Check the current layout after
+cutting or stitching, since island memberships and IDs can change.
+
+An edit takes one to 32 sequential operations and can include the layout's
+`revision`. The editor checks that the requested revision is current before
+planning. This example cuts a wing, pins the keeper corner, and moves the
+separated island.
+
+```json
+{
+  "operations": [
+    { "op": "cut", "ids": ["wing-seam"] },
+    { "op": "pin", "ids": ["faceplate/lower"], "pinned": true },
+    { "op": "transform", "ids": ["wing"], "translate": [0.12, 0.09],
+      "rotation": 0.22, "scale": 0.8 }
+  ]
+}
+```
+
+- **Cut** takes manifold shared edge IDs within one material sheet.
+- **Pin** locks the current UV of named face corners. Welded corners move
+  together, which makes a pin constrain its welded group. Set
+  `pinned: false` to release the named corners.
+- **Transform** takes island IDs and supports translation, rotation in
+  radians, and uniform or two-axis scale. Negative scale mirrors the island.
+  The default pivot is the center of each island's bounds. Supply `pivot`
+  for a specific normalized UV anchor.
+- **Stitch** takes shared edge IDs. The default `mode: "weld"` joins
+  corresponding endpoint groups, respecting pins and an optional
+  `keepFace`. Unanchored endpoints meet at their average. Use
+  `mode: "align"` and `keepFace` to rotate, scale and translate one
+  other island to the keeper's edge before welding. If a selected chain
+  spans multiple edges, they must all agree after that alignment.
+
+Omit `--out` for a dry run. The receipt records corner changes, pin and seam
+changes, and island counts. A moved pin, out-of-atlas coordinate, newly
+collapsed UV triangle, or inconsistent stitch blocks the entire edit.
+Use ordinary UV inspection to review overlap, stretch and padding on the
+resulting layout. For a retained scene mesh, add `--object ID` and write the
+revised scene beside the source. The scene editor journals the change in
+one undo step and invalidates material bakes for faces whose UVs moved.
+
+## Select in the atlas or on the model
+
+Use `mesh-uv select` with a JSON query. Choose `islands`, `faces`, `edges`,
+or `corners` as the domain. For an atlas pick use normalized top-down UVs
+and optionally narrow the pick to a material or a face.
+
+```json
+{ "domain": "faces", "atlas": { "at": [0.72, 0.42], "material": "enamel" } }
+```
+
+A model pick uses integer art-pixel coordinates in the native capture.
+Provide `--view view.json` to set the camera and raster dimensions.
+
+```json
+{ "domain": "faces", "model": { "pixel": [145, 86] } }
+```
+
+The picker uses the visible authored triangle to resolve the face and its
+corner IDs. Edge and corner picks choose the nearest component on that face.
+The atlas reports ambiguous overlapping picks with candidate IDs. Name
+a face or material to disambiguate. You can also select by `ids`, or pass
+a saved selection as `from` with the matching mesh revision and domain.
+
+Both views return the same stable component IDs and their related atlas
+elements. Use `--preview directory` for linked native views, or add
+`--selection selection.json` to a later edit preview on the same revision.
+The preview shows the authored cage, which keeps selection attached to
+editable corners when a scene uses modifiers.
+
+Use `KIT.meshTopology.uv.inspect`, `KIT.meshTopology.uv.select`,
+`KIT.meshTopology.uv.pickModel` and `KIT.meshTopology.uv.plan` for SDK access.
+A plan returns a topology patch and its report. The scene editor exposes
+`editor.planMeshUV` and `editor.editMeshUV` for the same operation.
+
+Run the [field case example](../examples/mesh-uv-workshop.cjs) to reproduce
+a cut on two wings, a linked native model and atlas selection, and an aligned
+stitch that leaves the keeper's two pins in place.
+
+```sh
+node examples/mesh-uv-workshop.cjs out/uv-workshop
+```
 
 ## Reduce an authored mesh
 

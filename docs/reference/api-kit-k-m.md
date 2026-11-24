@@ -226,6 +226,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.meshTopology.triangleSource` | function | `(mesh, triangle)` | [guide](../mesh-topology.md#render-pick-and-import-indexed-geometry), [guide](../mesh-topology.md#author-and-edit-a-polygon), [guide](../mesh-topology.md#combine-closed-mesh-parts), [source](../../src/kit/p04a-mesh-topology.js) |
 | `KIT.meshTopology.triangulate` | function | `(source)` | [guide](../mesh-topology.md#render-pick-and-import-indexed-geometry), [guide](../mesh-topology.md#author-and-edit-a-polygon), [guide](../mesh-topology.md#combine-closed-mesh-parts), [source](../../src/kit/p04a-mesh-topology.js) |
 | `KIT.meshTopology.updateModifier` | function | `(stack, id, patch)` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [guide](../mesh-topology.md#combine-closed-mesh-parts), [source](../../src/kit/p04y-mesh-modifiers.js) |
+| `KIT.meshTopology.uv` | namespace |  | [guide](../mesh-topology.md#author-and-edit-a-polygon), [guide](../mesh-topology.md#combine-closed-mesh-parts) |
+| `KIT.meshTopology.uv.fromTriangles` | function | `(source, { id, joinCoincident = false } = {})` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [guide](../mesh-topology.md#combine-closed-mesh-parts), [source](../../src/kit/p04zj-mesh-uv-edit.js) |
+| `KIT.meshTopology.uv.inspect` | function | `(source)` | [guide](../mesh-uv.md#select-in-the-atlas-or-on-the-model), [guide](../mesh-topology.md#author-and-edit-a-polygon), [guide](../mesh-topology.md#combine-closed-mesh-parts), [source](../../src/kit/p04zj-mesh-uv-edit.js) |
+| `KIT.meshTopology.uv.modelFaces` | function | `(mesh, frame)` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [guide](../mesh-topology.md#combine-closed-mesh-parts), [source](../../src/kit/p04zj-mesh-uv-edit.js) |
+| `KIT.meshTopology.uv.pickModel` | function | `(mesh, frame, pixel, domain = 'faces')` | [guide](../mesh-uv.md#select-in-the-atlas-or-on-the-model), [guide](../mesh-topology.md#author-and-edit-a-polygon), [guide](../mesh-topology.md#combine-closed-mesh-parts), [source](../../src/kit/p04zj-mesh-uv-edit.js) |
+| `KIT.meshTopology.uv.plan` | function | `(source, request)` | [guide](../mesh-uv.md#select-in-the-atlas-or-on-the-model), [guide](../mesh-topology.md#author-and-edit-a-polygon), [guide](../mesh-topology.md#combine-closed-mesh-parts), [source](../../src/kit/p04zj-mesh-uv-edit.js) |
+| `KIT.meshTopology.uv.select` | function | `(source, query = {})` | [guide](../mesh-uv.md#select-in-the-atlas-or-on-the-model), [guide](../mesh-topology.md#author-and-edit-a-polygon), [guide](../mesh-topology.md#combine-closed-mesh-parts), [source](../../src/kit/p04zj-mesh-uv-edit.js) |
 
 ## KIT.mist
 

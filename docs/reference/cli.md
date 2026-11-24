@@ -228,6 +228,10 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology modifiers inspect|set|update|apply <mesh-or-scene.json> [stack-or-edit.json] [--object id] [--through id] [--targets file] [--view file] [--preview dir] [--out file] [--report file]   inspect or edit a retained mesh modifier stack
   mesh-topology correspond <before.json> <after.json> [--lineage links.json] [--projection settings.json] [--match-ids on|off] [--out map.json]   map stable and projected elements
   mesh-uv inspect|simplify <mesh> --out <directory|mesh.json>   inspect UV maps or reduce with seam locks
+  mesh-uv import <mesh> --out topology.json [--id id] [--uv-set n] [--join-coincident on|off]   retain triangle corner UVs for editing
+  mesh-uv layout <mesh-or-scene.json> [--object id] [--out file]   inspect stable faces, seam sides, pins and islands
+  mesh-uv select <mesh-or-scene.json> <query.json> [--object id] [--view file] [--preview dir] [--out file]   select UV elements by atlas or model position
+  mesh-uv edit <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file] [--preview dir] [--out file] [--report file]   plan or apply UV cuts, stitches, pins and island transforms
   scenery pack <scene.js> --out asset.inkscenery   pack indexed meshes and textures from a scenery hook
   scenery inspect <asset.inkscenery>   decode the pack and report its transfer sizes
   export-glb <scene.js|.json|.obj|.gltf|.glb> --out model.glb   write UV-mapped geometry with materials, skins and clips
@@ -1005,7 +1009,6 @@ These options are read by CLI code. Follow each source link for the accepted val
 - `--transparent` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--upload-gap` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--uv-margin` · [cli/ink-studio.js](../../cli/ink-studio.js)
-- `--uv-set` · [cli/mesh-uv.js](../../cli/mesh-uv.js)
 - `--view-pose-samples` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--volume-composition` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--where` · [cli/world.js](../../cli/world.js)

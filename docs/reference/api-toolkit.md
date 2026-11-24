@@ -216,10 +216,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.MathFields.systems.thomas.start` | value | `array` |  |
 | `toolkit.MeshUV` | namespace |  |  |
 | `toolkit.MeshUV.area2` | function | `(a,b,c)` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
-| `toolkit.MeshUV.inspect` | function | `(source,{size=1024,padding=4,maxChecks=3000000,protectedSeams=source?.protectedSeams ?? []}={})` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
+| `toolkit.MeshUV.inspect` | function | `(source,{size=1024,padding=4,maxChecks=3000000,protectedSeams=source?.protectedSeams ?? [],cutSeams=source?.cutSeams ?? []}={})` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
 | `toolkit.MeshUV.overlaps` | function | `(a,b,epsilon=uvEpsilon)` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
 | `toolkit.MeshUV.sameUV` | function | `(a,b)` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
-| `toolkit.MeshUV.topology` | function | `(points, triangles, uvs, protectedSeams = [])` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
+| `toolkit.MeshUV.topology` | function | `(points, triangles, uvs, protectedSeams = [], cutSeams = [])` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
 | `toolkit.MeshUV.validate` | function | `(points, triangles, uvs, missing = false)` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
 | `toolkit.PALETTES` | value | `array` |  |
 | `toolkit.PAL_HEX` | value | `array` |  |
