@@ -113,11 +113,12 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
       const same = source?.row.geometryMasks && JSON.stringify(geometrySettings) ===
         JSON.stringify(Geometry.settings(baseline.document.geometryMasks)) &&
         source.row.geometry === projection.geometryHash(mesh.points,faces);
-      if (same) chartBake.geometry={previous:source.row.geometryMasks};
+      if (same && !chartBake.rebuild.size) chartBake.geometry={previous:source.row.geometryMasks};
       else {
         // A moving wall can change exposure or thickness on an otherwise identical chart.
-        for (const {id} of chartBake.state.charts) chartBake.dirty.add(id);
-        chartBake.geometry={calculate:Geometry.prepare(mesh.points,faces,faceNormals,geometrySettings,kit)};
+        if (!same) for (const {id} of chartBake.state.charts) chartBake.dirty.add(id);
+        chartBake.geometry={calculate:Geometry.prepare(mesh.points,faces,faceNormals,geometrySettings,kit),
+          ...(same && { scope:'updated-charts' })};
       }
     }
     const projected=chartBake.reproject.size ? projection.prepare(input.mesh.points,input.faces,views,kit) : undefined;

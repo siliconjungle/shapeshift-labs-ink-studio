@@ -14,7 +14,7 @@ const readMesh = result => read(result.materialBake).meshes[0];
 const faceRow = (mesh, name) => mesh.chartReport.layout.charts.find(chart => chart.faces.includes(name));
 const owners = (dir, descriptor) => inflateSync(fs.readFileSync(path.join(dir, descriptor.file)));
 
-function topology({ revised = false, collision } = {}) {
+function topology({ revised = false, movedOnly = false, collision } = {}) {
   const vertices = [], faces = [];
   function panel(id, west, east, uvWest, uvEast, uvNorth, uvSouth, { clip, newVertices } = {}) {
     const corners = [];
@@ -30,7 +30,7 @@ function topology({ revised = false, collision } = {}) {
   panel('reference', -2.7, -1.5, .06, .23, .08, .30);
   const moved = collision === 'overlap' ? [.12,.31,.08,.30] :
     collision === 'gutter' ? [.232,.42,.08,.30] : [.09,.31,.61,.84];
-  panel('relocated', -1.17, -.04, ...(revised ? moved : [.28,.46,.08,.30]), { clip: revised });
+  panel('relocated', -1.17, -.04, ...(revised || movedOnly ? moved : [.28,.46,.08,.30]), { clip: revised });
   panel('replacement', revised ? .65 : .2, revised ? 1.85 : 1.41, .53, .70, .08, .30, { newVertices: revised });
   if (!revised) panel('discard', 1.75, 2.6, .77, .94, .08, .30);
   return KIT.meshTopology.create({ id: 'test-enamel', vertices: revised ? vertices.reverse() : vertices,
@@ -71,23 +71,28 @@ test('stable chart revisions reuse map and mip pixels and remap approved paint o
   const approved = new Uint8Array(view.width * view.height * 3);
   for (let i = 0; i < approved.length; i += 3) approved.set([243, 51, 16], i);
   PNG.write(path.join(path.dirname(paintViews), view.paint), view.width, view.height, approved);
-  const baseline = bake('baseline', doc, { textureSize: 256, paintViews });
+  const baseline = bake('baseline', doc, { textureSize: 256, uvMargin: .045, paintViews });
   const edited = topology({ revised: true });
   const revision = bake('revision', edited, { rebakeFrom: baseline.materialBake });
   const a = readMesh(baseline), b = readMesh(revision), aDir = path.dirname(baseline.materialBake), bDir = path.dirname(revision.materialBake);
   const clean = faceRow(b, 'reference'), move = faceRow(b, 'relocated'), changed = faceRow(b, 'replacement');
+  assert.equal(b.padding, a.padding);
   assert.deepEqual(b.chartReport.reused, [clean.id]);
   assert.equal(clean.space, 'preserved');
   assert.deepEqual(clean.uvBefore, clean.uvAfter);
   assert.equal(clean.paint.status, 'retained');
   assert.equal(move.space, 'revised');
   assert.notDeepEqual(move.uvBefore, move.uvAfter);
-  assert.equal(move.paint.status, 'transferred');
+  assert.equal(move.paint.status, 'partially-transferred');
+  assert.equal(move.paint.unmappedTexels, 0);
+  assert(move.paint.unmappedOldPaintTexels > 50);
   assert(move.paint.transferredTexels > 1000);
   assert.equal(changed.paint.status, 'partially-transferred');
   assert(changed.paint.unmappedTexels > 100 && changed.paint.transferredTexels > 100);
   assert.deepEqual(b.chartReport.layout.retired[0].removedFaces, ['discard']);
-  assert(b.chartReport.layout.retired[0].paintTexels > 100);
+  const retired = b.chartReport.layout.retired[0];
+  assert(retired.paintTexels > 100);
+  assert.equal(retired.unmappedPaintTexels, retired.paintTexels);
   const oldOwners = owners(aDir, a.rebakeState.owners), newOwners = owners(bDir, b.rebakeState.owners);
   assert(preserved(a,b,aDir,bDir,oldOwners,newOwners,clean.id + 1) > 1000);
   const index = (u, v) => (Math.floor(v * b.height) * b.width + Math.floor(u * b.width)) * 4;
@@ -134,4 +139,20 @@ test('export-glb writes a structured result for retained topology and refuses ch
   assert(!gutter.ready);
   assert.equal(gutter.conflicts[0].code, 'retained-texel');
   assert(gutter.conflicts[0].gutter);
+});
+
+test('a UV-only revision updates geometry masks on the moved chart and keeps other charts byte-identical', t => {
+  const { bake } = target(t);
+  const base = bake('baseline', topology(), { textureSize: 256, geometryMasks: true });
+  const moved = bake('moved', topology({ movedOnly: true }), { rebakeFrom: base.materialBake });
+  const a = readMesh(base), b = readMesh(moved), aDir = path.dirname(base.materialBake), bDir = path.dirname(moved.materialBake);
+  assert.equal(a.geometry, b.geometry);
+  const chart = faceRow(b, 'relocated');
+  assert.deepEqual(b.chartReport.updated, [chart.id]);
+  assert.equal(b.geometryMasks.scope, 'updated-charts');
+  assert.equal(b.geometryMasks.texels, chart.sampledTexels);
+  const exposure = PNG.raster(path.join(bDir, b.masks.exposure.file));
+  assert(exposure.data[(Math.floor(.72 * b.height) * b.width + Math.floor(.17 * b.width)) * 4] > 0);
+  const ao = owners(aDir, a.rebakeState.owners), bo = owners(bDir, b.rebakeState.owners);
+  for (const id of b.chartReport.reused) assert(preserved(a, b, aDir, bDir, ao, bo, id + 1) > 0);
 });

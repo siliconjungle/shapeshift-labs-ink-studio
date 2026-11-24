@@ -226,14 +226,18 @@ function planMesh({mesh, faces, uvs, normals, atlas, splits, sourceFaces, size, 
   if (prior && (hash(maskNames) !== hash(prior.maskNames) || identity && prior.opacity !== undefined && state.opacity !== prior.opacity))
     for (const chart of charts) dirty.add(chart.id);
   const previous = source && loadAtlas(baseline,source.row);
-  const transfer = revised && topology.transferPlan(prior, state, previous, size);
+  const transfer = revised && topology.transferPlan(prior, state, previous, size, release);
   if (layout) {
-    for (const chart of layout.retired) chart.paintTexels = transfer?.painted.get(chart.id) ?? 0;
+    for (const chart of layout.retired) {
+      chart.paintTexels = transfer?.painted.get(chart.id) ?? 0;
+      chart.unmappedPaintTexels = transfer?.missing.get(chart.id) ?? 0;
+    }
     for (const chart of layout.charts) {
       const oldPaintedTexels = chart.from.reduce((total, id) => total + (transfer?.painted.get(id) ?? 0), 0);
+      const unmappedOldPaintTexels = chart.from.reduce((total, id) => total + (transfer?.missing.get(id) ?? 0), 0);
       chart.paint = { status: reproject.has(chart.id) ? 'reprojected' : !oldPaintedTexels ? 'none' :
         rebuild.has(chart.id) ? 'transferred' : 'retained', oldPaintedTexels, mappedTexels: 0,
-        transferredTexels: 0, unmappedTexels: 0, reprojectedTexels: 0 };
+        transferredTexels: 0, unmappedTexels: 0, unmappedOldPaintTexels, reprojectedTexels: 0 };
     }
   }
   return {state,dirty,reproject,previous,layout,rebuild,release,transfer,

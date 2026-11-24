@@ -124,8 +124,7 @@ function weightsAt(point, tri) {
   return [x, y, z];
 }
 
-function transferPlan(prior, state, previous, size) {
-  if (!previous.paint) return undefined;
+function surfaceMapping(prior, state) {
   const exact = new Map(), byFace = new Map();
   for (const [f, key] of prior.identity.keys.entries()) {
     const tri = oldTriangle(prior, f), label = prior.identity.labels[f];
@@ -133,18 +132,12 @@ function transferPlan(prior, state, previous, size) {
     if (!byFace.has(label)) byFace.set(label, []);
     byFace.get(label).push(tri);
   }
-  const paintNames = new Set(prior.paintMasks), painted = new Map();
-  for (let i = 0; i < previous.owners.length; i++) if (previous.footprint[i] && previous.paint[i * 4 + 3] > 0) {
-    const id = previous.owners[i] - 1;
-    painted.set(id, (painted.get(id) ?? 0) + 1);
-  }
   const direct = state.identity.keys.map((key, f) => {
     const tri = exact.get(key);
     if (!tri) return null;
     const uvs = state.faces[f].map(i => tri.uvs[tri.vertexIds.indexOf(state.identity.vertexIds[i])]);
     return { uvs, owner: tri.owner };
   });
-  const values = new Float64Array(paintNames.size);
   let visits = 0;
   function mapped(face, point, weights) {
     const target = direct[face];
@@ -153,7 +146,7 @@ function transferPlan(prior, state, previous, size) {
     if (candidates.length > 256) return null;
     let result;
     for (const tri of candidates) {
-      if (++visits > 32e6) throw new RangeError('UV paint transfer exceeds its projection budget; supply updated approved paint views');
+      if (++visits > 32e6) return null;
       const bary = weightsAt(point, tri);
       if (!bary) continue;
       const uv = interpolate(tri.uvs, bary);
@@ -162,6 +155,45 @@ function transferPlan(prior, state, previous, size) {
     }
     return result;
   }
+  return mapped;
+}
+
+function unmappedPaint(prior, state, previous, size, release, painted) {
+  const missing = new Map();
+  if (![...release].some(id => painted.has(id))) return missing;
+  const mapped = surfaceMapping(state, prior), visited = new Uint8Array(previous.owners.length);
+  for (const [f, tri] of prior.faces.entries()) {
+    const id = prior.faceCharts[f];
+    if (!release.has(id) || !painted.has(id)) continue;
+    const [a, b, c] = prior.uvs[f].map(uv => uv.map(n => n * size)), det = MeshUV.area2(a, b, c);
+    const x0 = Math.floor(Math.min(a[0], b[0], c[0])), x1 = Math.ceil(Math.max(a[0], b[0], c[0]));
+    const y0 = Math.floor(Math.min(a[1], b[1], c[1])), y1 = Math.ceil(Math.max(a[1], b[1], c[1]));
+    const points = tri.map(i => prior.identity.points[i]);
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      const pixel = y * size + x;
+      if (visited[pixel] || previous.owners[pixel] !== id + 1 || !previous.footprint[pixel] ||
+          previous.paint[pixel * 4 + 3] <= 0) continue;
+      const q = [x + .5, y + .5], u = MeshUV.area2(a, q, c) / det, v = MeshUV.area2(a, b, q) / det;
+      const weights = [1 - u - v, u, v];
+      if (Math.min(...weights) < -1e-9) continue;
+      const point = points[0].map((_, axis) => dot(weights, points.map(p => p[axis])));
+      visited[pixel] = 1;
+      if (!mapped(f, point, weights)) missing.set(id, (missing.get(id) ?? 0) + 1);
+    }
+  }
+  return missing;
+}
+
+function transferPlan(prior, state, previous, size, release) {
+  if (!previous.paint) return undefined;
+  const mapped = surfaceMapping(prior, state);
+  const paintNames = new Set(prior.paintMasks), painted = new Map();
+  for (let i = 0; i < previous.owners.length; i++) if (previous.footprint[i] && previous.paint[i * 4 + 3] > 0) {
+    const id = previous.owners[i] - 1;
+    painted.set(id, (painted.get(id) ?? 0) + 1);
+  }
+  const missing = unmappedPaint(prior, state, previous, size, release, painted);
+  const values = new Float64Array(paintNames.size);
   function sample(face, point, weights, stamp, at, masks, i) {
     const hit = mapped(face, point, weights);
     if (!hit) return 0;
@@ -182,7 +214,7 @@ function transferPlan(prior, state, previous, size) {
     for (let c = 0; c < masks.length; c++) masks[c].current[i] = Math.round(values[c] / total);
     return stamp[at + 3] > 0 ? 2 : 1;
   }
-  return { paintNames, painted, sample };
+  return { paintNames, painted, missing, sample };
 }
 
 function overlapReport(points, faces, uvs, faceCharts, size) {

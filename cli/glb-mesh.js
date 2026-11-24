@@ -79,7 +79,7 @@ function meshWriter(doc, mesh, rig, kit, options) {
     uvs:source.state.uvs,padding:source.row.padding,charts:source.state.chartCount,utilization:source.state.utilization
   } : generated ? unwrap(points, faces, faceNormals, {
     size: textureSize || 1024, margin: uvMargin, groups: mesh.chartGroups ? sourceFaces.map(i => mesh.chartGroups[i]) : undefined
-  }) : { uvs: corners, padding: Math.max(2, Math.ceil(textureSize * uvMargin / 2)) };
+  }) : { uvs: corners, padding: source?.row.padding ?? Math.max(2, Math.ceil(textureSize * uvMargin / 2)) };
   const uvs = registered ? atlas.uvs.map(face=>face.map(uv=>uv.map(Math.fround))) : atlas.uvs;
   if (uvs.some(uv => Math.abs(area2(...uv)) < 1e-15)) throw new Error('Degenerate UV mapping on ' + name);
   if (registered && (!textureSize || materials.some(m=>m.alphaMode && m.alphaMode!=='OPAQUE' || (m.opacity??1)!==1 && !mesh.paintedOpacity)))

@@ -192,8 +192,9 @@ node cli/ink-studio.js export-glb edited-scene.js \
 ```
 
 When the layout is fixed, the atlas keeps its exact UV coordinates, quad
-diagonals, chart IDs, and gutter ownership. Changed positions, shading normals, vertex colors, and
-material slots mark their affected charts automatically. The saved diorama
+diagonals, chart IDs, and gutter ownership. Changed positions, shading
+normals, vertex colors, and material slots mark their affected charts
+automatically. The saved diorama
 from `pixel-art edit` also carries rest-chart revisions. Adding, changing,
 clearing, or undoing a stamp invalidates the receiving atlas charts, even
 when the edit falls between face sample points. Ink checks the previous
@@ -247,7 +248,6 @@ Run `node examples/incremental-chart-rebake.js <new-directory>` for a
 512-pixel atlas demo with a local dent, retained camera paint, and an atlas
 view showing the updated chart beside the reused charts.
 
-
 ### Rebake a topology or UV revision
 
 Create the baseline from a retained mesh topology document carrying authored
@@ -280,7 +280,9 @@ rest-space surface still lies on an unambiguous part of the old face.
 New regions use the current material sampler. The receipt lists retired
 charts, removed faces, old and new UV bounds, released texels, truncated
 gutters, and how many texels mapped, inherited paint, or lacked a safe
-correspondence. For a reshaped surface with unresolved paint, recapture
+correspondence. It also counts previously painted texels whose surface
+was removed or no longer has a reliable match. With the mesh unchanged,
+a UV move recalculates geometry masks only on the affected charts. For a reshaped surface with unresolved paint, recapture
 approved views against the new geometry and select the receiving charts.
 The optional CLI report includes conflicts when a revision is blocked.
 

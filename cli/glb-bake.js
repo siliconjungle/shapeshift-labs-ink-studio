@@ -190,8 +190,8 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
   if (!registered && !emissiveUsed) delete pixels.emission;
   else if(hot && emissiveUsed)for (let i = 0; i < hot.length; i++) pixels.emission[i] = sRGB(hot[i] / strength);
   if (layout) for (const { paint } of layout.charts) if (paint.status === 'transferred') {
-    if (!paint.transferredTexels) paint.status = paint.unmappedTexels ? 'unmapped' : 'no-painted-samples';
-    else if (paint.unmappedTexels) paint.status = 'partially-transferred';
+    if (!paint.transferredTexels) paint.status = paint.unmappedTexels || paint.unmappedOldPaintTexels ? 'unmapped' : 'no-painted-samples';
+    else if (paint.unmappedTexels || paint.unmappedOldPaintTexels) paint.status = 'partially-transferred';
   }
   // Fixed charts expand inside their saved gutters. Revised charts may
   // claim only free texels next to their newly rasterized surface.
@@ -246,7 +246,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
     ...(revised && { oldOwners: previous.owners })};
   return { textures, strength, coverage, registeredMaps, owners, stamp, translucent, sampledTexels:used, raster,
     ...(revised && { layoutRevised: true }),
-    ...(geometry && {geometryMasks:geometry.calculate?.report() ?? geometry.previous}) };
+    ...(geometry && {geometryMasks:geometry.calculate ? { ...geometry.calculate.report(), ...(geometry.scope && { scope: geometry.scope }) } : geometry.previous}) };
 }
 
 module.exports = bake;
