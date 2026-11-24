@@ -486,6 +486,7 @@ function renderFrame(world, o, preparedPalettes) {
   const styled = !o.raw && !o.samples && !o.captureCoverage;
   const captureQuantization = styled && o.captureQuantization === true;
   const captureStages = styled && o.captureColorStages === true;
+  const captureBasePaint = o.captureBasePaint === true && !o.samples && !o.captureCoverage;
   const lookInputs = !o.raw && (o.lookInputSession ?? LookInputs.session(t, () =>
     world.lookSnapshot?.query ?? world.surfaceEffects?.query ?? require('../index.js').load().KIT.world.query.fromScene(world, t)));
   const lookOptions = { palette: world.pal, roles: world.paletteRoles, context: world.surfaceEffects, lookInputs,
@@ -550,7 +551,7 @@ function renderFrame(world, o, preparedPalettes) {
   const captureHybridDepth = typeof o.hybridDepthFrame === 'function' && !probeView &&
     !o[matteScope] && o[subjectFocusPass] !== false && (!o.samples || o[nativePartMotion]);
   if (captureHybridDepth) passSelection.add('depth');
-  if (captureStages) passSelection.add('splatId');
+  if (captureStages || captureBasePaint) passSelection.add('splatId');
   const readabilitySelectors = !o.samples && !o.captureCoverage && o.readabilitySelectors;
   if (readabilitySelectors) passSelection.add('splatId');
   if (clusters) for (const channel of ['splatId', 'protected', 'emission', 'paletteOwner']) passSelection.add(channel);
@@ -749,7 +750,7 @@ function renderFrame(world, o, preparedPalettes) {
       else frame = applyCorrection(frame);
     }
     if (captureQuantization && !legacyLook) capture(graded ?? (unclustered ?? frame.rgb).slice(), 'frame');
-    if (captureStages) {
+    if (paintStage && (captureStages || captureBasePaint)) {
       const {w,h,alpha}=frame, base={w,h,rgb:new Uint8Array(w*h*3),alpha:new Uint8Array(w*h)};
       for (let y=0;y<h;y++) for (let x=0;x<w;x++) {
         const p=y*w+x, packed=paintStage[(h-1-y)*w+x]-1;
@@ -759,7 +760,8 @@ function renderFrame(world, o, preparedPalettes) {
         base.rgb[p*3+2]=packed&255;
         base.alpha[p]=255;
       }
-      frame.colorStages={base,lit:{w,h,rgb:litStage,alpha:legacyLook ? legacyAlpha : alpha},
+      if (captureBasePaint) frame.basePaint=base;
+      if (captureStages) frame.colorStages={base,lit:{w,h,rgb:litStage,alpha:legacyLook ? legacyAlpha : alpha},
         graded:legacyLook ? null : {w,h,rgb:frameGrade??litStage,alpha},
         final:{w,h,rgb:frame.rgb.slice(),alpha}};
     }
@@ -976,7 +978,7 @@ function renderFrame(world, o, preparedPalettes) {
   }
   const fragmentTrace = o.inspectFragmentPixel && (!o.samples || o.worked) && !o.reflectionPlane && !probeView
     ? PixelFragments.capture(world,o.inspectFragmentPixel,W,H) : null;
-  const paintStage = o.captureColorStages===true && !o.raw && !o.captureCoverage &&
+  const paintStage = (o.captureBasePaint===true || o.captureColorStages===true && !o.raw) && !o.captureCoverage &&
     (!o.samples || o.worked) && o[subjectFocusPass]!==false ? new Uint32Array(W*H) : undefined;
   function baseReference(i) {
     const packed = world.materialAlbedo?.[i];
@@ -2079,7 +2081,8 @@ function renderFrame(world, o, preparedPalettes) {
     const rule = i<0 ? protection : subject?.(i);
     const dn=normalizedDepth(z), fogMix=world.fog.max>0&&world.fog.start<1 ?
       targetFog(sstep(world.fog.start,1,dn)*world.fog.max*(exposure?.fog?.(...position)??1),rule) : 0;
-    let scanLight, color=sprite.color, highlight=0, paletteId=spritePalettes.get(sprite.swatches) ?? 0, reflected, claim, stageBase, surfaceMatte;
+    let scanLight, color=sprite.color, highlight=0, paletteId=spritePalettes.get(sprite.swatches) ?? 0, reflected, claim, surfaceMatte;
+    let stageBase = paintStage && sprite.surface && !sprite.effect && i < 0 ? color : undefined;
     if (i>=0) {
       const packed=d[i*16+7];
       color=live?.albedo(i) ?? fitPigment?.(i) ?? [(packed&255)/255, (packed>>8&255)/255, (packed>>16)/255];

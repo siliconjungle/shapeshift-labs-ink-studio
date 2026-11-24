@@ -213,6 +213,7 @@ module.exports = {
   reviewShadowReadability: require('./cli/shadow-readability.js').reviewShadowReadability,
   reviewPaletteWeather: require('./cli/palette-weather.js').reviewPaletteWeather,
   reviewPaletteStages: require('./cli/palette-stages.js').reviewPaletteStages,
+  reviewPaintLighting: require('./cli/paint-lighting-review.js').reviewPaintLighting,
   compareShotPalettes: require('./cli/palette-compare.js').compareShotPalettes,
   allocateSequencePalette: require('./cli/sequence-palette.js').allocateSequencePalette,
   repairColorVisionPalette: require('./cli/color-vision-repair.js').repairColorVisionPalette,

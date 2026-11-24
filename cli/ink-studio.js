@@ -1434,6 +1434,7 @@ const CMD = {
         '  pixel-art correct <document.json> <plan.json> [--out report.json] [--review review.html] [--apply document.json --approval digest]   apply approved tracked pixels',
         '  pixel-art reprobe <document.json> --binding id --before view.json [--after view.json] --selection id|--rect x,y,w,h [--out report.json] [--invalidate checked.json]   check edited source bindings',
         '  pixel-art multiview <document.json> <plan.json> [--out report.json] [--patch edit.json] [--review review.html]   combine approved view marks on a bound surface',
+        '  pixel-art paint-lighting <scene> [--subject object [--part name]] [--steps N] [--out directory]   review neutral paint, the shot and a moving light',
         '  pixel-art rules <design.json> [--frame id] [--layer id] [--art-shot id] [--out report.json]   inspect asset art rules and scene settings',
         '  pixel-art lint <design.json> [--frame id] [--art-shot id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings',
         '  pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint',
@@ -4189,6 +4190,26 @@ const CMD = {
      its pixels make one, as 2 for a picture shown at twice its size), the diorama drawn at the same size in art pixels, the two side
      by side scaled up alike (--up, 3), and the crisp measures of each, so a look can be held to a picture it is after */
   'pixel-art'() {
+    if (pos[0] === 'paint-lighting') {
+      if (pos.length!==2 || ['subject','part','t','steps','out'].some(key=>opt[key]===true) ||
+          opt.part!==undefined && opt.subject===undefined || artPixelSize!==undefined && artPixelSize!==1)
+        die('Use pixel-art paint-lighting <scene> [--subject object [--part name]] [--steps N] [--out directory] at px 1');
+      const Review = require('./paint-lighting-review.js');
+      const id=pos[1], t=num('t',0), directory=outputFile('paint-lighting');
+      if (!Number.isFinite(t) || t<0) die('Paint lighting needs a finite, nonnegative scene time');
+      const input=fs.statSync(path.resolve(id),{throwIfNoEntry:false});
+      const report=fs.statSync(path.join(directory,'review.json'),{throwIfNoEntry:false});
+      if (input && report && input.dev===report.dev && input.ino===report.ino)
+        die('Choose a paint lighting output directory separate from the scene input');
+      const world=require('./look-preview.js').withAlbedo(()=>buildPreview(id));
+      pose(world,t);
+      const subject=opt.subject===undefined ? undefined : {object:opt.subject,...(opt.part!==undefined&&{part:opt.part})};
+      const review=Review.reviewPaintLighting(world,{
+        view:view({w:num('w',160),h:num('h',96),t,px:1}),subject,steps:num('steps',5)
+      });
+      console.log('wrote',Review.writeReview(directory,review));
+      return;
+    }
     const PixelArt = require('./pixel-art.js'), ViewSource = require('../src/pixel-view-source.js');
     const { sourceBindings } = require('../src/art-passes.js');
     const sourcePasses = [...ViewSource.channels,...sourceBindings,'pigment'];
