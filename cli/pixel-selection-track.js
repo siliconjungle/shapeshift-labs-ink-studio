@@ -147,7 +147,7 @@ function mappedLocation(anchor,indices,full,mapping) {
     mapping:{ id:mapping.id,from:anchor.source.kind,to:source.kind,point,distance:best.distance } };
 }
 
-function track({ binding,selection,documentGrid,revision,views,render,review }) {
+function track({ binding,selection,documentGrid,revision,views,render,review,visit }) {
   const grid = binding.canvas?.size ?? documentGrid, [w,h] = grid;
   const { samples } = Review.plan(views,'scene',w,h);
   if (samples.length < 2) throw new RangeError('Selection tracking needs a reference and at least one destination view');
@@ -169,6 +169,7 @@ function track({ binding,selection,documentGrid,revision,views,render,review }) 
     const masks = { visible:new Set(),moved:new Set(),occluded:new Set(),lost:new Set() };
     const counts = { visible:0,moved:0,occluded:0,lost:0 };
     const reasons = {}, examples = [], mappings = new Map();
+    const matches = visit && [];
     let mapped;
     for (const anchor of anchors) {
       const { documentAt,referenceAt,source } = anchor;
@@ -195,18 +196,23 @@ function track({ binding,selection,documentGrid,revision,views,render,review }) 
         masks.moved.add(at[1]*w+at[0]);
       }
       if (reason) reasons[reason] = (reasons[reason] ?? 0)+1;
-      if (examples.length < 24) examples.push({ documentAt,referenceAt:referenceAt ?? null,...result,
+      if (visit || examples.length < 24) {
+        const match = { documentAt,referenceAt:referenceAt ?? null,...result,
         ...(source && { source:{ kind:source.kind,object:source.object ?? source.entity ?? null,part:source.part ?? null,
           ...(source.kind === 'splat' && { id:source.id }),
           ...(source.kind === 'mesh' && { chart:source.chart,triangle:source.triangle }),
           ...(source.kind === 'sdf' && { field:source.field,local:source.local }),
           ...(source.kind === 'sprite' && { frame:source.frame,yaw:source.yaw,pitch:source.pitch,local:source.local })
-        }}) });
+        }}) };
+        if (examples.length < 24) examples.push(match);
+        matches?.push(match);
+      }
     }
 
     results.push({ id:row.id,label:row.label ?? row.id,frame:full.sourceView.frame,camera:full.sourceView.camera,
       counts,reasons,examples,...(binding.mapping && { mappings:[...mappings.values()] }),runs:Object.fromEntries(Object.entries(masks)
         .map(([status,pixels])=>[status,runs(w,[...pixels].sort((a,b)=>a-b))])) });
+    visit?.({ index,row,full,matches });
     if (review) {
       const { width,height,rgba } = Review.fromRender({ ...full,sourceView:undefined },row);
       images.push(PNG.encode(width,height,rgba,4).toString('base64'));

@@ -160,3 +160,90 @@ test('the standalone review shows lost marks over the reference grid',{ skip:!pr
     assert.match(await browser.evaluate("document.querySelector('#summary').textContent"),/reference view/);
   });
 });
+
+function correctionDemo(space) {
+  const source = scene(space), frames = ['rest','shifted','hidden','outside','back'];
+  const document = {
+    format:'ink-studio/pixel-art',version:2,width:64,height:48,pixelAspect:[1,1],
+    palette:{ bronze:'#bb763e',light:'#f7ca84',ink:'#262039' },layers:[{ id:'ink' }],
+    frames:frames.map((id,i) => ({ id,durationMs:100,cels:{ ink:{ marks:[
+      { swatch:'bronze',runs:[[24,i > 0 && i < 4 ? 40 : 32,3]] }
+    ] } } })),
+    protectedDetails:[{ id:'locked-accent',kind:'accent',frame:'back',pixels:[[32,24]] }],
+    sceneBindings:[{ id:'study',scene:source,object:'assembly',frame:'rest' }]
+  };
+  const plan = {
+    format:'ink-studio/pixel-tracked-correction',version:1,id:'enamel-edge',binding:'study',layer:'ink',
+    marks:[
+      { kind:'highlight',at:[32,24],swatch:'light' },
+      { kind:'contour',at:[33,24],swatch:'ink' },
+      { kind:'gap',at:[34,24],swatch:null,anchors:[[33,24],[35,24]] }
+    ],
+    samples:frames.map((frame,i) => ({ id:frame,frame,time:i === 4 ? 0 : i,...(i === 4 && { cut:true }) }))
+  };
+  const input = space.write('correction-input.json',document), planFile = space.write('correction-plan.json',plan);
+  return { document, input, planFile, source, run:(...args) => JSON.parse(cli('correct',input,planFile,...args)) };
+}
+
+test('approved corrections propagate per pixel and leave blocked, lost and protected edits for review',t=>{
+  const space = workspace(t), { document,input,run } = correctionDemo(space);
+  const resultFile = space.file('corrected.json'), review = space.file('correction.html');
+  const preview = run('--review',review);
+  const [rest,shifted,hidden,outside,back] = preview.frames;
+  assert.equal(preview.mode,'preview');
+  assert.deepEqual(rest.marks.map(mark=>mark.status),['verified','verified','verified']);
+  assert.deepEqual(shifted.marks.map(mark=>mark.at),[[40,24],[41,24],[42,24]]);
+  assert.equal(hidden.marks[0].correspondence.blocker.object,'cover');
+  assert.equal(hidden.marks[2].reason,'gap-anchor-unresolved');
+  assert.equal(outside.marks[0].reason,'outside-view');
+  assert.equal(back.marks[0].reason,'protected-pixel');
+  assert.deepEqual(preview.unresolvedFrames,['hidden','outside','back']);
+  assert.match(fs.readFileSync(review,'utf8'),/Correction preview/);
+  assert.throws(()=>run('--apply',resultFile),/--approval/);
+  assert.throws(()=>run('--apply',input,'--approval',preview.approval),/separate output paths/);
+  const applied = run('--apply',resultFile,'--approval',preview.approval);
+  assert.equal(applied.mode,'applied');
+  assert.equal(applied.resultRevision,preview.resultRevision);
+  const corrected = JSON.parse(fs.readFileSync(resultFile));
+  const editor = require('..').createPixelEditor(corrected);
+  const sample = at => editor.sample(at,{ mode:'layer',frame:'shifted',layer:'ink' }).swatch;
+  assert.equal(sample([40,24]),'light');
+  assert.equal(sample([41,24]),'ink');
+  assert.equal(sample([42,24]),null);
+  assert.deepEqual(corrected.frames.slice(2,4),document.frames.slice(2,4));
+  assert.deepEqual(JSON.parse(fs.readFileSync(input)),document);
+});
+
+test('an approval expires when the document or rendered tracking evidence changes',t=>{
+  const space = workspace(t);
+  const { document, input, run, source } = correctionDemo(space);
+  const { approval } = run(), out = space.file('corrected.json');
+  const changed = structuredClone(document);
+  changed.palette.ink = '#322c42';
+  fs.writeFileSync(input,JSON.stringify(changed));
+  assert.throws(()=>run('--apply',out,'--approval',approval),/approval is stale/);
+  fs.writeFileSync(input,JSON.stringify(document));
+  fs.writeFileSync(source,fs.readFileSync(source,'utf8').replace('7 : .45','7 : .57'));
+  assert.throws(()=>run('--apply',out,'--approval',approval),/approval is stale/);
+  assert.equal(fs.existsSync(out),false);
+});
+
+test('the correction review jumps to unresolved frames and retains scene evidence',
+  { skip:!process.env.INK_TEST_CHROME },async t=>{
+    const space = workspace(t), { run } = correctionDemo(space);
+    const html = space.file('correction.html');
+    run('--review',html);
+    await withChrome(space.directory,{ hardware:true },async browser=>{
+      await browser.send('Page.navigate',{ url:pathToFileURL(html).href });
+      let status;
+      for (let i=0;i<120 && !status?.includes('shifted');i++) {
+        status = await browser.evaluate("document.querySelector('#sample-summary')?.textContent");
+        await pause(25);
+      }
+      assert.match(status,/shifted.*3 verified/);
+      await browser.evaluate("document.querySelector('#pending').click()");
+      assert.match(await browser.evaluate("document.querySelector('#sample-summary').textContent"),/hidden.*3 unresolved/);
+      assert.match(await browser.evaluate("document.querySelector('tbody').textContent"),/Occluded · cover/);
+      assert.equal(await browser.evaluate("document.querySelectorAll('#samples button').length"),3);
+    });
+  });

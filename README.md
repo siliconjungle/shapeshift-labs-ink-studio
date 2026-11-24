@@ -901,6 +901,7 @@ covers reachable activity choices and confirmed arrivals.
 ## Rendering and command reference
 
 Draw and revise exact indexed layers for sprites, projected paint and masks with the [native pixel-art authoring CLI](docs/pixel-art-authoring.md).
+Approve a highlight, contour, or gap at a reference frame and propagate it through verified scene matches with [tracked pixel corrections](docs/pixel-art-authoring.md#approve-and-apply-a-tracked-correction).
 
 Use the [standard render comparison suite](docs/render-suite.md) to measure matched camera moves on the gatehouse, signal coil, and Saltgate night watch.
 

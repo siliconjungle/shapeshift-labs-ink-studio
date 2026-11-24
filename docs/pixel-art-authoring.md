@@ -1513,6 +1513,71 @@ or filtered atlas samples without direct texel provenance, and points
 with no sampled counterpart stay unresolved. Native edits to the
 original representation still require a valid source address.
 
+## Approve and apply a tracked correction
+
+Use `pixel-art correct` to carry exact swatch writes and erasures from an
+authored reference frame to an existing paint layer in a version 2 pixel
+animation. Pair each scene sample with its registered document frame.
+The first sample establishes the approved mark positions and uses the
+scene binding's reference frame when one is specified.
+
+```json
+{
+  "format": "ink-studio/pixel-tracked-correction",
+  "version": 1,
+  "id": "restore-signal",
+  "binding": "relay",
+  "layer": "capsule",
+  "marks": [
+    { "kind": "highlight", "at": [36, 32], "swatch": "signal" },
+    { "kind": "contour", "at": [28, 30], "swatch": "copper-light" },
+    { "kind": "gap", "at": [43, 32], "swatch": null, "anchors": [[42, 32], [44, 32]] }
+  ],
+  "samples": [
+    { "id": "key", "frame": "key", "time": 0 },
+    { "id": "approach", "frame": "approach", "time": 1 },
+    { "id": "crossing", "frame": "crossing", "time": 2 }
+  ]
+}
+```
+
+Coordinates and frame IDs come from the pixel document. Each sample can
+carry the same `camera`, `cut`, and `label` fields as a scene tracking plan.
+An existing swatch writes opaque paint. `null` clears the target layer
+pixel and reveals any underlying layers.
+
+Use an optional pair of flanking anchors for a one-pixel gap. Place them
+one cell on either side of the mark along one axis. Both must track to
+visible scene pixels that still span one cell. The midpoint must have
+known ownership or be empty, and a different object blocks the transfer.
+Without anchors, a gap uses the same direct surface correspondence as a
+highlight or contour.
+
+```sh
+node cli/ink-studio.js pixel-art correct design.json correction.json \
+  --out preview.json --review preview.html
+approval=$(node -p "require('./preview.json').approval")
+node cli/ink-studio.js pixel-art correct design.json correction.json \
+  --approval "$approval" --apply corrected.json --out applied.json --review review.html
+```
+
+The preview reports the reference and destination coordinates, original
+layer swatch, requested swatch, correspondence evidence, and the decision
+for every mark in every frame. The approval digest covers the plan, the
+document revision, and freshly rendered evidence. Apply reruns tracking
+and rejects a stale digest. Use the same render options for preview and
+apply. It saves a separate editable document and leaves occluded, lost,
+colliding, clipped, and protected destinations for review. Each valid
+mark can apply in a partially resolved frame. The HTML review compares
+the original and corrected cels and can show only unresolved frames.
+
+Reproduce the Signal Capsule example, including the editable source and
+corrected documents, plan, report, and offline review.
+
+```sh
+node examples/tracked-pixel-correction/demo.cjs /tmp/signal-capsule
+```
+
 ## Reprobe bindings after source edits
 
 Capture the reference view before changing the mesh, field, bake, or splat

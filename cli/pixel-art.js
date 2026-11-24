@@ -27,6 +27,7 @@ const Craft = require('../src/pixel-craft.js');
 const Motion = require('../src/pixel-motion-checks.js');
 const MotionReview = require('./pixel-motion-review.js');
 const SelectionTrack = require('./pixel-selection-track.js');
+const TrackedCorrection = require('./pixel-tracked-correction.js');
 const ArtRules = require('../src/pixel-art-rules.js');
 const Cleanup = require('../src/pixel-cleanup.js');
 const files = require('./asset-files.js');
@@ -2100,6 +2101,27 @@ function trackCommand(source,opt,captureTrack) {
   else process.stdout.write(JSON.stringify(report,null,2)+'\n');
 }
 
+function correctCommand(source, planFile, opt, captureTrack) {
+  const { apply,approval,out,review } = opt;
+  if ((apply === undefined) !== (approval === undefined) || approval !== undefined && !isRevision(approval) ||
+      [opt.scene,opt.binding,opt.frame,opt.w,opt.h,opt.t].some(value => value !== undefined))
+    throw new TypeError('Use pixel-art correct <document.json> <plan.json> with --apply <document.json> and --approval <digest> to commit');
+  const design = read(source), plan = read(planFile);
+  documentShape(design);
+  const binding = design.sceneBindings?.find(row => row.id === plan?.binding);
+  const inputs = [source,planFile,binding?.scene].filter(reference).map(file => path.resolve(file));
+  const outputs = [apply,out,review].filter(value => value !== undefined);
+  if (outputs.some(file => !reference(file) || inputs.includes(path.resolve(file))) ||
+      new Set(outputs.map(file => path.resolve(file))).size !== outputs.length ||
+      review !== undefined && !/\.html$/i.test(review))
+    throw new TypeError('Write the corrected document, report and HTML review to separate output paths');
+  const result = TrackedCorrection.run(design,plan,{ compile,edit,captureTrack,approval,includeImages:!!review });
+  if (review) TrackedCorrection.writeReview(path.resolve(review),result.images,result.report);
+  if (apply) files.json(path.resolve(apply),result.document);
+  if (out) files.json(path.resolve(out),result.report);
+  else process.stdout.write(JSON.stringify(result.report,null,2)+'\n');
+}
+
 function reprobeCommand(source,opt,capture) {
   const { binding:id,before,after,selection,rect:rectangle,out,invalidate,accept } = opt;
   if (![id,before].every(reference) || after !== undefined && !reference(after) ||
@@ -2296,7 +2318,7 @@ function trace(frame, object, scene) {
   return design;
 }
 
-const actions = ['capture','trace','import','upgrade','validate','targets','draw','canvas','inspect','lint','rules','motion','track','reprobe','multiview','sample','select','snap','brush','copy',
+const actions = ['capture','trace','import','upgrade','validate','targets','draw','canvas','inspect','lint','rules','motion','track','correct','reprobe','multiview','sample','select','snap','brush','copy',
   'preview','edit','replay'];
 const sessionActions = ['init','status','begin','apply','preview','commit','cancel','undo','redo',
   'inspect','sample','select','snap','brush','copy','targets','export'];
@@ -2366,9 +2388,10 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
   const [action, source, patch] = pos;
   const writing = action === 'edit' || action === 'replay';
   if (!actions.includes(action) ||
-      pos.length !== (writing || ['preview','select','multiview'].includes(action) ? 3 : 2))
-    throw new TypeError('Use pixel-art capture, trace, import, upgrade, validate, targets, draw, canvas, inspect, lint, rules, motion, track, reprobe, multiview, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
+      pos.length !== (writing || ['preview','select','multiview','correct'].includes(action) ? 3 : 2))
+    throw new TypeError('Use pixel-art capture, trace, import, upgrade, validate, targets, draw, canvas, inspect, lint, rules, motion, track, correct, reprobe, multiview, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
   if (action === 'track') return trackCommand(source,opt,captureTrack);
+  if (action === 'correct') return correctCommand(source,patch,opt,captureTrack);
   if (action === 'reprobe') return reprobeCommand(source,opt,capture);
   if (action === 'multiview') return multiviewCommand(source,patch,opt,{ scene,captureMultiview });
   const sourceViewFile = opt['source-view'];

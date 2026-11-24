@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tracked pixel correction · Ink Studio</title>
+<style>
+  :root { color-scheme:dark; background:#10171a; color:#edf0e5; font:15px system-ui,sans-serif;
+    --muted:#a5b5b2; --line:#374b4e; --verified:#a7e4c5; --unresolved:#ffc48d; }
+  * { box-sizing:border-box; }
+  body { margin:0; }
+  main { width:min(1260px,100%); margin:auto; padding:clamp(16px,4vw,52px); }
+  h1 { margin:0; font:400 clamp(30px,5vw,48px)/1.1 Georgia,serif; }
+  p { margin:.6rem 0; }
+  #summary { color:var(--muted); }
+  nav { margin:1.4rem 0; display:flex; flex-wrap:wrap; align-items:center; gap:.55rem; }
+  #samples { display:flex; flex-wrap:wrap; gap:.55rem; }
+  button { border:1px solid var(--line); background:#1c282b; color:inherit; border-radius:.4rem;
+    font:inherit; padding:.5rem .7rem; cursor:pointer; }
+  button:hover, button[aria-current="true"] { border-color:var(--verified); }
+  button[aria-current="true"] { background:#233936; }
+  button span { color:var(--unresolved); margin-left:.35rem; }
+  .controls { margin-left:auto; display:flex; gap:1rem; flex-wrap:wrap; }
+  .panels { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1rem; }
+  figure { margin:0; }
+  figcaption { margin:0 0 .45rem; }
+  .viewport { position:relative; overflow:hidden; border:1px solid var(--line); border-radius:.4rem;
+    background-color:#172123; background-image:conic-gradient(#1e2a2c 25%,transparent 0 50%,#1e2a2c 0 75%,transparent 0);
+    background-size:24px 24px; }
+  canvas { width:100%; display:block; image-rendering:pixelated; }
+  [hidden] { display:none; }
+  .markers { position:absolute; inset:0; pointer-events:none; }
+  #sample-summary { margin:1.25rem 0 .5rem; font-weight:650; }
+  .table { overflow:auto; max-height:22rem; border:1px solid var(--line); border-radius:.4rem; }
+  table { border-collapse:collapse; width:100%; text-align:left; min-width:32rem; }
+  th, td { padding:.55rem .7rem; border-bottom:1px solid var(--line); }
+  th { position:sticky; top:0; background:#1c282b; }
+  tr:last-child td { border-bottom:0; }
+  [data-status="unresolved"] { color:var(--unresolved); }
+  [data-status="verified"] { color:var(--verified); }
+  @media (max-width:760px) { .controls { margin:0; } .panels { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tracked pixel correction</h1>
+  <p id="summary"></p>
+  <nav aria-label="Review frames">
+    <div id="samples"></div>
+    <div class="controls">
+      <label><input id="pending" type="checkbox"> Unresolved frames only</label>
+      <label><input id="marks" type="checkbox" checked> Show marks</label>
+    </div>
+  </nav>
+  <section class="panels" aria-label="Native frame comparison">
+    <figure data-view="before"><figcaption>Before</figcaption><div class="viewport"><canvas></canvas><canvas class="markers" hidden></canvas></div></figure>
+    <figure data-view="after"><figcaption id="after-title">After</figcaption><div class="viewport"><canvas></canvas><canvas class="markers" hidden></canvas></div></figure>
+    <figure data-view="source"><figcaption>Scene evidence</figcaption><div class="viewport"><canvas></canvas><canvas class="markers" hidden></canvas></div></figure>
+  </section>
+  <p id="sample-summary" role="status"></p>
+  <div class="table"><table><thead><tr><th>Mark</th><th>Reference</th><th>Destination</th><th>Decision</th></tr></thead>
+  <tbody></tbody></table></div>
+</main>
+<script>
+const { images,report } = /*DATA*/;
+const summary = document.querySelector('#summary'), sampleSummary = document.querySelector('#sample-summary');
+const list = document.querySelector('#samples'), pending = document.querySelector('#pending');
+const toggle = document.querySelector('#marks'), table = document.querySelector('tbody');
+const panels = Array.from(document.querySelectorAll('figure'));
+const position = at => at?.join(', ') ?? '—';
+const reasons = {
+  'reference-not-visible':'Reference has no visible bound surface',
+  'reference-address-unavailable':'Reference has no stable surface address',
+  'reference-ambiguous-source':'Reference has overlapping sources',
+  'stale-source-binding':'Binding is stale here',
+  'source-unavailable-or-clipped':'Source is unavailable or clipped by the camera',
+  'outside-view':'Source projects outside the view',
+  'no-corresponding-pixel':'Projection has no verified match',
+  'no-registered-correspondence':'No registered representation matches',
+  'reference-gap-unverified':'The reference gap could not be verified',
+  'gap-anchor-unresolved':'A flanking pixel could not be verified',
+  'gap-span-changed':'The flanking pixels no longer span one cell',
+  'gap-blocked':'A different object occupies the gap',
+  'gap-owner-unknown':'The gap has an unidentified foreground sample',
+  'destination-collision':'Multiple marks land on this pixel',
+  'ambiguous-registration':'Several document cells share the source pixel',
+  'outside-registration':'Source pixel falls outside the registered document',
+  'reference-registration-mismatch':'The source and document reference cells differ',
+  'protected-pixel':'The destination pixel is protected',
+  'locked-layer':'The destination layer is locked',
+  'clipped-pixel':'The destination is outside the layer mask',
+  occluded:'Occluded'
+};
+const applied = report.mode === 'applied';
+document.querySelector('#after-title').textContent = applied ? 'Corrected frame' : 'Correction preview';
+summary.textContent = (applied ? report.counts.verified + ' applied' : report.counts.verified + ' ready to apply') +
+  ' · ' + report.counts.unchanged + ' already correct · ' + report.unresolvedFrames.length + ' frames need review';
+pending.disabled = !report.unresolvedFrames.length;
+let selected = Math.max(0,report.frames.findIndex(row => row.counts.verified && row.id !== report.reference));
+let request = 0;
+
+function describe(mark) {
+  if (mark.status === 'verified') return (applied ? 'Applied' : 'Verified') + ' · ' +
+    (mark.swatch === null ? 'cleared layer pixel' : mark.swatch);
+  if (mark.status === 'unchanged') return 'Already correct';
+  const blocker = mark.blocker ?? mark.correspondence?.blocker;
+  const reason = reasons[mark.reason] ?? mark.reason;
+  return blocker?.object ? reason + ' · ' + blocker.object : reason;
+}
+
+function frameButtons() {
+  const showing = report.frames.map((frame,i) => [frame,i]).filter(([frame]) => !pending.checked || frame.counts.unresolved);
+  if (!showing.some(([,i]) => i === selected)) selected = showing[0][1];
+  list.replaceChildren(...showing.map(([frame,i]) => {
+    const button = document.createElement('button');
+    button.textContent = frame.label;
+    button.setAttribute('aria-current',String(selected === i));
+    if (frame.counts.unresolved) {
+      const badge = document.createElement('span');
+      badge.textContent = frame.counts.unresolved + ' unresolved';
+      button.append(badge);
+    }
+    button.onclick = () => {
+      selected = i;
+      for (const item of list.children) item.setAttribute('aria-current',String(item === button));
+      show();
+    };
+    return button;
+  }));
+}
+
+function renderMarks(canvas,frame,scene) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  for (const mark of frame.marks) {
+    const at = scene ? (mark.sourceAt ?? mark.correspondence?.at) : mark.at;
+    if (!at) continue;
+    ctx.fillStyle = mark.status === 'unresolved' ? '#ffc48d' :
+      mark.status === 'verified' ? '#a7e4c5' : '#a5b5b2';
+    const x = at[0]*4, y = at[1]*4;
+    ctx.fillRect(x-1,y-1,3,1); ctx.fillRect(x-1,y-1,1,3);
+    ctx.fillRect(x+2,y+4,3,1); ctx.fillRect(x+4,y+2,1,3);
+  }
+}
+
+async function show() {
+  const running = ++request, index = selected, frame = report.frames[index];
+  sampleSummary.textContent = frame.label + ' · ' + frame.time.toFixed(2) + ' s · ' +
+    frame.counts.verified + (applied ? ' applied' : ' verified') + ' · ' + frame.counts.unresolved + ' unresolved';
+  table.replaceChildren(...frame.marks.map(mark => {
+    const tr = document.createElement('tr');
+    for (const text of [mark.kind,position(mark.reference),position(mark.at),describe(mark)])
+      tr.insertCell().textContent = text;
+    tr.lastChild.dataset.status = mark.status;
+    return tr;
+  }));
+  try {
+    await Promise.all(panels.map(async panel => {
+      const image = new Image(), type = panel.dataset.view;
+      image.src = 'data:image/png;base64,' + images[index][type];
+      await image.decode();
+      if (running !== request) return;
+      const [art,marks] = panel.querySelectorAll('canvas');
+      art.width = image.width;
+      art.height = image.height;
+      art.getContext('2d').drawImage(image,0,0);
+      marks.width = 4*image.width;
+      marks.height = 4*image.height;
+      renderMarks(marks,frame,type === 'source');
+      marks.hidden = !toggle.checked;
+    }));
+  } catch (error) {
+    if (running === request) sampleSummary.textContent = error.message;
+  }
+}
+pending.onchange = () => { frameButtons(); show(); };
+toggle.onchange = () => document.querySelectorAll('.markers').forEach(canvas => canvas.hidden = !toggle.checked);
+frameButtons();
+show();
+</script>
+</body>
+</html>
