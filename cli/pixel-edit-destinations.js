@@ -34,6 +34,7 @@ const kindFields = new Map([
   ['decal-layer', ['binding','decal']],
   ['splat-attributes', ['binding']],
   ['scan-material', ['binding','mesh','material']],
+  ['mesh-topology', ['binding']],
   ['sdf-shape', ['binding']],
   ['sdf-material', ['binding']]
 ]);
@@ -555,6 +556,16 @@ function apply(frame, edit, route, context, readMarks) {
     return asset;
   }
   if (destination.kind === 'decal-layer') return decalEdit(frame,edit,route,source.editor);
+  if (destination.kind === 'mesh-topology') {
+    const operation = edit.operation;
+    if (!fields(operation, ['patch', 'projection']) || !fields(operation.patch,
+      ['vertices', 'faces', 'removeVertices', 'removeFaces', 'lineage']) || !Object.keys(operation.patch).length)
+      throw new TypeError('A topology edit needs a mesh topology patch and optional projection settings');
+    const topology = source.editor.editMeshTopology(binding.object, operation.patch, { part: binding.part, projection: operation.projection });
+    context.onEditTarget?.({ ...sourceTarget(route, edit), node: 'mesh-topology:' + binding.object, topology });
+    return source.editor.snapshot();
+  }
+
   if (destination.kind==='sdf-material' && edit.operation?.paint!==undefined) {
     if (!fields(edit.operation,['paint'])) throw new TypeError('Use a separate edit for SDF surface paint');
     const { key,solid } = boundSolid(binding,source.editor);
@@ -639,6 +650,12 @@ function targets(route, context, limit, query) {
     const {id,kind,anchor,lifetime,opacity,image:{width,height},mask}=boundDecal(destination,binding,editor);
     return {destination:destination.id,binding,revision,sourceRevision,
       decal:{id,kind:kind??'paint',anchor,lifetime:lifetime??{},opacity:opacity??1,grid:[width,height],masked:!!mask}};
+  }
+  if (destination.kind === 'mesh-topology') {
+    const { document, bindings = [], bakes = [] } = editor.meshTopology(binding.object,binding.part);
+    const topology = require('../index.js').load().KIT.meshTopology.inspect(document);
+    return { destination:destination.id,binding,revision,sourceRevision,topology,
+      bindings, bakes:bakes.map(({ maps,...bake })=>bake) };
   }
   const { key, solid } = boundSolid(binding,editor);
   const { chart, channel } = destination;

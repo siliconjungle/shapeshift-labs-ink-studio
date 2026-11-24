@@ -1898,7 +1898,7 @@ function exactView({ design,binding,patch,kind,world,other,settings,options,repo
 
 function reportPreview({ baseline,candidate,exact,...options }) {
   const result = Preview.report({ baseline,candidate,...options,compile,cell,celLinks:Timeline.linkChanges(baseline,candidate ?? baseline) });
-  if (exact) result.diff = exactDiff({ baseline,candidate:candidate ?? baseline,compile,issues:options.issues ?? [],...exact });
+  if (exact) result.diff = exactDiff({ baseline,candidate:candidate ?? baseline,compile,issues:options.issues ?? [],targets:options.targets ?? [],...exact });
   return result;
 }
 
@@ -1931,7 +1931,7 @@ function previewEdit(design, patch, context, { frameId,limit,exact,shotHitFrame 
         if (splat.topology) (target.topologyHits ??= []).push(splat);
       },
       onEditTarget: summary => {
-        if (target && (summary.kind==='scan-material' || summary.brush || summary.surfacePaint)) Object.assign(target,summary);
+        if (target && (summary.kind==='scan-material' || summary.kind==='mesh-topology' || summary.brush || summary.surfacePaint)) Object.assign(target,summary);
         else targets.push(summary);
       },
       world:binding => context.world(binding),
@@ -2513,7 +2513,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
         const footprintHits = splats.filter(row=>row.footprint);
         const attributeHits = splats.filter(row=>row.attributes);
         const topologyHits = splats.filter(row=>row.topology);
-        const summary={ ...target,...((painted?.kind==='scan-material' || painted?.brush || painted?.surfacePaint) && painted), sourceRevision:receipt.inputs.sourceRevision,
+        const summary={ ...target,...((painted?.kind==='scan-material' || painted?.kind==='mesh-topology' || painted?.brush || painted?.surfacePaint) && painted), sourceRevision:receipt.inputs.sourceRevision,
           sourceChecked:patch.sourceRevision !== undefined || verifiedReplays.has(index),
           ...(paintHits.length && {paintHits}),
           ...(footprintHits.length && {footprintHits}),
@@ -3695,9 +3695,10 @@ function sessionCommand(pos,opt,{ scene,capture,view,world }) {
     const sceneLocation = sceneRef === undefined ? undefined : path.resolve(sceneRef);
     documentShape(design);
     const bindings = design.version === 2 ? design.sceneBindings ?? [] : [];
-    const binding = bindings.find(row => row.scene === sceneRef) ??
-      bindings.find(row => sceneLocation && path.resolve(row.scene) === sceneLocation);
     const sceneEditor = sceneLocation && scene(sceneLocation).editor;
+    const binding = bindings.find(row => row.scene === sceneRef) ??
+      bindings.find(row => sceneLocation && path.resolve(row.scene) === sceneLocation) ??
+      bindings.find(row => row.scene === sceneEditor?.snapshot().id);
     editor = createEditor(design,{ sessionDirectory:directory,sceneEditor,sceneLocation,sceneRef:binding?.scene ?? sceneRef });
   } else {
     let attachedScene;

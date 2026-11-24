@@ -75,7 +75,7 @@ function fieldDiff(before,after,write) {
   for (const key of keys(before,after)) if (different(before,after,key)) write(entry(before,after,key));
 }
 
-function sceneDiff(result,{ scene,before,after }) {
+function sceneDiff(result,{ scene,before,after },targets) {
   if (!before || !after || equal(before,after)) return;
   function compare(kind,left,right) {
     for (const key of keys(left,right)) {
@@ -100,7 +100,16 @@ function sceneDiff(result,{ scene,before,after }) {
   compare('part',entries(before.parts),entries(after.parts));
   compare('prefab',entries(before.instances),entries(after.instances));
   compare('decal',index(before.surfaceDecals?.decals),index(after.surfaceDecals?.decals));
-  const scoped = new Set(['solids','parts','instances','surfaceDecals']);
+  fieldDiff(entries(before.topologyMeshes),entries(after.topologyMeshes),({ key:object,before:old,after:next })=>{
+    const K = require('../index.js').load().KIT;
+    const changes = K.authoring.meshTopologyScene.diff(old,next);
+    const edits = targets.filter(row=>row.kind === 'mesh-topology' && row.scene === scene && row.object === object)
+      .map(({ id,topology })=>({ id,correspondence:topology.correspondence }));
+    if (!edits.length && old && next) edits.push({ correspondence:K.meshTopology.correspond(old.document,next.document) });
+    (result.topology ??= []).push({ scene,object,...((next?.part ?? old?.part) && {part:next?.part ?? old?.part}),
+      changes,...(edits.length && { edits }) });
+  });
+  const scoped = new Set(['solids','parts','instances','surfaceDecals','topologyMeshes']);
   fieldDiff(entries(before),entries(after),row=>{
     if (scoped.has(row.key)) return;
     const category = ['materials','roles','surfacePaint'].includes(row.key) ? result.materials :
@@ -189,10 +198,10 @@ function protectedRender(rendered,design,binding,compile) {
   return result;
 }
 
-function exactDiff({ baseline,candidate,compile,issues,scenes,assets,views,skippedHits,renderErrors }) {
+function exactDiff({ baseline,candidate,compile,issues,scenes,assets,views,skippedHits,renderErrors,targets = [] }) {
   const { cells,grids,protectedCells } = documentDiff(baseline,candidate,compile);
   const result = { cells,grids,materials:[],geometry:[],other:[],guards:[] };
-  for (const source of scenes) sceneDiff(result,source);
+  for (const source of scenes) sceneDiff(result,source,targets);
   for (const source of assets) assetDiff(result,source);
   const rendered = [], renderedProtection = [];
   const hits = [...skippedHits,...issues.filter(issue=>issue.at !== undefined || issue.splat !== undefined ||

@@ -228,6 +228,7 @@
     palette: 'list',
     assetPacks: 'list',
     assetParts: 'obj',
+    topologyMeshes: 'obj',
     environmentPreset: 'obj',
     roles: 'obj',
     camera: 'obj',
@@ -437,6 +438,19 @@
         K.authoring.assetRevisions.checkScene(spec, env?.assetPartImports);
       } catch (error) {
         bad('assetParts', error.message);
+      }
+    }
+    if (spec.topologyMeshes !== undefined) {
+      try {
+        presentation.topologyMeshes = K.authoring.meshTopologyScene.prepare(spec.topologyMeshes);
+        const names = new Set([...DIO.solids(spec).map(solid => solid?.id), ...Object.keys(spec.assetParts ?? {})]);
+        for (const [object] of presentation.topologyMeshes) {
+          if (names.has(object)) throw new RangeError('Editable mesh conflicts with scene object ' + object);
+        }
+        const imports = Object.keys(spec.assetParts ?? {}).flatMap(id => env?.assetPartImports?.[id]?.meshes ?? []);
+        K.sceneMeshes.list({ meshes: [...imports, ...presentation.topologyMeshes.map(([, row]) => row.mesh)] }, true);
+      } catch (error) {
+        bad('topologyMeshes', error.message);
       }
     }
     if (typeof spec.id !== 'string' || !/^[a-z0-9-]+$/.test(spec.id))
@@ -1528,10 +1542,12 @@
       motion = spec.motion || [],
       lamps = effects.filter(e => e.do === 'lamp'),
       loose = effects.some(e => ['dust', 'embers', 'smoke', 'sparks', 'rain'].includes(e.do)) || !!spec.tap;
-    function bindAssetParts(world) {
-      if (spec.assetParts === undefined) return;
-      const imported = Object.fromEntries(Object.keys(spec.assetParts).map(id => [id, env.assetPartImports[id]]));
-      K.authoring.assetRevisions.install(world, imported);
+    function bindSceneMeshes(world) {
+      if (spec.assetParts !== undefined) {
+        const imported = Object.fromEntries(Object.keys(spec.assetParts).map(id => [id, env.assetPartImports[id]]));
+        K.authoring.assetRevisions.install(world, imported);
+      }
+      K.authoring.meshTopologyScene.mount(world, presentation.topologyMeshes);
     }
     function bindBreakables(world) {
       try {
@@ -1576,7 +1592,7 @@
       if (modelOptions) throw new TypeError('Brush regions are baked as splat geometry');
       const { palette, roles, sun } = st0;
       const { timeline: authoredTimeline, cameraRig: authoredCameraRig, dataInputs: authoredData, dataMarks: authoredMarks,
-        breakables: authoredBreakables, surfaceDecals: authoredDecals, ...geometry } = spec;
+        breakables: authoredBreakables, surfaceDecals: authoredDecals, topologyMeshes: authoredTopology, ...geometry } = spec;
       let world = (env.brushSession ?? K.authoring.brushRegions.create()).build(geometry, env, { palette, roles, sun });
       let marksSystem;
       if (marks) {
@@ -1587,7 +1603,7 @@
         marksSystem = K.dataMarks.bind(world, marks, dataMarks, { first, query: marksQuery });
       }
       world.spec = source;
-      bindAssetParts(world);
+      bindSceneMeshes(world);
       bindBreakables(world);
       bindDecals(world);
       if (dataInputs) world.dataInputs = dataInputs;
@@ -2013,7 +2029,7 @@
       W.spriteAtlases = W.spriteAtlases.map(placement => typeof placement?.atlas === 'string' ?
         K.sprite.placeAtlas({ ...placement, atlas: env.resolveSpriteAtlas(placement.atlas) }) : placement);
     if (staticBake && !baked) cache.write('splats', bakeKey, cacheAPI.pack(W));
-    bindAssetParts(W);
+    bindSceneMeshes(W);
     if (pool) W.qualityParticleRanges = [{ first: pool.first, count: pool.n }];
     bindBreakables(W);
     const marksSystem = marks && K.dataMarks.bind(W, marks, dataMarks, { first: firstMark, query: marksQuery });

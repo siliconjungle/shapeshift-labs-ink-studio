@@ -142,6 +142,73 @@ node examples/topology-correspondence.cjs topology-correspondence-review
 ink-studio mesh-topology correspond topology-correspondence-review/after.json topology-correspondence-review/reimport.json --projection topology-correspondence-review/projection.json
 ```
 
+## Edit topology in a scene transaction
+
+Put the editable document in the diorama's `topologyMeshes` map. The
+key is the scene object ID. The row stores the topology, native
+materials, optional named part, and any element bindings or material
+bakes that depend on the mesh.
+
+```js
+sceneSource.topologyMeshes = {
+  relay: {
+    document: panel,
+    part: 'front',
+    materials: [{ id: 'enamel', color: 0x50646f }],
+    bindings: [{ id: 'cover-mask', domain: 'faces', element: 'front' }],
+    bakes: [{
+      id: 'paint-atlas',
+      material: 'enamel',
+      maps: { texture: { width: 1, height: 1, pixels: [82, 153, 135, 255] } }
+    }]
+  }
+};
+```
+
+A binding targets a stable `faces`, `edges`, or `corners` element and
+can carry JSON `data` for its consumer. A unique exact correspondence
+can rebind it. A split, deletion, or projected match flags it for review
+with available candidates. A retained element whose geometry changes
+is reported as displaced. Read usable bindings from
+`world.topologyMeshes[object].resolvedBindings`.
+
+Each bake registers native material maps against the faces using its
+material. The scene uses those maps while the bake is ready. A change to
+those faces, including their UVs, invalidates the bake, and the scene
+then uses the base material. Invalidation keeps the original map bytes
+in the snapshot. Unrelated materials keep their ready bakes.
+
+Use `editor.meshTopology(object, part)` to inspect the source row and
+`editor.editMeshTopology(object, patch, options)` to edit it inside the
+scene editor journal. To record and replay the operation with other pixel
+commands, declare a `mesh-topology` destination bound to the same scene,
+object and optional part. Send an `apply` command with the observed
+`revision` and `sourceRevision`, the frame, and
+`operation: { patch, projection? }`. The patch is the same one used by
+`KIT.meshTopology.editWithCorrespondence`.
+
+A normal preview shows target evidence. An exact preview also shows
+element-level before and after rows, correspondence, bindings and bake
+validity in `diff.topology`, along with matched native renders. Review
+bundles include that evidence in `topology.json`. Undo and redo restore
+the mesh, bindings, bake validity and any pixel edits in the same
+journal entry.
+
+### Run the transaction demo
+
+```sh
+node examples/mesh-topology-transaction.cjs mesh-transaction
+node cli/ink-studio.js pixel-art session init mesh-session mesh-transaction/pixel.json --scene mesh-transaction/scene.json
+node cli/ink-studio.js pixel-art session run mesh-session mesh-transaction/request.json
+node cli/ink-studio.js pixel-art session undo mesh-session
+node cli/ink-studio.js pixel-art session run mesh-session mesh-transaction/replay-command.json
+```
+
+The 1× frames and comparison show the original relay, edited cover,
+undo, and replay. The review bundle includes the native pixel annotation,
+a binding flagged for review, a displaced fastener, and the invalidated
+cover atlas. The separate badge atlas stays active.
+
 ## Render, pick, and import indexed geometry
 
 - Put the result of `KIT.meshTopology.toSceneMesh` in the scene's

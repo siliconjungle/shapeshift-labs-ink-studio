@@ -1635,11 +1635,12 @@ pixels.undo();
 scene.redo();
 ```
 
-Native calls on the attached editor and bound surface, SDF shape, and SDF
-material patches can take part in the same gesture. If `apply`, `preview`,
-`commit`, or the `transact` callback throws, both drafts are rolled back.
-Call undo or redo from either editor to restore the matching scene and pixel
-document.
+Native calls on the attached editor and bound surface, mesh topology, SDF
+shape, and SDF material patches can take part in the same gesture. If
+`apply`, `preview`, `commit`, or the `transact` callback throws, both
+drafts are rolled back. Call undo or redo from either editor to restore
+the matching scene and pixel document.
+[Mesh topology transactions](mesh-topology.md#edit-topology-in-a-scene-transaction)
 
 By default the attached diorama's ID matches `sceneBindings[].scene`. Pass
 `sceneRef` alongside `sceneEditor` if your bindings use a file path or
@@ -1864,6 +1865,7 @@ Read the result's `diff` object for the following evidence.
 | --- | --- |
 | `cells`, `grids` | Exact before and after values for changed composite and layer-local cells, including hidden paint, knockouts, alpha, and added or removed canvas area. Layer-local cells include their layer ID. |
 | `materials`, `geometry`, `other` | Changed authored fields keyed by scene and target. Includes material roles and channels, scan texels, splat transforms and footprints, SDF shapes and modifiers, and shot corrections. A missing `before` or `after` means the authored value was absent. |
+| `topology` | Exact before and after vertices, faces, edges, and corners, plus correspondence, displaced bindings, and invalidated bakes. |
 | `rendered` | Paired before and after native renders on the binding grid, with RGBA, coverage, depth, surface kind, and object, part, and material ownership for each changed pixel. The report identifies the time and, for a shot correction, the sampled shot frame. |
 | `skippedHits` | Skipped source projections, weight-filtered splat hits, and rejected pixel and source hits reported by the edit. |
 | `protection` | Whether the accepted diff changes protected cells or definitions, whether the rendered scene changes over a registered protected cell, and which protected hits the editor blocked. |
@@ -3213,6 +3215,7 @@ and declared destinations. The edit JSON has `revision`, `frame`, `id`, and
 | `decal-layer` | `operation.type` of `move`, `mask`, `replace`, or `bake` | Revised JSON diorama with the [decal layer](surface-decals.md#edit-a-decal-layer) edited in place |
 | `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and paint, footprint, or transform controls, or an ordered `operation.topology` batch | Splat-fit asset for `render --splat-fit` |
 | `scan-material` | Explicit `operation.texels` on a registered mesh material | Scan paint asset for `render --scan-paint` |
+| `mesh-topology` | `operation.patch` and optional `operation.projection` | Revised scene mesh with element correspondence, binding review and bake validity in the receipt. [Mesh topology transactions](mesh-topology.md#edit-topology-in-a-scene-transaction) |
 | `sdf-shape` | `operation.brush`, `operation.updateBrush`, `operation.parameters`, a new `operation.modifier`, `operation.updateModifier` with `id` and `patch`, or `operation.protection` | Revised JSON diorama with edited geometry or feature volumes |
 | `sdf-material` | `operation.paint` for a native-grid palette role or mask stroke, or `operation.material` for the whole solid | Revised JSON diorama with edited surface appearance |
 

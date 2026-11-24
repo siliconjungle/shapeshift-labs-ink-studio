@@ -42,9 +42,10 @@ function sourceChanges(scene, before, after) {
   compare('solid',solids(before.solids),solids(after.solids));
   compare('part',before.parts,after.parts);
   compare('prefab',before.instances,after.instances);
+  compare('mesh-topology',before.topologyMeshes,after.topologyMeshes);
   const decals = source => Object.fromEntries((source.surfaceDecals?.decals ?? []).map(row=>[row.id,row]));
   compare('decal',decals(before),decals(after));
-  const fields = fieldsChanged(before,after).filter(key => !['solids','parts','instances','surfaceDecals'].includes(key));
+  const fields = fieldsChanged(before,after).filter(key => !['solids','parts','instances','surfaceDecals','topologyMeshes'].includes(key));
   if (fields.length) result.push({ scene, kind:'scene', change:'modified', fields });
   return result;
 }

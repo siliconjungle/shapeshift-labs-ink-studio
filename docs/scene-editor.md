@@ -60,6 +60,15 @@ Use `setSurfaceState(state, keys)` to edit a solid's rest-chart marks or pass `n
 
 Pass the result of `build()` to `createSceneEditor` to reopen its source at the time of the bake. Retain `serialize()` output for durable storage alongside any exported splat or image data. Opening a scene with mesh operands uses the same asset lookup as opening its source JSON. Active modifiers on a separate analytic shape send its edited surface through the general mesh export path.
 
+## Native mesh topology
+
+A diorama can retain polygon meshes under `topologyMeshes`. Use
+`editor.meshTopology(object, part)` for the source and
+`editor.editMeshTopology(object, patch, options)` to update it in the
+same journal as solid and pixel edits. The edit returns correspondence,
+displaced bindings and invalidated material bakes.
+[Mesh topology transactions](mesh-topology.md#edit-topology-in-a-scene-transaction)
+
 ## Brushes and local rebuilds
 
 Use `paintShadowBand(stroke, { layer, keys })` to paint the lighting

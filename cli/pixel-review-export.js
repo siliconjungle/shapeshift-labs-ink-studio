@@ -73,7 +73,8 @@ function html(manifest,summary) {
     'img{display:block;image-rendering:pixelated;background:#282d37;outline:1px solid #4c5362}figcaption{padding:.45rem 0}</style>'+
     '<body><h1>'+escape(manifest.label)+'</h1><p>'+summary.pixelCount+' changed document pixels · '+summary.receiptCount+' edit receipts</p>'+
     '<nav><a href="manifest.json">Manifest</a> · <a href="diff.json">Exact diff</a> · '+
-    '<a href="render-settings.json">Render settings</a> · <a href="receipts.json">Edit receipts</a></nav>'+sections+'</body></html>\n';
+    '<a href="render-settings.json">Render settings</a> · <a href="receipts.json">Edit receipts</a>'+
+    (manifest.topology ? ' · <a href="topology.json">Mesh topology</a>' : '')+'</nav>'+sections+'</body></html>\n';
 }
 
 function assemble({ label,anchors,preview,receipts,batch,views,zoom }) {
@@ -99,6 +100,10 @@ function assemble({ label,anchors,preview,receipts,batch,views,zoom }) {
   write(manifest.diff,json(preview));
   write(manifest.settings,json({ version:1,views:settings,zoom,upsampling:'nearest-neighbor' }));
   write(manifest.receipts,json({ version:1,receipts,...(batch && {batch}) }));
+  if (preview.diff?.topology?.length) {
+    manifest.topology = 'topology.json';
+    write(manifest.topology,json({ version:1,meshes:preview.diff.topology }));
+  }
   write(manifest.review,html(manifest,{pixelCount:preview.pixelCount,receiptCount:receipts.length}));
   manifest.files = [...files].map(([path,bytes])=>({ path,bytes:Buffer.byteLength(bytes),sha256:checksum(bytes) }));
   write('manifest.json',json(manifest));

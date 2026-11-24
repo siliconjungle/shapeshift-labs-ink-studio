@@ -4871,6 +4871,268 @@
         }
       ]
     },
+    "meshTopologyOperation": {
+      "type": "object",
+      "properties": {
+        "patch": {
+          "type": "object",
+          "properties": {
+            "vertices": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "position": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "minItems": 3,
+                    "items": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "position"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "faces": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "material": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "corners": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "pattern": "\\S"
+                        },
+                        "vertex": {
+                          "type": "string",
+                          "minLength": 1,
+                          "pattern": "\\S"
+                        },
+                        "uv": {
+                          "type": "array",
+                          "prefixItems": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            }
+                          ],
+                          "minItems": 2,
+                          "items": false
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "vertex"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 3,
+                    "maxItems": 128
+                  }
+                },
+                "required": [
+                  "id",
+                  "corners"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "removeVertices": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "removeFaces": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "lineage": {
+              "type": "object",
+              "properties": {
+                "faces": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "from": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "to": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "from",
+                      "to"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "edges": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "from": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "to": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "from",
+                      "to"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "corners": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "from": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "to": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "from",
+                      "to"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [],
+          "additionalProperties": false,
+          "minProperties": 1
+        },
+        "projection": {
+          "type": "object",
+          "properties": {
+            "maxDistance": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "minNormalDot": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "maxUVDistance": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "minConfidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "ambiguity": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "maxChecks": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000000
+            }
+          },
+          "required": [
+            "maxDistance"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "patch"
+      ],
+      "additionalProperties": false,
+      "examples": [
+        {
+          "patch": {
+            "vertices": [
+              {
+                "id": "lip",
+                "position": [
+                  0.8,
+                  0.2,
+                  0
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
     "sdfShapeOperation": {
       "anyOf": [
         {
@@ -6364,6 +6626,12 @@
             "$ref": "#/$defs/dryRunSource"
           }
         },
+        "topology": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
         "rendered": {
           "type": "array",
           "items": {
@@ -7649,6 +7917,11 @@
           "minLength": 1,
           "pattern": "\\S"
         },
+        "topology": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
         "files": {
           "type": "array",
           "items": {
@@ -8451,6 +8724,33 @@
         }
       }
     },
+    "meshTopologyDestination": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "mesh-topology"
+        },
+        "binding": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "binding"
+      ],
+      "additionalProperties": false,
+      "not": {
+        "properties": {
+          "id": {
+            "const": "raster"
+          }
+        }
+      }
+    },
     "sdfShapeDestination": {
       "type": "object",
       "properties": {
@@ -8524,6 +8824,9 @@
         },
         {
           "$ref": "#/$defs/scanMaterialDestination"
+        },
+        {
+          "$ref": "#/$defs/meshTopologyDestination"
         },
         {
           "$ref": "#/$defs/sdfShapeDestination"
@@ -8855,6 +9158,29 @@
           "properties": {
             "operation": {
               "$ref": "#/$defs/scanMaterialOperation"
+            }
+          },
+          "required": [
+            "frame",
+            "operation"
+          ],
+          "not": {
+            "required": [
+              "edits"
+            ]
+          }
+        }
+      ]
+    },
+    "meshTopologyDestinationPatch": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/editPatch"
+        },
+        {
+          "properties": {
+            "operation": {
+              "$ref": "#/$defs/meshTopologyOperation"
             }
           },
           "required": [
@@ -12327,7 +12653,8 @@
           "/warnings": "Additional review evidence, including an unpinned source revision when applicable.",
           "/diff/cells": "Every changed composite or layer cell with before and after values in exact mode.",
           "/diff/materials": "Authored material fields, source splat channels and scan texels before and after.",
-          "/diff/geometry": "Authored geometry, modifiers, footprints and topology before and after.",
+          "/diff/geometry": "Authored geometry, modifiers and splat footprints before and after.",
+          "/diff/topology": "Exact before and after mesh elements, correspondence, displaced bindings and invalidated bakes.",
           "/diff/rendered": "Untruncated, matched native render differences for reviewed scene views.",
           "/diff/skippedHits": "Skipped projection hits, brush falloff and reported rejected pixel or source hits.",
           "/diff/protection": "Changed protection definitions and cells, and protected hits blocked by validation."
@@ -15267,6 +15594,44 @@
         "scope": "Bound frame and scene. Use targets to pin sourceRevision before editing.",
         "evidence": {
           "/affectedTargets": "Mesh and material IDs, registered texels, changed channels and captured appearance evidence.",
+          "/inputs/sourceRevision": "Observed source fingerprint for the same destination and binding."
+        }
+      },
+      "mesh-topology": {
+        "output": "scene",
+        "operation": "#/$defs/meshTopologyOperation",
+        "declaration": "#/$defs/meshTopologyDestination",
+        "requiredDeclaration": [
+          "id",
+          "kind",
+          "binding"
+        ],
+        "exampleDeclaration": {
+          "id": "mesh-topology",
+          "kind": "mesh-topology",
+          "binding": "gate"
+        },
+        "patch": "#/$defs/meshTopologyDestinationPatch",
+        "requiredPatch": [
+          "id",
+          "revision",
+          "frame",
+          "operation"
+        ],
+        "identityInputs": [
+          "sceneBindings",
+          "scene",
+          "object"
+        ],
+        "sourceGuard": {
+          "field": "sourceRevision",
+          "required": false,
+          "recommended": true,
+          "source": "pixel-art targets"
+        },
+        "scope": "Bound frame and scene. Use targets to pin sourceRevision before editing.",
+        "evidence": {
+          "/affectedTargets": "Stable element IDs, exact topology changes, binding impact and bake validity.",
           "/inputs/sourceRevision": "Observed source fingerprint for the same destination and binding."
         }
       },

@@ -207,7 +207,7 @@
     return { positions, uvs, indices, materials, faceMaterials, triangleSources };
   }
 
-  function toSceneMesh(source, { materials, objectId, partId } = {}) {
+  function toSceneMesh(source, { materials, objectId, partId, meshId } = {}) {
     const doc = create(source);
     const { materials: slots, triangleSources, ...geometry } = triangulate(doc);
     if (!triangleSources.length) throw new RangeError('Add at least one polygon before rendering a mesh topology');
@@ -216,7 +216,7 @@
       if (options && !options.has(id)) throw new RangeError('Missing mesh material ' + id);
       return options?.get(id) ?? { id };
     });
-    const mesh = K.sceneMeshes.create({ id: doc.id, objectId, partId, ...geometry, materials: definitions });
+    const mesh = K.sceneMeshes.create({ id: meshId ?? doc.id, objectId, partId, ...geometry, materials: definitions });
     renderSources.set(mesh, triangleSources);
     return mesh;
   }

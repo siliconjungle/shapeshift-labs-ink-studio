@@ -69,6 +69,10 @@
       for (const name of solids) byEntity.set(name, node.key);
       roots.push(node);
     }
+    for (const [id, mesh] of Object.entries(scene.topologyMeshes ?? {})) {
+      roots.push(Object.assign(parent('mesh-topology', id, mesh.label), { mesh }));
+      byEntity.set(id, 'mesh-topology:' + id);
+    }
     const byStroke = new Map();
     if (scene.brushRegion) {
       const brushRegion = parent('brushRegion', 'Brush region');
@@ -133,16 +137,16 @@
     }
     function keys(value, solidsOnly = false) {
       const requested = typeof value === 'string' ? [value] : value;
-      const kinds = solidsOnly ? ['solid'] : ['solid', 'stroke', 'prefab'];
+      const kinds = solidsOnly ? ['solid'] : ['solid', 'stroke', 'prefab', 'mesh-topology'];
       if (!Array.isArray(requested) || Array.from(requested).some(key => !kinds.includes(current().nodes.get(key)?.kind)))
         throw new RangeError(solidsOnly ? 'Edits need keys of solids in the scene tree' :
-          'Selection needs keys of solids, prefab instances, or brush strokes in the scene tree');
+          'Selection needs keys of solids, prefab instances, mesh topology, or brush strokes in the scene tree');
       return [...new Set(requested)];
     }
 
     function selectedKeys() {
       const { nodes } = current();
-      return freeze(selection.filter(key => ['solid', 'stroke', 'prefab'].includes(nodes.get(key)?.kind)));
+      return freeze(selection.filter(key => ['solid', 'stroke', 'prefab', 'mesh-topology'].includes(nodes.get(key)?.kind)));
     }
 
     function select(requested, { mode = 'replace' } = {}) {
@@ -299,6 +303,26 @@
       else document.transact('Edit prefab instance ' + id, write);
     }
 
+    function meshTopology(object, part) {
+      const meshes = snapshot().topologyMeshes ?? {};
+      const mesh = Object.hasOwn(meshes, object) ? meshes[object] : null;
+      if (!mesh || part !== undefined && mesh.part !== part)
+        throw new RangeError('No editable topology for scene object ' + object + (part === undefined ? '' : '/' + part));
+      return mesh;
+    }
+
+    function editMeshTopology(object, patch, { part, projection, label } = {}) {
+      const before = meshTopology(object, part);
+      const { row, ...evidence } = A.meshTopologyScene.revise(before, patch, { projection });
+      function write() {
+        const next = { topologyMeshes: { ...snapshot().topologyMeshes, [object]: row } };
+        validate({ ...snapshot(), ...next });
+        document.setEnvironment(next);
+        return freeze(evidence);
+      }
+      return document.pending() ? write() : document.transact(label ?? 'Edit topology of ' + object, write);
+    }
+
     function setBrushRegion(region) {
       const value = clone(region);
       const write = () => document.setEnvironment({ brushRegion: value });
@@ -362,7 +386,7 @@
         const target = hit?.target;
         const tag = target?.tags?.find(tag => byTag.has(tag));
         const stroke = target?.surface === 'brush-region' ? byStroke.get(target.entity) : undefined;
-        const key = stroke ?? (tag ? byTag.get(tag) : byEntity.get(target?.entity));
+        const key = stroke ?? (tag ? byTag.get(tag) : byEntity.get(target?.entity ?? target?.object));
         if (key) return { key, hit };
       }
       return null;
@@ -395,6 +419,8 @@
       updateModifier,
       setPrefabInstance,
       refreshPrefabs,
+      meshTopology,
+      editMeshTopology,
       setBrushRegion,
       setBreakables,
       applyBrush,

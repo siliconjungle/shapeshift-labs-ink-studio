@@ -200,6 +200,22 @@ function createDefinitions() {
     tagged('op','retire',{splat:text,reason:text},['splat'])),1)},['topology'])),
     scanMaterialOperation:object({texels:array({...object({at:textureCoordinate,pigment:nullable(inkSwatch),
       roughness:nullable(unit),normal:nullable(tangentNormal)},['at']),anyOf:['pigment','roughness','normal'].map(prop)},1,4096)},['texels']),
+    meshTopologyOperation:object({
+      patch:{
+        ...object({
+          vertices:array(object({id:text,position:pos},['id','position'])),
+          faces:array(object({id:text,material:text,corners:array(object({
+            id:text,vertex:text,uv:tuple(unit,unit)
+          },['id','vertex']),3,128)},['id','corners'])),
+          removeVertices:array(text),removeFaces:array(text),
+          lineage:object(Object.fromEntries(['faces','edges','corners'].map(kind=>
+            [kind,array(object({from:text,to:text},['from','to']))])))
+        }),
+        minProperties:1
+      },
+      projection:object({maxDistance:{type:'number',exclusiveMinimum:0},minNormalDot:unit,maxUVDistance:unit,minConfidence:unit,
+        ambiguity:unit,maxChecks:int(1,2000000)},['maxDistance'])
+    },['patch']),
     sdfShapeOperation:either(...[
       ['parameters',obj],['modifier',obj],['updateModifier',object({id:text,patch:obj},['id','patch'])],
       ['protection',array(obj)],['brush',sdfBrush],['updateBrush',{type:'object',required:['id']}]
