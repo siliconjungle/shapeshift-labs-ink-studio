@@ -121,6 +121,7 @@ const AtlasSprites = require('../src/atlas-sprites.js');
 const AtlasRaster = require('./atlas-sprites.js');
 const Multiprojection = require('./multiprojection.js');
 const SurfaceRaster = require('./sprite-surfaces.js');
+const PixelSourceTracking = require('./pixel-source-tracking.js');
 const SemanticMipmaps = require('../src/semantic-texture-mipmaps.js');
 const texelEmissionDisplay = require('../src/color-space.js').prepare('srgb-linear', 'srgb');
 const SimulationMaterialLayers=require('../src/simulation-material-layers.js');
@@ -949,6 +950,7 @@ function renderFrame(world, o, preparedPalettes) {
       native.strandPixel && { strandPixel: native.strandPixel },
       native.pixelFragments && { pixelFragments:native.pixelFragments },
       native.pixelSelection && { pixelSelection:native.pixelSelection },
+      native.pixelSourceTracking && { pixelSourceTracking:native.pixelSourceTracking },
       native.deep && { deep: native.deep },
       native.objectMattes && { objectMattes:native.objectMattes },
       native.silhouetteMask && { silhouetteMask:native.silhouetteMask },
@@ -1173,8 +1175,11 @@ function renderFrame(world, o, preparedPalettes) {
   const localProjection=reflectionPlane || probeView || o.captureCoverage ? null :
     Multiprojection.frame(Multiprojection.prepare(o.multiprojection ?? look.multiprojection),surfaceLayers,
       {V,ortho,near,w:W,h:H,focal,time:t});
+  const trackMeshes = isolate && o.trackPixelSources ? new Map() : null;
+  const trackFields = trackMeshes && new Map();
   const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { V, W, H, focal, ortho, near,simulationLayers,
       far:camera.clipFar, clip: geometryClip,multiprojection:localProjection,
+      trackMesh:trackMeshes && ((source,triangle,project)=>trackMeshes.set(PixelSourceTracking.meshKey(source,triangle),project)),
       paletteSampling: o.paletteSampling, semanticMipmaps:o.semanticMipmaps, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1,
       capture:captureTexturedSurface, sourceBinding:captureSourceSurface, allow:isolate?.matches, motion:!!temporal||captureSurfaceMotion, meshMask:geometryMask?.meshCodes, spriteLOD,
       captureFogOwners,
@@ -1184,7 +1189,9 @@ function renderFrame(world, o, preparedPalettes) {
   const localProjectionHits=surfaceFragments.some(sample=>sample.localProjection) && new Uint8Array(W*H);
   if (localProjectionHits) for (const sample of surfaceFragments) if (sample.localProjection) localProjectionHits[sample.p]=1;
   const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip,
-    editable:brickFrames,sourceBinding:captureSourceSurface || !!pixelSelection,allow:isolate?.matches,visible:geometryMask ? (row,x,y)=>spriteLOD.geometry(geometryMask.codes[row],x,y) : undefined}) : null;
+    editable:brickFrames,sourceBinding:captureSourceSurface || !!pixelSelection,allow:isolate?.matches,
+    trackSdf:trackFields && ((field,point)=>trackFields.set(JSON.stringify(field),point)),
+    visible:geometryMask ? (row,x,y)=>spriteLOD.geometry(geometryMask.codes[row],x,y) : undefined}) : null;
   for (const sample of sdf?.samples ?? []) surfaceFragments.push(sample);
   const emitterHits = !isolate && areaLights.length && AreaRaster.rasterize(areaLights, { w:W, h:H, rayAt, near, capture:!!(reflectionPlane || probeView), clip:geometryClip });
   if (emitterHits) for (const hit of emitterHits) if (hit) surfaceFragments.push(hit);
@@ -3402,6 +3409,9 @@ function renderFrame(world, o, preparedPalettes) {
     deep.transmit(p, source, eyeD - R + depth * 2 * R, eyeD - R + sourceDepth * 2 * R, weight)));
   const deepFrame = deep?.finish();
   const objectMattes = mattes?.finish(), selectionCoverage = pixelSelection?.finish();
+  const pixelSourceTracking = trackMeshes && PixelSourceTracking.capture(world,trackMeshes,trackFields,sampleFrames(world,t),{
+    X,Y,Z,AL,rayAt,V,W,H,focal,ortho,near,far:camera.clipFar
+  });
   if (selectionCoverage?.depth) selectionCoverage.view = {
     matrix:Array.from(V),focal,orthographic:ortho,near,far:camera.clipFar,time:sceneTime,poseTime:t
   };
@@ -3603,6 +3613,7 @@ function renderFrame(world, o, preparedPalettes) {
       ...(deepFrame && { deep: deepFrame }),
       ...(objectMattes && {objectMattes}),
       ...(selectionCoverage && {pixelSelection:selectionCoverage}),
+      ...(pixelSourceTracking && {pixelSourceTracking}),
       ...(o.resolveDetailCleanup && cleanupFlags && cleanupFlags.some(DetailBudgets.changesCleanup) &&
         { cleanDetail: cleanPixels }),
       ...(localAt && { localAt, localPalettes, localConstraints }), ...(detail && { detail }), ...(passes && { passes }), ...(motionReference && { motionReference }),
@@ -3966,6 +3977,7 @@ function renderFrame(world, o, preparedPalettes) {
     ...(deepFrame && { deep: deepFrame }),
     ...(objectMattes && {objectMattes}),
     ...(selectionCoverage && {pixelSelection:selectionCoverage}),
+    ...(pixelSourceTracking && {pixelSourceTracking}),
     ...(lightPlate && {lightPlate}),
     ...((localOutput || tone || evaluatedPalette) && { palette: localOutput?.packed || tone?.palette || evaluatedPalette }),
     ...(detail && { detail }), ...(motionReference && { motionReference }),

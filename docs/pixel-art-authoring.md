@@ -1423,6 +1423,43 @@ A bound canvas keeps the paired evidence so the blocker overlay works
 offline. An ordinary saved source view still supports overlap and address
 diagnostics. Inspecting it requires paired evidence to confirm a blocker.
 
+## Track a scene-bound selection
+
+Save a named selection on the frame registered to a scene binding. Use that
+camera and pose for the first sample of a version 1 scene view plan. The
+remaining samples may change the camera, scene time, or both.
+
+```json
+{
+  "version": 1,
+  "samples": [
+    { "id": "reference", "time": 0 },
+    { "id": "orbit", "time": 0, "camera": { "yaw": 0.35, "pitch": 0.12 } },
+    { "id": "posed", "time": 0.8, "camera": { "yaw": 0.35, "pitch": 0.12 } }
+  ]
+}
+```
+
+```sh
+node cli/ink-studio.js pixel-art track design.json --selection latch --binding gate \
+  --views views.json --out tracking.json --review tracking.html
+```
+
+Ink follows mesh triangle barycentrics, traced SDF rest positions, and stable
+splat IDs with local offsets. It projects the original anchors into every
+sample, so a selection can reappear after leaving the view. A closer depth
+owner confirms occlusion. Missing addresses, ambiguous reference hits,
+unverified correspondence, and off-grid projections are reported as lost.
+Tracking starts with visible source hits and leaves the document intact.
+
+The JSON includes native-grid row runs in `[row, startColumn, length]` order
+and example source and blocker details. Moved marks are the subset of visible
+correspondences that changed native cells. Lost marks use reference
+coordinates. If several selected document pixels land in one native cell,
+the counts still include each selected pixel, while the runs mark the cell
+once. The standalone HTML switches between sampled views and overlays each
+status, with lost marks displayed on the reference image.
+
 ## Navigate craft diagnostics
 
 Open **Craft diagnostics** below the canvas in the Pixel Stamp Workshop or

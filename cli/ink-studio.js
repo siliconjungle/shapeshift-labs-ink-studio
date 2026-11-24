@@ -1428,6 +1428,7 @@ const CMD = {
         '  pixel-art snap <design.json> --at x,y [--frame id] [--radius pixels]   resolve document guides',
         '  pixel-art motion <design.json> [--plan plan.json] [--layer id] [--out report.json] [--review review.html]   check native animation samples',
         '  pixel-art motion <scene> --views plan.json [--subject object] [--w n --h n] [--out report.json] [--review review.html]   check authored views',
+        '  pixel-art track <document.json> --selection id --binding id --views plan.json [--out report.json] [--review review.html]   track a bound selection',
         '  pixel-art rules <design.json> [--frame id] [--layer id] [--art-shot id] [--out report.json]   inspect asset art rules and scene settings',
         '  pixel-art lint <design.json> [--frame id] [--art-shot id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings',
         '  pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint',
@@ -4224,9 +4225,26 @@ const CMD = {
       if (subject !== undefined && !matched) throw new RangeError('Unknown visible motion subject '+subject);
       return { images,report:{ ...Motion.audit(images,options),source:id,...(subject !== undefined && { subject }) } };
     }
+    function captureTrack(id,{ object,part }) {
+      const passes = [...sourcePasses];
+      let world, previousTime = Infinity;
+      return (row,index,[w,h])=>{
+        if (row.time < previousTime) world = buildPreview(id);
+        previousTime = row.time;
+        pose(world,row.time);
+        const settings = { ...row.camera,lockCamera:!!row.camera,w,h,px:1,t:row.time,passes,transparent:true,
+          renderGrid:false,cameraGuides:false,resetRenderHistory:true };
+        const scope = { object,...(part !== undefined && { part }) };
+        const view = { id:row.id,index };
+        return {
+          full:renderView(world,id,{ ...settings,pixelSelection:scope },view),
+          isolated:renderView(world,id,{ ...settings,pixelSelection:{ ...scope,isolated:true },trackPixelSources:true },view)
+        };
+      };
+    }
     if (pos[0] === 'session') return PixelArt.sessionCommand(pos.slice(1),opt,{ scene:editScene,capture });
     PixelArt.command(pos,opt,outputFile,{
-      capture,captureMotion,
+      capture,captureMotion,captureTrack,
       world: id => buildPreview(id),
       scene:editScene
     });

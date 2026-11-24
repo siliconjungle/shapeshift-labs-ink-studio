@@ -23,7 +23,7 @@ function triangleAxes([a,b,c]) {
   return [right,cross(normal,right),normal];
 }
 
-function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,sourceBinding=false,allow,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,sourceBinding=false,trackMesh,allow,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection}) {
   if(!atlas)return [];
   const depth=depthOnly && new Float32Array(W*H).fill(Infinity);
   const fragments=depthOnly ? null : new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
@@ -102,9 +102,20 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
       const source = sourceBinding && {
         key:JSON.stringify([slot,chart?.first ?? 0]),
         identity:{ kind:'mesh',asset:layer.sceneMeshId ?? layer.surfaceMotionKey ?? null,
-          chart:chart?.id ?? null,stageSlot:slot, object:chart?.objectId,part:chart?.partId },
+          chart:chart?.id ?? null,stageSlot:slot,primitive:chart?.first ?? 0,object:chart?.objectId,part:chart?.partId },
         triangle:(first-(chart?.first ?? 0))/3
       };
+      if (trackMesh && source?.identity.object) {
+        const rest = chart?.rest?.subarray(source.triangle*9,source.triangle*9+9);
+        const signature = JSON.stringify([(chart?.end ?? vertices.length/5)-(chart?.first ?? 0),
+          input.map(row=>row.uv),rest ? Array.from(rest) : null]);
+        trackMesh(source.identity,source.triangle,{ signature,project(weights) {
+          const component = key=>input.reduce((total,row,i)=>total+row[key]*weights[i],0);
+          const z = component('z'), w = component('w');
+          return w > 0 && z >= near && z <= far ?
+            [W/2+focal*component('x')/w,H/2-focal*component('y')/w,z] : null;
+        } });
+      }
       const uvTransform = shifted ? range.transform : [1,1,0,0];
       const axes = !depthOnly && surfaceNormals && !mip?.objectTexels &&
         (normalPixels || mip?.chain.normal) && textureAxes(input, uvTransform);

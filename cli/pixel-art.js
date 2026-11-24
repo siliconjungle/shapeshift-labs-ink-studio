@@ -26,6 +26,7 @@ const PNG = require('./png.js');
 const Craft = require('../src/pixel-craft.js');
 const Motion = require('../src/pixel-motion-checks.js');
 const MotionReview = require('./pixel-motion-review.js');
+const SelectionTrack = require('./pixel-selection-track.js');
 const ArtRules = require('../src/pixel-art-rules.js');
 const Cleanup = require('../src/pixel-cleanup.js');
 const files = require('./asset-files.js');
@@ -2068,6 +2069,28 @@ function motionCommand(source,opt,captureMotion) {
   else process.stdout.write(JSON.stringify(report,null,2)+'\n');
 }
 
+function trackCommand(source,opt,captureTrack) {
+  const { selection:id,binding:bindingId,views,scene,out,review } = opt;
+  if (![id,bindingId,views].every(reference) || scene !== undefined && !reference(scene) ||
+      opt['source-view'] !== undefined || opt.w !== undefined || opt.h !== undefined || opt.t !== undefined)
+    throw new TypeError('Use pixel-art track <document.json> --selection id --binding id --views plan.json [--scene scene]');
+  const design = read(source);
+  documentShape(design);
+  const binding = design.sceneBindings?.find(row=>row.id === bindingId);
+  if (!binding) throw new RangeError('Unknown pixel scene binding '+bindingId);
+  if (scene !== undefined && !sameScene(binding.scene,scene)) throw new RangeError('The selection binding belongs to '+binding.scene);
+  const sceneRef = scene ?? binding.scene, selection = namedSelection(design,id,binding.frame);
+  const outputs = [out,review].filter(value=>value !== undefined);
+  if (outputs.some(value=>!reference(value) || [source,views,sceneRef].some(file=>path.resolve(file) === path.resolve(value))) ||
+      new Set(outputs.map(file=>path.resolve(file))).size !== outputs.length || review !== undefined && !/\.html$/i.test(review))
+    throw new TypeError('Write the tracking report and HTML review to separate paths');
+  const { images,report } = SelectionTrack.track({ binding,selection,documentGrid:[design.width,design.height],
+    revision:fingerprint(design),views:read(views),render:captureTrack(sceneRef,binding),review:!!review });
+  if (review) SelectionTrack.writeReview(path.resolve(review),images,report);
+  if (out) files.json(path.resolve(out),report);
+  else process.stdout.write(JSON.stringify(report,null,2)+'\n');
+}
+
 function draw(frame,directory,{ layer,colorMode,rules,shot } = {}) {
   const indexed = stamp(frame,layer), art = PNG.encodePaint(indexed,colorMode);
   const result = review(craftLayer(frame,layer),{ rules,shot,layer }), { w,h,rgb } = result.overlay;
@@ -2178,7 +2201,7 @@ function trace(frame, object, scene) {
   return design;
 }
 
-const actions = ['capture','trace','import','upgrade','validate','targets','draw','canvas','inspect','lint','rules','motion','sample','select','snap','brush','copy',
+const actions = ['capture','trace','import','upgrade','validate','targets','draw','canvas','inspect','lint','rules','motion','track','sample','select','snap','brush','copy',
   'preview','edit','replay'];
 const sessionActions = ['init','status','begin','apply','preview','commit','cancel','undo','redo',
   'inspect','sample','select','snap','brush','copy','targets','export'];
@@ -2242,14 +2265,15 @@ function inspectCoordinate(raw) {
   return raw.split(',').map(Number);
 }
 
-function command(pos,opt,outputFile,{ capture, captureMotion, world, scene }) {
+function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, world, scene }) {
   if (pos[0] === 'stack') return stackCommand(pos.slice(1),opt);
   if (pos[0] === 'palette') return paletteCommand(pos.slice(1),opt);
   const [action, source, patch] = pos;
   const writing = action === 'edit' || action === 'replay';
   if (!actions.includes(action) ||
       pos.length !== (writing || ['preview','select'].includes(action) ? 3 : 2))
-    throw new TypeError('Use pixel-art capture, trace, import, upgrade, validate, targets, draw, canvas, inspect, lint, rules, motion, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
+    throw new TypeError('Use pixel-art capture, trace, import, upgrade, validate, targets, draw, canvas, inspect, lint, rules, motion, track, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
+  if (action === 'track') return trackCommand(source,opt,captureTrack);
   const sourceViewFile = opt['source-view'];
   if (opt.binding !== undefined && (!['inspect','canvas'].includes(action) || !reference(opt.binding)))
     throw new TypeError('Use --binding id with pixel-art inspect or canvas');
