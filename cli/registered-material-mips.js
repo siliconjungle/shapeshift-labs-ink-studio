@@ -25,11 +25,13 @@ function chooseOwner(owners, footprint, children) {
   return best;
 }
 
-function reduce(source, size, saved, dirty, read) {
+function reduce(source, size, saved, dirty, read, reviseOwners) {
   const count = size * size, names = [...source.masks.keys()];
   const previous = saved && loadRaster(read, size, saved.maps, saved.masks);
   const packedOwners = saved && read(saved.owners);
   const owners = saved ? unpack(packedOwners, Uint32Array, count) : new Uint32Array(count);
+  const oldOwners = saved && reviseOwners ? owners.slice() : undefined;
+  const changed = reviseOwners ? new Uint8Array(count) : undefined;
   const pixels = previous?.pixels ?? Object.fromEntries(rgbLayers.map(layer => [layer, new Uint8Array(count * 3)]));
   const opacity = source.opacity && (previous?.opacity ?? new Uint8Array(count).fill(255));
   const footprint = previous?.footprint ?? new Uint8Array(count);
@@ -38,16 +40,37 @@ function reduce(source, size, saved, dirty, read) {
   const { base, normal, surface, emission } = source.pixels;
   const children = [0,0,0,0], width = size * 2;
   const pigment = [0,0,0], radiance = [0,0,0], mean = [0,0,0], mask = new Float64Array(names.length);
-  let filteredTexels = 0;
+  let filteredTexels = 0, changedOwners = 0, clearedTexels = 0;
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const i = y * size + x, p = 2 * (y * width + x);
     children[0] = p;
     children[1] = p + 1;
     children[2] = p + width;
     children[3] = p + width + 1;
-    const owner = saved ? owners[i] : chooseOwner(source.owners, source.footprint, children);
-    if (!owner || (saved && !dirty.has(owner - 1))) continue;
+    const old = owners[i];
+    const owner = saved && !reviseOwners ? old : chooseOwner(source.owners, source.footprint, children);
+    if (saved && old !== owner) changedOwners++;
+    if (!owner) {
+      if (old) {
+        owners[i] = 0;
+        footprint[i] = 0;
+        for (const layer of Object.values(pixels)) layer.fill(0, i * 3, i * 3 + 3);
+        for (const layer of dstMasks) layer[i] = 0;
+        if (opacity) opacity[i] = 255;
+        if (changed) changed[i] = 1;
+        clearedTexels++;
+      }
+      continue;
+    }
+    if (saved && old === owner && !dirty.has(owner - 1)) {
+      const changedContribution = reviseOwners && source.oldOwners && children.some(child => {
+        const before = source.oldOwners[child], after = source.owners[child];
+        return (before !== after || source.changed?.[child]) && (before === owner || after === owner);
+      });
+      if (!changedContribution) continue;
+    }
     owners[i] = owner;
+    if (changed) changed[i] = 1;
     filteredTexels++;
     let area = 0;
     for (const child of children) if (source.owners[child] === owner) area += source.footprint[child];
@@ -91,7 +114,8 @@ function reduce(source, size, saved, dirty, read) {
     if (opacity) opacity[i] = Math.round(alpha / total);
     for (let m = 0; m < mask.length; m++) dstMasks[m][i] = Math.round(mask[m] / total);
   }
-  return {pixels, opacity, footprint, masks, owners, packedOwners, filteredTexels};
+  return {pixels, opacity, footprint, masks, owners, packedOwners: changedOwners ? undefined : packedOwners,
+    filteredTexels, changedOwners, clearedTexels, oldOwners, changed};
 }
 
 function writeMips(baked, size, dirty, prior, read, map, sidecar) {
@@ -106,7 +130,7 @@ function writeMips(baked, size, dirty, prior, read, map, sidecar) {
     if (savedLevels && (saved?.level !== level || saved.width !== width || saved.height !== width))
       throw new Error('Invalid chart rebake mip dimensions');
     let maps, masks, owners, filteredTexels;
-    if (saved && !dirty.size && !!saved.maps.opacity === !!source.opacity &&
+    if (saved && !baked.layoutRevised && !dirty.size && !!saved.maps.opacity === !!source.opacity &&
         Object.keys(saved.masks).length === source.masks.size &&
         Object.keys(saved.masks).every(name => source.masks.has(name))) {
       maps = Object.fromEntries(Object.entries(mapFiles).filter(([name]) => name !== 'opacity' || source.opacity)
@@ -119,7 +143,7 @@ function writeMips(baked, size, dirty, prior, read, map, sidecar) {
       owners = sidecar(prefix + 'chart-owners', 'deflate', read(saved.owners));
       filteredTexels = 0;
     } else {
-      source = reduce(source, width, saved, dirty, read);
+      source = reduce(source, width, saved, dirty, read, baked.layoutRevised);
       const {pixels, footprint, opacity} = source;
       const rgb = (name, data, space, alpha) => map(prefix + name,
         alpha ? png.encodeFrame(png.packFrame({w:width,h:width,rgb:data,alpha})) : png.encode(width, width, data), space);
@@ -137,7 +161,8 @@ function writeMips(baked, size, dirty, prior, read, map, sidecar) {
       owners = sidecar(prefix + 'chart-owners', 'deflate', source.packedOwners ?? pack(source.owners));
       ({filteredTexels} = source);
     }
-    levels.push({level, width, height:width, maps, masks, owners, filteredTexels});
+    levels.push({level, width, height:width, maps, masks, owners, filteredTexels,
+      ...(baked.layoutRevised && { changedOwners: source.changedOwners, clearedTexels: source.clearedTexels }) });
   }
   return {version:1, levels};
 }

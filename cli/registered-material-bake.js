@@ -48,7 +48,7 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
       ...(registeredMaps.opacity&&{opacity:map('opacity',registeredMaps.opacity,'linear')})
     };
     const masks=Object.fromEntries(Object.entries(registeredMaps.masks).map(([name,bytes])=>[name,map('mask-'+name,bytes,'linear')]));
-    const {state,dirty,reproject,previous}=chartBake;
+    const {state,dirty,reproject,previous,layout}=chartBake;
     const paintReceipts=new Map((source?.row.paintViews??[]).map(view=>[view.id,view]));
     for(const view of plan?.report()??[]) {
       if(source) {
@@ -61,6 +61,7 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
       updated:state.charts.filter(chart=>dirty.has(chart.id)).map(chart=>chart.id),
       reused:state.charts.filter(chart=>!dirty.has(chart.id)).map(chart=>chart.id),
       sampledTexels:baked.sampledTexels,
+      ...(layout && {layout}),
       ...(baked.geometryMasks && {geometryMaskTexels:chartBake.geometry.calculate ? baked.geometryMasks.texels : 0})
     };
     const mipmaps=writeMips(baked,size,dirty,source?.row.mipmaps,baseline?.read,map,sidecar);
@@ -70,8 +71,8 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
       ...(baked.geometryMasks && {geometryMasks:baked.geometryMasks}),
       charts:state.charts.map(({id,faces,bounds})=>({id,faces,bounds})),
       chartLayout:sidecar('chart-layout','json',Buffer.from(JSON.stringify(state))),
-      rebakeState:{owners:sidecar('chart-owners','deflate',previous?.packedOwners??charts.pack(baked.owners)),
-        ...(baked.stamp && {paint:sidecar('uv-paint','deflate',(!reproject.size&&previous?.packedPaint)||charts.pack(baked.stamp))})},
+      rebakeState:{owners:sidecar('chart-owners','deflate',(!baked.layoutRevised && previous?.packedOwners) || charts.pack(baked.owners)),
+        ...(baked.stamp && {paint:sidecar('uv-paint','deflate',(!baked.layoutRevised && !reproject.size && previous?.packedPaint) || charts.pack(baked.stamp))})},
       chartReport};
     meshes.push(row);
     const authored=projection.cameraCapture(mesh,faces,capture.filter(v=>v.mesh===index),kit);
@@ -81,7 +82,8 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
       captures.push({id,...view,paint:id+'-paint.png'});
     }
     return {index,width:size,height:size,uvLayout:row.uvLayout,chartReport,
-      mipmaps:mipmaps.levels.map(({level,width,height,filteredTexels})=>({level,width,height,filteredTexels})),
+      mipmaps:mipmaps.levels.map(({level,width,height,filteredTexels,changedOwners,clearedTexels})=>
+        ({level,width,height,filteredTexels,...(changedOwners !== undefined && {changedOwners,clearedTexels})})),
       paintViews:row.paintViews.map(({id,texels})=>({id,texels}))};
   }
 

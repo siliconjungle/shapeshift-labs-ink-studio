@@ -1425,7 +1425,7 @@ const CMD = {
         '  export-glb <scene.js|.json|.obj|.gltf|.glb> --out model.glb   write UV-mapped geometry with materials, skins and clips',
         '    --bake-dir <folder> [--paint-views <plan.json> | --capture-paint <cameras.json>]   export registered UV material maps',
         '    --geometry-masks [settings.json|off]   bake slope, cavity, exposure and thickness into the registered atlas',
-        '    --rebake-from <material-bake.json> [--chart-edits <plan.json>]   update selected or changed UV charts',
+        '    --rebake-from <material-bake.json> [--chart-edits <plan.json>] [--rebake-report <file.json>]   update selected or changed UV charts',
         '  interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets',
         '    --manifest <revision.json>   attach an Ink asset revision to tagged glTF data',
         '  hybrid-ownership inspect <scene.json> [--out file.json]   list authored channels and derived outputs',
@@ -2654,9 +2654,18 @@ const CMD = {
   'export-glb'() {
     const id = pos[0];
     if (!id || typeof opt.out !== 'string') die('Usage: ink-studio export-glb <scene.js|.json|mesh> --out model.glb');
+    const reportFile = opt['rebake-report'];
+    if (reportFile !== undefined && (typeof reportFile !== 'string' || !reportFile.trim() ||
+        typeof opt['rebake-from'] !== 'string' || !/\.json$/i.test(reportFile) ||
+        [id, opt.out, opt['rebake-from'], opt['chart-edits'], opt['paint-views'], opt['capture-paint'], opt.authoring,
+          typeof opt['bake-dir'] === 'string' && path.join(opt['bake-dir'], 'material-bake.json')]
+          .some(file => typeof file === 'string' && path.resolve(file) === path.resolve(reportFile))))
+      die('--rebake-report needs a distinct JSON file and a rebake baseline');
     try {
       let source = id;
-      if (!/\.(obj|gltf|glb)$/i.test(id)) {
+      const retainedTopology = !id.startsWith('@') && /\.json$/i.test(id) &&
+        JSON.parse(fs.readFileSync(path.resolve(id), 'utf8'))?.format === 'ink-studio/mesh-topology';
+      if (!retainedTopology && !/\.(obj|gltf|glb)$/i.test(id)) {
         const authored = scene(id);
         if (typeof authored.model !== 'function') die('This scene needs a model(seed, options) hook that exposes its rest geometry');
         const box = list('bounds');
@@ -2678,8 +2687,13 @@ const CMD = {
         rebakeFrom:opt['rebake-from'],chartEdits:opt['chart-edits'],
         geometryMasks:opt['geometry-masks']==='off' ? false : opt['geometry-masks']==='on' ? true : opt['geometry-masks']
       });
+      if (reportFile) require('./asset-files.js').json(path.resolve(reportFile),
+        { ready: true, meshes: result.meshes.map(({ name, registeredBake }) => ({ name, ...registeredBake })),
+          materialBake: result.materialBake });
       console.log(JSON.stringify(result, null, 2));
     } catch (error) {
+      if (reportFile) require('./asset-files.js').json(path.resolve(reportFile),
+        { ready: false, error: error.message, ...error.report });
       die(error.message);
     }
   },

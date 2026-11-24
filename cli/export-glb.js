@@ -42,13 +42,18 @@ function exportGlb(modelOrFile, { out, uvMargin = 0.008, textureSize, bakeDir, p
     bytes = preserved ? original : embed(gltf, input, bin);
     report = { ...summarize(gltf), preserved };
   } else {
-    if (input && extension !== '.obj') throw new Error('Mesh input must be an OBJ, glTF or GLB');
+    if (input && !['.obj', '.json'].includes(extension)) throw new Error('Mesh input must be an OBJ, glTF, GLB or retained topology JSON');
     const { KIT: K } = studio.load();
     if (K.authoring.gltfAssets.is(modelOrFile)) {
       if (registered) throw new TypeError('Registered baking uses an authored model or OBJ input');
       return { ...summarize(modelOrFile.snapshot().document), preserved: true, ...studio.writeGltfAsset(modelOrFile, { out }) };
     }
-    if (input) modelOrFile = K.model.fromMesh(studio.readMesh(input, { attributes: true }));
+    if (input && extension === '.obj') modelOrFile = K.model.fromMesh(studio.readMesh(input, { attributes: true }));
+    if (input && extension === '.json') {
+      modelOrFile = JSON.parse(fs.readFileSync(input, 'utf8'));
+      if (modelOrFile?.format !== 'ink-studio/mesh-topology') throw new TypeError('Expected retained mesh topology JSON');
+    }
+    if (modelOrFile?.format === 'ink-studio/mesh-topology') modelOrFile = K.model.fromTopology(modelOrFile);
     const model = modelOrFile?.meshes ? modelOrFile : { meshes: [modelOrFile] };
     if (!model.meshes.length || model.meshes.some(m => !m)) throw new Error('GLB export requires a model');
     const doc = document(), rig = writeRig(doc, model, K);

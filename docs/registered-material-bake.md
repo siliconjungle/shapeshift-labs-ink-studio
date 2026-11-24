@@ -182,8 +182,8 @@ editable capture guides.
 ## Rebake changed UV charts
 
 Preserve the first registered bake's manifest, maps, and chart sidecars as a
-baseline. Keep the receiving mesh topology when making a new revision. The
-rebake inherits the saved texture size unless the input specifies one:
+baseline. The rebake inherits the saved texture size and requires the same
+mesh names, mesh order, and padding:
 
 ```sh
 node cli/ink-studio.js export-glb edited-scene.js \
@@ -191,8 +191,8 @@ node cli/ink-studio.js export-glb edited-scene.js \
   --rebake-from baseline/material-bake.json
 ```
 
-The atlas keeps its exact UV coordinates, quad diagonals, chart IDs, and
-gutter ownership. Changed positions, shading normals, vertex colors, and
+When the layout is fixed, the atlas keeps its exact UV coordinates, quad
+diagonals, chart IDs, and gutter ownership. Changed positions, shading normals, vertex colors, and
 material slots mark their affected charts automatically. The saved diorama
 from `pixel-art edit` also carries rest-chart revisions. Adding, changing,
 clearing, or undoing a stamp invalidates the receiving atlas charts, even
@@ -202,9 +202,8 @@ inside a nested or modified SDF recipe can require resampling its mesh
 because of nonlinear coordinates. Several charts can depend on the same
 shared vertex or material. For sculpt work, an authored
 receiving topology can be reused across edits through
-`KIT.model.fromSculpt(sculpt, { topology })`. Topology or UV changes require a
-fresh full bake, as does an emission edit that exceeds the saved intensity
-scale.
+`KIT.model.fromSculpt(sculpt, { topology })`. An emission edit that exceeds the
+saved intensity scale needs a fresh full bake.
 
 Use `--chart-edits edits.json` to mark a change inside a procedural sampler
 or to limit an updated `--paint-views` plan to selected charts. Bounds are in
@@ -227,7 +226,7 @@ texels sampled. A rebake combines the new samples with the previous atlas
 and embeds the complete material PNGs into the GLB. Reused chart texels and
 gutters keep their exact bytes.
 
-Each coarser texel keeps the chart chosen by the original atlas bake.
+In a fixed layout, each coarser texel keeps the chart chosen in the baseline.
 Dominant surface coverage wins where footprints meet, with the chart ID
 breaking ties. Pigment and emission filter in linear light, normal
 variation raises roughness, and scalar channels filter independently
@@ -247,3 +246,53 @@ baseline. The JavaScript options are `rebakeFrom` and `chartEdits`.
 Run `node examples/incremental-chart-rebake.js <new-directory>` for a
 512-pixel atlas demo with a local dent, retained camera paint, and an atlas
 view showing the updated chart beside the reused charts.
+
+
+### Rebake a topology or UV revision
+
+Create the baseline from a retained mesh topology document carrying authored
+UVs. Keep the stable vertex and face IDs on corresponding elements as you edit.
+At export, Ink triangulates the authored polygons and identifies each triangle
+by its face and vertex IDs. The JavaScript equivalent is
+`KIT.model.fromTopology(document, { materials })` for a scene model hook, or
+passing the document directly to `exportGlb`.
+
+```sh
+node cli/ink-studio.js export-glb baseline-topology.json \
+  --out baseline/model.glb --bake-dir baseline --texture-size 512
+node cli/ink-studio.js export-glb revised-topology.json \
+  --out revision/model.glb --bake-dir revision \
+  --rebake-from baseline/material-bake.json --rebake-report revision-report.json
+```
+
+Unchanged charts keep their atlas coordinates and owner IDs even if the mesh
+arrays are reordered. Their map pixels and gutters stay byte-identical. A moved,
+split, joined, or re-tessellated chart releases its old footprint and uses
+the revised document's UV coordinates. Place revised charts in free atlas
+space or in space released by other revised charts. A revised surface
+overlapping another surface or a retained gutter reports a conflict before
+export. A revised gutter can stop at an occupied texel. Only mip texels whose
+owners or contributing samples changed are filtered again.
+
+Saved camera paint follows matching triangles through their corner
+correspondence. A re-tessellated face can also recover paint where its
+rest-space surface still lies on an unambiguous part of the old face.
+New regions use the current material sampler. The receipt lists retired
+charts, removed faces, old and new UV bounds, released texels, truncated
+gutters, and how many texels mapped, inherited paint, or lacked a safe
+correspondence. For a reshaped surface with unresolved paint, recapture
+approved views against the new geometry and select the receiving charts.
+The optional CLI report includes conflicts when a revision is blocked.
+
+For a legacy atlas without stable IDs, first rebake the unchanged topology
+and UV layout with stable IDs to record the correspondence. For a new
+geometry revision, carry forward the resulting atlas and its sidecars.
+
+```sh
+node examples/incremental-chart-rebake.js morrow-review --topology
+```
+
+Open `morrow-review/comparison.png` to compare the relay at 1×. The demo
+clips and moves the brass service plate, transfers its approved lettering,
+and reuses the other charts. The revised material manifest includes its
+chart and mip receipts.

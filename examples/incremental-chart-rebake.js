@@ -8,7 +8,7 @@ const PNG = require('../cli/png.js');
 const {projector} = require('../src/drawing-primitives.js');
 const {screenDrawing} = require('../src/frame-composite.js');
 
-function relay(K,edited) {
+function relay(K,edited,serviceGrid = 22) {
   const points=[],faces=[],uvs=[],labels=[];
   let chart=0;
   function patch(label, at, u, v, nx=1, ny=1, deform) {
@@ -37,7 +37,7 @@ function relay(K,edited) {
   box('housing',-1.6,.15,-.54,3.2,1.85,.9);
   box('enamel',-1.46,.29,.36,1.42,1.56,.17);
   box('steel',.055,.29,.36,1.405,1.56,.17,{
-    front:'service',nx:22,ny:24,deform(p){
+    front:'service',nx:serviceGrid,ny:serviceGrid === 1 ? 1 : 24,deform(p){
       const r=Math.hypot((p[0]-.82)/.60,(p[1]-1.05)/.66);
       const depression=edited ? .147*Math.max(0,1-r*r)**2 : 0;
       return [p[0],p[1],p[2]-depression];
@@ -153,8 +153,69 @@ function preview(kit, file, manifest, out) {
   return row;
 }
 
-function demo(directory) {
-  const dir=path.resolve(directory), kit=ink.load(), {KIT:K}=kit, base=relay(K,false);
+function topologyRelay(K, edited) {
+  const base = relay(K, false, 1), vertices = base.points.map((position, i) => ({ id: 'point-' + i, position }));
+  const faces = base.faces.map((indices, i) => {
+    const service = i === 12;
+    const id = service ? 'service-face' : 'relay-face-' + i;
+    const corners = indices.map((vertex, j) => {
+      const [u, v] = base.uvs[i][j];
+      return { id: id + '/' + j, vertex: vertices[vertex].id, uv: [u + (service && edited ? .17 : 0),
+        .72 * v + (service && edited ? .52 : 0)] };
+    });
+    if (service && edited) {
+      // Clip the upper-right corner on the same rest-space plane. The
+      // polygon keeps its ID while its rendered triangles change.
+      const clip = (other, suffix) => {
+        const baseVertex = indices[2], targetVertex = indices[other];
+        const mix = (a, b) => a.map((n, k) => n + .23 * (b[k] - n));
+        const vertex = 'service-clip-' + suffix;
+        vertices.push({ id: vertex, position: mix(base.points[baseVertex], base.points[targetVertex]) });
+        return { id: id + '/' + suffix, vertex, uv: mix(corners[2].uv, corners[other].uv) };
+      };
+      const incoming = clip(1, 'lower'), outgoing = clip(3, 'upper');
+      corners.splice(2, 1, incoming, outgoing);
+    }
+    return { id, material: 'relay-housing', corners };
+  });
+  const doc = K.meshTopology.create({ id: 'morrow-tide-relay', vertices, faces });
+  const model = K.model.fromTopology(doc, { maskNames: base.maskNames, sampleSurface(p, n, f) {
+    const label = model.faceIds[f], source = label === 'service-face' ? 12 : Number(label.slice('relay-face-'.length));
+    return base.sampleSurface(p, n, source);
+  } });
+  return { doc, model };
+}
+
+function topologyComparison(K, dir) {
+  const Composite = require('../src/frame-composite.js');
+  const width = 968, height = 654, layers = [], draw = [];
+  const text = (message, x, y, size, color = '#d0e1e5') =>
+    draw.push({ type: 'text', text: message, at: [x, y], size, color });
+  const image = (name, x, y, w, h) => {
+    const png = PNG.raster(path.join(dir, name + '.png'));
+    layers.push({ source: { w: png.w, h: png.h, rgba: png.data }, rect: [x, y, w, h] });
+  };
+  text('MORROW TIDE RELAY', 484, 20, 17, '#f2dfaa');
+  text('APPROVED PAINT THROUGH A TOPOLOGY AND UV REVISION', 484, 43, 9);
+  text('01  BASELINE', 246, 67, 12);
+  text('02  CLIPPED SERVICE PLATE', 722, 67, 12);
+  image('before', 10, 82, 472, 332);
+  image('after', 486, 82, 472, 332);
+  image('before-atlas', 148, 424, 194, 194);
+  image('after-atlas', 504, 424, 194, 194);
+  image('after-owners', 745, 424, 194, 194);
+  text('ORIGINAL ATLAS', 245, 632, 9);
+  text('REVISED ATLAS', 601, 632, 9);
+  text('RESAMPLED   /   REUSED', 842, 632, 9, '#d5cda8');
+  const plan = K.frameComposite.prepare({ layers: [...layers, { draw }] }, width, height, 1);
+  const sheet = Composite.compose({ w: 1, h: 1, rgb: Uint8Array.of(12, 22, 31) },
+    K.frameComposite.layers(plan, {}, 0), width, height, 'nearest');
+  PNG.write(path.join(dir, 'comparison.png'), sheet.w, sheet.h, sheet.rgb);
+}
+
+function demo(directory, topology = false) {
+  const dir=path.resolve(directory), kit=ink.load(), {KIT:K}=kit;
+  const base = topology ? topologyRelay(K, false).model : relay(K, false);
   const run=(id,model,opts)=>ink.exportGlb(model,{out:path.join(dir,id,id+'.glb'),bakeDir:path.join(dir,id),
     textureSize:512,...opts});
   const capture=run('capture',base,{capturePaint:{format:'ink-studio/material-paint-cameras',version:1,
@@ -164,15 +225,24 @@ function demo(directory) {
   const plan=JSON.parse(fs.readFileSync(paintViews,'utf8'));
   approve(K,path.dirname(paintViews),plan.views[0]);
   const before=run('before',base,{paintViews});
-  const after=run('after',relay(K,true),{rebakeFrom:before.materialBake});
+  const revision = topology ? topologyRelay(K, true).model : relay(K, true);
+  const after = run('after', revision, { rebakeFrom: before.materialBake });
   const a=preview(kit,before.file,before.materialBake,path.join(dir,'before.png'));
   const b=preview(kit,after.file,after.materialBake,path.join(dir,'after.png'));
-  assert.equal(a.uvLayout,b.uvLayout);
+  if (topology) {
+    const changed = b.chartReport.layout.charts.find(chart => chart.faces.includes('service-face'));
+    assert.equal(changed.paint.status, 'transferred');
+    assert(changed.paint.transferredTexels > 100);
+    assert(b.mipmaps.levels.some(row => row.changedOwners > 0));
+    topologyComparison(K, dir);
+  } else {
+    assert.equal(a.uvLayout,b.uvLayout);
+    assert.equal(a.masks['projected-paint'].sha256,b.masks['projected-paint'].sha256);
+  }
   assert.equal(b.chartReport.updated.length,1);
   assert(b.chartReport.reused.length>10);
-  assert.equal(a.masks['projected-paint'].sha256,b.masks['projected-paint'].sha256);
   console.log(JSON.stringify({full:a.chartReport,incremental:b.chartReport},null,2));
 }
 
-if(require.main===module)demo(process.argv[2]??'incremental-chart-review');
+if(require.main===module)demo(process.argv[2]??'incremental-chart-review', process.argv.includes('--topology'));
 module.exports=factory;

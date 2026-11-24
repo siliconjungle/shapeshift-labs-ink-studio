@@ -30,9 +30,11 @@ function opaquePigment(texture) {
 function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = false, projection, chartBake } = {}) {
   const count = size * size, covered = new Uint8Array(count);
   if(projection && count*projection.views>64000000)throw new RangeError('Paint views exceed the projected texel budget');
-  const { previous, state, dirty, reproject, geometry } = chartBake || {};
-  const owners = previous?.owners ?? (registered && new Uint32Array(count));
-  const stamp = previous?.paint ?? (projection && new Float32Array(count * 4));
+  const { previous, state, dirty, reproject, geometry, layout, rebuild, release, transfer } = chartBake || {};
+  const revised = Boolean(rebuild?.size || release?.size), layoutRows = new Map(layout?.charts.map(row => [row.id, row]));
+  const retired = new Map(layout?.retired.map(row => [row.id, row]));
+  const owners = (revised ? previous.owners.slice() : previous?.owners) ?? (registered && new Uint32Array(count));
+  const stamp = (revised ? previous.paint?.slice() : previous?.paint) ?? (projection && new Float32Array(count * 4));
   const pixels = previous?.pixels ?? {
     base: new Uint8Array(count * 3), normal: new Uint8Array(count * 3),
     surface: new Uint8Array(count * 3), emission: new Uint8Array(count * 3)
@@ -57,14 +59,34 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
   const geometryLayers = geometry?.calculate && geometryNames.map(name=>masks.get(name));
   let used = 0, strength = previous?.strength ?? 1, normalUsed = false, emissiveUsed = false, surfaceUsed = false;
   const hot = previous ? null : new Float32Array(count * 3), mats = mesh.materials;
-  // Freeze all reused texels, including gutters. Dirty triangles can only
-  // write the footprint slots they owned in the saved atlas.
+  const footprint = registered && (revised ? previous.footprint.slice() : previous?.footprint ?? new Uint8Array(count));
+  const layers = Object.values(pixels), paintLayers = [];
+  if (revised && transfer) for (const name of transfer.paintNames) {
+    const prior = previous.masks.get(name);
+    if (!prior || !masks.has(name)) continue;
+    const current = prior.slice();
+    masks.set(name, current);
+    paintLayers.push({ prior, current });
+  }
+  // Only revised and retired owners release their footprints. Reused
+  // texels and gutters remain occupied for all new raster samples.
   if (previous) for (let i = 0; i < count; i++) {
-    if (owners[i] && !dirty.has(owners[i]-1)) covered[i] = 1;
+    const id = owners[i] - 1;
+    if (id < 0) continue;
+    if (revised && release.has(id)) {
+      owners[i] = 0;
+      footprint[i] = 0;
+      (layoutRows.get(id) ?? retired.get(id)).releasedTexels++;
+      for (const layer of layers) layer.fill(0, i * 3, i * 3 + 3);
+      for (const layer of masks.values()) layer[i] = 0;
+      if (alpha) alpha[i] = 255;
+      if (stamp) stamp.fill(0, i * 4, i * 4 + 4);
+    } else if (!dirty.has(id)) covered[i] = 1;
   }
   for (const [f, face] of faces.entries()) {
     const chart = state?.faceCharts[f], project = projection && reproject.has(chart);
     if (previous && !dirty.has(chart)) continue;
+    const rebuildChart = rebuild?.has(chart), layoutRow = layoutRows.get(chart);
     const geometrySample = geometry?.calculate?.forFace(f,geometryLayers);
     const t = uvs[f].map(p => p.map(x => x * size)), [a, b, c] = t, det = area2(a, b, c);
     if (Math.abs(det) < 1e-16) throw new Error('Cannot bake a degenerate UV triangle');
@@ -84,12 +106,19 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
       const q = [x + 0.5, y + 0.5], u = area2(a, q, c) / det, v = area2(a, b, q) / det;
       if (u < -1e-9 || v < -1e-9 || u + v > 1 + 1e-9) continue;
       const i = x + y * size;
-      if (previous && (owners[i] !== chart+1 || !previous.footprint[i])) continue;
+      if (previous && !rebuildChart && (owners[i] !== chart+1 || !previous.footprint[i])) continue;
+      if (rebuildChart && owners[i] && owners[i] !== chart + 1)
+        throw chartBake.conflict([{ code: 'retained-texel', chart, chartOwner: owners[i] - 1,
+          pixel: [x, y], gutter: !footprint[i] }]);
       const interior = Math.min(u, v, 1 - u - v) > 1e-7;
       if (covered[i] === 2 && interior) throw new Error('UV islands overlap in the texture bake');
       if (covered[i]) continue;
       covered[i] = interior ? 2 : 1;
-      if (registered) owners[i] = chart + 1;
+      if (registered) {
+        owners[i] = chart + 1;
+        footprint[i] = 255;
+      }
+      if (layoutRow) layoutRow.sampledTexels++;
       used++;
       const n = V.norm(V.mad(V.mad(na, normAB, u), normAC, v));
       const p = V.mad(V.mad(pa, ab, u), ac, v);
@@ -124,6 +153,13 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
           const weights=Object.create(null);
           projection.sample(p,front,f,weights,stamp,i*4);
           for(const [name,value] of Object.entries(weights))masks.get(name)[i]=byte(value);
+          if (layoutRow && stamp[i * 4 + 3]) layoutRow.paint.reprojectedTexels++;
+        } else if (rebuildChart && layoutRow.paint.status === 'transferred') {
+          stamp.fill(0, i * 4, i * 4 + 4);
+          const mapped = transfer.sample(f, p, [1 - u - v, u, v], stamp, i * 4, paintLayers, i);
+          if (mapped) layoutRow.paint.mappedTexels++;
+          else layoutRow.paint.unmappedTexels++;
+          if (mapped === 2) layoutRow.paint.transferredTexels++;
         }
         if(stamp && stamp[i*4+3])color=color.map((value,k)=>value*(1-stamp[i*4+3])+stamp[i*4+k]);
       }
@@ -153,17 +189,24 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
   if (!registered && !surfaceUsed) delete pixels.surface;
   if (!registered && !emissiveUsed) delete pixels.emission;
   else if(hot && emissiveUsed)for (let i = 0; i < hot.length; i++) pixels.emission[i] = sRGB(hot[i] / strength);
-  const footprint = registered && (previous?.footprint ?? Uint8Array.from(covered,n=>n?255:0));
-  const layers = Object.values(pixels);
-  // Expand a texel at a time, using only data from the previous pass.
-  // During a rebake, expansion stays inside the chart's saved gutter.
+  if (layout) for (const { paint } of layout.charts) if (paint.status === 'transferred') {
+    if (!paint.transferredTexels) paint.status = paint.unmappedTexels ? 'unmapped' : 'no-painted-samples';
+    else if (paint.unmappedTexels) paint.status = 'partially-transferred';
+  }
+  // Fixed charts expand inside their saved gutters. Revised charts may
+  // claim only free texels next to their newly rasterized surface.
   let front = [];
   for (let i = 0; i < count; i++) if (covered[i] && (!previous || footprint[i] && dirty.has(owners[i]-1)) &&
     ((i % size > 0 && !covered[i - 1]) || (i % size < size - 1 && !covered[i + 1]) ||
     (i >= size && !covered[i - size]) || (i < count - size && !covered[i + size]))) front.push(i);
   const copy = (i, j, next) => {
-    if (covered[j] || previous && owners[j] !== owners[i]) return;
-    if (registered) owners[j] = owners[i];
+    const owner = registered ? owners[i] : 0;
+    if (rebuild?.has(owner - 1) && owners[j] && owners[j] !== owner) {
+      layoutRows.get(owner - 1).gutterObstructions++;
+      return;
+    }
+    if (covered[j] || previous && owners[j] !== owner && !rebuild?.has(owner - 1)) return;
+    if (registered) owners[j] = owner;
     covered[j] = 1;
     next.push(j);
     for (const layer of layers) {
@@ -199,8 +242,10 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
     masks:Object.fromEntries(Array.from(masks,([name,data])=>[name,png.encodeGray(size,size,data)]))
   };
   const coverage = previous ? footprint.reduce((n,value)=>n+Number(value!==0),0)/count : used/count;
-  const raster = registered && {pixels,opacity:alpha,footprint,masks,owners};
+  const raster = registered && {pixels,opacity:alpha,footprint,masks,owners,
+    ...(revised && { oldOwners: previous.owners })};
   return { textures, strength, coverage, registeredMaps, owners, stamp, translucent, sampledTexels:used, raster,
+    ...(revised && { layoutRevised: true }),
     ...(geometry && {geometryMasks:geometry.calculate?.report() ?? geometry.previous}) };
 }
 

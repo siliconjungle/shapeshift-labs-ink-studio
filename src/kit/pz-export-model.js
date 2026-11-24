@@ -212,6 +212,33 @@
     };
   }
 
+  function fromTopology(source, { name, materials, ...settings } = {}) {
+    const topology = K.meshTopology, doc = topology.create(source);
+    const derived = topology.triangulate(doc), slots = new Map(derived.materials.map((id, i) => [id, i]));
+    const ids = new Map(doc.vertices.map((row, i) => [row.id, i]));
+    const corners = new Map(doc.faces.flatMap(row => row.corners.map(corner => [corner.id, corner])));
+    const byFace = new Map(doc.faces.map(row => [row.id, row]));
+    const authored = new Map((materials ?? []).map(row => [row.id, row]));
+    const points = doc.vertices.map(row => row.position);
+    const faces = derived.triangleSources.map(row => row.corners.map(id => ids.get(corners.get(id).vertex)));
+    const uvs = derived.triangleSources.map(row => row.corners.map(id => corners.get(id).uv));
+    const uvCuts = topology.inspect(doc).edges.filter(row => row.uvSeam ||
+      new Set(row.uses.map(use => byFace.get(use.face).material)).size > 1).map(row => row.vertices.map(id => ids.get(id)));
+    if (!faces.length) throw new RangeError('Topology export needs at least one face');
+    const cornerNormals = derived.normals && faces.map((face, i) => {
+      const [a, b, c] = face.map(id => points[id]), fallback = V.norm(V.cross(V.sub(b, a), V.sub(c, a)));
+      return [0, 1, 2].map(j => {
+        const at = derived.indices[i * 3 + j] * 3, normal = derived.normals.slice(at, at + 3);
+        return V.len(normal) ? normal : fallback;
+      });
+    });
+    return { ...settings, name: name ?? doc.id, points, faces, uvs, uvCuts, bakeUVs: true,
+      vertexIds: doc.vertices.map(row => row.id), faceIds: derived.triangleSources.map(row => row.face),
+      faceMaterials: derived.triangleSources.map(row => slots.get(byFace.get(row.face).material)),
+      materials: derived.materials.map(id => ({ name: id, ...authored.get(id) })),
+      ...(cornerNormals && { cornerNormals }) };
+  }
+
   function sampleClips(clips, sample) {
     return clips.map(({ name, duration, fps = 30, pose }) => {
       if (
@@ -379,5 +406,5 @@
     return { meshes, joints, animations };
   }
 
-  K.model = { fromSdf, fromSculpt, fromMesh, fromPuppet, fromCreature, sampleClips, mapModelMeshes };
+  K.model = { fromSdf, fromSculpt, fromMesh, fromTopology, fromPuppet, fromCreature, sampleClips, mapModelMeshes };
 })(KIT);

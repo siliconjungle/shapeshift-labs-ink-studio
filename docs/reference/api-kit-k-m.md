@@ -257,6 +257,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.model.fromPuppet` | function | `(mesh, puppet, { clips = [], tags = {}, defaultPart } = {})` | [guide](../../README.md#exporting-glb-models), [source](../../src/kit/pz-export-model.js) |
 | `KIT.model.fromSculpt` | function | `(sculpt, { palette = PAL_HEX, bounds, resolution = 0.08, targetTriangles = 16000, guides = [], topology, simplifyTopology = false, fur = {}, ...options } = {})` | [guide](../../README.md#exporting-glb-models), [guide](../mesh-uv.md#reduce-an-authored-mesh), [guide](../registered-material-bake.md#rebake-changed-uv-charts), [source](../../src/kit/pz-export-model.js) |
 | `KIT.model.fromSdf` | function | `(field, { bounds, resolution = 0.08, maxCells = 500000, method = 'auto', ...options } = {})` | [guide](../../README.md#exporting-glb-models), [source](../../src/kit/pz-export-model.js) |
+| `KIT.model.fromTopology` | function | `(source, { name, materials, ...settings } = {})` | [guide](../registered-material-bake.md#rebake-a-topology-or-uv-revision), [source](../../src/kit/pz-export-model.js) |
 | `KIT.model.mapModelMeshes` | function | `(mesh, transform)` | [source](../../src/kit/pz-export-model.js) |
 | `KIT.model.sampleClips` | function | `(clips, sample)` | [source](../../src/kit/pz-export-model.js) |
 
