@@ -22,7 +22,7 @@ import { createInspection, inspectionDepth } from './inspection.mjs';
 import { waterReflectionPlan, selectReflectionWorld } from './reflections.mjs';
 import { readHybridDepth } from './hybrid-depth.mjs';
 import { createFiniteCurvePass, finiteCurveMode, prepareFiniteCurves } from './finite-curves.mjs';
-import { createRenderGraph, graphOwner, graphCapture } from './render-graph.mjs';
+import { createRenderGraph, graphOwner, graphCapture, graphEffectPixel } from './render-graph.mjs';
 import { createFrameComposite, frameCamera, captureFrameCamera } from './frame-composite.mjs';
 import { createSurfacePipeline } from './surfaces.mjs';
 import { createDepthMeshPass } from './depth-mesh-proxies.mjs';
@@ -2305,12 +2305,20 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
       if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1)
         throw new RangeError('Ink Studio frame width and height must be positive integers');
       backend ??= createBackend(gl, toolkit, backendOptions);
-      let captures;
-      const settings = frame.renderGraphCapture === undefined ? frame :
-        { ...frame, [graphCapture]: value => { captures = value; } };
+      let captures, effectPixel;
+      const settings = frame.renderGraphCapture === undefined && frame.effectPixel === undefined ? frame : {
+        ...frame,
+        ...(frame.renderGraphCapture !== undefined && { [graphCapture]: value => { captures = value; } }),
+        ...(frame.effectPixel !== undefined && { [graphEffectPixel]: value => { effectPixel = value; } })
+      };
       backend.render(world, settings, width, height, output);
       if (picking?.world === world && (frame.changedRows?.length !== 0 || world.anim?.bones?.length)) picking = undefined;
-      return captures;
+      return frame.effectPixel === undefined ? captures : { effectPixel, ...(captures && { passes: captures }) };
+    },
+    inspectEffectPixel(world, at, frame = {}) {
+      const result = api.render(world, { ...frame, inspection: false, renderGrid: false, effectPixel: at });
+      if (!result.effectPixel?.passes.length) throw new RangeError('Effect inspection needs a visible material-response render graph');
+      return result.effectPixel;
     },
     captureTurntable(world, options) {
       if (disposed) throw new Error('The Ink Studio renderer has been disposed');

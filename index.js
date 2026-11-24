@@ -207,6 +207,7 @@ module.exports = {
   measureQuantizationError: require('./cli/palette-error.js').measureQuantizationError,
   reviewQuantizationError: require('./cli/palette-error.js').reviewQuantizationError,
   inspectPalettePixel: require('./cli/palette-pixel.js').inspectPalettePixel,
+  inspectEffectPixel: require('./cli/render.js').inspectEffectPixel,
   reviewPaletteShimmer: require('./cli/palette-shimmer.js').reviewPaletteShimmer,
   reviewSubjectReadability: require('./cli/readability-review.js').reviewSubjectReadability,
   reviewShadowReadability: require('./cli/shadow-readability.js').reviewShadowReadability,

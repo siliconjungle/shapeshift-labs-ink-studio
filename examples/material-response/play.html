@@ -2,92 +2,70 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Silt Lock</title>
+<title>Silt Lock · Effect inspector</title>
 <style>
-  :root { color-scheme: dark; background: #121922; color: #f6e3b5; font: 1rem system-ui, sans-serif; }
-  main { max-width: 61rem; margin: 2rem auto; padding: 0 1rem; }
-  canvas { width: 100%; image-rendering: pixelated; background: #17232c; display: block; }
-  .controls { margin-top: .75rem; display: flex; align-items: center; gap: .75rem; }
+  :root { color-scheme: dark; background: #111820; color: #f5e7cc; font: 1rem system-ui, sans-serif; }
+  * { box-sizing: border-box; }
+  main { max-width: 80rem; margin: 2rem auto; padding: 0 1rem; }
+  h1 { margin: 0 0 1rem; font-size: 1.85rem; font-weight: 650; }
+  h2 { margin: 0 0 .65rem; font-size: 1.1rem; }
+  button, input { font: inherit; }
+  button { background: #232e37; border: 1px solid #46545c; color: inherit; border-radius: .35rem; padding: .35rem .65rem; }
+  button:hover:enabled { border-color: #a8dfcf; }
+  button:disabled { opacity: .45; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(18rem, 1fr); gap: 1.2rem; }
+  .viewport { position: relative; border: 1px solid #46545c; }
+  canvas { width: 100%; image-rendering: pixelated; background: #121922; display: block; cursor: crosshair; }
+  .cursor { position: absolute; width: 14px; height: 14px; border: 1px solid #fff8e2; transform: translate(-50%,-50%); pointer-events: none; box-shadow: 0 0 0 1px #121922; }
+  .controls, .cases, form { margin-top: .7rem; display: flex; flex-wrap: wrap; align-items: center; gap: .55rem; }
+  [hidden] { display: none; }
   input[type=range] { flex: 1; min-width: 3rem; }
-  input[type=file] { margin-bottom: .75rem; max-width: 100%; }
-  output { font-variant-numeric: tabular-nums; }
+  input[type=file] { margin-bottom: .85rem; max-width: 100%; }
+  input[name=pixel] { width: 6.5rem; padding: .3rem; }
+  output, pre { font-variant-numeric: tabular-nums; }
+  .report { border: 1px solid #46545c; border-radius: .4rem; padding: .95rem; }
+  .swatch { display: inline-block; width: 1rem; height: 1rem; margin-right: .45rem; vertical-align: -.15rem; border: 1px solid #c9c5a7; }
+  #summary { color: #a8dfcf; font-weight: 600; }
+  #decisions { padding-left: 1.05rem; color: #d1d1bf; }
+  #decisions li { margin-bottom: .35rem; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; }
+  [role=status] { color: #f3b8a4; }
+  @media (max-width: 54rem) { .layout { grid-template-columns: 1fr; } }
 </style>
 <main>
   <h1>Silt Lock</h1>
-  <label>Open the Silt Lock project <input type="file" accept=".json,application/json"></label>
-  <canvas width="336" height="192" aria-label="Material response preview"></canvas>
-  <div class="controls">
-    <button type="button" disabled>Play</button>
-    <input type="range" aria-label="Scene time" min="0" max="5.8" step="0.01" value="0" disabled>
-    <output>0.00 s</output>
+  <label>Open an Ink project <input type="file" accept=".json,application/json"></label>
+  <div class="layout">
+    <section aria-label="Live scene">
+      <div class="viewport">
+        <canvas width="336" height="192" aria-label="Click the scene to inspect an effect pixel"></canvas>
+        <span class="cursor" aria-hidden="true" hidden></span>
+      </div>
+      <div class="controls">
+        <button id="play" type="button" disabled>Play</button>
+        <input type="range" aria-label="Scene time" min="0" max="5.8" step="0.01" value="0" disabled>
+        <output>0.00 s</output>
+      </div>
+      <div class="cases" aria-label="Example pixels" hidden>
+        <button type="button" data-probe="66,115,1.82">Footprint</button>
+        <button type="button" data-probe="150,98,3.18">Ripple</button>
+        <button type="button" data-probe="189,104,3.18">Cart blocks ripple</button>
+      </div>
+    </section>
+    <section class="report" aria-labelledby="report-title">
+      <h2 id="report-title">Effect inspector</h2>
+      <form>
+        <label>Pixel <input name="pixel" placeholder="x,y" pattern="\d+\s*,\s*\d+" required disabled></label>
+        <button type="submit" disabled>Inspect</button>
+      </form>
+      <p id="summary">Open a project, then click the scene or enter a pixel.</p>
+      <p id="source"></p>
+      <ul id="decisions" hidden></ul>
+      <details hidden><summary>JSON report</summary><pre></pre></details>
+    </section>
   </div>
-  <p role="status"></p>
+  <p role="status" aria-live="polite"></p>
 </main>
 <script src="../../dist/ink-studio.browser.js"></script>
-<script type="module">
-  import { createRenderer } from '../../webgl.mjs';
-  const canvas = document.querySelector('canvas'), file = document.querySelector('[type=file]');
-  const play = document.querySelector('button'), scrub = document.querySelector('[type=range]');
-  const output = document.querySelector('output'), status = document.querySelector('[role=status]');
-  const renderer = createRenderer(canvas, { toolkit: { KIT, makeBuilder, makeSculpt, PixelLook } });
-  let audio, playback, world, running = false, anchor = 0, frame = 0, time = 0, end = 5.8, opening = 0;
-  function draw(t) {
-    time = t;
-    world.anim?.update(0, t);
-    renderer.render(world, { time: t });
-    scrub.value = t;
-    output.value = t.toFixed(2) + ' s';
-  }
-  function pause() {
-    cancelAnimationFrame(frame);
-    playback?.stop();
-    running = false;
-    play.textContent = 'Play';
-  }
-  function tick() {
-    const at = audio.currentTime - anchor;
-    if (at >= end) { draw(end); pause(); return; }
-    playback.sync();
-    draw(at);
-    frame = requestAnimationFrame(tick);
-  }
-  file.addEventListener('change', async () => {
-    if (!file.files.length) return;
-    const selected = file.files[0], attempt = ++opening;
-    pause();
-    play.disabled = scrub.disabled = true;
-    status.textContent = '';
-    try {
-      audio ??= new AudioContext();
-      const project = KIT.authoring.projectBundles.open(JSON.parse(await selected.text()));
-      const next = project.build(), buffers = new Map();
-      for (const name of new Set(next.materialResponse.sounds().map(row => row.cue))) {
-        const bytes = project.attachment(name).bytes;
-        buffers.set(name, await audio.decodeAudioData(Uint8Array.from(bytes).buffer));
-      }
-      if (attempt !== opening) return;
-      world = next;
-      playback = world.materialResponse.createPlayback(audio, name => buffers.get(name));
-      end = world.timeline?.duration || world.materialResponse.duration;
-      scrub.max = end;
-      draw(0);
-      play.disabled = scrub.disabled = false;
-    } catch (error) { if (attempt === opening) status.textContent = error.message; }
-  });
-  play.addEventListener('click', async () => {
-    if (running) { pause(); return; }
-    await audio.resume();
-    if (time >= end) draw(0);
-    playback.seek(time);
-    anchor = audio.currentTime - time;
-    running = true;
-    play.textContent = 'Pause';
-    tick();
-  });
-  scrub.addEventListener('input', () => {
-    const t = Number(scrub.value);
-    if (running) { playback.seek(t); anchor = audio.currentTime - t; }
-    draw(t);
-  });
-</script>
+<script type="module" src="./play.mjs"></script>
 </html>

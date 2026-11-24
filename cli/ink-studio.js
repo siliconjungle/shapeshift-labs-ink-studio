@@ -1204,6 +1204,7 @@ const CMD = {
         '  palette distributions <reference.png> [--scene scene | --render frame.png] [--out directory]',
         '  palette error <scene> [--threshold .06] [--heatmap-max .20] [--region-limit 20] [--out directory]',
         '  palette inspect <scene> --at x,y [--out report.json]   explain the palette choice at one art pixel',
+        '  effect inspect <scene> --at x,y [--t seconds] [--out report.json]   trace a rendered pixel to its material response and contact',
         '  palette fit <fit.json> [--format png|data] [--tile]   fit two approved swatches and preview at native size',
         '  palette dither-review <fit.json> [--out directory]   compare approved pairs and flag strong texture',
         '  palette shimmer <scene> [--from 0 --to 3 --fps 12] [--camera-pan x,y,z --camera-orbit degrees] [--include-view] [--animate] [--out directory]',
@@ -2406,6 +2407,20 @@ const CMD = {
       fs.mkdirSync(path.dirname(file),{recursive:true});
       fs.writeFileSync(file,json);
     }
+  },
+  effect() {
+    if (pos[0] !== 'inspect' || pos.length !== 2 || typeof opt.at !== 'string' || !/^\d+\s*,\s*\d+$/.test(opt.at) ||
+        ['t', 'out'].some(key => opt[key] === true))
+      die('Use effect inspect <scene> --at x,y [--t seconds] [--out report.json]');
+    const t = num('t', 0);
+    if (!Number.isFinite(t)) die('Effect pixel inspection time must be finite');
+    const world = buildPreview(pos[1]);
+    pose(world, t);
+    const report = R.inspectEffectPixel(world, view({ t, at: list('at'), transparent: onOffOption('transparent') }));
+    if (!opt.out) return process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+    const file = outputFile('effect-pixel.json');
+    if (file === path.resolve(pos[1])) die('Choose a report path separate from the scene');
+    require('./asset-files.js').json(file, report);
   },
   look() {
     const io = require('./look.js');

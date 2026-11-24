@@ -23,10 +23,12 @@
     const events = [];
     const indices = new Map(names.map((name, i) => [name, i]));
     let revision = 0, previous;
-    function prepare({ at, time = 0, radius = 0.1, values, lifetime = Infinity, shape = 'disk',
+    function prepare({ at, time = 0, radius = 0.1, values, lifetime = Infinity, shape = 'disk', source,
       speed = 0, width = radius, velocity = [0, 0] } = {}) {
       if (!vector(at, 2) || !vector(velocity, 2) || !record(values) || !Object.keys(values).length ||
-          !['disk', 'ring'].includes(shape)) throw new TypeError('A field stamp needs UV, velocity, a shape and channel values');
+          !['disk', 'ring'].includes(shape) || source !== undefined &&
+          !(typeof source === 'string' && source.length > 0 && source.length <= 256))
+        throw new TypeError('A field stamp needs UV, velocity, a shape, channel values and an optional source ID');
       if (lifetime !== Infinity) scalar(1e-6, 1e6, 'Stamp lifetime', lifetime);
       scalar(-1e6, 1e6, 'Stamp time', time);
       scalar(1e-6, 1e5, 'Stamp radius', radius);
@@ -37,7 +39,7 @@
         if (index === undefined) throw new RangeError('Unknown field channel: ' + name);
         return [index, scalar(-1e4, 1e4, 'Stamp amount', amount)];
       });
-      return { at: at.slice(), time, radius, lifetime, shape, speed, width, velocity: velocity.slice(), writes };
+      return { at: at.slice(), time, radius, lifetime, shape, speed, width, velocity: velocity.slice(), writes, source };
     }
     function append(items) {
       if (events.length + items.length > 4096) throw new RangeError('Effect field exceeds its stamp budget');
@@ -80,11 +82,17 @@
     stampMany(stamps);
     strokes.forEach(stroke);
 
+    function influence(event, radius, distance) {
+      const q = event.shape === 'ring' ? Math.abs(distance - radius) / event.width : distance / radius;
+      return q < 1 ? (1 - q * q) ** 2 : 0;
+    }
+
     function frame(time) {
       scalar(-1e6, 1e6, 'Effect field time', time);
       if (previous?.time === time) return previous;
       const { width, height, dx, dz, ox, oz, size, open, bounds } = domain;
       const buffers = names.map(() => new Float32Array(size));
+      const active = [];
       let work = 0;
       for (const event of events) {
         const age = time - event.time;
@@ -100,18 +108,19 @@
         work += (right - left + 1) * (high - low + 1) * event.writes.length;
         if (work > 16000000) throw new RangeError('Effect frame exceeds its sampling budget');
         const writes = event.writes.map(([index, value]) => ({
+          index,
           buffer: buffers[index], sum: settings[index].combine === 'sum',
           amount: value * Math.exp(-settings[index].decay * age)
         }));
+        active.push({ event, u, v, radius, writes });
         for (let j = low; j <= high; j++) {
           const y = oz + (j + 0.5) * dz - v;
           for (let i = left; i <= right; i++) {
             const cell = j * width + i;
             if (!open[cell]) continue;
             const distance = Math.hypot(ox + (i + 0.5) * dx - u, y);
-            const q = event.shape === 'ring' ? Math.abs(distance - radius) / event.width : distance / radius;
-            if (q >= 1) continue;
-            const weight = (1 - q * q) ** 2;
+            const weight = influence(event, radius, distance);
+            if (!weight) continue;
             for (const { buffer, amount, sum } of writes) {
               const value = amount * weight;
               buffer[cell] = sum ? buffer[cell] + value : Math.max(buffer[cell], value);
@@ -129,6 +138,29 @@
         data(name) {
           const index = indices.get(name);
           return index === undefined ? undefined : buffers[index].slice();
+        },
+        traceCell(name, x, y) {
+          const index = indices.get(name);
+          if (index === undefined || !Number.isInteger(x) || !Number.isInteger(y) ||
+              x < 0 || y < 0 || x >= width || y >= height)
+            throw new RangeError('Field trace needs a named channel and a cell inside the field');
+          const cell = y * width + x, value = buffers[index][cell];
+          const uv = [ox + (x + .5) * dx, oz + (y + .5) * dz];
+          let strongest = 0, source = null, contributors = 0;
+          if (open[cell]) for (const row of active) {
+            const write = row.writes.find(candidate => candidate.index === index);
+            if (!write) continue;
+            const weight = influence(row.event, row.radius, Math.hypot(uv[0] - row.u, uv[1] - row.v));
+            const amount = Math.fround(write.amount * weight);
+            if (write.sum ? !amount : amount <= 0) continue;
+            contributors++;
+            const score = Math.abs(amount);
+            if (score > strongest) {
+              strongest = score;
+              source = row.event.source ?? null;
+            }
+          }
+          return { value, uv, contributors, source };
         }
       });
       return previous;

@@ -22,6 +22,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   palette distributions <reference.png> [--scene scene | --render frame.png] [--out directory]
   palette error <scene> [--threshold .06] [--heatmap-max .20] [--region-limit 20] [--out directory]
   palette inspect <scene> --at x,y [--out report.json]   explain the palette choice at one art pixel
+  effect inspect <scene> --at x,y [--t seconds] [--out report.json]   trace a rendered pixel to its material response and contact
   palette fit <fit.json> [--format png|data] [--tile]   fit two approved swatches and preview at native size
   palette dither-review <fit.json> [--out directory]   compare approved pairs and flag strong texture
   palette shimmer <scene> [--from 0 --to 3 --fps 12] [--camera-pan x,y,z --camera-orbit degrees] [--include-view] [--animate] [--out directory]

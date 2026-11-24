@@ -92,6 +92,38 @@ For custom projectors, `type: 'composite'` accepts this chart as
 `layer`. The raster may also come from a named graph slot. Its top row
 begins at minimum V.
 
+## Inspect a pixel
+
+```sh
+ink-studio effect inspect /tmp/silt-lock/silt-lock.ink.json \
+  --w 336 --h 192 --px 1 --t 3.18 --at 150,98
+```
+
+Pixel coordinates are zero-based from the top left of the render graph
+output. The versioned JSON reports the visible receiver, the swatch before
+and after the graph, and the top contributing material response. For a
+projected field it also reports the sampled texel, each channel's value and
+threshold, and the source contact. Overlapping max-blended stamps attribute
+the sample to the strongest stamp. Equal stored contributions keep the first
+written source. A rejected pass still reports its sampled values when the
+receiver lies inside its chart. The rejection codes distinguish a selector
+mismatch, missing depth, chart reach and bounds, inactive or subthreshold
+fields, and masks. Particle passes report the recorded contact and whether
+scene depth blocked the particle.
+
+```js
+const report = ink.inspectEffectPixel(world, { at: [150, 98], w: 336, h: 192, px: 1, t: 3.18 });
+const liveReport = renderer.inspectEffectPixel(world, [150, 98], { time: 3.18 });
+```
+
+Advance the scene animation to the requested time before using a renderer
+API. The CLI advances the scene automatically. WebGL reads the actual
+receiver and projected texel for the selected pixel, which can differ at
+an edge from the headless result. Ordinary playback uses no inspector
+readbacks. The report covers material-response passes at the graph output
+and resolves before external UI overlays. A particle can blend its source
+swatch with a different final RGB, which the report records separately.
+
 ## Silt Lock demo
 
 ```sh
@@ -101,7 +133,8 @@ python3 -m http.server 8080
 ```
 
 Open [the live preview](../examples/material-response/play.html) from the
-local server and load `silt-lock.ink.json`. Play or scrub the same project
+local server and load `silt-lock.ink.json`. Click a pixel or choose one of
+the three sample pixels for its effect report. Play or scrub the same project
 the demo script exports with aligned picture and WAV. The first station
 records footsteps in silt, the cart leaves ripples in the middle station,
 and a test press strikes the slate on the right.

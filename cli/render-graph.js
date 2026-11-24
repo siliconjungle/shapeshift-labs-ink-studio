@@ -11,7 +11,8 @@ const {
   history,
   feedbackMotion,
   volumeCoverage,
-  projectedColor,
+  projectedCell,
+  effectProbe,
   rowTable,
   scheduleTable,
   indexedSchedule,
@@ -63,7 +64,8 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
       reset: options.resetRenderHistory
     });
   if (!openHistory) options.renderHistory?.clear();
-  const outputs = new Map([['scene', FrameComposite.pixels(frame).data]]);
+  const scenePixels = FrameComposite.pixels(frame).data;
+  const outputs = new Map([['scene', scenePixels]]);
   const selectors = new Map();
   function selected(select) {
     if (!select) return null;
@@ -77,13 +79,20 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
     (owner || depth) && (passes.w !== w || passes.h !== h)
       ? (x, y) => Math.floor((y * passes.h) / h) * passes.w + Math.floor((x * passes.w) / w)
       : (_x, _y, p) => p;
+  const atPixel = options.effectPixel;
+  const probe = atPixel && effectProbe(world, atPixel, w, h, time, 'headless');
+  const probePixel = probe && atPixel[1] * w + atPixel[0];
+  const probeNative = probe && nativeIndex(atPixel[0] + .5, atPixel[1] + .5, probePixel);
+  if (probe) probe.setReceiver(world, owner?.[probeNative]);
   const color = new Float64Array(4),
     previousColor = new Float64Array(4),
     rgb = [0, 0, 0],
-    graded = [0, 0, 0];
+    graded = [0, 0, 0], chartCell = [0, 0];
   for (const [index, node] of plan.passes.entries()) {
     const input = outputs.get(node.input);
     const maskPass = node.type === 'mask';
+    const effect = probe?.effect(node);
+    if (effect && !node.enabled) probe.note(node, effect);
     let output;
     if (options[passImages]?.has(node.id)) output = options[passImages].get(node.id);
     else if (!node.enabled) output = maskPass ? new Uint8Array(w * h) : input;
@@ -113,6 +122,19 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
         Number(chosenAt(x, y)) *
         (mask ? mask[Math.floor(y) * w + Math.floor(x)] / 255 : 1) *
         effects.depthWeight(node.depth, depth?.[at(x, y)]);
+      if (effect) {
+        const x = atPixel[0] + .5, y = atPixel[1] + .5, selected = chosenAt(x, y);
+        let status = 0, alpha = 0;
+        if (raster && node.projection) {
+          const u = ((probeNative % passes.w) + .5) / passes.w;
+          const v = (Math.floor(probeNative / passes.w) + .5) / passes.h;
+          status = projectedCell(node.projection, camera, u, v, depth[probeNative], raster.w, raster.h, chartCell);
+          if (status === 3) alpha = raster.data[(chartCell[1] * raster.w + chartCell[0]) * 4 + 3];
+        } else if (raster && FrameComposite.samplePlaced(raster, x, y, color, depth?.[probeNative])) alpha = color[3];
+        const gate = weightAt(x, y) * node.opacity * (raster?.opacity ?? 1);
+        probe.note(node, effect, { selected, status, cell: chartCell, raster, camera, gate,
+          alpha: Math.round(alpha * gate) });
+      }
       if (node.window && opacity) {
         const pose = windowFrame(node.window, { world, time, sceneTime: options.t, width: w, height: h, camera, resolve });
         if (pose) paintWindow(pose, outputs.get(pose.source), outputs.get(node.window.sourceMask), output, w, h, weightAt, opacity);
@@ -378,7 +400,10 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
               if (node.projection) {
                 const u = ((native % passes.w) + .5) / passes.w;
                 const v = (Math.floor(native / passes.w) + .5) / passes.h;
-                if (!projectedColor(node.projection, camera, u, v, depth[native], raster, color)) continue;
+                if (projectedCell(node.projection, camera, u, v, depth[native], raster.w, raster.h, chartCell) !== 3) continue;
+                const offset = 4 * (chartCell[1] * raster.w + chartCell[0]);
+                if (!raster.data[offset + 3]) continue;
+                for (let c = 0; c < 4; c++) color[c] = raster.data[offset + c];
               } else if (raster) {
                 if (!FrameComposite.samplePlaced(raster, x, y, color, depth?.[native])) continue;
               } else for (let c = 0; c < 4; c++) color[c] = source[q + c];
@@ -445,6 +470,10 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
     for (const dependency of node.dependencies) if (plan.lastUse.get(dependency) === index) outputs.delete(dependency);
   }
   const result = FrameComposite.straight(outputs.get(plan.output), w, h, frame.alpha);
+  if (probe) {
+    const rgba = pixels => Array.from(pixels.subarray(probePixel * 4, probePixel * 4 + 4));
+    result.effectPixel = probe.finish(rgba(scenePixels), rgba(outputs.get(plan.output)));
+  }
   if (plan.captures?.size) result.renderGraphPasses = Object.fromEntries([...plan.captures].map(([id, kind]) => {
     const data = outputs.get(id);
     const raster = kind === 'mask' ? { width: w, height: h, channels: 1, data: data.slice() } :

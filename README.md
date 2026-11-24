@@ -334,6 +334,8 @@ and skids at the point of contact, with their own clock through a pose hold.
 displaced vegetation pixels, and expanding ripples on a shared native grid.
 [Material response recipes](docs/material-response.md) route footsteps,
 wheel contacts, and impacts to projected marks, ripples, particles, and sound.
+The [effect inspector](docs/material-response.md#inspect-a-pixel) traces a
+rendered swatch to the receiving material, its field sample, and the source contact.
 
 Reuse unchanged bake inputs in the editor and pass `--asset-cache DIR` to retain diorama bake results across CLI runs. [Incremental baking](docs/scene-editor.md#incremental-baking)
 

@@ -4089,4 +4089,16 @@ function grid(imgs, cols, labels) {
   });
   return out;
 }
-module.exports = { render, resize, pixelIndex, upscale, grid, label, viewMatrix, FOV, cameraCapture, sequenceHistory, sequenceOutput };
+function inspectEffectPixel(world, { at, ...view } = {}) {
+  if (!Array.isArray(at) || at.length !== 2 || !Array.from(at).every(n => Number.isSafeInteger(n) && n >= 0))
+    throw new TypeError('Effect pixel needs [x, y] in nonnegative output pixels');
+  const t = view.t ?? view.time ?? world.lookSnapshot?.time ?? 0;
+  if (!Number.isFinite(t)) throw new RangeError('Effect pixel inspection time must be finite');
+  const frame = render(world, { ...view, t, samples: false, captureCoverage: false, cameraGuides: false,
+    inspection: false, renderGrid: false, effectPixel: at });
+  if (!frame.effectPixel?.passes.length) throw new RangeError('Effect inspection needs a visible material-response render graph');
+  return frame.effectPixel;
+}
+
+module.exports = { render, inspectEffectPixel, resize, pixelIndex, upscale, grid, label, viewMatrix, FOV,
+  cameraCapture, sequenceHistory, sequenceOutput };

@@ -2,6 +2,8 @@
 (function (K) {
   const V = K.V;
   const format = 'ink-studio/material-response';
+  const surfacePrefix = 'material-response-surface/';
+  const particlePass = 'material-response-particles';
   const kinds = ['step', 'roll', 'impact'];
   const limits = { contacts: 2048, materials: 8, particles: 512 };
   const record = value => value != null && Object.getPrototypeOf(value) === Object.prototype;
@@ -94,7 +96,9 @@
         const strength = Math.min(1, speed / speedReference * Math.sqrt(Math.min(4, load / loadReference)));
         const n = V.norm(normal), h = V.norm(V.mad(heading, n, -V.dot(heading, n)), V.perp(n));
         const hit = { id: key, interaction, material, point: point.slice(), normal: n, heading: h,
-          time: at, speed, load, ...(entity != null && { entity }), ...(wheel != null && { wheel }), ...(source != null && { source }) };
+          time: at, speed, load, ...(entity != null && { entity }), ...(wheel != null && { wheel }), ...(source != null && { source }),
+          ...(Number.isSafeInteger(row.tick) && { tick: row.tick }),
+          ...(Number.isSafeInteger(row.appliedTick) && { appliedTick: row.appliedTick }) };
         pending.set(key, { hit, rule, strength });
         if (!rule?.chart || !strength) continue;
         const relative = V.sub(point, rule.chart.origin);
@@ -104,7 +108,7 @@
         for (const name of ['mark', 'ripple']) {
           const effect = rule[name];
           if (!effect) continue;
-          writes.get(rule).push({ at: uv, time: at, radius: effect.radius, lifetime: effect.duration,
+          writes.get(rule).push({ at: uv, time: at, radius: effect.radius, lifetime: effect.duration, source: key,
             values: { [name]: strength }, ...(name === 'ripple' && { shape: 'ring', speed: effect.speed, width: effect.width }) });
         }
       }
@@ -160,6 +164,20 @@
       return { w, h, rgba };
     }
 
+    function inspectField(material, time, cell) {
+      const rule = rules.get(material);
+      const frame = cell && rule.field.frame(time);
+      return ['mark', 'ripple'].filter(kind => rule[kind]).map(kind => {
+        const { threshold, rgb } = rule[kind];
+        const sample = frame && frame.traceCell(kind, ...cell);
+        const event = sample?.source && rows.get(sample.source)?.hit;
+        return { kind, rgb: rgb.slice(), threshold, sample: sample ? {
+          value: sample.value, contributors: sample.contributors, uv: sample.uv,
+          event: event ? structuredClone(event) : null
+        } : null };
+      });
+    }
+
     function particlesAt(time) {
       const output = [], active = contactsByTime();
       for (let i = active.length - 1; i >= 0 && output.length < limits.particles; i--) {
@@ -173,13 +191,13 @@
           point = V.mad(point, hit.heading, -(hash(2) + .1) * velocity * age);
           point = V.mad(point, side, (hash(3) - .5) * 1.4 * velocity * age);
           if (V.dot(V.sub(point, hit.point), hit.normal) < 0) continue;
-          output.push({ point, radius: fx.radius * (.65 + .7 * hash(4)), rgb: fx.rgb, alpha: Math.round(255 * (1 - age / fx.duration)) });
+          output.push({ point, contact: hit.id, radius: fx.radius * (.65 + .7 * hash(4)), rgb: fx.rgb,
+            alpha: Math.round(255 * (1 - age / fx.duration)) });
         }
       }
       return output;
     }
-    function particleRaster({ w, h, time, camera }) {
-      const rgba = new Uint8Array(w * h * 4), depth = new Float32Array(w * h).fill(Infinity);
+    function projectParticles(time, camera, w, h, draw) {
       const project = DrawingPrimitives.projector(camera, w, h);
       for (const dot of particlesAt(time)) {
         const view = project.toView(dot.point);
@@ -187,16 +205,40 @@
         const [x, y] = project.point(view);
         const radius = Math.min(24, Math.max(.5, dot.radius * project.pixelsPerUnit(view, [0, 1])));
         const cx = Math.floor(x) + .5, cy = Math.floor(y) + .5;
+        draw(dot, cx, cy, radius, view[2]);
+      }
+    }
+    function particleRaster({ w, h, time, camera }) {
+      const rgba = new Uint8Array(w * h * 4), depth = new Float32Array(w * h).fill(Infinity);
+      projectParticles(time, camera, w, h, (dot, cx, cy, radius, z) => {
         for (let iy = Math.max(0, Math.ceil(cy - radius - .5)); iy <= Math.min(h - 1, Math.floor(cy + radius - .5)); iy++)
           for (let ix = Math.max(0, Math.ceil(cx - radius - .5)); ix <= Math.min(w - 1, Math.floor(cx + radius - .5)); ix++) {
             const p = iy * w + ix;
-            if (view[2] >= depth[p] || (ix + .5 - cx) ** 2 + (iy + .5 - cy) ** 2 > radius ** 2) continue;
-            depth[p] = view[2];
+            if (z >= depth[p] || (ix + .5 - cx) ** 2 + (iy + .5 - cy) ** 2 > radius ** 2) continue;
+            depth[p] = z;
             rgba.set(dot.rgb, p * 4);
             rgba[p * 4 + 3] = dot.alpha;
           }
-      }
+      });
       return { w, h, rgba, depth };
+    }
+    function inspectParticle(time, camera, w, h, x, y) {
+      let nearest, depth = Infinity;
+      projectParticles(time, camera, w, h, (dot, cx, cy, radius, z) => {
+        if (z >= depth || (x + .5 - cx) ** 2 + (y + .5 - cy) ** 2 > radius ** 2) return;
+        nearest = dot;
+        depth = Math.fround(z);
+      });
+      return nearest?.alpha ? { rgb: nearest.rgb.slice(), depth, alpha: nearest.alpha,
+        event: structuredClone(rows.get(nearest.contact).hit) } : null;
+    }
+
+    function effectPass(id) {
+      if (id === particlePass && [...rules.values()].some(rule => rule.particles))
+        return { kind: 'particles', inspect: inspectParticle };
+      const material = id.startsWith(surfacePrefix) && id.slice(surfacePrefix.length);
+      if (!rules.get(material)?.chart) return null;
+      return { kind: 'projected-field', material, inspect: (time, cell) => inspectField(material, time, cell) };
     }
 
     function bind(world) {
@@ -206,13 +248,13 @@
       let input = RenderGraph.prepare(existing)?.output ?? 'scene';
       for (const [name, rule] of rules) if (rule.chart) {
         const { normal, ...projection } = rule.chart;
-        const id = 'material-response-surface/' + name;
+        const id = surfacePrefix + name;
         passes.push({ id, input, type: 'composite', select: rule.select, projection,
           layer: { resolution: rule.resolution, filter: 'nearest', source: ({ time }) => raster(rule, time) } });
         input = id;
       }
       if ([...rules.values()].some(rule => rule.particles)) {
-        const id = 'material-response-particles';
+        const id = particlePass;
         passes.push({ id, input, type: 'composite', layer: { resolution: pixelSize, filter: 'nearest', needsCamera: true,
           depthTest: { mode: 'occlude', bias: .015 }, source: particleRaster } });
         input = id;
@@ -226,7 +268,8 @@
       world.materialResponse = api;
       return world;
     }
-    const api = Object.freeze({ add, bind, audioTimeline, createPlayback: (context, resolve) => playback(sounds, context, resolve),
+    const api = Object.freeze({ add, bind, audioTimeline, effectPass,
+      createPlayback: (context, resolve) => playback(sounds, context, resolve),
       snapshot: () => ({ recipe: structuredClone(authored), contacts: contactsByTime().map(row => structuredClone(row.hit)) }),
       sounds: () => sounds().map(row => ({ ...row })),
       get revision() { return revision; },

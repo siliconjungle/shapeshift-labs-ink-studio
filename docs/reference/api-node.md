@@ -64,6 +64,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.graphDeepLayer` | function | `(frame, options = {}, channel)` | [guide](../art-passes.md#deep-compositing), [source](../../cli/deep-composite.js) |
 | `node.graphRenderPass` | function | `(frame, channel, { emptyDepth = 1e9, kit } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../cli/graph-render.js) |
 | `node.httpJsonAdapter` | function | `(location, { maxBytes = 1048576, timeout = 5000, headers = {} } = {})` | [guide](../graph-media.md#optional-host-adapters), [source](../../cli/graph-host.js) |
+| `node.inspectEffectPixel` | function | `(world, { at, ...view } = {})` | [guide](../material-response.md#inspect-a-pixel), [source](../../cli/render.js) |
 | `node.inspectEnvironment` | function | `(world, options = {})` | [guide](../environment-inspector.md), [source](../../cli/environment-inspector.js) |
 | `node.inspectPalettePixel` | function | `(world, { at, ...view } = {})` | [guide](../palette-recipes.md#inspect-the-palette-at-a-pixel), [source](../../cli/palette-pixel.js) |
 | `node.inspectPxc` | function | `(source, { image = false, tolerateArt = false } = {})` | [source](../../cli/pxc.js) |

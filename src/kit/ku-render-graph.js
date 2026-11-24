@@ -3,6 +3,7 @@
     create: RenderGraph.create,
     effects: RenderGraph.effects,
     resources: RenderGraph.resources,
+    effectProbe: RenderGraph.effectProbe,
     ownerGroups: RenderGraph.ownerGroups,
     prepare: RenderGraph.prepare,
     cube: RenderGraph.cube,

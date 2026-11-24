@@ -755,6 +755,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.renderGraph.addressRaster` | function | `(node, sources, width, height)` | [guide](../../README.md#license), [guide](../render-graph.md), [source](../../src/render-graph.js) |
 | `KIT.renderGraph.create` | function | `(value)` | [guide](../render-graph.md#editing-a-live-graph), [guide](../render-graph.md#bounded-film-and-signal-effects), [guide](../../README.md#license), [guide](../render-graph.md), [source](../../src/render-graph.js) |
 | `KIT.renderGraph.cube` | function | `({ stack, cubeSize: size })` | [guide](../../README.md#license), [guide](../render-graph.md), [source](../../src/render-graph.js) |
+| `KIT.renderGraph.effectProbe` | function | `(world, at, w, h, time, backend)` | [guide](../../README.md#license), [guide](../render-graph.md), [source](../../src/render-graph.js) |
 | `KIT.renderGraph.effects` | namespace |  | [guide](../../README.md#license) |
 | `KIT.renderGraph.effects.budget` | function | `(value = {}, effect = false)` | [guide](../../README.md#license), [source](../../src/render-effects.js) |
 | `KIT.renderGraph.effects.depth` | function | `(value)` | [guide](../../README.md#license), [source](../../src/render-effects.js) |

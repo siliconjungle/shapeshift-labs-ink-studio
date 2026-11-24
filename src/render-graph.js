@@ -1112,21 +1112,78 @@ const RenderGraph = (() => {
     return volume.feather ? clamp((1 - distance) / volume.feather) : Number(distance <= 1);
   }
 
-  function projectedColor(chart, camera, u, v, depth, raster, out) {
-    if (!Number.isFinite(depth)) return false;
+  // Return the same chart coordinate used for drawing or a rejection code.
+  function projectedCell(chart, camera, u, v, depth, w, h, out) {
+    if (!Number.isFinite(depth)) return 0;
     const { view, eye } = camera, scale = camera.tangent * (camera.ortho ? 1 : depth);
     const x = (2 * u - 1) * scale * camera.aspect, y = (1 - 2 * v) * scale;
     const px = eye[0] + x * view[0] + y * view[1] - depth * view[2] - chart.origin[0];
     const py = eye[1] + x * view[4] + y * view[5] - depth * view[6] - chart.origin[1];
     const pz = eye[2] + x * view[8] + y * view[9] - depth * view[10] - chart.origin[2];
     const dot = axis => axis[0] * px + axis[1] * py + axis[2] * pz;
-    if (Math.abs(dot(chart.normal)) > chart.reach) return false;
+    if (Math.abs(dot(chart.normal)) > chart.reach) return 1;
     const [minU, minV, maxU, maxV] = chart.bounds;
     const U = (dot(chart.u) - minU) / (maxU - minU), V = (dot(chart.v) - minV) / (maxV - minV);
-    if (U < 0 || V < 0 || U >= 1 || V >= 1) return false;
-    const offset = 4 * (Math.floor(V * raster.h) * raster.w + Math.floor(U * raster.w));
-    for (let c = 0; c < 4; c++) out[c] = raster.data[offset + c];
-    return out[3] > 0;
+    if (U < 0 || V < 0 || U >= 1 || V >= 1) return 2;
+    out[0] = Math.min(w - 1, Math.floor(U * w));
+    out[1] = Math.min(h - 1, Math.floor(V * h));
+    return 3;
+  }
+
+  function effectProbe(world, at, w, h, time, backend) {
+    if (!tuple(at, 2) || !at.every(Number.isSafeInteger) || at[0] < 0 || at[1] < 0 || at[0] >= w || at[1] >= h)
+      throw new RangeError('Effect pixel must be inside the render graph grid');
+    const passes = [];
+    let receiver = null, winner = null;
+    const swatch = rgb => '#' + rgb.slice(0, 3).map(n => n.toString(16).padStart(2, '0')).join('');
+    const straight = rgba => rgba[3] ? rgba.slice(0, 3).map(n => Math.min(255, Math.round(n * 255 / rgba[3]))) : null;
+    const swatchAt = rgba => rgba[3] ? swatch(straight(rgba)) : null;
+    function setReceiver(ownerWorld, owner) {
+      if (owner > 0 && owner <= ownerWorld.count)
+        receiver = { ...targets.index(ownerWorld).row(owner - 1), splatId: owner };
+    }
+    function effect(node) { return world.materialResponse?.effectPass?.(node.id); }
+    function note(node, entry, { selected, status, cell, alpha, gate, raster, camera } = {}) {
+      const pass = { id: node.id, kind: entry.kind, material: entry.material ?? null, reason: 'pass-disabled' };
+      const visible = node.enabled && raster;
+      let source;
+      if (entry.kind === 'projected-field') {
+        const samples = entry.inspect(time, status === 3 ? cell : null);
+        pass.select = node.select;
+        pass.cell = status === 3 ? cell.slice() : null;
+        pass.channels = samples.map(({ rgb, ...sample }) => ({ ...sample, swatch: swatch(rgb) }));
+        const selectedSample = pass.channels.findLast(choice => choice.sample && choice.sample.value >= choice.threshold);
+        if (visible) {
+          pass.reason = !receiver ? 'no-visible-receiver' : !selected ? 'receiver-mismatch' :
+            status === 0 ? 'no-receiver-depth' : status === 1 ? 'outside-projection-reach' : status === 2 ? 'outside-chart' :
+              !selectedSample ? (samples.some(choice => choice.sample?.value > 0) ? 'below-threshold' : 'no-active-stamp') :
+                alpha ? 'applied' : 'masked-out';
+        }
+        if (selectedSample) source = { kind: selectedSample.kind, swatch: selectedSample.swatch,
+          sample: selectedSample.sample, event: selectedSample.sample.event };
+      } else if (visible && camera) {
+        const x = Math.floor((at[0] + .5) * raster.w / w), y = Math.floor((at[1] + .5) * raster.h / h);
+        const particle = entry.inspect(time, camera, raster.w, raster.h, x, y);
+        pass.reason = !particle ? 'no-particle' : alpha ? 'applied' :
+          Math.round(particle.alpha * gate) ? 'particle-occluded' : 'masked-out';
+        if (particle) source = { kind: 'particle', swatch: swatch(particle.rgb), sample: null,
+          depth: particle.depth, event: particle.event };
+      }
+      if (source) pass.source = source;
+      if (pass.reason === 'applied' && source) {
+        pass.alpha = alpha;
+        winner = { pass: node.id, ...source, alpha };
+      }
+      passes.push(pass);
+    }
+    function finish(scene, output) {
+      const outputSwatch = swatchAt(output);
+      return { format: 'ink-studio/effect-pixel', version: 1, backend, scene: world.id ?? null,
+        pixel: at.slice(), width: w, height: h, time, receiver,
+        baseSwatch: swatchAt(scene), outputSwatch,
+        winner: winner && { ...winner, matchesOutput: winner.swatch === outputSwatch }, passes };
+    }
+    return { effect, setReceiver, note, finish };
   }
 
   return Object.freeze({
@@ -1149,7 +1206,8 @@ const RenderGraph = (() => {
     replay,
     volumeCoverage,
     projection,
-    projectedColor,
+    projectedCell,
+    effectProbe,
     rowTable,
     prepareRowEdits,
     scanlineMap
