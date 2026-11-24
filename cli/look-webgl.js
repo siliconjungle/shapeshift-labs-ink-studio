@@ -22,7 +22,7 @@ const result = document.querySelector('#result');
 try {
   const kit = { KIT, PixelLook, makeBuilder, makeSculpt, SpriteSurface, ContributionRules, RenderStages, compileGaussianPartProxies, compileGaussianMaterials, decodeSceneryPack, gaussianGltfWorld };
   const cases = await (${runFixtures.toString()})(kit, ${buildFixture.toString()},
-    (${browserBackend.toString()})(kit, createRenderer, createCameraAtlas), ${JSON.stringify(inputs).replaceAll('<', '\\u003c')});
+    (${browserBackend.toString()})(kit, createRenderer, createCameraAtlas), ${(JSON.stringify(inputs) ?? 'undefined').replaceAll('<', '\\u003c')});
   result.textContent = encodeURIComponent(JSON.stringify({ ...cases, browser: navigator.userAgent }));
 } catch (error) {
   result.textContent = encodeURIComponent(JSON.stringify({ error: error.stack ?? error.message }));
