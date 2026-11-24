@@ -1558,6 +1558,7 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
         if (splat.weight!==undefined) (target.paintHits ??= []).push(splat);
         if (splat.footprint) (target.footprintHits ??= []).push(splat);
         if (splat.attributes) (target.attributeHits ??= []).push(splat);
+        if (splat.topology) (target.topologyHits ??= []).push(splat);
       },
       onEditTarget: target => targets.push(target),
       world:binding => context.world(binding),
@@ -1569,7 +1570,7 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
       }
     });
     if (!route.binding) candidate = output;
-    if (target?.attributeHits) {
+    if (target?.attributeHits || target?.topologyHits) {
       target.render=SplatPreview.compare(sourceWorld,sourceWorld.look?.splatFit,output,{
         grid:route.binding.canvas?.size??[design.width,design.height],
         rows:resolvedRows,
@@ -1770,13 +1771,15 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
         const paintHits = splats.filter(row=>row.weight!==undefined);
         const footprintHits = splats.filter(row=>row.footprint);
         const attributeHits = splats.filter(row=>row.attributes);
+        const topologyHits = splats.filter(row=>row.topology);
         const summary={ ...target, sourceRevision:receipt.inputs.sourceRevision,
           sourceChecked:patch.sourceRevision !== undefined || verifiedReplays.has(index),
           ...(paintHits.length && {paintHits}),
           ...(footprintHits.length && {footprintHits}),
-          ...(attributeHits.length && {attributeHits}) };
+          ...(attributeHits.length && {attributeHits}),
+          ...(topologyHits.length && {topologyHits}) };
         targetsByKey.set(key,summary);
-        if (attributeHits.length) {
+        if (attributeHits.length || topologyHits.length) {
           const binding=route.binding, grid=binding.canvas?.size??[draft.design.width,draft.design.height];
           const reviewKey=JSON.stringify([binding.scene,grid]);
           if (!splatReviews.has(reviewKey)) splatReviews.set(reviewKey,{binding,grid,rows:new Set(),target:summary});

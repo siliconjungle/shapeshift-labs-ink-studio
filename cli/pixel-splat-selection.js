@@ -15,13 +15,13 @@ const fields = (value,keys) => record(value) && Object.keys(value).every(key=>ke
 const vector = value => Array.isArray(value) && value.length===3 && Array.from(value).every(Number.isFinite);
 
 function prepare(query, grid, recall) {
-  if (!fields(query,['part','material','region','footprint','minContribution','editableOnly','paintableOnly']))
-    throw new TypeError('A splat query needs part, material, region, footprint, minContribution, editableOnly or paintableOnly');
-  const {part,material,region,footprint,minContribution,editableOnly=false,paintableOnly=false}=query;
+  if (!fields(query,['part','material','region','footprint','minContribution','editableOnly','paintableOnly','includeRetired']))
+    throw new TypeError('A splat query needs part, material, region, footprint, minContribution, editableOnly, paintableOnly or includeRetired');
+  const {part,material,region,footprint,minContribution,editableOnly=false,paintableOnly=false,includeRetired=false}=query;
   if (part!==undefined && !Targets.name(part) ||
       material!==undefined && !Targets.name(material) && !Number.isSafeInteger(material) ||
-      minContribution!==undefined && !SplatFit.unit(minContribution) || (typeof editableOnly!=='boolean' || typeof paintableOnly!=='boolean'))
-    throw new TypeError('Choose valid part and material IDs, a contribution from 0 to 1, and boolean editableOnly and paintableOnly filters');
+      minContribution!==undefined && !SplatFit.unit(minContribution) || (typeof editableOnly!=='boolean' || typeof paintableOnly!=='boolean' || typeof includeRetired!=='boolean'))
+    throw new TypeError('Choose valid part and material IDs, a contribution from 0 to 1, and boolean editableOnly, paintableOnly and includeRetired filters');
   if (region!==undefined && (!fields(region,['min','max']) || !vector(region.min) || !vector(region.max) ||
       region.min.some((low,k)=>low>region.max[k])))
     throw new TypeError('A splat region needs inclusive XYZ min and max in rest space');
@@ -38,22 +38,23 @@ function prepare(query, grid, recall) {
   } else if (minContribution!==undefined) {
     mask=new Uint8Array(grid[0]*grid[1]).fill(1);
   }
-  return {query,grid,mask,minimum:minContribution??0,editableOnly,paintableOnly};
+  return {query,grid,mask,minimum:minContribution??0,editableOnly,paintableOnly,includeRetired};
 }
 
 function select(world,binding,plan,context) {
-  const {query,editableOnly,paintableOnly,mask}=plan, {region,part,material}=query;
-  const rest=Provenance.restData(world), identities=Provenance.identities(world,{fresh:true});
-  const authored=Targets.index(world).row, chosen=new Map();
-  const fit=SplatFit.prepare(world,world.look?.splatFit);
+  const {query,editableOnly,paintableOnly,includeRetired,mask}=plan, {region,part,material}=query;
+  const fit=SplatFit.prepare(world,world.look?.splatFit), backing=SplatFit.sourceWorld(world,fit);
+  const rest=Provenance.restData(backing), identities=Provenance.identities(backing,{fresh:true});
+  const authored=Targets.index(backing).row, chosen=new Map();
   const effective=SplatFit.renderWorld(world,fit,
     {footprints:world.look?.splatFootprints!==false,applyAttributes:false});
   const row=splatTargets(effective);
   const inScope=target=>!!Targets.objectScope(binding,target) &&
     (part===undefined || target.part===part) && (material===undefined || target.material===material);
-  const editable=i=>!!Targets.objectScope(binding,authored(i)) && SplatFit.eligible(world,i);
-  const eligible=i=>(!editableOnly || editable(i)) &&
-    (!paintableOnly || !!Targets.objectScope(binding,authored(i)) && SplatFit.paintable(world,i));
+  const retired=i=>fit?.topology?.retired.has(i);
+  const editable=i=>!retired(i) && !!Targets.objectScope(binding,authored(i)) && SplatFit.eligible(backing,i);
+  const eligible=i=>(!retired(i) || includeRetired) && (!editableOnly || editable(i)) &&
+    (!paintableOnly || !retired(i) && !!Targets.objectScope(binding,authored(i)) && SplatFit.paintable(backing,i));
   const choice=(id,index)=>({id,index,editable:editable(index)});
   function inRegion(index) {
     if (!region) return true;
@@ -62,7 +63,7 @@ function select(world,binding,plan,context) {
   }
   const selection={query,frame:plan.frame,unstableIds:0};
   if (!mask) {
-    for (let i=0;i<world.count;i++) {
+    for (let i=0;i<backing.count;i++) {
       if (!inScope(row(i)) || !inRegion(i) || !eligible(i)) continue;
       const id=identities.idAt(i);
       if (id) chosen.set(id,choice(id,i));

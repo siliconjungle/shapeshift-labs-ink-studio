@@ -19,7 +19,8 @@ function splatTargets(world, row=Targets.index(world).row) {
 function rowRevision(world,row) {
   const editedFootprint=SplatFit.editedFootprint(world,row);
   const attributes=SplatFit.editedAttributes(world,row);
-  world = SplatFit.baseWorld(world);
+  const {created,retired}=SplatFit.lifecycle(world,row);
+  world = SplatFit.sourceWorld(world);
   const hash = createHash('sha256');
   const data = Provenance.restData(world);
   for (const [key,values,stride,start = 0] of [
@@ -33,6 +34,7 @@ function rowRevision(world,row) {
     hash.update(key);
     hash.update(Buffer.from(chunk.buffer,chunk.byteOffset,chunk.byteLength));
   }
+  if (created || retired) hash.update('splat-lifecycle').update(JSON.stringify([created,retired]));
   if (attributes) hash.update('splat-attributes').update(JSON.stringify(attributes));
   if (editedFootprint!==undefined) {
     if (editedFootprint && !footprintDigests.has(editedFootprint))
@@ -94,7 +96,7 @@ function splatBuffer(size) {
         const { object,entity,part,material } = target(row);
         slots.set(row,splatSources.length);
         identities ??= Provenance.identities(world,{fresh:true});
-        splatSources.push({ id:identities.idAt(row) ?? null,renderRow:row,object,entity,part,material,editable:SplatFit.eligible(SplatFit.baseWorld(world),row),revision:rowRevision(world,row) });
+        splatSources.push({ id:identities.idAt(row) ?? null,renderRow:row,object,entity,part,material,editable:SplatFit.eligible(SplatFit.sourceWorld(world),row),revision:rowRevision(world,row) });
       }
       return slots.get(row);
     }

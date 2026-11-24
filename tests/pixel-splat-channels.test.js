@@ -362,3 +362,105 @@ test('geometry attributes carry retained footprint axes and shading normals with
   assert.notDeepEqual(a.passes.depth,b.passes.depth);
   assert(world.splatFootprints.frames[5]===0);
 });
+
+test('add, clone and retire preserve source lineage, paint and ordered batch replay',()=>{
+  const world=sampleWorld(), original=world.data.slice(), source=ids(world).idAt(1);
+  const doc={format:'ink-studio/pixel-art',version:2,width:65,height:65,pixelAspect:[1,1],
+    palette:{rose:'#f35c81',ink:'#224766'},layers:[{id:'ink'}],frames:[{id:'front',durationMs:100,cels:{}}],
+    sceneBindings:[{id:'plate',scene:world.id,object:'plate'}],
+    destinations:[{id:'splats',kind:'splat-attributes',binding:'plate'}]};
+  const editor=ink.createPixelEditor(doc);
+  const render=()=>ink.render(world,{...options,...editor.renderOptions(world.id),raw:true,
+    passes:[...options.passes,'sourceSplat']});
+  const context={world:()=>world,captureSelection:render};
+  const targets=query=>editor.targets('splats',{...context,query});
+  const patch=(id,operation)=>({id,destination:'splats',frame:'front',revision:editor.describe().revision,
+    sourceRevision:targets().sourceRevision,operation});
+  editor.apply(patch('paint-source',{splats:[{splat:source,pigment:'rose',scale:[1.2,.9,1]}]}),context);
+  const before=render();
+  const topology=patch('repair',{topology:[
+    {op:'add',id:'infill',position:[-.62,.2,.42],radius:[.19,.16,.04],pigment:'ink',opacity:.85,part:'rim'},
+    {op:'clone',from:source,id:'rim-a',offset:[.58,-.1,.06]},
+    {op:'clone',from:'rim-a',id:'rim-b',position:[.95,-.3,.42]},
+    {op:'retire',splat:source,reason:'Redundant center'}
+  ]});
+  const review=editor.previewEdit(topology,{...context,limit:2});
+  assert.equal(review.valid,true,JSON.stringify(review.conflicts));
+  assert.deepEqual(review.targets[0].topologyHits.map(hit=>hit.topology.op),['add','clone','clone','retire']);
+  assert(review.targets[0].render.coverageChanged>2);
+  assert.deepEqual(render().rgb,before.rgb);
+  const asset=editor.apply(topology,context);
+  const receipt=editor.receipts().at(-1);
+  assert.deepEqual(receipt.affectedTargets[0].splats,review.targets[0].topologyHits);
+  assert.equal(asset.version,2);
+  const fitted=Fit.prepare(world,asset), grown=Fit.renderWorld(world,fitted);
+  assert.equal(grown.count,5);
+  assert.equal(ids(grown).rowOf(source),1);
+  assert.equal(ids(grown).rowOf('infill'),2);
+  assert.equal(ids(grown).rowOf('rim-a'),3);
+  assert.equal(ids(grown).rowOf('rim-b'),4);
+  const reordered=KIT.procedural.splatProvenance.subset(world,[1,0]);
+  const reorderedFit=Fit.prepare(reordered,asset);
+  const rebuilt=Fit.renderWorld(reordered,reorderedFit);
+  assert.equal(ids(rebuilt).rowOf(source),0);
+  assert.equal(reorderedFit[0],0);
+  assert.equal(Fit.lifecycle(rebuilt,3).created.from,source);
+  assert.deepEqual(world.data,original);
+  assert.deepEqual(grown.data.subarray(0,16),original.subarray(0,16));
+  assert.deepEqual(targets().splats.map(row=>row.id),['infill','rim-a','rim-b']);
+  const added=targets({part:'rim'}).splats[0];
+  assert.equal(added.id,'infill');
+  assert.equal(added.attributes.opacity,.85);
+  const all=targets({includeRetired:true}).splats;
+  const retired=all.find(row=>row.id===source);
+  assert.deepEqual(retired.retired,{edit:'repair',reason:'Redundant center'});
+  assert.equal(retired.paintable,false);
+  const first=all.find(row=>row.id==='rim-a'), second=all.find(row=>row.id==='rim-b');
+  assert.deepEqual(first.provenance,{op:'clone',edit:'repair',from:source});
+  assert.deepEqual(second.provenance,{op:'clone',edit:'repair',from:'rim-a'});
+  assert.equal(second.pigment,'#f35c81');
+  assert.deepEqual(second.attributes.scale,[1.2,.9,1]);
+  assert.deepEqual(second.footprint,first.footprint);
+  const after=render();
+  assert(!after.passes.splatSources.some(row=>row?.id===source));
+  assert(after.passes.splatSources.some(row=>row?.id==='rim-a'));
+  assert(after.passes.splatSources.some(row=>row?.id==='infill'));
+
+  const stale=editor.targets('splats',{world:()=>world,renderFrame:before,query:{footprint:{at:[32,32]}}});
+  assert.equal(stale.count,0);
+  assert.equal(stale.selection.footprint.staleIds,1);
+  assert.throws(()=>editor.apply(patch('cannot-edit',{splats:[{splat:source,opacity:.5}]}),context),/retired splat/);
+  assert.throws(()=>editor.apply(patch('cannot-reuse',{topology:[{op:'clone',from:'rim-a',id:'rim-b',offset:[1,0,0]}]}),context),/reserved or already exists/);
+  assert.throws(()=>editor.apply(patch('out-of-scope',{topology:[
+    {op:'retire',splat:'infill'},{op:'clone',from:ids(world).idAt(0),id:'other',offset:[1,0,0]}
+  ]}),context),/out-of-scope/);
+  assert.deepEqual(editor.renderOptions(world.id).splatFit,asset);
+  editor.undo();
+  assert.deepEqual(render().rgb,before.rgb);
+  assert.deepEqual(editor.replay(receipt,context),asset);
+  assert.deepEqual(render().rgb,after.rgb);
+  editor.undo();
+  editor.redo();
+  assert.deepEqual(render().rgb,after.rgb);
+  editor.apply(patch('paint-clone',{splats:[{splat:'rim-b',pigment:'ink'}]}),context);
+  assert.equal(targets().splats.find(row=>row.id==='rim-b').pigment,'#224766');
+  assert.equal(targets().splats.find(row=>row.id==='rim-a').pigment,'#f35c81');
+});
+
+test('retirement survives SDF assist and retains signed legacy fit rows',()=>{
+  const world=KIT.diorama.build(scene()), labels=require('../src/target-selectors.js').index(world).row;
+  const source=Array.from({length:world.count},(_,i)=>i).filter(i=>labels(i).object==='plate' && Fit.topologyEditable(world,i));
+  const idsAt=ids(world);
+  const asset={format:Fit.format,version:1,rows:world.count,signature:signature(world),edits:[],
+    attributes:[[world.count,{pigment:rose}]],
+    topology:[{op:'clone',target:{object:'plate'},edit:'repair',id:'side-tack',from:idsAt.idAt(source[0]),position:[0,.9,.12]},
+      ...source.map(i=>({op:'retire',target:{object:'plate'},edit:'repair',id:idsAt.idAt(i)}))]};
+  const a=ink.render(world,{...options,raw:true});
+  const b=ink.render(world,{...options,raw:true,splatFit:asset,passes:[...options.passes,'sourceSplat']});
+  const plate=a.passes.objects.indexOf('plate'), post=a.passes.objects.indexOf('post'), sdf=a.passes.surfaceKinds.indexOf('sdf');
+  assert(a.passes.surfaceKind.some((n,i)=>n===sdf && a.passes.objectId[i]===plate));
+  assert(!b.passes.surfaceKind.some((n,i)=>n===sdf && b.passes.objectId[i]===plate));
+  assert(b.passes.surfaceKind.some((n,i)=>n===sdf && b.passes.objectId[i]===post));
+  assert(b.passes.splatSources.some(row=>row?.id==='side-tack'));
+  assert(b.passes.pigment.some(color=>color===rose+1));
+});

@@ -1,5 +1,6 @@
 const RowAssets = require('./render-row-assets.js');
 const RowAttributes = require('./splat-row-attributes.js');
+const Topology = require('./splat-topology.js');
 const Curve = require('../src/curve-splat.js');
 const Optical = require('../src/optical-materials.js');
 const Provenance = require('../src/splat-provenance.js');
@@ -9,6 +10,7 @@ const SurfaceLook = require('../src/surface-look.js');
 const source = Symbol('splat fit source');
 const footprintRows = Symbol('edited footprint rows');
 const rowAttributes = Symbol('edited splat attributes');
+const sourceTopology = Symbol('source splat topology');
 const baseWorld = world => world[source] ?? world;
 
 const format='ink-studio/splat-fit';
@@ -61,8 +63,11 @@ function fittedFootprints(count,authored,replacements) {
   return Footprints.layout(count,styles,indices,frames);
 }
 
+const topologyEditable = (world,i) => paintable(world,i) && RowAttributes.transformable(world,i);
+const sourceWorld = (world,fit) => fit?.topology?.world ?? world[sourceTopology]?.world ?? baseWorld(world);
+
 function prepare(world, asset) {
-  world = baseWorld(world);
+  const base = world = baseWorld(world);
   if (asset===undefined || asset===false) return null;
   const stable = asset?.version === 2 && asset.format === format;
   if (!stable) RowAssets.validate(world,asset,format);
@@ -71,10 +76,12 @@ function prepare(world, asset) {
   let cache = compiled.get(asset);
   if (!cache) compiled.set(asset,cache = new WeakMap());
   if (cache.has(world)) return cache.get(world);
-  if (!Array.isArray(asset.edits) || asset.edits.length>world.count) throw new TypeError('Splat fit needs splat edits');
   const target = stable ? Targets.prepare(asset.target) : undefined;
   if (stable && (!Targets.name(target.object) || Object.keys(target).some(key => !['object','part'].includes(key))))
     throw new TypeError('Stable splat fit needs an object ID and optional part ID');
+  const topology=asset.topology===undefined ? undefined : Topology.catalog(base,asset.topology,target,topologyEditable);
+  world = topology?.world ?? base;
+  if (!Array.isArray(asset.edits) || asset.edits.length>world.count) throw new TypeError('Splat fit needs splat edits');
   const ids = stable && Provenance.identities(world);
   const owner = stable && Targets.index(world).row;
   const scales=new Float32Array(world.count).fill(1), seen=new Set();
@@ -218,7 +225,17 @@ function prepare(world, asset) {
     if (roughness) scales.roughness=roughness;
     if (emission) scales.emission=emission;
   }
-  cache.set(world,scales);
+  if (topology) {
+    scales.topology=topology;
+    if (topology.retired.size) {
+      scales.retiredRows=new Uint8Array(world.count);
+      for (const i of topology.retired.keys()) {
+        scales[i]=0;
+        scales.retiredRows[i]=1;
+      }
+    }
+  }
+  cache.set(base,scales);
   return scales;
 }
 
@@ -279,9 +296,10 @@ function renderWorld(world,fit,{footprints=true,applyAttributes=true} = {}) {
   if (!fit) return world;
   const { albedo,renderMetadata,surfaceData,surfaces,roughness } = fit;
   const hasFootprints=footprints && Object.hasOwn(fit,'footprints');
-  if (!albedo && !renderMetadata && !surfaceData && !roughness && !hasFootprints && !fit.rowAttributes) return world;
+  if (!albedo && !renderMetadata && !surfaceData && !roughness && !hasFootprints && !fit.rowAttributes && !fit.topology) return world;
   const base=baseWorld(world);
-  const rendered={ ...world,[source]:base,
+  const rendered={ ...world,...fit.topology?.patch,[source]:base,
+    ...(fit.topology && {[sourceTopology]:fit.topology}),
     ...(hasFootprints && {splatFootprints:fit.footprints,[footprintRows]:fit.footprintRows}),
     ...(albedo && {materialAlbedo:albedo}),
     ...(renderMetadata && {renderMetadata}),
@@ -290,7 +308,7 @@ function renderWorld(world,fit,{footprints=true,applyAttributes=true} = {}) {
     ...(roughness && {splatRoughness:roughness}),
     ...(fit.rowAttributes && {[rowAttributes]:fit.rowAttributes}) };
   if (!fit.rowAttributes || !applyAttributes) return rendered;
-  const attributesSource={...base,...(surfaceData&&{surfaceData}),
+  const attributesSource={...sourceWorld(world,fit),...(surfaceData&&{surfaceData}),
     ...(hasFootprints&&{splatFootprints:fit.footprints})};
   return RowAttributes.apply(rendered,attributesSource,fit.rowAttributes);
 }
@@ -299,5 +317,10 @@ function editedFootprint(world,row) {
   return world[footprintRows]?.[row] ? footprintAt(world.splatFootprints,row) : undefined;
 }
 
+function lifecycle(world,row) {
+  const topology=world[sourceTopology];
+  return {created:topology?.created.get(row),retired:topology?.retired.get(row)};
+}
+
 const editedAttributes = (world,row) => world[rowAttributes]?.get(row);
-module.exports={format,prepare,editedAttributes,footprintAt,footprintFor,editedFootprint,eligible,paintable,sceneId,rgb24,unit,pigmentAt,validEmission,roughnessAt,materialProfiles,renderWorld,baseWorld};
+module.exports={format,prepare,topologyEditable,sourceWorld,lifecycle,editedAttributes,footprintAt,footprintFor,editedFootprint,eligible,paintable,sceneId,rgb24,unit,pigmentAt,validEmission,roughnessAt,materialProfiles,renderWorld,baseWorld};

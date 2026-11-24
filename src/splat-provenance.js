@@ -246,11 +246,75 @@ const SplatProvenance = (() => {
     return result;
   }
 
+  // Append static rows without changing existing row addresses or slot numbers.
+  // Each clone refers to an earlier row, including rows added in the same batch.
+  function appendStatic(world, additions) {
+    if (!(world?.data instanceof Float32Array) || !Number.isSafeInteger(world.count) || world.count<0 ||
+        world.data.length<world.count*16 || !Array.isArray(additions) || world.count+additions.length>0xffffff)
+      throw new RangeError('Appending splats needs a packed world and an array of additions');
+    const count=world.count+additions.length;
+    for (const [i,row] of additions.entries()) {
+      if (!validId(row?.id) || !Array.isArray(row.position) || row.position.length!==3 ||
+          !Array.from(row.position).every(Number.isFinite) ||
+          (row.from===undefined ? !(row.data instanceof Float32Array) || row.data.length!==16 :
+            !Number.isSafeInteger(row.from) || row.from<0 || row.from>=world.count+i))
+        throw new RangeError('A splat addition needs an ID, position, and packed row or earlier source index');
+    }
+    function extend(source,stride,Type) {
+      const out=new Type(count*stride);
+      if (source) out.set(source.subarray(0,world.count*stride));
+      for (const [i,{from}] of additions.entries()) if (from!==undefined)
+        out.copyWithin((world.count+i)*stride,from*stride,(from+1)*stride);
+      return out;
+    }
+    const patch={count};
+    for (const [key,stride,Type] of perSplat) if (world[key]) patch[key]=extend(world[key],stride,Type);
+    patch.rest=extend(restData(world),16,Float32Array);
+    patch.splatIds=Object.freeze([...Array.from({length:world.count},(_,i)=>world.splatIds?.[i]??null),
+      ...additions.map(row=>row.id)]);
+    const renderMetadata=patch.renderMetadata={...world.renderMetadata};
+    for (const [key,stride,Type] of channels) if (renderMetadata[key])
+      renderMetadata[key]=extend(renderMetadata[key],stride,Type);
+    for (const [key,table] of tables) {
+      const label = table==='objects' ? 'object' : table==='materials' ? 'material' : 'target';
+      if (!renderMetadata[key] && !additions.some(row=>row[label]!==undefined)) continue;
+      const names=[...(renderMetadata[table]??[null])];
+      const keyOf=label==='target' ? targetKey : value=>value;
+      const slots=new Map(names.flatMap((name,i)=>i && name!=null ? [[keyOf(name),i]] : []));
+      const indices=extend(renderMetadata[key],1,Uint32Array);
+      for (const [i,row] of additions.entries()) {
+        if (row.from!==undefined) indices[world.count+i]=indices[row.from];
+        else if (row[label]!==undefined) {
+          const key=keyOf(row[label]);
+          if (!slots.has(key)) slots.set(key,names.push(row[label])-1);
+          indices[world.count+i]=slots.get(key);
+        }
+      }
+      renderMetadata[key]=indices;
+      renderMetadata[table]=names;
+    }
+    for (const [i,row] of additions.entries()) for (const data of [patch.data,patch.rest]) {
+      const offset=(world.count+i)*16;
+      if (row.data) data.set(row.data,offset);
+      else data.copyWithin(offset,row.from*16,(row.from+1)*16);
+      data.set(row.position,offset);
+    }
+    const F=typeof SplatFootprints==='undefined' ? require('./splat-footprints.js') : SplatFootprints;
+    const footprint=F.validate(world);
+    if (footprint) patch.splatFootprints=F.layout(count,footprint.styles,extend(footprint.indices,1,Uint16Array),
+      footprint.frames && extend(footprint.frames,6,Float32Array));
+    const E=typeof Engraving==='undefined' ? require('./engraving.js') : Engraving;
+    const engraving=E.validate(world);
+    if (engraving) patch.engraving=E.layout(count,engraving.styles,extend(engraving.indices,1,Uint16Array),
+      extend(engraving.anchors,3,Float32Array),extend(engraving.restFrames,6,Float32Array));
+    return patch;
+  }
+
   function bindPaint(rows) {
     const api = typeof PaintCorrections === 'undefined' ? require('./paint-corrections.js') : PaintCorrections;
     return api.bind(rows);
   }
 
-  return Object.freeze({ join, subset, fromRecords, targetKey, validId, identities, restData });
+  return Object.freeze({ join, subset, appendStatic, fromRecords, targetKey, validId, identities, restData });
 })();
 if (typeof module !== 'undefined') module.exports = SplatProvenance;

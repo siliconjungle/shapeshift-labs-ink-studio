@@ -456,7 +456,7 @@ function renderFrame(world, o, preparedPalettes) {
   const fitted = SplatFit.prepare(world,o.splatFit ?? look.splatFit);
   const fittedCoverage = fitted?.coverage;
   const footprintsEnabled = (o.splatFootprints ?? look.splatFootprints) !== false;
-  const sdfOverrides = [fitted?.attributeRows,footprintsEnabled && fitted?.footprintRows].filter(Boolean);
+  const sdfOverrides = [fitted?.retiredRows,fitted?.attributeRows,footprintsEnabled && fitted?.footprintRows].filter(Boolean);
   world = SplatFit.renderWorld(world,fitted,{footprints:footprintsEnabled});
   const sdfSettings = SdfAssist.prepare(o.sdfAssist ?? look.sdfAssist);
   const areaLights = AreaLights.prepare(o.areaLights === true ? world.areaLights : o.areaLights ?? world.areaLights,{time:t});

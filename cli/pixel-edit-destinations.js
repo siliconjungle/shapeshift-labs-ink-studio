@@ -6,6 +6,7 @@ const SplatFit = require('./splat-fit-asset.js');
 const Footprints = require('../src/splat-footprints.js');
 const FootprintEdits = require('./pixel-splat-footprints.js');
 const RowAttributes = require('./splat-row-attributes.js');
+const Topology = require('./splat-topology.js');
 const { observe } = require('./pixel-edit-revisions.js');
 const Provenance = require('../src/splat-provenance.js');
 const { conflict } = require('./pixel-edit-preview.js');
@@ -86,9 +87,9 @@ function sceneTarget(binding) {
   return Targets.prepare({ object:binding.object, ...(binding.part !== undefined && { part:binding.part }) });
 }
 
-function splatRows(world, binding, onSplat) {
+function splatRows(world, binding, onSplat, identities) {
   const target = sceneTarget(binding), { row } = Targets.index(world);
-  let ids;
+  let ids=identities;
   return function resolveSplat(source) {
     const index = typeof source === 'string' ? (ids ??= Provenance.identities(world,{ fresh:true })).rowOf(source) : source;
     const scope = Number.isSafeInteger(index) && index >= 0 && index < world.count && Targets.objectScope(target,row(index));
@@ -128,7 +129,9 @@ function shot(frame, edit, binding, world, marks, onSplat) {
     seen.add(key);
     return [u-x,v-y,colors.get(mark.swatch)];
   });
-  const { scope,report } = splatRows(world,binding,onSplat)(anchor.splat);
+  const fit=SplatFit.prepare(world,world.look?.splatFit);
+  const { index,scope,report } = splatRows(SplatFit.sourceWorld(world,fit),binding,onSplat)(anchor.splat);
+  if (fit?.topology?.retired.has(index)) throw new RangeError('Cannot anchor to a retired splat');
   report?.();
   const base = world.look?.shotCorrections;
   const prior = ShotCorrections.prepare(base);
@@ -164,7 +167,81 @@ function mixPigment(from,to,weight) {
     .reduce((packed,value)=>(packed<<8)|Math.round(value*255),0);
 }
 
-function splats(frame, edit, binding, world, bake, onSplat) {
+function fitState(base,binding,bake,canKeepStable) {
+  const prior=base.look?.splatFit===false ? undefined : base.look?.splatFit;
+  const fitted=SplatFit.prepare(base,prior);
+  const world=SplatFit.sourceWorld(base,fitted), target=sceneTarget(binding);
+  const sameScope=prior?.version===2 && prior.target.object===target.object && prior.target.part===target.part;
+  const stable=(!prior || sameScope) && canKeepStable;
+  const ids=Provenance.identities(world,{fresh:true});
+  const previousRow=source=>prior.version===2 ? ids.rowOf(source) : source;
+  const scales=new Map(prior?.edits.map(([source,scale])=>[previousRow(source),scale]));
+  const channels=new Map(prior?.attributes?.map(([source,change])=>[previousRow(source),{...change}]));
+  function save(topology=prior?.topology,idAt=ids.idAt) {
+    const outputRow=index=>stable ? idAt(index) : index;
+    const edits=[...scales].map(([index,scale])=>[outputRow(index),scale]);
+    const attributes=[...channels].map(([index,change])=>[outputRow(index),change]);
+    const asset=stable
+      ? {format:SplatFit.format,version:2,scene:SplatFit.sceneId(base),target,edits}
+      : {format:SplatFit.format,version:1,rows:base.count,signature:bake,edits};
+    if (attributes.length) asset.attributes=attributes;
+    if (topology) asset.topology=topology;
+    SplatFit.prepare(base,asset);
+    return asset;
+  }
+  return {prior,fitted,world,target,ids,scales,channels,save};
+}
+
+function editTopology(frame,edit,binding,base,bake,onSplat) {
+  const operation=edit.operation;
+  if (!fields(operation,['topology']) || !Array.isArray(operation.topology) || !operation.topology.length ||
+      operation.topology.length>Topology.maxEdits)
+    throw new TypeError('A splat topology edit needs an ordered list of add, clone, or retire operations');
+  const {prior,world,target,ids,scales,channels,save}=fitState(base,binding,bake,true);
+  const palette=Object.fromEntries(frame.paletteEntries.map(({id,color})=>[id,color]));
+  const topology=prior?.topology?.slice()??[], added=new Map(), newIds=new Map(), hits=[];
+  const at=id=>added.get(id)?.index??ids.rowOf(id);
+  for (const change of operation.topology) {
+    const {op,id,from,splat,position,offset,reason,part,radius,pigment,opacity}=change??{};
+    const common={op,target,edit:edit.id};
+    if (op==='retire' && fields(change,['op','splat','reason'])) {
+      const index=at(splat);
+      topology.push({...common,id:splat,...(reason!==undefined && {reason})});
+      hits.push({requested:splat,row:index,id:splat,topology:{op,...(reason!==undefined && {reason})}});
+      continue;
+    }
+    const index=world.count+added.size;
+    let center;
+    if (op==='add' && fields(change,['op','id','position','radius','pigment','opacity','part'])) {
+      center=RowAttributes.prepare('position',position);
+      topology.push({...common,id,position:center,radius:Topology.radius(radius),
+        pigment:parseInt(indexedValue(pigment,palette).color.slice(1),16),...(part!==undefined && {part})});
+      if (opacity!==undefined) {
+        const alpha=RowAttributes.prepare('opacity',opacity);
+        if (alpha!==1) channels.set(index,{opacity:alpha});
+      }
+    } else if (op==='clone' && fields(change,['op','id','from','position','offset']) &&
+        (position===undefined)!==(offset===undefined)) {
+      const parent=at(from);
+      if (parent<0) throw new RangeError('Unknown source splat '+from);
+      const {position:_,...copy}=channels.get(parent)??{};
+      const sourcePosition=added.get(from)?.position??RowAttributes.valuesAt(world,parent,channels.get(parent)).position;
+      center=RowAttributes.prepare('position',position??RowAttributes.prepare('position',offset).map((n,k)=>n+sourcePosition[k]));
+      topology.push({...common,id,from,position:center});
+      if (Object.keys(copy).length) channels.set(index,copy);
+      if (scales.has(parent)) scales.set(index,scales.get(parent));
+    } else throw new TypeError('Invalid add, clone, or retire operation');
+    if (added.has(id)) throw new RangeError('Duplicate new splat ID '+id);
+    added.set(id,{index,position:center});
+    newIds.set(index,id);
+    hits.push({requested:id,row:index,id,topology:{op,position:center,...(op==='clone' && {from})}});
+  }
+  const asset=save(topology,index=>newIds.get(index)??ids.idAt(index));
+  for (const hit of hits) onSplat?.(hit);
+  return asset;
+}
+
+function splats(frame, edit, binding, base, bake, onSplat) {
   const operation = edit.operation;
   if (!fields(operation,['splats','paint','falloff','footprint','attributes']) || !Array.isArray(operation.splats) || !operation.splats.length)
     throw new TypeError('A splat attribute edit needs a list of explicit source splats');
@@ -173,21 +250,11 @@ function splats(frame, edit, binding, world, bake, onSplat) {
     throw new TypeError('Splat attributes need opacity, position, scale or orientation');
   if (paint!==undefined && (!fields(paint,splatChannels) || !Object.keys(paint).length))
     throw new TypeError('Splat paint needs pigment, coverage, material, roughness or emission');
+  const {world,fitted,ids,scales,channels,save}=fitState(base,binding,bake,operation.splats.every(change=>typeof change?.splat==='string'));
   const falloff=splatFalloff(operation.falloff), rest=falloff && Provenance.restData(world);
-  const row = splatRows(world,binding,onSplat);
-  const seen = new Set();
-  const prior = world.look?.splatFit===false ? undefined : world.look?.splatFit;
-  const fitted = SplatFit.prepare(world,prior);
-  const authored = Footprints.validate(world);
-  const footprints = fitted && Object.hasOwn(fitted,'footprints') ? fitted.footprints : authored;
-  const target = sceneTarget(binding);
-  const sameScope = prior?.version === 2 && prior.target.object === target.object && prior.target.part === target.part;
-  const stable = (!prior || sameScope) && operation.splats.every(change => typeof change?.splat === 'string');
-  const ids = (stable || prior?.version === 2) && Provenance.identities(world);
-  const previousRow = source => prior.version === 2 ? ids.rowOf(source) : source;
-  const outputRow = index => stable ? ids.idAt(index) : index;
-  const scales = new Map(prior?.edits.map(([source,scale])=>[previousRow(source),scale]));
-  const channels = new Map(prior?.attributes?.map(([source,change])=>[previousRow(source),{...change}]));
+  const row=splatRows(world,binding,onSplat,ids), seen=new Set();
+  const authored=Footprints.validate(world);
+  const footprints=fitted && Object.hasOwn(fitted,'footprints') ? fitted.footprints : authored;
   const palette = Object.fromEntries(frame.paletteEntries.map(({id,color})=>[id,color]));
   let materials;
   const sharedFootprints = new Map();
@@ -218,6 +285,7 @@ function splats(frame, edit, binding, world, bake, onSplat) {
       material!==undefined || roughness!==undefined || emission!==undefined;
     if (seen.has(index)) throw new RangeError('Duplicate splat edit ' + splat);
     seen.add(index);
+    if (fitted?.topology?.retired.has(index)) throw new RangeError('Cannot edit retired splat '+splat);
     const supports=footprintScale!==undefined || visible!==undefined ? SplatFit.eligible : SplatFit.paintable;
     if (!supports(world,index)) throw new RangeError('Invalid, duplicate, or unavailable splat fit target '+splat);
     const attributes = channels.get(index) ?? {};
@@ -292,14 +360,7 @@ function splats(frame, edit, binding, world, bake, onSplat) {
     if (Object.keys(attributes).length) channels.set(index,attributes);
     else channels.delete(index);
   }
-  const edits = [...scales].map(([index,scale])=>[outputRow(index),scale]);
-  const attributes = [...channels].map(([index,change])=>[outputRow(index),change]);
-  const asset = stable
-    ? { format:SplatFit.format, version:2, scene:SplatFit.sceneId(world), target, edits }
-    : { format:SplatFit.format, version:1, rows:world.count, signature:bake, edits };
-  if (attributes.length) asset.attributes=attributes;
-  SplatFit.prepare(world,asset);
-  return asset;
+  return save();
 }
 
 function boundSolid(binding, editor) {
@@ -467,7 +528,10 @@ function apply(frame, edit, route, context, readMarks) {
   context.onSource?.(source.sourceRevision,source);
   checkRevision(binding,source,edit.sourceRevision);
   if (isShot) return shot(frame,edit,binding,source.world,marks,context.onSplat);
-  if (destination.kind === 'splat-attributes') return splats(frame,edit,binding,source.world,source.revision,context.onSplat);
+  if (destination.kind === 'splat-attributes') {
+    const apply=edit.operation?.topology!==undefined ? editTopology : splats;
+    return apply(frame,edit,binding,source.world,source.revision,context.onSplat);
+  }
   if (destination.kind === 'decal-layer') return decalEdit(frame,edit,route,source.editor);
   const change = destination.kind === 'surface-channel' && layer?.kind === 'surface' &&
     edit.operation?.pixel !== undefined ? { ...edit,operation:surfacePixel(frame,edit.operation,binding,layer) } : edit;
@@ -482,16 +546,18 @@ function targets(route, context, limit, query) {
   const { world,editor,revision,sourceRevision } = source;
   if (world) {
     const editing = destination.kind === 'splat-attributes';
-    const fit = editing && SplatFit.prepare(world,world.look?.splatFit);
-    const rest = query ? Provenance.restData(world) : world.rest ?? world.data;
+    const fit = SplatFit.prepare(world,world.look?.splatFit);
+    const sourceRows=SplatFit.sourceWorld(world,fit);
+    const rest = query ? Provenance.restData(sourceRows) : sourceRows.rest ?? sourceRows.data;
     const fittedWorld=SplatFit.renderWorld(world,fit,{applyAttributes:false});
     const effectiveRow=editing && Targets.index(fittedWorld).row;
     const layout=editing && Footprints.validate(fittedWorld);
     const describe = (id,i) => {
-      const attributes=editing && RowAttributes.valuesAt(world,i,fit?.rowAttributes?.get(i));
-      return { id, at:attributes?.position ?? Array.from(rest.subarray(i*16,i*16+3)),
-      ...(editing && {attributes,transformable:SplatFit.paintable(world,i) && RowAttributes.transformable(world,i),pigment:'#'+SplatFit.pigmentAt(world,i,fit).toString(16).padStart(6,'0'),
-        paintable:SplatFit.paintable(world,i),material:effectiveRow(i).material,roughness:SplatFit.roughnessAt(fittedWorld,i,fit),
+      const attributes=editing && RowAttributes.valuesAt(sourceRows,i,fit?.rowAttributes?.get(i));
+      const {created,retired}=SplatFit.lifecycle(fittedWorld,i);
+      return { id,...(created && {provenance:created}),...(retired && {retired}), at:attributes?.position ?? Array.from(rest.subarray(i*16,i*16+3)),
+      ...(editing && {attributes,transformable:!retired && SplatFit.topologyEditable(sourceRows,i),pigment:'#'+SplatFit.pigmentAt(sourceRows,i,fit).toString(16).padStart(6,'0'),
+        paintable:!retired && SplatFit.paintable(sourceRows,i),material:effectiveRow(i).material,roughness:SplatFit.roughnessAt(fittedWorld,i,fit),
         emission:fit?.emission?.get(i)??[0,0,0],coverage:fit?.coverage?.[i]??1,
         footprint:SplatFit.footprintAt(layout,i),footprintScale:fit?.[i]??1}) };
     };
@@ -503,13 +569,13 @@ function targets(route, context, limit, query) {
       });
       return {destination:destination.id,binding,revision,sourceRevision,count:rows.length,splats,selection};
     }
-    const ids = Provenance.identities(world,{ fresh:true }), {row}=Targets.index(world), scope = sceneTarget(binding);
+    const ids = Provenance.identities(sourceRows,{ fresh:true }), {row}=Targets.index(sourceRows), scope = sceneTarget(binding);
     const splats = [];
     let count = 0;
-    for (let i = 0; i < world.count; i++) {
+    for (let i = 0; i < sourceRows.count; i++) {
       const id = ids.idAt(i);
-      if (!id || !Targets.objectScope(scope,row(i)) ||
-          editing && !SplatFit.paintable(world,i)) continue;
+      if (!id || fit?.topology?.retired.has(i) || !Targets.objectScope(scope,row(i)) ||
+          editing && !SplatFit.paintable(sourceRows,i)) continue;
       count++;
       if (splats.length < limit) splats.push(describe(id,i));
     }

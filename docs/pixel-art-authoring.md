@@ -2174,7 +2174,7 @@ and declared destinations. The edit JSON has `revision`, `frame`, `id`, and
 | `shot-correction` | Guarded RGB `edits` and `operation` containing `at`, `anchor`, `fps`, and an inclusive `frames` range | Native shot-correction file for `render --shot-corrections` |
 | `surface-channel` | `operation.stamp` with a rest-UV brush and value or clear mode | Revised JSON diorama with a stamp appended to the chart |
 | `decal-layer` | `operation.type` of `move`, `mask`, `replace`, or `bake` | Revised JSON diorama with the [decal layer](surface-decals.md#edit-a-decal-layer) edited in place |
-| `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and paint channels, footprint controls, or `opacity`, `position`, `scale`, and `orientation` | Splat-fit asset for `render --splat-fit` |
+| `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and paint, footprint, or transform controls, or an ordered `operation.topology` batch | Splat-fit asset for `render --splat-fit` |
 | `sdf-shape` | `operation.parameters`, a new `operation.modifier`, or `operation.updateModifier` with `id` and `patch` | Revised JSON diorama with edited geometry |
 | `sdf-material` | `operation.material` with a palette role or native material object | Revised JSON diorama with the solid's material changed |
 
@@ -2481,6 +2481,52 @@ session's `preview` compares the draft fit with the fit at the transaction start
 The saved fit applies to headless renders. Edit receipts carry the
 source IDs and changed values through undo, redo, and replay. The
 preview leaves the working fit intact until you apply the edit.
+
+### Add, clone, and retire source splats
+
+Use `operation.topology` on a `splat-attributes` destination for an
+ordered batch. A batch can patch a sparse area, extend a strand built
+from splats, and retire a redundant mark in one undo step.
+
+```json
+{
+  "topology": [
+    { "op": "add", "id": "rim-infill", "position": [0.8, 1.1, 0.2],
+      "radius": [0.12, 0.08, 0.025], "pigment": "mint", "opacity": 0.85 },
+    { "op": "clone", "from": "gate-rim-tip", "id": "rim-extension", "offset": [0.1, 0.04, 0] },
+    { "op": "retire", "splat": "gate-rim-extra", "reason": "Overlaps the tip" }
+  ]
+}
+```
+
+- `add` creates a Gaussian at the specified center. Give it a fresh
+  stable ID, a document swatch, and a scalar radius or three radii on
+  the scene axes. Radii are Gaussian standard deviations in scene
+  units. Opacity defaults to 1. An optional `part` must agree with
+  the binding when the binding names a part.
+- `clone` copies a static source splat and its current paint,
+  footprint, and transform settings. Supply a new ID and exactly
+  one of `position` or `offset`. An offset starts at the source's
+  current center. You can clone a row created earlier in the batch.
+- `retire` removes an active static row from the render and ordinary
+  selection. Its ID and original row slot remain reserved. Existing
+  clones remain independent, and their provenance still points to
+  the original.
+
+The editing scope is the bound object and optional part. Additions and
+clones use explicit IDs. The `rest:` namespace is reserved for IDs
+derived from source rows. The fit retains up to 4,096 ordered topology
+operations.
+
+Use `pixel-art preview` before applying the batch. The report shows
+resolved operations and compares coverage and depth for the same
+native grid and camera. Once applied, use `targets` to select new
+rows for paint or transforms. A metadata query with
+`{"includeRetired":true}` shows retirement receipts alongside active
+rows. Added and cloned rows report their creation edit, and clones
+report the source ID. Undo, redo, and replay use the existing pixel
+editor session. The saved fit renders through `--splat-fit` in the
+software renderer.
 
 ### Target shot corrections and scene sources
 

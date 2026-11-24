@@ -1668,6 +1668,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.splatProvenance` | namespace |  |  |
+| `KIT.procedural.splatProvenance.appendStatic` | function | `(world, additions)` | [source](../../src/splat-provenance.js) |
 | `KIT.procedural.splatProvenance.fromRecords` | function | `(records)` | [source](../../src/splat-provenance.js) |
 | `KIT.procedural.splatProvenance.identities` | function | `(world, { fresh = false } = {})` | [source](../../src/splat-provenance.js) |
 | `KIT.procedural.splatProvenance.join` | function | `(parts, options = {})` | [guide](../pixel-look.md#material-and-surface-provenance), [source](../../src/splat-provenance.js) |
