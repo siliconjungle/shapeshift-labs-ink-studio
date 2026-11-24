@@ -1320,6 +1320,8 @@ Use [custom splat footprints](docs/splat-footprints.md) for square, wedge, star,
 
 Use [surface-aligned brush strokes](docs/surface-brush.md) for gouache, bristle, wash and ink marks following curvature, contours or authored vector fields. Their retained axes follow animated bones and CPU deformation. Try the [Pigment Coast / Painted Koi demos](examples/surface-brush.html).
 
+Paint and inspect a velocity grid, then export the same [editable flow map](docs/flow-maps.md) for water, smoke, cloth, and debris.
+
 Use [engraving and tonal art maps](docs/engraving.md) for light-responsive hatching, cross engraving, white-cut woodcut and stippled native surfaces. Explore the [Copperplate Cabinet](examples/engraving.html), with an animated moth and etched observatory.
 
 Use [irregular mosaics and stained glass](docs/mosaic-surfaces.md) for fitted polygon pieces on flat or curved carriers, with real seams, bevels and optical transmission. Explore the [Tessera Collection](examples/mosaic-surfaces.html), featuring an animated lapis koi and glass pavilion.

@@ -775,7 +775,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.rasterSimulation` | namespace |  |  |
-| `KIT.procedural.rasterSimulation.define` | function | `(kind, settings = {}, { seed = 0, dt = 1 / 48, maxTicks = 2400 } = {})` | [source](../../src/kit/par-animate-base.js) |
+| `KIT.procedural.rasterSimulation.define` | function | `(kind, settings = {}, { seed = 0, dt = 1 / 48, maxTicks = 2400 } = {})` | [guide](../flow-maps.md#bind-one-asset-to-four-solvers), [source](../../src/kit/par-animate-base.js) |
 | `KIT.procedural.rasterSimulation.operations` | namespace |  |  |
 | `KIT.procedural.rasterSimulation.operations["anim.feedback"]` | namespace |  |  |
 | `KIT.procedural.rasterSimulation.operations["anim.feedback"].inputs` | namespace |  |  |
@@ -883,7 +883,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.rasterSimulation.operations["sim.run"].outputs.report` | value | `string = "record"` |  |
 | `KIT.procedural.rasterSimulation.operations["sim.run"].outputs.value` | value | `string = "raster"` |  |
 | `KIT.procedural.rasterSimulation.operations["sim.run"].time` | value | `boolean = true` |  |
-| `KIT.procedural.rasterSimulation.session` | function | `(source, { checkpoint, every = 16, cache = 12, firstTick = checkpoint?.firstTick ?? 0, materialPasses = false } = {})` | [guide](../simulation-checkpoints.md#node-integration), [source](../../src/kit/par-animate-base.js) |
+| `KIT.procedural.rasterSimulation.session` | function | `(source, { checkpoint, every = 16, cache = 12, firstTick = checkpoint?.firstTick ?? 0, materialPasses = false } = {})` | [guide](../flow-maps.md#bind-one-asset-to-four-solvers), [guide](../simulation-checkpoints.md#node-integration), [source](../../src/kit/par-animate-base.js) |
 | `KIT.procedural.rasterSimulation.tickAt` | function | `(time, dt)` | [source](../../src/kit/par-animate-base.js) |
 
 ## KIT.procedural.rasterWarp

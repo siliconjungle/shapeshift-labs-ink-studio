@@ -73,10 +73,11 @@
       bed=changed;
       sharedBed=undefined;
     }
-    function step(duration,{rain,drain,friction=0.13,opening,boundary,transfers=[],transport,bedOffset,
+    function step(duration,{rain,drain,friction=0.13,opening,boundary,transfers=[],transport,bedOffset,flow,flowDrag=3,
       cfl:stepCFL=cfl,maxDt:stepLimit=maxDt}={}){
 
       if(!number(duration,0,120)||!number(friction,0,1e6)||!number(stepCFL,.05,.49)||!number(stepLimit,1e-6,2)||
+        !number(flowDrag,0,1000)||(flow!==undefined&&typeof flow!=='function')||
         (opening!==undefined&&typeof opening!=='function')||!Array.isArray(transfers)||transfers.length>4096||
         (boundary!==undefined&&!['edge','export','cell','apply'].every(key=>typeof boundary?.[key]==='function'))||
         (transport!==undefined&&!['begin','face','advect','drain','pump','settle'].every(key=>typeof transport?.[key]==='function'))||
@@ -84,7 +85,7 @@
         transfers.some(p=>!p||!integer(p.from,0,size-1)||!integer(p.to,0,size-1)||p.from===p.to||
           !open[p.from]||!open[p.to]||!number(p.rate,0,1e9))||
         [rain,drain].some(v=>v!==undefined&&typeof v!=='function'&&!number(v,0,1e4)))
-        throw new Error('Water steps need bounded time, friction and nonnegative source rates');
+        throw new Error('Water steps need bounded time, friction, flow and nonnegative source rates');
       if(!duration)return snapshot();
       const depth=layer.depth.slice(),mx=layer.x.slice(),mz=layer.z.slice(),
         dh=new Float64Array(size),du=new Float64Array(size),dv=new Float64Array(size),heightmap=transport?bed.slice():bed;
@@ -167,13 +168,22 @@
           interfaceFlux(left,right,1,boundary?(z===0?2:z===height?3:undefined):undefined);
         }
         transport?.advect(depth);
-        const t=time+elapsed,drag=Math.exp(-friction*dt);
+        const t=time+elapsed,drag=Math.exp(-friction*dt),flowBlend=flow&&-Math.expm1(-flowDrag*dt);
         for(let i=0;i<size;i++){
           if(!open[i])continue;
           const wet=depth[i]+dt*dh[i];
           if(wet < -1e-7 || !number(wet,-1e-7,maxDepth))throw new Error('Water depth left its stable range');
-          const d=Math.max(0,wet),
-            u=(mx[i]+dt*du[i])*drag,v=(mz[i]+dt*dv[i])*drag;
+          const d=Math.max(0,wet);
+          let u=(mx[i]+dt*du[i])*drag,v=(mz[i]+dt*dv[i])*drag;
+          if(flowBlend&&d>dry){
+            const velocity=flow(...center(i),t);
+            if(velocity!=null){
+              if(!vector(velocity))throw new Error('Water flow must return a finite XZ velocity or null');
+              const limit=Math.min(1,maxSpeed/Math.max(1e-20,Math.hypot(...velocity)));
+              u+=(d*velocity[0]*limit-u)*flowBlend;
+              v+=(d*velocity[1]*limit-v)*flowBlend;
+            }
+          }
           let inFlow=0,outFlow=0;
           if(rain||drain){
             const p=center(i),state={depth:d,level:floor(i)+d,bed:floor(i)},

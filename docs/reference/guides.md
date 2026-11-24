@@ -135,6 +135,7 @@ All checked-in guides, indexed by title and section headings.
 - [Field and volume visualization](../field-visualization.md)
 - [First-divergence debugging](../first-divergence.md)
 - [Flash and flicker review](../flash-flicker-review.md)
+- [Editable flow maps](../flow-maps.md)
 - [Local lights in fog](../fog-lighting.md)
 - [Foley and perspective](../foley-perspective.md)
 - [4D projections and slices](../four-dimensional.md)

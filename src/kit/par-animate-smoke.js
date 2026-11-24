@@ -5,11 +5,12 @@
   kinds.smoke = options => {
     const dims = size(options, 16384), { width, height } = dims, { closed } = obstacles(options, dims);
     const { emitters = [{ at: [width / 2, height * .8], radius: 6, density: 8, velocity: [0, -46] }],
-      buoyancy = 7, wind = [0, 0], viscosity = .024, diffusion = .055, dissipation = .43,
+      buoyancy = 7, wind = [0, 0], flowMap, flowDrag = 6, flowScale = 1, viscosity = .024, diffusion = .055, dissipation = .43,
       pressureIterations = 10, palette = ['#534957', '#88717e', '#b7a0a0', '#d7c1aa', '#f0d8ac'], opacity = .88,
       alphaScale = .92 } = options;
     const rgb = Array.isArray(palette) && int(palette.length, 1, 32) && palette.map(color);
-    if (!rgb || !vector(wind, 2) || !range(buoyancy, -500, 500) || ![viscosity, diffusion, dissipation].every(n => range(n, 0, 10)) ||
+    if (!rgb || !vector(wind, 2) || !range(flowDrag, 0, 40) || !range(flowScale, 0, 1000) ||
+        !range(buoyancy, -500, 500) || ![viscosity, diffusion, dissipation].every(n => range(n, 0, 10)) ||
         !int(pressureIterations, 2, 80) || !range(opacity, 0, 1) || !range(alphaScale, .001, 100) ||
         !Array.isArray(emitters) || emitters.length > 24)
       throw new RangeError('Invalid smoke inlets, flow, pressure or palette settings');
@@ -19,13 +20,22 @@
           !range(start, 0, 1e6) || !range(end, start, 1e6)) throw new RangeError('Invalid smoke inlet');
       return { at, radius, density, velocity, start, end };
     });
+    const maxSpeed = 160, maxDt = .04;
+    const flow = flowMap === undefined ? null : K.flowMap.open(flowMap).planar({ bounds:[0,0,width,height],scale:flowScale });
     const fluid = P.motion.stableFluid({ ...dims, cell: 1, mask: (_x, _y, i) => !closed[i],
-      pressureIterations, diffusionIterations: 4, maxTracing: 20, maxDt: .04, maxDensity: 20, maxSpeed: 160 });
+      pressureIterations, diffusionIterations: 4, maxTracing: 20, maxDt, maxDensity: 20, maxSpeed });
     function step(tick, dt) {
       const time = (tick - 1) * dt, active = inlets.filter(row => time >= row.start && time < row.end);
+      const substep = dt / Math.ceil(dt / maxDt);
+      const coupling = flow && -Math.expm1(-flowDrag * substep) / substep;
       fluid.step(dt, {
-        force(x, y, _time, { density }) {
+        force(x, y, _time, { density, velocity }) {
           let a = wind[0] * density, b = (wind[1] - buoyancy) * density;
+          if (coupling) {
+            const [u,v] = flow(x,y), limit = Math.min(1,maxSpeed / Math.max(1e-20,Math.hypot(u,v)));
+            a += (u*limit - velocity[0])*coupling;
+            b += (v*limit - velocity[1])*coupling;
+          }
           for (const row of active) {
             const weight = disc(row, x, y);
             a += row.velocity[0] * weight;

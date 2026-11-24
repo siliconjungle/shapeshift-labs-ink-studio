@@ -1475,6 +1475,10 @@ const CMD = {
         '  data-inputs <scene or catalog> [dataset] [--sample JSON --t seconds --rows --out report.json]  inspect typed source data',
         '  randomness <recipe.json> [--samples 16 --out report.json]  inspect named authoring streams and distributions',
         '  math-fields <field.json> [--point x,y,z --time n --integrate seconds --out report.json]  inspect procedural math fields',
+        '  flow-map new [--size width,height] [--bounds minU,minV,maxU,maxV] [--out map.json]  create an empty flow map',
+        '  flow-map paint <map.json> <stroke.json> [--out painted.json]  paint velocity into a map',
+        '  flow-map inspect <map.json> --at u,v [--out report.json]  read the sampled velocity and native cell',
+        '  flow-map editor [map.json] --out editor.html  open an offline brush editor and solver previews',
         '  splat-footprints <shape|profile.json> [--rotation n --stretch x,y --softness n --point x,y --preview file.png --out report.json]  inspect native splat silhouettes',
         '  render-grid <hex|triangle|diamond|settings.json> [--size 8 --point x,y --bounds x,y,w,h --out report.json]  inspect tessellating cells',
         '  render-graph <graph.json> [--w 900 --h 620 --out report.json]  inspect effect resolution and memory/work budgets',
@@ -3154,6 +3158,9 @@ const CMD = {
   },
   'math-fields'() {
     return require('./math-fields.js')(pos,opt,lib());
+  },
+  'flow-map'() {
+    return require('./flow-map.js').command(pos,opt,require('../index.js').bundle);
   },
   'splat-footprints'() {
     return require('./splat-footprints.js')(pos,opt,lib());

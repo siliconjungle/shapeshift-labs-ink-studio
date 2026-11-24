@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flow map · Ink Studio</title>
+<style>
+  :root { color-scheme:dark; color:#e3ede6; background:#111a1d; font:15px/1.45 system-ui,sans-serif;
+    --line:#365053; --muted:#a4b8b5; --accent:#a0e3c2; --panel:#182529; }
+  * { box-sizing:border-box; }
+  body { margin:0; }
+  main { max-width:1230px; margin:auto; padding:clamp(16px,4vw,46px); }
+  h1 { margin:0; font:400 clamp(36px,5vw,58px)/1.1 Georgia,serif; }
+  h2 { margin:0; font-size:1.05rem; font-weight:640; }
+  p { margin:.35rem 0; }
+  small, .muted, output { color:var(--muted); }
+  header, .row, .plot-line { display:flex; flex-wrap:wrap; align-items:center; gap:.55rem; }
+  header { justify-content:space-between; margin-bottom:1.25rem; }
+  button, input, select { font:inherit; color:inherit; }
+  button, .file, select, input[type=number] { padding:.42rem .62rem; background:#203136; border:1px solid var(--line); border-radius:.38rem; }
+  button, .file, select { cursor:pointer; }
+  button:hover:enabled, .file:hover { border-color:var(--accent); }
+  button:disabled { opacity:.45; cursor:default; }
+  button.primary { background:#a0e3c2; color:#152b26; border-color:#a0e3c2; font-weight:650; }
+  .file { position:relative; }
+  .file input { position:absolute; width:1px; height:1px; opacity:0; }
+  .file:focus-within { outline:2px solid var(--accent); }
+  .workspace { display:grid; grid-template-columns:minmax(0,1fr) minmax(245px,305px); gap:1rem; }
+  canvas { display:block; width:100%; }
+  #chart { background:#16252a; border:1px solid var(--line); border-radius:.45rem; cursor:crosshair; touch-action:none; }
+  .plot-line { justify-content:space-between; font-size:.87rem; margin-top:.5rem; color:var(--muted); }
+  .legend { display:inline-flex; align-items:center; gap:.42rem; white-space:nowrap; }
+  .gradient { width:70px; height:8px; border-radius:4px; background:linear-gradient(90deg,#19282e,#348379,#a3b16f); }
+  aside { display:grid; align-content:start; gap:.9rem; }
+  aside section { background:var(--panel); border:1px solid var(--line); border-radius:.45rem; padding:.9rem; }
+  .fields { display:grid; gap:.42rem 1rem; grid-template-columns:1fr 1fr; margin:.65rem 0 0; }
+  .full { grid-column:1 / -1; }
+  .fields > label { display:grid; gap:.21rem; align-content:start; }
+  input[type=number], select { min-width:0; width:100%; }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  .probe { margin-top:.66rem; display:grid; grid-template-columns:1fr 1fr auto; gap:.4rem; align-items:end; }
+  .probe label { display:grid; gap:.2rem; }
+  dl { display:grid; grid-template-columns:auto 1fr; gap:.25rem .9rem; margin:.7rem 0 0; font-variant-numeric:tabular-nums; }
+  dt { color:var(--muted); }
+  dd { margin:0; }
+  #notice { color:#f4ba93; min-height:1.25em; font-size:.85rem; }
+  .previews { margin-top:1.2rem; }
+  .previews header { margin-bottom:.6rem; }
+  .panels { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.7rem; }
+  figure { margin:0; border:1px solid var(--line); background:var(--panel); border-radius:.45rem; overflow:hidden; }
+  figure canvas { image-rendering:pixelated; }
+  figcaption { padding:.4rem .58rem; }
+  [hidden] { display:none; }
+  @media(max-width:850px) {
+    .workspace { grid-template-columns:1fr; }
+    aside { grid-template-columns:1fr 1fr; }
+    .panels { grid-template-columns:1fr 1fr; }
+  }
+  @media(max-width:545px) { aside { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Flow map</h1>
+    <div class="row" aria-label="Map files">
+      <button type="button" id="new">New map</button>
+      <label class="file">Open map<input type="file" accept=".json,application/json" id="open"></label>
+      <button type="button" class="primary" id="export">Export JSON</button>
+    </div>
+  </header>
+  <div class="workspace">
+    <div>
+      <canvas id="chart" width="960" height="640" aria-label="Velocity map. Drag to paint, or inspect an exact position using the U and V fields."></canvas>
+      <div class="plot-line"><span id="grid"></span><span class="legend">Calm <span class="gradient"></span> Fastest</span></div>
+    </div>
+    <aside>
+      <section aria-labelledby="brush-title">
+        <div class="row">
+          <h2 id="brush-title">Brush</h2>
+          <button type="button" id="undo">Undo</button><button type="button" id="redo">Redo</button>
+        </div>
+        <div class="fields">
+          <label>Tool <select id="mode"><option value="paint">Flow</option><option value="speed">Speed only</option><option value="erase">Erase</option><option value="inspect">Inspect</option></select></label>
+          <label>Direction <select id="heading"><option value="stroke">Follow stroke</option><option value="fixed">Fixed angle</option></select></label>
+          <label>Speed <input id="speed" type="number" min="0" max="1000" step=".1" value="2.4"></label>
+          <label>Radius <input id="radius" type="number" min=".000001" max="1000000" step="any" value=".48"></label>
+          <label id="angle-row" hidden>Angle (°) <input id="angle" type="number" min="-360" max="360" step="any" value="0"></label>
+          <label class="full">Opacity <input id="opacity" type="range" min=".05" max="1" step=".05" value="1"></label>
+        </div>
+        <p id="notice" role="status"></p>
+      </section>
+      <section aria-labelledby="probe-title">
+        <h2 id="probe-title">Vector inspector</h2>
+        <form class="probe">
+          <label>U <input id="u" type="number" step="any" required></label>
+          <label>V <input id="v" type="number" step="any" required></label>
+          <button>Probe</button>
+        </form>
+        <dl>
+          <dt>Sample</dt><dd id="velocity">—</dd>
+          <dt>Speed</dt><dd id="magnitude">—</dd>
+          <dt>Direction</dt><dd id="bearing">—</dd>
+          <dt>Native cell</dt><dd id="cell">—</dd>
+        </dl>
+      </section>
+    </aside>
+  </div>
+  <section class="previews" aria-labelledby="previews-title">
+    <header><h2 id="previews-title">Solver previews</h2><div class="row"><output id="time">0.00 s</output>
+       <button type="button" id="toggle">Pause</button><button type="button" id="restart">Restart</button></div></header>
+    <div class="panels">
+      <figure><canvas data-simulation="water" aria-label="Shallow-water velocity and tracers"></canvas><figcaption>Water</figcaption></figure>
+      <figure><canvas data-simulation="smoke" aria-label="Smoke density transported by the flow map"></canvas><figcaption>Smoke</figcaption></figure>
+      <figure><canvas data-simulation="cloth" aria-label="Cloth driven by the flow map"></canvas><figcaption>Cloth</figcaption></figure>
+      <figure><canvas data-simulation="debris" aria-label="Debris chunks driven by the flow map"></canvas><figcaption>Debris</figcaption></figure>
+    </div>
+  </section>
+</main>
+<script>/*TOOLKIT*/</script>
+<script>
+/*PREVIEWS*/
+const flowMapAsset = /*MAP*/;
+/*EDITOR*/
+</script>
+</body>
+</html>

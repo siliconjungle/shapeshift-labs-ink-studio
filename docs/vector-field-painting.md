@@ -1,5 +1,7 @@
 # Vector-field painting
 
+To author the velocities themselves, use [editable flow maps](flow-maps.md).
+
 `KIT.fieldViews.lic` uses line integral convolution (LIC) to turn a
 velocity field into an aligned grain. It samples a bounded planar
 slice, projects velocities into that plane, and filters seed texture

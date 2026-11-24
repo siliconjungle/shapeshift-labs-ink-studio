@@ -2056,7 +2056,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.motion.obstacleWake` | function | `(obstacle,{ origin=[0,0,0],flow=[1,0,0],up=[0,1,0],radius=0.6,length=5, width=0.82,height=1.25, circulation=1.1,eddies=6,period=3.4,shelter=0.18 }={})` | [source](../../src/kit/p80-flow-trajectories.js) |
 | `KIT.procedural.motion.phaseChange` | function | `(options = {})` | [guide](../coupled-phase-changes.md), [source](../../src/kit/p85-phase-change.js) |
 | `KIT.procedural.motion.scalarWave` | function | `(options = {})` | [guide](../scalar-wave.md), [source](../../src/kit/p83-scalar-wave.js) |
-| `KIT.procedural.motion.shallowWater` | function | `(options={})` | [source](../../src/kit/p83-shallow-water.js) |
+| `KIT.procedural.motion.shallowWater` | function | `(options={})` | [guide](../flow-maps.md#bind-one-asset-to-four-solvers), [source](../../src/kit/p83-shallow-water.js) |
 | `KIT.procedural.motion.stableFluid` | function | `(options={})` | [source](../../src/kit/p82-stable-fluids.js) |
 | `KIT.procedural.motion.streamline` | function | `(field,start,{ direction='forward', step=0.08,minStep=step/32,tolerance=0.001, time=0, normalize=true, maxLength=14,maxSteps=1800,maxChecks=120000,bounds, mask, obstacle,clearance=0,closeDistance=0 }={})` | [guide](../math-fields.md#deformation-flow-and-materials), [source](../../src/kit/p80-flow-trajectories.js) |
 | `KIT.procedural.motion.surfaceAdvection` | function | `(carrier,input,{ velocity,time=0,step=0.05,epsilon=0.0025,min=[0,0],max=[1,1],wrap:periodic,boundary='clamp', maxUpdates=180000 }={})` | [source](../../src/kit/p81-surface-and-loop-motion.js) |

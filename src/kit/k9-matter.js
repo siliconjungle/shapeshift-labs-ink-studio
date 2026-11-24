@@ -15,6 +15,10 @@
     M = K.M;
   K.debris = (st, o) => {
     o = o || {};
+    const { wind, windDrag = 3 } = o;
+    if ((wind !== undefined && typeof wind !== 'function') ||
+        !Number.isFinite(windDrag) || windDrag < 0 || windDrag > 1000)
+      throw new TypeError('Debris wind needs a velocity sampler and bounded drag');
     const D = st.D,
       B0 = st.base,
       chunks = [],
@@ -72,11 +76,22 @@
         chunks.push(ch);
         return ch;
       },
-      update(dt) {
+      update(dt, time = 0) {
         dt = Math.min(dt, 0.033);
+        const windBlend = wind && -Math.expm1(-windDrag*dt);
+        const velocities = windBlend && chunks.map(chunk => {
+          const value = wind(...chunk.c,time);
+          if (value == null) return null;
+          const speed = Array.from(value);
+          if (speed.length !== 3 || !speed.every(Number.isFinite))
+            throw new TypeError('Debris wind must return a finite XYZ velocity or null');
+          return speed;
+        });
         const frames = chunks.some(ch => ch.footprints) ? st.W.splatFootprints.frames.slice() : null;
         for (let n = chunks.length - 1; n >= 0; n--) {
           const ch = chunks[n];
+          const airflow = velocities && velocities[n];
+          if (airflow) for (let i = 0; i < 3; i++) ch.v[i] += (airflow[i] - ch.v[i])*windBlend;
           ch.v[1] -= g * dt;
           ch.c[0] += ch.v[0] * dt;
           ch.c[1] += ch.v[1] * dt;

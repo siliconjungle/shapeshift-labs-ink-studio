@@ -1043,11 +1043,11 @@ Members and callable signatures come from the public entry point. Guide links po
 
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
-| `KIT.cloth` | function | `(B, o)` | [guide](../../README.md#physics-and-persistent-effects), [guide](../art-direction.md#motion-cadence-by-effect), [guide](../cloth-review.md), [guide](../cloth-review.md#author-regions), [source](../../src/kit/ks-xpbd.js) |
-| `KIT.cloth.review` | namespace |  | [guide](../../README.md#physics-and-persistent-effects), [guide](../art-direction.md#motion-cadence-by-effect), [guide](../cloth-review.md), [guide](../cloth-review.md#author-regions) |
+| `KIT.cloth` | function | `(B, o)` | [guide](../../README.md#physics-and-persistent-effects), [guide](../art-direction.md#motion-cadence-by-effect), [guide](../cloth-review.md), [guide](../cloth-review.md#author-regions), [guide](../flow-maps.md#bind-one-asset-to-four-solvers), [source](../../src/kit/ks-xpbd.js) |
+| `KIT.cloth.review` | namespace |  | [guide](../../README.md#physics-and-persistent-effects), [guide](../art-direction.md#motion-cadence-by-effect), [guide](../cloth-review.md), [guide](../cloth-review.md#author-regions), [guide](../flow-maps.md#bind-one-asset-to-four-solvers) |
 | `KIT.cloth.review.clip` | function | `(payload)` | [guide](../cloth-review.md#bake-and-replay), [guide](../../README.md#physics-and-persistent-effects), [guide](../art-direction.md#motion-cadence-by-effect), [guide](../cloth-review.md), [guide](../cloth-review.md#author-regions), [source](../../src/kit/phf-cloth-review.js) |
-| `KIT.cloth.review.create` | function | `(panel, { regions, fps = 60, maxSeconds = 8, minimum = 0.6, quietFor = 0.45, speed = 0.04 } = {})` | [guide](../cloth-review.md#author-regions), [guide](../../README.md#physics-and-persistent-effects), [guide](../art-direction.md#motion-cadence-by-effect), [guide](../cloth-review.md), [source](../../src/kit/phf-cloth-review.js) |
-| `KIT.cloth.review.roles` | value | `array` | [guide](../../README.md#physics-and-persistent-effects), [guide](../art-direction.md#motion-cadence-by-effect), [guide](../cloth-review.md), [guide](../cloth-review.md#author-regions) |
+| `KIT.cloth.review.create` | function | `(panel, { regions, fps = 60, maxSeconds = 8, minimum = 0.6, quietFor = 0.45, speed = 0.04 } = {})` | [guide](../cloth-review.md#author-regions), [guide](../../README.md#physics-and-persistent-effects), [guide](../art-direction.md#motion-cadence-by-effect), [guide](../cloth-review.md), [guide](../flow-maps.md#bind-one-asset-to-four-solvers), [source](../../src/kit/phf-cloth-review.js) |
+| `KIT.cloth.review.roles` | value | `array` | [guide](../../README.md#physics-and-persistent-effects), [guide](../art-direction.md#motion-cadence-by-effect), [guide](../cloth-review.md), [guide](../cloth-review.md#author-regions), [guide](../flow-maps.md#bind-one-asset-to-four-solvers) |
 
 ## KIT.clouds
 
@@ -1287,7 +1287,7 @@ Members and callable signatures come from the public entry point. Guide links po
 
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
-| `KIT.debris` | function | `(st, o)` | [guide](../../README.md#physics-and-persistent-effects), [guide](../destruction.md), [source](../../src/kit/k9-matter.js) |
+| `KIT.debris` | function | `(st, o)` | [guide](../../README.md#physics-and-persistent-effects), [guide](../destruction.md), [guide](../flow-maps.md#bind-one-asset-to-four-solvers), [source](../../src/kit/k9-matter.js) |
 
 ## KIT.deform
 
@@ -1806,6 +1806,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.flow.sum` | function | `(...fs)` | [guide](../../README.md#particles-and-interaction), [guide](../materialisation.md#bind-a-surface), [guide](../materialisation.md), [source](../../src/kit/k7-particles.js) |
 | `KIT.flow.vortex` | function | `(c, axis, strength, radius)` | [guide](../materialisation.md#wind-forces-paths-and-appearance), [guide](../materialisation.md), [source](../../src/kit/k7-particles.js) |
 | `KIT.flow.wind` | function | `(v)` | [guide](../../README.md#particles-and-interaction), [guide](../contour-ribbons.md#peel-into-particles), [guide](../materialisation.md#bind-a-surface), [guide](../typography.md#sdf-extrusion-and-materialisation), [guide](../materialisation.md), [source](../../src/kit/k7-particles.js) |
+
+## KIT.flowMap
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.flowMap` | namespace |  |  |
+| `KIT.flowMap.create` | function | `({ width = 48, height = 32, bounds = [-3, -2, 3, 2] } = {})` | [guide](../flow-maps.md#paint-and-inspect-headlessly), [source](../../src/flow-map.js) |
+| `KIT.flowMap.format` | value | `string = "ink-studio/flow-map"` |  |
+| `KIT.flowMap.open` | function | `(value)` | [guide](../flow-maps.md#paint-and-inspect-headlessly), [guide](../flow-maps.md#bind-one-asset-to-four-solvers), [source](../../src/flow-map.js) |
+| `KIT.flowMap.version` | value | `number = 1` |  |
 
 ## KIT.form
 
