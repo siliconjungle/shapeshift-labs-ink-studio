@@ -197,6 +197,7 @@
   K.pixelCanvasTransforms = PixelCanvasTransforms;
   K.pixelAdjustments = PixelAdjustments;
   K.pixelLayerStack = PixelLayerStack;
+  K.pixelInspection = PixelInspection;
   K.pixelBrushes = PixelBrushes;
   K.sprite = {
     scanlineBudget: SpriteScanlineBudget,

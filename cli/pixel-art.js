@@ -13,6 +13,8 @@ const PixelTransforms = require('../src/pixel-selection-transforms.js');
 const CanvasTransforms = require('../src/pixel-canvas-transforms.js');
 const PixelAdjustments = require('../src/pixel-adjustments.js');
 const LayerStack = require('../src/pixel-layer-stack.js');
+const PixelInspection = require('../src/pixel-inspection.js');
+const ArtPasses = require('../src/art-passes.js');
 const PixelColors = require('../src/pixel-raster-colors.js');
 const PixelPalette = require('../src/pixel-palette.js');
 const PaletteExtract = require('../src/palette-extract.js');
@@ -317,10 +319,51 @@ function cell(frame,p) {
   };
 }
 
-function inspect(frame,coordinate) {
-  if (!at(frame.width,frame.height,coordinate)) throw new RangeError('Use a pixel coordinate inside the native grid');
-  const [x,y] = coordinate;
-  return { revision:frame.revision, ...frameMetadata(frame), ...cell(frame,y*frame.width+x) };
+function sameScene(ref,requested) {
+  return ref === requested || (typeof requested === 'string' && /\.(?:js|json)$/i.test(ref) &&
+    path.resolve(requested) === path.resolve(ref));
+}
+
+function inspectionMaterials(design,destinations,context,frame) {
+  const names = destinations ?? (context?.sceneRef === undefined ? [] : (design.destinations ?? [])
+    .filter(row=>row.kind === 'surface-channel' && design.sceneBindings.some(binding=>
+      binding.id === row.binding && sameScene(binding.scene,context.sceneRef) &&
+      (frame === undefined || binding.frame === undefined || binding.frame === frame))).map(row=>row.id));
+  if (!Array.isArray(names) || !Array.from(names).every(reference) || new Set(names).size !== names.length)
+    throw new TypeError('Choose a list of distinct surface destinations to inspect');
+  return names.map(id=>({ name:id,...Destinations.channelSource(Destinations.resolve(design,id),context) }));
+}
+
+function inspectMaterial(source,coordinate,width,height) {
+  const { name,sample,canvas,...metadata } = source, uv = pixelUV(width,height,coordinate,canvas);
+  return { ...metadata,requestedDestination:name,uv,value:uv ? sample(uv) : null };
+}
+
+function inspectionCapture(width,height,coordinate,context) {
+  if (!context?.captureSelection) return;
+  const frame = context.captureSelection({ w:width,h:height,passes:PixelInspection.channels,
+    ...(coordinate && { palettePixel:coordinate,strandPixel:coordinate,inspectFragmentPixel:coordinate }),
+    sceneInspection:true });
+  if (frame?.w !== width || frame?.h !== height || frame.passes && (frame.passes.w !== width || frame.passes.h !== height))
+    throw new RangeError('Scene inspection must use the document native grid');
+  return frame;
+}
+
+function inspect(design,coordinate,{ frame,cel,destinations,references = false } = {},context) {
+  const compiled = compile(design,frame,cel,true,{ references }), { width,height } = compiled;
+  if (!at(width,height,coordinate)) throw new RangeError('Use a pixel coordinate inside the native grid');
+  const p = coordinate[1]*width+coordinate[0];
+  const trace = LayerStack.inspect(compiled.layerStack,compiled.colors,id=>{
+    const row = compiled.layerSources.get(id);
+    return { slot:row.slots[p],alpha:row.alpha?.[p] };
+  },{ references });
+  const description = PixelInspection.document(trace,compiled.paletteEntries,id=>compiled.cels?.get(id) ?? null);
+  const materials = inspectionMaterials(design,destinations,context,compiled.id)
+    .filter(row=>row.frame === undefined || row.frame === compiled.id)
+    .map(source=>inspectMaterial(source,coordinate,width,height));
+  const scene = inspectionCapture(width,height,coordinate,context);
+  return { revision:compiled.revision,...frameMetadata(compiled),...cell(compiled,p),...description,
+    materials,...(scene && { scene:PixelInspection.scene(scene,coordinate,ArtPasses) }) };
 }
 
 function hexColor(packed) {
@@ -1544,7 +1587,8 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     layerDeck: () => structuredClone(layerDeck(state().design)),
     extractPalette: ({ frame,layer,...options } = {})=>extractPalette(
       stampImage(stamp(compile(state().design,frame,undefined,layer),layer),{ preserveHidden:true }),options),
-    inspect: (coordinate,{ frame,cel } = {}) => inspect(compile(state().design,frame,cel),coordinate),
+    inspect: (coordinate,options = {}) => inspect(state().design,coordinate,options,
+      { ...editContext(options,false),sceneRef:sceneEditor && sceneName }),
     sample: (coordinate,options = {}) => samplePixel(state().design,coordinate,options,editContext(options,false)),
     captureBrush: options => captureBrush(state().design,options),
     copySelection: options => copySelection(state().design,options),
@@ -1796,15 +1840,15 @@ function draw(frame,directory,{ layer,colorMode } = {}) {
   return result.report;
 }
 
-function canvasReview(design,frameId,file,source) {
+function canvasReview(design,frameId,file,sources,scene) {
   documentShape(design);
   const palette = paletteEntries(design.palette,design.version), revision = fingerprint(design);
   const frames = design.version === 1 ? [undefined] : design.frames;
   if (frameId !== undefined && !frames.some(frame => frame?.id === frameId))
     throw new RangeError('Unknown pixel frame ' + frameId);
   const chosen = frameId === undefined ? frames : frames.filter(frame => frame.id === frameId);
-  if (source?.frame !== undefined && !chosen.some(frame => frame?.id === source.frame))
-    throw new RangeError('The source channel is bound to frame ' + source.frame);
+  if (sources.some(source=>source.frame !== undefined && !chosen.some(frame=>frame?.id === source.frame)))
+    throw new RangeError('A source channel is bound to a frame outside this canvas');
   const encodeSlots = slots => Buffer.from(Uint8Array.from(slots,slot => slot < 0 ? 255 : slot)).toString('base64');
   const deck = chosen.map(frame => {
     const compiled = compileFrame(design,frame,revision,palette,true,{ references:true });
@@ -1814,34 +1858,54 @@ function canvasReview(design,frameId,file,source) {
       guides:compiled.guides ?? [], id:frame?.id, composite:encodeSlots(compiled.slots),
       ...(compiled.opacity && { alpha:encode(compiled.opacity),rgb:encode(image(compiled).rgb) }),
       layers:[...compiled.layerSources].map(([id,row]) => ({
-        id,slots:encodeSlots(row.slots),...(row.alpha && { alpha:encode(row.alpha) })
+        id,cel:compiled.cels?.get(id) ?? null,slots:encodeSlots(row.slots),...(row.alpha && { alpha:encode(row.alpha) }),
+        ...(row.slots.includes(-2) && { knockouts:encode(Uint8Array.from(row.slots,slot=>Number(slot === -2))) })
       })) };
   });
-  let material = null;
-  if (source) {
-    const { sample,...metadata } = source, { width,height } = design;
-    const count = source.type === 'number' ? 1 : 4, values = Buffer.alloc(width*height*count*8);
+  const { width,height } = design, cells = width*height;
+  if (sources.reduce((size,source)=>size+(source.type === 'number' ? 1 : 4)*cells,0) > 2_000_000)
+    throw new RangeError('Choose fewer source channels for the offline canvas');
+  const materials = sources.map(source=>{
+    const { sample,...metadata } = source;
+    const count = source.type === 'number' ? 1 : 4, values = Buffer.alloc(cells*count*8);
     let missing;
-    for (let p=0; p<width*height; p++) {
+    for (let p=0; p<cells; p++) {
       const uv = pixelUV(width,height,[p%width,Math.floor(p/width)],source.canvas);
       if (!uv) {
-        missing ??= Buffer.alloc(width*height);
+        missing ??= Buffer.alloc(cells);
         missing[p] = 1;
         continue;
       }
       const value = sample(uv);
       if (count === 1) values.writeDoubleLE(value,p*8);
       else if (value) [...value.color,value.coverage].forEach((component,i) => values.writeDoubleLE(component,(p*4+i)*8));
+      else values.writeDoubleLE(-1,(p*4+3)*8);
     }
-    material = { ...metadata,values:values.toString('base64'),...(missing && { missing:missing.toString('base64') }) };
-  }
+    return { ...metadata,values:values.toString('base64'),...(missing && { missing:missing.toString('base64') }) };
+  });
   const template = fs.readFileSync(path.join(__dirname,'pixel-grid-review.html'),'utf8');
   const browserSource = ext => fs.readFileSync(path.join(__dirname,'../src/pixel-grid-canvas.'+ext),'utf8');
-  const data = JSON.stringify({ frames:deck,palette,material }).replaceAll('<','\\u003c');
+  const definitions = design.version === 1 ? design.layers.map(({ id,clip,protect })=>({ id,clip,protect })) : design.layers;
+  const data = JSON.stringify({ frames:deck,palette,materials,definitions,scene:scene && embedScene(scene) }).replaceAll('<','\\u003c');
   files.write(file,template.replace('/*PIXEL_GRID_CSS*/',() => browserSource('css'))
     .replace('/*PIXEL_GUIDES_MODULE*/',() => fs.readFileSync(path.join(__dirname,'../src/pixel-guides.js'),'utf8'))
     .replace('/*PIXEL_GRID_MODULE*/',() => browserSource('mjs'))
+    .replace('/*PIXEL_INSPECT_MODULES*/',() => [
+      'pixel-layer-stack.js','pixel-canvas-transforms.js','pixel-inspection.js','art-passes.js','pixel-inspector.mjs'
+    ].map(file=>fs.readFileSync(path.join(__dirname,'../src',file),'utf8')).join('\n'))
     .replace('/*PIXEL_GRID_DATA*/',() => data));
+}
+
+function embedScene(frame) {
+  function encode(data) {
+    return { type:data.constructor.name,bytes:Buffer.from(data.buffer,data.byteOffset,data.byteLength).toString('base64') };
+  }
+  const { w,h,scene,time,palettePixel,pixelFragments,strandPixel } = frame;
+  const passes = frame.passes && Object.fromEntries([...PixelInspection.channels,...PixelInspection.tables]
+    .filter(key=>frame.passes[key] !== undefined)
+    .map(key=>[key,ArrayBuffer.isView(frame.passes[key]) ? encode(frame.passes[key]) : frame.passes[key]]));
+  return { w,h,scene,time,palettePixel,pixelFragments,strandPixel,passes,
+    ...(frame.rgb && { rgb:encode(frame.rgb) }),...(frame.alpha && { alpha:encode(frame.alpha) }) };
 }
 
 function trace(frame, object, scene) {
@@ -1922,6 +1986,19 @@ function stackCommand(pos,opt) {
   files.json(path.resolve(opt.out),action === 'export' ? layerDeck(openDesign(data).design) : documentFromDeck(data));
 }
 
+function destinationList(raw) {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'string' || raw.split(',').some(id=>!id.trim()))
+    throw new TypeError('Use --destination with comma-separated surface destination IDs');
+  return raw.split(',').map(id=>id.trim());
+}
+
+function inspectCoordinate(raw) {
+  if (typeof raw !== 'string' || !/^\d+,\d+$/.test(raw))
+    throw new TypeError('Use --at x,y inside the native grid');
+  return raw.split(',').map(Number);
+}
+
 function command(pos,opt,outputFile,{ capture, world, scene }) {
   if (pos[0] === 'stack') return stackCommand(pos.slice(1),opt);
   if (pos[0] === 'palette') return paletteCommand(pos.slice(1),opt);
@@ -1977,6 +2054,7 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     return opt.scene;
   }
   const context = {
+    sceneRef:opt.scene,
     captureSelection:reference(opt.scene) ? settings=>{
       if (out === path.resolve(opt.scene))
         throw new RangeError('Write the edit to a separate output from the rendered scene');
@@ -1993,15 +2071,16 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
   if (action === 'canvas') {
     if (typeof opt.out !== 'string' || !/\.html$/i.test(opt.out) || path.resolve(opt.out) === path.resolve(source))
       throw new TypeError('Use pixel-art canvas <design.json> --out <canvas.html>');
-    let channel;
-    if (opt.scene !== undefined || opt.destination !== undefined) {
-      if (!reference(opt.destination) || !reference(opt.scene))
-        throw new TypeError('Use --scene and --destination together to include a source material channel');
-      documentShape(design);
-      channel = Destinations.channelSource(Destinations.resolve(design,opt.destination),context);
-    }
+    const destinations = destinationList(opt.destination);
+    if ((destinations || opt.at !== undefined) && !reference(opt.scene))
+      throw new TypeError('Use --scene with surface destinations or a pinned scene pixel');
+    documentShape(design);
+    const coordinate = opt.at === undefined ? undefined : inspectCoordinate(opt.at);
+    if (coordinate && !at(design.width,design.height,coordinate)) throw new RangeError('Scene pixel is outside the native grid');
+    const materials = inspectionMaterials(design,destinations,context,opt.frame);
+    const scene = inspectionCapture(design.width,design.height,coordinate,context);
     const file = path.resolve(opt.out);
-    canvasReview(design,opt.frame,file,channel);
+    canvasReview(design,opt.frame,file,materials,scene);
     console.log('wrote',file);
     return;
   }
@@ -2048,16 +2127,24 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     process.stdout.write(JSON.stringify(receipt,null,2)+'\n');
     return;
   }
+  if (action === 'inspect') {
+    const destinations = destinationList(opt.destination);
+    if (opt.scene === true) throw new TypeError('--scene needs a scene reference');
+    if (opt.out === true) throw new TypeError('--out needs an inspection report path');
+    if (destinations && !reference(opt.scene)) throw new TypeError('Use --scene to inspect source destinations');
+    const result = inspect(design,inspectCoordinate(opt.at),{ frame:opt.frame,cel:opt.cel,
+      destinations,references:opt.references === true },context);
+    if (typeof opt.out === 'string') {
+      if ([source,opt.scene].some(file=>reference(file) && path.resolve(opt.out) === path.resolve(file)))
+        throw new RangeError('Write the inspection report separately from its inputs');
+      files.json(path.resolve(opt.out),result);
+    } else process.stdout.write(JSON.stringify(result,null,2)+'\n');
+    return;
+  }
   const frame = compile(design,opt.frame,undefined,action === 'draw' ? opt.layer : undefined);
   if (action === 'snap') {
     const { point,radius } = snapOptions(opt);
     process.stdout.write(JSON.stringify(snapPoint(frame,point,radius),null,2)+'\n');
-    return;
-  }
-  if (action === 'inspect') {
-    const coordinate = /^\d+,\d+$/.test(opt.at ?? '') ? opt.at.split(',').map(Number) : null;
-    if (!at(frame.width,frame.height,coordinate)) throw new RangeError('Use --at x,y inside the native grid');
-    process.stdout.write(JSON.stringify(inspect(frame,coordinate),null,2)+'\n');
     return;
   }
   if (action === 'draw') {
@@ -2112,8 +2199,8 @@ function sessionCommand(pos,opt,{ scene,capture }) {
       result = editor.previewChanges({ limit });
       if (!result.valid) process.exitCode = 2;
     } else if (action === 'inspect') {
-      if (!/^\d+,\d+$/.test(opt.at ?? '')) throw new TypeError('Use --at x,y inside the native grid');
-      result = editor.inspect(opt.at.split(',').map(Number),{ frame:opt.frame, cel:opt.cel });
+      result = editor.inspect(inspectCoordinate(opt.at),{ frame:opt.frame,cel:opt.cel,
+        destinations:destinationList(opt.destination),references:opt.references === true,captureSelection });
     } else if (action === 'sample') {
       const { coordinate,options } = sampleOptions(opt);
       result = editor.sample(coordinate,options);

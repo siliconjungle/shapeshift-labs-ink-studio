@@ -236,7 +236,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art validate <design.json>           validate the versioned document and each frame
   pixel-art targets <design.json> --destination id --scene <bound scene>   list stable scene targets
   pixel-art preview <design.json> <edit.json> [--scene <bound scene>]   report a proposed edit and its conflicts
-  pixel-art canvas <design.json> --out canvas.html [--frame id]   inspect native art and its 1× preview
+  pixel-art canvas <design.json> --out canvas.html [--frame id] [--scene scene.json] [--destination ids] [--at x,y]   inspect the cursor and optional pinned scene pixel
   pixel-art sample <design.json> --at x,y [--mode composite|layer|source]   sample art or a bound material channel
   pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id] [--scene path]   resolve a native selection
   pixel-art copy <design.json> --selection id [--frame id] --layer id|--cel id   print a pixel clipboard
@@ -244,7 +244,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
     dynamics options: --stabilization ms --pressure light,full --velocity pxPerSecond,slow,fast
   pixel-art snap <design.json> --at x,y [--frame id] [--radius pixels]   resolve document guides
   pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint
-  pixel-art inspect|edit <design.json> [--frame id]   work on a native indexed frame
+  pixel-art inspect <design.json> --at x,y [--frame id] [--scene scene.json] [--destination ids] [--references] [--out report.json]   show pixel contributors
+  pixel-art edit <design.json> [--frame id]   work on a native indexed frame
   pixel-art edit <design.json> <edit.json> --out result.json   write an edit and print its receipt
   pixel-art stack export <document.json> --out deck.json   open in the layer Workshop
   pixel-art stack import <deck.json> --out document.json

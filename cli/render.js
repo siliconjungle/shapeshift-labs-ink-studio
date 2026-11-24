@@ -74,6 +74,7 @@ const CurvePattern = require('../src/curve-pattern.js');
 const CurveLod = require('./curve-lod.js');
 const CurveQuality = require('./curve-quality.js');
 const { createMaskResolve, applyMasks } = require('./look-mask-resolve.js');
+const PixelFragments = require('./pixel-fragments.js');
 const PalettePixel = require('./palette-pixel.js');
 const PaletteComposition = require('./palette-composition.js');
 const PaletteUsage = require('./palette-usage.js');
@@ -921,6 +922,7 @@ function renderFrame(world, o, preparedPalettes) {
       !specializedResolve && native.detail && { detail: native.detail },
       native.motionReference && { motionReference: native.motionReference },
       native.strandPixel && { strandPixel: native.strandPixel },
+      native.pixelFragments && { pixelFragments:native.pixelFragments },
       native.deep && { deep: native.deep },
       native.objectMattes && { objectMattes:native.objectMattes },
       native.silhouetteMask && { silhouetteMask:native.silhouetteMask },
@@ -932,6 +934,8 @@ function renderFrame(world, o, preparedPalettes) {
       o.captureFog && native.fog && { fog: native.fog }), native.passes, native.fog, native.effectSignals, native.color,
       native.paletteState,native.paletteInventory,reference,native.paintStage);
   }
+  const fragmentTrace = o.inspectFragmentPixel && (!o.samples || o.worked) && !o.reflectionPlane && !probeView
+    ? PixelFragments.capture(world,o.inspectFragmentPixel,W,H) : null;
   const paintStage = o.captureColorStages===true && !o.raw && !o.captureCoverage &&
     (!o.samples || o.worked) && o[subjectFocusPass]!==false ? new Uint32Array(W*H) : undefined;
   function baseReference(i) {
@@ -1939,6 +1943,7 @@ function renderFrame(world, o, preparedPalettes) {
     }
     const p3 = p * 3, ia = 1 - a;
     if (strandTrace) strandTrace.fragment(p, a, opticalDepth, strandHit);
+    if (fragmentTrace?.pixel === p) fragmentTrace.add(i,opticalDepth,a,sprite,glass,sectionEdge);
     if (counters) {
       counters.fragments++;
       if (!wd && a < 1) counters.translucentFragments++;
@@ -3553,6 +3558,7 @@ function renderFrame(world, o, preparedPalettes) {
       w: W, h: H, color: Uint8Array.from(c2, v => Math.round(clamp(v, 0, 1) * 255)), depth: dep, drawn,
       ...(filterMatte && {matte:filterMatte}),
       ...(strand?.inspected && { strandPixel: strand.inspected }),
+      ...(fragmentTrace && { pixelFragments:fragmentTrace.finish() }),
       ...(deepFrame && { deep: deepFrame }),
       ...(objectMattes && {objectMattes}),
       ...(o.resolveDetailCleanup && cleanupFlags && cleanupFlags.some(DetailBudgets.changesCleanup) &&
@@ -3914,6 +3920,7 @@ function renderFrame(world, o, preparedPalettes) {
     ...(focusCue && {focusTrack:{id:focusPlan.id,subject:focusCue.to?.id ?? null,
       from:focusCue.from?.id ?? null,weight:focusCue.weight}}),
     ...(strand?.inspected && { strandPixel: strand.inspected }),
+      ...(fragmentTrace && { pixelFragments:fragmentTrace.finish() }),
     ...(deepFrame && { deep: deepFrame }),
     ...(objectMattes && {objectMattes}),
     ...(lightPlate && {lightPlate}),

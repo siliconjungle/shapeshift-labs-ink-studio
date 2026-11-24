@@ -43,20 +43,50 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
     <div class="sample-readout"><span id="sample-swatch" aria-hidden="true" hidden></span><output id="sample-value"></output></div>
   </div>
   <div id="canvas"></div>
+  <div id="pixel-inspection"></div>
   <p id="error" role="status" hidden></p>
 </main>
 <script type="module">
 /*PIXEL_GUIDES_MODULE*/
 /*PIXEL_GRID_MODULE*/
-const { frames,palette,material } = /*PIXEL_GRID_DATA*/;
+/*PIXEL_INSPECT_MODULES*/
+const { frames,palette,materials,definitions,scene:embeddedScene } = /*PIXEL_GRID_DATA*/;
 const view = mountPixelGridCanvas(document.querySelector('#canvas'),{ guideTool:PixelGuides });
 const select = document.querySelector('#frames'), status = document.querySelector('#error');
 const eyedropper = document.querySelector('#eyedropper'), mode = document.querySelector('#sample-mode');
 const layer = document.querySelector('#sample-layer'), swatch = document.querySelector('#sample-swatch');
 const result = document.querySelector('#sample-value');
 const scratch = document.createElement('canvas'), context = scratch.getContext('2d',{ willReadFrequently:true });
-const unmapped = material?.missing ? atob(material.missing) : null;
-const values = material && new DataView(Uint8Array.from(atob(material.values),byte=>byte.charCodeAt(0)).buffer);
+const materialRows = materials.map(row=>({ ...row,
+  missing:row.missing ? atob(row.missing) : null,
+  data:new DataView(Uint8Array.from(atob(row.values),byte=>byte.charCodeAt(0)).buffer)
+}));
+const stack = PixelLayerStack.prepare(definitions), colors = palette.map(row=>Number.parseInt(row.color.slice(1),16));
+const byteTypes = { Uint8Array,Uint8ClampedArray,Uint16Array,Uint32Array,Int16Array,Int32Array,Float32Array,Float64Array };
+function bytes(value) {
+  return value?.bytes && byteTypes[value.type]
+    ? new byteTypes[value.type](Uint8Array.from(atob(value.bytes),byte=>byte.charCodeAt(0)).buffer) : value;
+}
+const scene = embeddedScene && { ...embeddedScene,rgb:bytes(embeddedScene.rgb),alpha:bytes(embeddedScene.alpha),
+  ...(embeddedScene.passes && { passes:{ w:embeddedScene.w,h:embeddedScene.h,...Object.fromEntries(
+    Object.entries(embeddedScene.passes).map(([key,value])=>[key,bytes(value)])) } }) };
+const inspector = mountPixelInspector(document.querySelector('#pixel-inspection'),view,at=>{
+  if (!active || at[0] >= active.width || at[1] >= active.height) return;
+  const p = at[1]*active.width+at[0];
+  const trace = PixelLayerStack.inspect(stack,colors,id=>{
+    const row = active.sources.get(id), slot = row.slots.charCodeAt(p);
+    return { slot:row.knockouts?.charCodeAt(p) ? -2 : slot === 255 ? -1 : slot,alpha:row.alpha?.charCodeAt(p) };
+  },{ references:true });
+  return { ...PixelInspection.document(trace,palette,id=>active.sources.get(id)?.cel ?? null),
+    materials:materialRows.filter(row=>row.frame === undefined || row.frame === active.id).map(row=>{
+      const { data,values,missing,canvas,...meta } = row;
+      const uv = PixelCanvasTransforms.uv([active.width,active.height],at,canvas);
+      const offset = p*32, coverage = row.type === 'number' ? undefined : data.getFloat64(offset+24,true);
+      const value = !uv ? null : row.type === 'number' ? data.getFloat64(p*8,true) :
+        coverage < 0 ? null : { color:[0,8,16].map(i=>data.getFloat64(offset+i,true)),coverage };
+      return { ...meta,requestedDestination:row.name,uv,value };
+    }),...(scene && { scene:PixelInspection.scene(scene,at,ArtPasses) }) };
+});
 const hex = components => '#' + components.map(value => Math.round(value*255).toString(16).padStart(2,'0')).join('');
 let request = 0, active, sampling = false;
 
@@ -85,13 +115,16 @@ view.canvas.addEventListener('pointerdown',event => {
   if (!at) return;
   const p = at[1]*view.canvas.width+at[0], position = at.join(', ');
   if (mode.value === 'source') {
+    const material = active.material;
+    if (!material) return;
+    const values = material.data;
     const name = material.object + '/' + material.chart + '/' + material.channel;
-    if (unmapped?.charCodeAt(p)) { showSample(position+' · '+name+' · Outside source'); return; }
+    if (material.missing?.charCodeAt(p)) { showSample(position+' · '+name+' · Outside source'); return; }
     if (material.type === 'number') {
       showSample(position+' · '+name+' · '+values.getFloat64(p*8,true)+(material.units ? ' '+material.units : ''));
     } else {
       const offset = p*32, coverage = values.getFloat64(offset+24,true);
-      const color = coverage ? hex([0,8,16].map(i=>values.getFloat64(offset+i,true))) : null;
+      const color = coverage > 0 ? hex([0,8,16].map(i=>values.getFloat64(offset+i,true))) : null;
       showSample(position+' · '+name+' · '+(color ? color+' · '+Math.round(coverage*100)+'% coverage' : 'Transparent'),color);
     }
     return;
@@ -118,14 +151,17 @@ async function draw() {
     view.setFrame({ width:scratch.width, height:scratch.height,
       rgba:context.getImageData(0,0,scratch.width,scratch.height).data });
     view.setGuides(frame.guides);
-    active = { composite:atob(frame.composite), alpha:frame.alpha && atob(frame.alpha),
-      rgb:frame.rgb && atob(frame.rgb), layers:frame.layers.map(row=>({
-        ...row,slots:atob(row.slots),alpha:row.alpha && atob(row.alpha)
-      })) };
+    const layers = frame.layers.map(row=>({ ...row,slots:atob(row.slots),alpha:row.alpha && atob(row.alpha),
+      knockouts:row.knockouts && atob(row.knockouts) }));
+    active = { id:frame.id,width:scratch.width,height:scratch.height,composite:atob(frame.composite),
+      alpha:frame.alpha && atob(frame.alpha),rgb:frame.rgb && atob(frame.rgb),layers,
+      sources:new Map(layers.map(row=>[row.id,row])),
+      material:materialRows.find(row=>row.frame === undefined || row.frame === frame.id) };
+    inspector.refresh();
     const selected = layer.value;
     layer.replaceChildren(...active.layers.map(({ id })=>new Option(id,id)));
     if (active.layers.some(({ id })=>id === selected)) layer.value = selected;
-    const hasMaterial = material && (material.frame === undefined || material.frame === frame.id);
+    const hasMaterial = !!active.material;
     mode.options[2].disabled = !hasMaterial;
     if (!hasMaterial && mode.value === 'source') mode.value = 'composite';
     updateSampling();

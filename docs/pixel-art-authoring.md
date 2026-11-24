@@ -1187,6 +1187,41 @@ you want to erase earlier artwork. A trace preserves only the part visible
 at capture time. If an object exceeds 255 displayed colors, select a
 suitable palette in the source view before tracing.
 
+## Inspect pixel contributors
+
+Open **Inspect pixel** below the native canvas and move the pointer over the
+artwork. Pin the pixel to compare the same location across edits or frames.
+The inspector gives the resolved color and alpha, lists the layers in front
+to back order, and shows which swatch, mask, opacity, and blend contributed.
+Hidden, clipped, and covered layers stay in the trace. A pixel with a named
+swatch keeps its authored index even if other swatches share that color.
+
+```sh
+node cli/ink-studio.js pixel-art inspect design.json --at 18,23 --frame front \
+  --scene scene.json --destination glaze,wear --out pixel.json
+node cli/ink-studio.js pixel-art canvas design.json --scene scene.json \
+  --at 18,23 --out review.html
+```
+
+Coordinates start at the top-left native pixel. `inspect` includes editable
+reference layers when you pass `--references`. The offline canvas shows them
+with the working composite. With `--scene`, Ink samples compatible bound
+surface channels automatically. Use `--destination` with comma-separated IDs
+to choose specific channels. The chart values are authored material samples
+at the registered UV. The captured render channels show values such as
+coverage, depth, and emission on the native scene grid.
+
+A scene-backed canvas shows the opaque surface and front strand at each
+cursor pixel where those hits exist. Use `--at` to also record the detailed
+palette decisions and surviving native raster fragments for one coordinate.
+The hover panel shows those details at that coordinate. The scene capture
+uses a single camera time (`--t` in seconds), shared across the review's
+document frames.
+
+The SDK uses `editor.inspect([x, y], { frame, destinations, references,
+renderFrame })` for an existing aligned render. A caller can also supply
+`captureSelection` to render the requested native passes and pixel traces.
+
 ## Inspect, revise and reuse
 
 `report.json` gives swatch use and coordinates for orphan pixels, doubles,

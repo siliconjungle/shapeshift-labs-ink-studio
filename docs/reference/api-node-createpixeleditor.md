@@ -19,7 +19,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createPixelEditor().extractPalette` | function | `({ frame,layer,...options } = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().flushSession` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().history` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../src/kit/p23-authoring-document.js) |
-| `node.createPixelEditor().inspect` | function | `(coordinate,{ frame,cel } = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
+| `node.createPixelEditor().inspect` | function | `(coordinate,options = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().layerDeck` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().palette` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().png` | function | `({ frame,cel,layer,colorMode } = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |

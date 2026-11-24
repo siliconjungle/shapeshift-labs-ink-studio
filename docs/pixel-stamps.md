@@ -221,6 +221,12 @@ CSS. Pass each native `{ width, height, rgba }` frame to `view.setFrame()`.
 Use `view.pixelAt(clientX, clientY)` to get the art coordinate for an edit
 and `view.dispose()` when removing the canvas.
 
+Open **Inspect pixel** in the Workshop to trace the composite, layer masks,
+and palette under the cursor. Pin a coordinate to see it update through
+edits or frame changes. To include bound source channel values and native
+scene hits, export a scene-backed canvas with the CLI.
+[Pixel inspection commands](pixel-art-authoring.md#inspect-pixel-contributors)
+
 Stamp JSON stores guides shared by the whole animation in `guides`.
 Individual entries in `frames` can also carry a local `guides` list with its
 own IDs. Both use the [pixel guide definitions](pixel-art-authoring.md#register-frames-and-align-texture-pixels)

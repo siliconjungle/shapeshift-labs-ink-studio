@@ -261,6 +261,17 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelGuides.prepare` | function | `(guides = [], frames)` | [guide](../pixel-stamps.md#drawing-and-timing), [source](../../src/pixel-guides.js) |
 | `KIT.pixelGuides.snap` | function | `(guides, point, { width,height,radius = 1 } = {})` | [guide](../pixel-stamps.md#drawing-and-timing), [source](../../src/pixel-guides.js) |
 
+## KIT.pixelInspection
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.pixelInspection` | namespace |  |  |
+| `KIT.pixelInspection.channels` | value | `array` |  |
+| `KIT.pixelInspection.document` | function | `(trace,palette,celId = () => null)` | [source](../../src/pixel-inspection.js) |
+| `KIT.pixelInspection.hex` | function | `(color)` | [source](../../src/pixel-inspection.js) |
+| `KIT.pixelInspection.scene` | function | `(frame,at,ArtPasses)` | [source](../../src/pixel-inspection.js) |
+| `KIT.pixelInspection.tables` | value | `array` |  |
+
 ## KIT.pixelLayerStack
 
 | Member | Kind | Signature or value | Guides and source |
@@ -268,9 +279,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelLayerStack` | namespace |  |  |
 | `KIT.pixelLayerStack.bake` | function | `(raster,colors,resolve,keepKnockouts = false)` | [source](../../src/pixel-layer-stack.js) |
 | `KIT.pixelLayerStack.blends` | value | `array` |  |
-| `KIT.pixelLayerStack.compose` | function | `(width,height,colors,stack,read,{ capture,references = false } = {})` | [source](../../src/pixel-layer-stack.js) |
+| `KIT.pixelLayerStack.compose` | function | `(width,height,colors,stack,read,{ capture,references = false,trace } = {})` | [source](../../src/pixel-layer-stack.js) |
 | `KIT.pixelLayerStack.descendants` | function | `(stack,layer)` | [source](../../src/pixel-layer-stack.js) |
 | `KIT.pixelLayerStack.image` | function | `(raster,colors)` | [source](../../src/pixel-layer-stack.js) |
+| `KIT.pixelLayerStack.inspect` | function | `(stack,colors,read,{ references = false } = {})` | [source](../../src/pixel-layer-stack.js) |
 | `KIT.pixelLayerStack.kinds` | value | `array` |  |
 | `KIT.pixelLayerStack.mergePlan` | function | `(layers,operation)` | [source](../../src/pixel-layer-stack.js) |
 | `KIT.pixelLayerStack.prepare` | function | `(layers)` | [source](../../src/pixel-layer-stack.js) |

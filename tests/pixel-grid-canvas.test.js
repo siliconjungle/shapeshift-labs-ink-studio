@@ -824,6 +824,13 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     const beforeMerge = await download('#export');
     assert.deepEqual(beforeMerge.frames[0].cels.detail.slots,slots([5,2],[6,1]));
     assert.deepEqual(await raster(browser,preview,1,1),[0,128,127,255]);
+    await evaluate(browser,()=>document.querySelector('#pixel-inspection details').open = true);
+    await mouse('mouseMoved',outsideMask);
+    await mouse('mouseMoved',lockedPaint);
+    await until(browser,"document.querySelector('[data-inspection-result]').value.includes('#00807f')");
+    const inspected = await browser.evaluate("document.querySelector('#pixel-inspection').textContent");
+    assert.match(inspected,/detail.*clip mask 255/);
+    assert.match(inspected,/layer blend/);
 
     await change('layer-active','group');
     await click(browser,'#layer-merge');
@@ -896,6 +903,26 @@ test('the CLI exports an offline native canvas with both views on the selected v
     await sample('layer','1, 2 · paint · cool · #216286');
     await sample('source','1, 2 · face/front/wear · 0.625');
     await sample('source','0, 0 · face/front/wear · Outside source',0,0);
+    await evaluate(browser,()=>document.querySelector('#pixel-inspection details').open = true);
+    const moveTo = async (x,y) => browser.send('Input.dispatchMouseEvent',{
+      type:'mouseMoved',...place(await screen(browser,main),x,y)
+    });
+    await moveTo(1,2);
+    const inspectorOutput = "document.querySelector('[data-inspection-result]').value";
+    await until(browser,`${inspectorOutput} === '1, 2 · glaze · #ac421d · alpha 255'`);
+    const inspected = await browser.evaluate("document.querySelector('#pixel-inspection').textContent");
+    assert.match(inspected,/paint.*covered/);
+    assert.match(inspected,/authored index/);
+    assert.match(inspected,/face\/front\/wear.*0\.625/);
+    assert.match(inspected,/Scene hits/);
+    await click(browser,'#pixel-inspection button');
+    await moveTo(0,0);
+    assert.equal(await browser.evaluate(inspectorOutput),'1, 2 · glaze · #ac421d · alpha 255');
+    await click(browser,'#pixel-inspection button');
+    await moveTo(1,2);
+    await moveTo(0,0);
+    await until(browser,`${inspectorOutput} === '0, 0 · Transparent · alpha 0'`);
+    assert.match(await browser.evaluate("document.querySelector('#pixel-inspection').textContent"),/Outside source/);
     await browser.evaluate(`document.querySelector('#frames').selectedIndex = 1;
       document.querySelector('#frames').dispatchEvent(new Event('change'));`);
     await until(browser,"document.querySelector('.ink-grid-main').getContext('2d').getImageData(1,2,1,1).data[0] === 33");

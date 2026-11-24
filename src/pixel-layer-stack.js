@@ -52,14 +52,14 @@ const PixelLayerStack = (() => {
     return packed;
   }
 
-  function compose(width,height,colors,stack,read,{ capture,references = false } = {}) {
+  function compose(width,height,colors,stack,read,{ capture,references = false,trace } = {}) {
     const size = width*height, layerIds = [null,...stack.rows.keys()], layerSources = capture ? new Map() : undefined;
     const empty = ()=>({
       slots:new Int16Array(size).fill(-1), owners:new Uint8Array(size), locks:new Uint8Array(size),
       underSlots:new Int16Array(size).fill(-1), underOwners:new Uint8Array(size),
       opacity:new Uint8Array(size), mixedColors:new Uint32Array(size), usesAlpha:false
     });
-    function branch(parent,shown) {
+    function branch(parent,shown,steps) {
       const buffer = empty(), masks = new Map();
       const { slots,owners,locks,underSlots,underOwners,opacity,mixedColors } = buffer;
       for (const row of stack.children.get(parent)) {
@@ -68,7 +68,23 @@ const PixelLayerStack = (() => {
         const clip = masks.get(row.clip), mask = new Uint8Array(size);
         masks.set(row.id,mask);
         const group = kind === 'group';
-        const source = group ? branch(row.id,visible) : read(row.id);
+        const step = steps && { id:row.id,label:row.label ?? row.id,kind,blend,opacity:layerAlpha,visible,
+          locked:row.effectiveLock || kind === 'reference',...(row.parent !== undefined && { parent:row.parent }),
+          ...(row.clip !== undefined && { clip:{ layer:row.clip,alpha:clip[0] } }),
+          ...(row.destination !== undefined && { destination:row.destination }),
+          ...(group && { children:[] }),contributes:false };
+        if (step) steps.push(step);
+        const source = group ? branch(row.id,visible,step?.children) : read(row.id);
+        if (step) {
+          const raw = source.slots[0], drawn = raw !== null && raw >= 0;
+          step.slot = drawn ? raw : null;
+          step.color = drawn ? group ? source.mixedColors[0] : colors[raw] : null;
+          step.sourceAlpha = drawn ? (group ? source.opacity[0] : source.alpha?.[0] ?? 255) : 0;
+          step.knockout = raw === -2;
+          step.status = !shown ? 'parent-hidden' : row.visible === false ? 'hidden' : !layerAlpha ? 'zero-opacity' :
+            kind === 'reference' && !references ? 'reference-disabled' :
+            !drawn && !step.knockout ? 'empty' : clip && !clip[0] ? 'clipped' : 'transparent';
+        }
         if (!group && (capture === true || capture === row.id)) layerSources.set(row.id,{
           ...source,clipping:clip,locked:row.effectiveLock || kind === 'reference'
         });
@@ -81,22 +97,33 @@ const PixelLayerStack = (() => {
           const strength = layerAlpha*(clip ? clip[p]/255 : 1), erase = raw === -2;
           const amount = erase ? 0 : Math.round(strength*((group ? source.opacity[p] : source.alpha?.[p]) ?? 255));
           if (!erase && !amount) continue;
+          if (step) {
+            step.effectiveAlpha = erase ? Math.round(255*strength) : amount;
+            step.status = kind === 'mask' ? 'mask' : erase ? 'knockout' : 'paint';
+            step.before = { alpha:opacity[p],color:opacity[p] ? mixedColors[p] : null };
+          }
           mask[p] = kind === 'mask' || group ? amount : amount > 0 ? 255 : 0;
           if (kind === 'mask') continue;
           const slot = erase ? -1 : raw;
           if (locks[p] && kind !== 'reference') {
             if (slot !== slots[p])
               throw new RangeError(row.id+' changes a protected pixel at '+[p%width,Math.floor(p/width)].join(','));
+            if (step) step.status = 'protected';
             continue;
           }
           if (erase && strength < 1) {
             opacity[p] = Math.round(opacity[p]*(1-strength));
-            if (opacity[p]) continue;
+            if (opacity[p]) {
+              if (step) step.after = { alpha:opacity[p],color:mixedColors[p] };
+              continue;
+            }
           }
           const behind = opacity[p]*(255-amount)/255, front = group ? source.mixedColors[p] : colors[slot];
-          mixedColors[p] = !amount ? 0 : !behind ? front :
-            mix(front,mixedColors[p],amount,behind,blend,amount*opacity[p]/255);
+          const overlap = amount*opacity[p]/255;
+          mixedColors[p] = !amount ? 0 : !behind && (blend === 'normal' || !overlap) ? front :
+            mix(front,mixedColors[p],amount,behind,blend,overlap);
           opacity[p] = amount ? Math.round(amount+behind) : 0;
+          if (step) step.after = { alpha:opacity[p],color:opacity[p] ? mixedColors[p] : null };
           underSlots[p] = group && source.underOwners[p] ? source.underSlots[p] : slots[p];
           underOwners[p] = group && source.underOwners[p] ? source.underOwners[p] : owners[p];
           slots[p] = slot;
@@ -106,9 +133,33 @@ const PixelLayerStack = (() => {
       }
       return buffer;
     }
-    const { usesAlpha,opacity,mixedColors,...raster } = branch(undefined,true);
+    const { usesAlpha,opacity,mixedColors,...raster } = branch(undefined,true,trace);
     return { width,height,...raster,layerIds,...(layerSources && { layerSources }),
       ...(usesAlpha && { opacity,mixedColors }) };
+  }
+
+  function inspect(stack,colors,read,{ references = false } = {}) {
+    const layers = [];
+    const result = compose(1,1,colors,stack,id=>{
+      const { slot,alpha } = read(id);
+      return { slots:[slot ?? -1],...(alpha !== undefined && { alpha:[alpha] }) };
+    },{ references,trace:layers });
+
+    function contributors(steps,visible) {
+      const masks = new Set();
+      for (let i = steps.length-1; i >= 0; i--) {
+        const row = steps[i], paints = row.status === 'paint' || row.status === 'knockout';
+        row.contributes = visible && paints || masks.has(row.id);
+        if (row.contributes && row.clip) masks.add(row.clip.layer);
+        if (row.children) contributors(row.children,row.contributes);
+        if (row.contributes && row.effectiveAlpha === 255 &&
+            (row.status === 'knockout' || row.blend === 'normal') && paints) visible = false;
+      }
+    }
+    contributors(layers,true);
+    const slot = result.slots[0], alpha = result.opacity?.[0] ?? (slot < 0 ? 0 : 255);
+    return { layers,alpha,slot:slot < 0 ? null : slot,color:alpha ? result.mixedColors?.[0] ?? colors[slot] : null,
+      layer:result.layerIds[result.owners[0]] };
   }
 
   function descendants(stack,layer) {
@@ -191,6 +242,6 @@ const PixelLayerStack = (() => {
     return { width:raster.width,height:raster.height,rgba };
   }
 
-  return Object.freeze({ prepare,compose,image,bake,descendants,mergePlan,kinds,blends });
+  return Object.freeze({ prepare,compose,inspect,image,bake,descendants,mergePlan,kinds,blends });
 })();
 if (typeof module !== 'undefined') module.exports = PixelLayerStack;

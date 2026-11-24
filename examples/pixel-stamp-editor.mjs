@@ -1,4 +1,5 @@
 import { mountPixelGridCanvas } from '../src/pixel-grid-canvas.mjs';
+import { mountPixelInspector } from '../src/pixel-inspector.mjs';
 import * as paletteModule from '../src/pixel-palette.js';
 import { colors,openPNG,readPNG,savePNG } from './pixel-stamp-png.mjs';
 
@@ -10,6 +11,9 @@ const layerStack = KIT.pixelLayerStack, stackFormat = 'ink-studio/pixel-layer-de
 const { stonePaint, flowingInk, bubble, glint, starTwinkle, line, rect } = InkPixelStudies;
 const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
+let readInspection;
+const inspector = mountPixelInspector($('pixel-inspection'),view,at=>readInspection?.(at));
+const flatStack = layerStack.prepare([{ id:'paint',label:'Paint' }]);
 const state = { frame:0, swatch:0, tool:'pencil', points:[], undo:[] };
 let drawingPointer, pencilStroke, grid;
 let brush, brushTip, brushStroke, selection, selectionDraft, shownMasks;
@@ -509,36 +513,76 @@ function frameSlots(current) {
   return painted;
 }
 
+function inspectionReader(doc,frame,{ palette,swatchIds,slots,alpha,knockouts,isolated }) {
+  const { width,height } = doc, stack = state.stack ?? flatStack, active = state.stack ? state.layer : 'paint';
+  const entries = palette.map((color,i)=>{
+    const id = swatchIds[i] ?? 'rgb-'+color.slice(1);
+    const label = doc.swatchLabels?.[id], locked = doc.lockedSwatches?.includes(id);
+    return { id,color,...(typeof label === 'string' && { label }),...(locked && { locked }) };
+  });
+  const colors = palette.map(color=>Number.parseInt(color.slice(1),16)), cached = new Map();
+  const erase = new Set(knockouts);
+  return ([x,y])=>{
+    if (x >= width || y >= height) return;
+    const p = y*width+x;
+    const trace = layerStack.inspect(stack,colors,id=>{
+      if (id === active) return { slot:slots[p] === null && erase.has(p) ? -2 : slots[p],alpha:alpha?.[p] };
+      if (!cached.has(id)) {
+        const cel = Object.hasOwn(frame.cels,id) ? frame.cels[id] : {};
+        cached.set(id,{ slots:rasterSlots(width,height,cel),alpha:cel.alpha });
+      }
+      const source = cached.get(id);
+      return { slot:source.slots[p],alpha:source.alpha?.[p] };
+    },{ references:$('layer-references').checked });
+    const result = KIT.pixelInspection.document(trace,entries,id=>frame.cels?.[id]?.id ?? null);
+    const display = isolated && { layer:active,color:slots[p] != null && (alpha?.[p] ?? 255) > 0 ? palette[slots[p]] : null,
+      alpha:slots[p] == null ? 0 : alpha?.[p] ?? 255 };
+    return display ? { ...result,display } : result;
+  };
+}
+
 function draw() {
   const { width,height } = state.doc;
   const frame = state.doc.frames[state.frame], current = activeCel();
   const preview = adjustmentDraft
-    ? { palette:adjustmentDraft.palette,...adjustmentDraft.frames.get(state.frame) }
+    ? { palette:adjustmentDraft.palette,swatchIds:adjustmentDraft.swatchIds,...adjustmentDraft.frames.get(state.frame) }
     : transformDraft?.preview;
   let palette = preview?.palette ?? state.doc.palette, slots = preview?.slots ?? frameSlots(current);
-  let alpha = preview?.alpha ?? current.alpha;
+  let alpha = preview?.alpha ?? current.alpha, swatchIds = preview?.swatchIds ?? state.doc.swatchIds;
+  let knockouts = preview?.knockouts ?? current.knockouts;
+  const isolated = state.stack && $('layer-view').value === 'active';
   if (!adjustmentDraft && !transformDraft && rgbaPencil() && pencilStroke?.tip()) {
-    try { ({ palette,slots,alpha } = rgbaStroke(current)); }
+    try { ({ palette,slots,alpha,swatchIds } = rgbaStroke(current)); }
     catch (error) { notify(error.message); }
   }
   if (!adjustmentDraft && !transformDraft && state.tool === 'brush-stamp' && brush && (brushStroke || state.points.length)) {
-    try { ({ palette,slots,alpha } = applyBrush(slots,alpha)); }
-    catch (error) { notify(error.message); }
+    try {
+      const brushed = applyBrush(slots,alpha);
+      ({ palette,slots,alpha } = brushed);
+      swatchIds = brushed.swatchIds ?? swatchIds;
+    } catch (error) { notify(error.message); }
   }
   let image;
-  if (state.stack && $('layer-view').value === 'composite') {
+  if (state.stack && !isolated) {
     const references = $('layer-references').checked;
     try {
-      const knockout = preview?.knockouts ?? current.knockouts;
-      const composed = renderStack(state.doc,state.stack,frame,palette,{ id:state.layer,cel:{ slots,alpha,knockouts:knockout } },references);
+      const composed = renderStack(state.doc,state.stack,frame,palette,{ id:state.layer,cel:{ slots,alpha,knockouts } },references);
       image = layerStack.image(composed,composed.packed);
     } catch (error) {
       notify(error.message);
       const composed = renderStack(state.doc,state.stack,frame,state.doc.palette,undefined,references);
       image = layerStack.image(composed,composed.packed);
+      palette = state.doc.palette;
+      swatchIds = state.doc.swatchIds;
+      slots = stamp.paint(width,height,current);
+      ({ alpha,knockouts } = current);
     }
   } else image = stamp.image({ width,height,palette,slots,alpha });
   view.setFrame(image);
+  const document = state.doc;
+  let reader;
+  readInspection = at=>(reader ??= inspectionReader(document,frame,{ palette,swatchIds,slots,alpha,knockouts,isolated }))(at);
+  inspector.refresh();
   drawSelection();
   drawGuides(frame);
   const count = state.doc.frames.length;

@@ -1407,7 +1407,7 @@ const CMD = {
         '  pixel-art validate <design.json>           validate the versioned document and each frame',
         '  pixel-art targets <design.json> --destination id --scene <bound scene>   list stable scene targets',
         '  pixel-art preview <design.json> <edit.json> [--scene <bound scene>]   report a proposed edit and its conflicts',
-        '  pixel-art canvas <design.json> --out canvas.html [--frame id]   inspect native art and its 1× preview',
+        '  pixel-art canvas <design.json> --out canvas.html [--frame id] [--scene scene.json] [--destination ids] [--at x,y]   inspect the cursor and optional pinned scene pixel',
         '  pixel-art sample <design.json> --at x,y [--mode composite|layer|source]   sample art or a bound material channel',
         '  pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id] [--scene path]   resolve a native selection',
         '  pixel-art copy <design.json> --selection id [--frame id] --layer id|--cel id   print a pixel clipboard',
@@ -1415,7 +1415,8 @@ const CMD = {
         '    dynamics options: --stabilization ms --pressure light,full --velocity pxPerSecond,slow,fast',
         '  pixel-art snap <design.json> --at x,y [--frame id] [--radius pixels]   resolve document guides',
         '  pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint',
-        '  pixel-art inspect|edit <design.json> [--frame id]   work on a native indexed frame',
+        '  pixel-art inspect <design.json> --at x,y [--frame id] [--scene scene.json] [--destination ids] [--references] [--out report.json]   show pixel contributors',
+        '  pixel-art edit <design.json> [--frame id]   work on a native indexed frame',
         '  pixel-art edit <design.json> <edit.json> --out result.json   write an edit and print its receipt',
         '  pixel-art stack export <document.json> --out deck.json   open in the layer Workshop',
         '  pixel-art stack import <deck.json> --out document.json',
@@ -4119,10 +4120,14 @@ const CMD = {
       return { editor:descriptor.openEditor({ historyLimit }),
         ...(bytes && { revision:require('./asset-references.js').hash(bytes) }) };
     }
-    function capture(id,{ w = num('w',160),h = num('h',96),passes = ['objectId'] } = {}) {
+    function capture(id,{ w = num('w',160),h = num('h',96),passes = ['objectId'],
+      palettePixel,strandPixel,inspectFragmentPixel,sceneInspection } = {}) {
       const world = buildPreview(id), t = num('t',0);
       pose(world,t);
-      return R.render(world,view({ w,h,px:1,t,passes }));
+      const frame = R.render(world,view({ w,h,px:1,t,passes,...(sceneInspection && {
+        palettePixel,strandPixel,inspectFragmentPixel,renderGrid:false,cameraGuides:false
+      }) }));
+      return sceneInspection ? { ...frame,scene:world.id,time:t } : frame;
     }
     if (pos[0] === 'session') return PixelArt.sessionCommand(pos.slice(1),opt,{ scene:editScene,capture });
     PixelArt.command(pos,opt,outputFile,{
