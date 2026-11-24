@@ -78,6 +78,7 @@ const inspector = mountPixelInspector(document.querySelector('#pixel-inspection'
     return { slot:row.knockouts?.charCodeAt(p) ? -2 : slot === 255 ? -1 : slot,alpha:row.alpha?.charCodeAt(p) };
   },{ references:true });
   return { ...PixelInspection.document(trace,palette,id=>active.sources.get(id)?.cel ?? null),
+    protection:PixelProtection.at(active.protectedDetails,...at),
     materials:materialRows.filter(row=>row.frame === undefined || row.frame === active.id).map(row=>{
       const { data,values,missing,canvas,...meta } = row;
       const uv = PixelCanvasTransforms.uv([active.width,active.height],at,canvas);
@@ -153,7 +154,7 @@ async function draw() {
     view.setGuides(frame.guides);
     const layers = frame.layers.map(row=>({ ...row,slots:atob(row.slots),alpha:row.alpha && atob(row.alpha),
       knockouts:row.knockouts && atob(row.knockouts) }));
-    active = { id:frame.id,width:scratch.width,height:scratch.height,composite:atob(frame.composite),
+    active = { id:frame.id,protectedDetails:frame.protectedDetails,width:scratch.width,height:scratch.height,composite:atob(frame.composite),
       alpha:frame.alpha && atob(frame.alpha),rgb:frame.rgb && atob(frame.rgb),layers,
       sources:new Map(layers.map(row=>[row.id,row])),
       material:materialRows.find(row=>row.frame === undefined || row.frame === frame.id) };

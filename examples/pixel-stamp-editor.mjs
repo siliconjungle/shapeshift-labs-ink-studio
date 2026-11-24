@@ -7,7 +7,7 @@ const palettes = paletteModule.default ?? globalThis[Symbol.for('ink-studio.pixe
 const stamp = KIT.pixelStamps, guideTool = KIT.pixelGuides, paintTools = KIT.pixelPaintTools;
 const brushes = KIT.pixelBrushes, selections = KIT.pixelSelections, transforms = KIT.pixelSelectionTransforms;
 const canvasTransforms = KIT.pixelCanvasTransforms, adjustments = KIT.pixelAdjustments;
-const layerStack = KIT.pixelLayerStack, stackFormat = 'ink-studio/pixel-layer-deck';
+const protection = KIT.pixelProtection, layerStack = KIT.pixelLayerStack, stackFormat = 'ink-studio/pixel-layer-deck';
 const { stonePaint, flowingInk, bubble, glint, starTwinkle, line, rect } = InkPixelStudies;
 const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
@@ -17,7 +17,7 @@ const flatStack = layerStack.prepare([{ id:'paint',label:'Paint' }]);
 const state = { frame:0, swatch:0, tool:'pencil', points:[], undo:[] };
 let drawingPointer, pencilStroke, grid;
 let brush, brushTip, brushStroke, selection, selectionDraft, shownMasks;
-let clipboard, transformDraft, adjustmentDraft;
+let clipboard, transformDraft, adjustmentDraft, shownProtection;
 const maxPencilPixels = 4096;
 let sharedGuides, frameGuides, guideItems = [];
 const limit = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
@@ -95,6 +95,7 @@ function load(data) {
   });
   const revised = { ...rest,swatchIds,frames:loaded };
   if (stack) validateStackDeck(revised,stack);
+  else validateProtection(revised);
   stop();
   if (state.doc) saveUndo();
   state.doc = revised;
@@ -197,11 +198,14 @@ function drawSelection() {
   $('selection-save').disabled = !active || busy || !selectionId(id);
   $('selection-save').textContent = rows?.some(row=>row.id === id) ? 'Update mask' : 'Save mask';
   $('selection-recall').disabled = busy || !menu.value;
+  drawProtection(active,busy);
   $('transform-begin').disabled = busy || !layerWritable() || !active?.pixelCount;
   $('transform-copy').disabled = busy || !active?.pixelCount;
   $('transform-paste').disabled = busy || !layerWritable() || !clipboard;
   $('transform-fields').hidden = !transformDraft;
   $('transform-duplicate-label').hidden = !transformDraft?.fromSelection;
+  $('transform-protection-label').hidden = !transformDraft?.fromSelection ||
+    $('transform-duplicate').checked || !frameProtection(state.doc,state.frame).length;
   $('transform-apply').disabled = !transformDraft?.preview || drawingPointer !== undefined;
   $('canvas-fit-selection').disabled = busy || !active?.pixelCount;
   $('swatch-replace').disabled = busy || !layerWritable() || !active?.pixelCount || !$('swatch-replace-target').value;
@@ -320,6 +324,74 @@ function activeCel(index = state.frame) {
   return state.stack ? (Object.hasOwn(frame.cels,state.layer) ? frame.cels[state.layer] : {}) : frame;
 }
 
+const frameIds = doc=>doc.frames.map(frame=>frame.id);
+const frameProtection = (doc,i)=>doc.protectedDetails?.length ? protection.active(doc.protectedDetails,frameIds(doc),i) : [];
+
+function drawProtection(active,busy) {
+  const doc = state.doc, rows = doc.protectedDetails, menu = $('protection-saved');
+  if (shownProtection !== rows) {
+    const previous = menu.value;
+    menu.replaceChildren(new Option('Choose a detail',''),...(rows ?? []).map(row=>
+      new Option(row.id+' · '+(row.kind ?? 'pixel'),row.id)));
+    if (rows?.some(row=>row.id === previous)) menu.value = previous;
+    shownProtection = rows;
+  }
+  const id = $('protection-id').value.trim();
+  $('protection-lock').disabled = busy || !active?.pixelCount || !selectionId(id);
+  $('protection-lock').textContent = rows?.some(row=>row.id === id) ? 'Update detail' : 'Lock selected pixels';
+  $('protection-show').disabled = busy || !frameProtection(doc,state.frame).some(row=>row.id === menu.value);
+  $('protection-unlock').disabled = busy || !menu.value;
+  $('protection-range').hidden = $('protection-scope').value !== 'range';
+  $('protection-first').max = $('protection-last').max = doc.frames.length;
+}
+
+for (const id of ['protection-id','protection-scope','protection-saved'])
+  $(id).addEventListener(id === 'protection-id' ? 'input' : 'change',drawSelection);
+$('protection-lock').addEventListener('click',()=>{
+  const doc = state.doc, { width,height } = doc, selected = activeSelection();
+  if (!selected?.pixelCount) return;
+  const id = $('protection-id').value.trim(), kind = $('protection-kind').value;
+  const scope = $('protection-scope').value, used = new Set(frameIds(doc));
+  const frames = [...doc.frames];
+  const key = index=>{
+    const frame = frames[index];
+    if (frame.id !== undefined) return frame.id;
+    const id = colors.uniqueId(used,'frame-'+(index+1));
+    used.add(id);
+    frames[index] = { ...frame,id };
+    return id;
+  };
+  try {
+    const [first,last] = ['protection-first','protection-last'].map(id=>$(id).valueAsNumber-1);
+    if (scope === 'range' && (!Number.isInteger(first) || !Number.isInteger(last) || first < 0 || last < first || last >= frames.length))
+      throw new RangeError('Choose a valid first and last frame');
+    const row = { id,kind,pixels:selections.pixels(width,selected.mask),
+      ...(scope === 'frame' && { frame:key(state.frame) }),...(scope === 'range' && { frames:[key(first),key(last)] }) };
+    const details = new Map((doc.protectedDetails ?? []).map(row=>[row.id,row]));
+    details.set(id,row);
+    const revised = { ...doc,frames,protectedDetails:[...details.values()] };
+    validateProtection(revised,state.stack);
+    edit(()=>{ state.doc = revised; });
+    $('protection-saved').value = id;
+    drawSelection();
+    notify('Protected '+id);
+  } catch (error) { notify(error.message); }
+});
+$('protection-show').addEventListener('click',()=>{
+  const row = frameProtection(state.doc,state.frame).find(row=>row.id === $('protection-saved').value);
+  if (!row) return;
+  const { width,height } = state.doc;
+  const mask = selections.fromPixels(width,height,row.pixels);
+  setActiveSelection(selectionFromMask(mask));
+  drawSelection();
+});
+$('protection-unlock').addEventListener('click',()=>{
+  const id = $('protection-saved').value;
+  if (!id) return;
+  edit(()=>{ state.doc.protectedDetails = state.doc.protectedDetails.filter(row=>row.id !== id); });
+  notify('Unlocked '+id);
+});
+
 function layerWritable() {
   const layer = state.stack?.rows.get(state.layer);
   return !state.stack || layer && layer.kind !== 'group' && layer.kind !== 'reference' && !layer.effectiveLock;
@@ -336,19 +408,19 @@ function renderStack(doc,stack,frame,palette = doc.palette,override,references =
   return { ...composite,packed };
 }
 
-function layerConflict(slots,alpha,knockouts,index = state.frame) {
-  if (!state.stack) return;
+function layerConflict(slots,alpha,knockouts,index = state.frame,carried) {
   if (!layerWritable()) throw new RangeError('Choose an unlocked paint, mask, or surface layer');
-  const doc = state.doc, previous = activeCel(index), before = rasterSlots(doc.width,doc.height,previous);
-  const composed = renderStack(doc,state.stack,doc.frames[index],doc.palette,undefined,false,state.layer);
-  const { clipping } = composed.layerSources.get(state.layer), erased = new Set(knockouts);
-  const frameId = doc.frames[index].id, protectedPixels = new Set();
-  for (const detail of doc.protectedDetails ?? []) if (detail.frame === undefined || detail.frame === frameId)
-    for (const [x,y] of detail.pixels) protectedPixels.add(y*doc.width+x);
+  const doc = state.doc, details = frameProtection(doc,index);
+  if (!state.stack && !details.length) return;
+  const previous = activeCel(index), before = rasterSlots(doc.width,doc.height,previous);
+  const composed = state.stack && renderStack(doc,state.stack,doc.frames[index],doc.palette,undefined,false,state.layer);
+  const clipping = composed?.layerSources.get(state.layer)?.clipping, erased = new Set(knockouts);
+  const protectedPixels = carried?.locked ?? new Set();
+  if (!carried) for (const detail of details) for (const [x,y] of detail.pixels) protectedPixels.add(y*doc.width+x);
   for (let p = 0; p < slots.length; p++) {
     const slot = erased.has(p) ? -2 : slots[p], opacity = alpha?.[p] ?? 255;
     if (slot === before[p] && (slot === null || slot < 0 || opacity === (previous.alpha?.[p] ?? 255))) continue;
-    const protectedPixel = composed.locks[p] || protectedPixels.has(p);
+    const protectedPixel = composed?.locks[p] || protectedPixels.has(p);
     if (protectedPixel || clipping && !clipping[p])
       throw new RangeError((protectedPixel ? 'Protected' : 'Clipped')+' pixel at '+[p%doc.width,Math.floor(p/doc.width)].join(', '));
   }
@@ -388,7 +460,7 @@ function startTransform(fromSelection) {
   $('transform-width').value = clip.width;
   $('transform-height').value = clip.height;
   $('transform-angle').value = 0;
-  $('transform-flip-x').checked = $('transform-flip-y').checked = $('transform-duplicate').checked = false;
+  for (const id of ['transform-flip-x','transform-flip-y','transform-duplicate','transform-protection']) $(id).checked = false;
   updateTransform();
   art.closest('.ink-grid-viewport').focus({ preventScroll:true });
 }
@@ -414,7 +486,12 @@ function updateTransform() {
       flipX:$('transform-flip-x').checked,flipY:$('transform-flip-y').checked,rotation:$('transform-rotation').value
     };
     const move = transformDraft.fromSelection && !$('transform-duplicate').checked;
-    const raster = transforms.stage(width,height,{ slots,alpha,palette:indexedPalette() },transformDraft.clip,settings,{ move,named:true,limit:colors.limit });
+    const carry = move && $('transform-protection').checked;
+    const raster = transforms.stage(width,height,{ slots,alpha,palette:indexedPalette() },transformDraft.clip,settings,
+      { move,named:true,limit:colors.limit,captureSources:carry });
+    const doc = state.doc, index = state.frame;
+    const carried = carry ? protection.carry(frameProtection(doc,index),doc.frames[index].id,width,
+      activeSelection().mask,raster.sources) : undefined;
     for (const [p,pixel] of raster.writes) {
       slots[p] = pixel.slot === -1 ? null : pixel.slot;
       alpha[p] = pixel.alpha;
@@ -422,7 +499,7 @@ function updateTransform() {
     const knockouts = [];
     for (let p = 0; p < slots.length; p++) if (slots[p] === -2) { slots[p] = null; knockouts.push(p); }
     transformDraft.preview = { slots,alpha,knockouts,palette:raster.palette.map(entry=>entry.color),
-      swatchIds:raster.palette.map(entry=>entry.id),selection:selectionFromMask(raster.mask) };
+      swatchIds:raster.palette.map(entry=>entry.id),selection:selectionFromMask(raster.mask),carried };
     $('transform-info').value = raster.clippedPixels ? `${raster.clippedPixels} selected pixels outside the canvas` : '';
   } catch (error) {
     transformDraft.preview = undefined;
@@ -434,8 +511,8 @@ function updateTransform() {
 function finishTransform() {
   const preview = transformDraft?.preview;
   if (!preview || drawingPointer !== undefined) return;
-  const { slots,palette,alpha,selection,swatchIds,knockouts } = preview;
-  if (savePixels(activeCel(),slots,palette,alpha,selection,swatchIds,knockouts)) notify('Applied transform');
+  const { slots,palette,alpha,selection,swatchIds,knockouts,carried } = preview;
+  if (savePixels(activeCel(),slots,palette,alpha,selection,swatchIds,knockouts,carried)) notify('Applied transform');
 }
 
 function cancelTransform() {
@@ -513,7 +590,7 @@ function frameSlots(current) {
   return painted;
 }
 
-function inspectionReader(doc,frame,{ palette,swatchIds,slots,alpha,knockouts,isolated }) {
+function inspectionReader(doc,frame,index,{ palette,swatchIds,slots,alpha,knockouts,isolated }) {
   const { width,height } = doc, stack = state.stack ?? flatStack, active = state.stack ? state.layer : 'paint';
   const entries = palette.map((color,i)=>{
     const id = swatchIds[i] ?? 'rgb-'+color.slice(1);
@@ -521,7 +598,7 @@ function inspectionReader(doc,frame,{ palette,swatchIds,slots,alpha,knockouts,is
     return { id,color,...(typeof label === 'string' && { label }),...(locked && { locked }) };
   });
   const colors = palette.map(color=>Number.parseInt(color.slice(1),16)), cached = new Map();
-  const erase = new Set(knockouts);
+  const erase = new Set(knockouts), details = frameProtection(doc,index);
   return ([x,y])=>{
     if (x >= width || y >= height) return;
     const p = y*width+x;
@@ -537,7 +614,7 @@ function inspectionReader(doc,frame,{ palette,swatchIds,slots,alpha,knockouts,is
     const result = KIT.pixelInspection.document(trace,entries,id=>frame.cels?.[id]?.id ?? null);
     const display = isolated && { layer:active,color:slots[p] != null && (alpha?.[p] ?? 255) > 0 ? palette[slots[p]] : null,
       alpha:slots[p] == null ? 0 : alpha?.[p] ?? 255 };
-    return display ? { ...result,display } : result;
+    return { ...result,protection:protection.at(details,x,y),...(display && { display }) };
   };
 }
 
@@ -579,9 +656,9 @@ function draw() {
     }
   } else image = stamp.image({ width,height,palette,slots,alpha });
   view.setFrame(image);
-  const document = state.doc;
+  const doc = state.doc, index = state.frame;
   let reader;
-  readInspection = at=>(reader ??= inspectionReader(document,frame,{ palette,swatchIds,slots,alpha,knockouts,isolated }))(at);
+  readInspection = at=>(reader ??= inspectionReader(doc,frame,index,{ palette,swatchIds,slots,alpha,knockouts,isolated }))(at);
   inspector.refresh();
   drawSelection();
   drawGuides(frame);
@@ -593,8 +670,8 @@ function draw() {
   $('width').disabled = !['brush','erase'].includes(state.tool);
   $('pixel-perfect').disabled = $('pencil-color-mode').disabled = state.tool !== 'pencil';
   $('pencil-rgba').hidden = !rgbaPencil();
-  const boundFrame = state.stack && frame.id !== undefined &&
-    [...(state.doc.sceneBindings ?? []),...(state.doc.protectedDetails ?? [])].some(row=>row.frame === frame.id);
+  const boundFrame = frame.id !== undefined && ((state.doc.sceneBindings ?? []).some(row=>row.frame === frame.id) ||
+    (doc.protectedDetails ?? []).some(row=>row.frame === frame.id || row.frames?.includes(frame.id)));
   $('remove').disabled = count === 1 || !!boundFrame;
   $('duplicate').disabled = count >= 2048 || (count+1)*width*height > 2**20;
   showShapeControls();
@@ -699,19 +776,29 @@ function commitStroke() {
 }
 
 function savePixels(current,slots,palette = state.doc.palette,alpha = current.alpha,nextSelection = selection,
-    swatchIds = state.doc.swatchIds,knockouts = current.knockouts?.filter(p=>slots[p] === null)) {
+    swatchIds = state.doc.swatchIds,knockouts = current.knockouts?.filter(p=>slots[p] === null),carried) {
   const { rows,strokes,alpha:previousAlpha,knockouts:previousKnockouts,...frame } = current;
   const keepAlpha = alpha?.some((value,p)=>value !== 255 && slots[p] !== null);
   const next = { ...frame,slots,
     ...(keepAlpha && { alpha:alpha.map((value,p)=>slots[p] === null ? 255 : value) }),
     ...(knockouts?.length && { knockouts }) };
+  const doc = state.doc, frameBefore = doc.frames[state.frame];
+  const frameAfter = state.stack ? { ...frameBefore,cels:{ ...frameBefore.cels,[state.layer]:next } } :
+    { ...next,duration:current.duration ?? 1/(doc.fps ?? 12) };
   try {
-    layerConflict(slots,alpha,knockouts);
-    if (state.stack) renderStack(state.doc,state.stack,state.doc.frames[state.frame],palette,{ id:state.layer,cel:next });
+    layerConflict(slots,alpha,knockouts,state.frame,carried);
+    if (carried?.moved.size) {
+      const before = protectionRaster(doc,frameBefore,state.stack);
+      const after = protectionRaster({ ...doc,palette,swatchIds },frameAfter,state.stack);
+      const change = protection.carriedChange(carried,doc.width,before,after);
+      if (change) throw new RangeError('Transform would change protected detail '+change.id);
+    } else if (state.stack) {
+      renderStack(doc,state.stack,frameAfter,palette);
+    }
   } catch (error) { resetStroke(); draw(); notify(error.message); return false; }
   edit(() => {
-    if (state.stack) state.doc.frames[state.frame].cels[state.layer] = next;
-    else state.doc.frames[state.frame] = { ...next,duration:current.duration ?? 1/(state.doc.fps ?? 12) };
+    doc.frames[state.frame] = frameAfter;
+    if (carried?.moved.size) doc.protectedDetails = doc.protectedDetails.map(row=>carried.moved.get(row.id) ?? row);
     state.doc.palette = palette;
     state.doc.swatchIds = swatchIds;
     selection = nextSelection;
@@ -1119,7 +1206,8 @@ function transformCanvas(operation,bindingPolicy) {
       const slots = layerArt ? layerArt.slots : stamp.paint(doc.width,doc.height,frame);
       const alpha = layerArt ? layerArt.opacity : frame.alpha;
       for (let p = 0; p < slots.length; p++)
-        if (slots[p] !== null && slots[p] >= 0 && alpha?.[p] !== 0) trim.include(p%doc.width,Math.floor(p/doc.width));
+        if (layerArt?.locks[p] || slots[p] !== null && slots[p] >= 0 && alpha?.[p] !== 0)
+          trim.include(p%doc.width,Math.floor(p/doc.width));
     }
     for (const detail of doc.protectedDetails ?? []) for (const [x,y] of detail.pixels) trim.include(x,y);
   }
@@ -1132,24 +1220,28 @@ function transformCanvas(operation,bindingPolicy) {
   const revised = { ...doc,width,height };
   let updatedSelection = selection;
   if (changesGrid) {
-    function transformCel(cel) {
+    const mapping = protection.remap(map,doc.protectedDetails,canvasTransforms.region);
+    function transformCel(cel,sampling) {
       const { rows,strokes,alpha,knockouts,...rest } = cel;
-      const output = canvasTransforms.raster(map,rasterSlots(doc.width,doc.height,cel),alpha), erased = [];
+      const output = canvasTransforms.raster(sampling,rasterSlots(doc.width,doc.height,cel),alpha), erased = [];
       for (let p = 0; p < output.slots.length; p++)
         if (output.slots[p] === -2) { output.slots[p] = null; erased.push(p); }
       return { ...rest,...output,...(erased.length && { knockouts:erased }) };
     }
-    revised.frames = doc.frames.map(frame => {
+    revised.frames = doc.frames.map((frame,i) => {
+      const active = frameProtection(doc,i).filter(row=>row.kind);
+      const sampling = active.length ? mapping.forFrame(active,protectionRaster(doc,frame,state.stack)) : map;
       const { selections:saved,guides,cels,...hold } = frame;
       const adjusted = canvasTransforms.guides(map,guides);
       if (adjusted) guideTool.prepare(adjusted);
       const painted = cels ? { ...hold,cels:Object.fromEntries(
-        Object.entries(cels).map(([id,cel])=>[id,transformCel(cel)])) } : transformCel(hold);
+        Object.entries(cels).map(([id,cel])=>[id,transformCel(cel,sampling)])) } : transformCel(hold,sampling);
       return { ...painted,...(adjusted && { guides:adjusted }),
         ...(saved && { selections:saved.map(row=>({ ...row,pixels:canvasTransforms.region(map,row.pixels).pixels })) }) };
     });
-    for (const key of ['protectedDetails','sharedSelections']) if (doc[key])
-      revised[key] = doc[key].map(row=>({ ...row,pixels:canvasTransforms.region(map,row.pixels).pixels }));
+    if (mapping.rows) revised.protectedDetails = mapping.rows;
+    if (doc.sharedSelections) revised.sharedSelections = doc.sharedSelections.map(row=>
+      ({ ...row,pixels:canvasTransforms.region(map,row.pixels).pixels }));
     if (doc.guides) revised.guides = guideTool.prepare(canvasTransforms.guides(map,doc.guides));
     if (doc.drawing) {
       revised.drawing = { ...doc.drawing };
@@ -1170,6 +1262,7 @@ function transformCanvas(operation,bindingPolicy) {
     });
   }
   if (state.stack) validateStackDeck(revised,state.stack);
+  else validateProtection(revised);
   edit(() => {
     state.doc = revised;
     selection = updatedSelection;
@@ -1434,10 +1527,8 @@ $('duration').addEventListener('change',()=>edit(()=>{
 $('playback').addEventListener('change',()=>edit(()=>{state.doc.playback=$('playback').value;}));
 $('duplicate').addEventListener('click',()=>edit(()=>{
   const copy=structuredClone(state.doc.frames[state.frame]);
-  if (state.stack) {
-    delete copy.id;
-    for (const cel of Object.values(copy.cels)) delete cel.id;
-  }
+  delete copy.id;
+  if (state.stack) for (const cel of Object.values(copy.cels)) delete cel.id;
   state.doc.frames.splice(++state.frame,0,copy);
   if (selection?.frame >= state.frame) selection = { ...selection,frame:selection.frame+1 };
   resetStroke();
@@ -1482,13 +1573,42 @@ function validateStackDeck(doc,stack = layerStack.prepare(doc.layers)) {
   if (frameIds.size !== frames.filter(frame=>frame.id !== undefined).length)
     throw new RangeError('Layer deck frame IDs must be unique');
   validateSavedMasks(width,height,doc.sharedSelections);
-  for (const detail of doc.protectedDetails ?? []) {
-    if (!selectionId(detail.id) || detail.frame !== undefined && !frameIds.has(detail.frame))
-      throw new RangeError('Protected details need a valid ID and frame');
-    selections.fromPixels(width,height,detail.pixels);
+  const details = doc.protectedDetails ?? [];
+  const ids = frames.map(frame=>frame.id);
+  protection.validate(details,width,height,ids);
+  for (let i = 0; i < frames.length; i++) {
+    const raster = protectionRaster(doc,frames[i],stack);
+    protection.paintLocks(protection.active(details,ids,i),width,raster);
   }
-  for (const frame of frames) renderStack(doc,stack,frame);
   return stack;
+}
+
+function protectionRaster(doc,frame,stack) {
+  const { width,height,swatchIds } = doc;
+  const raster = stack ? renderStack(doc,stack,frame) : { slots:rasterSlots(width,height,frame),
+    opacity:frame.alpha,locks:new Uint8Array(width*height) };
+  return { ...raster,swatches:swatchIds,colors:raster.packed ?? doc.palette.map(row=>Number.parseInt(row.slice(1),16)) };
+}
+
+function validateProtection(doc,stack) {
+  const ids = frameIds(doc);
+  protection.validate(doc.protectedDetails,doc.width,doc.height,ids);
+  if (!doc.protectedDetails?.some(row=>row.kind === 'gap')) return;
+  for (let i = 0; i < doc.frames.length; i++) {
+    const gaps = protection.active(doc.protectedDetails,ids,i).filter(row=>row.kind === 'gap');
+    if (gaps.length) protection.paintLocks(gaps,doc.width,protectionRaster(doc,doc.frames[i],stack));
+  }
+}
+
+function assertProtectionUnchanged(doc,next,stack) {
+  if (!doc.protectedDetails?.length) return;
+  for (let i = 0; i < doc.frames.length; i++) {
+    const active = frameProtection(doc,i);
+    if (!active.length) continue;
+    const change = protection.changed(active,doc.width,protectionRaster(doc,doc.frames[i],state.stack),
+      protectionRaster(next,next.frames[i],stack));
+    if (change) throw new RangeError('Edit would change protected detail '+change.id+' at '+change.at.join(', '));
+  }
 }
 
 function updateLayers() {
@@ -1535,7 +1655,9 @@ function showLayerProperties() {
 }
 
 function commitStack(doc,active = state.layer) {
-  validateStackDeck(doc);
+  const stack = layerStack.prepare(doc.layers);
+  assertProtectionUnchanged(state.doc,doc,stack);
+  validateStackDeck(doc,stack);
   edit(()=>{
     state.doc = doc;
     state.layer = active;
@@ -1588,7 +1710,7 @@ $('layer-properties').addEventListener('change',event=>{
   catch (error) { showLayerProperties(); notify(error.message); }
 });
 for (const [id,step] of [['layer-lower',-1],['layer-raise',1]]) $(id).addEventListener('click',()=>{
-  const doc = state.doc, stack = state.stack, row = stack.rows.get(state.layer);
+  const doc = state.doc, stack = layerStack.prepare(doc.layers), row = stack.rows.get(state.layer);
   const siblings = stack.children.get(row.parent), i = siblings.indexOf(row), swap = i+step;
   [siblings[i],siblings[swap]] = [siblings[swap],siblings[i]];
   const defs = new Map(doc.layers.map(layer=>[layer.id,layer]));
@@ -1806,6 +1928,7 @@ function paletteEdit(operation,selected) {
   const roles = doc.swatchRoles && swatchIds.map(id=>doc.swatchRoles[doc.swatchIds.indexOf(id)] ?? null);
   const next = { ...base,frames,palette:palette.swatches.map(row=>row.color),swatchIds,
     ...palettes.stampMetadata(palette),...(roles && { swatchRoles:roles }) };
+  assertProtectionUnchanged(doc,next,state.stack);
   if (state.stack) validateStackDeck(next,state.stack);
   edit(()=>{
     state.doc = next;

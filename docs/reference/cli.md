@@ -249,6 +249,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art edit <design.json> <edit.json> --out result.json   write an edit and print its receipt
   pixel-art stack export <document.json> --out deck.json   open in the layer Workshop
   pixel-art stack import <deck.json> --out document.json
+    protection destination: set or remove named pixel locks across frames
     layers destination: add, update, reorder, set-cel, remove, merge-down, flatten-group, and flatten
     adjustments destination: curves, hue-saturation, gradient, replace, dither, and outline by scope
     canvas destination: crop, trim, pad, resize, or resample all frames

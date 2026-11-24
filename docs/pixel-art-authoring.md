@@ -775,6 +775,59 @@ transform drops. Commit through `pixel-art edit` or `editor.apply()`.
 Canvas edits support receipts, replay, and persistent sessions. Undo
 restores the original grid and authored cel commands.
 
+## Protect authored details
+
+In the Workshop, select the native pixels and open **Protect details**.
+Name the detail and choose a pixel lock, transparent gap, contour span or
+focal accent. Select the cells beside a contour too if they need to stay
+empty. Protect the current frame, all frames, or an inclusive range in
+animation order. A gap must be transparent in every frame it covers. Use
+**Select detail** to recall the mask or **Unlock detail** to remove it.
+
+A lock follows its authored swatch, composite color and coverage. Paint,
+palette edits, layer-stack changes, and adjustments that would alter the
+detail report a conflict. Draw review keeps protected findings out of the
+editable cleanup overlay. The cursor inspector lists the lock IDs, kinds
+and frame scopes at the hovered pixel.
+
+Use the `document:protection` destination with the usual revision,
+preview, edit and replay commands. This edit protects an opening in two
+or more frames, from `closed` through `opening`.
+
+```json
+{
+  "id": "protect-vent",
+  "revision": "<revision from pixel-art validate>",
+  "destination": "document:protection",
+  "operation": {
+    "type": "set",
+    "id": "vent-opening",
+    "kind": "gap",
+    "frames": ["closed", "opening"],
+    "pixels": [[14, 10], [15, 10]]
+  }
+}
+```
+
+Use `selection` in place of `pixels` to take coordinates from a saved mask.
+A frame-scoped selection needs the same `frame` on the operation.
+Use an operation such as `{"type":"remove","id":"vent-opening"}` to unlock
+the group. Setting an existing ID replaces its scope and coordinates.
+
+Whole-canvas transforms carry named locks and copy their exact pixel
+samples, including gaps during area resampling. If downsampling would
+combine different protected samples, preview reports a conflict. Remove
+or reposition a named lock before cropping out any of its protected
+cells. Existing untyped protection lists keep their original crop
+behavior and the receipt reports any lost coordinates.
+
+For a single-frame move, select the entire frame-scoped detail and enable
+**Carry frame locks**. Use `"carryProtection": true` on the SDK or CLI
+raster transform operation. The destination needs to preserve the exact
+color and coverage, and a carried gap needs an empty destination. A
+selection move applies to one frame. Use whole-canvas operations to
+transform shared or ranged protection.
+
 ## Author a drawing
 
 ```json
@@ -1138,9 +1191,10 @@ document level. Each frame holds its own cels and duration.
   a separate display `label`.
 - `selections` and `protectedDetails` are optional arrays of named coordinate
   sets. Each list uses unique in-bounds `[x, y]` coordinates. Omit `frame` to
-  apply the set across all frames. Selections are saved for reuse. Protected
-  details lock the final visible cell for guarded edits, including transparent
-  gaps. A protected layer still locks its marks during compositing.
+  apply a set across all frames. Protected details also accept a `kind`
+  and an inclusive `frames: [first, last]` scope. Selections are saved for
+  reuse. Details lock visible pixels and transparent gaps. A protected
+  layer still locks its marks during compositing.
 - `sceneBindings` optionally records a `scene` and `object` with an optional
   `part`, source `revision`, and `frame` or `layer` scope. Drawing and editing
   the pixel document operate on the stored art. Named destinations use

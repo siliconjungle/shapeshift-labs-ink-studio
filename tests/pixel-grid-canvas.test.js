@@ -851,6 +851,43 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     await click(browser,'#layer-remove');
     assert.deepEqual((await download('#export')).layers,beforeMerge.layers);
 
+    const detailFile = path.join(directory,'workshop-detail.json');
+    fs.writeFileSync(detailFile,JSON.stringify({ width:4,height:3,swatchIds:['ink'],
+      palette:['#ff0000'],frames:[{ slots:slots([0,0]),duration:.25 },{ slots:slots(),duration:.25 }] }));
+    await browser.send('DOM.setFileInputFiles',{ nodeId:imported.nodeId,files:[detailFile] });
+    await until(browser,"document.querySelector('#status').textContent === 'Opened workshop-detail.json'");
+    await evaluate(browser,()=>document.querySelector('#protection-tools').open = true);
+    await chooseSelection('rectangle');
+    const detailCanvas = await screen(browser,main);
+    await press(place(detailCanvas,0,0));
+    await release(place(detailCanvas,0,0));
+    await evaluate(browser,()=>{
+      const field = document.querySelector('#protection-id');
+      field.value = 'eye';
+      field.dispatchEvent(new Event('input'));
+    });
+    await change('protection-kind','accent');
+    await click(browser,'#protection-lock');
+    const locked = await download('#export');
+    assert.deepEqual(locked.protectedDetails,[{ id:'eye',kind:'accent',pixels:[[0,0]],frame:'frame-1' }]);
+    await change('color','#00ff00');
+    assert.match(await browser.evaluate("document.querySelector('#status').textContent"),/would change protected detail eye/);
+    await click(browser,'#transform-begin');
+    await evaluate(browser,()=>{
+      const carry = document.querySelector('#transform-protection');
+      carry.checked = true;
+      document.querySelector('#transform-x').value = 2;
+      carry.dispatchEvent(new Event('input',{ bubbles:true }));
+    });
+    await click(browser,'#transform-apply');
+    assert.deepEqual((await download('#export')).protectedDetails[0].pixels,[[2,0]]);
+    assert.deepEqual(await raster(browser,preview,2,0),[255,0,0,255]);
+    await click(browser,'#protection-unlock');
+    assert.deepEqual((await download('#export')).protectedDetails,[]);
+    await click(browser,'#undo');
+    assert.equal((await download('#export')).protectedDetails[0].id,'eye');
+
+
 
 
 
@@ -868,6 +905,7 @@ test('the CLI exports an offline native canvas with both views on the selected v
       { id:'side',label:'Side',durationMs:200,cels:{ paint:{ marks:[{ at:[1,2],swatch:'cool' }] } } }
     ],guides:[{ id:'tile',kind:'grid',at:[0,1],step:[4,3] },
       { id:'front-pin',kind:'registration',at:[3,4],frame:'front' }],
+    protectedDetails:[{ id:'paint-tip',kind:'accent',frame:'front',pixels:[[1,2]] }],
     sceneBindings:[{ id:'panel',scene:scenePath,object:'face',frame:'front',
       canvas:{ size:[7,6],offset:[-1,0],scale:[1,1] } }],
     destinations:[{ id:'scratches',kind:'surface-channel',binding:'panel',chart:'front',channel:'wear' }] };
@@ -913,6 +951,7 @@ test('the CLI exports an offline native canvas with both views on the selected v
     const inspected = await browser.evaluate("document.querySelector('#pixel-inspection').textContent");
     assert.match(inspected,/paint.*covered/);
     assert.match(inspected,/authored index/);
+    assert.match(inspected,/paint-tip · accent · front/);
     assert.match(inspected,/face\/front\/wear.*0\.625/);
     assert.match(inspected,/Scene hits/);
     await click(browser,'#pixel-inspection button');

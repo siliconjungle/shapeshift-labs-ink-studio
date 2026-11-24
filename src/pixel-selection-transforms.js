@@ -114,7 +114,7 @@ const PixelSelectionTransforms = (() => {
     return { samples,left,top,right,bottom };
   }
 
-  function stage(width,height,current,raw,settings = {},{ move = false, named = false, limit = 255 } = {}) {
+  function stage(width,height,current,raw,settings = {},{ move = false, named = false, limit = 255, captureSources = false } = {}) {
     if (!integer(width,1,512) || !integer(height,1,512) || current?.slots?.length !== width*height ||
         !Array.isArray(current.palette) || current.alpha !== undefined && current.alpha.length !== current.slots.length)
       throw new RangeError('A transform needs a native target raster and its palette');
@@ -123,6 +123,7 @@ const PixelSelectionTransforms = (() => {
     const bounds = [x,y,right-left+1,bottom-top+1];
     const native = (u,v) => integer(u,0,width-1) && integer(v,0,height-1);
     const mask = new Uint8Array(width*height), placed = new Map(), used = new Set(), writes = new Map();
+    const sources = captureSources ? new Map() : undefined;
     let clippedPixels = 0;
     const set = (p,slot,alpha = 255) => { writes.set(p,{ slot,alpha }); };
 
@@ -140,6 +141,10 @@ const PixelSelectionTransforms = (() => {
       if (!native(u,v)) { clippedPixels++; continue; }
       const p = v*width+u;
       mask[p] = 1;
+      if (sources) {
+        const [u,v] = clip.origin;
+        sources.set(p,(v+Math.floor(from/clip.width))*width+u+from%clip.width);
+      }
       if (slot === -1) continue;
       placed.set(p,from);
       if (slot >= 0) used.add(slot);
@@ -155,7 +160,7 @@ const PixelSelectionTransforms = (() => {
       const before = current.slots[p] ?? -1;
       if (slot === before && alpha === (before < 0 ? 255 : current.alpha?.[p] ?? 255)) writes.delete(p);
     }
-    return { mask,palette,writes,bounds,clippedPixels };
+    return { mask,palette,writes,bounds,clippedPixels,...(sources && { sources }) };
   }
 
   return Object.freeze({ format,validate,capture,stage });
