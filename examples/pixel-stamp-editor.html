@@ -139,6 +139,22 @@
             <label class="row">Tint <input id="brush-tint" type="color"></label>
             <button type="button" id="brush-active-color">Use active swatch</button>
           </div>
+          <label>Brush mode<select id="brush-mode">
+            <option value="paint">Paint</option>
+            <option value="recolor">Recolor with coverage lock</option>
+            <option value="ramp">Shade along ramp</option>
+            <option value="alpha">Set alpha</option>
+          </select></label>
+          <div class="guide-controls" id="brush-ramp-controls" hidden>
+            <label>Ramp swatches (dark to light)<input id="brush-ramp" type="text" value="1, 2, 3"></label>
+            <div class="row canvas-size">
+              <label>Step<input id="brush-ramp-step" type="number" min="-47" max="47" step="1" value="1"></label>
+              <button type="button" id="brush-ramp-add">Add active swatch</button>
+            </div>
+          </div>
+          <div class="canvas-size" id="brush-alpha-controls" hidden>
+            <label>Alpha (0–255)<input id="brush-alpha" type="number" min="0" max="255" step="1" value="128"></label>
+          </div>
           <label class="row" style="display:flex"><input id="brush-dynamics" type="checkbox"> Brush dynamics</label>
           <div class="guide-controls" id="brush-dynamics-settings" hidden>
             <div class="canvas-size">

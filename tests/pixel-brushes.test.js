@@ -167,3 +167,88 @@ test('CLI brush capture, reuse and replay preserve saved anchor, angle, size and
   assert.equal(cli('replay',file('target'),file('receipt'),'--out',file('replayed')),fs.readFileSync(file('receipt'),'utf8'));
   assert.equal(fs.readFileSync(file('edited'),'utf8'),fs.readFileSync(file('replayed'),'utf8'));
 });
+
+const glazing = {
+  ...target,
+  palette:{ blue:'#0000ff',red:'#ff0000',shade:'#994422',bright:'#ffaa00' },
+  layers:[{ id:'base' },{ id:'ink' }],
+  frames:[{ id:'front',durationMs:100,cels:{
+    base:{ marks:[{ swatch:'blue',at:[2,2] },{ swatch:'blue',at:[3,2] }] },
+    ink:{ marks:[{ swatch:'red',at:[2,2] },{ swatch:'shade',at:[4,2] },{ swatch:'bright',at:[5,2] }] }
+  } }]
+};
+
+test('coverage lock recolors only visible pixels on the target cel and keeps their alpha', () => {
+  const editor = ink.createPixelEditor({ ...glazing,protectedDetails:[{ id:'empty',pixels:[[3,2]] }] });
+  const brush = solidBrush();
+  editor.apply(pathFor(editor,'thin-ink',brush,{ at:[4,2] },{ shading:{ mode:'alpha',value:93 } }));
+  const patch = pathFor(editor,'recolor-ink',brush,{ points:[[2,2],[4,2]] },
+    { swatch:'bright',shading:{ mode:'recolor' } });
+  assert.equal(editor.previewEdit(patch).targets[0].pixelCount,2);
+  editor.apply(patch);
+  const layer = { mode:'layer',layer:'ink' };
+  assert.equal(editor.sample([2,2],layer).swatch,'bright');
+  assert.equal(editor.sample([3,2],layer).swatch,null);
+  assert.equal(editor.sample([3,2]).swatch,'blue');
+  assert.equal(editor.sample([4,2],layer).swatch,'bright');
+  assert.equal(editor.sample([4,2],layer).alpha,93);
+});
+
+test('shading moves one authored step per stroke and clamps at ramp endpoints', () => {
+  const editor = ink.createPixelEditor(glazing), brush = solidBrush();
+  const ramp = ['shade','red','bright'];
+  const patch = pathFor(editor,'lighten',brush,{ points:[[2,2],[5,2],[2,2]] },{ shading:{ mode:'ramp',ramp,step:1 } });
+  editor.apply(patch);
+  assert.deepEqual([2,3,4,5].map(x=>editor.sample([x,2]).swatch),['bright','blue','red','bright']);
+  editor.apply(pathFor(editor,'darken',brush,{ at:[5,2] },{ shading:{ mode:'ramp',ramp,step:-2 } }));
+  assert.equal(editor.sample([5,2]).swatch,'shade');
+  assert.equal(editor.previewEdit(pathFor(editor,'hold-dark',brush,{ at:[5,2] },
+    { shading:{ mode:'ramp',ramp,step:-1 } })).pixelCount,0);
+  assert.throws(()=>editor.apply(pathFor(editor,'invalid-ramp',brush,{ at:[5,2] },
+    { shading:{ mode:'ramp',ramp:['shade','shade'],step:1 } })),/distinct, existing target swatches/);
+});
+
+test('alpha-only strokes preview, replay and restore hidden pigment through a lossless PNG export', t => {
+  const editor = ink.createPixelEditor(glazing), brush = solidBrush();
+  const sampleInk = (x) => editor.sample([x,2],{ mode:'layer',layer:'ink' });
+  const patch = pathFor(editor,'glaze',brush,{ points:[[2,2],[4,2]] },{ shading:{ mode:'alpha',value:128 } });
+  const preview = editor.previewEdit(patch);
+  assert.equal(preview.pixelCount,2);
+  assert.equal(preview.pixels[0].before.color,'#ff0000');
+  assert.equal(preview.pixels[0].after.color,'#80007f');
+  assert.equal(preview.pixels[1].before.alpha,255);
+  assert.equal(preview.pixels[1].after.alpha,128);
+  const revised = editor.apply(patch);
+  assert.deepEqual(ink.createPixelEditor(glazing).replay(editor.receipts()[0]),revised);
+  assert.deepEqual([sampleInk(2).swatch,sampleInk(2).alpha],['red',128]);
+  assert.deepEqual([sampleInk(3).swatch,sampleInk(3).alpha],[null,0]);
+  assert.deepEqual([editor.sample([2,2]).color,editor.sample([2,2]).alpha],['#80007f',255]);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-alpha-brush-'));
+  t.after(()=>fs.rmSync(dir,{ recursive:true,force:true }));
+  const design = path.join(dir,'design.json');
+  fs.writeFileSync(design,JSON.stringify(revised));
+  execFileSync(process.execPath,['cli/ink-studio.js','pixel-art','draw',design,'--out',dir],
+    { cwd:path.resolve(__dirname,'..') });
+  const PNG = require('../cli/png.js'), stamps = require('../src/pixel-stamps.js');
+  const art = PNG.raster(path.join(dir,'art.png'));
+  const exported = stamps.image(JSON.parse(fs.readFileSync(path.join(dir,'stamp.json'),'utf8')));
+  assert.deepEqual(Array.from(art.data),Array.from(exported.rgba));
+  assert.deepEqual(Array.from(art.data.slice(22*4,25*4)),[128,0,127,255,0,0,255,255,153,68,34,128]);
+
+  editor.apply(pathFor(editor,'hide',brush,{ at:[2,2] },{ shading:{ mode:'alpha',value:0 } }));
+  assert.deepEqual([sampleInk(2).swatch,sampleInk(2).alpha],['red',0]);
+  assert.equal(editor.sample([2,2]).swatch,'blue');
+  editor.apply(pathFor(editor,'restore',brush,{ at:[2,2] },{ shading:{ mode:'alpha',value:255 } }));
+  assert.equal(editor.sample([2,2]).color,'#ff0000');
+  assert.equal(editor.undo(),true);
+  assert.equal(editor.sample([2,2]).color,'#0000ff');
+  assert.equal(editor.redo(),true);
+  assert.equal(editor.sample([2,2]).color,'#ff0000');
+
+  const guarded = ink.createPixelEditor({ ...glazing,protectedDetails:[{ id:'hold',pixels:[[4,2]] }] });
+  const locked = pathFor(guarded,'blocked-alpha',brush,{ points:[[2,2],[4,2]] },
+    { shading:{ mode:'alpha',value:100 } });
+  assert.throws(()=>guarded.apply(locked),error=>error.receipt?.conflicts[0].code === 'protected-pixel');
+  assert.equal(guarded.sample([2,2]).color,'#ff0000');
+});

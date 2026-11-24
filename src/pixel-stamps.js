@@ -47,10 +47,10 @@ const PixelStamps = (() => {
 
   function prepare(spec) {
     if (!record(spec)) throw new TypeError('Pixel stamps need an indexed raster object');
-    const { width, height, slots, rows, strokes, frames, fps = 12, playback = 'loop', phase = 0, palette } = spec;
+    const { width, height, slots, rows, strokes, alpha, frames, fps = 12, playback = 'loop', phase = 0, palette } = spec;
     if (![width, height].every(n => Number.isSafeInteger(n) && n > 0) || width * height > maxCells ||
         (frames !== undefined && (!Array.isArray(frames) || !frames.length || frames.length > 2048 ||
-          width * height * frames.length > maxCells || slots !== undefined || rows !== undefined || strokes !== undefined)))
+          width * height * frames.length > maxCells || slots !== undefined || rows !== undefined || strokes !== undefined || alpha !== undefined)))
       throw new RangeError('Pixel stamp needs bounded dimensions and either a single cel or a frame list');
     if (frames === undefined && slots === undefined && rows === undefined && strokes === undefined)
       throw new TypeError('Pixel stamps need texels or paint strokes');
@@ -59,14 +59,22 @@ const PixelStamps = (() => {
           !Array.from(palette).every(colorValue))))
       throw new RangeError('Pixel stamp needs valid playback and palette swatches');
     const sharedGuides = guides.prepare(spec.guides);
-    const entries = Array.from(frames ?? [{ slots, rows, strokes }], (entry, frame) => {
+    const entries = Array.from(frames ?? [{ slots, rows, strokes, alpha }], (entry, frame) => {
       if (!record(entry)) throw new TypeError('Pixel stamp frames need slots, strokes or an empty cel');
       const { duration = 1 / fps } = entry;
       const texels = paint(width, height, entry);
       if (palette && texels.some(slot => slot !== null && slot >= palette.length))
         throw new RangeError('Pixel stamp slots must be valid palette indices within its palette');
+      const opacity = entry.alpha;
+      if (opacity !== undefined) {
+        if (!Array.isArray(opacity) || opacity.length !== texels.length ||
+            !Array.from(opacity).every(value => index(value) && value <= 255))
+          throw new TypeError('Pixel stamp alpha needs one byte per texel');
+        for (let p = 0; p < texels.length; p++)
+          if (opacity[p] === 0) texels[p] = null;
+      }
       const visibleGuides = entry.guides === undefined ? sharedGuides : guides.prepare([...sharedGuides,...guides.prepare(entry.guides)]);
-      return { frame, duration, slots: texels, ...(visibleGuides.length && { guides:visibleGuides }) };
+      return { frame, duration, slots: texels, ...(opacity && { alpha:opacity.slice() }), ...(visibleGuides.length && { guides:visibleGuides }) };
     });
     const clock = cels.playback(entries, fps, playback);
     const duration = entries.reduce((sum, entry) => sum + entry.duration, 0);
@@ -99,7 +107,7 @@ const PixelStamps = (() => {
     return color;
   }
 
-  function raster(width, height, slots, palette, scenePalette, paletteRoles, emissive, colors = new Map()) {
+  function raster(width, height, { slots,alpha }, palette, scenePalette, paletteRoles, emissive, colors = new Map()) {
     const length = width * height;
     const rgba = new Uint8Array(length * 4);
     const emission = emissive.size ? new Uint8Array(length * 4) : undefined;
@@ -108,7 +116,7 @@ const PixelStamps = (() => {
       if (slot === null) continue;
       if (!colors.has(slot)) colors.set(slot, paletteColor(palette?.[slot] ?? slot, scenePalette, paletteRoles));
       const packed = colors.get(slot), p = i * 4;
-      rgba.set([packed >> 16, (packed >> 8) & 255, packed & 255, 255], p);
+      rgba.set([packed >> 16, (packed >> 8) & 255, packed & 255, alpha?.[i] ?? 255], p);
       if (emissive.has(slot)) emission.set(rgba.subarray(p, p + 4), p);
     }
     return { rgba, emission };
@@ -116,7 +124,7 @@ const PixelStamps = (() => {
 
   function image(spec, { time = 0, scenePalette, paletteRoles } = {}) {
     const { width, height, entries, palette, at } = prepare(spec);
-    const { rgba } = raster(width, height, entries[at(time)].slots, palette, scenePalette, paletteRoles, new Set());
+    const { rgba } = raster(width, height, entries[at(time)], palette, scenePalette, paletteRoles, new Set());
     return { width, height, rgba };
   }
 
@@ -136,7 +144,7 @@ const PixelStamps = (() => {
     if (w < 1 || h > 8192) throw new RangeError('Pixel stamp frames do not fit the atlas dimensions');
     const emissive = new Set(emissionSlots), known = new Map();
     const color = new Uint8Array(w * h * 4), emission = emissive.size ? new Uint8Array(color.length) : undefined;
-    const frames = entries.map(({ frame, duration, slots, guides }) => {
+    const frames = entries.map(({ frame, duration, slots, alpha, guides }) => {
       let anchor = pivot;
       if (pivotGuide !== undefined) {
         const options = guides?.filter(guide => guide.kind === 'pivot' && (pivotGuide === true || guide.id === pivotGuide)) ?? [];
@@ -145,7 +153,7 @@ const PixelStamps = (() => {
         anchor = { x:x+.5,y:y+.5 };
       }
       const x = frame % columns * width, y = Math.floor(frame / columns) * height;
-      const result = raster(width, height, slots, palette, scenePalette, paletteRoles, emissive, known);
+      const result = raster(width, height, { slots,alpha }, palette, scenePalette, paletteRoles, emissive, known);
       for (let row = 0; row < height; row++) {
         const from = row * width * 4, to = ((y + row) * w + x) * 4;
         color.set(result.rgba.subarray(from, from + width * 4), to);

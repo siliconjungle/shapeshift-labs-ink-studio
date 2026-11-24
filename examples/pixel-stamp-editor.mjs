@@ -33,8 +33,13 @@ function load(data) {
     throw new RangeError('Open a stamp up to 512 × 512 with 1–48 hex swatches.');
   stop();
   if (state.doc) saveUndo();
-  const { slots, rows, strokes, frames, ...rest } = data;
-  state.doc = { ...rest, frames:frames ?? [{ slots, rows, strokes, duration:1 / (data.fps ?? 12) }] };
+  const { slots, rows, strokes, alpha, frames, ...rest } = data;
+  const loaded = frames ?? [{ slots, rows, strokes, alpha, duration:1 / (data.fps ?? 12) }];
+  state.doc = { ...rest, frames:loaded.map(frame => {
+    if (!frame.alpha) return frame;
+    const pixels = stamp.paint(width,height,frame);
+    return { ...frame,alpha:frame.alpha.map((value,p)=>pixels[p] === null ? 255 : value) };
+  }) };
   state.frame = 0;
   state.swatch = 0;
   selection = undefined;
@@ -75,12 +80,12 @@ function frameSlots(current) {
 function draw() {
   const { width,height } = state.doc;
   const current = state.doc.frames[state.frame];
-  let palette = state.doc.palette, slots = frameSlots(current);
+  let palette = state.doc.palette, slots = frameSlots(current), alpha = current.alpha;
   if (state.tool === 'brush-stamp' && brush && (brushStroke || state.points.length)) {
-    try { ({ palette,slots } = applyBrush(slots)); }
+    try { ({ palette,slots,alpha } = applyBrush(slots,alpha)); }
     catch (error) { notify(error.message); }
   }
-  view.setFrame(stamp.image({ width,height,palette,slots }));
+  view.setFrame(stamp.image({ width,height,palette,slots,alpha }));
   const selected = selection?.frame === state.frame ? selection.bounds : null;
   view.setSelection(state.tool === 'brush-select' ? selected : null);
   $('capture-brush').disabled = !selected || state.tool !== 'brush-select' || drawingPointer !== undefined;
@@ -143,10 +148,12 @@ function commitStroke() {
   savePixels(current,slots);
 }
 
-function savePixels(current,slots,palette = state.doc.palette) {
+function savePixels(current,slots,palette = state.doc.palette,alpha = current.alpha) {
   edit(() => {
-    const { rows,strokes,...frame } = current;
-    state.doc.frames[state.frame] = { ...frame,slots,duration:current.duration ?? 1/(state.doc.fps ?? 12) };
+    const { rows,strokes,alpha:previousAlpha,...frame } = current;
+    const keepAlpha = alpha?.some((value,p)=>value !== 255 && slots[p] !== null);
+    state.doc.frames[state.frame] = { ...frame,slots,duration:current.duration ?? 1/(state.doc.fps ?? 12),
+      ...(keepAlpha && { alpha:alpha.map((value,p)=>slots[p] === null ? 255 : value) }) };
     state.doc.palette = palette;
     resetStroke();
   });
@@ -205,9 +212,39 @@ function updateBrushSettings() {
   }
 }
 
-function applyBrush(slots) {
+const shadingControls = new Set(['brush-mode','brush-ramp','brush-ramp-step','brush-alpha']);
+function brushShading() {
+  const mode = $('brush-mode').value;
+  $('brush-ramp-controls').hidden = mode !== 'ramp';
+  $('brush-alpha-controls').hidden = mode !== 'alpha';
+  if (mode === 'ramp') return { mode,step:$('brush-ramp-step').valueAsNumber,
+    ramp:$('brush-ramp').value.split(',').map(n=>n.trim() ? Number(n)-1 : NaN) };
+  if (mode === 'alpha') return { mode,value:$('brush-alpha').valueAsNumber };
+  if (mode === 'recolor') return { mode };
+}
+
+function applyBrush(slots,alpha) {
   const { width,height,palette:colors } = state.doc, dabs = brushStroke?.dabs ?? new Map();
   if (!brushStroke) brushes.stroke(width,height,brushTip,state.points,(p,slot)=>{ dabs.set(p,slot); });
+  const shading = brushShading();
+  if (shading) {
+    const resolve = brushes.shade(shading,colors.map((_,slot)=>slot));
+    const opacity = shading.mode === 'alpha' ? alpha?.slice() ?? Array(slots.length).fill(255) : alpha;
+    let changed = false;
+    for (const p of dabs.keys()) {
+      const next = resolve(slots[p],opacity?.[p] ?? 255);
+      if (next === undefined) continue;
+      if (shading.mode === 'alpha') opacity[p] = next;
+      else {
+        const color = shading.mode === 'recolor' ? state.swatch : next;
+        if (slots[p] === color) continue;
+        slots[p] = color;
+      }
+      changed = true;
+    }
+    return { slots,palette:colors,alpha:opacity,changed };
+  }
+
   const { palette,mapping } = brushes.resolvePalette(brush,colors.map(color=>({ color })),
     { limit:48,used:new Set(dabs.values()) });
   let changed = false;
@@ -217,15 +254,15 @@ function applyBrush(slots) {
     slots[p] = next;
     changed = true;
   }
-  return { slots,palette:palette.map(entry=>entry.color),changed };
+  return { slots,palette:palette.map(entry=>entry.color),alpha,changed };
 }
 
 function commitBrush() {
   const { width,height } = state.doc, current = state.doc.frames[state.frame];
   try {
     brushStroke?.path.finish();
-    const { slots,palette,changed } = applyBrush(stamp.paint(width,height,current));
-    if (changed) savePixels(current,slots,palette);
+    const { slots,palette,alpha,changed } = applyBrush(stamp.paint(width,height,current),current.alpha);
+    if (changed) savePixels(current,slots,palette,alpha);
     else { resetStroke(); draw(); }
     notify('');
   } catch (error) {
@@ -237,18 +274,30 @@ function commitBrush() {
 
 $('capture-brush').addEventListener('click',() => {
   const { width,height,palette } = state.doc;
-  const slots = stamp.paint(width,height,state.doc.frames[state.frame]);
+  const current = state.doc.frames[state.frame], slots = stamp.paint(width,height,current);
   try {
     setBrush(brushes.capture({ width,height,rect:selection.bounds,
       read(x,y) {
-        const slot = slots[y*width+x];
-        return slot === null ? null : { color:palette[slot] };
+        const p = y*width+x, slot = slots[p];
+        return slot === null || current.alpha?.[p] === 0 ? null : { color:palette[slot] };
       } }));
     chooseTool('brush-stamp');
     notify('Captured brush');
   } catch (error) { notify(error.message); }
 });
-$('brush-settings').addEventListener('change',updateBrushSettings);
+$('brush-settings').addEventListener('change',event => {
+  if (shadingControls.has(event.target.id)) {
+    brushShading();
+    if (state.tool === 'brush-stamp') resetStroke();
+    draw();
+    notify('');
+  } else updateBrushSettings();
+});
+$('brush-ramp-add').addEventListener('click',() => {
+  const input = $('brush-ramp'), swatch = String(state.swatch+1);
+  const list = input.value.split(',').map(value=>value.trim()).filter(Boolean);
+  if (!list.includes(swatch)) input.value = [...list,swatch].join(', ');
+});
 $('brush-active-color').addEventListener('click',() => {
   $('brush-tint').value = state.doc.palette[state.swatch];
   updateBrushSettings();
@@ -332,10 +381,12 @@ function showShapeControls() {
 
 function pickOrFill(at) {
   const { width,height } = state.doc, current = state.doc.frames[state.frame];
-  const slots = stamp.paint(width,height,current), picked = slots[at[1]*width+at[0]];
+  const slots = stamp.paint(width,height,current), p = at[1]*width+at[0], picked = slots[p];
   if (state.tool === 'eyedropper') {
     if (picked !== null) selectSwatch(picked);
-    notify(picked === null ? 'Transparent pixel' : 'Sampled '+state.doc.palette[picked]);
+    const opacity = current.alpha?.[p];
+    notify(picked === null ? 'Transparent pixel' : 'Sampled '+state.doc.palette[picked]+
+      (opacity === undefined ? '' : ' · alpha '+opacity));
     return;
   }
   if (picked === state.swatch) return;
@@ -449,12 +500,15 @@ function resizeCanvas(width,height) {
     throw new RangeError('Canvas size exceeds the stamp grid or animation budget.');
   if (width === doc.width && height === doc.height) return;
   const columns = Math.min(width,doc.width), rows = Math.min(height,doc.height);
-  const frames = doc.frames.map(({ slots,rows:sourceRows,strokes,...hold }) => {
+  const frames = doc.frames.map(({ slots,rows:sourceRows,strokes,alpha,...hold }) => {
     const before = stamp.paint(doc.width,doc.height,{ slots,rows:sourceRows,strokes });
-    const resized = Array(width * height).fill(null);
-    for (let y = 0; y < rows; y++)
-      for (let x = 0; x < columns; x++) resized[y * width + x] = before[y * doc.width + x];
-    return { ...hold, slots:resized };
+    const resized = Array(width * height).fill(null), opacity = alpha && Array(width * height).fill(255);
+    for (let y = 0; y < rows; y++) for (let x = 0; x < columns; x++) {
+      const p = y*width+x, source = y*doc.width+x;
+      resized[p] = before[source];
+      if (opacity) opacity[p] = alpha[source];
+    }
+    return { ...hold, slots:resized, ...(opacity && { alpha:opacity }) };
   });
   edit(() => {
     state.doc = { ...doc,width,height,frames };

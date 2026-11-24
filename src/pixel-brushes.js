@@ -205,6 +205,27 @@ const PixelBrushes = (() => {
     stroke.finish();
   }
 
+  function shade(shading,swatches) {
+    if (fields(shading,['mode']) && shading.mode === 'recolor')
+      return (slot,alpha) => slot !== null && slot >= 0 && alpha > 0 ? slot : undefined;
+    if (fields(shading,['mode','value']) && shading.mode === 'alpha' && integer(shading.value,0,255))
+      return (slot,alpha) => slot !== null && slot >= 0 && alpha !== shading.value ? shading.value : undefined;
+    if (!fields(shading,['mode','ramp','step']) || shading.mode !== 'ramp' ||
+        !Array.isArray(shading.ramp) || !integer(shading.ramp.length,2,255) ||
+        !integer(shading.step,-254,254) || !shading.step)
+      throw new TypeError('Brush shading needs recolor, a ramp with a nonzero step, or an alpha byte');
+    const ramp = Array.from(shading.ramp,id=>swatches.indexOf(id));
+    if (ramp.includes(-1) || new Set(ramp).size !== ramp.length)
+      throw new RangeError('A brush ramp needs distinct, existing target swatches');
+    const positions = new Map(ramp.map((slot,index)=>[slot,index]));
+    return (slot,alpha) => {
+      const index = positions.get(slot);
+      if (!alpha || index === undefined) return;
+      const next = ramp[clamp(index+shading.step,0,ramp.length-1)];
+      return next === slot ? undefined : next;
+    };
+  }
+
   function resolvePalette(brush,entries,{ limit = 255,named = false,used } = {}) {
     const palette = entries.slice(), tone = brush.settings.swatch;
     const ids = new Set(palette.map(entry=>entry.id));
@@ -231,7 +252,7 @@ const PixelBrushes = (() => {
     return { palette,mapping };
   }
 
-  return Object.freeze({ format,validate,capture,footprint,stroke,beginDynamicStroke,dynamicStroke,resolvePalette });
+  return Object.freeze({ format,validate,capture,footprint,stroke,beginDynamicStroke,dynamicStroke,shade,resolvePalette });
 })();
 
 if (typeof module !== 'undefined') module.exports = PixelBrushes;

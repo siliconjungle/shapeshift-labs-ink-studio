@@ -41,6 +41,18 @@ stabilized stroke previews on both canvases while you draw and ends at your
 release pixel. Brush JSON also saves the dynamics.
 [Brush capture and dynamics](pixel-art-authoring.md#brush-dynamics)
 
+Choose a **Brush mode** after capturing or opening a brush. **Recolor with
+coverage lock** applies the active swatch only to visible pixels of the
+current frame. **Shade along ramp** takes an ordered list of 1-based palette
+slots and a signed step. **Set alpha** changes opacity without changing the
+swatch. Use 0 to hide the pigment and 255 to bring it back. A stroke is one
+undo step. [Document shading operations](pixel-art-authoring.md#coverage-lock-and-shading)
+
+A stamp or animated frame can carry an optional `alpha` array with one byte
+per texel alongside its indexed paint. Omitting the array gives painted
+texels full opacity. Sprite atlases and projected indexed paint and masks
+carry this coverage through sampling.
+
 The main canvas zooms in whole steps. Use **−**, **+**, and **Fit**, or
 Ctrl-scroll or ⌘-scroll around the cursor. Middle-drag, use **Pan** and drag,
 or focus the canvas and use the arrow keys to move it. The grid appears at

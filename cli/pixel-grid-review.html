@@ -96,7 +96,11 @@ view.canvas.addEventListener('pointerdown',event => {
   }
   const entry = mode.value === 'layer' ? active.layers[layer.selectedIndex] : null;
   const ink = palette[(entry?.slots ?? active.composite).charCodeAt(p)];
-  showSample(position+' · '+(entry ? entry.id+' · ' : '')+(ink ? ink.id+' · '+ink.color : 'Transparent'),ink?.color);
+  const alpha = (entry ? entry.alpha : active.alpha)?.charCodeAt(p);
+  const color = ink && (!entry && active.rgb ?
+    hex([0,1,2].map(i=>active.rgb.charCodeAt(3*p+i)/255)) : ink.color);
+  const value = ink ? ink.id+' · '+color+(alpha === undefined ? '' : ' · alpha '+alpha) : 'Transparent';
+  showSample(position+' · '+(entry ? entry.id+' · ' : '')+value,color);
 });
 
 async function draw() {
@@ -112,7 +116,10 @@ async function draw() {
     view.setFrame({ width:scratch.width, height:scratch.height,
       rgba:context.getImageData(0,0,scratch.width,scratch.height).data });
     view.setGuides(frame.guides);
-    active = { composite:atob(frame.composite), layers:frame.layers.map(row=>({ ...row,slots:atob(row.slots) })) };
+    active = { composite:atob(frame.composite), alpha:frame.alpha && atob(frame.alpha),
+      rgb:frame.rgb && atob(frame.rgb), layers:frame.layers.map(row=>({
+        ...row,slots:atob(row.slots),alpha:row.alpha && atob(row.alpha)
+      })) };
     const selected = layer.value;
     layer.replaceChildren(...active.layers.map(({ id })=>new Option(id,id)));
     if (active.layers.some(({ id })=>id === selected)) layer.value = selected;

@@ -137,7 +137,7 @@ function shapes(width, height, mark) {
 }
 
 function rasterLayer(layer,base,ids,width,height,erase,count,spend) {
-  let painted = base, strokes = [];
+  let painted = base, strokes = [], alpha;
   function flush() {
     if (strokes.length || painted === undefined) painted = paint(width,height,{ slots:painted,strokes });
     strokes = [];
@@ -145,10 +145,14 @@ function rasterLayer(layer,base,ids,width,height,erase,count,spend) {
   for (const mark of layer.marks) {
     const slot = mark?.swatch === null ? erase : ids.get(mark?.swatch);
     if (mark && Object.hasOwn(mark,'runs')) {
-      if (!fields(mark,['swatch','clear','runs']) || (mark.clear !== undefined
-        ? mark.clear !== true || Object.hasOwn(mark,'swatch') : slot === undefined) ||
-        !Array.isArray(mark.runs) || !mark.runs.length || mark.runs.length > width*height)
-        throw new TypeError('A pixel run mark needs a swatch or clear flag and native runs');
+      const alphaRun = Object.hasOwn(mark,'alpha');
+      if (alphaRun ? !fields(mark,['alpha','runs']) || !integer(mark.alpha,0,255) :
+          !fields(mark,['swatch','clear','runs']) || (mark.clear !== undefined
+            ? mark.clear !== true || Object.hasOwn(mark,'swatch') : slot === undefined))
+        throw new TypeError('A pixel run mark needs a swatch, clear flag or alpha byte');
+      if (!Array.isArray(mark.runs) || !mark.runs.length || mark.runs.length > width*height)
+        throw new TypeError('A pixel run mark needs native runs');
+      if (alphaRun) alpha ??= new Uint8Array(width*height).fill(255);
       count(1);
       flush();
       let end = 0;
@@ -160,17 +164,38 @@ function rasterLayer(layer,base,ids,width,height,erase,count,spend) {
         if (first < end) throw new RangeError('Pixel runs need sorted, non-overlapping spans');
         end = first+length;
         spend(length);
-        painted.fill(mark.clear ? null : slot,first,end);
+        if (alphaRun) {
+          for (let p = first; p < end; p++)
+            if (painted[p] !== null && painted[p] !== erase) alpha[p] = mark.alpha;
+        } else {
+          painted.fill(mark.clear ? null : slot,first,end);
+          if (mark.clear || slot === erase) alpha?.fill(255,first,end);
+        }
       }
     } else {
       const parts = shapes(width,height,mark);
       if (slot === undefined) throw new TypeError('Unknown pixel swatch ' + mark.swatch);
       count(parts.length);
       for (const shape of parts) strokes.push({ slot,shape });
+      if (alpha && slot === erase) {
+        flush();
+        spend(painted.length);
+        for (let p = 0; p < painted.length; p++)
+          if (painted[p] === erase) alpha[p] = 255;
+      }
     }
   }
   flush();
-  return painted;
+  return { painted,alpha };
+}
+
+function overColor(front,rear,frontWeight,rearWeight) {
+  let color = 0;
+  for (const shift of [16,8,0]) {
+    const value = ((front>>>shift&255)*frontWeight+(rear>>>shift&255)*rearWeight)/(frontWeight+rearWeight);
+    color |= Math.round(value)<<shift;
+  }
+  return color;
 }
 
 function composite(width,height,entries,layers,capture) {
@@ -183,7 +208,7 @@ function composite(width,height,entries,layers,capture) {
   const underSlots = new Int16Array(size).fill(-1), underOwners = new Uint8Array(size);
   const masks = new Map(), layerIds = [null];
   const layerSources = capture ? new Map() : undefined;
-  let marksUsed = 0;
+  let marksUsed = 0, opacity, mixedColors;
   let runBudget = 32e6;
   for (const layer of layers) {
     if (!record(layer) || !name(layer.id) || masks.has(layer.id) || !Array.isArray(layer.marks) ||
@@ -201,15 +226,19 @@ function composite(width,height,entries,layers,capture) {
         return ids.get(swatch);
       });
     }
-    const painted = rasterLayer(layer,base,ids,width,height,erase,operations => {
+    const { painted,alpha } = rasterLayer(layer,base,ids,width,height,erase,operations => {
       if ((marksUsed += operations) > 4096) throw new RangeError('Pixel designs support up to 4096 drawing operations');
     },size => {
       if ((runBudget -= size) < 0) throw new RangeError('Pixel runs exceed the drawing budget');
     });
+    if (alpha && !opacity) {
+      opacity = Uint8Array.from(slots,slot=>slot < 0 ? 0 : 255);
+      mixedColors = Uint32Array.from(slots,slot=>colors[slot] ?? 0);
+    }
     const clipping = masks.get(layer.clip), mask = new Uint8Array(size);
     if (capture === true || capture === layer.id) {
       const raw = Int16Array.from(painted,slot => slot === null ? -1 : slot === erase ? -2 : slot);
-      layerSources.set(layer.id,{ slots:raw, clipping });
+      layerSources.set(layer.id,{ slots:raw,clipping,...(alpha && { alpha }) });
     }
     layerIds.push(layer.id);
     masks.set(layer.id,mask);
@@ -217,10 +246,18 @@ function composite(width,height,entries,layers,capture) {
     for (let p = 0; p < size; p++) {
       if (painted[p] === null || (clipping && !clipping[p])) continue;
       const slot = painted[p] === erase ? -1 : painted[p];
+      const amount = slot < 0 ? 0 : alpha?.[p] ?? 255;
+      if (slot >= 0 && !amount) continue;
       mask[p] = Number(slot >= 0);
       if (locks[p]) {
         if (slot !== slots[p]) throw new RangeError(layer.id + ' changes a protected pixel at ' + [p%width,Math.floor(p/width)].join(','));
         continue;
+      }
+      if (opacity) {
+        const rearWeight = opacity[p]*(255-amount)/255;
+        mixedColors[p] = !amount ? 0 : !rearWeight ? colors[slot] :
+          overColor(colors[slot],mixedColors[p],amount,rearWeight);
+        opacity[p] = amount ? Math.round(amount+rearWeight) : 0;
       }
       underSlots[p] = slots[p];
       underOwners[p] = owners[p];
@@ -230,7 +267,7 @@ function composite(width,height,entries,layers,capture) {
     }
   }
   return { width,height,slots,owners,locks,underSlots,underOwners,layerIds,swatches,colors,
-    ...(layerSources && { layerSources }) };
+    ...(layerSources && { layerSources }),...(opacity && { opacity,mixedColors }) };
 }
 
 function compileFrame(design, frame, revision, palette,capture) {
@@ -299,6 +336,7 @@ function cell(frame,p) {
   return { at:[p%frame.width,Math.floor(p/frame.width)], layer,
     ...(frame.cels && { cel:frame.cels.get(layer) ?? null }),
     swatch:frame.swatches[frame.slots[p]] ?? null, protected:!!frame.locks[p],
+    ...(frame.opacity && { alpha:frame.opacity[p] }),
     underneath:{ layer:under, ...(frame.cels && { cel:frame.cels.get(under) ?? null }),
       swatch:frame.swatches[frame.underSlots[p]] ?? null }
   };
@@ -347,11 +385,13 @@ function samplePixel(design,coordinate,{ mode = 'composite',frame,layer,cel,dest
     const slot = source.slots[p];
     return { ...common,layer:target,cel:active.cels?.get(target) ?? null,
       swatch:active.swatches[slot] ?? null,color:hexColor(active.colors[slot]),
+      ...(source.alpha && { alpha:slot < 0 ? 0 : source.alpha[p] }),
       knockout:slot === -2,clipped:!!source.clipping && !source.clipping[p] };
   }
   const observed = cell(active,p);
   return { ...common,layer:observed.layer,cel:observed.cel ?? null,
-    swatch:observed.swatch,color:hexColor(active.colors[active.slots[p]]),protected:observed.protected };
+    swatch:observed.swatch,color:active.slots[p] < 0 ? null : hexColor(active.mixedColors?.[p] ?? active.colors[active.slots[p]]),
+    ...(active.opacity && { alpha:active.opacity[p] }),protected:observed.protected };
 }
 
 function captureBrush(design,{ selection,pixels,rect,frame,layer,cel,anchor,settings } = {}) {
@@ -374,8 +414,10 @@ function captureBrush(design,{ selection,pixels,rect,frame,layer,cel,anchor,sett
   if (!source) throw new RangeError('Unknown brush source layer ' + target);
   return PixelBrushes.capture({ width,height,pixels,rect,anchor,settings,
     read(x,y) {
-      const slot = source.slots[y*width+x];
-      return slot < 0 ? null : { id:swatches[slot],color:hexColor(colors[slot]) };
+      const p = y*width+x, slot = source.slots[p];
+      if (slot < 0 || source.alpha?.[p] === 0) return null;
+      const color = source.mixedColors?.[p] ?? colors[slot];
+      return { ...(color === colors[slot] && { id:swatches[slot] }),color:hexColor(color) };
     } });
 }
 
@@ -383,7 +425,7 @@ function image(frame) {
   const rgb = new Uint8Array(frame.slots.length*3);
   for (let p = 0; p < frame.slots.length; p++) {
     if (frame.slots[p] < 0) continue;
-    const color=frame.colors[frame.slots[p]], i=3*p;
+    const color=frame.mixedColors?.[p] ?? frame.colors[frame.slots[p]], i=3*p;
     rgb[i]=color>>>16;
     rgb[i+1]=color>>>8;
     rgb[i+2]=color&255;
@@ -512,9 +554,9 @@ function edit(design, frame, patch, context) {
 
 function editRasterTool(design,frame,patch,destination,context) {
   const { operation } = patch;
-  if (patch.edits !== undefined || !fields(operation,['tool','layer','at','points','samples','swatch','pixelPerfect','shape','brush']))
+  if (patch.edits !== undefined || !fields(operation,['tool','layer','at','points','samples','swatch','pixelPerfect','shape','brush','shading']))
     throw new TypeError('A raster tool needs a layer or cel and a pencil, eraser, fill, shape or brush operation');
-  const { tool,swatch,pixelPerfect,shape,brush,samples } = operation;
+  const { tool,swatch,pixelPerfect,shape,brush,samples,shading } = operation;
   const fill = tool === 'fill', erase = tool === 'eraser', precise = tool === 'shape', brushing = tool === 'brush';
   if (pixelPerfect !== undefined && (tool !== 'pencil' || typeof pixelPerfect !== 'boolean'))
     throw new TypeError('Pixel-perfect cleanup is a boolean pencil option');
@@ -529,6 +571,8 @@ function editRasterTool(design,frame,patch,destination,context) {
       (erase ? swatch !== undefined : (!brushing || swatch !== undefined) && slot < 0))
     throw new TypeError('Paint tools need a known swatch or saved brush colors. Eraser clears the active layer.');
   if ((brush !== undefined) !== brushing) throw new TypeError('A brush operation needs a saved brush');
+  if (shading !== undefined && (!brushing || swatch !== undefined && shading?.mode !== 'recolor'))
+    throw new TypeError('Brush shading needs a saved tip. Only recolor accepts a swatch override.');
   if (precise ? operation.at !== undefined || operation.points !== undefined : shape !== undefined)
     throw new TypeError('Put shape geometry in the shape operation');
   if (samples !== undefined && (!brushing || operation.at !== undefined || operation.points !== undefined))
@@ -553,7 +597,7 @@ function editRasterTool(design,frame,patch,destination,context) {
   }
   let changed, added = [], brushMarks = [];
   if (brushing) {
-    const result = brushChanges(design,frame,brush,slot,{ points,samples },captured.slots,check);
+    const result = brushChanges(design,frame,brush,slot,{ points,samples,shading },captured,check);
     ({ changed,added,marks:brushMarks } = result);
   } else if (precise) {
     const mask = require('../index.js').load().KIT.pixelShapes.raster(width,height,shape);
@@ -579,6 +623,7 @@ function editRasterTool(design,frame,patch,destination,context) {
   const runs = RasterTools.runs(width,changed), cel = frame.cels?.get(layer) ?? (frame.id && frame.id+'/'+layer);
   context?.onRasterTool?.({ destination:destination.id, kind:'raster', tool,frame:frame.id ?? null, layer,
     cel:cel ?? null, ...(pixelPerfect && { pixelPerfect }), ...(precise && { shape:shape.type }),
+    ...(shading !== undefined && { shading:shading.mode }),
     ...(added.length && { addedSwatches:added.map(entry=>entry.id) }), pixelCount:changed.length,runs });
   if (!runs.length) return design;
   const marks = brushing ? brushMarks : [erase ? { clear:true,runs } : { swatch,runs }];
@@ -595,20 +640,38 @@ function editRasterTool(design,frame,patch,destination,context) {
   return revised;
 }
 
-function brushChanges(design,frame,brush,override,{ points,samples },current,check) {
+function brushChanges(design,frame,brush,override,{ points,samples,shading },{ slots:current,alpha },check) {
   const { width,height } = frame, stamps = new Map();
   const emit = (p,slot) => { stamps.set(p,slot); };
   if (samples === undefined) PixelBrushes.stroke(width,height,PixelBrushes.footprint(brush),points,emit);
   else PixelBrushes.dynamicStroke(width,height,brush,samples,emit);
+  const resolve = shading === undefined ? null : PixelBrushes.shade(shading,frame.swatches);
+  if (resolve) {
+    for (const p of stamps.keys()) {
+      const value = resolve(current[p],alpha?.[p] ?? 255);
+      if (value === undefined) stamps.delete(p);
+      else if (shading.mode !== 'recolor') stamps.set(p,value);
+    }
+  }
   for (const p of stamps.keys()) check(p);
+  if (shading?.mode === 'alpha') {
+    const changed = [...stamps.keys()].sort((a,b)=>a-b);
+    return { changed,added:[],marks:changed.length ? [{ alpha:shading.value,runs:RasterTools.runs(width,changed) }] : [] };
+  }
+
   const original = paletteEntries(design.palette,design.version);
-  const used = new Set(stamps.values());
-  const { palette,mapping } = override < 0 ? PixelBrushes.resolvePalette(brush,original,{ named:true,used })
-    : { palette:original,mapping:Array(brush.palette.length).fill(override) };
-  const changed = [...stamps.keys()].filter(p=>current[p] !== mapping[stamps.get(p)]).sort((a,b)=>a-b);
+  let palette = original;
+  if (shading?.mode !== 'ramp') {
+    const used = new Set(stamps.values());
+    const resolved = override < 0 ? PixelBrushes.resolvePalette(brush,original,{ named:true,used })
+      : { palette:original,mapping:Array(brush.palette.length).fill(override) };
+    palette = resolved.palette;
+    for (const [p,slot] of stamps) stamps.set(p,resolved.mapping[slot]);
+  }
+  const changed = [...stamps.keys()].filter(p=>current[p] !== stamps.get(p)).sort((a,b)=>a-b);
   const bySwatch = new Map();
   for (const p of changed) {
-    const swatch = palette[mapping[stamps.get(p)]].id;
+    const swatch = palette[stamps.get(p)].id;
     if (!bySwatch.has(swatch)) bySwatch.set(swatch,[]);
     bySwatch.get(swatch).push(p);
   }
@@ -1034,12 +1097,22 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
 }
 
 function stamp(frame) {
-  return {
-    width:frame.width, height:frame.height, origin:'top-left',
-    palette:frame.colors.map(color=>'#'+color.toString(16).padStart(6,'0')),
-    slots:Array.from(frame.slots,n=>n < 0 ? null : n),
-    ...(frame.guides?.length && { guides:structuredClone(frame.guides) })
-  };
+  const palette = frame.colors.map(hexColor), slots = Array.from(frame.slots,n=>n < 0 ? null : n);
+  if (frame.mixedColors) {
+    const ids = new Map(palette.map((rgb,slot)=>[rgb,slot]));
+    for (let p = 0; p < slots.length; p++) {
+      if (slots[p] === null || frame.mixedColors[p] === frame.colors[slots[p]]) continue;
+      const rgb = hexColor(frame.mixedColors[p]);
+      if (!ids.has(rgb)) {
+        ids.set(rgb,palette.length);
+        palette.push(rgb);
+      }
+      slots[p] = ids.get(rgb);
+    }
+  }
+  return { width:frame.width,height:frame.height,origin:'top-left',palette,slots,
+    ...(frame.opacity && { alpha:Array.from(frame.opacity) }),
+    ...(frame.guides?.length && { guides:structuredClone(frame.guides) }) };
 }
 
 function snapPoint(frame,point,radius) {
@@ -1105,7 +1178,9 @@ function writeBrush(design,opt,source) {
 function draw(frame,directory) {
   fs.mkdirSync(directory,{ recursive:true });
   const indexed = stamp(frame), result = review(frame), { w,h,rgb } = result.overlay;
-  PNG.writeIndexed(path.join(directory,'art.png'),frame.width,frame.height,indexed.slots,
+  const art = path.join(directory,'art.png');
+  if (indexed.alpha) files.write(art,PNG.encode(frame.width,frame.height,stampImage(indexed).rgba,4));
+  else PNG.writeIndexed(art,frame.width,frame.height,indexed.slots,
     frame.colors.map(color=>[color>>>16,color>>>8&255,color&255]));
   files.write(path.join(directory,'review.png'),PNG.encode(w,h,rgb));
   files.json(path.join(directory,'stamp.json'),indexed);
@@ -1126,9 +1201,13 @@ function canvasReview(design,frameId,file,source) {
   const deck = chosen.map(frame => {
     const compiled = compileFrame(design,frame,revision,palette,true);
     const { width,height,rgba } = stampImage(stamp(compiled));
-    return { label:frame?.label ?? frame?.id ?? 'Drawing', png:PNG.encode(width,height,rgba,4).toString('base64'),
+    const encode = bytes => Buffer.from(bytes).toString('base64');
+    return { label:frame?.label ?? frame?.id ?? 'Drawing', png:encode(PNG.encode(width,height,rgba,4)),
       guides:compiled.guides ?? [], id:frame?.id, composite:encodeSlots(compiled.slots),
-      layers:[...compiled.layerSources].map(([id,row]) => ({ id,slots:encodeSlots(row.slots) })) };
+      ...(compiled.opacity && { alpha:encode(compiled.opacity),rgb:encode(image(compiled).rgb) }),
+      layers:[...compiled.layerSources].map(([id,row]) => ({
+        id,slots:encodeSlots(row.slots),...(row.alpha && { alpha:encode(row.alpha) })
+      })) };
   });
   let material = null;
   if (source) {

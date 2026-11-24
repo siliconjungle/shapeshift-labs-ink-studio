@@ -311,6 +311,41 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     assert.deepEqual(await raster(browser,preview,26,23),clear);
     await tap(30,25);
     assert.deepEqual(await raster(browser,preview,30,23),[81,74,110,255]);
+
+    await click(browser,'#brush-dynamics');
+    const settings = (mode, values = {}) => evaluate(browser,(mode,values) => {
+      for (const [id,value] of Object.entries(values)) document.getElementById('brush-'+id).value = value;
+      const select = document.getElementById('brush-mode');
+      select.value = mode;
+      if (values.width !== undefined)
+        document.getElementById('brush-width').dispatchEvent(new Event('change',{ bubbles:true }));
+      select.dispatchEvent(new Event('change',{ bubbles:true }));
+    },mode,values);
+    await settings('alpha',{ width:9,height:9,alpha:128 });
+    await press(anchor(30,25));
+    assert.equal((await raster(browser,preview,30,25))[3],128);
+    assert.deepEqual(await raster(browser,preview,26,25),clear);
+    await release(anchor(30,25));
+
+    await settings('recolor');
+    await click(browser,'.swatch:nth-child(1)');
+    await tap(30,25);
+    assert.equal((await raster(browser,main,30,25))[3],128);
+    assert.deepEqual(await raster(browser,preview,26,25),clear);
+    await settings('ramp',{ ramp:'1,3','ramp-step':1 });
+    await tap(30,25);
+    const lit = await raster(browser,preview,30,25);
+    assert.ok(Math.abs(lit[0]-230) <= 1);
+    assert.equal(lit[3],128);
+
+    await settings('alpha',{ alpha:0 });
+    await tap(30,25);
+    assert.deepEqual(await raster(browser,preview,30,25),clear);
+    await settings('alpha',{ alpha:255 });
+    await tap(30,25);
+    assert.deepEqual(await raster(browser,preview,30,25),[230,219,182,255]);
+    await click(browser,'#undo');
+    assert.deepEqual(await raster(browser,preview,30,25),clear);
   });
 });
 

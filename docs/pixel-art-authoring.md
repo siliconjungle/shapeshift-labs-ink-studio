@@ -255,6 +255,34 @@ Preview, edit, replay, and working sessions use the same rules. Receipts
 retain the samples and saved mappings. The `at` and `points` forms
 continue to use the brush's fixed size.
 
+### Coverage lock and shading
+
+A raster brush operation can carry an optional `shading` object. The same
+tip, placement and dynamics apply, including to strokes with recorded samples.
+
+| Shading | Effect |
+| --- | --- |
+| `{"mode":"recolor"}` | Paint with the brush colors or an operation-level `swatch`. The color changes only where the target layer has visible paint. Its alpha stays fixed. |
+| `{"mode":"ramp","ramp":["shadow","mid","highlight"],"step":1}` | Shift existing colors by one step per stroke. List distinct target swatch IDs in order. Use a negative step to darken. The endpoints hold and colors outside the ramp are skipped. |
+| `{"mode":"alpha","value":128}` | Set alpha to a byte from 0 to 255. Swatch IDs stay fixed. The brush can reveal a pixel previously set to zero. It skips pixels that have never been painted or have been erased. |
+
+The footprint applies to the selected raster layer or cel. Hits on another
+layer do not count, even if its paint is visible underneath. The brush still
+honors clipping and protected details. A continuous stroke applies a ramp
+step at most once per pixel, even when the tip overlaps itself.
+
+Alpha defaults to 255 on painted pixels. The document keeps authored alpha
+in native runs such as `{"alpha":128,"runs":[[5,3,4]]}`, where a run lists
+row, column and length. Ordinary color edits preserve that alpha. The eraser
+clears both paint and stored alpha. Preview and composite eyedropper results
+include the visible color after layer blending, and layer sampling shows the
+original swatch and its own alpha.
+
+`pixel-art draw` preserves partial coverage in the flattened `stamp.json`
+and writes an RGBA `art.png` when the frame has authored alpha. Fully
+transparent paint remains recoverable in the source document. Flattened
+exports describe the visible composite.
+
 ## Author a drawing
 
 ```json
