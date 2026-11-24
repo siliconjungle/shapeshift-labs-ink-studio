@@ -567,6 +567,16 @@ function apply(frame, edit, route, context, readMarks) {
       evidence = source.editor.transformMeshTopology(binding.object, operation.transform, options);
     } else if (fields(operation, ['cut', 'projection']) && Object.hasOwn(operation, 'cut')) {
       evidence = source.editor.cutMeshTopology(binding.object, operation.cut, options);
+    } else if (fields(operation, ['modifiers']) && Object.hasOwn(operation, 'modifiers')) {
+      const row = operation.modifiers, object = binding.object, part = binding.part;
+      if (fields(row, ['action', 'stack']) && row.action === 'set') {
+        evidence = { modifiers: source.editor.setMeshModifiers(object, row.stack, { part }) };
+      } else if (fields(row, ['action', 'id', 'patch']) && row.action === 'update') {
+        evidence = { modifiers: source.editor.updateMeshModifier(object, row.id, row.patch, { part }) };
+      } else if (fields(row, ['action', 'through']) && row.action === 'apply') {
+        const { report, topology } = source.editor.applyMeshModifiers(object, { part, through: row.through });
+        evidence = { modifiers: report, topology };
+      } else throw new TypeError('Use a set, update, or apply mesh modifier edit');
     } else if (fields(operation, ['shading', 'projection']) && Object.hasOwn(operation, 'shading')) {
       evidence = source.editor.editMeshShading(binding.object, operation.shading, options);
     } else if (fields(operation, ['bevel', 'projection']) && Object.hasOwn(operation, 'bevel')) {
@@ -600,7 +610,7 @@ function apply(frame, edit, route, context, readMarks) {
     } else {
       if (!fields(operation, ['patch', 'projection']) || !fields(operation.patch,
         ['vertices', 'faces', 'removeVertices', 'removeFaces', 'edges', 'shading', 'lineage']) || !Object.keys(operation.patch).length)
-        throw new TypeError('A topology edit needs a mesh topology patch, component transform, cut, face-region, edge edit, bevel, shading, or repair request');
+        throw new TypeError('A topology edit needs a mesh topology patch, component transform, cut, face-region, edge edit, bevel, shading, modifier, or repair request');
       evidence = { topology: source.editor.editMeshTopology(binding.object, operation.patch, options) };
     }
     context.onEditTarget?.({ ...sourceTarget(route, edit), node: 'mesh-topology:' + binding.object, ...evidence });
@@ -693,10 +703,10 @@ function targets(route, context, limit, query) {
       decal:{id,kind:kind??'paint',anchor,lifetime:lifetime??{},opacity:opacity??1,grid:[width,height],masked:!!mask}};
   }
   if (destination.kind === 'mesh-topology') {
-    const { document, bindings = [], bakes = [] } = editor.meshTopology(binding.object,binding.part);
+    const { document, bindings = [], bakes = [], modifiers } = editor.meshTopology(binding.object,binding.part);
     const topology = require('../index.js').load().KIT.meshTopology.inspect(document);
     return { destination:destination.id,binding,revision,sourceRevision,topology,
-      bindings, bakes:bakes.map(({ maps,...bake })=>bake) };
+      bindings, bakes:bakes.map(({ maps,...bake })=>bake), ...(modifiers && { modifiers }) };
   }
   const { key, solid } = boundSolid(binding,editor);
   const { chart, channel } = destination;

@@ -276,6 +276,21 @@ function createDefinitions() {
       edges:array(ref('meshEdgeShading')),corners:array(object({id:text,normal:nullable(pos)},['id','normal'])),
       settings:nullable(ref('meshShadingSettings'))
     },['id','revision']),
+    meshModifier: either(
+      tagged('kind','mirror',{id:text,enabled:bool,origin:pos,normal:pos,weld:bool,flipU:bool,tolerance:{type:'number',exclusiveMinimum:0}},
+        ['id','normal']),
+      tagged('kind','array',{id:text,enabled:bool,count:int(1,32),step:pos},['id','count','step']),
+      tagged('kind','bevel',{id:text,enabled:bool,edges:array(text,1),width:{type:'number',exclusiveMinimum:0},segments:int(1,16),
+        profile:either(choice('chamfer','round'),obj),join:choice('miter','patch'),
+        weights:array(object({edge:text,weight:unit},['edge','weight'])),material:text,protect:obj},['id','width']),
+      tagged('kind','shell',{id:text,enabled:bool,faces:array(text,1),thickness:{type:'number',exclusiveMinimum:0},
+        rim:obj,interior:obj,minWall:{type:'number',exclusiveMinimum:0}},['id','thickness']),
+      tagged('kind','subdivision',{id:text,enabled:bool,levels:int(1,3)},['id','levels']),
+      tagged('kind','projection',{id:text,enabled:bool,target:text,direction:pos,distance:{type:'number',exclusiveMinimum:0},
+        vertices:array(text,1),bidirectional:bool,offset:number,miss:choice('keep','error')},['id','target','direction','distance'])
+    ),
+    meshModifierEdit:either(tagged('action','set',{stack:array(ref('meshModifier'),0,16)},['stack']),
+      tagged('action','update',{id:text,patch:obj},['id','patch']),tagged('action','apply',{through:text})),
     meshTopologyOperation:{ ...object({
       transform:ref('meshComponentTransform'),
       repair:ref('meshRepairRequest'),
@@ -284,6 +299,7 @@ function createDefinitions() {
       edgeEdit:ref('meshEdgeEditRequest'),
       bevel:ref('meshBevelRequest'),
       shading:ref('meshShadingRequest'),
+      modifiers:ref('meshModifierEdit'),
       patch:{
         ...object({
           vertices:array(object({id:text,position:pos,weights:nullable(object({},[],unit))},['id','position'])),
@@ -299,7 +315,7 @@ function createDefinitions() {
       },
       projection:object({maxDistance:{type:'number',exclusiveMinimum:0},minNormalDot:unit,maxUVDistance:unit,minConfidence:unit,
         ambiguity:unit,maxChecks:int(1,2000000)},['maxDistance'])
-    }),oneOf:['patch','transform','repair','cut','faceRegion','edgeEdit','bevel','shading'].map(prop) },
+    }),oneOf:['patch','transform','repair','cut','faceRegion','edgeEdit','bevel','shading','modifiers'].map(prop) },
     sdfShapeOperation:either(...[
       ['parameters',obj],['modifier',obj],['updateModifier',object({id:text,patch:obj},['id','patch'])],
       ['protection',array(obj)],['brush',sdfBrush],['updateBrush',{type:'object',required:['id']}]

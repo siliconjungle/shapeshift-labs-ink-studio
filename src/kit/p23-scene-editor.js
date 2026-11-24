@@ -70,7 +70,14 @@
       roots.push(node);
     }
     for (const [id, mesh] of Object.entries(scene.topologyMeshes ?? {})) {
-      roots.push(Object.assign(parent('mesh-topology', id, mesh.label), { mesh }));
+      const node = Object.assign(parent('mesh-topology', id, mesh.label), { mesh });
+      for (const modifier of mesh.modifiers ?? []) {
+        const key = 'mesh-modifier:' + id + '/' + modifier.id;
+        const stage = { key, kind: 'mesh-modifier', name: modifier.id, modifier, children: [] };
+        node.children.push(stage);
+        nodes.set(key, stage);
+      }
+      roots.push(node);
       byEntity.set(id, 'mesh-topology:' + id);
     }
     const byStroke = new Map();
@@ -471,6 +478,51 @@
       }) });
     }
 
+    function inspectMeshModifiers(object, { through, part } = {}) {
+      meshTopology(object, part);
+      return A.meshTopologyScene.evaluator(snapshot().topologyMeshes)(object, through);
+    }
+
+    function writeMeshModifiers(object, row, label) {
+      function write() {
+        const next = { topologyMeshes: { ...snapshot().topologyMeshes, [object]: row } };
+        validate({ ...snapshot(), ...next });
+        document.setEnvironment(next);
+      }
+      if (document.pending()) write();
+      else document.transact(label, write);
+    }
+
+    function setMeshModifiers(object, modifiers, { part } = {}) {
+      const row = meshTopology(object, part);
+      requireMeshShapeOwner(object, row.part, snapshot(), 'Edit mesh modifiers on');
+      const stack = K.meshTopology.modifierStack(modifiers);
+      writeMeshModifiers(object, { ...row, modifiers: stack }, 'Set mesh modifiers on ' + object);
+      return inspectMeshModifiers(object).report;
+    }
+
+    function updateMeshModifier(object, id, fields, { part } = {}) {
+      const row = meshTopology(object, part);
+      return setMeshModifiers(object, K.meshTopology.updateModifier(row.modifiers ?? [], id, fields), { part });
+    }
+
+    function planApplyMeshModifiers(object, { through, part } = {}) {
+      const row = meshTopology(object, part);
+      requireMeshShapeOwner(object, row.part, snapshot(), 'Apply mesh modifiers to');
+      const plan = inspectMeshModifiers(object, { through, part });
+      if (!plan.report.canApply) return freeze({ report: plan.report, remaining: plan.remaining });
+      const { row: after, ...topology } = A.meshTopologyScene.applyModifiers(row, plan);
+      return freeze({ row: after, report: plan.report, topology });
+    }
+
+    function applyMeshModifiers(object, options) {
+      const plan = planApplyMeshModifiers(object, options);
+      if (!plan.report.canApply) throw Object.assign(new RangeError('Mesh modifier ' +
+        plan.report.stages.at(-1).id + ': ' + plan.report.stages.at(-1).message), { report: plan.report });
+      if (plan.report.stages.length) writeMeshModifiers(object, plan.row, 'Apply mesh modifiers on ' + object);
+      return plan;
+    }
+
     function setBrushRegion(region) {
       const value = clone(region);
       const write = () => document.setEnvironment({ brushRegion: value });
@@ -586,6 +638,11 @@
       bevelMeshTopology,
       planMeshShading,
       editMeshShading,
+      inspectMeshModifiers,
+      setMeshModifiers,
+      updateMeshModifier,
+      planApplyMeshModifiers,
+      applyMeshModifiers,
       hybridRoute: address => A.hybridOwnership.route(snapshot().hybridOwnership, address),
       setBrushRegion,
       setBreakables,

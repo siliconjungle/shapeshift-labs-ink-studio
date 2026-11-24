@@ -798,3 +798,59 @@ and `editor.editMeshShading`. A bound pixel transaction can use
 `operation.shading` to record the edit in the same undo and replay
 journal. Run `node examples/mesh-shading/render.cjs <directory>` for
 a worked example.
+
+## Run a non-destructive mesh modifier stack
+
+An editable scene mesh under `topologyMeshes` can store a `modifiers`
+array beside its `document`. The document stays the authored cage.
+A normal scene build draws the enabled stack in order and resolves
+bindings against that evaluated mesh. Each stage has a stable `id`,
+a `kind`, and an optional `enabled: false` to bypass it. Reorder
+stages by saving the same entries in a new order.
+
+| Kind | Parameters and behavior |
+| --- | --- |
+| `mirror` | Set a plane `normal` and optional `origin`. The default `weld: true` shares seam vertices and removes faces lying on the plane. Use a cage on one side of the plane or explicitly choose `weld: false`. Optional `tolerance` controls the weld and `flipU` flips mirrored UVs. |
+| `array` | Set `count` from 1 to 32 and a translation `step` in mesh units. Copies retain skin weights, materials, and face-corner data. Original IDs remain on the first copy. |
+| `bevel` | Set `width` and optionally `edges` by current stage IDs. It uses convex, non-flat hinges by default and accepts the same profile, weights, join, material, and protection controls as a [checked bevel](#bevel-selected-edges). |
+| `shell` | Set `thickness` and optional `faces`, `rim`, `interior`, or `minWall`. Complete open islands get stitched edges and closed islands get an inner skin, using the same checks as [face-region thickening](#extrude-inset-or-thicken-a-face-region). |
+| `subdivision` | Set `levels` from 1 to 3. It uses the existing [crease-aware Catmull–Clark subdivision](#author-corner-normals-and-creases). |
+| `projection` | Set a retained mesh `target` by object ID, a ray `direction`, and a maximum `distance`. It projects all vertices or named `vertices`. Use `bidirectional: true` for the nearest hit along either direction and `offset` for clearance along the hit normal. Set `miss: "error"` to require every ray to hit. |
+
+Projection uses the target mesh's evaluated geometry in the same
+coordinate frame. The scene checks dependency cycles. Bypassing a stage
+also bypasses its target lookup. If explicit element IDs come from an
+earlier stage, inspect those IDs again after reordering or replacing
+that stage.
+
+```sh
+ink-studio mesh-topology modifiers set scene.json stack.json --object housing --out staged.json
+ink-studio mesh-topology modifiers update staged.json bypass.json --object housing --out revised.json
+ink-studio mesh-topology modifiers inspect staged.json --object housing --through trim --preview trim-view
+ink-studio mesh-topology modifiers apply staged.json --object housing --through trim --report apply-review.json
+ink-studio mesh-topology modifiers apply staged.json --object housing --out applied.json
+```
+
+An update file is shaped like `{ "id": "trim", "patch": { "enabled": false } }`.
+Without `--out`, applying writes a dry run with topology, binding and bake
+effects. With `--through`, applying consumes the prefix through that
+stage and retains the remaining stack. A binding on a retained element
+can stay in place. Splits and removed elements report candidates or
+request review. Copies from array and mirror keep bindings on the
+original surface. Scene changes share the undo journal.
+
+Standalone meshes accept a stack JSON array as the second input to
+`inspect` and `apply`. The `set` command saves the cage and stack as one
+versioned JSON document. When using standalone projection, pass a
+`--targets` JSON map from target IDs to mesh documents. Use `--through`
+to export the topology at a particular stage and `--preview` to save its
+native-grid image. `--view` accepts the same camera and material settings
+as the bevel preview.
+
+The toolkit exposes `KIT.meshTopology.evaluateModifiers`, which returns
+the requested stage's document, the remaining stages, element lineage,
+and a report. Scene editor methods are `setMeshModifiers`,
+`updateMeshModifier`, `inspectMeshModifiers`,
+`planApplyMeshModifiers`, and `applyMeshModifiers`.
+Bound pixel transactions accept `operation.modifiers` with
+`action: "set"`, `"update"`, or `"apply"`.

@@ -1,5 +1,5 @@
 /* Derive a Catmull–Clark surface from a retained cage and semi-sharp edges. */
-(function (K) {
+const meshTopologySubdivision = (function (K) {
   const { meshTopology: topology, V } = K;
   const { record } = meshCutGeometry;
   const { context, cyclic, point, cornerData, corners, edgeOf, requireWinding } = meshEdgeFlowData;
@@ -17,9 +17,10 @@
     return result;
   }
 
-  function refine(doc, level) {
-    const g = context(doc, { id: 'subdivision-' + level, revision: topology.revision(doc) });
+  function refine(doc, level, trace, stage) {
+    const g = context(doc, { id: (stage ? stage + '.' : '') + 'subdivision-' + level, revision: topology.revision(doc) });
     const atVertex = new Map(doc.vertices.map(row => [row.id, { faces: [], edges: [] }]));
+    const lineage = trace && { faces: [], edges: [], corners: [] };
     const vertices = [], faces = [], edges = [], centers = new Map(), middle = new Map();
     function add(stencil, keep) {
       const { vertex } = point(g, [...stencil]);
@@ -41,7 +42,9 @@
       middle.set(edge.id, id);
       for (const [vertex, other] of [[a, b], [b, a]]) {
         atVertex.get(vertex).edges.push({ midpoint, sharp, other });
-        edges.push({ id: g.fresh('edge'), vertices: [vertex, id],
+        const child = g.fresh('edge');
+        lineage?.edges.push({ from: edge.id, to: child });
+        edges.push({ id: child, vertices: [vertex, id],
           ...(edge.smooth !== undefined && { smooth: edge.smooth }), ...(edge.crease !== undefined && { crease: edge.crease }) });
       }
     }
@@ -80,25 +83,34 @@
           if (V.len(normal)) rows[j].normal = normal;
         }
         edges.push({ id: g.fresh('edge'), vertices: [a, id], smooth: true });
-        faces.push({ id: g.fresh('face'), material: face.material, corners: rows });
+        const child = g.fresh('face');
+        lineage?.faces.push({ from: face.id, to: child });
+        lineage?.corners.push({ from: corner.id, to: rows[0].id });
+        faces.push({ id: child, material: face.material, corners: rows });
       }
     }
-    return topology.create({ ...doc, id: doc.id + '/subdivision-' + level, vertices, edges, faces });
+    const next = topology.create({ ...doc, id: doc.id + '/subdivision-' + level, vertices, edges, faces });
+    trace?.(next, lineage);
+    return next;
   }
 
   function subdivide(source, options = {}) {
     if (!record(options, ['levels'])) throw new TypeError('Use mesh subdivision levels');
-    const { levels = 1 } = options;
+    return run(source, options.levels ?? 1);
+  }
+
+  function run(source, levels, trace, stage) {
     if (!Number.isSafeInteger(levels) || levels < 0 || levels > 3)
       throw new RangeError('Use zero to three subdivision levels');
     let doc = topology.create(source);
     for (let level = 1; level <= levels; level++) {
       if (doc.faces.reduce((count, face) => count + face.corners.length * 2, 0) > 250000)
         throw new RangeError('Subdivision exceeds the render triangle budget');
-      doc = refine(doc, level);
+      doc = refine(doc, level, trace, stage);
     }
     return doc;
   }
 
   K.meshTopology = Object.freeze({ ...topology, subdivide });
+  return { run };
 })(KIT);

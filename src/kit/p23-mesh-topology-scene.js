@@ -53,13 +53,13 @@
     return value;
   }
 
-  function prepareRow(object, row) {
-    if (!TargetSelectors.name(object) || !fields(row, ['document', 'part', 'label', 'materials', 'bindings', 'bakes']) ||
+  function prepareRow(object, row, evaluation) {
+    if (!TargetSelectors.name(object) || !fields(row, ['document', 'part', 'label', 'materials', 'bindings', 'bakes', 'modifiers']) ||
         (row.part !== undefined && !TargetSelectors.name(row.part)) || (row.label !== undefined && !name(row.label)))
       throw new TypeError('An editable scene mesh needs an object ID, document, and optional named part');
-    const document = topology.create(row.document);
+    const cage = topology.create(row.document), document = evaluation?.document ?? cage;
     if (!document.faces.length) throw new RangeError('An editable scene mesh needs at least one polygon');
-    const records = elements(document), bindings = index(row.bindings ?? [], 'Mesh bindings');
+    const records = elements(cage), bindings = index(row.bindings ?? [], 'Mesh bindings');
     for (const binding of bindings.values()) {
       if (!fields(binding, ['id', 'domain', 'element', 'data', 'review']) || !elementKinds.includes(binding.domain) ||
           !name(binding.element) || binding.review === undefined && !records[binding.domain].has(binding.element) ||
@@ -87,15 +87,53 @@
     }
     const mesh = topology.toSceneMesh(document, { objectId: object, partId: row.part, meshId: 'topology/' + object,
       materials: [...active.values()].map(material) });
-    const resolvedBindings = Object.fromEntries([...bindings.values()].filter(binding => !binding.review)
-      .map(binding => [binding.id, { ...binding, geometry: records[binding.domain].get(binding.element) }]));
-    return { mesh, document, bindings: [...bindings.values()], resolvedBindings, bakes: [...bakes.values()] };
+    const moved = document !== cage && bindings.size ?
+      remapBindings([...bindings.values()], topology.correspond(cage, document, { lineage: evaluation.lineage })) : [...bindings.values()];
+    const visible = document !== cage && bindings.size ? elements(document) : records;
+    const resolvedBindings = Object.fromEntries(moved.filter(binding => !binding.review)
+      .map(binding => [binding.id, { ...binding, geometry: visible[binding.domain].get(binding.element) }]));
+    return { mesh, document, bindings: moved, resolvedBindings, bakes: [...bakes.values()],
+      ...(evaluation && { cage, modifierReport: evaluation.report }) };
+  }
+
+  function evaluator(rows) {
+    const known = new Map(Object.entries(rows)), visited = new Set(), cache = new Map();
+    function evaluate(id, through) {
+      if (through === undefined && cache.has(id)) return cache.get(id);
+      if (visited.has(id)) throw new RangeError('Mesh modifier projection cycle at ' + [...visited, id].join(' → '));
+      const row = known.get(id);
+      if (!row) throw new RangeError('Unknown editable mesh ' + id);
+      visited.add(id);
+      try {
+        const plan = topology.evaluateModifiers(row.document, row.modifiers ?? [], { through,
+          target(id) {
+            const target = known.has(id) && evaluate(id);
+            if (target) requireComplete(target);
+            return target?.document;
+          } });
+        if (through === undefined) cache.set(id, plan);
+        return plan;
+      } finally {
+        visited.delete(id);
+      }
+    }
+    return evaluate;
+  }
+
+  function requireComplete(plan) {
+    if (!plan.report.canApply) {
+      const last = plan.report.stages.at(-1);
+      throw Object.assign(new RangeError('Mesh modifier ' + last.id + ': ' + last.message), { report: plan.report });
+    }
+    return plan;
   }
 
   function prepare(rows) {
     if (rows === undefined) return [];
     if (!record(rows) || Object.keys(rows).length > 32) throw new TypeError('Scene topologyMeshes needs a map of up to 32 editable meshes');
-    return Object.entries(rows).map(([object, row]) => [object, prepareRow(object, row)]);
+    const evaluate = evaluator(rows);
+    return Object.entries(rows).map(([object, row]) => [object,
+      prepareRow(object, row, row?.modifiers === undefined ? undefined : requireComplete(evaluate(object)))]);
   }
 
   function mount(world, prepared) {
@@ -159,13 +197,10 @@
     return changes;
   }
 
-  function revise(row, patch, { projection } = {}) {
-    const before = topology.create(row.document);
-    const { document, correspondence } = topology.editWithCorrespondence(before, patch, { projection });
+  function remapBindings(bindings, correspondence) {
     const groups = Object.fromEntries(elementKinds.map(kind =>
       [kind, new Map(correspondence.domains[kind].groups.flatMap(group => group.from.map(id => [id, group])))]));
-    const updated = { ...row, document };
-    if (row.bindings) updated.bindings = row.bindings.map(binding => {
+    return bindings.map(binding => {
       if (binding.review) return binding;
       const group = groups[binding.domain].get(binding.element);
       const links = group.links.filter(link => link.from === binding.element);
@@ -175,6 +210,11 @@
       return { ...binding, review: { reason: links.length > 1 ? 'split' : links.length ? 'projected' : group.status,
         candidates: sorted(candidates) } };
     });
+  }
+
+  function transition(row, before, document, correspondence) {
+    const updated = { ...row, document };
+    if (row.bindings) updated.bindings = remapBindings(row.bindings, correspondence);
     if (row.bakes) {
       const dirty = new Map();
       for (const { id, before: old, after: next } of recordsChanged(elements(before).faces, elements(document).faces)) {
@@ -190,5 +230,20 @@
     return { row: updated, correspondence, ...diff(row, updated) };
   }
 
-  A.meshTopologyScene = Object.freeze({ prepare, mount, diff, revise });
+  function revise(row, patch, { projection } = {}) {
+    const before = topology.create(row.document);
+    const { document, correspondence } = topology.editWithCorrespondence(before, patch, { projection });
+    return transition(row, before, document, correspondence);
+  }
+
+  function applyModifiers(row, plan) {
+    requireComplete(plan);
+    const before = topology.create(row.document);
+    const correspondence = topology.correspond(before, plan.document, { lineage: plan.lineage });
+    const result = transition(row, before, plan.document, correspondence);
+    result.row.modifiers = plan.remaining;
+    return result;
+  }
+
+  A.meshTopologyScene = Object.freeze({ prepare, mount, diff, revise, evaluator, applyModifiers });
 })(KIT);

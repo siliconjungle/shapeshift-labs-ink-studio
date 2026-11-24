@@ -9,6 +9,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `node.createSceneEditor().applyBrush` | function | `(stroke)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().applyMeshModifiers` | function | `(object, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().begin` | function | `(label)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().bevelMeshTopology` | function | `(object, request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().build` | function | `(inputs = buildEnv.parameterInputs, { retainRenderSdf = buildEnv.retainRenderSdf, retainPartRenderSdf = buildEnv.retainPartRenderSdf } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
@@ -25,6 +26,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().fork` | function | `(source = snapshot())` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().history` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().hybridRoute` | function | `(address)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().inspectMeshModifiers` | function | `(object, { through, part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().materials` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().meshHealth` | function | `(object, settings, { part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().meshTopology` | function | `(object, part)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
@@ -33,6 +35,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().paintShadeNormal` | function | `(stroke, options = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().paintShadowBand` | function | `(stroke, options = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().pick` | function | `(ray, { world, time, reconstruction, sampleWithdrawal } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().planApplyMeshModifiers` | function | `(object, { through, part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planMeshBevel` | function | `(object, request, { part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planMeshCut` | function | `(object, request, { part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planMeshEdgeEdit` | function | `(object, request, { part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
@@ -53,6 +56,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().setBreakables` | function | `(definitions)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().setBrushRegion` | function | `(region)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().setMaterial` | function | `(material, targets = selectedKeys())` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().setMeshModifiers` | function | `(object, modifiers, { part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().setModifiers` | function | `(modifiers, targets = selectedKeys())` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().setPrefabInstance` | function | `(id, instance)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().setRole` | function | `(name, ramp)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
@@ -66,5 +70,6 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().transformMeshTopology` | function | `(object, request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().tree` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().undo` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().updateMeshModifier` | function | `(object, id, fields, { part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().updateModifier` | function | `(id, patch, targets = selectedKeys())` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().updateShape` | function | `(patch, targets = selectedKeys())` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |

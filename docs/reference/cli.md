@@ -219,6 +219,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology edge-edit <mesh-or-scene.json> <request.json> [--object id] [--out file] [--report file]   preview or apply loop insertion, edge slides, bridges and grid fills
   mesh-topology bevel <mesh-or-scene.json> <request.json> [--object id] [--view file] [--preview dir] [--out file] [--report file]   preview or apply an edge bevel with native-grid protection
   mesh-topology shading <mesh-or-scene.json> [request.json] [--object id] [--view file] [--preview dir] [--subdivision level] [--out file] [--report file]   inspect or edit corner normals, smooth edges and subdivision creases
+  mesh-topology modifiers inspect|set|update|apply <mesh-or-scene.json> [stack-or-edit.json] [--object id] [--through id] [--targets file] [--view file] [--preview dir] [--out file] [--report file]   inspect or edit a retained mesh modifier stack
   mesh-topology correspond <before.json> <after.json> [--lineage links.json] [--projection settings.json] [--match-ids on|off] [--out map.json]   map stable and projected elements
   mesh-uv inspect|simplify <mesh> --out <directory|mesh.json>   inspect UV maps or reduce with seam locks
   scenery pack <scene.js> --out asset.inkscenery   pack indexed meshes and textures from a scenery hook

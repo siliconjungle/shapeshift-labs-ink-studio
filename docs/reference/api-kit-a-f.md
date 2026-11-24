@@ -812,7 +812,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.looks.paletteFinding` | function | `(value, previous)` | [source](../../src/kit/p90-asset-looks.js) |
 | `KIT.authoring.looks.scene` | function | `(look, catalog)` | [guide](../pixel-look.md#look-assets-and-overrides), [guide](../pixel-look.md#shared-look-selectors), [source](../../src/kit/p90-asset-looks.js) |
 | `KIT.authoring.meshTopologyScene` | namespace |  |  |
+| `KIT.authoring.meshTopologyScene.applyModifiers` | function | `(row, plan)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.diff` | function | `(before, after)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
+| `KIT.authoring.meshTopologyScene.evaluator` | function | `(rows)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.mount` | function | `(world, prepared)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.prepare` | function | `(rows)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.revise` | function | `(row, patch, { projection } = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |

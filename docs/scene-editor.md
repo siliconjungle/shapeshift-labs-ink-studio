@@ -128,3 +128,13 @@ Use `undo()`, `redo()`, `history()`, and `revision()` to track saved edits. `onC
 
 Pass a scene editor to [`createPixelEditor`](pixel-art-authoring.md#undo-pixel-and-scene-edits-together)
 to group native scene operations with pixel edits in the same transaction.
+
+## Retained mesh modifier stacks
+
+Use `setMeshModifiers(object, list)` and
+`updateMeshModifier(object, id, patch)` on an editable mesh. The mesh
+tree keeps each stage at `mesh-modifier:<object>/<id>` while reordering or
+bypassing it. `build()` draws the evaluated mesh and `snapshot()` stores
+the editable cage and ordered stack. Use `planApplyMeshModifiers` to
+review changed bindings and bakes before `applyMeshModifiers` writes
+the selected prefix to topology. See [mesh modifier stacks](mesh-topology.md#run-a-non-destructive-mesh-modifier-stack).

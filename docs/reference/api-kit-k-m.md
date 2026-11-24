@@ -203,10 +203,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.meshTopology.create` | function | `(source)` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
 | `KIT.meshTopology.edit` | function | `(source, { vertices = [], faces = [], removeVertices = [], removeFaces = [], edges = [], shading } = {})` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
 | `KIT.meshTopology.editWithCorrespondence` | function | `(source, patch, { lineage = patch?.lineage, projection } = {})` | [guide](../mesh-topology.md#record-correspondence-through-an-edit), [guide](../mesh-topology.md#edit-topology-in-a-scene-transaction), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04c-topology-correspondence.js) |
+| `KIT.meshTopology.evaluateModifiers` | function | `(source, modifiers, { through, target } = {})` | [guide](../mesh-topology.md#run-a-non-destructive-mesh-modifier-stack), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04y-mesh-modifiers.js) |
 | `KIT.meshTopology.fromIndexed` | function | `({ id, positions, indices, uvs, normals, materials = ['default'], faceMaterials } = {})` | [guide](../mesh-topology.md#render-pick-and-import-indexed-geometry), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
 | `KIT.meshTopology.health` | function | `(source, options = {})` | [guide](../mesh-topology.md#inspect-and-repair-local-mesh-health), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04f-mesh-health.js) |
 | `KIT.meshTopology.inspect` | function | `(source)` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
 | `KIT.meshTopology.inspectShading` | function | `(source)` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04v-mesh-shading.js) |
+| `KIT.meshTopology.modifierStack` | function | `(source)` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04y-mesh-modifiers.js) |
 | `KIT.meshTopology.planBevel` | function | `(source, request)` | [guide](../mesh-topology.md#bevel-selected-edges), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04u-mesh-bevel.js) |
 | `KIT.meshTopology.planCut` | function | `(source, request)` | [guide](../mesh-topology.md#cut-with-a-plane-or-knife-path), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04j-mesh-cut.js) |
 | `KIT.meshTopology.planEdgeEdit` | function | `(source, request)` | [guide](../mesh-topology.md#edit-edge-loops-and-fill-openings), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04q-mesh-edge-edit.js) |
@@ -221,6 +223,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.meshTopology.toSceneMesh` | function | `(source, { materials, objectId, partId, meshId } = {})` | [guide](../mesh-topology.md#render-pick-and-import-indexed-geometry), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
 | `KIT.meshTopology.triangleSource` | function | `(mesh, triangle)` | [guide](../mesh-topology.md#render-pick-and-import-indexed-geometry), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
 | `KIT.meshTopology.triangulate` | function | `(source)` | [guide](../mesh-topology.md#render-pick-and-import-indexed-geometry), [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04a-mesh-topology.js) |
+| `KIT.meshTopology.updateModifier` | function | `(stack, id, patch)` | [guide](../mesh-topology.md#author-and-edit-a-polygon), [source](../../src/kit/p04y-mesh-modifiers.js) |
 
 ## KIT.mist
 

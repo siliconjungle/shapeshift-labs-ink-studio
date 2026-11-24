@@ -6547,6 +6547,414 @@
       ],
       "additionalProperties": false
     },
+    "meshModifier": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "mirror"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "origin": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "minItems": 3,
+              "items": false
+            },
+            "normal": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "minItems": 3,
+              "items": false
+            },
+            "weld": {
+              "type": "boolean"
+            },
+            "flipU": {
+              "type": "boolean"
+            },
+            "tolerance": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "normal"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "array"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 32
+            },
+            "step": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "minItems": 3,
+              "items": false
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "count",
+            "step"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "bevel"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "edges": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "minItems": 1
+            },
+            "width": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "segments": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "profile": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "chamfer",
+                    "round"
+                  ]
+                },
+                {
+                  "type": "object"
+                }
+              ]
+            },
+            "join": {
+              "enum": [
+                "miter",
+                "patch"
+              ]
+            },
+            "weights": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "edge": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "weight": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "edge",
+                  "weight"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "material": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "protect": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "width"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "shell"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "faces": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "minItems": 1
+            },
+            "thickness": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "rim": {
+              "type": "object"
+            },
+            "interior": {
+              "type": "object"
+            },
+            "minWall": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "thickness"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "subdivision"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "levels": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "levels"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "projection"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "direction": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "minItems": 3,
+              "items": false
+            },
+            "distance": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "vertices": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "minItems": 1
+            },
+            "bidirectional": {
+              "type": "boolean"
+            },
+            "offset": {
+              "type": "number"
+            },
+            "miss": {
+              "enum": [
+                "keep",
+                "error"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "target",
+            "direction",
+            "distance"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "meshModifierEdit": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "const": "set"
+            },
+            "stack": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/meshModifier"
+              },
+              "minItems": 0,
+              "maxItems": 16
+            }
+          },
+          "required": [
+            "action",
+            "stack"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "const": "update"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "patch": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "action",
+            "id",
+            "patch"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "const": "apply"
+            },
+            "through": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
     "meshTopologyOperation": {
       "type": "object",
       "properties": {
@@ -6570,6 +6978,9 @@
         },
         "shading": {
           "$ref": "#/$defs/meshShadingRequest"
+        },
+        "modifiers": {
+          "$ref": "#/$defs/meshModifierEdit"
         },
         "patch": {
           "type": "object",
@@ -6919,6 +7330,11 @@
         {
           "required": [
             "shading"
+          ]
+        },
+        {
+          "required": [
+            "modifiers"
           ]
         }
       ],
