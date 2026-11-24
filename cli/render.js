@@ -1197,6 +1197,11 @@ function renderFrame(world, o, preparedPalettes) {
   const decals = o.surfaceDecals !== false && world.surfaceDecals?.sample(sceneTime,o).layers;
   const surfaceLayers = meshLayers.length || brickLayers.length || decals?.length ?
     [spriteSurfaces].flat().concat(meshLayers,brickLayers,decals || []) : spriteSurfaces;
+  if(pbr) pbr.shadows=PbrMaterials.shadows.prepare(pbr,world,pbrFrames,{
+    layers:[surfaceLayers],enabled:o.pbrShadows!==false,curveMode:curves?'curves':'splats',shadowArt:o.shadowArt,footprint:shadowFootprint,
+    surfaceOptions:{time:t,interfaceTime:o.interfaceTime,enabled:o.cutoutShadows!==false,shadowShells:o.shadowShells,
+      surfaces:o.spriteSurfaces===false?false:spriteSurfaces,sprites:spriteAtlases,atlasMode:o.spriteAtlasMode}
+  });
   const simulationLayers=o.simulationMaterialLayers===false ? undefined : SimulationMaterialLayers.frame(
     [surfaceLayers].flat(),{time:sceneTime,session:lookInputs||undefined,
       query:()=>world.lookSnapshot?.query??world.surfaceEffects?.query??require('../index.js').load().KIT.world.query.fromScene(world,sceneTime),
@@ -2160,6 +2165,7 @@ function renderFrame(world, o, preparedPalettes) {
       }
       if (pbrMaterial) color=PbrMaterials.shade(pbr,pbrMaterial,{
         color:physicalPigment,position,normal:sprite.normal,roughness:world.splatRoughness?.[i],
+        receiveShadow:pbr.shadows?.receives?.(i),
         view:pbrView ?? eye.map((value,k)=>value-position[k])
       });
       if (emitted) color=addLinearTint(color,emitted.linear);
@@ -2189,6 +2195,7 @@ function renderFrame(world, o, preparedPalettes) {
     if (sprite.pbrMaterial) {
       color = PbrMaterials.shade(pbr, sprite.pbrMaterial, {
         color: sprite.color, position, normal: sprite.normal, tangent: sprite.pbrTangent,
+        shadowNormal:sprite.biasNormal,receiveShadow:sprite.pbrReceives,
         view: pbrView ?? eye.map((value, k) => value - position[k]), roughness: sprite.semantic?.roughness,
         metalness: sprite.semantic?.metalness, emission: sprite.semantic?.emission
       });
@@ -2321,6 +2328,7 @@ function renderFrame(world, o, preparedPalettes) {
       pk = sdf?.rows[i]?.baseColor ?? d[q + 7];
     const fieldParticle = i >= baseCount;
     const pbrMaterial = !fieldParticle && pbrTargets && pbrTargets(i);
+    const pbrReceives = pbrMaterial && pbr.shadows?.receives?.(i);
     const pbrNormal = pbrMaterial && !curve && PbrMaterials.splatNormal(world, i, pbrFrames(i), pbrMatrices);
     const correction = paint && d[q + 14] === paint.marker;
     const translucent = al < 1 && d[q+3] < 1 || opticalActive || (kraw & 16) && (kraw & 256);
@@ -2865,6 +2873,7 @@ function renderFrame(world, o, preparedPalettes) {
             normal?.some(Boolean) ? surfacePoint(ray, normal, x, y, z, -cz, R) : [x, y, z]);
           const rgb = PbrMaterials.shade(pbr, pbrMaterial, {
             color: physicalPigment, position, normal, tangent: curve?.axis,
+            receiveShadow:pbrReceives,
             view: ray.direction.map(n => -n), roughness: roughness ?? world.splatRoughness?.[i],
             emission: curveEmission ? toLinearSrgb(Array.from(curveEmission)) : undefined
           });

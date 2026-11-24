@@ -349,13 +349,13 @@ void main() {
     vec3 rgb = pigment.rgb;
     ${pbr ? `
     vec4 controls=spanRow(hit.row,10);
-    if(controls.w>=1.0){
+    if(abs(controls.w)>=1.0){
       float travel=hit.depth/(-ray.z);
       mat3 toWorld=transpose(mat3(u_curveView));
       vec3 at=toWorld*(origin+travel*ray-u_curveView[3].xyz);
       vec3 normal=toWorld*curvePbrNormal(hit.row,origin,ray,travel);
-      rgb=pbrShade(int(controls.w),rgb,normal,toWorld*spanRow(hit.row,1).xyz,-toWorld*ray,at,
-        fract(controls.w)*2.0,0.0,0.0,pbrLinear(controls.rgb));
+      rgb=pbrShade(int(controls.w),rgb,normal,normal,toWorld*spanRow(hit.row,1).xyz,-toWorld*ray,at,
+        fract(abs(controls.w))*2.0,0.0,0.0,pbrLinear(controls.rgb));
     }` : ''}
     ${engraving ? `
     int slot=int(curveMark(hit.row,4).w);

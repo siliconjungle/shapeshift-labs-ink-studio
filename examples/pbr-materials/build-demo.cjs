@@ -13,7 +13,7 @@ async function main() {
   const [renderer, output, still] = process.argv.slice(2);
   if (!renderer || !output) throw new Error('Usage: node build-demo.cjs bundled-preview.mjs demo.html [still.png]');
   const api = await import('./preview.mjs');
-  const world = createScene(Ink.load(),api);
+  const world = createScene(Ink.load(),{...api,shadowStudy:true});
   const frame = Ink.render(world,{ w:width,h:height,px:2,dither:.15,
     pbrMaterials:paletteMaterials(world.look.pbrMaterials,true) });
   const png = PNG.encode(frame.w,frame.h,frame.rgb);

@@ -1284,37 +1284,6 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const K = toolkit.KIT;
       const sample = (wantsRelight || wantsShot) && K.splatFrames.create(world, time, K.M);
       const pbrTargets = pbr && K.pbr.splatBindings(world, pbr);
-      const pbrRamps = pbr && K.pbr.rampTable(pbr);
-      // The shared material shaders read ramp stops after the vertex data in the same texture.
-      const pbrUniforms = pbr && {
-        ...K.pbr.uniforms(pbr,pbrRamps),u_pbrRows:pbrUnit,u_pbrRampOffset:world.count
-      };
-      const pbrUseAlbedo = !portableStages && !paintActive;
-      const pbrSource = pbr && [world, world.data, world.count, world.pix, world.renderMetadata, world.surfaceData,
-        world.gaussianHarmonics, world.splatRoughness, world.materialAlbedo, pbrDefinition, time, pbrUseAlbedo,
-        world.pal,world.paletteRoles,pbrRampOverrides];
-      const pbrRetained = pbr && frame.changedRows?.length === 0 && !world.anim?.bones && !world.anim?.rig &&
-        !world.reconstructionPose && pbrRowSource && pbrSource.every((value,i)=>value===pbrRowSource[i]) &&
-        sameValues(pbrRamps.rows,uploadedPbrRamps);
-      if (pbr && !pbrRetained) {
-        const frames = sample || K.splatFrames.create(world, time, K.M);
-        const length = world.count * 4 + pbrRamps.rows.length;
-        if (!pbrRows || pbrRows.length !== length) pbrRows = new Float32Array(length);
-        for (let i = 0; i < world.count; i++) {
-          const id = pbrTargets(i), at = i * 4;
-          pbrRows[at + 3] = id ? id + .5 * (world.splatRoughness?.[i] ?? .45) : 0;
-          if (id) {
-            const normal = K.pbr.splatNormal(world, i, frames(i), K.M);
-            pbrRows.set(K.pbr.encodeNormal(normal), at);
-            pbrRows[at + 2] = pbrUseAlbedo ? world.materialAlbedo?.[i] ?? 0 : 0;
-          }
-        }
-        pbrRows.set(pbrRamps.rows,world.count*4);
-        pbrTable ??= table(512, pbrUnit, maxSize);
-        pbrTable.upload(pbrRows);
-        uploadedPbrRamps = pbrRamps.rows;
-        pbrRowSource = pbrSource;
-      }
       let lightRows;
       if (wantsRelight) {
         const timeline = K.environmentFrame.timeline(world, frame, t,
@@ -1439,6 +1408,49 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         if(changes!==lastSimulationMaterials)historyValid=false;
         lastSimulationMaterials=changes;
       }
+      const pbrFrames=pbr && (sample || K.splatFrames.create(world,time,K.M));
+      if(pbr)pbr.shadows=K.pbr.shadows.prepare(pbr,world,pbrFrames,{
+        layers:atlases,enabled:frame.pbrShadows!==false,curveMode:finiteCurves?'curves':'splats',shadowArt:frame.shadowArt,
+        footprint:2*(camera.distance-(camera.setback??0))*camera.tangent/height,
+        surfaceOptions:{time:t,interfaceTime:frame.interfaceTime,enabled:frame.cutoutShadows!==false,shadowShells:frame.shadowShells,
+          surfaces:spriteSurfaces,sprites:frame.spriteAtlases===true?world.spriteAtlases:frame.spriteAtlases??world.spriteAtlases,
+          atlasMode:frame.spriteAtlasMode}
+      });
+      const pbrRamps = pbr && K.pbr.rampTable(pbr);
+      const pbrShadowData = pbr && K.pbr.shadows.pack(pbr.shadows,world.count+pbrRamps.rows.length/4);
+      const pbrLength = pbr && (world.count*4+pbrRamps.rows.length+pbrShadowData.rows.length);
+      // The shared material shaders read ramp and shadow data after the vertex rows.
+      const pbrUniforms = pbr && {
+        ...K.pbr.uniforms(pbr,pbrRamps),...pbrShadowData.uniforms,u_pbrRows:pbrUnit,u_pbrRampOffset:world.count
+      };
+      const pbrUseAlbedo = !portableStages && !paintActive;
+      const pbrSource = pbr && [world, world.data, world.count, world.pix, world.renderMetadata, world.surfaceData,
+        world.gaussianHarmonics, world.splatRoughness, world.materialAlbedo, pbrDefinition, time, pbrUseAlbedo,
+        world.pal,world.paletteRoles,pbrRampOverrides,frame.shadowArt,world.look?.shadowArt,!!pbr.shadows];
+      const pbrRetained = pbr && frame.changedRows?.length === 0 && !world.anim?.bones && !world.anim?.rig &&
+        !world.reconstructionPose && pbrRowSource && pbrSource.every((value,i)=>value===pbrRowSource[i]) &&
+        pbrRows?.length===pbrLength && sameValues(pbrRamps.rows,uploadedPbrRamps);
+      if (pbr && !pbrRetained) {
+        if (!pbrRows || pbrRows.length !== pbrLength) pbrRows = new Float32Array(pbrLength);
+        for (let i = 0; i < world.count; i++) {
+          const id = pbrTargets(i), at = i * 4;
+          const receive=pbr.shadows?.receives?.(i)!==false;
+          pbrRows[at + 3] = id ? (id+.5*(world.splatRoughness?.[i]??.45))*(receive?1:-1) : 0;
+          if (id) {
+            const normal = K.pbr.splatNormal(world, i, pbrFrames(i), K.M);
+            pbrRows.set(K.pbr.encodeNormal(normal), at);
+            pbrRows[at + 2] = pbrUseAlbedo ? world.materialAlbedo?.[i] ?? 0 : 0;
+          }
+        }
+        pbrRows.set(pbrRamps.rows,world.count*4);
+        uploadedPbrRamps = pbrRamps.rows;
+        pbrRowSource = pbrSource;
+      }
+      if(pbr && (!pbrRetained || pbr.shadows)){
+        pbrRows.set(pbrShadowData.rows,world.count*4+pbrRamps.rows.length);
+        pbrTable ??= table(512,pbrUnit,maxSize);
+        pbrTable.upload(pbrRows);
+      }
       let marks, engraving, markOutput, filterBuffers;
       if (filter) {
         if (width*2 > Math.min(maxSize,viewportLimit[0]) || height*2 > Math.min(maxSize,viewportLimit[1]))
@@ -1463,7 +1475,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         data.bind();
       }
       const curveSettings = finiteCurves && {
-        pbrTargets,pbrUseAlbedo,
+        pbrTargets,pbrUseAlbedo,pbrReceives:pbr?.shadows?.receives,
         time,restMarks:marks,engraving,filter, drawOrder:frame.order, planes:[clip,cover?.plane],
         geometryCode:spriteMask && (i=>spriteMask.codes[i]),
         curveSubdivision:cutaway ? false : frame.curveSubdivision ?? look.curveSubdivision,
@@ -1480,7 +1492,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           const source=diffuseRamps?.pixels ?? world.pix;
           if (!pbr) return source;
           const rows=source.slice();
-          for (let i=0;i<world.count;i++) if(pbrRows[i*4+3]>=1)rows[i*8]=0;
+          for (let i=0;i<world.count;i++) if(Math.abs(pbrRows[i*4+3])>=1)rows[i*8]=0;
           return rows;
         };
         const changedPbrPatterns = !!pbr !== materials?.pbr || pbr && !pbrRetained;

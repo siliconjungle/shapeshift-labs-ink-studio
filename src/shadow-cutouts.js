@@ -35,7 +35,7 @@ const ShadowCutouts = (() => {
       v: cross(normal, right).map(n => n / area) };
   }
 
-  function surfacePlanes(atlas, emit, shadowShells) {
+  function surfacePlanes(atlas, emit, shadowShells, accepts) {
     const { shadowFaces, width, height, vertices, pixels, revision = 0 } = atlas;
     if (!Array.isArray(shadowFaces) || shadowFaces.length > maxPlanes ||
         !(vertices instanceof Float32Array) || !(pixels instanceof Uint8Array) || pixels.length !== width * height * 4)
@@ -48,6 +48,10 @@ const ShadowCutouts = (() => {
     const slip = atlas[slipSymbol];
     const edits = slip?.vertices === vertices && slip.width === width && slip.height === height ? slip.ranges : [];
     for (const { first, region, shell: authoredShell, subdivisions = 1 } of shadowFaces) {
+      if(accepts){
+        const chart=atlas.surfaceCharts?.find(row=>row.first<=first&&row.end>first);
+        if(!accepts(chart?{object:chart.objectId,entity:chart.objectId,material:chart.materialId,part:chart.partId,surface:chart.id}:{})) continue;
+      }
       const shell=shadowShells && authoredShell;
       const span = 3 * subdivisions ** 2, end = first + 2 * span;
       if (!integer(first) || first % 3 || !Number.isSafeInteger(subdivisions) || subdivisions < 1 || subdivisions > 16 ||
@@ -127,7 +131,7 @@ const ShadowCutouts = (() => {
   }
 
   function prepare(world, { time = 0, interfaceTime, enabled = true, surfaces = world.spriteSurfaces,
-    sprites = world.spriteAtlases, atlasMode, shadowShells = world.shadowShells !== false } = {}) {
+    sprites = world.spriteAtlases, atlasMode, shadowShells = world.shadowShells !== false, accepts } = {}) {
     const planes = [];
     if (!enabled || world.cutoutShadows === false) return planes;
     let pixels = 0;
@@ -142,28 +146,34 @@ const ShadowCutouts = (() => {
       planes.push(value);
     }
     for (const atlas of Array.isArray(surfaces) ? surfaces : [surfaces])
-      if (atlas?.shadowFaces?.length) surfacePlanes(atlas,emit,shadowShells);
+      if (atlas?.shadowFaces?.length) surfacePlanes(atlas,emit,shadowShells,accepts);
     if (Array.isArray(sprites) && (atlasMode === undefined || atlasMode === 'scenery')) {
       const A = atlasAPI();
       for (const placement of sprites)
-        if (placement?.castsShadow || placement?.shadowShell !== undefined && placement.shadowShell !== false)
+        if ((placement?.castsShadow || placement?.shadowShell !== undefined && placement.shadowShell !== false) &&
+            (!accepts || accepts({object:placement.id,entity:placement.id})))
           sceneryPlanes(A.place(placement),time,interfaceTime,emit,shadowShells);
     }
     return planes;
   }
 
+  function shellDepth({origin:at,normal,u,v,image,mapping,cutoff,shellScale=1},origin,direction,distance) {
+    const offset=delta(at,origin);
+    return shells.firstHit(image,mapping,cutoff,[-dot(offset,u),-dot(offset,v),dot(offset,normal)],
+      [dot(direction,u),dot(direction,v),-dot(direction,normal)],distance,shellScale);
+  }
+
   function occludes(planes, origin, direction, distance) {
-    for (const { origin: at, normal, u, v, image, mapping, cutoff, shellScale=1 } of planes) {
-      const facing = dot(direction, normal);
-      if (!image.shell && Math.abs(facing) <= 1e-8) continue;
-      const ox = at[0] - origin[0], oy = at[1] - origin[1], oz = at[2] - origin[2];
-      const axial = ox * normal[0] + oy * normal[1] + oz * normal[2];
+    for (const plane of planes) {
+      const {origin:at,normal,u,v,image,mapping,cutoff}=plane;
       if (image.shell) {
-        const point = [-ox*u[0]-oy*u[1]-oz*u[2], -ox*v[0]-oy*v[1]-oz*v[2], axial];
-        const ray = [dot(direction,u),dot(direction,v),-facing];
-        if (shells.trace(image,mapping,cutoff,point,ray,distance,shellScale)) return true;
+        if (Number.isFinite(shellDepth(plane,origin,direction,distance))) return true;
         continue;
       }
+      const facing = dot(direction, normal);
+      if (Math.abs(facing) <= 1e-8) continue;
+      const ox = at[0] - origin[0], oy = at[1] - origin[1], oz = at[2] - origin[2];
+      const axial = ox * normal[0] + oy * normal[1] + oz * normal[2];
       const hit = axial / facing;
       if (hit <= 1e-5 || hit >= distance) continue;
       const xh = hit * direction[0] - ox, yh = hit * direction[1] - oy, zh = hit * direction[2] - oz;
@@ -183,6 +193,6 @@ const ShadowCutouts = (() => {
     }).join(';');
   }
 
-  return Object.freeze({ prepare, occludes, historyKey });
+  return Object.freeze({ prepare, occludes, shellDepth, historyKey });
 })();
 if (typeof module !== 'undefined') module.exports = ShadowCutouts;

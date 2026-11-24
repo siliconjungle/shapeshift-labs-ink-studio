@@ -39,17 +39,26 @@ function paletteMaterials(physical, ramps) {
   };
 }
 
-function keyLight(degrees) {
+function keyLight(degrees, shadows = false) {
   const angle = degrees * Math.PI / 180;
   return [
     { direction:[-.72 * Math.cos(angle), .52 + .21 * Math.sin(angle), .62 + .34 * Math.sin(angle)],
-      color:'#ffe5c3', intensity:2.6 },
+      color:'#ffe5c3', intensity:2.6, shadows, mapSize:192, filter:1 },
     { direction:[.72,-.3,.51],color:'#8ee6ee',intensity:.62 },
     { direction:[.22,.92,-.15],color:'#f6a379',intensity:.5 }
   ];
 }
 
-function createScene({ KIT, makeBuilder, SpriteSurface }, { bakeObjectTexels }) {
+function shutterPositions(offset=0) {
+  const x=-6.1+offset,y=3.3,z=5.2,w=3.0,h=2.3;
+  return [x,y,z,x+w,y,z,x+w,y+h,z,x,y+h,z];
+}
+
+function poseShutter({KIT}, world, offset) {
+  KIT.sceneMeshes.pose(world.meshes.find(mesh=>mesh.id==='shutter'),shutterPositions(offset));
+}
+
+function createScene({ KIT, makeBuilder, SpriteSurface }, { bakeObjectTexels, shadowStudy = false }) {
   const B = makeBuilder(191,palette), meshes = [], surface = SpriteSurface.make(40);
   const { sceneMeshes, curveSplats } = KIT;
   const ring = (name, x, y, profile, material, color, count = 90) => {
@@ -167,6 +176,17 @@ function createScene({ KIT, makeBuilder, SpriteSurface }, { bakeObjectTexels }) 
     surface.face([x,-1.72,.036],[i%4===0?.03:.016,0,0],[0,i%4===0?.10:.056,0],2,2,
       ()=>i%4===0?0x927c67:0x60565a);
   }
+  if(shadowStudy){
+    const size=48,pixels=new Uint8Array(size*size*4);
+    for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+      const slat=(x+Math.floor(y*.27))%13;
+      const rim=x<2||x>=size-2||y<2||y>=size-2;
+      if(rim||slat<5) pixels.set(rim?[90,77,80,255]:[52,52,65,255],(y*size+x)*4);
+    }
+    meshes.push(sceneMeshes.create({id:'shutter',objectId:'shutter',positions:shutterPositions(),
+      uvs:[0,1,1,1,1,0,0,0],indices:[0,1,2,0,2,3],
+      materials:[{id:'shutter',texture:{width:size,height:size,pixels}}]}));
+  }
 
   const materials = {
     copper:{roughness:.37,metalness:.82,anisotropy:.6,coating:{weight:.26,roughness:.27}},
@@ -181,7 +201,7 @@ function createScene({ KIT, makeBuilder, SpriteSurface }, { bakeObjectTexels }) 
   };
   const pbrMaterials = {
     materials, bindings:Object.keys(materials).map(id=>({select:{material:id},material:id})),
-    lights:keyLight(initial), environment:{sky:'#a9c9ef',horizon:'#a096b1',ground:'#534869',intensity:.71},exposure:1.15,
+    lights:keyLight(initial,shadowStudy), environment:{sky:'#a9c9ef',horizon:'#a096b1',ground:'#534869',intensity:.71},exposure:1.15,
     projections:[
       { material:'copper', origin:[-3.25,-.77,.32],u:[2.44,1.88,0],v:[-.10,.13,0],reach:.4,feather:.07,
         channels:{baseColor:'#735759',roughness:.73,metalness:.32,coating:.02} },
@@ -189,9 +209,10 @@ function createScene({ KIT, makeBuilder, SpriteSurface }, { bakeObjectTexels }) 
         channels:{baseColor:'#31575b',roughness:.77,coating:0,emission:'#224248'} }
     ]
   };
-  return B.finish({ meshes,spriteSurfaces:surface.finish(),radius:5,paletteRoles,look:{pbrMaterials},
+  const shadowArt=shadowStudy?{cast:{include:[{object:'shutter'}]}}:undefined;
+  return B.finish({ meshes,spriteSurfaces:surface.finish(),radius:5,paletteRoles,look:{pbrMaterials,shadowArt},
     cam:{target:[0,.06,0],dist:7.92,fov:.62,yaw:.055,pitch:.13,ortho:true},
     fog:{start:1,max:0},dither:0 });
 }
 
-if (typeof module !== 'undefined') module.exports = { createScene, keyLight, paletteMaterials, width, height, initial };
+if (typeof module !== 'undefined') module.exports = { createScene, keyLight, paletteMaterials, poseShutter, width, height, initial };

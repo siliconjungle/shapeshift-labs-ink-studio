@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const ink = require('..');
 const runWebGL = require('../cli/look-webgl.js');
 
-function fixture({ KIT, makeBuilder, SpriteSurface, bakeObjectTexels, editObjectTexels }) {
+function fixture({ KIT, makeBuilder, SpriteSurface, bakeObjectTexels, editObjectTexels }, caster) {
   const B = makeBuilder(3, [0x111923, 0xc98044, 0x84949b, 0xf5d28a, 0x296565]);
   const quad = x => ({
     points:[x-.48,-.48,0,x+.48,-.48,0,x+.48,.48,0,x-.48,.48,0],
@@ -20,7 +20,7 @@ function fixture({ KIT, makeBuilder, SpriteSurface, bakeObjectTexels, editObject
     fallback:()=>({pigment:0xc98044,roughness:.46,metalness:1})
   });
   const baked = KIT.sceneMeshes.fromObjectTexels(texels, { id:'texels', materialId:'texel' });
-  const sign = SpriteSurface.make(4);
+  const sign = SpriteSurface.make(8);
   sign.face([-.48,-.48,0],[.96,0,0],[0,.96,0],4,4,()=>0xc98044,
     { id:'sign', materialId:'alloy', projection:{mapping:'affine'} });
   let first = B.count();
@@ -40,15 +40,37 @@ function fixture({ KIT, makeBuilder, SpriteSurface, bakeObjectTexels, editObject
     projections:[{ material:'alloy', origin:[-2.7,.11,.18],u:[5.6,0,0],v:[0,.35,0],
       reach:.5,feather:0,channels:{baseColor:'#30acac',metalness:0,roughness:.8} }]
   };
+  const blockerPoints=[-3,.27,.9,3,.27,.9,3,1.07,.9,-3,1.07,.9];
+  const blocker = caster==='mesh' && KIT.sceneMeshes.create({
+    id:'blocker',positions:blockerPoints,indices:[0,1,2,0,2,3],uvs:[0,1,1,1,1,0,0,0],
+    materials:[{id:'blocker',color:0x162430}]
+  });
+  if(caster==='cutout'||caster==='shell')sign.face([-3,.27,.9],[6,0,0],[0,.8,0],8,2,(x)=>x===0?null:0x162430,
+    {id:'cutout',castsShadow:true,...(caster==='shell'&&{shadowShell:.19})});
+  if(caster==='curve'||caster==='transmitting')KIT.curveSplats.draw(B,[[-3,.63,.9],[3,.63,.9]],
+    {width:.8,edge:'hard',color:'#162430',shadow:{cast:true,...(caster==='transmitting'&&{transmittance:.55})}});
+  if(caster==='splat')B.disc(0,.63,.9,[0,0,1],3.4,.018,B.P[0],1);
   const world = B.finish({
-    meshes:[mesh,baked],spriteSurfaces:sign.finish(),radius:4,
+    meshes:blocker?[mesh,baked,blocker]:[mesh,baked],spriteSurfaces:sign.finish(),radius:4,
     paletteRoles:{sea:[0,4,2,3]},
     look:{pbrMaterials:definition},cam:{target:[0,0,0],dist:5,fov:.72,yaw:0,pitch:0,ortho:true},
     fog:{start:1,max:0},dither:0
   });
   const edit = () => KIT.sceneMeshes.updateObjectTexels(baked, editObjectTexels(texels,
     texels.cells.filter(Boolean).map(({id}) => ({ id, metalness:0 }))));
-  return { world, definition, edit };
+  const moveBlocker = height => KIT.sceneMeshes.pose(blocker,blockerPoints.map((n,k)=>n+(k%3===1?height:0)));
+  return { world, definition, edit, moveBlocker };
+}
+function shadowSettings(definition) {
+  const material={roughness:.56,metalness:1,
+    lightingRamp:{stops:[[0,'#264065'],[.2,'#579884'],[.68,'#c59456']],interpolation:'step'},
+    highlight:{color:'#fff3ce',threshold:.01}
+  };
+  const pbrMaterials={...definition,materials:{alloy:material,texel:material},projections:[],
+    environment:{intensity:0},lights:[{direction:[0,.7,1],intensity:2.3,shadows:true,mapSize:128,filter:0}]};
+  const shadowArt={cast:{include:[{object:'blocker'}]}};
+  const fill={direction:[0,-.15,1],intensity:.38,shadows:true,mapSize:128,filter:0};
+  return {pbrMaterials,shadowArt,fill};
 }
 function rampFrames(definition) {
   const material = {
@@ -147,6 +169,73 @@ test('PBR lighting ramps reuse strict surface ramp validation', () => {
     [0xc6,0xe4,0xcf].map(n=>n/255));
   definition.materials.alloy.highlight.lightingRamp.weights = [.1,.5,1];
   assert.throws(()=>pbr.prepare(definition,[],options),/zero weight to an inactive highlight/);
+});
+
+test('per-light shadows follow posed blockers, use shadow swatches and leave the fill intact in both renderers',
+  {skip:!process.env.INK_TEST_CHROME},async ()=>{
+    const api=await import('../webgl.mjs');
+    const kit={...ink.load(),...api}, {world,definition,moveBlocker}=fixture(kit,'mesh');
+    const {pbrMaterials,shadowArt,fill}=shadowSettings(definition);
+    const frame={pbrMaterials,shadowArt};
+    const render=options=>read(ink.render(world,{...view,...frame,...options}));
+    const blocked=render();
+    const bypass=render({pbrShadows:false});
+    const mask=render({shadowArt:{...shadowArt,receive:{exclude:[{object:'plate'}]}}});
+    const filled=render({pbrLights:[...pbrMaterials.lights,fill]});
+    const fillOnly=render({pbrLights:[fill]});
+    moveBlocker(1.2);
+    const moved=render();
+    const strandBlocker=fixture(kit,'transmitting').world;
+    const strandLook={...pbrMaterials,materials:Object.fromEntries(Object.entries(pbrMaterials.materials)
+      .map(([id,finish])=>[id,{...finish,highlight:false}]))};
+    const transmitting=read(ink.render(strandBlocker,{...view,pbrMaterials:strandLook}));
+    assert.deepEqual(transmitting.mesh,[0x57,0x98,0x84]);
+    for(const name of ['mesh','texel','decal','gaussian','strand']){
+      assert([0x26,0x40,0x65].every((n,k)=>Math.abs(blocked[name][k]-n)<=2),name);
+      assert.deepEqual(filled[name],fillOnly[name],name);
+      assert.deepEqual(moved[name],bypass[name],name);
+      assert.notDeepEqual(blocked[name],bypass[name],name);
+    }
+    assert.deepEqual(mask.mesh,bypass.mesh);
+    assert.deepEqual(mask.texel,blocked.texel);
+    const actual=runWebGL({},fixture,(kit,build,backend,{view,samples,shadowSource})=>{
+      const {world,definition,moveBlocker}=build(kit,'mesh');
+      const {pbrMaterials,shadowArt,fill}=new Function('return ('+shadowSource+')')()(definition);
+      const painter=backend(view.w,view.h,view);
+      try{
+        function render(options){
+          painter.draw(world,{pbrMaterials,shadowArt,changedRows:[],...options});
+          return painter.sample(samples);
+        }
+        const blocked=render(),bypass=render({pbrShadows:false});
+        const mask=render({shadowArt:{...shadowArt,receive:{exclude:[{object:'plate'}]}}});
+        const filled=render({pbrLights:[...pbrMaterials.lights,fill]}),fillOnly=render({pbrLights:[fill]});
+        moveBlocker(1.2);
+        const moved=render(),strandBlocker=build(kit,'transmitting').world;
+        const strandLook={...pbrMaterials,materials:Object.fromEntries(Object.entries(pbrMaterials.materials)
+          .map(([id,finish])=>[id,{...finish,highlight:false}]))};
+        painter.draw(strandBlocker,{pbrMaterials:strandLook});
+        return {blocked,bypass,mask,filled,fillOnly,moved,transmitting:painter.sample(samples)};
+      }finally{painter.close();}
+    },{view,samples,shadowSource:shadowSettings.toString()});
+    for(const [stage,colors] of Object.entries({blocked,bypass,mask,filled,fillOnly,moved})){
+      for(const name of ['mesh','texel','decal','gaussian','strand']){
+        const expected=colors[name], seen=actual[stage][name];
+        assert(expected.every((n,k)=>Math.abs(seen[k]-n)<=4),JSON.stringify({stage,name,expected,seen}));
+      }
+    }
+    assert.deepEqual(actual.transmitting.mesh,transmitting.mesh);
+});
+
+test('painted cutouts, shadow shells, opaque splats and finite curves cast on PBR materials',async ()=>{
+  const kit={...ink.load(),...await import('../webgl.mjs')};
+  for(const caster of ['cutout','shell','curve','splat']){
+    const {world,definition}=fixture(kit,caster);
+    const {pbrMaterials}=shadowSettings(definition);
+    const painted=read(ink.render(world,{...view,pbrMaterials}));
+    const clear=read(ink.render(world,{...view,pbrMaterials,pbrShadows:false}));
+    assert.notDeepEqual(painted.mesh,clear.mesh,caster);
+  }
 });
 
 test('portable bindings validate and a swatch is driven by the highlight response', () => {

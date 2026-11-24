@@ -70,15 +70,15 @@ const ShadowShell = (() => {
     return a<=b ? [a,b] : null;
   }
 
-  function trace(image,mapping,cutoff,origin,direction,stop,scale) {
+  function firstHit(image,mapping,cutoff,origin,direction,stop,scale) {
     const { width,height,alpha,shell }=image;
     const near=1e-5;
-    if (stop<=near) return false;
+    if (stop<=near) return Infinity;
     const u=slab(near,stop,origin[0],direction[0],0,1);
     const v=u && slab(...u,origin[1],direction[1],0,1);
     const bottom=shell.min*scale, top=shell.max*scale;
     const span=v && slab(...v,origin[2],direction[2],bottom,top);
-    if (!span || span[0]>=stop) return false;
+    if (!span || span[0]>=stop) return Infinity;
     let [time,end]=span;
     const gx=mapping[0]+origin[0]*mapping[2], gy=mapping[1]+origin[1]*mapping[3],
       dx=direction[0]*mapping[2], dy=direction[1]*mapping[3];
@@ -96,16 +96,19 @@ const ShadowShell = (() => {
         const key=bytes[p*3]+bytes[p*3+1]*256+bytes[p*3+2]*65536;
         const back=bottom+(key>>12)*decode, front=bottom+(key&precision)*decode;
         const hit=slab(time,far,origin[2],direction[2],back,front);
-        if (hit && hit[0]<stop) return true;
+        if (hit && hit[0]<stop) return hit[0];
       }
       if (far>=end) break;
       if (nx<=ny) x+=sx;
       if (ny<=nx) y+=sy;
       time=Math.max(time,far);
     }
-    return false;
+    return Infinity;
   }
 
-  return Object.freeze({ prepare, fit, crop, trace });
+  function trace(image,mapping,cutoff,origin,direction,stop,scale) {
+    return Number.isFinite(firstHit(image,mapping,cutoff,origin,direction,stop,scale));
+  }
+  return Object.freeze({ prepare, fit, crop, trace, firstHit });
 })();
 if (typeof module !== 'undefined') module.exports = ShadowShell;

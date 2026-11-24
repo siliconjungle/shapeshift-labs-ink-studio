@@ -1,8 +1,9 @@
 const el = id => document.getElementById(id);
 const canvas = document.querySelector('canvas'), still=el('still'), play=el('play'), slider=el('light');
+const shutter=el('shutter'), shadows=el('shadows');
 const controls = [...document.querySelectorAll('[data-mode]')];
 el('download').href=still.src;
-let renderer, world, looks, mode='ramps', angle=initial, animation;
+let renderer, toolkit, world, looks, mode='ramps', angle=initial, animation;
 
 function draw() {
   const isStill=mode==='export';
@@ -16,12 +17,14 @@ function draw() {
       canvas.height=h;
     }
     renderer.render(world,{ width:w,height:h,raw:!art,outline:art,edges:art,dither:art?.15:0,
-      pbrMaterials:looks[mode],pbrLights:keyLight(angle),changedRows:[] });
+      pbrMaterials:looks[mode],pbrLights:keyLight(angle,true),pbrShadows:shadows.checked,changedRows:[] });
   }
   el('backend').textContent=isStill?'Headless export':'Live WebGL';
   el('degrees').value=(isStill?initial:Math.round(angle))+'°';
   slider.value=isStill?initial:angle;
   slider.disabled=play.disabled=isStill||mode==='off';
+  shutter.disabled=isStill;
+  shadows.disabled=isStill||mode==='off';
   for (const control of controls) control.setAttribute('aria-pressed', String(control.dataset.mode===mode));
   document.documentElement.dataset.backend=isStill?'headless':'webgl';
 }
@@ -33,11 +36,11 @@ function stop() {
 }
 try {
   const [kitSource,browserSource]=await Promise.all([unpack('@TOOLKIT@'),unpack('@RENDERER@')]);
-  const toolkit = new Function(kitSource)();
+  toolkit = new Function(kitSource)();
   const url=URL.createObjectURL(new Blob([browserSource],{type:'text/javascript'}));
   let toolkitBrowser;
   try { toolkitBrowser=await import(url); } finally { URL.revokeObjectURL(url); }
-  world=createScene(toolkit,toolkitBrowser);
+  world=createScene(toolkit,{...toolkitBrowser,shadowStudy:true});
   const physical=world.look.pbrMaterials;
   looks={physical,off:false,ramps:paletteMaterials(physical,true),palette:paletteMaterials(physical,false)};
   renderer=toolkitBrowser.createRenderer(canvas,{toolkit,contextAttributes:{preserveDrawingBuffer:true}});
@@ -47,6 +50,8 @@ try {
     control.addEventListener('click',()=>{stop();mode=control.dataset.mode;draw();});
   }
   slider.addEventListener('input',()=>{stop();angle=Number(slider.value);draw();});
+  shutter.addEventListener('input',()=>{stop();poseShutter(toolkit,world,Number(shutter.value));draw();});
+  shadows.addEventListener('change',()=>{stop();draw();});
   play.addEventListener('click',()=>{
     if(animation)return stop();
     const zero=performance.now(), from=angle;

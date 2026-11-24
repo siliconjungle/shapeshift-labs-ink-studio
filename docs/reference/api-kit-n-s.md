@@ -159,6 +159,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pbr.prepare` | function | `(definition, lightsOverride, {palette = [], paletteRoles = {}, surfaceLightRamps} = {})` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
 | `KIT.pbr.rampTable` | function | `(plan)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
 | `KIT.pbr.shade` | function | `(plan, id, sample)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
+| `KIT.pbr.shadows` | namespace |  |  |
+| `KIT.pbr.shadows.curveLayers` | value | `number = 4` |  |
+| `KIT.pbr.shadows.pack` | function | `(shadows, offset)` | [source](../../src/pbr-shadows.js) |
+| `KIT.pbr.shadows.prepare` | function | `(plan, world, frames, {layers=[],surfaceOptions,shadowArt,footprint=0,enabled=true,curveMode}={})` | [source](../../src/pbr-shadows.js) |
 | `KIT.pbr.splatBindings` | function | `(world, plan)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
 | `KIT.pbr.splatNormal` | function | `(world, i, frame, M)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
 | `KIT.pbr.uniforms` | function | `(plan, ramps = rampTable(plan))` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
@@ -1368,7 +1372,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.shadowCutouts` | namespace |  |  |
 | `KIT.shadowCutouts.historyKey` | function | `(planes)` | [source](../../src/shadow-cutouts.js) |
 | `KIT.shadowCutouts.occludes` | function | `(planes, origin, direction, distance)` | [source](../../src/shadow-cutouts.js) |
-| `KIT.shadowCutouts.prepare` | function | `(world, { time = 0, interfaceTime, enabled = true, surfaces = world.spriteSurfaces, sprites = world.spriteAtlases, atlasMode, shadowShells = world.shadowShells !== false } = {})` | [source](../../src/shadow-cutouts.js) |
+| `KIT.shadowCutouts.prepare` | function | `(world, { time = 0, interfaceTime, enabled = true, surfaces = world.spriteSurfaces, sprites = world.spriteAtlases, atlasMode, shadowShells = world.shadowShells !== false, accepts } = {})` | [source](../../src/shadow-cutouts.js) |
+| `KIT.shadowCutouts.shellDepth` | function | `({origin:at,normal,u,v,image,mapping,cutoff,shellScale=1},origin,direction,distance)` | [source](../../src/shadow-cutouts.js) |
 
 ## KIT.shafts
 

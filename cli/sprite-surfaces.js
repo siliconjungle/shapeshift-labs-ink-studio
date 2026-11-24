@@ -86,6 +86,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
       while(charts?.[chartIndex]?.end<=first)chartIndex++;
       const chart=charts?.[chartIndex]?.first<=first ? charts[chartIndex] : null;
       const pbrMaterial = pbr?.surface(chart);
+      const pbrReceives = pbrMaterial && pbr.shadows?.receivesSurface(chart);
       if (allow && !allow({object:chart?.objectId,part:chart?.partId})) continue;
       const local=multiprojection?.project(layer,chart);
       const step=local ? 0 : (style?.vertexSnap ?? 0)*artScale;
@@ -260,7 +261,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             }
           }
           fragments[p]={p,z,alpha:1,color:material?.color ?? [ink >>> 16, (ink >>> 8) & 255, ink & 255].map(n=>n/255),position,
-            ...(pbrMaterial && {pbrMaterial,pbrTangent:axes?.right}),
+            ...(pbrMaterial && {pbrMaterial,pbrReceives,pbrTangent:axes?.right}),
             ...(material && {semantic:material,semanticRule:mip.chain.rule,scan:mip.chain.scan,objectTexels:mip.objectTexels,
               semanticView:ortho ? [V[2],V[6],V[10]] : unit(sub(eye,position))}),
             normal:mapped??normal,...(mapped&&{biasNormal:normal}),objectPosition,surface:true,

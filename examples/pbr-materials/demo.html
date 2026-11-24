@@ -22,6 +22,9 @@
     background:#12141bdf;padding:6px 8px;border:1px solid #4a4252;border-radius:4px}
   .state:before{content:'';width:5px;height:5px;border-radius:50%;background:#90d8bb}
   .bar{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:13px 16px;border-top:1px solid var(--line)}
+  .shutter{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .shutter input{accent-color:var(--bronze)}
+  .shutter input[type=range]{width:min(180px,32vw)}
   .lights,.modes{display:flex;align-items:center;gap:8px}.modes{flex-wrap:wrap}
   .lights{flex:1;max-width:365px} .lights label{white-space:nowrap} .lights input{min-width:60px;width:100%;accent-color:var(--bronze)}
   output{min-width:43px;text-align:right;color:var(--bronze);font-size:12px}
@@ -45,7 +48,7 @@
 <main>
   <header>
     <div><p class="edition">Ink Studio / Material study</p><h1>Vesper Relay</h1></div>
-    <p class="note">Sweep the light across copper and teal</p>
+    <p class="note">Move the shutter across the relay</p>
   </header>
   <section class="viewer" aria-label="Vesper Relay material viewer">
     <figure>
@@ -68,6 +71,11 @@
         <button data-mode="export" aria-pressed="false" disabled>Headless</button>
       </div>
       <a id="download" download="vesper-relay.png">Save still</a>
+    </div>
+    <div class="bar shutter">
+      <label for="shutter">Shutter position</label>
+      <input id="shutter" type="range" min="-2" max="5" value="0" step=".01" disabled>
+      <label><input type="checkbox" id="shadows" checked disabled> Cast shadows</label>
     </div>
   </section>
   <dl aria-label="Scene materials">

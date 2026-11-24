@@ -282,10 +282,10 @@ void main(){
   ` : ''}
   ${semantic?'if(u_semanticOn&&!u_index)rgb=semanticFinish(rgb,normal,detail.a,sheen,emission,v_world,scanIrradiance,scanHighlight,captured);':''}
   ${pbr ? `
-  if(u_surfacePbr>0){
+  if(u_surfacePbr!=0){
     float det=uvDx.x*uvDy.y-uvDx.y*uvDy.x;
     vec3 tangent=(dpdx*uvDy.y-dpdy*uvDx.y)*sign(det);
-    rgb=pbrShade(u_surfacePbr,${simulation?'pbrPigment':'ink.rgb'},normal,tangent,
+    rgb=pbrShade(u_surfacePbr,${simulation?'pbrPigment':'ink.rgb'},normal,geometricNormal,tangent,
       u_pbrOrtho?u_pbrBack:u_surfaceEye-v_world,v_world,
       ${semantic?'u_semanticOn?detail.a:.45,u_semanticOn?metalness:0.,0.,u_semanticOn?emission:vec3(0)':'0.45,0.0,0.0,vec3(0)'});
   }` : ''}
@@ -867,7 +867,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
             shader.set({u_blockOn:true,u_blockOrigin:[block.region.x,block.region.y],u_blockTint:block.tint});
           } else if(blockRanges)shader.set({u_blockOn:false});
           if(coverageFilter)shader.set({u_filterSoftness:coverageFilter.at(chart?.materialId)});
-          if(pbr)shader.set({u_surfacePbr:pbr.surface(chart)});
+          if(pbr)shader.set({u_surfacePbr:pbr.surface(chart)*(pbr.shadows?.receivesSurface(chart)===false?-1:1)});
           if(mip){
             const {chain,region:r}=mip;
             const key=mip.objectTexels && sun;

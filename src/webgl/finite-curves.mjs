@@ -115,7 +115,8 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
       ...(caps[0]?.plane ?? zero),...(caps[1]?.plane ?? zero),
       ...color,i+1,span.group,span.tau,geometryCode,strandCode,
       ...(caps[0]?.at ?? zero),endCap[0],endCap[1],endCap[2],softness,
-      ...(glow || none),physical ? physical+.5*(roughness ? roughness-1 : world.splatRoughness?.[i] ?? .45) : 0);
+      ...(glow || none),physical ? (physical+.5*(roughness ? roughness-1 : world.splatRoughness?.[i] ?? .45))*
+        (options.pbrReceives?.(i)===false?-1:1) : 0);
     if (marking) {
       const {V}=kit, stored=!replacement && world.curveRest?.[at+3] ? world.curveRest.subarray(at,at+16) : undefined;
       const shape=kernel.spanShape(replacement?.data ?? data,replacement ? 0 : at,1);

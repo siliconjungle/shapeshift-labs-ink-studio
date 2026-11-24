@@ -75,6 +75,24 @@ The diffuse ramp samples the strongest directional response, using wrapped incid
 
 Author scene or environment overrides with `look.surfaceLightRamps`. Use the PBR material name as the finish ID and `diffuse` or `specular` as the layer. These override entries accept explicit hex or RGB stops, just like legacy surface overrides. Pass `surfaceLightRamps: false` at render time to use the authored material definitions. To require exact swatches after a full-strength ramp, include them in the scene palette or bind a dedicated [target palette](pixel-look.md#target-palettes-and-dithering).
 
+## Per-light shadows
+
+Set `shadows: true` on any directional light in `pbrMaterials.lights` or `pbrLights`.
+`mapSize` accepts 32–1024 pixels on the longer axis and defaults to 256.
+`bias` defaults to 0.02 world units and `filter` is a radius of 0–2 shadow-map pixels, defaulting to 1.
+
+```js
+const lights = [
+  { direction: [-0.7, 0.6, 0.7], color: '#ffe5c3', intensity: 2, shadows: true, filter: 1 },
+  { direction: [0.8, 0.1, 0.5], color: '#82bdec', intensity: 0.35 }
+];
+renderer.render(world, { pbrLights: lights });
+```
+
+The browser and headless renderer use the same directional shadow map rasterizer. It reads opaque splats, retained mesh and texel geometry with texture cutouts, [painted shadow casters](painted-cutout-shadows.md), and finite curves authored with `shadow.cast`. Finite curves can transmit light through their authored `shadow.transmittance`. Use `look.shadowArt` to select casters and receivers by their geometry IDs and to apply the existing shadow gain steps.
+
+Visibility scales the diffuse ramp's light response and the direct specular response separately for each light. A covered key can pick a shadow swatch while an unobstructed fill continues to illuminate the same receiver. Environment light and emission stay available in the shadow. Use `pbrShadows: false` or `--pbr-shadows off` to review the same shot with the caster geometry and light directions still visible.
+
 ## Carrier channels
 
 - **Mesh and projected surface** sample the registered pigment and mapped normal. `KIT.sceneMeshes.create` accepts a scalar or a matching byte map for `roughness` and `metalness`. Projected atlas faces retain their projection settings and may bind by material, object, part or named surface.
@@ -82,11 +100,11 @@ Author scene or environment overrides with `look.surfaceLightRamps`. Use the PBR
 - **Gaussian splats** use registered pigment when supplied and otherwise use baked row color. They prefer authored normals, then available capture normals, then the thin covariance axis. A round splat without a usable normal faces the view. Relighting a capture with baked highlights is approximate, so author a pigment swatch for materials where those highlights matter.
 - **Finite curves** use the analytic intersection normal and the strand tangent, with authored along-strand roughness and emission available to the shared material. Gaussian carrier mode uses the row-level normal instead.
 
-Ink shades before palette mapping, dithering and outlines. An explicit PBR binding supplies the finish for that receiver, including where the receiver previously used legacy per-pixel ramp lighting. Use full color to tune the look, then adjust the highlight swatches and palette on the target art grid. The analytic environment supplies smooth reflection color. PBR lights illuminate independently of scene shadow maps and reflection captures, and Gaussian transparency remains coverage-based.
+Ink shades before palette mapping, dithering and outlines. An explicit PBR binding supplies the finish for that receiver, including where the receiver previously used legacy per-pixel ramp lighting. Use full color to tune the look, then adjust the highlight swatches and palette on the target art grid. The analytic environment supplies smooth reflection color. Gaussian transparency remains coverage-based.
 
 ## Vesper Relay
 
-The editable [demo scene](../examples/pbr-materials/scene.cjs) uses a machined collar, a Gaussian signal lens, a painted switchboard, an affine status badge and finite-curve wires. The copper finish is shared by the collar and the copper wires. Sweep the key light and compare Material ramps with Scene palette on the same art grid. The Headless view shows the ramped finish exported by the software renderer.
+The editable [demo scene](../examples/pbr-materials/scene.cjs) uses a machined collar, a Gaussian signal lens, a painted switchboard, an affine status badge and finite-curve wires. Move the overhead shutter to cast a shadow across the relay, or toggle Cast shadows while holding the light and shutter position fixed. The Headless view shows the same shadows in the exported still.
 
 From the repository root, build a self-contained HTML demo and headless PNG.
 

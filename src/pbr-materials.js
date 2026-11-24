@@ -1,10 +1,11 @@
 /* Portable material parameters and the matching CPU/WebGL lighting equations. */
 const PbrMaterials = (() => {
-  let selectors, colors, surface, pixelLook;
+  let selectors, colors, surface, pixelLook, shadows;
   try { selectors = TargetSelectors; } catch { selectors = require('./target-selectors.js'); }
   try { colors = ColorSpace; } catch { colors = require('./color-space.js'); }
   try { surface = SurfaceLook; } catch { surface = require('./surface-look.js'); }
   try { pixelLook = PixelLook; } catch { pixelLook = require('./pixel-look.js'); }
+  try { shadows = PbrShadows; } catch { shadows = require('./pbr-shadows.js'); }
   const toLinear = colors.prepare('srgb', 'srgb-linear');
   const toDisplay = colors.prepare('srgb-linear', 'srgb');
   const MAX_MATERIALS = 16, MAX_LIGHTS = 4, MAX_PROJECTIONS = 8;
@@ -117,7 +118,12 @@ const PbrMaterials = (() => {
       if (!direction) throw new RangeError('Light direction must be nonzero');
       const intensity = number(value.intensity ?? 1, 'Light intensity', 0, 64);
       const light = color(value.color ?? WHITE, 'Light color').map(channel => channel * intensity);
-      return { direction, color: light, rampIntensity: clamp(Math.max(...light)) };
+      const {shadows=false,mapSize=256,bias=.02,filter=1}=value;
+      if(typeof shadows!=='boolean' || !Number.isSafeInteger(mapSize) || mapSize<32 || mapSize>1024 ||
+          !Number.isSafeInteger(filter) || filter<0 || filter>2)
+        throw new RangeError('PBR shadows need a switch, mapSize of 32–1024 and filter of 0–2');
+      number(bias,'PBR shadow bias',0,10);
+      return { direction,color:light,rampIntensity:clamp(Math.max(...light)),shadows:shadows&&light.some(Boolean),mapSize,bias,filter };
     });
     const settings = definition.environment ?? {};
     const environment = {
@@ -200,16 +206,20 @@ const PbrMaterials = (() => {
     const aspect = Math.sqrt(1 - .9 * m.anisotropy);
     const a = Math.max(.012, rough * rough), ac = Math.max(.012, m.coatRoughness ** 2);
     let highlight = 0, incidence = 0;
-    for (const light of plan.lights) {
+    for (const [index,light] of plan.lights.entries()) {
       const l = light.direction, nl = dot(n, l);
-      if (m.diffuseRamp) incidence = Math.max(incidence, clamp((nl + m.wrap) / (1 + m.wrap)) * light.rampIntensity);
-      if (nl <= 0) continue;
+      const response = m.diffuseRamp ? clamp((nl+m.wrap)/(1+m.wrap))*light.rampIntensity : 0;
+      if(nl<=0 && !response)continue;
+      const visibility = sample.receiveShadow!==false && plan.shadows ?
+        plan.shadows.visibility(index,sample.position,unit(sample.shadowNormal??ZERO,n)) : 1;
+      incidence=Math.max(incidence,response*visibility);
+      if (nl <= 0 || !visibility) continue;
       const h = unit(v.map((value, i) => value + l[i]), n), s = schlick(dot(v, h));
       const specular = lobe(h, l, frame, nl, a / aspect, a * aspect);
       const coatFresnel = coat * mix(.04, 1, s);
       const top = coatFresnel ? coatFresnel * lobe(h, l, frame, nl, ac, ac) : 0;
       for (let i = 0; i < 3; i++) {
-        const irradiance = light.color[i] * nl, fresnel = mix(f0[i], 1, s);
+        const irradiance = light.color[i] * nl * visibility, fresnel = mix(f0[i], 1, s);
         const spec = specular * fresnel;
         const diffuse = base[i] * (1 - metal) * (1 - fresnel) / Math.PI;
         rgb[i] += irradiance * ((diffuse + spec) * (1 - coatFresnel) + top);
@@ -318,9 +328,14 @@ uniform vec4 u_pbrSky, u_pbrHorizon;
 uniform vec3 u_pbrGround;
 uniform highp sampler2D u_pbrRows;
 uniform highp int u_pbrRampOffset;
-vec4 pbrRampRow(int index){
-  int at=u_pbrRampOffset+index;
+uniform vec4 u_pbrShadow[16];
+uniform float u_pbrShadowRamp[16],u_pbrShadowStrength;
+uniform int u_pbrShadowRampCount;
+vec4 pbrRow(int at){
   return texelFetch(u_pbrRows,ivec2(at&511,at>>9),0);
+}
+vec4 pbrRampRow(int index){
+  return pbrRow(u_pbrRampOffset+index);
 }
 vec4 pbrRamp(int start,vec4 info,float value,float fallbackWeight){
   int lo=0, hi=int(info.x)-1;
@@ -348,6 +363,42 @@ vec3 pbrDisplay(vec3 c) {
   return mix(1.055*pow(c,vec3(1.0/2.4))-0.055,c*12.92,lessThanEqual(c,vec3(0.0031308)));
 }
 vec3 pbrUnit(vec3 v,vec3 fallback) { float q=dot(v,v); return q>1e-16?v*inversesqrt(q):fallback; }
+float pbrVisibility(int index,vec3 at,vec3 normal,vec3 light){
+  int row=index*4;
+  vec4 u=u_pbrShadow[row],v=u_pbrShadow[row+1],shape=u_pbrShadow[row+2],options=u_pbrShadow[row+3];
+  if(shape.z<=0.0)return 1.0;
+  vec2 uv=(vec2(dot(at,u.xyz),dot(at,v.xyz))-vec2(u.a,v.a))/shape.z;
+  float facing=dot(normal,light);
+  if(facing<0.0)normal=-normal;
+  vec2 slope=-vec2(dot(normal,u.xyz),dot(normal,v.xyz))*shape.z/max(.1,abs(facing));
+  float depth=dot(at,light)+shape.w, clear=0.0;
+  ivec2 cell=ivec2(floor(uv)),size=ivec2(shape.xy);
+  int radius=int(options.y);
+  for(int y=-radius;y<=radius;y++)for(int x=-radius;x<=radius;x++){
+    ivec2 test=cell+ivec2(x,y);
+    if(any(lessThan(test,ivec2(0)))||any(greaterThanEqual(test,size)))clear+=1.0;
+    else{
+      int texel=test.y*size.x+test.x;
+      float closest=pbrRow(int(options.x)+(texel>>2))[texel&3];
+      float cutoff=depth+dot(vec2(test)+.5-uv,slope);
+      if(closest>cutoff)continue;
+      float through=1.0;
+      if(options.z>0.0){
+        int first=int(pbrRow(int(options.z)-1+(texel>>2))[texel&3])-1;
+        if(first>=0)for(int j=0;j<${shadows.curveLayers/2};j++){
+          vec4 layer=pbrRow(first+j);
+          if(layer.x>cutoff)through*=1.0-layer.y;
+          if(layer.z>cutoff)through*=1.0-layer.w;
+        }
+      }
+      clear+=through;
+    }
+  }
+  float count=float(2*radius+1);
+  float visibility=clear/(count*count);
+  if(u_pbrShadowRampCount>0)visibility=u_pbrShadowRamp[int(floor(visibility*float(u_pbrShadowRampCount-1)+.5))];
+  return mix(1.0,visibility,u_pbrShadowStrength);
+}
 vec3 pbrDecodeNormal(vec2 oct) {
   if(oct.x>1.0)return vec3(0);
   vec3 n=vec3(oct,1.0-abs(oct.x)-abs(oct.y));
@@ -364,9 +415,11 @@ float pbrLobe(vec3 h,vec3 l,vec3 n,vec3 t,vec3 b,vec3 v,float nl,float nv,vec2 a
   float ll=length(vec3(vec2(dot(t,l),dot(b,l))*a,nl));
   return 0.5*d/max(1e-6,nl*lv+nv*ll);
 }
-vec3 pbrShade(int id,vec3 pigment,vec3 normal,vec3 tangent,vec3 view,vec3 at,
+vec3 pbrShade(int id,vec3 pigment,vec3 normal,vec3 shadowNormal,vec3 tangent,vec3 view,vec3 at,
               float sampledRoughness,float sampledMetalness,float sampledCoat,vec3 sampledEmission) {
-  if (id<=0) return pigment;
+  if (id==0) return pigment;
+  bool receiveShadow=id>0;
+  id=abs(id);
   int m=(id-1)*5;
   vec4 baseRow=u_pbrMaterial[m], controls=u_pbrMaterial[m+1], emissionCoat=u_pbrMaterial[m+2];
   vec4 swatch=u_pbrMaterial[m+3], finish=u_pbrMaterial[m+4];
@@ -393,6 +446,7 @@ vec3 pbrShade(int id,vec3 pigment,vec3 normal,vec3 tangent,vec3 view,vec3 at,
   }
   vec3 v=pbrUnit(view,vec3(0,0,1)), n=pbrUnit(normal,v);
   if (dot(n,v)<0.0) n=-n;
+  vec3 casterNormal=pbrUnit(shadowNormal,n);
   vec3 stable=normalize(cross(abs(n.y)<0.9?vec3(0,1,0):vec3(1,0,0),n));
   vec3 t=pbrUnit(tangent-dot(tangent,n)*n,stable), b=cross(n,t);
   float nv=max(1e-4,dot(n,v)), grazing=pbrSchlick(nv);
@@ -410,14 +464,17 @@ vec3 pbrShade(int id,vec3 pigment,vec3 normal,vec3 tangent,vec3 view,vec3 at,
     vec4 lightRow=u_pbrLight[i*2];
     vec3 light=lightRow.xyz;
     float nl=dot(n,light);
-    if(diffuseRamp>0)incidence=max(incidence,clamp((nl+diffuseInfo.w)/(1.0+diffuseInfo.w),0.0,1.0)*lightRow.w);
-    if (nl<=0.0) continue;
+    float response=diffuseRamp>0?clamp((nl+diffuseInfo.w)/(1.0+diffuseInfo.w),0.0,1.0)*lightRow.w:0.0;
+    if(nl<=0.0&&response==0.0)continue;
+    float visibility=receiveShadow?pbrVisibility(i,at,casterNormal,light):1.0;
+    incidence=max(incidence,response*visibility);
+    if (nl<=0.0||visibility<=0.0) continue;
     vec3 h=pbrUnit(v+light,n);
     float s=pbrSchlick(dot(v,h)), coatFresnel=coat*mix(0.04,1.0,s);
     vec3 spec=mix(f0,vec3(1),s)*pbrLobe(h,light,n,t,b,v,nl,nv,vec2(a/aspect,a*aspect));
     float top=coatFresnel>0.0?coatFresnel*pbrLobe(h,light,n,t,b,v,nl,nv,vec2(ac)):0.0;
     vec3 direct=base*(1.0-metal)*(1.0-mix(f0,vec3(1),s))/3.141592654;
-    vec3 irradiance=u_pbrLight[i*2+1].rgb*nl;
+    vec3 irradiance=u_pbrLight[i*2+1].rgb*(nl*visibility);
     rgb+=irradiance*((direct+spec)*(1.0-coatFresnel)+top);
     vec3 shine=irradiance*(spec*(1.0-coatFresnel)+top);
     highlight=max(highlight,max(shine.r,max(shine.g,shine.b)));
@@ -437,6 +494,6 @@ vec3 pbrShade(int id,vec3 pigment,vec3 normal,vec3 tangent,vec3 view,vec3 at,
   return pbrDisplay(mix(display,swatch.rgb,highlight>swatch.a?finish.y:0.0));
 }
 `;
-  return Object.freeze({ prepare, shade, uniforms, rampTable, glsl, splatNormal, splatBindings, encodeNormal });
+  return Object.freeze({ prepare, shade, uniforms, rampTable, glsl, splatNormal, splatBindings, encodeNormal, shadows });
 })();
 if (typeof module !== 'undefined') module.exports = PbrMaterials;

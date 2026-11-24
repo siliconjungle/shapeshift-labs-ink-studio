@@ -738,7 +738,7 @@ ${materialStyles ? `
 ${facingColors ? 'rgb = facingFragment(rgb, u_fog, u_viewport, u_focal, u_ortho > 0.5);' : ''}
 ${relighting ? 'if (v_relight.w > 0.0) rgb = mix(min(vec3(1.0), rgb * v_relight.xyz), u_fog, v_relight.w - 1.0);' : ''}
 ${pbr ? `
-  if(v_pbrRow.w>=1.0){
+  if(abs(v_pbrRow.w)>=1.0){
     vec2 screen=(gl_FragCoord.xy-u_viewport*.5)/u_focal;
     mat3 toWorld=transpose(mat3(u_pbrView));
     bool ortho=u_ortho>0.5;
@@ -753,8 +753,8 @@ ${pbr ? `
       float centerDepth=-(u_pbrView*vec4(point,1)).z;
       if(travel>=0.0&&abs(travel-centerDepth)<=u_pbrReach)point=from+travel*direction;
     }
-    rgb=pbrShade(int(v_pbrRow.w),v_pbrPigment.rgb,normal,vec3(0),-direction,point,
-      fract(v_pbrRow.w)*2.0,0.0,0.0,vec3(0));
+    rgb=pbrShade(int(v_pbrRow.w),v_pbrPigment.rgb,normal,normal,vec3(0),-direction,point,
+      fract(abs(v_pbrRow.w))*2.0,0.0,0.0,vec3(0));
     rgb=mix(rgb,u_fog,${optical?'hasOptical?0.0:':''}v_pbrPigment.a);
   }` : ''}
 ${optical ? `
