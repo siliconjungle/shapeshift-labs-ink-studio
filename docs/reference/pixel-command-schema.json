@@ -6955,6 +6955,186 @@
         }
       ]
     },
+    "meshBooleanRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "operation": {
+          "enum": [
+            "union",
+            "difference",
+            "intersection"
+          ]
+        },
+        "selection": {
+          "type": "object"
+        },
+        "operand": {
+          "type": "object",
+          "properties": {
+            "object": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "part": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "document": {
+              "type": "object"
+            },
+            "revision": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "selection": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "revision"
+          ],
+          "additionalProperties": false
+        },
+        "cutMaterial": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "tolerance": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "maxWork": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5000000
+        },
+        "solver": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "mesh"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "sdf"
+                },
+                "cell": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "maxCells": {
+                  "type": "integer",
+                  "minimum": 64,
+                  "maximum": 1000000
+                },
+                "edgeTolerance": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "thicknessTolerance": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "probes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "origin": {
+                        "type": "array",
+                        "prefixItems": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ],
+                        "minItems": 3,
+                        "items": false
+                      },
+                      "direction": {
+                        "type": "array",
+                        "prefixItems": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ],
+                        "minItems": 3,
+                        "items": false
+                      },
+                      "distance": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "origin",
+                      "direction",
+                      "distance"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 0,
+                  "maxItems": 64
+                }
+              },
+              "required": [
+                "kind",
+                "cell"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "operation",
+        "operand"
+      ],
+      "additionalProperties": false
+    },
     "meshTopologyOperation": {
       "type": "object",
       "properties": {
@@ -6966,6 +7146,9 @@
         },
         "cut": {
           "$ref": "#/$defs/meshCutRequest"
+        },
+        "boolean": {
+          "$ref": "#/$defs/meshBooleanRequest"
         },
         "faceRegion": {
           "$ref": "#/$defs/meshFaceRegionRequest"
@@ -7310,6 +7493,11 @@
         {
           "required": [
             "cut"
+          ]
+        },
+        {
+          "required": [
+            "boolean"
           ]
         },
         {

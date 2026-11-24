@@ -24,7 +24,7 @@ function render(world, view, toolkit, channels = ['geometricNormal']) {
   const frame = R.render(world, { w: view.w, h: view.h, t: view.t, px: 1, camera: view.camera,
     raw: view.raw, passes: ['depth', ...channels], renderGrid: false, shutter: false, cameraGuides: false });
   if (frame.w !== view.w || frame.h !== view.h || frame.passes?.depth?.length !== view.w * view.h ||
-      channels.some(channel => frame.passes?.[channel]?.length !== view.w * view.h * 3))
+      channels.some(channel => frame.passes?.[channel]?.length !== view.w * view.h * (channel==='materialId' ? 1 : 3)))
     throw new RangeError('Mesh preview needs a matching native-grid depth and color capture');
   return frame;
 }

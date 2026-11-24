@@ -366,6 +366,91 @@ art-grid comparison. For pointer and slider editing, build with
 JSON file, place a path or move a plane, preview pieces and caps, apply
 or undo the cut, and save the mesh or the replayable request.
 
+## Combine closed mesh parts
+
+Use `KIT.meshTopology.planBoolean(document, request)` for union,
+difference, or intersection. Each operand is a closed, consistently
+oriented set of faces in the same coordinate system. Omit selections to
+use two full documents. For two parts in one document, give disjoint
+target and tool selections and omit the tool document. A selection can
+be a saved component selection or a query such as
+`{ domain: 'faces', ids: faceIds }`. This form replaces both selected
+shells with the result and keeps the rest of the document.
+
+```js
+const mesh = KIT.meshTopology;
+const plan = mesh.planBoolean(gauge, {
+  id: 'open-window',
+  revision: mesh.revision(gauge),
+  operation: 'difference',
+  operand: { document: cutter, revision: mesh.revision(cutter) },
+  cutMaterial: 'fresh-copper'
+});
+console.log(plan.report.canCommit, plan.report.faces);
+```
+
+The mesh solver is the default. It splits polygons where the solids
+intersect and stitches compatible boundaries. Where possible, it
+preserves uncut authored polygons, UVs, IDs, and edge records. New
+corners interpolate UVs and compatible attributes from their source
+face. New vertices interpolate weights. A difference uses the tool's
+surface materials on new interior walls unless you supply
+`cutMaterial`. Each result face reports the operand and original face
+that supplied it.
+
+### Request the SDF fallback
+
+Specify `solver: { kind: 'sdf', cell: 0.12 }` in the request to use Ink’s
+[mesh-to-field conversion](headless-authoring.md#textured-sdf-reconstruction)
+and then reconstruct the signed Boolean. The cell size is specified in
+mesh coordinates. The report includes the actual sampling pitch of
+both conversion grids and of the reconstructed surface. A blocked mesh
+solve returns its issues so you can decide whether to request the field
+solver. Both paths require closed, oriented input and check the
+topology of the resulting solid.
+
+The field solver projects UVs and source attributes to the reconstructed
+faces and issues new topology IDs for the sampled region. Its report
+records where sampling changed the result.
+
+| Diagnostic | Evidence |
+| --- | --- |
+| Edge shape | Points along hard polygon edges, their nearest reconstructed positions, distances, and normal agreement. When the mesh solve is unavailable, the report samples eligible input edges |
+| Shell thickness | Reference intervals obtained from polygon intersections along each ray, reconstructed intervals, thickness deltas, and any lost or new walls |
+| Material ownership | Before and after operand, source face, and material at matched ray boundaries |
+
+Set `edgeTolerance` and `thicknessTolerance` on the SDF solver to tune
+when a measured difference is flagged. Add up to 64 named probes with
+`id`, `origin`, `direction`, and `distance` to check a particular
+clearance, opening, or thin panel. Start and end those rays outside the
+solids. The automatic probes cover three axes. Measurements remain
+samples of the result and depend on the selected pitch.
+
+### Preview and apply a scene Boolean
+
+Use `editor.planMeshBoolean(object, request)` to preview an edit to
+an authored scene mesh and `editor.booleanMeshTopology(object, request)`
+to apply it. Set `operand: { object, part, revision }` to use another
+editable scene mesh. The tool mesh stays editable in the scene and
+its used material definitions travel with the result where compatible.
+Disambiguate conflicting material IDs before applying. Apply as
+`operation.boolean` on a bound `mesh-topology` destination to get
+the ordinary preview, correspondence, receipt, bake invalidation, and
+undo behavior. A standalone mesh can contain an empty Boolean result.
+Scene edits require a retained polygon mesh.
+
+The [gauge demo](../examples/mesh-boolean/README.md) shows all three
+operations and a sampled difference. The matched native-grid captures
+isolate the edited mesh. The difference image records visible coverage,
+depth and material changes. The JSON report carries individual probes
+and face ownership.
+
+```sh
+node cli/ink-studio.js mesh-topology boolean gauge.json fallback-request.json \
+  --operand cutter.json --view view.json --preview review \
+  --out edited.json --report report.json
+```
+
 ## Record correspondence through an edit
 
 `KIT.meshTopology.editWithCorrespondence(before, patch)` returns the

@@ -329,11 +329,11 @@
       return mesh;
     }
 
-    function editMeshTopology(object, patch, { part, projection, label } = {}) {
+    function editMeshTopology(object, patch, { part, projection, label, materials } = {}) {
       const before = meshTopology(object, part);
       const { row, ...evidence } = A.meshTopologyScene.revise(before, patch, { projection });
       function write() {
-        const next = { topologyMeshes: { ...snapshot().topologyMeshes, [object]: row } };
+        const next = { topologyMeshes: { ...snapshot().topologyMeshes, [object]: materials===undefined ? row : {...row,materials} } };
         validate({ ...snapshot(), ...next });
         document.setEnvironment(next);
         return freeze(evidence);
@@ -412,6 +412,50 @@
       return freeze({ cut: plan.report, ...(Object.keys(plan.patch).length && {
         topology: editMeshTopology(object, plan.patch, options)
       }) });
+    }
+
+    function planMeshBoolean(object, request, { part } = {}) {
+      const target=meshTopology(object,part);
+      requireMeshShapeOwner(object,target.part,snapshot(),'Boolean edit');
+      let operand=request?.operand, tool;
+      if (operand?.object!==undefined) {
+        if (Object.getPrototypeOf(operand)!==Object.prototype ||
+            Object.keys(operand).some(key=>!['object','part','revision','selection'].includes(key)))
+          throw new TypeError('Select a scene Boolean operand by object, part and topology revision');
+        const {object:toolId,part:toolPart,...settings}=operand;
+        tool=meshTopology(toolId,toolPart);
+        operand=toolId===object ? settings : {...settings,document:tool.document};
+      }
+      const plan=K.meshTopology.planBoolean(target.document,{...request,operand});
+      if (!plan.report.canCommit) return plan;
+      const blocked=issue=>freeze({...plan,report:{...plan.report,canCommit:false,issues:[issue]}});
+      if (plan.report.empty) return blocked({code:'empty-editable-scene-mesh'});
+      if (!tool || tool===target) return plan;
+      const authored=new Map((target.materials ?? []).map(row=>[row.id,row]));
+      const supplied=new Map((tool.materials ?? []).map(row=>[row.id,row]));
+      const used=new Set(plan.report.faces.filter(row=>row.operand==='tool' && row.material!==request.cutMaterial).map(row=>row.material));
+      let changed=false;
+      for (const id of used) {
+        const incoming=supplied.get(id);
+        if (!incoming) continue;
+        const current=authored.get(id);
+        if (current && JSON.stringify(current)!==JSON.stringify(incoming))
+          return blocked({code:'operand-material-conflict',material:id});
+        if (!current) {
+          authored.set(id,incoming);
+          changed=true;
+        }
+      }
+      return changed ? freeze({...plan,materials:[...authored.values()]}) : plan;
+    }
+
+    function booleanMeshTopology(object,request,options) {
+      const plan=planMeshBoolean(object,request,options);
+      if (!plan.report.canCommit)
+        throw Object.assign(new RangeError('Mesh Boolean failed geometry or scene checks'),{report:plan.report});
+      return freeze({boolean:plan.report,...(Object.keys(plan.patch).length && {
+        topology:editMeshTopology(object,plan.patch,{...options,materials:plan.materials})
+      })});
     }
 
     function planMeshFaceRegion(object, request, { part } = {}) {
@@ -630,6 +674,8 @@
       repairMeshTopology,
       planMeshCut,
       cutMeshTopology,
+      planMeshBoolean,
+      booleanMeshTopology,
       planMeshFaceRegion,
       editMeshFaceRegion,
       planMeshEdgeEdit,

@@ -306,10 +306,21 @@ function createDefinitions() {
     ),
     meshModifierEdit:either(tagged('action','set',{stack:array(ref('meshModifier'),0,16)},['stack']),
       tagged('action','update',{id:text,patch:obj},['id','patch']),tagged('action','apply',{through:text})),
+    meshBooleanRequest:object({
+      id:text,revision:text,operation:choice('union','difference','intersection'),selection:obj,
+      operand:object({object:text,part:text,document:obj,revision:text,selection:obj},['revision']),
+      cutMaterial:text,tolerance:{type:'number',exclusiveMinimum:0},maxWork:int(1,5000000),
+      solver:either(object({kind:constant('mesh')},['kind']),
+        object({kind:constant('sdf'),cell:{type:'number',exclusiveMinimum:0},maxCells:int(64,1000000),
+          edgeTolerance:{type:'number',exclusiveMinimum:0},thicknessTolerance:{type:'number',exclusiveMinimum:0},
+          probes:array(object({id:text,origin:pos,direction:pos,distance:{type:'number',exclusiveMinimum:0}},
+            ['id','origin','direction','distance']),0,64)},['kind','cell']))
+    },['id','revision','operation','operand']),
     meshTopologyOperation:{ ...object({
       transform:ref('meshComponentTransform'),
       repair:ref('meshRepairRequest'),
       cut:ref('meshCutRequest'),
+      boolean:ref('meshBooleanRequest'),
       faceRegion:ref('meshFaceRegionRequest'),
       edgeEdit:ref('meshEdgeEditRequest'),
       bevel:ref('meshBevelRequest'),
@@ -330,7 +341,7 @@ function createDefinitions() {
       },
       projection:object({maxDistance:{type:'number',exclusiveMinimum:0},minNormalDot:unit,maxUVDistance:unit,minConfidence:unit,
         ambiguity:unit,maxChecks:int(1,2000000)},['maxDistance'])
-    }),oneOf:['patch','transform','repair','cut','faceRegion','edgeEdit','bevel','shading','modifiers'].map(prop) },
+    }),oneOf:['patch','transform','repair','cut','boolean','faceRegion','edgeEdit','bevel','shading','modifiers'].map(prop) },
     stencilSdfBrush:sdfBrush,
     freeformSdfBrush:freeformBrush,
     sdfShapeOperation:either(...[
