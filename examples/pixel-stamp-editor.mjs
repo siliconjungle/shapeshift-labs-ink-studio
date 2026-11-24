@@ -158,6 +158,8 @@ function load(data) {
     const cels = Object.fromEntries(Object.entries(frame.cels ?? {}).map(([id,cel])=>{
       const layer = stack.rows.get(id);
       if (!layer || layer.kind === 'group') throw new RangeError('Invalid cel layer '+id);
+      if (cel.opacity !== undefined && (!Number.isInteger(cel.opacity) || cel.opacity < 0 || cel.opacity > 255))
+        throw new RangeError('Cel opacity needs a byte');
       stamp.prepare({ width,height,palette,frames:[cel] });
       return [id,validateCel(cel)];
     }));
@@ -480,7 +482,7 @@ function renderStack(doc,stack,frame,palette = doc.palette,override,references =
     const cel = override?.id === id ? override.cel : Object.hasOwn(frame.cels,id) ? frame.cels[id] : {};
     const slots = stamp.paint(width,height,cel);
     for (const p of cel.knockouts ?? []) if (slots[p] === null) slots[p] = -2;
-    return { slots,alpha:cel.alpha };
+    return { slots,alpha:cel.alpha,celOpacity:cel.opacity };
   },{ references,capture });
   return { ...composite,packed };
 }
@@ -680,13 +682,14 @@ function inspectionReader(doc,frame,index,{ palette,swatchIds,slots,alpha,knocko
     if (x >= width || y >= height) return;
     const p = y*width+x;
     const trace = layerStack.inspect(stack,colors,id=>{
-      if (id === active) return { slot:slots[p] === null && erase.has(p) ? -2 : slots[p],alpha:alpha?.[p] };
+      if (id === active) return { slot:slots[p] === null && erase.has(p) ? -2 : slots[p],alpha:alpha?.[p],
+        celOpacity:frame.cels?.[id]?.opacity };
       if (!cached.has(id)) {
         const cel = Object.hasOwn(frame.cels,id) ? frame.cels[id] : {};
-        cached.set(id,{ slots:rasterSlots(width,height,cel),alpha:cel.alpha });
+        cached.set(id,{ slots:rasterSlots(width,height,cel),alpha:cel.alpha,celOpacity:cel.opacity });
       }
       const source = cached.get(id);
-      return { slot:source.slots[p],alpha:source.alpha?.[p] };
+      return { slot:source.slots[p],alpha:source.alpha?.[p],celOpacity:source.celOpacity };
     },{ references:$('layer-references').checked });
     const result = KIT.pixelInspection.document(trace,entries,id=>frame.cels?.[id]?.id ?? null);
     const display = isolated && { layer:active,color:slots[p] != null && (alpha?.[p] ?? 255) > 0 ? palette[slots[p]] : null,
@@ -741,7 +744,7 @@ function draw() {
   let image;
   if (stack && !isolated) {
     try {
-      const composed = renderStack(state.doc,state.stack,frame,palette,{ id:state.layer,cel:{ slots,alpha,knockouts } },references);
+      const composed = renderStack(state.doc,state.stack,frame,palette,{ id:state.layer,cel:{ slots,alpha,knockouts,opacity:current.opacity } },references);
       image = layerStack.image(composed,composed.packed);
     } catch (error) {
       notify(error.message);
@@ -757,7 +760,7 @@ function draw() {
   updateTileNeighbors(frame.id,()=>{
     if (!isolated && !references) return image;
     try {
-      const composite = renderStack(state.doc,state.stack,frame,palette,{ id:state.layer,cel:{ slots,alpha,knockouts } });
+      const composite = renderStack(state.doc,state.stack,frame,palette,{ id:state.layer,cel:{ slots,alpha,knockouts,opacity:current.opacity } });
       return layerStack.image(composite,composite.packed);
     } catch (error) {
       notify(error.message);
@@ -2409,7 +2412,7 @@ function saveJson(filename,data) {
 function workshopTileArt(frame) {
   const doc = state.doc, layers = Object.entries(frame.cels).map(([id,cel])=>{
     const [x,y] = state.stack.rows.get(id).offset ?? [0,0], [dx,dy] = cel.offset ?? [0,0];
-    return [id,{ slots:rasterSlots(doc.width,doc.height,cel),alpha:cel.alpha,offset:[x+dx,y+dy] }];
+    return [id,{ slots:rasterSlots(doc.width,doc.height,cel),alpha:cel.alpha,opacity:cel.opacity,offset:[x+dx,y+dy] }];
   });
   const details = frameProtection(doc,doc.frames.indexOf(frame));
   return { layers:new Map(layers),protection:Tilemap.protectionKey(details) };

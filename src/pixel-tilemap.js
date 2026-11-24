@@ -147,11 +147,12 @@ const PixelTilemap = (() => {
       const left = a.layers.get(layer), right = b.layers.get(layer);
       if (left && right && left.slots.length !== right.slots.length) return false;
       const offsetsEqual = (left?.offset ?? [0,0]).every((value,i)=>value === (right?.offset?.[i] ?? 0));
+      const opacityEqual = (left?.opacity ?? 255) === (right?.opacity ?? 255);
       for (let p=0,n=(left ?? right).slots.length;p<n;p++) {
         const before = left?.slots[p] ?? -1, after = right?.slots[p] ?? -1;
         if (before !== after) return false;
         if (before === -1) continue;
-        if (!offsetsEqual || before >= 0 && (left?.alpha?.[p] ?? 255) !== (right?.alpha?.[p] ?? 255)) return false;
+        if (!offsetsEqual || !opacityEqual || before >= 0 && (left?.alpha?.[p] ?? 255) !== (right?.alpha?.[p] ?? 255)) return false;
       }
     }
     return a.protection === b.protection;

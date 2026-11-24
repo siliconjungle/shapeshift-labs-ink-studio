@@ -296,6 +296,9 @@ module.exports = {
   pixelDocumentFromAseprite(source, options) {
     return require('./cli/pixel-art.js').documentFromAseprite(source, options);
   },
+  pixelDocumentFromAsepriteTiles(document, options) {
+    return require('./cli/pixel-art.js').documentFromAsepriteTiles(document, options);
+  },
   createPixelEditor(source, options) {
     return require('./cli/pixel-art.js').createEditor(source, options);
   },

@@ -126,11 +126,12 @@ function documentShape(design) {
     frameIds.add(frame.id);
     for (const [layer,cel] of Object.entries(frame.cels)) {
       if (!layerRows.has(layer) || layerRows.get(layer).kind === 'group' ||
-          !fields(cel,['id','label','marks','slots','offset','hold']) || !label(cel.label) ||
+          !fields(cel,['id','label','marks','slots','offset','opacity','hold']) || !label(cel.label) ||
           (cel.hold === undefined ? !Array.isArray(cel.marks) :
             !celName(cel.hold) || cel.marks !== undefined || cel.slots !== undefined) ||
           (cel.id !== undefined && !celName(cel.id)) ||
-          (cel.offset !== undefined && !LayerStack.validOffset(cel.offset)))
+          (cel.offset !== undefined && !LayerStack.validOffset(cel.offset)) ||
+          (cel.opacity !== undefined && !integer(cel.opacity,0,255)))
         throw new TypeError('Pixel cel ' + frame.id + '/' + layer + ' needs a known layer and valid marks or hold, ID and offset');
     }
   }
@@ -281,14 +282,15 @@ function composite(width,height,entries,layers,capture,options,legacy = false) {
   const swatches = entries.map(row=>row.id), colors = entries.map(row=>Number.parseInt(row.color.slice(1),16));
   const read = layerRasterizer(width,height,new Map(swatches.map((id,i)=>[id,i])));
   const byId = new Map(layers.map(row=>[row.id,row]));
-  const stack = LayerStack.prepare(layers.map(({ slots,marks,sourceOffset,...layer })=>{
+  const stack = LayerStack.prepare(layers.map(({ slots,marks,sourceOffset,celOpacity,...layer })=>{
     if (legacy && (sourceOffset !== undefined || !fields(layer,['id','clip','protect'])))
       throw new TypeError('Legacy layers need a unique ID, marks and optional clipping or protection');
     return layer;
   }));
   const compiled = LayerStack.compose(width,height,colors,stack,id=>{
     const layer = byId.get(id), source = read(layer);
-    return layer.sourceOffset ? Timeline.translate(width,height,source,layer.sourceOffset) : source;
+    const raster = layer.sourceOffset ? Timeline.translate(width,height,source,layer.sourceOffset) : source;
+    return layer.celOpacity === undefined ? raster : { ...raster,celOpacity:layer.celOpacity };
   },{ ...options,capture });
   return { ...compiled,colors,swatches,layerStack:stack };
 }
@@ -304,7 +306,7 @@ function celLayers(layers,frame,lookup,cels) {
     const { id } = layer, cel = getCel(frame,id);
     if (cel) cels?.set(id,celId(frame,id,cel));
     const content = Timeline.content(cel,lookup);
-    return { ...layer,marks:content?.marks ?? [],slots:content?.slots,sourceOffset:Timeline.offset(layer,cel) };
+    return { ...layer,marks:content?.marks ?? [],slots:content?.slots,sourceOffset:Timeline.offset(layer,cel),celOpacity:cel?.opacity };
   });
 }
 
@@ -363,7 +365,7 @@ function tileArtReader(design,lookup) {
   return id=>{
     const rasterize = layerRasterizer(width,height,swatches);
     const paint = Object.entries(frames.get(id).cels).map(([layer,cel])=>[layer,{
-      ...rasterize(Timeline.content(cel,lookup)),offset:Timeline.offset(layers.get(layer),cel)
+      ...rasterize(Timeline.content(cel,lookup)),offset:Timeline.offset(layers.get(layer),cel),...(cel.opacity !== undefined && { opacity:cel.opacity })
     }]);
     return { layers:new Map(paint),protection:Tilemap.protectionKey(frameProtection(design,id)) };
   };
@@ -464,6 +466,7 @@ function validate(design) {
     ...(design.version === 2 && design.tilemap !== undefined && { tilemap:structuredClone(design.tilemap) }),
     ...(design.version === 2 && design.slices !== undefined && { slices:structuredClone(design.slices) }),
     ...(design.version === 2 && design.legacyMetadata?.aseprite && { aseprite:structuredClone(design.legacyMetadata.aseprite) }),
+    ...(design.version === 2 && design.legacyMetadata?.asepriteFile && { asepriteFile:structuredClone(design.legacyMetadata.asepriteFile.report) }),
     ...(design.version === 2 && design.guides && { guides:structuredClone(design.guides) }),
     ...(design.version === 2 && design.destinations !== undefined && { destinations:design.destinations }) };
 }
@@ -541,7 +544,7 @@ function inspect(design,coordinate,{ frame,cel,binding,destinations,references =
   const p = coordinate[1]*width+coordinate[0];
   const trace = LayerStack.inspect(compiled.layerStack,compiled.colors,id=>{
     const row = compiled.layerSources.get(id);
-    return { slot:row.slots[p],alpha:row.alpha?.[p] };
+    return { slot:row.slots[p],alpha:row.alpha?.[p],celOpacity:row.celOpacity };
   },{ references });
   const description = PixelInspection.document(trace,compiled.paletteEntries,id=>compiled.cels?.get(id) ?? null);
   const materials = inspectionMaterials(design,destinations,context,compiled.id)
@@ -2221,10 +2224,21 @@ function documentFromPNG(file) {
 }
 
 function documentFromAseprite(file,options) {
+  if (file instanceof Uint8Array || /\.ase(?:prite)?$/i.test(file)) {
+    const design = require('./pixel-aseprite-file.js').readLayered(file,authoredCel);
+    validate(design);
+    return design;
+  }
   const { width,height,swatches,frames,tags,slices,aseprite } = require('./pixel-aseprite-sheet.js').readSheet(file,options,authoredCel);
   const design = { format,version:2,width,height,pixelAspect:[1,1],palette:paletteDefinition(swatches),
     layers:[{ id:'image' }],frames,...(tags.length && { tags }),...(slices.length && { slices }),
     legacyMetadata:{ aseprite } };
+  validate(design);
+  return design;
+}
+
+function documentFromAsepriteTiles(document,options) {
+  const design = require('./pixel-aseprite-file.js').tileDocument(document,options,authoredCel);
   validate(design);
   return design;
 }
@@ -2238,7 +2252,7 @@ function layerDeck(design) {
     const compiled = compileFrame(design,frame,revision,palette.swatches,true,undefined,lookup);
     const cels = Object.fromEntries(Object.entries(frame.cels).map(([id,cel])=>{
       const { slots,alpha,knockouts } = stamp(compiled,id);
-      return [id,{ ...(cel.id && { id:cel.id }),...(cel.label && { label:cel.label }),slots,
+      return [id,{ ...(cel.id && { id:cel.id }),...(cel.label && { label:cel.label }),...(cel.opacity !== undefined && { opacity:cel.opacity }),slots,
         ...(alpha && { alpha }),...(knockouts && { knockouts }) }];
     }));
     return { id:frame.id,...(frame.label && { label:frame.label }),duration:frame.durationMs/1000,cels,
@@ -2279,7 +2293,7 @@ function documentFromDeck(deck) {
           !Array.from(knockouts).every((p,i)=>Number.isInteger(p) && slots[p] === null && (i === 0 || p > knockouts[i-1]))))
         throw new TypeError('Layer deck knockouts must be sorted transparent cells');
       return [layer,{ ...(cel.id && { id:cel.id }),...(cel.label && { label:cel.label }),
-        ...authoredCel(width,{ slots,alpha,knockouts },swatchIds) }];
+        ...(cel.opacity !== undefined && { opacity:cel.opacity }),...authoredCel(width,{ slots,alpha,knockouts },swatchIds) }];
     }));
     for (const guide of frame.guides ?? []) guides.push({ ...guide,frame:id });
     for (const selection of frame.selections ?? []) selections.push({ ...selection,frame:id });
@@ -2820,6 +2834,14 @@ function tilemapCommand([action,source,...rest],opt) {
 }
 
 function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, captureMultiview, world, scene, view }) {
+  if (pos[0] === 'aseprite-tiles') {
+    const [,source] = pos;
+    if (pos.length !== 2 || !reference(opt.layer) || !reference(opt.frame) || !reference(opt.out) ||
+        path.resolve(source) === path.resolve(opt.out))
+      throw new TypeError('Use pixel-art aseprite-tiles <document.json> --layer id --frame id --out tiles.json');
+    files.json(path.resolve(opt.out),documentFromAsepriteTiles(read(source),{ layer:opt.layer,frame:opt.frame }));
+    return;
+  }
   if (pos[0] === 'export') return exportCommand(pos.slice(1),opt);
   if (pos[0] === 'directions') return require('./pixel-directional-views.js').command(pos.slice(1),opt,{ compileFrames:compileDirectionalFrames,documentFromDeck });
   if (pos[0] === 'slices') return sliceCommand(pos.slice(1),opt);
@@ -2870,11 +2892,12 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
     return;
   }
   if (action === 'import') {
-    const aseprite = path.extname(source).toLowerCase() === '.json';
-    if (!reference(opt.out) || path.resolve(source) === path.resolve(opt.out) || (!aseprite && opt.sheet !== undefined))
-      throw new TypeError('Use pixel-art import <image.png|sheet.json> --out <document.json> [--sheet <sheet.png> for JSON]');
-    const design = aseprite ? documentFromAseprite(source,{ sheet:opt.sheet,out:opt.out }) : documentFromPNG(source);
+    const sheet = path.extname(source).toLowerCase() === '.json', binary = /\.ase(?:prite)?$/i.test(source);
+    if (!reference(opt.out) || path.resolve(source) === path.resolve(opt.out) || (!sheet && opt.sheet !== undefined))
+      throw new TypeError('Use pixel-art import <image.png|sheet.json|sprite.aseprite> --out <document.json> [--sheet <sheet.png> for JSON]');
+    const design = sheet || binary ? documentFromAseprite(source,{ sheet:opt.sheet,out:opt.out }) : documentFromPNG(source);
     files.json(path.resolve(opt.out),design);
+    if (binary) process.stdout.write(JSON.stringify(design.legacyMetadata.asepriteFile.report,null,2)+'\n');
     return;
   }
   const design = read(source);
@@ -3157,5 +3180,5 @@ function sessionCommand(pos,opt,{ scene,capture,view }) {
     documentRevision:editor.describe().revision },null,2)+'\n');
 }
 
-module.exports = { createEditor, documentFromPNG, documentFromAseprite, documentFromDeck, openEditorSession, compile, validate, stamp, image, review, edit, draw, trace, artRulesReport,
+module.exports = { createEditor, documentFromPNG, documentFromAseprite, documentFromAsepriteTiles, documentFromDeck, openEditorSession, compile, validate, stamp, image, review, edit, draw, trace, artRulesReport,
   command, sessionCommand, splatDiagnosticOptions, actions, sessionActions, paletteActions, stackActions };

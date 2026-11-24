@@ -252,6 +252,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
     edit operations: palette swatch, palette remap-indices, or raster replace-swatch in a saved selection
   pixel-art import <image.png> --out document.json   open indexed or RGBA PNG as editable pixels
   pixel-art import <sheet.json> [--sheet sheet.png] --out document.json   restore Aseprite frames, tags and slices
+  pixel-art import <sprite.aseprite> --out document.json   import binary layers and print compatibility report
+  pixel-art aseprite-tiles <document.json> --layer id --frame id --out tiles.json   extract an editable tilemap
   pixel-art upgrade <design.json> --out <document.json>   open a legacy drawing as editable cels
   pixel-art validate <design.json>           validate the versioned document and each frame
   pixel-art timeline <design.json>           list frame timing and layer-by-frame cels

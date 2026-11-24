@@ -174,6 +174,7 @@ function describe(design,revision,lookup = index(design.frames)) {
       const id = celId(frame,layer.id,cel);
       return { frame:frame.id,state:cel.hold !== undefined ? 'hold' : cel.slots || cel.marks.length ? 'cel' : 'blank',
         cel:id,...(cel.label !== undefined && { label:cel.label }),offset:cel.offset ?? origin,effectiveOffset:offset(layer,cel),
+        ...(cel.opacity !== undefined && { opacity:cel.opacity }),
         ...(cel.hold !== undefined && { hold:cel.hold,source:lookup.sources.get(id) }) };
     })
   }));
@@ -300,7 +301,7 @@ function edit(design,op) {
     writable(target.layer);
     const { cel } = target, key = target.id ?? availableId(op.frame,op.layer,lookup);
     if (type === 'blank') {
-      setCel(target,{ id:key,...(cel?.label !== undefined && { label:cel.label }),...(cel?.offset && { offset:cel.offset }),marks:[] });
+      setCel(target,{ id:key,...(cel?.label !== undefined && { label:cel.label }),...(cel?.offset && { offset:cel.offset }),...(cel?.opacity !== undefined && { opacity:cel.opacity }),marks:[] });
       report = { frame:op.frame,layer:op.layer,cel:key };
     } else {
       if (!cel) throw conflict('missing-cel','Cel offset needs an existing cel',{ frame:op.frame,layer:op.layer });
@@ -324,8 +325,8 @@ function edit(design,op) {
     let cel;
     if (type === 'hold') {
       const source = lookup.sources.get(from.id);
-      const { label,offset } = from.cel;
-      cel = { id:key,hold:source,...(label !== undefined && { label }),...(offset !== undefined && { offset }) };
+      const { label,offset,opacity } = from.cel;
+      cel = { id:key,hold:source,...(label !== undefined && { label }),...(offset !== undefined && { offset }),...(opacity !== undefined && { opacity }) };
     } else {
       cel = { ...(type === 'move' ? from.cel : independent(from.cel,lookup)),id:key };
     }

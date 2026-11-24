@@ -67,18 +67,19 @@ const PixelLayerStack = (() => {
       const buffer = empty(), masks = new Map();
       const { slots,owners,locks,underSlots,underOwners,opacity,mixedColors } = buffer;
       for (const row of stack.children.get(parent)) {
-        const { kind,blend = 'normal',opacity:layerAlpha = 1 } = row;
+        const { kind,blend = 'normal' } = row, group = kind === 'group';
+        const painted = group ? undefined : read(row.id);
+        const layerAlpha = (row.opacity ?? 1)*((painted?.celOpacity ?? 255)/255);
         const visible = shown && row.visible !== false && layerAlpha > 0 && (references || kind !== 'reference');
         const clip = masks.get(row.clip), mask = new Uint8Array(size);
         masks.set(row.id,mask);
-        const group = kind === 'group';
         const step = steps && { id:row.id,label:row.label ?? row.id,kind,blend,opacity:layerAlpha,visible,
           locked:row.effectiveLock || kind === 'reference',...(row.parent !== undefined && { parent:row.parent }),
           ...(row.clip !== undefined && { clip:{ layer:row.clip,alpha:clip[0] } }),
           ...(row.destination !== undefined && { destination:row.destination }),
           ...(group && { children:[] }),contributes:false };
         if (step) steps.push(step);
-        const source = group ? branch(row.id,visible,step?.children) : read(row.id);
+        const source = group ? branch(row.id,visible,step?.children) : painted;
         if (step) {
           const raw = source.slots[0], drawn = raw !== null && raw >= 0;
           step.slot = drawn ? raw : null;
@@ -145,8 +146,8 @@ const PixelLayerStack = (() => {
   function inspect(stack,colors,read,{ references = false } = {}) {
     const layers = [];
     const result = compose(1,1,colors,stack,id=>{
-      const { slot,alpha } = read(id);
-      return { slots:[slot ?? -1],...(alpha !== undefined && { alpha:[alpha] }) };
+      const { slot,alpha,celOpacity } = read(id);
+      return { slots:[slot ?? -1],celOpacity,...(alpha !== undefined && { alpha:[alpha] }) };
     },{ references,trace:layers });
 
     function contributors(steps,visible) {

@@ -555,6 +555,46 @@ Slice bounds that extend beyond the sprite expand the editable canvas.
 pixel in that case. Open the deck in the Pixel Stamp Workshop or use the
 document directly with the edit and export commands.
 
+## Import a layered Aseprite file
+
+Import a binary `.aseprite` or `.ase` into a version 2 pixel document.
+The importer supports indexed, grayscale, and RGBA cels within Ink's native
+canvas and swatch limits. It preserves the layer hierarchy, visibility, locks,
+supported blends, cel offsets and opacity, and links between compatible
+drawings. It also imports named frame ranges, keyed slices, and pivots.
+[Aseprite binary format](https://github.com/aseprite/aseprite/blob/main/docs/ase-file-specs.md)
+
+```sh
+ink-studio pixel-art import lantern.aseprite --out lantern.ink.json
+ink-studio pixel-art timeline lantern.ink.json
+ink-studio pixel-art validate lantern.ink.json
+```
+
+The import prints a compatibility report and saves it under
+`legacyMetadata.asepriteFile.report`. The report identifies losses such as
+unsupported blend modes, per-cel z-index, custom profiles and user properties.
+Source palette entries and changes are recorded with their names and alpha.
+Ink uses stable swatches for the art and bakes palette changes into affected
+cels. If a palette or crop change requires splitting a linked cel, the report
+names the affected cel and the metadata keeps its original link. Keep the
+native document for shared-cel editing. A Workshop deck represents each
+exposure as a placed raster.
+
+Embedded tilemap cels appear in the sprite as paint layers. Their source
+tilesets, original placements and flips travel with the document. Extract a
+specific layer and frame to get an editable Ink tilemap with shared tile art,
+including unused entries and the flipped forms referenced by that map.
+
+```sh
+ink-studio pixel-art aseprite-tiles lantern.ink.json \
+  --layer layer-3 --frame frame-1 --out lantern-tiles.ink.json
+```
+
+Only embedded tile art is loaded. The tile document records the original cel
+offset. Changes to an extracted tile document are local to that document.
+For Node use `pixelDocumentFromAseprite(pathOrBytes)` and
+`pixelDocumentFromAsepriteTiles(document, { layer, frame })`.
+
 ## Export from a saved preset
 
 Open **Export presets** in the Pixel Stamp Workshop to choose outputs,

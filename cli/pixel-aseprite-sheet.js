@@ -168,4 +168,4 @@ function readSheet(file,{ sheet, out } = {},authoredCel) {
       frames:frames.map(({ durationMs,padding,...row })=>row) } };
 }
 
-module.exports = { readSheet };
+module.exports = { readSheet,sliceRows,taggedRanges };
