@@ -49,6 +49,11 @@ test('sweep finds the earliest receiving surface and authored flights stop at th
   assert.equal(flights.frame(2).length,0);
   assert.deepEqual(flights.frame(.2),K.particleImpacts.compile(flights.snapshot()).frame(.2));
   assert.throws(()=>K.particleImpacts.compile({...spec,receivers:[water,water]}),/unique ID/);
+  const touching = K.particleImpacts.compile({receivers:[ledge],particles:[
+    shot('touching',0,{point:[0,1+.13,0],radius:.13})
+  ]});
+  assert.equal(touching.contacts()[0].time,0);
+  assert.equal(touching.frame(0).length,0);
 });
 
 test('portable tracks regenerate collisions when edited and retain external particle receipts', () => {

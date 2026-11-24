@@ -86,7 +86,7 @@
       ids.add(particle);
       const p = point.slice(), v = velocity.slice();
       const position = age => [p[0]+v[0]*age, p[1]+v[1]*age-.5*gravity*age*age, p[2]+v[2]*age];
-      const hit = first(surfaces, y => landingTime(p[1]-y-radius,v[1],gravity,life), position);
+      const hit = first(surfaces, y => landingTime(p[1]-(y+radius),v[1],gravity,life), position);
       const end = time + (hit?.at ?? life);
       if (hit) hits.push(contact(hit, { particle, velocity: [v[0],v[1]-gravity*hit.at,v[2]], time: end }));
       return { time, end, position, radius, rgb: ColorCurves.color(color).map(c => Math.round(c*255)) };
