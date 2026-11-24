@@ -31,7 +31,8 @@ test('the scene tree resolves parts and compound operands and selects visible un
   assert.equal(editor.node('part:tip').children[0].key, 'solid:tip-shape');
   assert.equal(editor.node('group:cluster').children[0].key, 'solid:carved');
   assert.deepEqual(editor.node('solid:carved').children.map(({ key, operand }) => [key, operand]),
-    [['solid:base', 'a'], ['slot:2/b', 'b']]);
+    [['solid:base', 'a'], ['operand:carved/b', 'b']]);
+  assert.equal(editor.node('slot:2/b'),editor.node('operand:carved/b'));
   const top = editor.selectRay(ray(-1.4));
   assert.equal(top.key, 'slot:0');
   assert.deepEqual(top.hit.target.tags, ['@editor/0_']);
@@ -49,6 +50,29 @@ test('the scene tree resolves parts and compound operands and selects visible un
   const unnamedPart = studio.createSceneEditor(scene).pick(ray(1.8, .25));
   assert.equal(unnamedPart.key, 'slot:4');
   assert.equal(unnamedPart.hit.target.entity, 'tip');
+});
+
+test('named parts and modifier operands have the same keys after reordering and relabeling', () => {
+  const scene = source();
+  const body = scene.solids.find(solid => solid.id === 'body-shape');
+  body.modifiers = [
+    { id:'vent', label:'Air inlet', kind:'mask', mode:'cut', shape:ball(null,[1,-.15,.18],{r:.1}) },
+    { id:'shell', kind:'swell', by:.03 }
+  ];
+  const address = 'operand:body-shape/modifiers/vent/shape';
+  assert.equal(studio.createSceneEditor(scene).node(address).solid.r,.1);
+  scene.solids.reverse();
+  body.modifiers.reverse();
+  body.label = 'Main enclosure';
+  scene.parts.body.label = 'Enclosure';
+  const editor = studio.createSceneEditor(scene);
+  assert.equal(editor.node('part:body').name,'Enclosure');
+  assert.equal(editor.node('solid:body-shape').name,'Main enclosure');
+  editor.updateShape({r:.12},address);
+  editor.updateModifier('vent',{label:'Intake'},'solid:body-shape');
+  assert.equal(editor.node(address).solid.r,.12);
+  assert.deepEqual(editor.node('solid:body-shape').solid.modifiers.map(({id,label})=>[id,label]),
+    [['shell',undefined],['vent','Intake']]);
 });
 
 test('transforms, material assignments, and ramps commit together and undo exactly', () => {

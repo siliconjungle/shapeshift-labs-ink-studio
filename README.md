@@ -22,8 +22,10 @@ The package includes geometry, materials, lighting, animation, character control
 - [Retained authoring](#retained-authoring)
 - [Editable 3D drawing](#editable-3d-drawing)
 - [Headless world simulation](docs/headless-worlds.md)
+- [Playable and editable Inkwell Rebirth scenes](examples/inkwell-rebirth/README.md)
 - [Editable starter recipes](examples/starter-recipes/README.md)
 - [Rendering and command reference](#rendering-and-command-reference)
+- [Searchable public reference](docs/reference/index.md)
 - [View-dependent surface materials](#view-dependent-surface-materials)
 - [Projected and procedural effects](#projected-and-procedural-effects)
 - [Reflections, ripples and atmosphere](#reflections-ripples-and-atmosphere)
@@ -44,8 +46,12 @@ The package includes geometry, materials, lighting, animation, character control
 - [Search for hard-to-stage routes](docs/staging-route-search.md)
 - [Blind audiovisual review](docs/blind-av-review.md)
 - [Video codec round-trip approval](docs/video-round-trip.md)
+- [Flash and flicker review](docs/flash-flicker-review.md)
+- [Beat-level live performance captures](docs/beat-performance-captures.md)
+- [Ambisonic ambience export](docs/ambisonic-ambience.md)
 - [Compressed-audio round-trip approval](docs/audio-round-trip.md)
 - [Playback translation through measured devices](docs/playback-translation.md)
+- [Display and speaker latency calibration](docs/output-latency.md)
 - [WebGPU graphs and Gaussian splat import](#webgpu-graphs-and-gaussian-splat-import)
 - [Screen transitions](#screen-transitions)
 - [Module reference](#module-reference)
@@ -798,6 +804,9 @@ S.bake();
 ```
 
 Use `ink-studio catalog <words>` to search catalog entries and follow their `where` fields to the implementation.
+Add `--all` to search the [public reference](docs/reference/index.md), including
+CLI usage, exported APIs, graph operations, and guide headings. Add `--json`
+for structured results.
 
 ## Editable 3D drawing
 
@@ -825,6 +834,10 @@ Use `ink-studio authoring inspect` to list stable part IDs, bounds and anchors i
 Preview a JSON edit with an optional PNG, then apply it to a new snapshot after the scene's checks pass.
 The [editable passage walkthrough](docs/headless-authoring.md#edit-generated-parts-from-the-cli) moves a
 doorway and landing while checking that a character can still walk through.
+
+Use [agent-driven project authoring](docs/agent-projects.md) to pick a frame and
+batch scene, layered pixel, timeline, and audio cue edits into one portable
+project revision.
 
 The [headless authoring guide](docs/headless-authoring.md) covers typed graphs,
 cached simulation, attribute transfer, mesh paths, layered artwork, animation
@@ -877,7 +890,11 @@ The watershed and quarry examples run entirely from the CLI. The [puzzle recipes
 switches to a physical gate, inspect blockers and verify a solution. The [agent decision guide](docs/agent-decisions.md)
 covers reachable activity choices and confirmed arrivals.
 
+[Natively rendered hero shots](docs/hero-render.md) can use posed sculpt surfaces, traced indirect light and splat footprints fitted to approved views.
+
 ## Rendering and command reference
+
+Draw and revise exact indexed layers for sprites, projected paint and masks with the [native pixel-art authoring CLI](docs/pixel-art-authoring.md).
 
 Use the [standard render comparison suite](docs/render-suite.md) to measure matched camera moves on the gatehouse, signal coil, and Saltgate night watch.
 
@@ -887,13 +904,14 @@ The CLI and Node `render()` use the CPU renderer. Use the [browser renderer](doc
 | --- | --- |
 | `help` | Print supported commands and options. |
 | `scenes` | List scenes from the default demos or configured collection. |
-| `catalog [words] [--full]` | Search feature names, descriptions and tags. |
+| `catalog [words] [--full] [--json] [--all]` | Search the feature catalog or the full public reference. |
 | `acts` | List action clips, reactions, easing names and cues. |
 | `authoring inspect\|preview\|apply <scene>` | Inspect generated parts, preview JSON edits and save validated snapshots. |
 | `render <scene> --t 1.5` | Render one PNG at a chosen time. |
 | `data-inputs <scene-or-catalog> [dataset] [--sample JSON] [--rows]` | Inspect typed columns, sample values, or export normalized rows and spatial features. |
 | `camera-rig <scene> [--at seconds] [--camera-shot id]` | Inspect the resolved shot, projection, blend, and occlusion clearance. |
 | `camera-review <scene> --from 0 --to 2 --frames 5 --w 160 --h 96` | Check subject framing across a shot at the native export crop. |
+| `canvas-grid-check [plan.json]` | [Measure canvas pixel widths and slow-pan edge motion](docs/canvas-grid-check.md) across browser viewport sizes and DPRs. |
 | `passes <scene>` | Save art-pixel coverage, depth, normals, IDs and emission previews. |
 | `export-deep <scene> --out file.exr` | Export depth-sorted samples and camera calibration as deep OpenEXR for compositing. |
 | `export-layers <scene>` | Export transparent color, depth, normals, object IDs, and material mattes on one grid. |
@@ -1227,6 +1245,12 @@ Other directories:
 - `storage-retention.json`: exact retained inputs and disposable generated outputs.
 
 ## Validation and development
+
+Run `npm run docs:build` after adding or changing a public command, API member,
+graph operation, or guide. `npm run docs:check` regenerates the reference in
+memory and checks it against the committed files. The test suite and the
+documentation workflow run that check. See the
+[reference maintenance guide](docs/reference-maintenance.md) for what it verifies.
 
 ```sh
 npm test

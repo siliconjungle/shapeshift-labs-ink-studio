@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flash and flicker review</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#111820;color:#edf2f3}
+body{margin:0}main{width:min(1140px,calc(100% - 40px));margin:44px auto 70px}
+h1{font-size:clamp(2.1rem,6vw,3.5rem);line-height:1.02;letter-spacing:-.06em;margin:0 0 10px}
+h2{font-size:1.17rem;margin:30px 0 12px}p{color:#bac7ce;margin:8px 0;line-height:1.55}
+a{color:#9ce0c9}.quiet{font-size:.9rem;color:#aebbc1}.metrics,.stills{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:12px;margin:20px 0}
+article,figure{margin:0;border:1px solid #384953;border-radius:8px;background:#1a242d}
+article{padding:12px 15px}article strong{display:block;font-size:1.75rem;color:#a2e3cc;margin-top:2px}
+figure img{width:100%;display:block;image-rendering:pixelated;border-radius:7px 7px 0 0}
+figcaption{font-size:.85rem;padding:8px 12px}video{width:100%;max-width:760px;background:#0b1117;border:1px solid #384953;border-radius:7px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin:9px 0 12px}button{font:inherit;color:inherit;cursor:pointer;background:#202c35;border:1px solid #657783;border-radius:4px;padding:6px 10px}
+button[aria-pressed=true]{color:#10211d;background:#a2e3cc;border-color:#a2e3cc}
+.table{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:660px;font-size:.9rem}
+th,td{padding:10px 8px;text-align:left;border-bottom:1px solid #344550}th{color:#adc4c7}
+</style>
+</head>
+<body>
+<main>
+<h1>Flash and flicker review</h1>
+<p id="summary"></p>
+<div class="metrics" id="metrics"></div>
+<section id="evidence" hidden>
+<h2 id="evidenceTitle"></h2>
+<div class="stills" id="stills"></div>
+</section>
+<section>
+<h2>Playback</h2>
+<p id="previewLabel"></p>
+<div class="actions" id="choices"></div>
+<video controls playsinline preload="metadata" aria-label="Flash review picture"></video>
+<p class="quiet">Frame links seek to the pulse peak. <a href="report.json">Download measurements</a></p>
+</section>
+<section id="timeline" hidden>
+<h2>Decoded pulses</h2>
+<div class="table"><table>
+<thead><tr><th>Peak frame</th><th>Completed</th><th>Picture area</th><th>Origin</th><th>Contributing sources</th></tr></thead>
+<tbody id="events"></tbody>
+</table></div>
+</section>
+</main>
+<script>
+const report = /* REPORT */ {};
+const at = id => document.getElementById(id);
+const describe = track => track.pulses + ' pulses · peak ' + track.peakCount + ' per ' + report.thresholds.windowSeconds + ' s';
+function add(parent, tag, text) {
+  const node = document.createElement(tag);
+  if (text !== undefined) node.textContent = text;
+  parent.append(node);
+  return node;
+}
+for (const [label, track] of [['Composited', report.composited], ['Decoded delivery', report.decoded],
+  ...(report.preview ? [['Decoded preview', report.preview.decoded]] : [])]) {
+  const card = add(at('metrics'), 'article', label);
+  add(card, 'strong', String(track.windows.length));
+  add(card, 'div', 'flagged intervals');
+  add(card, 'p', describe(track));
+}
+at('summary').textContent = report.decoded.windows.length
+  ? 'The decoded delivery contains repeated flashes within the selected review window.'
+  : 'The decoded delivery had no intervals above the configured repetition threshold.';
+const video = document.querySelector('video');
+const options = [['Original delivery', report.delivery.video]];
+if (report.preview) options.push(['Reduced flicker', report.preview.file]);
+const buttons = options.map(([name], i) => {
+  const button = add(at('choices'), 'button', name);
+  button.type = 'button';
+  button.addEventListener('click', () => select(i));
+  return button;
+});
+let active = 0;
+function startTime(index) {
+  const seekable = video.seekable.length ? video.seekable.start(0) : 0;
+  if (index !== 0) return seekable;
+  const [n, d] = report.delivery.timeBase.split('/').map(Number);
+  const first = report.delivery.firstPts * n / d;
+  const span = (report.source.endFrame - report.source.firstFrame) / report.source.fps;
+  // Some containers expose an edit-list lead on the player timeline.
+  const retainsLead = Math.abs(video.duration - (first + span)) < 2 / report.source.fps;
+  return retainsLead ? Math.max(seekable, first) : seekable;
+}
+function select(i, time = Math.max(0, video.currentTime - startTime(active))) {
+  function seek() { video.currentTime = startTime(i) + time; }
+  if (i === active && video.readyState >= 1) seek();
+  else {
+    active = i;
+    video.onloadedmetadata = seek;
+    video.src = options[i][1];
+  }
+  buttons.forEach((button, index) => button.setAttribute('aria-pressed', String(index === i)));
+}
+select(0);
+const preview = report.preview;
+at('previewLabel').textContent = preview
+  ? preview.change === 're-encode' ? 'The preview re-encodes the original composite.'
+    : 'The preview blends ' + Math.round(preview.reduction * 100) + '% toward ' +
+      (preview.source ? 'the render with ' + preview.source + ' disabled.' : 'the authored alternate.')
+  : 'No candidate met the measured reduction criteria.';
+if (report.evidence) {
+  at('evidence').hidden = false;
+  at('evidenceTitle').textContent = 'Frame ' + report.evidence.frame + ' and accumulated pulse area';
+  for (const [key, label] of [['delivery', 'Decoded delivery'], ['heatmap', 'Pulse accumulation'], ['preview', 'Decoded preview']]) {
+    if (!report.evidence[key]) continue;
+    const figure = add(at('stills'), 'figure');
+    const img = add(figure, 'img');
+    img.src = report.evidence[key]; img.alt = label;
+    add(figure, 'figcaption', label);
+  }
+}
+at('timeline').hidden = !report.events.length;
+for (const event of report.events) {
+  const row = add(at('events'), 'tr');
+  const button = add(add(row, 'td'), 'button', String(event.peak));
+  button.type = 'button';
+  button.addEventListener('click', () => select(0, (event.peak - report.source.firstFrame + .5) / report.source.fps));
+  add(row, 'td', String(event.frame));
+  add(row, 'td', (100 * event.area).toFixed(1) + '%');
+  add(row, 'td', event.origin.replaceAll('-', ' ') + (event.crossesEdit ? ' · crosses edit' : ''));
+  add(row, 'td', event.contributors.map(({id, kind}) => id + ' (' + kind + ')').join(', ') || 'Unattributed');
+}
+</script>
+</body>
+</html>

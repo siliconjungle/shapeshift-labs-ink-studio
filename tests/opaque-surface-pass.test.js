@@ -92,7 +92,7 @@ test('CLI writes aligned previews and lossless top-down surface channels',t=>{
   const folder=fs.mkdtempSync(path.join(os.tmpdir(),'ink-opaque-pass-'));
   t.after(()=>fs.rmSync(folder,{recursive:true,force:true}));
   execFileSync(process.execPath,[path.resolve(__dirname,'../cli/ink-studio.js'),'passes',
-    path.resolve(__dirname,'../examples/opaque-surface-gate.js'),'--channels','opaque-surface',
+    path.resolve(__dirname,'../examples/opaque-surface-gate.js'),'--channels','opaque-surface,sourceSurface,sourceSplat',
     '--w','120','--h','80','--px','1','--px1','--previous','.3','--t','.45','--out',folder],{stdio:'pipe'});
   const report=JSON.parse(fs.readFileSync(path.join(folder,'passes.json'),'utf8')), raw=report.opaqueSurface;
   assert.deepEqual([raw.width,raw.height,raw.rows],[120,80,'top-down']);
@@ -103,6 +103,11 @@ test('CLI writes aligned previews and lossless top-down surface channels',t=>{
   const motion=fs.readFileSync(path.join(folder,raw.files.surfaceMotionValid.file));
   assert(kind.includes(1)&&kind.includes(2));
   assert(kind.some((id,p)=>id===1&&motion[p]===255));
+  const sources = report.sourceBindings;
+  assert.equal(sources.surfaceSources.find(source=>source?.chart === 'sluice-screen').kind,'mesh');
+  assert.deepEqual(sources.files.sourceCoordinates,{file:'sourceCoordinates.f32le',format:'f32le',components:3});
+  assert.deepEqual(sources.files.sourceSplatWeight,{file:'sourceSplatWeight.f32le',format:'f32le',components:4});
+
   assert(kind.some((id,p)=>id===2&&motion[p]===255));
 });
 
@@ -112,7 +117,7 @@ test('perspective clipping keeps authored UV and rest coordinates aligned with t
     4,4,()=>0x8899aa,{id:'near-triangle'});
   const raster=require('../cli/sprite-surfaces.js');
   const hits=raster.rasterize(atlas.finish(),{V:[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
-    W:40,H:30,near:.1,focal:22,capture:true,motion:true});
+    W:40,H:30,near:.1,focal:22,capture:true,motion:true,sourceBinding:true});
   assert(hits.length>10);
   for(const hit of hits) {
     const [u,v]=hit.uv;
@@ -120,5 +125,7 @@ test('perspective clipping keeps authored UV and rest coordinates aligned with t
     close(hit.position[2],-.04*(1-u-v)-u-v);
     hit.position.forEach((n,i)=>close(hit.objectPosition[i],n*2));
     close(hit.weights[0]+hit.weights[1]+hit.weights[2],1);
+    assert.equal(hit.source.triangle,0);
+    assert.deepEqual(hit.source.coordinate,hit.weights);
   }
 });

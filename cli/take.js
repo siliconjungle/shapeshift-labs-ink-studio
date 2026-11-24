@@ -135,6 +135,8 @@ function command(pos, opt, settings) {
     return require('./audio-round-trip.js').command(pos[1],opt,settings);
   if(pos[0]==='approve-video'&&pos.length===2)
     return require('./video-approval.js').command(pos[1],opt,settings);
+  if(pos[0]==='review-flashes'&&pos.length===2)
+    return require('./flash-flicker.js').command(pos[1],opt,settings);
   if(pos[0]==='check-sync'&&pos.length===2)
     return require('./delivered-sync.js').command(pos[1],opt,settings);
   if(['blind-review','blind-review-score'].includes(pos[0]))

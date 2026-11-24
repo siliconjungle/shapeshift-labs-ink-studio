@@ -113,7 +113,9 @@ test('WebGL redraws the face addresses without a texture or vertex upload', asyn
   calls.length = 0;
   kit.SpriteSurface.uvSlip(atlas, edits[2]);
   pipeline.draw(atlas, frame);
-  assert.deepEqual(pipeline.stats, { geometryBytes: 0, textureBytes: 0 });
+  const { geometryBytes, textureBytes, blockBytes } = pipeline.stats;
+  assert.deepEqual({ geometryBytes, textureBytes, blockBytes }, { geometryBytes: 0, textureBytes: 0, blockBytes: 0 });
+  assert.deepEqual(calls.filter(({ key }) => /^(?:buffer(?:Sub)?Data|(?:compressedT|t)ex(?:Sub)?Image2D)$/.test(key)), []);
   assert.deepEqual(calls.filter(call => call.key === 'drawArrays').map(call => call.args.slice(1)), [[0, 6], [6, 12]]);
   pipeline.dispose();
 });

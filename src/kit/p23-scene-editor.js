@@ -2,6 +2,7 @@
 (function (K) {
   const A = K.authoring, DIO = K.diorama;
   const { clone, freeze } = K.procedural.data;
+  const documents = new WeakMap();
   const modes = ['replace', 'add', 'toggle', 'remove'];
   const encodeSlot = key => key.replaceAll('~', '~0').replaceAll('/', '~1');
   const record = value => value && typeof value === 'object' && !Array.isArray(value);
@@ -18,14 +19,14 @@
   function sceneIndex(scene, env) {
     const solids = scene.solids ?? [];
     const nodes = new Map(), byEntity = new Map(), roots = [], parts = new Map(), groups = new Map();
-    function parent(kind, name) {
-      const node = { key: kind + ':' + name, kind, name, children: [] };
+    function parent(kind, id, label = id) {
+      const node = { key: kind + ':' + id, kind, name:label, children: [] };
       nodes.set(node.key, node);
       return node;
     }
 
     for (const name of new Set([...Object.keys(scene.parts ?? {}), ...solids.map(solid => solid.part).filter(Boolean)]))
-      parts.set(name, parent('part', name));
+      parts.set(name, parent('part', name, scene.parts?.[name]?.label));
     for (const [name, node] of parts) {
       const container = parts.get(scene.parts?.[name]?.parent);
       (container?.children ?? roots).push(node);
@@ -36,16 +37,23 @@
       roots.push(node);
     }
 
-    function solidNode(solid, path, operand, modifier) {
-      const key = solid.id === undefined ? 'slot:' + path.join('/') : 'solid:' + solid.id;
+    function solidNode(solid, path, address, operand, modifier) {
+      const slot = 'slot:' + path.join('/');
+      const key = solid.id === undefined ? address ? 'operand:' + address.join('/') : slot : 'solid:' + solid.id;
+      const base = solid.id === undefined ? address : [encodeSlot(solid.id)];
+      const descend = trail => base && [...base, ...trail];
       const operands = DIO.operandFields(solid).filter(field => record(solid[field]));
       const modifierOperands = stack(solid).filter(entry => typeof entry?.id === 'string' && record(entry.shape));
       const node = { key, kind: 'solid', shape: solid.kind, ...(operand && { operand }), ...(modifier && { modifier }),
-        name: solid.id ?? solid.kind, solid, children: [
-          ...operands.map(field => solidNode(solid[field], [...path, field], field)),
-          ...modifierOperands.map(({ id, shape }) => solidNode(shape, [...path, 'modifiers', encodeSlot(id), 'shape'], 'shape', id))
+        name: solid.label ?? solid.id ?? solid.kind, solid, children: [
+          ...operands.map(field => solidNode(solid[field], [...path,field], descend([field]), field)),
+          ...modifierOperands.map(({ id, shape }) => {
+            const trail = ['modifiers',encodeSlot(id),'shape'];
+            return solidNode(shape,[...path,...trail],descend(trail),'shape',id);
+          })
         ] };
       nodes.set(key, node);
+      if (solid.id === undefined && key !== slot) nodes.set(slot,node);
       if (solid.id !== undefined) byEntity.set(solid.id, key);
       return node;
     }
@@ -255,6 +263,7 @@
       validate(snapshot(), bindings);
       Object.assign(buildEnv, bindings, { brushSession: A.brushRegions.create() });
       indexScene = undefined;
+      document.checkpointSession();
     }
 
     function setPrefabInstance(id, instance) {
@@ -267,7 +276,7 @@
         document.setEnvironment({ instances: null });
         document.setEnvironment({ instances });
       };
-      if (document.pending()) write();
+      if (document.pending()) document.batchSession(write);
       else document.transact('Edit prefab instance ' + id, write);
     }
 
@@ -287,12 +296,14 @@
         return (previewWorld = build());
       }
       if (!document.pending()) return document.transact('Set breakable groups', write);
-      try {
-        return write();
-      } catch (error) {
-        document.cancel();
-        throw error;
-      }
+      return document.batchSession(() => {
+        try {
+          return write();
+        } catch (error) {
+          document.cancel();
+          throw error;
+        }
+      });
     }
 
     function applyBrush(stroke) {
@@ -338,9 +349,13 @@
       return null;
     }
 
-    return Object.freeze({
+    const editor = Object.freeze({
       snapshot,
       serialize: (space = 2) => JSON.stringify(snapshot(), null, space),
+      fork: () => create(snapshot(),{ env:buildEnv, historyLimit:0 }),
+      sourceDependencies: () => A.bakeCache.signature([
+        buildEnv.assets ?? {},buildEnv.prefabs ?? {},buildEnv.parameterInputs ?? {}
+      ]),
       tree: () => current().tree,
       node: key => current().nodes.get(key),
       selection: selectedKeys,
@@ -389,7 +404,13 @@
         return document.onChange(({ type, label, revision }) => listener({ type, label, revision, snapshot: snapshot() }));
       }
     });
+    documents.set(editor,{ document, validate });
+    return editor;
   }
 
-  A.sceneEditor = Object.freeze({ create });
+  A.sceneEditor = Object.freeze({
+    create,
+    transactionDocument: editor => documents.get(editor)?.document,
+    validateSnapshot: (editor,snapshot) => documents.get(editor).validate(snapshot)
+  });
 })(KIT);

@@ -3,6 +3,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pixel Stamp Workshop · Ink Studio</title>
+<link rel="stylesheet" href="../src/pixel-grid-canvas.css">
 <style>
   :root { color-scheme: dark; background:#10161b; color:#e6eeea; font: 15px system-ui,sans-serif; --line:#354549; --accent:#b3d6bb; --quiet:#a7b9b7; }
   * { box-sizing:border-box; }
@@ -11,17 +12,11 @@
   h1 { margin:6px 0 0; font:400 clamp(34px,5vw,58px)/1 Georgia,serif; letter-spacing:-.035em; }
   h2 { margin:0 0 10px; font:600 14px system-ui,sans-serif; }
   .eyebrow { color:var(--accent); font:600 12px ui-monospace,monospace; text-transform:uppercase; letter-spacing:.14em; }
-  .layout { display:grid; grid-template-columns:minmax(0,1fr) 284px; gap:20px; }
+  .layout { display:grid; grid-template-columns:minmax(0,1fr) 284px; align-items:start; gap:20px; }
   .paint { min-width:0; background:#172126; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
-  .canvas { display:grid; place-items:center; min-height:430px; padding:24px; background:#121a1d; }
-  .canvas-wrap { position:relative; max-width:100%; }
-  canvas { width:var(--canvas-width,auto); max-width:100%; height:auto; max-height:590px; image-rendering:pixelated; cursor:crosshair; touch-action:none;
-    display:block; border:1px solid #405455; background:repeating-conic-gradient(#203035 0% 25%,#26383a 0% 50%) 0/20px 20px; }
-  .pixel-grid { position:absolute; pointer-events:none; inset:1px;
-    background-image:linear-gradient(to right,#adc6c34a 1px,transparent 1px),linear-gradient(to bottom,#adc6c34a 1px,transparent 1px);
-    background-size:calc(100% / var(--cols)) calc(100% / var(--rows)); }
   aside { display:grid; gap:15px; align-content:start; }
   section { background:#1a262b; border:1px solid var(--line); border-radius:10px; padding:15px; }
+  .row[hidden] { display:none; }
   .row { display:flex; flex-wrap:wrap; gap:7px; align-items:center; }
   .side-label { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:12px; }
   .side-label span, .muted, output { color:var(--quiet); }
@@ -41,7 +36,21 @@
   .timeline { padding:13px 16px; border-top:1px solid var(--line); }
   #current { min-width:94px; font:12px ui-monospace,monospace; }
   #status { margin:12px 0 0; min-height:1.45em; font-size:13px; }
-  @media(max-width:780px) { .layout { grid-template-columns:1fr; } .canvas { min-height:300px; } aside { grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); } }
+  .canvas-size { display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
+  .canvas-size label { display:grid; gap:4px; color:var(--quiet); font-size:13px; }
+  .canvas-size input[type=number] { width:65px; color:#e6eeea; }
+  .guide-controls { display:grid; gap:9px; }
+  .guide-controls > label { display:grid; gap:4px; color:var(--quiet); font-size:13px; }
+  .guide-controls select { max-width:100%; color:#e6eeea; }
+  .guide-controls[hidden], .guide-controls [hidden], #pencil-rgba[hidden] { display:none; }
+  #shape-controls { margin-top:12px; }
+  #shape-controls textarea, #shape-lengths { width:100%; }
+  #shape-controls textarea, #shape-lengths { font:inherit; color:inherit; border:1px solid #476062; border-radius:5px; background:#253437; padding:6px 10px; }
+  #shape-hint { font-size:13px; margin:0; }
+  #cleanup-diff { overflow:auto; max-height:240px; }
+  #cleanup-diff table { width:100%; border-collapse:collapse; font:12px/1.4 ui-monospace,monospace; }
+  #cleanup-diff th, #cleanup-diff td { padding:4px; border-bottom:1px solid var(--line); text-align:left; }
+  @media(max-width:780px) { .layout { grid-template-columns:1fr; } aside { grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); } }
 </style>
 <main>
   <header>
@@ -54,13 +63,23 @@
         <option value="body">Flowing ink</option><option value="eye">Red eye</option><option value="blank">Blank stamp</option>
       </select>
       <label id="size-label" hidden><span id="variant-label">Size</span> <select id="size"></select></label>
-      <label class="file-button">Open JSON<input type="file" id="import" accept=".json,application/json"></label>
+      <label class="file-button">Open stamp or PNG<input type="file" id="import" accept=".json,.png,application/json,image/png"></label>
       <button id="export" class="primary">Save JSON</button>
+      <select id="png-color-mode" aria-label="PNG color mode">
+        <option value="auto">Auto PNG</option><option value="indexed">Indexed PNG</option><option value="rgba">RGBA PNG</option>
+      </select>
+      <button id="export-png">Save PNG frame</button>
     </div>
   </header>
   <div class="layout">
     <div class="paint">
-      <div class="canvas"><div class="canvas-wrap"><canvas aria-label="Indexed art pixel canvas" id="art"></canvas><div id="grid" class="pixel-grid" hidden></div></div></div>
+      <div id="canvas-view"></div>
+      <div class="row timeline" id="art-shot-control" hidden>
+        <label>Art shot <select id="art-shot"></select></label>
+      </div>
+      <div id="craft-diagnostics"></div>
+      <div id="motion-checks"></div>
+      <div id="pixel-inspection"></div>
       <div class="row timeline">
         <button id="play">Play</button><input id="scrub" type="range" aria-label="Frame" min="1" value="1" step="1">
         <output id="current" for="scrub"></output>
@@ -73,17 +92,503 @@
           <button type="button" data-tool="pencil" aria-pressed="true">Pencil</button>
           <button type="button" data-tool="brush" aria-pressed="false">Brush</button>
           <button type="button" data-tool="erase" aria-pressed="false">Erase</button>
-          <button type="button" data-tool="polygon" aria-pressed="false">Shape</button>
+          <button type="button" data-tool="eyedropper" aria-pressed="false">Eyedropper</button>
+          <button type="button" data-tool="fill" aria-pressed="false">Fill</button>
+          <button type="button" data-tool="shape" aria-pressed="false">Shape</button>
         </div>
-        <label class="side-label"><span>Pixel grid</span><input id="show-grid" type="checkbox" checked></label>
+        <label class="side-label"><span>Pixel-perfect pencil</span><input id="pixel-perfect" type="checkbox" checked></label>
+        <label class="side-label">Pencil color<select id="pencil-color-mode">
+          <option value="indexed">Active swatch</option><option value="rgba">RGBA</option>
+        </select></label>
+        <div class="row" id="pencil-rgba" hidden>
+          <label>RGB <input type="color" id="pencil-rgb"></label>
+          <label>Alpha <input type="number" id="pencil-alpha" min="0" max="255" step="1" value="255"></label>
+        </div>
         <label class="side-label"><span>Brush width</span><input id="width" type="number" min="1" max="24" value="2"></label>
-        <div class="row" style="margin-top:12px"><button id="finish-shape" disabled>Close shape</button><button id="undo" disabled>Undo</button></div>
+        <div class="guide-controls" id="shape-controls" hidden>
+          <label>Shape<select id="shape-type">
+            <option value="line">Line</option><option value="curve">Curve</option>
+            <option value="rect">Rectangle</option><option value="ellipse">Ellipse</option>
+            <option value="polygon">Polygon</option><option value="text">Text</option>
+            <option value="staircase">Staircase</option>
+          </select></label>
+          <label id="shape-fill-label">Style<select id="shape-fill">
+            <option value="filled">Filled</option><option value="outline">Outline</option>
+          </select></label>
+          <label id="shape-width-label">Stroke width<input id="shape-width" type="number" min="1" max="32" value="1"></label>
+          <label id="curve-label">Curve<select id="shape-curve">
+            <option value="3">Quadratic</option><option value="4">Cubic</option>
+          </select></label>
+          <div class="guide-controls" id="shape-text-controls">
+            <label>Text<textarea id="shape-text" rows="2" maxlength="512"></textarea></label>
+            <label>Scale<input id="shape-scale" type="number" min="1" max="32" value="1"></label>
+          </div>
+          <div class="guide-controls" id="shape-step-controls">
+            <label>Run lengths<input id="shape-lengths" type="text" value="4, 3, 2"></label>
+            <label>Run axis<select id="shape-axis"><option value="x">X</option><option value="y">Y</option></select></label>
+            <div class="row">
+              <label>X direction <select id="shape-dir-x"><option value="1">Right</option><option value="-1">Left</option></select></label>
+              <label>Y direction <select id="shape-dir-y"><option value="1">Down</option><option value="-1">Up</option></select></label>
+            </div>
+          </div>
+          <p id="shape-hint" class="muted"></p>
+          <div class="row"><button id="finish-shape" disabled>Apply shape</button><button id="cancel-shape" disabled>Cancel</button></div>
+        </div>
+        <div class="row" style="margin-top:12px"><button id="undo" disabled>Undo</button></div>
+      </section>
+      <section>
+        <h2>Selection</h2>
+        <div class="guide-controls" id="selection-tools">
+          <label>Selection tool<select id="selection-type">
+            <option value="rectangle">Rectangle marquee</option>
+            <option value="ellipse">Ellipse marquee</option>
+            <option value="lasso">Freehand lasso</option>
+            <option value="polygon">Polygon lasso</option>
+            <option value="wand">Magic wand</option>
+            <option value="range">Color range</option>
+            <option value="swatch">Swatch</option>
+            <option value="cluster">Swatch cluster</option>
+          </select></label>
+          <label>New selection<select id="selection-mode">
+            <option value="replace">Replace</option>
+            <option value="combine">Add</option>
+            <option value="subtract">Subtract</option>
+            <option value="intersect">Intersect</option>
+          </select></label>
+          <label id="selection-tolerance-label" hidden>Color tolerance
+            <input id="selection-tolerance" type="number" min="0" max="255" step="1" value="0">
+          </label>
+          <label id="selection-connectivity-label" hidden>Cluster neighbors
+            <select id="selection-connectivity">
+              <option value="4">Edges</option>
+              <option value="8">Edges and corners</option>
+            </select>
+          </label>
+          <div class="row">
+            <button type="button" data-tool="brush-select" aria-pressed="false">Select pixels</button>
+            <button type="button" id="selection-clear" disabled>Clear</button>
+          </div>
+          <div class="row" id="polygon-selection-actions" hidden>
+            <button type="button" id="selection-close" disabled>Close polygon</button>
+            <button type="button" id="selection-cancel" disabled>Cancel polygon</button>
+          </div>
+          <output id="selection-count" aria-label="Selected pixels"></output>
+          <details>
+            <summary>Modify selection</summary>
+            <div class="guide-controls" style="margin-top:9px">
+              <div class="row" id="selection-modifiers">
+                <button type="button" data-selection-modifier="invert">Invert</button>
+                <button type="button" data-selection-modifier="grow" disabled>Grow</button>
+                <button type="button" data-selection-modifier="shrink" disabled>Shrink</button>
+                <button type="button" data-selection-modifier="outline" disabled>Outline</button>
+              </div>
+              <div class="canvas-size">
+                <label>Radius (px)<input id="selection-amount" type="number" min="1" max="512" step="1" value="1"></label>
+                <label>Outline placement<select id="selection-side">
+                  <option value="inside">Inside</option>
+                  <option value="outside">Outside</option>
+                  <option value="both">Both</option>
+                </select></label>
+              </div>
+            </div>
+          </details>
+          <details id="protection-tools">
+            <summary>Protect details</summary>
+            <div class="guide-controls" style="margin-top:9px">
+              <label>Detail ID <input id="protection-id" type="text" maxlength="64" placeholder="eye-highlight"></label>
+              <label>Kind <select id="protection-kind">
+                <option value="pixel">Pixels</option>
+                <option value="gap">Transparent gap</option>
+                <option value="contour">Contour span</option>
+                <option value="accent">Focal accent</option>
+              </select></label>
+              <label>Scope <select id="protection-scope">
+                <option value="frame">Current frame</option>
+                <option value="all">All frames</option>
+                <option value="range">Frame range</option>
+              </select></label>
+              <div class="canvas-size" id="protection-range" hidden>
+                <label>First frame <input id="protection-first" type="number" min="1" step="1" value="1"></label>
+                <label>Last frame <input id="protection-last" type="number" min="1" step="1" value="1"></label>
+              </div>
+              <button type="button" id="protection-lock" disabled>Lock selected pixels</button>
+              <label>Saved detail <select id="protection-saved"><option value="">Choose a detail</option></select></label>
+              <div class="row">
+                <button type="button" id="protection-show" disabled>Select detail</button>
+                <button type="button" id="protection-unlock" disabled>Unlock detail</button>
+              </div>
+            </div>
+          </details>
+          <details>
+            <summary>Transform pixels</summary>
+            <div class="guide-controls" style="margin-top:9px">
+              <div class="row">
+                <button type="button" id="transform-begin" disabled>Transform</button>
+                <button type="button" id="transform-copy" disabled>Copy</button>
+                <button type="button" id="transform-paste" disabled>Paste</button>
+              </div>
+              <div class="guide-controls" id="transform-fields" hidden>
+                <div class="canvas-size">
+                  <label>X<input id="transform-x" type="number" min="-4096" max="4096" step="1"></label>
+                  <label>Y<input id="transform-y" type="number" min="-4096" max="4096" step="1"></label>
+                  <label>Angle (°)<input id="transform-angle" type="number" step="any"></label>
+                  <label>Width<input id="transform-width" type="number" min="1" max="512" step="1"></label>
+                  <label>Height<input id="transform-height" type="number" min="1" max="512" step="1"></label>
+                </div>
+                <div class="row">
+                  <label><input id="transform-flip-x" type="checkbox"> Flip X</label>
+                  <label><input id="transform-flip-y" type="checkbox"> Flip Y</label>
+                  <label id="transform-duplicate-label"><input id="transform-duplicate" type="checkbox"> Leave source</label>
+                  <label id="transform-protection-label"><input id="transform-protection" type="checkbox"> Carry frame locks</label>
+                </div>
+                <label>Rotation<select id="transform-rotation">
+                  <option value="nearest">Nearest pixel</option>
+                  <option value="pixel-aware">Pixel-aware</option>
+                </select></label>
+                <output id="transform-info" aria-live="polite"></output>
+                <div class="row">
+                  <button type="button" id="transform-apply">Apply transform</button>
+                  <button type="button" id="transform-cancel">Cancel</button>
+                </div>
+              </div>
+            </div>
+          </details>
+          <details>
+            <summary>Saved masks</summary>
+            <div class="guide-controls" style="margin-top:9px">
+              <label>Mask ID<input id="selection-name" type="text" maxlength="64" placeholder="glaze-islands"></label>
+              <button type="button" id="selection-save" disabled>Save mask</button>
+              <label>Mask to recall<select id="selection-saved"><option value="">Choose a mask</option></select></label>
+              <button type="button" id="selection-recall" disabled>Recall mask</button>
+            </div>
+          </details>
+        </div>
+      </section>
+      <section>
+        <h2>Reusable brush</h2>
+        <div class="row" id="brush-tools">
+          <button type="button" id="capture-brush" disabled>Capture</button>
+          <button type="button" data-tool="brush-stamp" aria-pressed="false" disabled>Stamp brush</button>
+        </div>
+        <div class="guide-controls" id="brush-settings" hidden style="margin-top:12px">
+          <div class="canvas-size">
+            <label>Anchor X<input id="brush-x" type="number" min="0" step="1"></label>
+            <label>Anchor Y<input id="brush-y" type="number" min="0" step="1"></label>
+          </div>
+          <div class="canvas-size">
+            <label>Width<input id="brush-width" type="number" min="1" max="512" step="1"></label>
+            <label>Height<input id="brush-height" type="number" min="1" max="512" step="1"></label>
+            <label>Angle (°)<input id="brush-angle" type="number" step="any"></label>
+          </div>
+          <label>Swatches<select id="brush-swatch">
+            <option value="original">Captured colors</option><option value="tint">Single tint</option>
+          </select></label>
+          <div class="row" id="brush-tint-controls" hidden>
+            <label class="row">Tint <input id="brush-tint" type="color"></label>
+            <button type="button" id="brush-active-color">Use active swatch</button>
+          </div>
+          <label>Brush mode<select id="brush-mode">
+            <option value="paint">Paint</option>
+            <option value="recolor">Recolor with coverage lock</option>
+            <option value="ramp">Shade along ramp</option>
+            <option value="alpha">Set alpha</option>
+          </select></label>
+          <div class="guide-controls" id="brush-ramp-controls" hidden>
+            <label>Saved ramp<select id="brush-ramp-id"><option value="">Manual slots</option></select></label>
+            <label>Ramp swatches (dark to light)<input id="brush-ramp" type="text" value="1, 2, 3"></label>
+            <div class="row canvas-size">
+              <label>Step<input id="brush-ramp-step" type="number" min="-254" max="254" step="1" value="1"></label>
+              <button type="button" id="brush-ramp-add">Add active swatch</button>
+            </div>
+          </div>
+          <div class="canvas-size" id="brush-alpha-controls" hidden>
+            <label>Alpha (0–255)<input id="brush-alpha" type="number" min="0" max="255" step="1" value="128"></label>
+          </div>
+          <label class="row" style="display:flex"><input id="brush-dynamics" type="checkbox"> Brush dynamics</label>
+          <div class="guide-controls" id="brush-dynamics-settings" hidden>
+            <div class="canvas-size">
+              <label>Stabilization (ms)<input id="brush-stabilization" type="number" min="0" max="500" step="any"></label>
+              <label>Fast speed (px/s)<input id="brush-speed" type="number" min="1" max="10000" step="any"></label>
+            </div>
+            <div class="canvas-size">
+              <label>Light pressure ×<input id="brush-light" type="number" min="0" max="4" step="any"></label>
+              <label>Full pressure ×<input id="brush-full" type="number" min="0" max="4" step="any"></label>
+            </div>
+            <div class="canvas-size">
+              <label>Slow size ×<input id="brush-slow" type="number" min="0" max="4" step="any"></label>
+              <label>Fast size ×<input id="brush-fast" type="number" min="0" max="4" step="any"></label>
+            </div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <label class="file-button">Open brush<input type="file" id="open-brush" accept=".json,application/json"></label>
+          <button type="button" id="save-brush" disabled>Save brush</button>
+        </div>
+      </section>
+      <section>
+        <h2>Canvas transforms</h2>
+        <form class="guide-controls" id="canvas-size">
+          <label>Operation<select id="canvas-operation">
+            <option value="resize">Resize</option><option value="crop">Crop</option><option value="trim">Trim</option>
+            <option value="pad">Pad</option><option value="resample">Resample</option>
+          </select></label>
+          <div class="canvas-size" id="canvas-crop-origin" hidden>
+            <label>X<input type="number" id="canvas-x" min="0" max="511" step="1" value="0"></label>
+            <label>Y<input type="number" id="canvas-y" min="0" max="511" step="1" value="0"></label>
+          </div>
+          <div class="canvas-size" id="canvas-dimensions">
+            <label>Width<input type="number" id="canvas-width" min="1" max="512" step="1" required></label>
+            <label>Height<input type="number" id="canvas-height" min="1" max="512" step="1" required></label>
+          </div>
+          <label id="canvas-anchor-label">Resize anchor<select id="canvas-anchor">
+            <option value="top-left">Top left</option><option value="top">Top</option><option value="top-right">Top right</option>
+            <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
+            <option value="bottom-left">Bottom left</option><option value="bottom">Bottom</option>
+            <option value="bottom-right">Bottom right</option>
+          </select></label>
+          <label id="canvas-filter-label" hidden>Resampling<select id="canvas-filter">
+            <option value="nearest">Nearest pixel</option><option value="area">Area coverage</option>
+          </select></label>
+          <div class="canvas-size" id="canvas-margins" hidden>
+            <label>Left<input id="canvas-left" type="number" min="0" max="511" step="1" value="0"></label>
+            <label>Top<input id="canvas-top" type="number" min="0" max="511" step="1" value="0"></label>
+            <label>Right<input id="canvas-right" type="number" min="0" max="511" step="1" value="0"></label>
+            <label>Bottom<input id="canvas-bottom" type="number" min="0" max="511" step="1" value="0"></label>
+          </div>
+          <label id="canvas-binding-label" hidden>Scene registration<select id="canvas-binding-policy" required disabled>
+            <option value="">Choose a binding policy</option>
+            <option value="preserve">Preserve source registration</option>
+            <option value="reframe">Map whole new canvas</option>
+          </select></label>
+          <div class="row">
+            <button type="submit" id="canvas-apply">Resize</button>
+            <button type="button" id="canvas-fit-selection" hidden disabled>Use selection bounds</button>
+          </div>
+        </form>
+      </section>
+      <section>
+        <h2>Symmetry and wrapping</h2>
+        <div id="drawing-settings" class="guide-controls">
+          <div class="canvas-size">
+            <div><label class="row"><input id="mirror-x" type="checkbox"> Mirror X</label>
+              <input id="mirror-x-at" aria-label="Vertical mirror position" type="number" min="-0.5" step="0.5"></div>
+            <div><label class="row"><input id="mirror-y" type="checkbox"> Mirror Y</label>
+              <input id="mirror-y-at" aria-label="Horizontal mirror position" type="number" min="-0.5" step="0.5"></div>
+          </div>
+          <div class="row">
+            <label><input id="wrap-x" type="checkbox"> Wrap X</label>
+            <label><input id="wrap-y" type="checkbox"> Wrap Y</label>
+          </div>
+        </div>
+      </section>
+      <section>
+        <h2>Guides</h2>
+        <form class="guide-controls" id="guide-form">
+          <label>Guide<select id="guide-item"></select></label>
+          <label>Type<select id="guide-type">
+            <option value="grid">Grid origin</option><option value="axis-x">Vertical axis</option>
+            <option value="axis-y">Horizontal axis</option><option value="pivot">Pivot</option>
+            <option value="registration">Registration</option>
+          </select></label>
+          <label>Applies to<select id="guide-scope">
+            <option value="all">All frames</option><option value="frame">Current frame</option>
+          </select></label>
+          <div class="canvas-size">
+            <label id="guide-x-label">X<input type="number" id="guide-x" min="-8192" max="8192" step=".5" value="0"></label>
+            <label id="guide-y-label">Y<input type="number" id="guide-y" min="-8192" max="8192" step=".5" value="0"></label>
+          </div>
+          <div class="canvas-size" id="guide-steps">
+            <label>Step X<input type="number" id="guide-step-x" min="1" max="8192" step="1" value="8"></label>
+            <label>Step Y<input type="number" id="guide-step-y" min="1" max="8192" step="1" value="8"></label>
+          </div>
+          <div class="row"><button type="submit">Save guide</button><button type="button" id="guide-remove">Remove</button></div>
+        </form>
       </section>
       <section>
         <h2>Palette</h2>
         <div class="palette" id="palette" aria-label="Paint swatches"></div>
-        <label class="side-label"><span id="swatch-label">Active swatch</span><input type="color" id="color"></label>
-        <button id="add-color">Add swatch</button>
+        <div id="swatch-label"></div>
+        <label class="side-label">Edit swatch color in all frames<input type="color" id="color"></label>
+        <label class="side-label">Swatch name<input id="swatch-name" type="text"></label>
+        <label class="side-label">Lock color<input id="swatch-lock" type="checkbox"></label>
+        <div class="row">
+          <button id="add-color">Add swatch</button>
+          <button id="swatch-earlier">Move earlier</button>
+          <button id="swatch-later">Move later</button>
+        </div>
+        <details class="selection-group">
+          <summary>Replace swatch in selection</summary>
+          <div class="guide-controls">
+            <label>Replace active swatch with<select id="swatch-replace-target"></select></label>
+            <button id="swatch-replace">Replace in selection</button>
+          </div>
+        </details>
+        <details class="selection-group">
+          <summary>Remap palette indices</summary>
+          <div class="guide-controls">
+            <label>Map active index to<select id="swatch-remap-target"></select></label>
+            <label><span>Remove source swatch</span><input id="swatch-remap-remove" type="checkbox"></label>
+            <button id="swatch-remap">Remap all frames</button>
+          </div>
+        </details>
+        <details class="selection-group">
+          <summary>Palette ramps</summary>
+          <form id="palette-ramp-form" class="guide-controls">
+            <label>Ramp<select id="palette-ramp-select"><option value="">New ramp</option></select></label>
+            <label>Ramp ID<input id="palette-ramp-id" type="text" required pattern="[a-z][a-z0-9\-]{0,63}"></label>
+            <label>Name<input id="palette-ramp-name" type="text"></label>
+            <label>Swatch IDs in order<input id="palette-ramp-order" type="text" required placeholder="shadow, midtone, light"></label>
+            <div class="row">
+              <button id="palette-ramp-add" type="button">Add active swatch</button>
+              <button type="submit">Save ramp</button>
+              <button id="palette-ramp-remove" type="button" disabled>Remove ramp</button>
+            </div>
+          </form>
+        </details>
+        <details class="selection-group">
+          <summary>Palette files</summary>
+          <div class="guide-controls">
+            <div class="row">
+              <label class="file-button">Import palette<input type="file" id="palette-import" accept=".json,application/json"></label>
+              <button id="palette-export">Export palette</button>
+            </div>
+            <label>RGB extraction size<input id="palette-extract-size" type="number" min="1" max="255" step="1" value="16"></label>
+            <label>Sample alpha<select id="palette-extract-alpha"><option value="visible">Visible</option><option value="opaque">Opaque</option><option value="all">All</option></select></label>
+            <div class="row">
+              <button id="palette-extract-frame">Extract from frame</button>
+              <label class="file-button">Extract from PNG<input type="file" id="palette-extract-png" accept=".png,image/png"></label>
+            </div>
+          </div>
+        </details>
+      </section>
+      <section>
+        <h2>Layers</h2>
+        <details class="selection-group">
+          <summary>Edit layer stack</summary>
+          <div class="guide-controls">
+            <label>Active layer<select id="layer-active"></select></label>
+            <label>View<select id="layer-view"><option value="composite">Composite</option><option value="active">Active layer</option></select></label>
+            <label><span>Show references</span><input id="layer-references" type="checkbox" checked></label>
+            <div class="row">
+              <label>New ID <input id="layer-id" type="text"></label>
+              <label>Kind <select id="layer-kind">
+                <option value="paint">Paint</option><option value="mask">Mask</option><option value="reference">Reference</option>
+                <option value="group">Group</option><option value="surface">Bound surface</option>
+              </select></label>
+              <button id="layer-add">Add layer</button>
+            </div>
+            <label id="layer-destination-label" hidden>Surface destination<select id="layer-destination"></select></label>
+            <div class="guide-controls" id="layer-properties" hidden>
+              <label>Name<input id="layer-name" type="text"></label>
+              <label>Group<select id="layer-parent"></select></label>
+              <label>Clip to<select id="layer-clip"></select></label>
+              <output id="layer-bound-path" hidden></output>
+              <div class="canvas-size">
+                <label>Opacity<input id="layer-opacity" type="number" min="0" max="1" step=".01"></label>
+                <label>Blend<select id="layer-blend">
+                  <option value="normal">Normal</option><option value="multiply">Multiply</option>
+                  <option value="screen">Screen</option><option value="overlay">Overlay</option><option value="add">Add</option>
+                </select></label>
+              </div>
+              <div class="row">
+                <label><input id="layer-visible" type="checkbox"> Visible</label>
+                <label><input id="layer-lock" type="checkbox"> Locked</label>
+              </div>
+              <div class="row">
+                <button id="layer-lower">Move down</button><button id="layer-raise">Move up</button>
+                <button id="layer-merge">Merge down</button><button id="layer-remove">Remove layer</button>
+              </div>
+              <label id="layer-reference-label" class="file-button" hidden>Load reference PNG
+                <input id="layer-reference" type="file" accept=".png,image/png">
+              </label>
+            </div>
+          </div>
+        </details>
+      </section>
+      <section>
+        <h2>Adjustments</h2>
+        <details id="cleanup-tools">
+          <summary>Clean up selected pixels</summary>
+          <div class="guide-controls" id="cleanup-settings" style="margin-top:9px">
+            <label>Operation <select id="cleanup-kind">
+              <option value="stair">Even out a staircase</option>
+              <option value="fragment">Merge one pixel</option>
+              <option value="outline">Thin doubled outline</option>
+              <option value="cluster">Reshape a cluster</option>
+            </select></label>
+            <label id="cleanup-mode-label" hidden>Cluster edge <select id="cleanup-mode">
+              <option value="grow">Grow one pixel</option><option value="shrink">Shrink one pixel</option>
+            </select></label>
+            <label id="cleanup-swatch-label" hidden>Merge into <select id="cleanup-swatch"></select></label>
+            <label>Pixel budget <input type="number" id="cleanup-budget" min="1" max="256" value="64"></label>
+            <div class="row">
+              <button type="button" id="cleanup-preview">Preview cleanup</button>
+              <button type="button" id="cleanup-apply" disabled>Apply cleanup</button>
+              <button type="button" id="cleanup-cancel" disabled>Cancel</button>
+            </div>
+            <output id="cleanup-info" aria-live="polite"></output>
+            <div id="cleanup-diff" hidden>
+              <table aria-label="Cleanup pixel changes">
+                <thead><tr><th scope="col">Pixel</th><th scope="col">Before</th><th scope="col">After</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+        <details class="selection-group">
+          <summary>Adjust pixels</summary>
+          <div class="guide-controls" id="adjustment-settings">
+            <label>Scope<select id="adjustment-scope">
+              <option value="selection">Active selection</option><option value="frame" selected>Current frame</option>
+              <option value="range">Frame range</option>
+            </select></label>
+            <div class="canvas-size" id="adjustment-range" hidden>
+              <label>First frame<input id="adjustment-start" type="number" min="1" value="1"></label>
+              <label>Last frame<input id="adjustment-end" type="number" min="1" placeholder="Last"></label>
+            </div>
+            <label>Adjustment<select id="adjustment-type">
+              <option value="curves">Curves</option><option value="hue-saturation">Hue and saturation</option>
+              <option value="gradient">Gradient</option><option value="replace">Color replacement</option>
+              <option value="dither">Dither</option><option value="outline">Outline</option>
+            </select></label>
+            <label data-adjustment="curves hue-saturation gradient">Colors<select id="adjustment-match">
+              <option value="exact">Exact RGB</option><option value="palette">Match palette</option>
+            </select></label>
+            <label data-adjustment="curves">Channel<select id="adjustment-channel">
+              <option value="rgb">RGB</option><option value="red">Red</option>
+              <option value="green">Green</option><option value="blue">Blue</option>
+            </select></label>
+            <label data-adjustment="curves">Curve points (0–1)<input id="adjustment-curve" type="text" value="[[0,0],[0.5,0.65],[1,1]]"></label>
+            <div class="canvas-size" data-adjustment="hue-saturation" hidden>
+              <label>Hue, degrees<input id="adjustment-degrees" type="number" value="30" step="1"></label>
+              <label>Saturation factor<input id="adjustment-saturation" type="number" min="0" max="4" step=".1" value="1"></label>
+            </div>
+            <label data-adjustment="gradient replace dither outline" hidden>
+              <span id="adjustment-first-label">First swatch</span><select id="adjustment-first"></select>
+            </label>
+            <label data-adjustment="gradient replace dither" hidden>
+              <span id="adjustment-second-label">Second swatch</span><select id="adjustment-second"></select>
+            </label>
+            <label data-adjustment="gradient" hidden>Direction<select id="adjustment-axis">
+              <option value="x">Horizontal</option><option value="y">Vertical</option>
+            </select></label>
+            <label data-adjustment="dither" hidden>Pattern<select id="adjustment-pattern">
+              <option value="bayer">Bayer 4×4</option><option value="checker">Checker</option>
+            </select></label>
+            <div class="canvas-size" data-adjustment="outline" hidden>
+              <label>Radius<input id="adjustment-radius" type="number" min="1" max="512" value="1"></label>
+              <label>Side<select id="adjustment-side"><option value="outside">Outside</option>
+                <option value="inside">Inside</option><option value="both">Both</option>
+              </select></label>
+            </div>
+          </div>
+          <div class="row">
+            <button id="adjustment-preview">Preview</button>
+            <button id="adjustment-apply" disabled>Apply adjustment</button>
+            <button id="adjustment-cancel" disabled>Cancel preview</button>
+          </div>
+          <output id="adjustment-info" aria-live="polite"></output>
+        </details>
       </section>
       <section>
         <h2>Timing</h2>

@@ -2,7 +2,7 @@
 (function (P) {
   const R = P.raster, D = P.drawing2d;
   const blocked = 0xffffffff, maxPixels = 8e6;
-  const four = [[1,0],[-1,0],[0,1],[0,-1]], eight = [...four,[1,1],[-1,1],[1,-1],[-1,-1]];
+  const { four,eight,visit } = PixelPaintTools;
   const valid = P.graphTypes.validator('raster');
   const raster = (width,height,data) => ({width,height,channels:1,data});
 
@@ -12,27 +12,6 @@
     if (connectivity !== 4 && connectivity !== 8) throw new RangeError('Raster connectivity must be 4 or 8');
     return {width:source.width,height:source.height,steps:connectivity===4 ? four : eight,
       queue:new Uint32Array(source.width*source.height)};
-  }
-
-  function visit(seed, marks, id, matches, context) {
-    const {width,height,steps,queue} = context;
-    const startX = seed%width, startY = Math.floor(seed/width);
-    let left=startX, right=startX, top=startY, bottom=startY, area=1;
-    marks[seed]=id; queue[0]=seed;
-    for (let i=0; i<area; i++) {
-      const p=queue[i], x=p%width, y=Math.floor(p/width);
-      left=Math.min(left,x); right=Math.max(right,x); top=Math.min(top,y); bottom=Math.max(bottom,y);
-      for (const [dx,dy] of steps) {
-        const u=x+dx, v=y+dy;
-        if (u<0 || u>=width || v<0 || v>=height) continue;
-        const key=v*width+u;
-        if (!marks[key] && matches(key)) {
-          marks[key]=id;
-          queue[area++]=key;
-        }
-      }
-    }
-    return {id,area,seed:[startX,startY],rect:{x:left,y:top,width:right-left+1,height:bottom-top+1}};
   }
 
   function floodFill(source, {seed, color = '#ffffff', connectivity = 4, tolerance = 0} = {}) {

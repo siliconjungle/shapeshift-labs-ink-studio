@@ -199,4 +199,4 @@ async function command(file,opt,{kit}) {
   if (report.status!=='approved') process.exitCode=2;
 }
 
-module.exports={analyze,command,usage};
+module.exports={analyze,command,usage,sourcePixels,nativeArt};

@@ -1,0 +1,17 @@
+{
+  "reflectors": [
+    {"select":{"object":"flood-pool"},"reflectance":0.99,"roughness":0.008,"tint":"#d9ecfa"}
+  ],
+  "rules":[
+    {"id":"pool-visor","via":"reflection","interface":{"object":"flood-pool"},
+      "select":{"object":"keeper","material":"visor"},"palette":["#fff1bb"],"ambient":0.30},
+    {"id":"pool-keeper","via":"reflection","interface":{"object":"flood-pool"},"select":{"object":"keeper"},
+      "palette":["#24305a","#436889","#82afb5","#e8d19a"],"stops":[0.12,0.27,0.49],"ambient":0.28,
+      "ink":{"color":"#151b39","width":0.61,"features":["silhouette","seam","crease"],"crease":60}},
+    {"id":"port-visor","via":"transmission","interface":{"object":"glass-port"},
+      "select":{"object":"keeper","material":"visor"},"palette":["#e1ffe4"],"ambient":0.30},
+    {"id":"port-keeper","via":"transmission","interface":{"object":"glass-port"},"select":{"object":"keeper"},
+      "palette":["#142c35","#28605f","#65a899","#d8e0a7"],"stops":[0.10,0.25,0.53],"ambient":0.32,
+      "ink":{"color":"#112631","width":0.64,"features":["silhouette","seam","crease"],"crease":67}}
+  ]
+}

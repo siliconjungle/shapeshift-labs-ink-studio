@@ -18,6 +18,10 @@ Use `--attachments <files.json>` to carry host-managed resources such as audio c
 
 `project.scene()` returns editable scene data with typed data sources ready to use. `project.snapshot()` returns the portable file document. Use `project.files()`, `project.readFile(path)`, and `project.attachment(id)` to access retained files. A version 1 bundle opens as a diorama in the CLI, editor, and browser.
 
+[Agent-driven project authoring](agent-projects.md) uses the version 1 diorama
+bundle to inspect frames and apply coordinated changes to scene materials,
+layered pixel art, timeline keys, and sound cues.
+
 ## Bundle a whole take
 
 A native [take](take-clock.md) is the entry in a version 2 project bundle.

@@ -1,0 +1,108 @@
+{
+  "format": "ink-studio/pixel-art",
+  "version": 1,
+  "width": 64,
+  "height": 46,
+  "palette": {
+    "ink": "#1d1b31",
+    "crease": "#322c49",
+    "ceramic-shadow": "#3c4868",
+    "ceramic": "#467789",
+    "ceramic-light": "#78b3ae",
+    "ceramic-rim": "#b9d4b1",
+    "metal-shadow": "#63425a",
+    "bronze": "#a85e56",
+    "copper": "#da8b61",
+    "yellow": "#fac481",
+    "glass": "#293d57",
+    "glass-light": "#426778",
+    "signal": "#96e8ce",
+    "spark": "#fff0cd"
+  },
+  "layers": [
+    {
+      "id": "shell",
+      "marks": [
+        {"swatch":"ink","shape":{"type":"polygon","points":[[8,23],[11,16],[17,13],[18,6],[23,3],[38,2],[43,5],[44,11],[51,14],[56,20],[54,35],[48,41],[16,44],[10,40],[7,33]]}}
+      ]
+    },
+    {
+      "id": "ceramic-masses",
+      "clip": "shell",
+      "marks": [
+        {"swatch":"ceramic-shadow","shape":{"type":"polygon","points":[[10,23],[13,17],[43,12],[50,16],[54,21],[52,34],[47,39],[17,42],[12,38],[9,32]]}},
+        {"swatch":"ceramic","shape":{"type":"polygon","points":[[10,24],[15,17],[39,13],[44,15],[46,21],[43,33],[38,37],[17,40],[12,37],[9,32]]}},
+        {"swatch":"ceramic-light","shape":{"type":"polygon","points":[[11,23],[15,18],[39,14],[44,16],[42,20],[17,24],[12,30],[10,30]]}},
+        {"swatch":"ceramic-rim","steps":{"from":[15,18],"axis":"x","direction":[1,-1],"lengths":[3,5,5,5,4,2]}},
+        {"swatch":"crease","shape":{"type":"polygon","points":[[48,29],[52,27],[52,33],[47,38],[38,39],[42,35]]}},
+        {"swatch":"ceramic-shadow","shape":{"type":"polygon","points":[[10,33],[15,35],[34,33],[39,35],[36,38],[17,41],[13,38]]}}
+      ]
+    },
+    {
+      "id": "handle",
+      "clip": "shell",
+      "marks": [
+        {"swatch":"metal-shadow","shape":{"type":"polygon","points":[[19,6],[23,4],[38,3],[42,6],[43,10],[39,14],[21,17],[18,13]]}},
+        {"swatch":"bronze","shape":{"type":"polygon","points":[[20,7],[25,4],[37,3],[41,6],[39,9],[23,12],[19,13]]}},
+        {"swatch":"copper","steps":{"from":[23,5],"axis":"x","direction":[1,-1],"lengths":[4,6,4]}},
+        {"swatch":"crease","shape":{"type":"polygon","points":[[20,9],[24,7],[36,6],[39,7],[39,9],[22,13],[20,12]]}}
+      ]
+    },
+    {
+      "id": "handle-opening",
+      "clip": "shell",
+      "protect": true,
+      "marks": [
+        {"swatch":null,"shape":{"type":"polygon","points":[[22,9],[24,8],[36,7],[38,8],[37,10],[23,12],[22,11]]}}
+      ]
+    },
+    {
+      "id": "visor",
+      "clip": "shell",
+      "marks": [
+        {"swatch":"ink","shape":{"type":"polygon","points":[[17,26],[21,22],[38,19],[43,21],[42,30],[38,33],[21,36],[17,33]]}},
+        {"swatch":"glass","shape":{"type":"polygon","points":[[18,26],[22,23],[38,20],[41,22],[40,29],[37,32],[22,34],[18,32]]}},
+        {"swatch":"glass-light","steps":{"from":[22,24],"axis":"x","direction":[1,-1],"lengths":[3,5,4,4]}},
+        {"swatch":"glass-light","shape":{"type":"polygon","points":[[20,29],[24,27],[33,26],[30,28],[21,31]]}},
+        {"swatch":"signal","shape":{"type":"rect","rect":[22,28,3,2]}},
+        {"swatch":"signal","shape":{"type":"rect","rect":[32,26,3,2]}},
+        {"swatch":"ceramic-light","steps":{"from":[27,32],"axis":"x","direction":[1,-1],"lengths":[4,3]}}
+      ]
+    },
+    {
+      "id": "hardware",
+      "clip": "shell",
+      "marks": [
+        {"swatch":"metal-shadow","shape":{"type":"polygon","points":[[44,22],[50,20],[52,23],[51,29],[45,32],[44,29]]}},
+        {"swatch":"bronze","shape":{"type":"polygon","points":[[45,23],[50,22],[51,24],[50,28],[46,30],[45,28]]}},
+        {"swatch":"copper","steps":{"from":[46,24],"axis":"x","direction":[1,-1],"lengths":[2,2]}},
+        {"swatch":"metal-shadow","shape":{"type":"polygon","points":[[16,40],[24,39],[24,41],[17,42]]}},
+        {"swatch":"bronze","shape":{"type":"rect","rect":[25,39,2,1]}},
+        {"swatch":"copper","shape":{"type":"rect","rect":[12,29,2,2]}}
+      ]
+    },
+    {
+      "id": "approved-accents",
+      "clip": "shell",
+      "protect": true,
+      "marks": [
+        {"swatch":"spark","at":[23,28]},
+        {"swatch":"spark","at":[33,26]},
+        {"swatch":"yellow","at":[46,24]}
+      ]
+    },
+    {
+      "id": "freckles",
+      "clip": "shell",
+      "marks": [
+        {"swatch":"yellow","at":[13,22]},
+        {"swatch":"spark","at":[18,19]},
+        {"swatch":"yellow","at":[26,19]},
+        {"swatch":"ceramic-rim","at":[36,16]},
+        {"swatch":"spark","at":[49,34]},
+        {"swatch":"copper","at":[41,36]},
+        {"swatch":"yellow","at":[31,38]}
+      ]
+    }
+  ]
+}

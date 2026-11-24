@@ -15,6 +15,9 @@ const { readShow, int } = require('./patch-show-config.js');
 const { feed } = require('./live-world.js');
 const InterventionInput = require('./patch-interventions.js');
 const Installation = require('./patch-installation.js');
+const Performance = require('./show-performance-capture.js');
+const Score = require('./show-performance-score.js');
+const Draw = require('./performance-draw.js');
 
 function presetControl(config, project, report) {
   const worldInput = config.liveWorld && { [config.liveWorld.input]: null };
@@ -176,6 +179,13 @@ async function runShow(file, opt, settings, emit) {
   const config = await readShow(file, opt.rehearse, settings.kit), report = showReport(config, opt.rehearse);
   const { fps, frames, projector, video, audio, dimensions, liveWorld } = config, period = 1000 / fps;
   const output = opt.report && path.resolve(opt.report);
+  const captureFolder = opt['capture-performance'] && path.resolve(opt['capture-performance']);
+  const scoreSpec = opt['live-score'] && opt['live-route'] &&
+    { recipe: path.resolve(opt['live-score']), route: path.resolve(opt['live-route']) };
+  if ((opt['live-score'] || opt['live-route']) && (!captureFolder || !scoreSpec))
+    throw new TypeError('Use --live-score and --live-route together with --capture-performance');
+  if (captureFolder && output && (output === captureFolder || output.startsWith(captureFolder + path.sep)))
+    throw new TypeError('Use a separate --report file outside the performance capture directory');
   const interventionInput = InterventionInput.settings(opt, liveWorld, output, config.installation);
   if (video === '-' && interventionInput?.source === '-')
     throw new TypeError('Video and intervention input cannot both read stdin');
@@ -192,12 +202,36 @@ async function runShow(file, opt, settings, emit) {
   const watch = { picture: { output: config.output } }, control = presetControl(config, project, report);
   const live = liveWorld && feed(settings.kit.KIT.world, liveWorld, (state, reason) => report.source('world', state, reason));
   const protectedFiles = [...project.sourceFiles(), ...config.assetFiles, file, config.cueSource, config.presentationSource, video, audio,
+    ...(scoreSpec ? [scoreSpec.recipe, scoreSpec.route] : []),
+    ...(captureFolder ? [path.resolve('ink-studio.config.js'), opt['gpu-module'] && path.resolve(opt['gpu-module'])] : []),
     ...(config.audioDiagnostics?.files ?? []), interventionInput?.source].filter(source =>
     source && !['-', 'video'].includes(source) && fs.existsSync(source));
   const writer = output && graphOutputs(protectedFiles);
   writer?.protect(fs.statSync(output, { throwIfNoEntry: false }));
   const abort = new AbortController(), { signal } = abort, raster = settings.kit.KIT.procedural.raster;
-  let interrupted, projection, osc, capture, interventions, failure, attached = false;
+  const identity = captureFolder && { projectHash: plan.projectHash, fingerprint: project.artifactIdentity().fingerprint,
+    score: scoreSpec, gpuModule: opt['gpu-module'] && path.resolve(opt['gpu-module']) };
+  const recording = identity && Performance.create(captureFolder, config, identity);
+  const importedGaps = recording && (config.audioDiagnostics?.findings ?? []).filter(row => row.kind === 'audio-underrun')
+    .sort((a,b)=>a.fromFrame-b.fromFrame);
+  let importedCursor = 0;
+  let interrupted, projection, osc, capture, interventions, score, failure, attached = false;
+  async function audioThrough(frame) {
+    if (!recording) return;
+    while (importedGaps[importedCursor]?.fromFrame < frame) {
+      const gap = importedGaps[importedCursor++];
+      recording.issue({ kind: gap.kind, channel: 'audio-report', fromFrame: gap.fromFrame, toFrame: gap.toFrame,
+        ...gap.detail, ...(gap.direct?.beatId && { beatId: gap.direct.beatId }) });
+    }
+    if (score) {
+      recording.audioBoundary(frame);
+      await score.advance(frame, (block, frameOf) => {
+        recording.audio(block, frameOf);
+        for (const gap of block.gaps)
+          if (!gap.recovered) report.liveUnderrun(gap, frameOf(gap.sample), block.sampleRate);
+      });
+    }
+  }
   const installation = interventionInput?.devices ?
     Installation.open(config.installation, (grant, device) => interventions.capture(grant, device)) : undefined;
   const midi = config.midi && midiControl(config.midi, control, report, installation);
@@ -213,6 +247,13 @@ async function runShow(file, opt, settings, emit) {
     osc?.check(start);
   }
   try {
+    if (recording) {
+      if (scoreSpec) {
+        score = await Score.open(scoreSpec.recipe, scoreSpec.route, settings.kit, config.rate);
+        protectedFiles.push(...score.files);
+      }
+      identity.files = await Performance.fingerprints(protectedFiles, captureFolder);
+    }
     if (interventionInput) {
       interventions = InterventionInput.open(settings.kit.KIT, interventionInput, liveWorld,
         { fps, rehearse: opt.rehearse, report });
@@ -223,7 +264,12 @@ async function runShow(file, opt, settings, emit) {
     const projectorMidi = config.midi && { ...config.midi,
       choices: Boolean(installation && config.installation.midi) };
     projection = await openProjector(projector, projectorMidi, {
-      afterFrame: (skipped, placement) => report.displayed(skipped, placement),
+      afterFrame(skipped, placement) {
+        report.displayed(skipped, placement);
+        if (recording && skipped)
+          for (const range of placement?.ranges ?? [])
+            recording.issue({ kind: 'dropped-frame', channel: 'projector', ...range });
+      },
       afterAttach(replaced) { attached = true; if (replaced) midi?.reset(); report.source('projector', 'online'); },
       onMidi: value => midi.push(value)
     });
@@ -238,6 +284,7 @@ async function runShow(file, opt, settings, emit) {
       } catch (error) {
         signal.throwIfAborted();
         media.audio = { sampleRate: 48000, channels: 1, samples: new Float32Array(48000) };
+        recording?.staticFallback();
         report.source('audio', 'offline', error.message);
       }
     }
@@ -253,15 +300,24 @@ async function runShow(file, opt, settings, emit) {
     for (let next = 0; next < frames;) {
       const index = Math.min(frames, await showSlot(next, start, period, signal));
       report.schedule(next, index);
-      if (index === frames) break;
+      if (recording && next < index) recording.issue({ kind: 'dropped-frame', channel: 'schedule', fromFrame: next, toFrame: index });
+      if (index === frames) { if (recording) await audioThrough(index); break; }
       report.frame(index);
       checkSources(start);
       if (capture) media.frame = capture.sample(index);
+      const audioStart = score ? performance.now() : 0;
+      if (recording) await audioThrough(index + 1);
+      const audioMs = score ? performance.now() - audioStart : 0;
       const { preset, selectedCue } = control.inputs(index), inputs = live ? { ...preset, [liveWorld.input]: live.sample() } : preset;
       const before = performance.now();
-      const result = await project.previewFrame(watch, { inputs, time: index / fps }, { profile: true, encodeArtifacts: false });
+      const draw = () => project.previewFrame(watch, { inputs, time: index / fps }, { profile: true, encodeArtifacts: false });
+      const {result,trace} = recording ? await Draw.measure(draw) : {result:await draw()};
+      const beats = recording ? [] : null;
       for(const [output,value] of Object.entries(result.outputs))
-        for(const link of settings.kit.KIT.world.inspectionLinks.references(value))report.graphLink(output,link);
+        for(const link of settings.kit.KIT.world.inspectionLinks.references(value)) {
+          report.graphLink(output,link);
+          if (beats && beats.length < 32) beats.push({ ...link, output, fromFrame: index, toFrame: index + 1, alignment: 'observed' });
+        }
       signal.throwIfAborted();
       const drawn = performance.now();
       report.stage('graph', drawn - before);
@@ -269,10 +325,17 @@ async function runShow(file, opt, settings, emit) {
       const picture = result.values.picture;
       if (picture?.colorSpace === 'srgb-linear' || !(picture?.width * picture?.height <= 1048576))
         throw new TypeError('Projector output needs a display raster up to 1,048,576 pixels');
-      projection.publish(index, raster.rgba(picture));
+      const rendered = raster.rgba(picture);
+      projection.publish(index, rendered);
       if (selectedCue !== undefined) report.cueLink(selectedCue, result.report.passed ? 'applied' : 'render-failed');
       report.stage('output', performance.now() - drawn);
       report.rendered(result.report.passed);
+      if (recording) {
+        recording.request(index, inputs, media.frame, result.report.seed);
+        recording.picture({ frame: index, elapsedMs: before - start, graphMs: drawn - before, audioMs,
+          timingsMs: Object.fromEntries(Object.entries(result.report.timingsMs ?? {}).slice(0,128)),
+          cache: { hits: result.report.cache.hits, misses: result.report.cache.misses }, draw: trace, beats, width: rendered.width, height: rendered.height }, rendered);
+      }
       interventions?.observe(index, live.cursor(), result.report.passed);
       if (tracking && result.report.passed && (!capture || capture.fresh))
         installation.sample(index, result.outputs[tracking.output]);
@@ -289,15 +352,22 @@ async function runShow(file, opt, settings, emit) {
     abort.abort(new Error('Show ended'));
     try {
       const closed = await Promise.allSettled([capture?.done, projection?.close(), osc?.close(), live?.close(),
-        interventions?.close()]);
+        interventions?.close(), score?.close()]);
       failure ??= closed.find(result => result.status === 'rejected')?.reason;
       project.clear();
     } catch (error) { failure ??= error; }
     finally { gpu.dispose(); }
     const summary = report.finish(interrupted ? 'interrupted' : failure ? 'failed' : 'completed', failure);
+    if (recording) {
+      try {
+        const performance = await recording.finish(summary, protectedFiles);
+        summary.performanceCapture = { directory: captureFolder, cases: performance.cases, omitted: performance.omitted };
+      } catch (error) { failure ??= error; summary.passed = false; summary.performanceCapture = { error: error.message }; }
+    }
     if (writer) {
-      if (interventions) graphOutputs([interventionInput.file]).protect(fs.statSync(output, { throwIfNoEntry: false }));
-      writer.write(path.dirname(output), [{ file: path.basename(output), document: summary }]);
+      const sources = interventions ? [...protectedFiles, interventionInput.file] : protectedFiles;
+      try { graphOutputs(sources).write(path.dirname(output), [{ file: path.basename(output), document: summary }]); }
+      catch (error) { failure ??= error; summary.passed = false; summary.reportError = error.message; }
     }
     await emit(summary);
     process.exitCode = interrupted ?? (failure ? 1 : opt.rehearse && !summary.passed ? 2 : 0);

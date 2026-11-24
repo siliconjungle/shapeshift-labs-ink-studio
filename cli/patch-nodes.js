@@ -1,4 +1,5 @@
 const { footageNodes } = require('./patch-footage.js');
+const Draw = require('./performance-draw.js');
 
 const options = { type: 'record', default: {} };
 const scalar = value => ({ type: 'number', default: value });
@@ -114,11 +115,12 @@ function patchNodes(kit, media = {}, gpu) {
       description: 'Run a WGSL image kernel using an optional native WebGPU device.',
       instantiate() {
         const run = () => { throw new Error('Use ink-studio patch run for asynchronous WGSL nodes'); };
-        run.async = async ({ source, wgsl, amount, position }, { time }) => {
+        run.async = async ({ source, wgsl, amount, position }, { time, node }) => {
           if (!gpu) throw new Error('Patch shader runtime is unavailable');
           const { width, height } = source;
           const rgba = P.raster.rgba(source);
           const data = await gpu.process({ width, height, data: rgba.data, wgsl, amount, time, position });
+          if (Draw.active()) Draw.pass({ kind: 'patch.shader', node, width, height, workgroups: [Math.ceil(width / 8), Math.ceil(height / 8)] });
           return { value: { width, height, channels:4, data } };
         };
         return run;

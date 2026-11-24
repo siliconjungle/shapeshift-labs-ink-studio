@@ -106,6 +106,7 @@
   // ---------------- what may be written ----------------
   const COMMON = {
     id: 'str',
+    label: 'str',
     surfaceId: 'str',
     surfaceState: 1,
     prefabs: 'list',
@@ -716,6 +717,11 @@
       bad('finish.look.boundaryCels', error.message);
     }
     try {
+      LivePixelBoundaries.prepare(look?.livePixelBoundaries);
+    } catch (error) {
+      bad('finish.look.livePixelBoundaries', error.message);
+    }
+    try {
       SplatOrder.transparency(look?.stableTransparency);
     } catch (error) {
       bad('finish.look.stableTransparency', error.message);
@@ -978,7 +984,7 @@
           continue;
         }
         const def = modifierKinds[kind];
-        fields(modifier, at, def, { id: 'str', enabled: 'bool' });
+        fields(modifier, at, def, { id: 'str', label: 'str', enabled: 'bool' });
         if (Object.hasOwn(modifier, 'do')) bad(at + '.do', 'a sculpt modifier uses kind');
         if (kind === 'fold') {
           if ([modifier.polar, modifier.mirror, modifier.repeat].filter(value => value !== undefined).length !== 1)
@@ -1109,7 +1115,8 @@
       if (v.parent !== undefined && !parts.has(v.parent))
         bad('parts.' + p + '.parent', 'no part called "' + v.parent + '"');
       if (v.parent === p) bad('parts.' + p + '.parent', 'a part cannot hang from itself');
-      keys(v, 'parts.' + p, { joint: 1, parent: 1 });
+      if (v.label !== undefined) typeOk(v.label, 'str', 'parts.' + p + '.label');
+      keys(v, 'parts.' + p, { joint: 1, parent: 1, label: 1 });
     }
     const checkedParts = new Set();
     for (const part of Object.keys(partDefinitions)) {
@@ -1573,8 +1580,9 @@
       makeSolid = (s, held) => {
         const modifiers = activeModifiers(s);
         const o = { res: s.res, objectId: s.part ?? s.id };
-        if (s.id || s.surfaceId || s.tags?.length || s.prefabs?.length) o.target = {
-          ...(s.id && { entity: s.id }), ...(s.surfaceId && { surface: s.surfaceId }), ...(s.tags?.length && { tags: s.tags }),
+        if (s.id || s.part || s.surfaceId || s.tags?.length || s.prefabs?.length) o.target = {
+          ...(s.id && { entity: s.id }), ...(s.part && { part:s.part }),
+          ...(s.surfaceId && { surface: s.surfaceId }), ...(s.tags?.length && { tags: s.tags }),
           ...(s.prefabs?.length && { prefabs: s.prefabs })
         };
         if (s.res === undefined) delete o.res;

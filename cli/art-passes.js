@@ -5,6 +5,7 @@ const { surfacePoint } = require('./scene-optics.js');
 const TargetSelectors = require('../src/target-selectors.js');
 const PartMotion = require('./part-motion.js');
 const SurfaceMotion = require('./opaque-surface-pass.js');
+const PixelSources = require('./pixel-source-passes.js');
 
 const SplatFrames = require('../src/splat-frames.js');
 const { rows: shutterRows } = require('./programmable-exposure.js');
@@ -44,8 +45,10 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
   const owner = needsOwner ? new Int32Array(size).fill(-1) : null;
   const depth = needsOwner ? new Float32Array(size).fill(Infinity) : null;
 
+  const bindings = selected.has('sourceSplat') ? PixelSources.splatBuffer(size) : null;
   let atlasOwners;
-  function fragment(p, i, a, solid, z, emits, r, g, b, atlas, emissionTint) {
+  function fragment(p, i, a, solid, z, emits, r, g, b, atlas, emissionTint, sourceDepth = z) {
+    bindings?.add(p,atlas ? -1 : i,a,sourceDepth);
     const tint=emissionTint ?? atlas?.emission;
     emits ||= Boolean(tint);
     if (coverage) coverage[p] = a + coverage[p] * (1 - a);
@@ -90,6 +93,7 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
   }
 
   function sprite(p, i, z) {
+    bindings?.add(p,i,1,z);
     atlasOwners?.delete(p);
     if (coverage) coverage[p] = 1;
     if (emission) emission.fill(0, p * 3, p * 3 + 3);
@@ -111,6 +115,8 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
       return out;
     };
     const result = { w, h };
+    if (selected.has('sourceSurface')) Object.assign(result,PixelSources.surfaces(size,atlasOwners,topDown));
+    if (bindings) Object.assign(result,bindings.finish(world,topDown));
     if (geometry.ditherView) result.ditherView = geometry.ditherView;
     if (coverage) result.coverage = topDown(coverage, 1);
     if (surfaceCoverage) result.surfaceCoverage=topDown(surfaceCoverage,1);
@@ -127,6 +133,19 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
     }
     const topDepth=(selected.has('depth')||captureSurfaceMotion) && topDown(depth,1);
     if (selected.has('depth')) result.depth=topDepth;
+    if (selected.has('pigment')) {
+      // RGB24 plus one keeps opaque black distinct from a missing sample.
+      const data=world.rest??world.data;
+      const pigment=Uint32Array.from(owner,(i,p)=>{
+        if (i>=0) {
+          const rgb=Math.round(data[i*16+7]);
+          return world.materialAlbedo?.[i] || ((rgb&255)<<16 | rgb&0xff00 | rgb>>>16&255)+1;
+        }
+        const color=atlasOwners?.get(p)?.color;
+        return color ? color.reduce((value,n)=>value*256+Math.round(Math.min(1,Math.max(0,n))*255),0)+1 : 0;
+      });
+      result.pigment=topDown(pigment,1);
+    }
     if (captureSurfaceMotion) {
       const motion=SurfaceMotion.capture(w,h,captureSurfaceMotion,topDepth,atlasOwners,selected);
       geometry.motionReference.surfaceMotion=motion.snapshot;
@@ -137,7 +156,7 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
       const labels=new Map(), keys=[null], ids=new Uint32Array(size);
       for(let p=0;p<size;p++){
         const hit=atlasOwners?.get(p), i=owner[p];
-        const key=hit ? hit.mesh?.key && hit.mesh.key+'/'+hit.mesh.triangle : i>=0 ? i+1 : null;
+        const key=hit ? !hit.mesh?.localProjection && hit.mesh?.key && hit.mesh.key+'/'+hit.mesh.triangle : i>=0 ? i+1 : null;
         if(!key)continue;
         if(!labels.has(key)){labels.set(key,keys.length);keys.push(key);}
         ids[p]=labels.get(key);
@@ -268,13 +287,14 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
       const defaults=world.renderMetadata?.[names] || [null];
       const key=channel==='objectId' ? 'object' : 'material';
       const declared=(geometry.representationLabels ?? []).map(row=>row[key]);
-      const appended=[...new Set([...(geometry.surfaceLabels?.[names] ?? []),...declared])]
-        .filter(name=>!defaults.includes(name)).sort();
+      const labels = new Set([...(geometry.surfaceLabels?.[names] ?? []), ...declared]);
+      for (const hit of atlasOwners?.values() ?? []) if (hit[channel] !== undefined) labels.add(hit[channel]);
+      const appended = [...labels].filter(name => !defaults.includes(name)).sort();
       const table=appended?.length ? [...defaults,...appended] : defaults;
       const byName=new Map(table.map((name,i)=>[name,i]));
       result[channel]=topDown(Uint32Array.from(owner,(i,p)=>{
         const hit=atlasOwners?.get(p);
-        const name=hit?.mesh?.[key] ?? (hit?.partId!==undefined || hit?.sdf ? hit?.[channel] : undefined);
+        const name = hit?.mesh?.[key] ?? hit?.[channel];
         return name===undefined ? ids?.[i] || 0 : byName.get(name) ?? 0;
       }),1);
       result[names]=table;

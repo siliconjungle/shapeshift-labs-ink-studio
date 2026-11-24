@@ -1,4 +1,4 @@
-/* Select where a retained static sculpt may supply opaque coverage. */
+/* Select where a retained sculpt may supply opaque coverage. */
 const SdfAssist = (() => {
   const selectors = typeof TargetSelectors === 'undefined' ? require('./target-selectors.js') : TargetSelectors;
   const record = value => value && Object.getPrototypeOf(value) === Object.prototype;
@@ -6,9 +6,10 @@ const SdfAssist = (() => {
   function prepare(value) {
     if (value === undefined || value === false) return null;
     if (value === true) value = {};
-    if (!record(value) || Object.keys(value).some(key => !['rules','epsilon','steps'].includes(key)))
-      throw new TypeError('SDF assist needs a boolean or an object with rules, epsilon and steps');
-    const { rules: authored, epsilon = .0015, steps = 160 } = value;
+    if (!record(value) || Object.keys(value).some(key => !['rules','epsilon','steps','posed'].includes(key)))
+      throw new TypeError('SDF assist needs a boolean or an object with rules, epsilon, steps and posed');
+    const { rules: authored, epsilon = .0015, steps = 160, posed = false } = value;
+    if (typeof posed !== 'boolean') throw new TypeError('Posed SDF assist needs a boolean');
     if (!Number.isFinite(epsilon) || epsilon < .0001 || epsilon > .05 ||
         !Number.isSafeInteger(steps) || steps < 16 || steps > 512)
       throw new RangeError('SDF assist needs epsilon in .0001–.05 and 16–512 trace steps');
@@ -28,7 +29,7 @@ const SdfAssist = (() => {
     const contains = (rule,point) => !rule.bounds ||
       point.every((n,i)=>n >= rule.bounds.min[i] && n <= rule.bounds.max[i]);
     return {
-      epsilon, steps,
+      epsilon, steps, posed,
       candidates: target => !rules || rules.some(rule=>rule.enabled && matches(rule,target)),
       allows: (target,point) => !rules || (rules.find(rule=>matches(rule,target) && contains(rule,point))?.enabled ?? false)
     };

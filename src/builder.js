@@ -143,6 +143,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     cidx = [],
     nrms = [];
   let footprintRecorder, engravingRanges;
+  let authoredSplats, authoredSplatIds;
   function describeEngraving(first,end,spec,frame) {
     if(first>=end||spec===undefined)return;
     const prepared=Engraving.prepare(spec);engravingRanges??=[];const last=engravingRanges.at(-1);
@@ -421,6 +422,15 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     fine[o + 11] = 1;
   };
   function push(x, y, z, c00, c01, c02, c11, c12, c22, col, a, an, normal = null) {
+    if (an?.splatId !== undefined) {
+      const id = an.splatId;
+      authoredSplatIds ??= new Set();
+      if (!SplatProvenance.validId(id) || id.startsWith('rest:') || authoredSplatIds.has(id))
+        throw new RangeError('Authored splats need unique IDs outside the rest: namespace');
+      authoredSplatIds.add(id);
+      authoredSplats ??= [];
+      authoredSplats[n] = id;
+    }
     reserveRow();
     if (attrN) {
       if (!attr || attr.length < cap * 4) {
@@ -1137,6 +1147,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
       {
         data: data.subarray(0, n * 16),
         count: n,
+        ...(authoredSplats && { splatIds: Object.freeze(Array.from({ length:n },(_,i) => authoredSplats[i] ?? null)) }),
         ...(hasCurveSplats && { curveSplats: true }),
         ...(curveStations && { curveStations: curveStations.slice(0, n * CurveSplat.stationStride), curveStrands: curveStrands.slice() }),
         ...(curveRest && { curveRest:curveRest.slice(0,n*16) }),

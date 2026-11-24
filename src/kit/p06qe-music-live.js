@@ -14,7 +14,7 @@
 
   function open(sources,spec,options={},observe) {
     check(fields(options,['assets','sampleRate','maxVoices','reservedVoices','foreground','priorities','traceLimit',
-      'maxEvents','streams','readPage','pageSize','maxPages','masterGain','clock','startTime','layerGains','layerFactors','stemGroups','ambienceGains']),
+      'maxEvents','streams','readPage','pageSize','maxPages','masterGain','clock','startTime','layerGains','layerFactors','stemGroups','ambienceGains','performanceTrace']),
     'Invalid live score options');
     const {assets={},sampleRate:rate=48000,maxVoices=32,reservedVoices=Math.min(4,maxVoices-1),
       foreground=[],priorities={},traceLimit=128,maxEvents=512,masterGain=-3,startTime=0,layerGains={},layerFactors={}}=options;
@@ -24,6 +24,8 @@
       new Set(foreground).size===foreground.length && record(priorities) &&
       Object.entries(priorities).every(([name,priority])=>id(name) && integer(priority,-100,100)),
     'Invalid live score clock or voice limits');
+    const tracePerformance=options.performanceTrace ?? false;
+    check(typeof tracePerformance==='boolean','Live audio performance tracing needs a boolean');
     const streams=P.musicLiveStreams.open(rate,options.streams,options.readPage,options.pageSize,options.maxPages);
     const stemGroups=streams.stemGroups(options.stemGroups);
     const {compiled,segments,known,memory,routes,recalls,phrasing,stingers,holds,rules}=
@@ -762,13 +764,30 @@
       windows.sort((a,b)=>Number(b.source.foreground)-Number(a.source.foreground) || b.source.priority-a.source.priority);
       return streams.prefetch(windows);
     }
+    const voiceRoster=()=>voices.map(voice=>({
+      ...(voice.part!==undefined && {part:voice.part}), ...(voice.pitch!==undefined && {pitch:voice.pitch}),
+      ...(voice.stream && {resource:voice.stream.name}), ...(voice.clip && {section:voice.clip.section,source:voice.clip.source}),
+      firstSample:voice.first, ...(voice.trigger?.beatId && {beatId:voice.trigger.beatId}),
+      ...(voice.trigger?.cue && {cue:voice.trigger.cue})
+    }));
     function pull(count) {
       check(integer(count,1,16384),'Pull 1 to 16384 live audio frames');
       const firstFrame=frame,samples=new Float32Array(2*count);
-      let peak=0,clipped=0,energy=0,blockVoices=0;
+      let peak=0,clipped=0,energy=0,blockVoices=0,roster,rosterSample=firstFrame,omittedGaps=0;
+      const gaps=tracePerformance ? [] : null;
+      function traceGap(gap,source) {
+        if (!gaps) return;
+        if (gaps.length===32) { omittedGaps++; return; }
+        gaps.push({sample:frame,resource:gap.name,sourceSample:gap.frame,recovered:Boolean(gap.recovered),
+          ...(source.trigger?.beatId && {beatId:source.trigger.beatId}),
+          ...(source.part!==undefined && {part:source.part}),voices:voiceRoster()});
+      }
       for (let i=0;i<count;i++,frame++) {
         step();
-        blockVoices=Math.max(blockVoices,voices.length);
+        if (voices.length>blockVoices) {
+          blockVoices=voices.length;
+          if (tracePerformance) { roster=voiceRoster(); rosterSample=frame; }
+        }
         let l=0,r=0,sendL=0,sendR=0,foleyL=0,foleyR=0,foleySendL=0,foleySendR=0;
         for (const voice of voices) {
           const gap=voice.read(frame,pair);
@@ -795,6 +814,7 @@
           }
           if (gap) {
             diagnostics.stream(voice,gap,frame,undefined,voice.trigger);
+            if (tracePerformance) traceGap(gap,voice);
             if (!gap.recovered) {
               profile.streamGaps++;
               log('stream-underrun',{name:gap.name,sourceFrame:gap.frame});
@@ -822,6 +842,7 @@
             const gap=stem.read(position,pair);
             if (gap) {
               diagnostics.stream(stem,gap,frame,{group:group.name,part:stem.part});
+              if (tracePerformance) traceGap(gap,stem);
               if (!gap.recovered) {
                 profile.streamGaps++;
                 log('stream-underrun',{name:gap.name,sourceFrame:gap.frame,group:group.name,
@@ -895,7 +916,11 @@
       profile.clippedFrames+=clipped;
       profile.blocks++;
       lastBlock={firstFrame,frames:count,peak,rms:Math.sqrt(energy/count),clippedFrames:clipped,peakVoices:blockVoices};
-      return {samples,sampleRate:rate,channels:2,firstFrame};
+      return {samples,sampleRate:rate,channels:2,firstFrame,...(tracePerformance && {performance:{
+        firstSample:firstFrame,endSample:frame,peakVoices:blockVoices,rosterSample,voices:roster ?? [],
+        stems:stemGroups.flatMap(group=>group.parts.map(stem=>({group:group.name,part:stem.part,resource:stem.source.name}))),
+        gaps,omittedGaps
+      }})};
     }
     function inspect() {
       const layerGains={}, layerFactors={};

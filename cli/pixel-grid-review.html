@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixel canvas · Ink Studio</title>
+<style>
+:root { color-scheme:dark; background:#10161b; color:#e6eeea; font:15px system-ui,sans-serif; }
+* { box-sizing:border-box; }
+body { margin:0; }
+main { max-width:1120px; margin:auto; padding:clamp(16px,4vw,48px); }
+header { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:12px; margin-bottom:16px; }
+h1 { margin:0; font:400 clamp(32px,5vw,52px)/1 Georgia,serif; }
+select { font:inherit; color:inherit; background:#253437; border:1px solid #476062; border-radius:5px; padding:6px 8px; }
+select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
+#canvas { border:1px solid #354549; border-radius:8px; overflow:hidden; }
+.sampling { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; margin-bottom:12px; }
+.sample-controls, .sample-readout { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+.sample-readout { min-height:20px; flex-wrap:nowrap; }
+#sample-layer-control[hidden] { display:inline-block; visibility:hidden; }
+#scene-hit-controls[hidden] { display:none; }
+#sample-layer { max-width:min(200px,65vw); }
+.sampling button { font:inherit; color:inherit; background:#253437; border:1px solid #476062; border-radius:5px; padding:6px 9px; cursor:pointer; }
+.sampling button[aria-pressed="true"] { background:#b3d6bb; color:#17221e; }
+.sampling button:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
+.sampling output { color:#b8c8c4; font:13px ui-monospace,monospace; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+#sample-swatch { flex:0 0 16px; height:16px; border-radius:3px; border:1px solid #98aaa7; background:var(--picked-color); }
+/*PIXEL_GRID_CSS*/
+</style>
+</head>
+<body>
+<main>
+  <header><h1>Pixel canvas</h1><label id="frame-control" hidden>Frame <select id="frames"></select></label></header>
+  <div class="sampling" aria-label="Eyedropper controls">
+    <div class="sample-controls">
+      <button type="button" id="eyedropper" aria-pressed="false">Eyedropper</button>
+      <label>Sample <select id="sample-mode">
+        <option value="composite">Visible composite</option>
+        <option value="layer">Active layer</option>
+        <option value="source" disabled>Source material channel</option>
+      </select></label>
+      <label id="sample-layer-control" hidden>Layer <select id="sample-layer"></select></label>
+    </div>
+    <div class="sample-readout"><span id="sample-swatch" aria-hidden="true" hidden></span><output id="sample-value"></output></div>
+  </div>
+  <div id="canvas"></div>
+  <div id="craft-diagnostics"></div>
+  <div class="sample-controls" id="scene-hit-controls" hidden>
+    <label>Highlight scene hits <select id="scene-hit-mode">
+      <option value="">Off</option>
+      <option value="blocker">Foreground blockers</option>
+      <option value="overlap">Overlapping sources</option>
+      <option value="unreliable">Unreliable bindings</option>
+    </select></label>
+    <output id="scene-hit-count"></output>
+  </div>
+  <div id="pixel-inspection"></div>
+  <p id="error" role="status" hidden></p>
+</main>
+<script type="module">
+/*PIXEL_GUIDES_MODULE*/
+/*PIXEL_GRID_MODULE*/
+/*PIXEL_INSPECT_MODULES*/
+const { frames,palette,materials,definitions,layerIds,rulesSource,sceneBindings,reviewBinding,scene:embeddedScene } = /*PIXEL_GRID_DATA*/;
+const view = mountPixelGridCanvas(document.querySelector('#canvas'),{ guideTool:PixelGuides });
+const select = document.querySelector('#frames'), status = document.querySelector('#error');
+const eyedropper = document.querySelector('#eyedropper'), mode = document.querySelector('#sample-mode');
+const layer = document.querySelector('#sample-layer'), swatch = document.querySelector('#sample-swatch');
+const result = document.querySelector('#sample-value');
+const scratch = document.createElement('canvas'), context = scratch.getContext('2d',{ willReadFrequently:true });
+const materialRows = materials.map(row=>({ ...row,
+  missing:row.missing ? atob(row.missing) : null,
+  data:new DataView(Uint8Array.from(atob(row.values),byte=>byte.charCodeAt(0)).buffer)
+}));
+const stack = PixelLayerStack.prepare(definitions), colors = palette.map(row=>Number.parseInt(row.color.slice(1),16));
+const scene = embeddedScene && PixelViewSource.unpack(embeddedScene);
+const boundView = sceneBindings.find(binding=>binding.id === reviewBinding);
+function sourceAt(at) {
+  if (!boundView) return at;
+  return PixelCanvasTransforms.sourcePoint([active.width,active.height],at,boundView.canvas)?.map(Math.floor);
+}
+function bindingsAt(at) {
+  return sceneBindings.filter(binding=>binding.frame === undefined || binding.frame === active.id).map(binding=>
+    PixelSourceBindings.resolve(scene,binding,at,{ grid:[active.width,active.height],frameId:active.id,
+      sceneMatches:true,sourcePoint:PixelCanvasTransforms.sourcePoint,ArtPasses }));
+}
+const hitMode = document.querySelector('#scene-hit-mode'), hitCount = document.querySelector('#scene-hit-count');
+document.querySelector('#scene-hit-controls').hidden = !scene;
+hitMode.querySelector('[value=blocker]').disabled = !scene?.bindingEvidence || !boundView;
+const hitColors = { blocker:'#ed675e99',overlap:'#6cd7e599',unreliable:'#dfb85f99' };
+function highlightHits() {
+  const kind = hitMode.value;
+  if (!active || !scene || !kind) {
+    view.setDiagnostic(null,'source-hits');
+    hitCount.value = '';
+    return;
+  }
+  const { width,height } = active, runs = [];
+  const scope = boundView && (!boundView.frame || boundView.frame === active.id) ? boundView : undefined;
+  let count = 0;
+  for (let y=0; y<height; y++) {
+    let start = -1;
+    for (let x=0; x<=width; x++) {
+      const at = x < width && sourceAt([x,y]);
+      const relevant = at && ((kind !== 'blocker' && PixelSourceBindings.issues(scene,at,ArtPasses).some(issue=>issue.kind === kind)) ||
+        (scope && kind !== 'overlap' && PixelSourceBindings.issues(scene,at,ArtPasses,{ binding:scope }).some(issue=>issue.kind === kind)));
+      if (relevant) {
+        count++;
+        if (start < 0) start = x;
+      } else if (start >= 0) {
+        runs.push([y,start,x-start]);
+        start = -1;
+      }
+    }
+  }
+  view.setDiagnostic(runs.length ? { bounds:[0,0,width,height],runs,color:hitColors[kind] } : null,'source-hits');
+  hitCount.value = count === 1 ? '1 pixel' : count+' pixels';
+}
+hitMode.addEventListener('change',highlightHits);
+const inspector = mountPixelInspector(document.querySelector('#pixel-inspection'),view,at=>{
+  if (!active || at[0] >= active.width || at[1] >= active.height) return;
+  const p = at[1]*active.width+at[0];
+  const trace = PixelLayerStack.inspect(stack,colors,id=>{
+    const row = active.sources.get(id), slot = row.slots.charCodeAt(p);
+    return { slot:row.knockouts?.charCodeAt(p) ? -2 : slot === 255 ? -1 : slot,alpha:row.alpha?.charCodeAt(p) };
+  },{ references:true });
+  const sampleAt = scene && sourceAt(at);
+  return { ...PixelInspection.document(trace,palette,id=>active.sources.get(id)?.cel ?? null),
+    protection:PixelProtection.at(active.protectedDetails,...at),
+    materials:materialRows.filter(row=>row.frame === undefined || row.frame === active.id).map(row=>{
+      const { data,values,missing,canvas,...meta } = row;
+      const uv = PixelCanvasTransforms.uv([active.width,active.height],at,canvas);
+      const offset = p*32, coverage = row.type === 'number' ? undefined : data.getFloat64(offset+24,true);
+      const value = !uv ? null : row.type === 'number' ? data.getFloat64(p*8,true) :
+        coverage < 0 ? null : { color:[0,8,16].map(i=>data.getFloat64(offset+i,true)),coverage };
+      return { ...meta,requestedDestination:row.name,uv,value };
+    }),...(scene && { scene:{
+      ...(sampleAt && PixelInspection.scene(scene,sampleAt,ArtPasses)),
+      bindings:bindingsAt(at)
+    } }) };
+});
+const craftPanel = mountPixelCraftPanel(document.querySelector('#craft-diagnostics'),view,rulesSource ? PixelArtRules.kinds : PixelCraft.kinds,{
+  inspect:at=>inspector.focus(at)
+});
+const rulePlan = rulesSource && PixelArtRules.prepare(rulesSource.definition,{ ...rulesSource,swatches:palette });
+function diagnose(frame,width,height) {
+  const source = frame.diagnosticSource, paint = source.slots ? source : { ...frame,slots:frame.composite };
+  const unpack = value=>Uint8Array.from(atob(value),byte=>byte.charCodeAt(0));
+  const slots = Int16Array.from(unpack(paint.slots),slot=>slot === 255 ? -1 : slot);
+  const rgb = paint.rgb && unpack(paint.rgb);
+  const raster = { width,height,slots,colors,swatches:palette.map(row=>row.id),
+    opacity:paint.alpha && unpack(paint.alpha),
+    mixedColors:rgb && Uint32Array.from(slots,(_,p)=>(rgb[3*p]<<16)|(rgb[3*p+1]<<8)|rgb[3*p+2]),
+    layerIds,owners:unpack(source.owners),locks:unpack(source.locks) };
+  return PixelArtRules.audit(raster,PixelCraft.analyze(raster),rulePlan,
+    { frame:frame.id,shot:rulesSource?.artShot }).diagnostics;
+}
+const hex = components => '#' + components.map(value => Math.round(value*255).toString(16).padStart(2,'0')).join('');
+let request = 0, active, sampling = false;
+
+function showSample(text = '',color) {
+  result.value = text;
+  result.title = text;
+  swatch.hidden = !color;
+  swatch.style.setProperty('--picked-color',color ?? '');
+}
+
+function updateSampling() {
+  document.querySelector('#sample-layer-control').hidden = mode.value !== 'layer';
+  showSample();
+}
+
+eyedropper.addEventListener('click',() => {
+  sampling = !sampling;
+  eyedropper.setAttribute('aria-pressed',sampling);
+  showSample(sampling ? 'Click a pixel to sample it' : '');
+});
+mode.addEventListener('change',updateSampling);
+layer.addEventListener('change',updateSampling);
+view.canvas.addEventListener('pointerdown',event => {
+  if (!active || !sampling || event.button !== 0) return;
+  const at = view.pixelAt(event.clientX,event.clientY,{ snap:false });
+  if (!at) return;
+  const p = at[1]*view.canvas.width+at[0], position = at.join(', ');
+  if (mode.value === 'source') {
+    const material = active.material;
+    if (!material) return;
+    const values = material.data;
+    const name = material.object + '/' + material.chart + '/' + material.channel;
+    if (material.missing?.charCodeAt(p)) { showSample(position+' · '+name+' · Outside source'); return; }
+    if (material.type === 'number') {
+      showSample(position+' · '+name+' · '+values.getFloat64(p*8,true)+(material.units ? ' '+material.units : ''));
+    } else {
+      const offset = p*32, coverage = values.getFloat64(offset+24,true);
+      const color = coverage > 0 ? hex([0,8,16].map(i=>values.getFloat64(offset+i,true))) : null;
+      showSample(position+' · '+name+' · '+(color ? color+' · '+Math.round(coverage*100)+'% coverage' : 'Transparent'),color);
+    }
+    return;
+  }
+  const entry = mode.value === 'layer' ? active.layers[layer.selectedIndex] : null;
+  const ink = palette[(entry?.slots ?? active.composite).charCodeAt(p)];
+  const alpha = (entry ? entry.alpha : active.alpha)?.charCodeAt(p);
+  const color = ink && (!entry && active.rgb ?
+    hex([0,1,2].map(i=>active.rgb.charCodeAt(3*p+i)/255)) : ink.color);
+  const value = ink ? ink.id+' · '+color+(alpha === undefined ? '' : ' · alpha '+alpha) : 'Transparent';
+  showSample(position+' · '+(entry ? entry.id+' · ' : '')+value,color);
+});
+
+async function draw() {
+  const serial = ++request, frame = frames[select.selectedIndex];
+  const image = new Image();
+  try {
+    image.src = 'data:image/png;base64,' + frame.png;
+    await image.decode();
+    if (serial !== request) return;
+    scratch.width = image.naturalWidth;
+    scratch.height = image.naturalHeight;
+    context.drawImage(image,0,0);
+    view.setFrame({ width:scratch.width, height:scratch.height,
+      rgba:context.getImageData(0,0,scratch.width,scratch.height).data });
+    view.setGuides(frame.guides);
+    const layers = frame.layers.map(row=>({ ...row,slots:atob(row.slots),alpha:row.alpha && atob(row.alpha),
+      knockouts:row.knockouts && atob(row.knockouts) }));
+    active = { id:frame.id,protectedDetails:frame.protectedDetails,width:scratch.width,height:scratch.height,composite:atob(frame.composite),
+      alpha:frame.alpha && atob(frame.alpha),rgb:frame.rgb && atob(frame.rgb),layers,
+      sources:new Map(layers.map(row=>[row.id,row])),
+      material:materialRows.find(row=>row.frame === undefined || row.frame === frame.id) };
+    inspector.refresh();
+    highlightHits();
+    craftPanel.setSource(frame,()=>diagnose(frame,active.width,active.height));
+    const selected = layer.value;
+    layer.replaceChildren(...active.layers.map(({ id })=>new Option(id,id)));
+    if (active.layers.some(({ id })=>id === selected)) layer.value = selected;
+    const hasMaterial = !!active.material;
+    mode.options[2].disabled = !hasMaterial;
+    if (!hasMaterial && mode.value === 'source') mode.value = 'composite';
+    updateSampling();
+    status.hidden = true;
+  } catch (error) {
+    if (serial !== request) return;
+    status.textContent = 'Could not display the native frame. ' + error.message;
+    status.hidden = false;
+  }
+}
+select.replaceChildren(...frames.map(({ label },index) => new Option(label,index)));
+document.querySelector('#frame-control').hidden = frames.length < 2;
+select.addEventListener('change',draw);
+draw();
+</script>
+</body>
+</html>

@@ -10,6 +10,21 @@ const RenderContract = (() => {
   const stages = typeof RenderStages === 'undefined' ? require('./render-stages.js') : RenderStages;
   const inputs = typeof LookInputs === 'undefined' ? require('./look-inputs.js') : LookInputs;
 
+  const scenePaletteLimit = 64, analyticFogLimit = 16;
+  const analyticFogKinds = ['fog', 'box', 'sphere', 'shaft'];
+  const stageDifferences = {
+    'deep-compositing': ['Headless can capture deep fragments.', 'WebGL does not emit deep fragments.', 'Deliver the deep pass headlessly.'],
+    'programmable-exposure': ['Headless can sample programmable shutters.', 'WebGL has no matching exposure pass.', 'Use a headless review for the shuttered image.'],
+    'motional-coverage': ['Headless resolves motion-aware coverage.', 'WebGL has no matching coverage resolve.', 'Disable motional coverage for a shared preview.'],
+    'live-pixel-boundaries': ['The shot solver uses a seekable frame sequence.', 'Live named features use the preceding frame.', 'Use the shot solver for an offline approval or disable the live pass for a shared preview.'],
+    'post-stage': ['Headless applies frame and palette stage rules.', 'WebGL cannot apply those rules through shared staged color.', 'Use uniform material or lit stages for a shared look.'],
+    'spatial-stage-mask': ['Headless evaluates spatial stage masks.', 'WebGL cannot apply the masked rules through shared staged color.', 'Use a uniform stage rule for a shared look.'],
+    'textured-splat-color': ['Headless applies staged rules to per-pixel splat colors.', 'WebGL stages operate on baked splat RGB.', 'Review per-pixel stage color headlessly.'],
+    'surface-finish': ['Headless composes staged rules with surface finishes.', 'WebGL has no shared staged path for this surface combination.', 'Review the combined finish headlessly.'],
+    'contribution-color': ['Headless stages account for per-fragment color contributions.', 'WebGL has no shared staged path for these contributions.', 'Review staged translucent and coverage color headlessly.'],
+    'live-lighting': ['Headless combines staged color and live lighting.', 'WebGL has no shared staged path for this lighting combination.', 'Review the lit stages headlessly or use baked lighting.']
+  };
+
   function options(world, frame = {}, bindClocks) {
     let out = { ...frame, time: frame.time ?? frame.t };
     const clocks = out.timeDomains ?? world.timeDomains;
@@ -59,7 +74,7 @@ const RenderContract = (() => {
     if (frame.deepComposite ?? look.deepComposite) issues.push('deep-compositing');
     if (frame.shutter ?? look.shutter) issues.push('programmable-exposure');
     if (frame.motionalCoverage ?? look.motionalCoverage) issues.push('motional-coverage');
-    if (!frame.raw && world.pal?.length > 64) issues.push('palette-limit');
+    if (!frame.raw && world.pal?.length > scenePaletteLimit) issues.push('palette-limit');
     if (!rules.length && !hasSurfacePaint(world, frame)) return issues;
     if (rules.some(rule => rule.stage === 'frame' || rule.stage === 'palette')) issues.push('post-stage');
     if (rules.some(rule => rule.mask || rule.driver?.inputs?.mask)) issues.push('spatial-stage-mask');
@@ -78,8 +93,86 @@ const RenderContract = (() => {
     return issues;
   }
 
+  function resolved(worldSetting, frameSetting) {
+    return frameSetting === true ? worldSetting : frameSetting ?? worldSetting;
+  }
+
+  function atmosphereIssues(world, frame, sample, issues) {
+    if (frame.atmosphere === false || frame.environment === false) return;
+    const volumeSources = world.atmosphere ?? [];
+    const shaped = resolved(world.shapedAtmosphere, frame.shapedAtmosphere);
+    const active = [...volumeSources, ...(shaped || []).map(volume => ({ ...volume, type: 'field' }))]
+      .filter(volume => (volume.density ?? .2) > 0);
+    const analytic = active.filter(volume => analyticFogKinds.includes(volume.type));
+    const fields = active.filter(volume => volume.type === 'field');
+    const describeVolumes = rows => ({ count: rows.length, volumes: rows.flatMap(volume => volume.id === undefined ? [] : [volume.id]) });
+    const add = (code, kind, headless, webgl, action, detail) =>
+      issues.push({ code, kind, headless, webgl, action, ...(detail && { detail }) });
+
+    if (fields.length) add('density-field', 'omitted', 'Marches shaped density fields.',
+      'The analytic fog pass omits these density fields.', 'Use an analytic fog volume for playback or review the density fields in the headless export.',
+      describeVolumes(fields));
+
+    const depthBands = resolved(world.atmosphereDepthBands, frame.atmosphereDepthBands);
+    if (depthBands?.length || analytic.some(volume => volume.depthBand)) add('atmosphere-depth-bands', 'different',
+      'Samples depth bands along the viewing ray.', 'The analytic fog pass has no depth-band sampling.',
+      'Use constant-density volumes for a shared fog look.');
+
+    const fronts = frame.weatherBinding !== false && frame.weatherFronts !== false &&
+      (frame.weatherBinding?.fronts ?? world.weatherBinding?.fronts)?.length;
+    if (analytic.length > analyticFogLimit || analytic.length && fronts) {
+      const environment = typeof EnvironmentFrame === 'undefined' ? require('./environment-frame.js') : EnvironmentFrame;
+      const tracks = world.weatherTracks && (typeof KIT === 'undefined' ? require('../index.js').load().KIT : KIT).weather.tracks;
+      const sky = environment.timeline(world, frame, sample.time, sample.direction, tracks);
+      if (analytic.length > analyticFogLimit) {
+        const optics = typeof SceneOptics === 'undefined' ? require('./scene-optics.js') : SceneOptics;
+        const uniform = environment.opticalWeather(world, frame, sky);
+        const count = optics.prepareVolumes(analytic, world.pal, undefined, uniform?.fogGain, sky.skyTime).length;
+        if (count > analyticFogLimit) add('analytic-fog-limit', 'limit', 'Renders the authored analytic volumes.',
+          'WebGL rejects frames above its active analytic fog limit.', 'Reduce the number of active analytic fog volumes.',
+          { count, limit: analyticFogLimit });
+      }
+      if (fronts) {
+        const regional = environment.opticalWeather(world, frame, sky, true);
+        const affected = analytic.filter(volume => typeof regional?.fogGain(volume)?.sample === 'function');
+        if (affected.length) add('regional-fog', 'different', 'Applies local weather-front density across the volume.',
+          'WebGL uses the uniform weather sample for analytic fog.', 'Use uniform weather density for a shared fog look.', describeVolumes(affected));
+      }
+    }
+
+    if ((active.length || depthBands?.length) && resolved(world.volumeCutouts, frame.volumeCutouts)) {
+      const cutouts = typeof VolumeCutouts === 'undefined' ? require('./volume-cutouts.js') : VolumeCutouts;
+      if (cutouts.settings(world.volumeCutouts, frame.volumeCutouts).frame(art.time(sample.direction, sample.time)).fog)
+        add('volume-cutouts', 'omitted', 'Applies authored volume cutouts to fog.',
+          'The analytic fog pass omits authored volume cutouts.', 'Review cutout openings in the headless export.');
+    }
+    if (active.length && frame.water !== false && world.water?.count && world.water.raySegments)
+      add('coupled-water-air', 'different', 'Integrates water and fog along the same ray.',
+        'WebGL uses separate water and analytic fog passes.', 'Review the waterline in both renderers.');
+    const lit = analytic.filter(volume => volume.lit);
+    if (lit.length) add('lit-fog', 'different', 'Samples light and shadow along the fog ray.',
+      'WebGL samples analytic fog lighting from an emitter grid.', 'Compare the shot on its playback device before approving the lighting.',
+      describeVolumes(lit));
+  }
+
+  function review(world, frame = {}, sample = clock(world, frame)) {
+    const codes = compatibility(world, frame);
+    if (frame.livePixelBoundaries ?? world.look?.livePixelBoundaries) codes.push('live-pixel-boundaries');
+    const issues = codes.map(code => {
+      if (code === 'palette-limit') return { code, kind: 'limit', headless: 'Resolves the full scene palette.',
+        webgl: 'Scene palette resolve uses only the first ' + scenePaletteLimit + ' swatches.',
+        action: 'Use at most ' + scenePaletteLimit + ' scene swatches for a shared palette resolve.',
+        detail: { count: world.pal.length, limit: scenePaletteLimit } };
+      const [headless, webgl, action] = stageDifferences[code];
+      return { code, kind: 'different', headless, webgl, action };
+    });
+    atmosphereIssues(world, frame, sample, issues);
+    return { version: 1, time: sample.time, status: issues.length ? 'differences' : 'no-known-differences', issues };
+  }
+
   function requirePortable(world, frame) {
     const issues = compatibility(world, frame);
+    if (frame.livePixelBoundaries ?? world.look?.livePixelBoundaries) issues.push('live-pixel-boundaries');
     if (issues.length) throw new Error('Frame is outside the shared rendering contract: ' + issues.join(', '));
   }
 
@@ -104,7 +197,8 @@ const RenderContract = (() => {
 
   function describe(world, frame = {}, bindClocks) {
     frame = options(world, frame, bindClocks);
-    const { direction, ...clocks } = clock(world, frame);
+    const sample = clock(world, frame);
+    const { direction, ...clocks } = sample;
     const width = frame.width ?? frame.w ?? 900, height = frame.height ?? frame.h ?? 620;
     const camera = lenses.frame(world, frame, width, height,
       { orbit: staging.prepare(frame.cameraStaging ?? world.look?.cameraStaging)?.orbit, impulse: impulses.frame });
@@ -122,9 +216,9 @@ const RenderContract = (() => {
       ...(grid && { representation: { type: 'grid', mode: grid.mode, size: grid.size, angle: grid.angle,
         origin: grid.origin, aspect: grid.aspect, gap: grid.gap, resources: grids.dimensions(grid, width, height) } }), camera: { pose, time, ortho, tangent, clipNear, clipFar, setback },
       paletteMode, palette: !frame.raw && grade ? pixels.gradePalette(grade) : world.pal?.slice(),
-      stages: [...stageNames], issues: compatibility(world, frame) };
+      stages: [...stageNames], issues: compatibility(world, frame), compatibility: review(world, frame, sample) };
   }
-  return Object.freeze({ options, clock, palette, stagePlan, compatibility, requirePortable, materialData, describe,
+  return Object.freeze({ options, clock, palette, stagePlan, compatibility, review, requirePortable, materialData, describe,
     hasStages: (world, frame) => stageRules(world, frame).length > 0 || hasSurfacePaint(world, frame) });
 })();
 if (typeof module !== 'undefined') module.exports = RenderContract;

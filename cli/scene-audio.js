@@ -8,6 +8,7 @@ const ContactPulse = require('../src/contact-pulse.js');
 const WAV = require('./wav.js');
 const { readAudioSource, isSoundRecipe, decodeSoundRecipe } = require('./sound-source.js');
 const { mix } = require('./scene-audio-mix.js');
+const Ambisonics = require('./scene-ambisonics.js');
 const { planWorldVoices } = require('./scene-voice-budget.js');
 const { createSceneCrowd } = require('./scene-crowd-audio.js');
 const { createPlaybackReceipts } = require('./scene-audio-receipts.js');
@@ -93,8 +94,9 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
   const inline = proceduralScore?.score === undefined ? null : K.music.score.compile(proceduralScore.score);
   const scoreSystem = proceduralScore?.system, synthAsset = Symbol('procedural score'), productionAsset=Symbol('music production');
 
-  function render(sequence, { timeline, runtime: sceneRuntime, recordedThrough, trace = false, soundReceipts, audition } = {}, selection, delivery=false) {
+  function render(sequence, { timeline, runtime: sceneRuntime, recordedThrough, trace = false, soundReceipts, audition, ambisonic = false } = {}, selection, delivery=false) {
     const start = sampleOf(sequence.startPoint), end = sampleOf(sequence.endPoint);
+    const emitField = ambisonic && !selection && !delivery;
     const postSelected=post && (!selection || selection.kind==='stem' && !legacy.includes(selection.name));
     const mixStart=postSelected ? 0 : start;
     const musicSelected = postSelected || !selection || selection.kind==='stem' && ['mix','music'].includes(selection.name);
@@ -155,6 +157,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
       return { sample, gain: voice.gain, pan, cutoff: voice.cutoff, delay: delayed||moving ? 0 : voice.delay,
         ...(moving&&{sourceTime:voice.offset,rate:voice.rate,propagated:true}),
         ...(binaural&&at&&{hrirAt:at}),
+        ...(emitField&&ear&&at&&{fieldDirection:Ambisonics.direction(ear.position,at)}),
         ...(voice.radiation&&{radiation:Radiation.shelf(voice.bands,voice.gain)}),
         ...(mixer?.voiceBudget&&{rankGain:Math.max(voice.gain,voice.contact?.targetGain??0)}),
         ...(voice.processing&&{processing:voice.processing}) };
@@ -343,6 +346,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
         if (report) receiptPoint(knot,live);
         knot.pan ??= row.points.at(-1).pan;
         if (binaural) knot.hrirAt ??= row.points.at(-1).hrirAt;
+        if (emitField) knot.fieldDirection ??= row.points.at(-1).fieldDirection;
         append(row.points,knot);
         if (report) {
           report.lastPosition = live.position;
@@ -529,6 +533,9 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
         }
       }
     }
+    const handoff = emitField && Ambisonics.render(voices,resolve,{
+      start,end,sampleRate,gain,parametric:K.procedural.audioParametric,roomResponse
+    });
     const allocation=mixer?.voiceBudget&&planWorldVoices(voices,resolve,{end,sampleRate,policy:mixer.voiceBudget,crowd,priorities});
     if (crowd&&(selection?.kind!=='world'||selection.name==='procedural/voice-aggregation')){
       const texture=crowd.tracks(audio=>{
@@ -546,6 +553,10 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
       mix(active,resolve,{start,end,sampleRate,gain,capture:selection!==undefined,parametric:K.procedural.audioParametric,roomResponse,binaural});
     if (selection?.kind==='world' && !result.report.stems.spatial.voices && !result.report.stems.spatial.roomResponse?.assets)
       throw new RangeError('No audible world source in the selected capture range');
+    if (handoff) {
+      Object.assign(result.waves,handoff.waves);
+      result.report.ambisonic=handoff.manifest;
+    }
     if (binauralProfile) result.report.binauralProfile=Binaural.describe(binauralProfile);
     if (worldReport) result.report.worldScore=worldReport;
     if (worldSoundPacks.length) result.report.worldSoundPacks=worldSoundPacks;

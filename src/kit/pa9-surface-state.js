@@ -163,6 +163,10 @@
     }}};
   }
   const xyz=value=>Array.isArray(value)&&value.length===3&&Array.from(value).every(finite);
+  function restSampler({u,v,stamps}) {
+    const {V}=K;
+    return prepare(stamps,{size:[Math.sqrt(V.dot(u,u)),Math.sqrt(V.dot(v,v))]});
+  }
   function projection(spec) {
     check(keys(spec,['charts'])&&record(spec.charts)&&Object.keys(spec.charts).length>0&&Object.keys(spec.charts).length<=32,
       'Expected one to 32 named rest surface charts');
@@ -174,7 +178,7 @@
         'Surface chart needs a finite origin, UV axes and positive depth');
       const cross=V.cross(u,v), uu=V.dot(u,u), vv=V.dot(v,v), uv=V.dot(u,v), det=V.dot(cross,cross);
       check(det>1e-12&&det>uu*vv*1e-10,'Surface chart UV axes must span a plane');
-      const n=V.norm(cross), sampler=prepare(stamps,{size:[Math.sqrt(uu),Math.sqrt(vv)]});
+      const n=V.norm(cross), sampler=restSampler({u,v,stamps});
       return {chart,sampler,point(point,normal) {
         const delta=V.sub(point,origin), distance=Math.abs(V.dot(delta,n)), facing=V.dot(n,normal);
         if(distance>depth||(twoSided?Math.abs(facing):facing)<.5)return null;
@@ -193,5 +197,5 @@
       return best?{chart:best.row.chart,uv:best.uv,values:best.row.sampler.sample(best.uv)}:null;
     };
   }
-  P.surfaceState=Object.freeze({channels,prepare,correspondence,projection,bind,appearance,ramp,window,into,isUv:uv,full});
+  P.surfaceState=Object.freeze({channels,prepare,restSampler,correspondence,projection,bind,appearance,ramp,window,into,isUv:uv,full});
 })(KIT);

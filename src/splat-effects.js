@@ -135,7 +135,7 @@ const SplatEffects = (() => {
     const texels = entries.map(entry => Uint32Array.from(entry.slots, slot => slot === null ? 0 : add(slot) + 1));
     const groups = cycling.prepare(cycles, add, local ? undefined : roles ?? {});
     const active = new Map(swatches);
-    let lastTime, current = texels[0];
+    let lastTime, frame = 0;
     return {
       palette: Array.from(swatches.values()),
       sample(u, v, time, result) {
@@ -143,15 +143,15 @@ const SplatEffects = (() => {
         if (texel < 0) return 0;
         if (!Number.isFinite(time)) time = 0;
         if (lastTime !== time) {
-          if (texels.length > 1) current = texels[at(time)];
+          if (texels.length > 1) frame = at(time);
           cycling.visit(groups, time, (index, source) => active.set(index, swatches.get(source)));
           lastTime = time;
         }
-        const slot = current[texel] - 1;
+        const slot = texels[frame][texel] - 1;
         if (slot === -1) return 0;
         const rgb = active.get(slot);
         for (let k = 0; k < 3; k++) result[k] = rgb[k];
-        return 1;
+        return (entries[frame].alpha?.[texel] ?? 255)/255;
       }
     };
   }
@@ -268,7 +268,8 @@ const SplatEffects = (() => {
           const loc = pointFor(sample,space) && lookup(sample);
           if (!loc) return undefined;
           const i = texel(loc.u,loc.v);
-          return Number(i>=0 && entries[at(sample.time)].slots[i]!==null);
+          const frame = entries[at(sample.time)];
+          return i < 0 || frame.slots[i] === null ? 0 : (frame.alpha?.[i] ?? 255)/255;
         };
         break;
       }

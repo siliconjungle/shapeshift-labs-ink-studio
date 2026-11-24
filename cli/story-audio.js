@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { readSceneAudio } = require('./scene-audio.js');
+const { folder: ambisonicFolder } = require('./scene-ambisonics.js');
 const { resolveCheckpoint } = require('./checkpoint-file.js');
 const { readProjectBundle } = require('./project-bundle.js');
 const { readRecording } = require('./story-exchange.js');
@@ -9,7 +10,7 @@ const { format:playbackFormat } = require('./scene-audio-receipts.js');
 
 const format = 'ink-studio/story-audio';
 const choiceFormat = 'ink-studio/sound-choice-receipts';
-const usage = 'story audio <recording|run-bundle> <soundtrack.json> --out directory [--from seconds --to seconds] [--receipts receipts.json]';
+const usage = 'story audio <recording|run-bundle> <soundtrack.json> --out directory [--from seconds --to seconds] [--receipts receipts.json] [--ambisonic]';
 
 function point(T, input, fallback) {
   if (input === undefined) return fallback;
@@ -59,7 +60,8 @@ function readSoundReceipts(file, world, W) {
 
 async function command(file, plan, rest, opt, library) {
   if (!file || !plan || rest.length || typeof opt.out !== 'string' || !opt.out.trim() ||
-      Object.keys(opt).some(key => !['out','from','to','receipts'].includes(key)) ||
+      Object.keys(opt).some(key => !['out','from','to','receipts','ambisonic'].includes(key)) ||
+      opt.ambisonic!==undefined && opt.ambisonic!==true ||
       opt.receipts!==undefined && (typeof opt.receipts!=='string'||!opt.receipts.trim())) throw new TypeError('Use ' + usage);
   const kit = library(), { world:W } = kit.KIT;
   const inputs = new Set([path.resolve(file),path.resolve(plan)]);
@@ -91,13 +93,15 @@ function recordingWindow(T,recording,{from,to}) {
 async function renderRecording(recording,soundtrack,settings,{KIT:K}) {
   const T=K.procedural.takeTime, R=K.world.runtime, {world}=recording.origin;
   const {startPoint,endPoint}=recordingWindow(T,recording,settings);
-  const {soundReceipts}=settings;
+  const {soundReceipts,ambisonic}=settings;
   await R.replayAsync(recording);
   const { waves, report } = soundtrack.render({startPoint,endPoint},{
-    runtime:()=>R.openRecording(recording),recordedThrough:recording.end.tick,trace:true,soundReceipts
+    runtime:()=>R.openRecording(recording),recordedThrough:recording.end.tick,trace:true,soundReceipts,ambisonic
   });
   const output = Object.entries(waves).map(([name,bytes]) => ({file:name+'.wav',bytes}));
-  const { storyAudio, ...mix } = report;
+  const { storyAudio, ambisonic: soundfield, ...mix } = report;
+  const fieldManifest=ambisonicFolder+'/manifest.json';
+  if (soundfield) output.push({file:fieldManifest,document:soundfield});
   const cueFile = row => (report.post ? row.bus : row.stem)+'.wav';
   const documentReport = {
     format, version:1, world:world.id, coverage:{fromTick:recording.origin.tick,toTick:recording.end.tick},
@@ -108,6 +112,7 @@ async function renderRecording(recording,soundtrack,settings,{KIT:K}) {
     cues:storyAudio.cues.map(row=>({...row,file:cueFile(row)})),
     ...(storyAudio.contacts && {contacts:storyAudio.contacts.map(row=>({...row,file:cueFile(row)}))}),
     playbackReceipts:'playback.json',
+    ...(soundfield&&{ambisonic:fieldManifest}),
     ...(storyAudio.soundChoices && { receipts:'receipts.json' })
   };
   if (storyAudio.soundChoices) output.push({file:'receipts.json',document:{

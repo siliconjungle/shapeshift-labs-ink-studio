@@ -75,6 +75,25 @@ test('projected shape animation has exact holds, phase, color ownership and an i
   assert.equal(mask(sample([1.5,0,.5],.2)),0);
 });
 
+test('stamp alpha survives playback, atlas sampling, and projected paint and masks', () => {
+  const ink = { width:2,height:1,palette:['#ff0000'],origin:'top-left',
+    frames:[{ slots:[0,0],alpha:[128,0] },{ slots:[0,0],alpha:[0,255] }],fps:2 };
+  assert.deepEqual([...stamps.image(ink).rgba],[255,0,0,128,0,0,0,0]);
+  assert.deepEqual([...stamps.image(ink,{ time:.5 }).rgba],[0,0,0,0,255,0,0,255]);
+  const asset = stamps.atlas(ink);
+  const texel = { color:[],normal:[],emission:[] };
+  assert(asset.sample(asset.select(),0,0,{},texel));
+  assert.equal(texel.alpha,128/255);
+  const mask = K.splatEffects.prepareMask({ type:'indexed',raster:ink,interpolation:'linear' });
+  assert.equal(mask(sample([.25,0,.5],0)),128/255);
+  assert.equal(mask(sample([.75,0,.5],.5)),1);
+  const effect = { type:'projected',pattern:'indexed',ink:true,raster:ink };
+  const look = SurfaceLook.prepare({ layers:{ effect } });
+  assert.deepEqual(SurfaceLook.shade(look,sample([.25,0,.5],0),[0,0,0]).slice(0,3),[128/255,0,0]);
+  assert.deepEqual(SurfaceLook.shade(look,sample([.75,0,.5],0),[0,0,0]).slice(0,3),[0,0,0]);
+  assert.throws(()=>stamps.prepare({ ...ink,frames:[{ slots:[0,0],alpha:[256,0] }] }),/one byte per texel/);
+});
+
 test('authored contours choose contrast from the backdrop and obey paint in rest space', () => {
   const width=6, rgb=Uint8Array.from([16,96,16,232,96,232].flatMap(v=>[v,v,v]));
   const passes={depth:Float32Array.from([Infinity,1,Infinity,Infinity,1,Infinity]),

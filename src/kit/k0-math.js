@@ -11,6 +11,7 @@ KIT.renderContract = RenderContract;
 KIT.colorClusters = ColorClusters;
 KIT.shotCorrections = ShotCorrections;
 KIT.boundaryCels = BoundaryCels;
+KIT.livePixelBoundaries = LivePixelBoundaries;
 KIT.shadowArt = ShadowArt;
 KIT.shotLighting = ShotLighting;
 KIT.splatFrames = SplatFrames;

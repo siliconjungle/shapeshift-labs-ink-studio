@@ -1,0 +1,14 @@
+{
+  "targets": [{"object":"head"},{"object":"chest"},{"object":"staff"},{"object":"hand-L"},{"object":"hand-R"},{"object":"lower-R"},{"object":"upper-R"}],
+  "bands": [
+    {"id":"helmet-key","select":{"object":"head","material":"brass"},"threshold":0.64},
+    {"id":"coat-key","select":{"object":"chest","material":"enamel"},"threshold":0.44}
+  ],
+  "constraints": [
+    {"id":"helmet-highlight","kind":"connected","band":"helmet-key","bounds":[46,6,58,33]},
+    {"id":"grip-gap","kind":"gap","between":[{"object":"hand-R"},{"object":"chest"}],"bounds":[67,28,34,39]}
+  ],
+  "spatial": 0.19,
+  "temporal": 0.47,
+  "steps": 6
+}

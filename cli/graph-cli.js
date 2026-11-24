@@ -22,6 +22,9 @@ const flags = {
   session:['protocol','out','workers'],
   clip:['inputs','seed','out','output','from','to','fps','warmup','cuts','clock','format','render-options','capture-options','json',...executionFlags]
 };
+const discoveryFlags = { nodes: ['json'], describe: ['json', 'example'] };
+const analysisFlags = { impact: ['root', 'json'], diff: ['adapters', 'json'] };
+const commandOptions = { ...flags, ...discoveryFlags, ...analysisFlags, ...host.commands };
 
 async function sendText(text) {
   if (!process.stdout.write(text+'\n')) await once(process.stdout,'drain');
@@ -106,10 +109,10 @@ function clipOptions(opt, sources, defaultClock) {
 
 async function graphCommand(pos,opt,settings) {
   const [mode,file,caseFile]=pos;
-  if (mode==='nodes' || mode==='describe') {
+  if (Object.hasOwn(discoveryFlags, mode)) {
     const listing=mode==='nodes';
     if (pos.length!==(listing ? 1 : 2) || opt.json && opt.example ||
-        Object.entries(opt).some(([key,value])=>value!==true || key!=='json' && (listing || key!=='example')))
+        Object.entries(opt).some(([key,value])=>value!==true || !discoveryFlags[mode].includes(key)))
       throw new TypeError('Use graph nodes [--json] or graph describe <op> [--json | --example]');
     const result=listing ? catalog.listGraphNodes(settings) : catalog.describeGraphNode(file,settings);
     if (opt.json) return send(result);
@@ -121,13 +124,13 @@ async function graphCommand(pos,opt,settings) {
   }
   if (mode==='impact') {
     if (pos.length!==2 || Object.entries(opt).some(([key,value])=>
-      key==='json' ? value!==true : key!=='root' || typeof value!=='string' || !value.trim()))
+      key==='json' ? value!==true : !analysisFlags.impact.includes(key) || typeof value!=='string' || !value.trim()))
       throw new TypeError('Use graph impact <group.json> [--root directory] [--json]');
     return send(findGraphGroupUsers(file,{root:opt.root}),opt.json);
   }
   if (mode==='diff') {
     if (pos.length!==3 || Object.entries(opt).some(([key,value])=>
-      key==='json' ? value!==true : key!=='adapters' || typeof value!=='string' || !value.trim()))
+      key==='json' ? value!==true : !analysisFlags.diff.includes(key) || typeof value!=='string' || !value.trim()))
       throw new TypeError('Use graph diff <before.json> <after.json> [--json]');
     settings=await host.adapters(opt.adapters,settings);
     const read = source => {
@@ -215,3 +218,4 @@ async function projectCommand(mode,file,caseFile,opt,settings) {
 }
 
 module.exports=graphCommand;
+module.exports.commandOptions=commandOptions;

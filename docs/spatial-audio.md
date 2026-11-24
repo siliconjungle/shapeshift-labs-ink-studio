@@ -23,6 +23,8 @@ blocked acoustic route is silent. Set a cue's `occlusion` to false to omit
 these tests for that cue. Set `propagationDelay` to true to include delay
 from the acoustic route. [Per-source propagation and Doppler](propagation-doppler.md) also covers direct paths and moving sources.
 
+Use [Ambisonic ambience export](ambisonic-ambience.md) for a rotatable environmental bed with separate dialogue and close Foley placement stems.
+
 For offline soundtrack rendering, set `follow: true` on a cue to keep its
 one-shot tail attached to its entity or socket. Set `bus` to route the cue
 to a named post stem such as `foley`. [Adaptive story audio](adaptive-story-audio.md)

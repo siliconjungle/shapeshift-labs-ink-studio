@@ -1,6 +1,7 @@
 const ColorSpace = require('../src/color-space.js');
 const Optical = require('../src/optical-materials.js');
 const RenderStages = require('../src/render-stages.js');
+const SdfPose = require('./sdf-pose.js');
 const { slab } = require('../src/scene-optics.js');
 
 const linear = ColorSpace.prepare('srgb', 'srgb-linear');
@@ -38,7 +39,7 @@ function materials(palette, roles) {
   };
 }
 
-function bind(world, epsilon, steps) {
+function bind(world, epsilon, steps, posed = false) {
   const palette = world.pal;
   const profile = materials(palette,world.paletteRoles), rows = new Uint8Array(world.count);
   const boned = new Set(world.anim?.boned ?? []), sources = [];
@@ -46,6 +47,22 @@ function bind(world, epsilon, steps) {
   const { nearest } = require('../index.js').load().KIT.procedural.attributes;
   let excludedMoving = 0;
   for (const source of world.referenceSdfs ?? []) {
+    if (posed && world.anim?.bones) {
+      for (const [key,group] of SdfPose.groups(world,source,(i,rest)=>{
+        const flags=Math.round(rest[i*16+11]);
+        return [0,1,7,12].includes(flags&15) && !(flags&8704);
+      },source.bind)) {
+        const motion=SdfPose.transform(key,world.anim.bones);
+        if (motion===false) continue;
+        for (const owner of group.owners) {
+          const ranges=source.rows.get(owner) ?? [];
+          for (const [start,end] of ranges) rows.fill(1,start,end);
+          rangesByOwner.set(owner,ranges);
+        }
+        sources.push(...group.fields.map(field=>SdfPose.field(field,motion)));
+      }
+      continue;
+    }
     const allowed = new Set();
     for (const [owner,ranges] of source.rows) {
       let moved = Boolean(owner.born !== undefined || owner.mat.motionAt);

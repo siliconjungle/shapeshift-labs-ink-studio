@@ -133,6 +133,10 @@ function makeSculpt(B, rest) {
   let hasOptionalProxy = false;
   function add(p, mat, o) {
     o = o || {};
+    if (!p.sourceLocal) {
+      const center = p.bc.slice();
+      p.sourceLocal = point => point.map((n,i)=>n-center[i]);
+    }
     p.mat = controlled(Array.isArray(mat) ? { r: mat } : mat || {});
     p.res = o.res || S.res;
     p.k = o.k || 0;
@@ -188,12 +192,13 @@ function makeSculpt(B, rest) {
     const solids = lists.flatMap((list, i) => list.slice(starts[i]));
     if (!solids.length && result?.sd) solids.push(result);
     for (const solid of solids) {
-      const { sd, sample, lowerBound, along, analytic, geometryBounds, mat } = solid;
+      const { sd, sample, lowerBound, along, analytic, geometryBounds, mat,sourceLocal } = solid;
       solid.bc = point(solid.bc);
       if (solid.br < 1e8) solid.br *= scale;
       solid.reach *= scale;
       if (solid.bump) solid.bump = [solid.bump[0] * scale, solid.bump[1]];
       solid.sd = (x, y, z) => scale * sd(...inverse([x, y, z]));
+      solid.sourceLocal = value => sourceLocal(inverse(value));
       solid.sample = function (visit) {
         const res = this.res;
         this.res = res / scale;
@@ -272,6 +277,10 @@ function makeSculpt(B, rest) {
   function local(c, br, sd0, sm0, mat, o) {
     const ax = o && o.ax,
       p = { bc: c, br };
+    p.sourceLocal = point => {
+      const offset = point.map((value,i)=>value-c[i]);
+      return ax ? ax.map(axis=>axis.reduce((sum,value,i)=>sum+value*offset[i],0)) : offset;
+    };
     if (ax) {
       const U = ax[0],
         V = ax[1],
@@ -1684,14 +1693,19 @@ function makeSculpt(B, rest) {
   function captureRenderSdf() {
     const positive = pos.filter(p => !p.whole && Number.isFinite(p.br) && p.br < 1e8 && SdfAssist.opaque(p.mat));
     if (!positive.length) return null;
-    const field = makeSculpt(B,{positive,negative:neg.slice()});
-    const bounds = field.modelBounds(.05);
-    field.ready();
+    const negative = neg.slice();
     const rows = new Map();
-    const owners = new Set([...positive,...neg.filter(p=>SdfAssist.opaque(p.mat))]);
+    const owners = new Set([...positive,...negative.filter(p=>SdfAssist.opaque(p.mat))]);
     const {pre,clip} = S;
     const accepts = (pre || clip) && ((x,y,z)=>(!pre || pre(x,y,z)) && (!clip || clip(x,y,z)));
-    return { bounds, distance:field.sdf, locate:field.renderSurface, rows, owners, accepts };
+    function bind(body, cut) {
+      const selected = positive.filter(body);
+      if (!selected.length) return null;
+      const field = makeSculpt(B,{positive:selected,negative:negative.filter(cut)});
+      field.ready();
+      return {bounds:field.modelBounds(.05), distance:field.sdf, locate:field.renderSurface, accepts};
+    }
+    return { ...bind(()=>true,()=>true), bind, rows, owners, negative };
   }
   function captureReferenceSdf() {
     const finite = p => !p.whole && Number.isFinite(p.br) && p.br < 1e8 && !p.mat.skip;
@@ -1703,10 +1717,10 @@ function makeSculpt(B, rest) {
     const isPane = mat => mat.optical || mat.glass || mat.a < 1 ||
       Object.values(mat.surface?.layers ?? {}).some(layer => layer?.type === 'transmission') ||
       mat.top && isPane(mat.top);
-    function bind(allowed) {
+    function bind(allowed, cutsAllowed = allowed) {
       const solids = [], panes = [];
       for (const owner of bodies) if (allowed(owner)) (isPane(owner.mat) ? panes : solids).push(owner);
-      const activeCuts = cuts.filter(allowed);
+      const activeCuts = cuts.filter(cutsAllowed);
       function source(positive, negative) {
         const field = makeSculpt(B, { positive, negative });
         field.ready();
@@ -1727,7 +1741,7 @@ function makeSculpt(B, rest) {
       ];
     }
     const lighting = { direction: S.sun, intensity: S.sunK, ambient: S.amb, shadows: true, lights: S.lights.slice() };
-    return bodies.length || separate.length ? { rows, bind, lighting } : null;
+    return bodies.length || separate.length ? { rows, bind, lighting, negative:cuts } : null;
   }
   S.solidCount = () => pos.length + neg.length;
   S.add = add;

@@ -78,6 +78,8 @@ A finding with no frame overlap or explicit cue identity remains visible with an
 
 Reports keep up to 256 findings per kind, 32 links per finding, 2,048 observed graph links, and 16,384 planned windows, clock-map events, and pack placements. Scheduled cue anchors have their own cue budget. Audio omission totals retain in-range findings excluded by the show budget. They also include source omissions when the full source report fits the placement, since a trimmed source has no sample positions for omitted faults.
 
+Use [beat-level performance captures](beat-performance-captures.md) to retain the draw passes, active voices and replay inputs around a miss.
+
 To discover staging failures before recording a show, [search for hard-to-stage routes](staging-route-search.md) and open the saved native replays.
 
 ## Run the Beacon Rehearsal demo

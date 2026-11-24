@@ -128,19 +128,20 @@ function* arrivals(voices) {
   }
 }
 
-function sumVoices(voices, resolve, { start, end, sampleRate, gain = 1, cues, parametric, roomResponse, binaural }, buses = stereo) {
+function sumVoices(voices, resolve, { start, end, sampleRate, gain = 1, cues, parametric, roomResponse, binaural, field }, buses = stereo) {
   const historyStart = Math.min(start,roomResponse?.path[0]?.sample??start), count = end-start;
   if (!Number.isSafeInteger(count) || count < 1 || (end-historyStart)*2 > WAV.maxSamples)
     throw new RangeError('Scene soundtrack exceeds its WAV sample budget');
-  const stems = new Map(buses.map(name => [name, new Float32Array(count * 2)]));
+  const stems = new Map(field ? [] : buses.map(name => [name, new Float32Array(count * 2)]));
   const statistics = Object.fromEntries(buses.map(name => [name, { voices: 0, peak: 0 }]));
   const roomInput=roomResponse && new Float32Array((end-historyStart)*2);
   let work = 0, binauralWork=0;
   for (const { stem, ...voice } of arrivals(voices)) {
     const spans = voice.admissions;
     const pinned=binaural&&voice.points?.some(point=>point.hrirAt);
+    const wetStart = field?.roomHistory(stem) ?? (roomInput ? historyStart : undefined);
     const inputStart=pinned?Math.min(historyStart,binaural.path[0]?.sample??start):
-      roomInput&&voice.points?.some(point=>point.pan!==undefined)?historyStart:start;
+      wetStart!==undefined&&voice.points?.some(point=>point.pan!==undefined)?wetStart:start;
     const tail=pinned?binaural.length-1:0;
     if (spans && !spans.some(span=>span.end+tail>inputStart&&span.end>span.first)) continue;
     if (voice.end !== undefined && voice.end+tail <= inputStart) continue;
@@ -152,7 +153,7 @@ function sumVoices(voices, resolve, { start, end, sampleRate, gain = 1, cues, pa
     const points = p.points, filters = Boolean(points?.some(row => row.cutoff < 22000));
     const tone = contextualFilter(points, sampleRate, parametric), radiation=radiationFilter(points,sampleRate,parametric);
     // Restore the complete filter history for contextual audio when printing a crop.
-    const begin = tone || radiation || spans && filters ? p.first : filters ? Math.max(p.first, first - Math.ceil(sampleRate / 3)) : first;
+    const begin = tone || radiation || (spans || field) && filters ? p.first : filters ? Math.max(p.first, first - Math.ceil(sampleRate / 3)) : first;
     const length = spans && !radiation ? spans.reduce((sum,span)=>sum+Math.max(0,Math.min(span.end,last)-Math.max(span.first,begin)),0) : last-begin;
     work += length * Math.max(2, source.channels) * (1 + (tone?.stages ?? 0) + (radiation?2:0));
     if (pinned) binauralWork+=Math.max(0,stop-begin)*binaural.length;
@@ -181,6 +182,7 @@ function sumVoices(voices, resolve, { start, end, sampleRate, gain = 1, cues, pa
         roomInput[at+1]+=right;
       }
     }
+    const unpanned = field?.foreground(stem);
     let knot = 0, low = 0, spanIndex = 0, listenerIndex=0, fir, priorAt, priorEar, priorDirection, hrirCutoff;
     for (let sample = begin; sample < stop; sample++) {
       let admission = 1;
@@ -241,18 +243,26 @@ function sumVoices(voices, resolve, { start, end, sampleRate, gain = 1, cues, pa
       }
       const fade = p.fade ? clamp(Math.min((sample - p.first) / p.fade, (p.end - sample) / p.fade), 0, 1) : 1;
       const n = (sample - start) * 2, scale = level * p.gain * gain * fade * admission;
-      if (fir) {
+      if (unpanned) {
+        if (sample >= first) field.write(stem, sample, l * scale, r * scale, a, b, u, source.channels);
+      } else if (fir) {
         const [left,right]=fir.process((l+r)*.5*scale,hrirCutoff);
         spatial(sample,left,right);
       } else if (pan !== undefined) {
         const mono = (l + r) * .5;
         low += (!filters || cutoff >= 22000 ? 1 : 1 - Math.exp(-2 * Math.PI * cutoff / sampleRate)) * (mono - low);
         if (sample < first) continue;
-        const left=low*scale*Math.sqrt((1-pan)/2), right=low*scale*Math.sqrt((1+pan)/2);
-        spatial(sample,left,right);
+        if (field) field.write(stem, sample, low * scale, low * scale, a, b, u, 1);
+        else {
+          const left=low*scale*Math.sqrt((1-pan)/2), right=low*scale*Math.sqrt((1+pan)/2);
+          spatial(sample,left,right);
+        }
       } else if (sample >= Math.max(first,start)) {
-        bus[n] += l * scale;
-        bus[n + 1] += r * scale;
+        if (field) field.write(stem, sample, l * scale, r * scale, a, b, u, source.channels);
+        else {
+          bus[n] += l * scale;
+          bus[n + 1] += r * scale;
+        }
       }
     }
   }

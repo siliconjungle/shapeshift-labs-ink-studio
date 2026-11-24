@@ -2,6 +2,8 @@
 const WAV=require('./wav.js'),{sumVoices}=require('./scene-audio-mix.js');
 const buses=Object.freeze(['dialogue','foley','effects','ambience','music']);
 const legacy=Object.freeze(['timeline','spatial','tracks']);
+const sceneRole=row=>row.bus ?? (row.stem==='music' ? 'music' :
+  row.stem==='tracks' || row.stem==='spatial' && row.loop ? 'ambience' : 'effects');
 function createScenePost(P,post,sampleRate) {
   const {fields,record,id,check,integer}=P.musicInstruments;
   check(fields(post,['strips','processors','assets','map','peakPolicy']) && integer(sampleRate,8000,96000) &&
@@ -18,8 +20,7 @@ function createScenePost(P,post,sampleRate) {
   const taps=Object.fromEntries(buses.map(name=>[name,{strip:name}]));
   function prepare(voices,resolve,{start,end,gain,roomResponse,binaural},collect=false) {
     check(start>=0 && end>start && end*2*buses.length<=32e6,'Scene post needs a nonnegative, bounded timeline range');
-    const classified=voices.map(row=>({...row,stem:row.bus ?? (
-      row.stem==='music' ? 'music' : row.stem==='tracks' || row.stem==='spatial' && row.loop ? 'ambience' : 'effects')}));
+    const classified=voices.map(row=>({...row,stem:sceneRole(row)}));
     const cues=collect ? [] : undefined;
     const {stems,statistics}=sumVoices(classified,resolve,{start:0,end,sampleRate,gain,cues,parametric:P.audioParametric,roomResponse,binaural},buses);
     const assets=Object.fromEntries(Object.entries(post.assets ?? {}).map(([name,asset])=>[name,resolve(asset)]));
@@ -55,4 +56,4 @@ function createScenePost(P,post,sampleRate) {
   }
   return {render,prepare};
 }
-module.exports={createScenePost,buses,legacy};
+module.exports={createScenePost,buses,legacy,sceneRole};

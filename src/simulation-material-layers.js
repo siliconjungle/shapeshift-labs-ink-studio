@@ -1,7 +1,8 @@
 /* Simulation values drive material channels through stable UV or rest-space masks. */
 const SimulationMaterialLayers=(()=>{
   const Inputs=typeof LookInputs==='undefined'?require('./look-inputs.js'):LookInputs;
-  const Color=typeof ColorSpace==='undefined'?require('./color-space.js'):ColorSpace;
+  let Color;
+  try { Color = ColorSpace; } catch { Color = require('./color-space.js'); }
   const linear=Color.prepare('srgb','srgb-linear'), display=Color.prepare('srgb-linear','srgb');
   const format='ink-studio/simulation-material-layers', maxLayers=8, compiled=Symbol.for(format);
   const unit=n=>Number.isFinite(n)&&n>=0&&n<=1;

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixel motion review · Ink Studio</title>
+<style>
+:root { color-scheme:dark; background:#10161b; color:#e6eeea; font:15px system-ui,sans-serif; }
+* { box-sizing:border-box; }
+body { margin:0; }
+main { max-width:1120px; margin:auto; padding:clamp(16px,4vw,48px); }
+header { display:flex; flex-wrap:wrap; gap:12px; justify-content:space-between; align-items:baseline; margin-bottom:16px; }
+h1 { margin:0; font:400 clamp(32px,5vw,52px)/1 Georgia,serif; }
+select { font:inherit; color:inherit; background:#253437; border:1px solid #476062; border-radius:5px; padding:6px 8px; }
+#canvas { border:1px solid #354549; border-radius:8px; overflow:hidden; }
+/*CSS*/
+</style>
+</head>
+<body>
+<main>
+  <header><h1>Motion review</h1><label>Sample <select id="samples"></select></label></header>
+  <div id="canvas"></div>
+  <div id="checks"></div>
+  <div id="pixel-inspection" hidden></div>
+  <p id="error" role="status" hidden></p>
+</main>
+<script type="module">
+/*SCRIPTS*/
+const { report,frames } = /*DATA*/;
+const view = mountPixelGridCanvas(document.querySelector('#canvas'));
+const input = document.querySelector('#samples'), status = document.querySelector('#error');
+const scratch = document.createElement('canvas'), context = scratch.getContext('2d',{ willReadFrequently:true });
+let request = 0, overlayEpoch = 0, active;
+const inspectionRoot = document.querySelector('#pixel-inspection');
+const inspector = frames.some(row=>row.source) ? mountPixelInspector(inspectionRoot,view,at=>{
+  if (!active?.scene || at[0] >= active.width || at[1] >= active.height) return;
+  const p = (at[1]*active.width+at[0])*4, alpha = active.rgba[p+3];
+  const color = alpha ? PixelInspection.hex(active.rgba[p]*65536+active.rgba[p+1]*256+active.rgba[p+2]) : null;
+  return { display:{ color,alpha },scene:PixelInspection.scene(active.scene,at,ArtPasses) };
+}) : null;
+inspectionRoot.hidden = !inspector;
+
+async function readSource(source) {
+  if (!source) return null;
+  const bytes = Uint8Array.from(atob(source),value=>value.charCodeAt(0));
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
+  return PixelViewSource.unpack(await new Response(stream).json());
+}
+async function draw(index,finding) {
+  const serial = ++request, epoch = overlayEpoch, image = new Image();
+  try {
+    const { png,source } = frames[index];
+    image.src = 'data:image/png;base64,'+png;
+    const [,scene] = await Promise.all([image.decode(),readSource(source)]);
+    if (serial !== request) return;
+    const [width,height] = report.grid;
+    scratch.width = width;
+    scratch.height = height;
+    context.drawImage(image,0,0);
+    const { data:rgba } = context.getImageData(0,0,width,height);
+    active = { width,height,rgba,scene };
+    view.setFrame(active);
+    inspector?.refresh();
+    const highlight = epoch === overlayEpoch ? finding : undefined;
+    view.setDiagnostic(highlight ?? null,'motion');
+    if (highlight) view.focusRegion(highlight.bounds,'motion');
+    input.selectedIndex = index;
+    status.hidden = true;
+  } catch (error) {
+    if (serial !== request) return;
+    status.textContent = error.message;
+    status.hidden = false;
+  }
+}
+input.replaceChildren(...report.samples.map(row=>new Option(row.label)));
+input.addEventListener('change',()=>draw(input.selectedIndex));
+const checks = mountPixelMotionPanel(document.querySelector('#checks'),{
+  showSample:(index,at,finding)=>draw(index,finding),
+  clear() { overlayEpoch++; view.setDiagnostic(null,'motion'); }
+});
+checks.setSource(report,()=>report);
+document.querySelector('#checks details').open = true;
+draw(0);
+</script>
+</body>
+</html>

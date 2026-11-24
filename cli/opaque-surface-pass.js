@@ -51,8 +51,18 @@ function capture(w,h,input,depth,hits,selected) {
     if (!prior||!valid) continue;
     const old=mesh && prior.meshes.get(key)?.get(mesh.triangle);
     if (mesh&&!old) continue;
-    const point=mesh ? meshPoint(old,hit.weights,prior.camera,w,h) : cameraPoint(prior.camera.view,...hit.position);
-    const before=project(prior.camera,point,w,h);
+    let before;
+    if (old?.localProjection) {
+      const point=[0,1,2].map(k=>hit.weights.reduce((sum,weight,i)=>sum+weight*old.points[i][k],0));
+      const local=old.localProjection(...point), [, , depth]=cameraPoint(prior.camera.view,...point);
+      const units=local.w/prior.camera.focal;
+      const x=w*.5+local.x/units,y=h*.5-local.y/units;
+      if (depth>=prior.camera.near && units>0 && x>=0 && x<w && y>=0 && y<h)
+        before={x,y,depth,units};
+    } else {
+      const point=mesh ? meshPoint(old,hit.weights,prior.camera,w,h) : cameraPoint(prior.camera.view,...hit.position);
+      before=project(prior.camera,point,w,h);
+    }
     if (!before) continue;
     const q=Math.floor(before.y)*w+Math.floor(before.x);
     if (prior.keys[prior.ids[q]]!==key || Math.abs(prior.depth[q]-before.depth)>Math.max(.0001,before.units*1.25)) continue;

@@ -62,8 +62,8 @@
         const prepared=data===undefined?K.pixelStamps.prepare(source):null;
         paintPixels+=width*height*(prepared?.entries.length??1);
         check(paintPixels<=8*1024*1024,'stage paint exceeds the image budget');
-        const frames=prepared?prepared.entries.map(({slots})=>K.pixelStamps.image({
-          width,height,slots,palette:prepared.palette
+        const frames=prepared?prepared.entries.map(({slots,alpha})=>K.pixelStamps.image({
+          width,height,slots,alpha,palette:prepared.palette
         },{scenePalette,paletteRoles}).rgba):[P.raster.rgba({width,height,data,channels:source.channels}).data];
         textureCache.set(source,{ width,height,at:prepared?.at??(()=>0),frames });
       }

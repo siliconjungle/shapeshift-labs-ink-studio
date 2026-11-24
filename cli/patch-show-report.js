@@ -14,7 +14,7 @@ function showReport(config, rehearse) {
   }));
   const diagnostics = collect(config, cueLinks), outages = new Map();
   const graphLinks=[], outcomes={};
-  let inputMode;
+  let inputMode, liveUnderruns = 0;
   const video = { received: 0, repeated: 0, fallback: 0 };
   let rendered = 0, displayed = 0, assertionFailures = 0, frame = 0, endFrame = 0, unlogged = 0;
   const elapsed = () => performance.now() - began;
@@ -85,6 +85,12 @@ function showReport(config, rehearse) {
       append(graphLinks, { ...link, output, frame, status: 'observed' });
       diagnostics.observe(frame, output, link);
     },
+    liveUnderrun(gap, frame, sampleRate) {
+      liveUnderruns++;
+      diagnostics.issue('audio-underrun', { fromSample: gap.sample, toSample: gap.sample + 1,
+        resource: gap.resource, sourceSample: gap.sourceSample, sampleRate, evidence: 'live-onset' }, frame, frame + 1,
+        gap.beatId && { beatId: gap.beatId, fromFrame: frame, toFrame: frame + 1, alignment: 'audio-live' });
+    },
     interventionMode(mode) { inputMode = mode; },
     intervention(status, count = 1) { outcomes[status] = (outcomes[status] ?? 0) + count; },
     finish(reason, error) {
@@ -116,7 +122,7 @@ function showReport(config, rehearse) {
       const beatLinks = [...cueLinks.values()].filter(cue => cue.beatId).concat(graphLinks);
       return { format: 'ink-studio/patch-show-report', version: 1, event: 'show-report', mode: rehearse ? 'rehearsal' : 'show',
         reason, passed: reason === 'completed' && !slow && !offline && !assertionFailures && !Object.values(dropped).some(Boolean) &&
-          (!rehearse || !diagnostics.missedCues && !audioFailed),
+          (!rehearse || !diagnostics.missedCues && !audioFailed && !liveUnderruns),
         fps: config.fps, frameBudgetMs: 1000 / config.fps, slowMs: config.slowMs, elapsedMs: elapsed(),
         rendered, displayed, dropped, video, assertionFailures, sources: Object.fromEntries(sources),
         stages: Object.fromEntries([...stages].map(([name, { totalMs, ...entry }]) => [name, { ...entry, meanMs: totalMs / entry.samples }])),
@@ -124,6 +130,7 @@ function showReport(config, rehearse) {
         ...(beatLinks.length&&{beatLinks}),
         ...(storyDiagnostics && { storyDiagnostics }),
         ...(audioDiagnostics && { audioDiagnostics }),
+        ...(liveUnderruns && { liveAudioUnderruns: liveUnderruns }),
         ...(inputMode && { interventions: { mode: inputMode, outcomes } }),
         sourceEvents, presets, samples, unlogged, ...(error && { error: error.message }) };
     }

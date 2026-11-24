@@ -19,12 +19,13 @@ const argv = process.argv.slice(2),
   cmd = argv[0] || 'help',
   pos = [],
   opt = {};
+const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' ? ['json'] : [];
 for (let i = 1; i < argv.length; i++) {
   const a = argv[i];
   if (a.startsWith('--')) {
     const k = a.slice(2),
       v = argv[i + 1];
-    if (v === undefined || v.startsWith('--')) opt[k] = true;
+    if (switches.includes(k) || v === undefined || v.startsWith('--')) opt[k] = true;
     else {
       opt[k] = v;
       i++;
@@ -153,9 +154,12 @@ function dataScene(file, override, { installedPacks = false } = {}) {
   if (cacheDirectory !== undefined && (typeof cacheDirectory !== 'string' || !cacheDirectory.length))
     die('--asset-cache expects a directory');
   const bakeCache = cacheDirectory && require('./bake-cache.js').open(path.resolve(cacheDirectory), require('../index.js'), K.authoring.bakeCache);
-  const descriptor=K.diorama.scene(spec,{assets,prefabs,bakeCache,resolveSpriteAtlas});
+  const env={assets,prefabs,bakeCache,resolveSpriteAtlas};
+  const descriptor=K.diorama.scene(spec,env);
   const atlases=new Map();
-  return { ...descriptor, project: project?.metadata, lookPreviewPacks:spec.assetPacks, build(seed, options = {}) {
+  return { ...descriptor, project: project?.metadata, lookPreviewPacks:spec.assetPacks,
+    ...(source === raw && source.format === undefined && { openEditor: options => K.authoring.sceneEditor.create(spec,{ ...options,env }) }),
+    build(seed, options = {}) {
     const parameterTime = opt['parameter-time'] ?? (Number.isFinite(Number(opt.t)) ? opt.t : 0);
     const world=descriptor.build(seed, { ...options, parameterInputs: { time: Number(parameterTime), ...options.parameterInputs } });
     if (Array.isArray(world.spriteAtlases)) world.spriteAtlases=world.spriteAtlases.map(placement=>{
@@ -710,7 +714,22 @@ function sdfAssistOption() {
   if (value === undefined) return undefined;
   if (value === true || value === 'on') return true;
   if (value === 'off') return false;
+  if (value === 'posed') return {posed:true};
   return sdfAssistOverride ??= JSON.parse(fs.readFileSync(path.resolve(value), 'utf8'));
+}
+
+const renderAssetOverrides=new Map();
+function renderAssetOption(flag) {
+  const value=opt[flag];
+  if (value===undefined) return undefined;
+  if (value==='off') return false;
+  if (typeof value!=='string') die('--'+flag+' needs a JSON file or off');
+  const file=path.resolve(value);
+  if (!renderAssetOverrides.has(file)) {
+    shot?.dependency(file);
+    renderAssetOverrides.set(file,JSON.parse(fs.readFileSync(file,'utf8')));
+  }
+  return renderAssetOverrides.get(file);
 }
 
 let colorClustersOverride;
@@ -883,6 +902,16 @@ function bounceProbesOption() {
   return bounceProbesOverride ??= JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
+let artRulesOverride;
+function artRulesOption() {
+  if (artRulesOverride) return artRulesOverride;
+  const document = renderAssetOption('art-rules');
+  if (!document) return document;
+  const report = require('./pixel-art.js').artRulesReport(document,{ frame:opt['art-frame'],shot:opt['art-shot'] });
+  if (!report.definition) die('--art-rules needs a version 2 pixel document with artRules');
+  return artRulesOverride = report.scene;
+}
+
 const view = extra =>
   Object.assign(
     {
@@ -896,6 +925,7 @@ const view = extra =>
       stable: stabilityOption(),
       stableDetail: stableDetailOption(),
       edgeFilter: edgeFilterOption(),
+      assetArtRules: artRulesOption(),
       coverageFilter: coverageFilterOption(),
       surfaceHistory: surfaceHistoryOption(),
       protectedPixels: protectedPixelsOption(),
@@ -955,6 +985,10 @@ const view = extra =>
         { mode: opt['render-grid'], size: num('grid-size', 8), angle: num('grid-angle', 0),
           aspect: num('grid-aspect', 1), gap: num('grid-gap', 0), origin: list('grid-origin', [0, 0]) },
       sdfAssist: sdfAssistOption(),
+      multiprojection: renderAssetOption('multiprojection'),
+      tracedLighting: renderAssetOption('traced-lighting'),
+      splatFit: renderAssetOption('splat-fit'),
+      shotCorrections: renderAssetOption('shot-corrections'),
       stableTransparency: opt['stable-transparency'] === 'blend' ? { mode: 'blend' } : onOffOption('stable-transparency'),
       fragmentBudget: num('fragment-budget'),
       inspection: opt.inspection === 'off' ? false : opt.inspection === undefined ? undefined :
@@ -1154,10 +1188,10 @@ const CMD = {
     process.once('SIGTERM', stop);
   },
   help() {
-    console.log(
-      [
+    const lines = [
         'ink-studio <command> <diorama id | lab/file.js> [options]',
         '',
+        '  help [--json]   list commands and shared options',
         '  paint mix|ramp|table|swatches <file.json> [--out file.json]   mix pigments or bake colors',
         '  hierarchy <graph.json> [--node id] [--parent id|world] [--out file.json]   inspect or reparent live scene nodes',
         '  curve <family.json> [--distance n] [--text INK] [--out file.json]   sample reusable curve families',
@@ -1296,12 +1330,17 @@ const CMD = {
         '  scenes                      list every diorama',
         '  show-bridge [--port 8181] [--osc-in 9002]   open live audio, timecode, stage and projection control',
         '    --dmx-host IP --dmx-protocol artnet|sacn --universe N   configure a physical lighting destination',
-        '  catalog [words]             what the toolkit can do, searchable',
+        '  catalog [words] [--full] [--json] [--all]   search features or the complete public reference',
         '  stats <id>                  splat counts, colours used, size, cost per frame, warnings',
         '  render <id> [--t 1.5]       one PNG rendered on the CPU',
         '  bounce-probes bake <scene> [--bounce-probes settings.json] --out probes.json',
         '  bounce-probes sample <scene> --at x,y,z --normal x,y,z [--bounce-probes probes.json]',
         '  bounce-probes review <scene> --out directory [--from 0 --to 3 --fps 12 --w 184 --h 112]',
+        '  traced-lighting <scene> --out asset.json [--plan settings.json --t 0 --samples 32 --bounces 2]',
+        '  splat-fit <scene> --plan approvals.json --out asset.json',
+        '  render/clip --shot-corrections file.json|off   load or bypass native shot corrections',
+        '  render or clip --multiprojection plan.json   use local projection for named mesh surfaces',
+        '  path-ink <scene> --plan look.json --out frame.png [--t 0 | --from 0 --to 2 --fps 12]',
         '  sdf-reference <scene> --out directory [--t 0,1.2 --w 192 --h 120 --samples 32 --bounces 3]',
         '  pose-correctives capture <scene> --plan sculpt.json --t 1 --out correction.json',
         '  pose-correctives review <scene> --out directory [--from 0 --to 2.4 --fps 10]',
@@ -1310,6 +1349,8 @@ const CMD = {
         '  render/clip --volume-scale 3 --volume-reconstruction object|depth|lighting   choose a coarse fog reconstruction',
         '  render/clip --volume-stochastic 4 --volume-stochastic-history 12   trial sparse scattering in one static fog field',
         '  render-suite [--scene gatehouse|signal-coil|night] [--profile file.json] [--out directory]   compare matched art-grid renders',
+        '  canvas-grid-check [<plan.json>] [--chrome executable] [--hardware] [--out directory] [--fail-on-flags]',
+        '    Check pixel widths and slow pans in the browser at several viewport sizes and device pixel ratios.',
         '  fog-reconstruction review <scene> --out directory [--subject object-id --volume-scale 4 --from 0 --to 2.4 --fps 10]',
         '  render/clip --dynamic-bounce off   reuse the baked probes without sampling moving sources',
         '  render <id> --palette-constraints <file.json|off>   override target palettes and dither settings',
@@ -1333,6 +1374,7 @@ const CMD = {
         '  clip <id> [--from 0 --to 6 --fps 12]   animated PNG (also --text, --feedback-fps 24, --feedback-cuts 2.5,4)',
         '    --camera-pan x,y,z --camera-orbit degrees --px 1   review slow camera motion at native art resolution',
         '    --camera-orbit-offset yaw,pitch                  offset the authored orbit in degrees',
+        '  clip <scene> --pixel-boundaries settings.json --px 1 --w N --h N --out shot.png',
         '  reel <manifest.json> [--out reel.html] [--clean]   export selected captures as an offline reel',
         '  ghost <id> [--t 2 --spacing 0.12 --n 2 | --ghosts 1.6,1.8]   one moment with those either side laid faintly over it',
         '  acts                        the ready clips, reactions, easings and cues, by name',
@@ -1366,6 +1408,46 @@ const CMD = {
         '  paint layers|tune|clear <id> [--layer name]  list, adjust or clear corrections',
         '  paint cause <id> <recipe.json> [--events <run.json>] [--replace]   bake geometry or committed events into paint layers',
         '    layer controls: --angle degrees --feather degrees --opacity fraction --region JSON|file|off',
+        '  pixel-art capture <scene> --out view.json [--view-id id] [--w n --h n --t seconds] [--at x,y]   save the camera and native source passes',
+        '  pixel-art trace <scene> --subject object-id --out directory   save a native underdrawing and its source view',
+        '  pixel-art palette export <document.json> --out palette.json',
+        '  pixel-art palette extract <image.png|document.json> --out palette.json [--size 32] [--alpha visible|opaque|all]',
+        '  pixel-art palette import <document.json> <palette.json> --out revised.json',
+        '    edit operations: palette swatch, palette remap-indices, or raster replace-swatch in a saved selection',
+        '  pixel-art import <image.png> --out document.json   open indexed or RGBA PNG as editable pixels',
+        '  pixel-art upgrade <design.json> --out <document.json>   open a legacy drawing as editable cels',
+        '  pixel-art validate <design.json>           validate the versioned document and each frame',
+        '  pixel-art targets <design.json> --destination id --scene <bound scene>   list stable scene targets',
+        '  pixel-art preview <design.json> <edit.json> [--scene <bound scene>]   report a proposed edit and its conflicts',
+        '  pixel-art canvas <design.json> --out canvas.html [--frame id] [--scene scene.json | --source-view view.json] [--binding id] [--destination ids] [--at x,y]   inspect the cursor and optional pinned scene pixel',
+        '  pixel-art sample <design.json> --at x,y [--mode composite|layer|source]   sample art or a bound material channel',
+        '  pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id] [--scene path]   resolve a native selection, including scoped bindings',
+        '  pixel-art copy <design.json> --selection id [--frame id] --layer id|--cel id   print a pixel clipboard',
+        '  pixel-art brush <design.json> --selection id|--rect x,y,w,h --out brush.json   capture a portable indexed brush',
+        '    dynamics options: --stabilization ms --pressure light,full --velocity pxPerSecond,slow,fast',
+        '  pixel-art snap <design.json> --at x,y [--frame id] [--radius pixels]   resolve document guides',
+        '  pixel-art motion <design.json> [--plan plan.json] [--layer id] [--out report.json] [--review review.html]   check native animation samples',
+        '  pixel-art motion <scene> --views plan.json [--subject object] [--w n --h n] [--out report.json] [--review review.html]   check authored views',
+        '  pixel-art track <document.json> --selection id --binding id --views plan.json [--out report.json] [--review review.html]   track a bound selection',
+        '  pixel-art reprobe <document.json> --binding id --before view.json [--after view.json] --selection id|--rect x,y,w,h [--out report.json] [--invalidate checked.json]   check edited source bindings',
+        '  pixel-art rules <design.json> [--frame id] [--layer id] [--art-shot id] [--out report.json]   inspect asset art rules and scene settings',
+        '  pixel-art lint <design.json> [--frame id] [--art-shot id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings',
+        '  pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint',
+        '  pixel-art inspect <design.json> --at x,y [--frame id] [--scene scene.json | --source-view view.json] [--binding id] [--destination ids] [--references] [--out report.json]   show pixel contributors',
+        '  pixel-art edit <design.json> [--frame id]   work on a native indexed frame',
+        '  pixel-art edit <design.json> <edit.json> --out result.json   write an edit and print its receipt',
+        '  pixel-art stack export <document.json> --out deck.json   open in the layer Workshop',
+        '  pixel-art stack import <deck.json> --out document.json',
+        '    art-rules destination: set or remove versioned art rule profiles and scopes',
+        '    protection destination: set or remove named pixel locks across frames',
+        '    layers destination: add, update, reorder, set-cel, remove, merge-down, flatten-group, and flatten',
+        '    raster cleanup tool: stair, fragment, outline, and cluster within a selection',
+        '    adjustments destination: curves, hue-saturation, gradient, replace, dither, and outline by scope',
+        '    canvas destination: crop, trim, pad, resize, or resample all frames',
+        '  pixel-art replay <design.json> <receipt.json> --out result.json   verify and reproduce an edit with the same options',
+        '            --scene <bound scene> for native edits; --shot-hit-frame <index> to sample skipped shot hits',
+        '  pixel-art session init <directory> <design.json> [--scene scene.json]   start a persistent edit session',
+        '  pixel-art session <status|begin|apply|preview|commit|cancel|undo|redo|inspect|sample|select|snap|brush|copy|targets|export> <directory>',
         '  lint <id ...> [--map]              pixel-art lint: orphans, doubles, jaggies, banding, pillow shading, noise, colours',
         '  review <id> [--ref pic --px 2]     a sheet of fixed shots (four sides, top, low, far, near, close), beside the last one',
         '  sweep <scene> <plan.json> --out directory   render still and clip contact sheets across settings and seeds',
@@ -1430,6 +1512,7 @@ const CMD = {
         '  '+require('./music-sound-recipe.js').mutationUsage+'   generate a bounded family of one-shots',
         '  '+require('./music-sound-recipe.js').replayUsage+'   rebuild a kept sound audition',
         ...require('./room-impulse-capture.js').usage.map(line=>'  '+line),
+        ...require('./output-latency.js').usage.map(line => '  ' + line),
         '  '+require('./world-sound-pack.js').usage,
         '  '+require('./world-sound-pack.js').auditionUsage,
         '  music instrument analyze|audition|build recipe.json --out path   turn a take bank into labeled playable zones',
@@ -1519,6 +1602,7 @@ const CMD = {
         '  music reference <plan.json> --part ID --section ID [--out motif.json]   recover an audition idea',
         '  patch help   edit, wire, inspect and run typed audiovisual patches from the CLI',
         '  story validate|describe|preview <file.json> [story-id]   validate or inspect versioned story definitions',
+        '  story help   list story commands',
         '  story describe <file.json> [story-id] --inventory      list role schemas and required interfaces',
         '  story preview <file.json> [story-id] [--format json|text|dot] [--out file] [--strict]   export potential story routes',
         '  story instantiate <template.json|story-pack-bundle> <instance.json> [--template ID]',
@@ -1542,9 +1626,7 @@ const CMD = {
         '  story shots <recording> [--timeline file --story id/name --from-tick N --to-tick N --limit N --out plan.json]',
         '  story shots-review <recording> <plan.json> --out directory [--all --w N --h N]',
         '  sim cast <world|checkpoint|run> --spec casting.json   explain who qualifies for a story role',
-        '  patch show <cues.json> [--rehearse] [--report file]   run a cue-driven patch on a projector',
-        '    [--record-interventions journal.ndjson [--intervention-input <recording.json|->]]',
-        '  '+require('./patch-choice-replay.js').usage.replace('ink-studio ',''),
+        ...require('./patch-cli.js').usage.split('\n').map(line => '  ' + line.replace(/^ink-studio /, '')),
         '  graph nodes [--json]   list registered graph operations and their ports',
         '  graph describe <op> [--json | --example]   show schema, units, limits and a runnable example',
         '  graph validate|plan <project.json> [--inputs values.json]   validate and describe a headless graph',
@@ -1582,6 +1664,7 @@ const CMD = {
         '  take blind-review-score <review-key.json> <ballots-directory> --out directory   compare action, cause and impact by version',
         '  take approve-audio <plan.json> --out report.json   check decoded audio for timing, true peak and loop seams',
         '  take approve-video <plan.json> --out directory   check decoded video for palette, accent and flicker damage',
+        '  take review-flashes <plan.json> --out directory   trace composited and decoded flashes and verify a reduced-flicker preview',
         '  take check-sync <recipe.json> [--out report.json] [--fail-on-flags]   compare visible contact and rendered attack',
         '  timeline <scene> [--at seconds] [--from seconds --to seconds] [--out report.json]  sample tracks and export cues',
         '  authored-contacts <id> [--at seconds] [--out report.json]  inspect contact ranges and socket transfer timing',
@@ -1604,12 +1687,14 @@ const CMD = {
         '  export-scene <scene|world|take> --out directory [--formats still,loop,replay,embed]',
         '    --audio soundtrack.json [--mux CODEC --adapters host.cjs]   export aligned WAV stems and optional video',
         '    --loop-join   inspect the actual frame join and excluded endpoint on a clip or scene export',
+        '    export.json includes WebGL compatibility across sampled frames',
         '    --w width --h height --still-scale 2 --t seconds --from 0 --to 2 --fps 12 --embed-config file.json',
         '  scene-replay <recording.json> --out output.png [--at seconds]   save a frame from a replay',
         '  scene-replay <recording.json> --embed --out embed.html [--embed-config file.json]   package a replay for the web',
         '  project pack <scene|take|experiment|story-pack|story-run.json> --out <bundle.json> [--root directory --revision N]',
         '    [--asset-pack file --paint file --attachments file]',
         '  project inspect <bundle.json>   show the bundle version, entry path and retained files',
+        ...require('./agent-project.js').usages.map(line => '  ' + line),
         '  assets lock <draft.json> --out catalog.json | assets validate <catalog.json> | assets resolve <catalog.json> <ID> <revision>',
         '  render @namespace/scene@revision --asset-registry catalog.json   render a pinned scene',
         '  project unpack <bundle.json> --out new-directory   extract a portable project',
@@ -1676,10 +1761,16 @@ const CMD = {
         'staging: --fov radians | --focal-length mm [--sensor-height mm] --focus-distance units --composition u,v --camera-staging on|off|file.json --camera-guides [on|off] --depth-of-field [on|off]',
         'art direction: --art-direction on|off|painted-pixel|storm-silhouette|soft-dawn|file.json',
         'shared rendering: --strict-contract [on|off] --step-animation [on|off]',
+        '  render <id> --compatibility-report [on|off]   save WebGL compatibility beside the preview',
+        '  clip <id> --compatibility-report [on|off]   save WebGL compatibility across the previewed frames',
         'effect palette options: --effect-palettes on|off|file.json',
-        'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink on|off|file.json --ink-shot file.json --effects off --emissive-finishes off --stable on|off|file.json --stable-detail on|off|file.json --coverage-filter on|off|file.json --surface-history on|off|file.json --protected-pixels on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --area-lights on|off|file.json --bounce-probes on|off|file.json --snap on|off --dither-space screen|world|object|view --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface|selective --transparency-settings file.json --splat-coverage legacy|continuous|soft --splat-footprints on|off --palette-sampling off --semantic-mipmaps off --simulation-material-layers off --relief-lod auto|geometry|normal|painted|off --render-grid hex|triangle|diamond|off --grid-size 8 --grid-angle 0 --grid-aspect 1 --grid-gap 0 --grid-origin x,y --sdf-assist on|off|file.json --surface-decals off --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --cutaway file.json|off --render-graph file.json|off --shutter on|off|file.json --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
-      ].join('\n')
-    );
+        'asset art rules: --art-rules design.json [--art-frame id] [--art-shot id]',
+        'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink on|off|file.json --ink-shot file.json --effects off --emissive-finishes off --stable on|off|file.json --stable-detail on|off|file.json --coverage-filter on|off|file.json --surface-history on|off|file.json --protected-pixels on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --area-lights on|off|file.json --bounce-probes on|off|file.json --snap on|off --dither-space screen|world|object|view --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface|selective --transparency-settings file.json --splat-coverage legacy|continuous|soft --splat-footprints on|off --palette-sampling off --semantic-mipmaps off --simulation-material-layers off --relief-lod auto|geometry|normal|painted|off --render-grid hex|triangle|diamond|off --grid-size 8 --grid-angle 0 --grid-aspect 1 --grid-gap 0 --grid-origin x,y --sdf-assist on|posed|off|file.json --traced-lighting file.json|off --splat-fit file.json|off --surface-decals off --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --cutaway file.json|off --render-graph file.json|off --shutter on|off|file.json --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
+    ];
+    if (opt.json) {
+      const commands = [...Object.keys(CMD), ...worldCommands].sort();
+      console.log(JSON.stringify({ commands, lines }, null, 2));
+    } else console.log(lines.join('\n'));
   },
   hierarchy() {
     return require('./hierarchy.js')(pos,opt,lib());
@@ -2135,6 +2226,94 @@ const CMD = {
     fs.writeFileSync(file,JSON.stringify(data,null,2)+'\n');
     console.log('baked',data.probes.length,'bounce probes to',file);
   },
+  'traced-lighting'() {
+    if (pos.length!==1 || typeof opt.out!=='string' || opt.plan!==undefined && typeof opt.plan!=='string')
+      die('Use traced-lighting <scene> --out asset.json [--plan settings.json --t 0]');
+    const file=outputFile('traced-lighting.json'), plan=opt.plan && path.resolve(opt.plan);
+    if (file===path.resolve(pos[0]) || file===plan) die('Write traced lighting separately from its inputs');
+    const {bake}=require('./traced-lighting.js'), settings=plan ? JSON.parse(fs.readFileSync(plan,'utf8')) : {};
+    const t=num('t',0);
+    if (!Number.isFinite(t) || t<0 || t>3600) die('Traced lighting needs a valid scene time');
+    const world=buildPreview(pos[0],{retainReferenceSdf:true});
+    pose(world,t);
+    const options=view({ w:96,h:64,t,px:1,renderGraph:false,renderGrid:false,inspection:false,
+      composite:false,tracedLighting:false,splatFit:false,sdfAssist:false });
+    let camera;
+    R.render(world,{...options,...R.cameraCapture(options,value=>{camera=value;})});
+    const asset=bake(world,options,camera,{...settings,samples:num('samples',settings.samples),
+      bounces:num('bounces',settings.bounces),spacing:num('spacing',settings.spacing)});
+    require('./asset-files.js').json(file,asset);
+    console.log('Baked',asset.stats.litSites,'traced lighting sites to',file);
+  },
+  'splat-fit'() {
+    if (pos.length!==1 || typeof opt.out!=='string' || typeof opt.plan!=='string')
+      die('Use splat-fit <scene> --plan approvals.json --out asset.json');
+    const file=outputFile('splat-fit.json'), plan=path.resolve(opt.plan);
+    if (file===path.resolve(pos[0]) || file===plan) die('Write splat fit separately from its inputs');
+    const {views,...settings}=JSON.parse(fs.readFileSync(plan,'utf8'));
+    if (!Array.isArray(views) || !views.length) die('Splat fit needs approval views');
+    const inputPath=name=>{
+      if (typeof name!=='string') throw new TypeError('Splat fit reference must name a file');
+      const input=path.resolve(path.dirname(plan),name);
+      if (input===file) die('Write splat fit separately from its reference images');
+      return input;
+    };
+    const load=image=>require('./png.js').raster(inputPath(image));
+    const loadDepth=name=>{
+      const input=inputPath(name), count=settings.width*settings.height;
+      if (!Number.isSafeInteger(count) || count<64 || count>512**2 || fs.statSync(input).size!==count*4)
+        throw new RangeError('Splat fit depth needs a native-grid depth.f32le file');
+      const bytes=fs.readFileSync(input);
+      return Float32Array.from({length:count},(_,i)=>bytes.readFloatLE(i*4));
+    };
+    const asset=require('./splat-fit.js').fit(buildPreview(pos[0],{retainSdf:true}),{...settings,pose,view,
+      views:views.map(entry=>({...entry,reference:load(entry.reference),mask:entry.mask && load(entry.mask),
+        ...(entry.depth!==undefined && {depth:loadDepth(entry.depth)}),
+        ...Object.fromEntries(['normal','pigment','pins'].filter(key=>entry[key]!==undefined).map(key=>[key,load(entry[key])]))}))});
+    require('./asset-files.js').json(file,asset);
+    const {resized,omitted,reshaped,repainted,validation}=asset.report;
+    console.log('Resized',resized,'and omitted',omitted,'splats.',
+      ...(reshaped!==undefined ? ['Reshaped',reshaped,'and repainted',repainted,'splats.'] : []),'Wrote',file);
+    if (validation) console.log(validation.passed?'Passed':'Regressed on',validation.views,'held-out view(s).');
+  },
+  'path-ink'() {
+    if (pos.length!==1 || typeof opt.out!=='string' || !/\.png$/i.test(opt.out) ||
+        opt.plan!==undefined && typeof opt.plan!=='string' || artPixelSize!==undefined && artPixelSize!==1)
+      die('Use path-ink <scene> [--plan look.json] --out frame.png [--t 0 | --from 0 --to 2 --fps 12]');
+    const sequence=opt.to!==undefined || opt.from!==undefined || opt.fps!==undefined;
+    const from=num(sequence?'from':'t',0), fps=num('fps',12), to=num('to',from+1);
+    if (!Number.isFinite(from) || from<0 || from>3600 ||
+        (sequence && (opt.t!==undefined || !Number.isFinite(to) || to<=from || to>3600 ||
+        !Number.isFinite(fps) || fps<1 || fps>60)))
+      die('Path ink needs a finite still time or a forward clip range at 1–60 FPS');
+    const n=sequence ? Math.max(2,Math.round((to-from)*fps)) : 1;
+    const file=outputFile('path-ink.png'), plan=opt.plan && path.resolve(opt.plan);
+    const reportFile=file.replace(/\.png$/i,'')+'.path-ink.json';
+    if ([file,reportFile].some(destination=>destination===path.resolve(pos[0]) || destination===plan))
+      die('Write path ink outputs separately from their inputs');
+    const api=require('./path-ink-render.js');
+    const settings=api.settings({width:num('w',176),height:num('h',128),samples:num('samples',32),
+      bounces:num('bounces',1),steps:num('steps',144),epsilon:num('epsilon',.001),seed:num('trace-seed',1),
+      exposure:num('reference-exposure',1)},n);
+    const world=buildPreview(pos[0],{retainReferenceSdf:true}), camera=clipCamera(world);
+    const pathInk=plan ? JSON.parse(fs.readFileSync(plan,'utf8')) : world.look?.pathInk;
+    if (!pathInk) die('Path ink needs a scene look or --plan');
+    const finish=outputFinish(), frames=[], report=[];
+    for (let i=0;i<n;i++) {
+      const t=from+(sequence ? i/fps : 0);
+      pose(world,t);
+      const frame=api.renderPathInk(world,view({t,...camera?.(sequence ? i/(n-1) : 0),pathInk}),settings);
+      report.push({time:t,...frame.stats});
+      frames.push(finish(frame));
+    }
+    if (sequence) {
+      fs.mkdirSync(path.dirname(file),{recursive:true});
+      PNG.animate(file,frames,fps);
+    } else require('./asset-files.js').write(file,PNG.encode(settings.width,settings.height,frames[0].rgb));
+    require('./asset-files.js').json(reportFile,{format:'ink-studio/path-ink',version:1,settings,
+      ...(sequence && {fps}),frames:report});
+    console.log('Wrote',n,'path ink frame(s) to',file);
+  },
   'sdf-reference'() {
     if (pos.length !== 1 || typeof opt.out !== 'string' ||
         opt.t !== undefined && (typeof opt.t !== 'string' || opt.t.split(',').some(value=>!value.trim())))
@@ -2325,6 +2504,7 @@ const CMD = {
     for (const s of lib().SCENES) console.log(s.id.padEnd(12), s.name.padEnd(20), s.blurb);
   },
   catalog() {
+    if (opt.all) return require('./reference-search.js').print(pos, opt);
     const cat = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'catalog.json'), 'utf8')),
       words = pos.map(s => s.toLowerCase());
     const hit = e =>
@@ -2334,6 +2514,10 @@ const CMD = {
             .includes(w)
         ),
       found = cat.entries.filter(hit);
+    if (opt.json) {
+      console.log(JSON.stringify({ ...cat, entries: found }, null, 2));
+      return;
+    }
     if (found.length === 1 || opt.full)
       for (const e of found)
         console.log(
@@ -2604,6 +2788,7 @@ const CMD = {
     Shot.replay(pos[1],{out:opt.out,root:opt.root,entry:__filename});
   },
   render() {
+    const Compatibility = require('./scene-compatibility.js');
     const finishOutput = outputFinish();
     const w = buildPreview(), diagnostics = previewPasses(),
       t = num('t', 0);
@@ -2616,10 +2801,15 @@ const CMD = {
         [outputFile(w.id+'.png'),path.resolve(pos[0]),opt['transparency-settings'] && path.resolve(opt['transparency-settings']),
           report && path.resolve(report),opt.recipe && path.resolve(opt.recipe)].includes(path.resolve(transparencyReport))))
       die('--transparency-report needs a separate JSON output path');
-    shot?.destination(outputFile(w.id+'.png'),suffixes);
+    const output = outputFile(w.id+'.png');
+    const compatibilityFile = onOffOption('compatibility-report') &&
+      Compatibility.sidecar(output, pos[0], report, transparencyReport, opt.recipe);
+    if (compatibilityFile) suffixes.push(Compatibility.suffix);
+    shot?.destination(output, suffixes);
     pose(w, t);
     const t0 = Date.now(),
-      im = R.render(w, view({ t, ...diagnostics?.settings, ...(report&&{renderStats:true}) }));
+      im = R.render(w, view({ t, ...diagnostics?.settings, ...(report&&{renderStats:true}), captureCompatibility: true }));
+    Compatibility.preview(im.compatibility, compatibilityFile);
     if(report)require('./asset-files.js').json(path.resolve(report),{
       scene:w.id,time:t,width:im.w,height:im.h,
       receivers:im.renderStats?.reflectionSources?.receivers??[],planarCaptures:im.renderStats?.planarCaptures??0,
@@ -2640,9 +2830,9 @@ const CMD = {
       shot?.finish(f,{suffixes});
       return;
     }
-    const output = save(w.id + '.png', R.upscale(finishOutput(im), opt.px1 ? 1 : im.px));
-    diagnostics?.write(output, { times: [t] });
-    shot?.finish(output,{suffixes});
+    const file = save(w.id + '.png', R.upscale(finishOutput(im), opt.px1 ? 1 : im.px));
+    diagnostics?.write(file, { times: [t] });
+    shot?.finish(file,{suffixes});
   },
   sweep() {
     const sweeps = require('./visual-sweep.js');
@@ -2978,6 +3168,9 @@ const CMD = {
   'effect-clip'() {
     return require('./effect-clip-command.js').command(pos,opt,{kit:lib(),operations:cfg.graphOperations,adapters:cfg.graphAdapters});
   },
+  'output-latency'() {
+    return require('./output-latency.js').command(pos, opt, lib());
+  },
   'room-impulse'() {
     console.log(JSON.stringify(require('./room-impulse-capture.js').run(pos,opt),null,2));
   },
@@ -3132,6 +3325,23 @@ const CMD = {
       console.log(id,webgl,'visible curve spans,',groups.shoots.attached,'attached clay shoots');
     console.log('wrote',directory);
   },
+  async 'canvas-grid-check'() {
+    if (pos.length > 1 || opt.out === true || opt.chrome === true)
+      die('Use canvas-grid-check [<plan.json>] [--chrome executable] [--hardware] [--out directory] [--fail-on-flags]');
+    const directory = outputFile('canvas-grid-check'), planFile = pos[0] && path.resolve(pos[0]);
+    if (planFile === path.join(directory, 'report.json')) die('Choose an output directory separate from the canvas grid plan');
+    const report = await require('./canvas-grid-check.js').run(directory, {
+      ...(planFile && { plan: JSON.parse(fs.readFileSync(planFile, 'utf8')), root: path.dirname(planFile) }),
+      chrome: opt.chrome, hardware: opt.hardware,
+      onCase({ viewport, flags }) {
+        const kinds = [...new Set(flags.map(flag => flag.kind))];
+        console.log(viewport.width + '×' + viewport.height, 'at DPR', viewport.dpr,
+          kinds.length ? kinds.join(', ') : 'clean');
+      }
+    });
+    console.log('wrote', directory);
+    if (opt['fail-on-flags'] && report.cases.some(result => result.flags.length)) process.exitCode = 2;
+  },
   'render-suite'() {
     if (pos.length) die('Use render-suite [--scene gatehouse|signal-coil|night] [--profile file.json] [--out directory]');
     const directory = outputFile('render-suite');
@@ -3283,9 +3493,9 @@ const CMD = {
     const host = await require('./graph-host-command.js').adapters(opt.adapters, {
       kit, operations: cfg.graphOperations, adapters: cfg.graphAdapters
     });
-    return require('./project-bundle.js').withTakeSource(pos[0], source => {
+    return require('./agent-project.js').withExportSource(pos[0], (source, bundledAudio) => {
       const native = require('./scene-export-world.js').readExportWorld(source, kit);
-      const soundtrack = opt.audio ?? native?.audio;
+      const soundtrack = opt.audio ?? native?.audio ?? bundledAudio;
       if (opt.mux !== undefined && soundtrack === undefined) die('A review mux needs a take soundtrack or --audio');
       const audio = soundtrack === undefined ? undefined : require('./scene-audio.js').readSceneAudio(soundtrack, { ...host, jointPriority:jointPriorityOption() });
       const video = opt.mux === undefined ? undefined : require('./graph-host.js').createGraphHost(host.adapters, { kit });
@@ -3293,12 +3503,11 @@ const CMD = {
       const fpsText = opt.fps, fraction = typeof fpsText === 'string' && /^(\d+)\/(\d+)$/.exec(fpsText);
       const fps = fraction ? { numerator: Number(fraction[1]), denominator: Number(fraction[2]) } :
         fpsText === undefined ? native?.fps ?? 12 : Number(fpsText);
-      const { file } = require('./scene-export.js').exportScene(({ width, height, moving, from }) => {
-        if (native) return native.capture({ width, height, from, render: R.render,
-          options: view({ ...(moving && sequenceHistory()), transparent, ...(opt.px1 && { px: 1 }) }) });
-        const world = buildPreview(source, { parameterInputs: { time: num('parameter-time', from) } });
-        const frame = view({ ...(moving && sequenceHistory()), w: width, h: height, transparent,
+      const { file, manifest } = require('./scene-export.js').exportScene(({ width, height, moving, from }) => {
+        const frame = view({ ...(moving && sequenceHistory()), w: width, h: height, transparent, captureCompatibility: true,
           ...(opt.px1 && { px: 1 }) });
+        if (native) return native.capture({ width, height, from, render: R.render, options: frame });
+        const world = buildPreview(source, { parameterInputs: { time: num('parameter-time', from) } });
         const camera = moving ? clipCamera(world) : null, replay = moving ? feedbackReplay(world, from, frame) : null;
         return {
           scene: world.id, title: world.name, timeline: world.timeline,
@@ -3318,6 +3527,7 @@ const CMD = {
         width: num('w', 640), height: num('h', 360), fps, from: num('from', 0), to: num('to'),
         stillScale: num('still-scale', 2), stillTime: num('t'), loopJoin: onOffOption('loop-join'), kit, audio,
         ...(video && { mux: payload => video.mux(opt.mux, payload) }) });
+      require('./scene-compatibility.js').warn(manifest.compatibility);
       console.log('wrote', file);
     });
   },
@@ -3338,8 +3548,9 @@ const CMD = {
   },
   async project() {
     const [mode, input] = pos, api = require('./project-bundle.js');
+    if (mode === 'author') return require('./agent-project.js').command(pos.slice(1), opt);
     if (pos.length !== 2 || !['pack', 'inspect', 'unpack', 'verify'].includes(mode))
-      die('Use project pack, inspect, unpack or verify with a JSON document');
+      die('Use project pack, inspect, unpack, verify or author with a JSON document');
     if (mode === 'unpack') {
       const { entry } = api.unpackProject(input, { out: opt.out });
       console.log('unpacked', entry);
@@ -3689,6 +3900,7 @@ const CMD = {
     save(w.id + '-turn.png', R.grid(imgs, num('cols', 4), labs));
   },
   clip() {
+    const Compatibility = require('./scene-compatibility.js'), compatibility = Compatibility.collect();
     const finishOutput = outputFinish();
     const join = onOffOption('loop-join') && require('./loop-join.js');
     const w = buildPreview(), diagnostics = previewPasses(),
@@ -3699,27 +3911,58 @@ const CMD = {
       n = Math.max(2, Math.round((to - from) * fps)),
       frames = [], ts = [], camera = clipCamera(w),
       f = outputFile(w.id+'-clip.png');
-    const suffixes = [...reviewSidecars(diagnostics), ...(join ? join.suffixes : [])];
+    const boundaryFile=opt['pixel-boundaries'];
+    if (boundaryFile!==undefined && typeof boundaryFile!=='string')
+      die('--pixel-boundaries needs a shot settings JSON file');
+    const boundaryPath=boundaryFile && path.resolve(boundaryFile);
+    const boundaryReport=f.replace(/\.(?:a?png)$/i,'')+'.boundaries.json';
+    if (boundaryPath===f || boundaryPath===boundaryReport) die('Write boundary output separately from its settings');
+    if (boundaryPath) shot?.dependency(boundaryPath);
+    const suffixes = [...reviewSidecars(diagnostics), ...(join ? join.suffixes : []), ...(boundaryPath ? ['.boundaries.json'] : [])];
+    const compatibilityFile = onOffOption('compatibility-report') && Compatibility.sidecar(f, pos[0], boundaryPath, opt.recipe);
+    if (compatibilityFile) suffixes.push(Compatibility.suffix);
     shot?.destination(f,suffixes);
     const frame = { ...sequenceHistory(),
       w: num('w', 600), h: num('h', 420) };
     const replay = feedbackReplay(w, from, view(frame));
-    function draw(t, resetRenderHistory, fraction = Math.max(0, Math.min(1, (t - from) * fps / (n - 1)))) {
+    function draw(t, resetRenderHistory, fraction = Math.max(0, Math.min(1, (t - from) * fps / (n - 1))), overrides={}) {
       pose(w, t);
-      return R.render(w, view({ ...frame, t, resetRenderHistory, ...camera?.(fraction), ...diagnostics?.settings }));
+      return R.render(w, view({ ...frame, t, resetRenderHistory, ...camera?.(fraction), ...diagnostics?.settings, ...overrides, captureCompatibility: true }));
     }
-    for (let k = 0; k < n; k++) {
-      const t = from + k / fps;
-      const im = replay ? R.sequenceOutput(frame, ()=>replay.sample(t, draw)) : draw(t, undefined, k / (n - 1));
+    function deliver(im,t) {
       diagnostics?.capture(im, opt.px1 ? 1 : im.px);
+      compatibility.sequence(im.compatibility, t, ts.length);
       ts.push(t);
       frames.push(displayFrame(finishOutput(im), w));
+    }
+    let boundaries;
+    if (boundaryPath) {
+      const opts=view(frame);
+      if (replay || w.anim?.stateful || join || opts.shutter || opts.renderGraph || opts.composite ||
+          (opts.shutter ?? w.look?.shutter) || (opts.renderGraph ?? w.look?.renderGraph) ||
+          (opts.composite ?? w.look?.composite) || opts.renderGrid || (opts.renderGrid ?? w.look?.renderGrid) ||
+          artPixelSize!==undefined && artPixelSize!==1 || opt.text)
+        die('Pixel boundaries need a seekable native raster clip without shutter, render graph, composite, grid, loop analysis, or text output');
+      const analyze=(k,overrides,lane,passes)=>{
+        const t=from+k/fps;
+        if (lane==='native') pose(w,t);
+        return R.render(w,view({t,...camera?.(k/(n-1)),...overrides,passes}));
+      };
+      boundaries=require('./pixel-boundary-shot.js').shot({width:frame.w,height:frame.h,count:n,
+        settings:JSON.parse(fs.readFileSync(boundaryPath,'utf8')),draw:analyze,
+        output(k,overrides) { deliver(draw(from+k/fps,undefined,k/(n-1),{px:1,...overrides}),from+k/fps); }
+      });
+    } else for (let k = 0; k < n; k++) {
+      const t = from + k / fps;
+      deliver(replay ? R.sequenceOutput(frame, ()=>replay.sample(t, draw)) : draw(t, undefined, k / (n - 1)),t);
     }
     const end = from + n / fps;
     const audit = join && join.inspect({ first: frames[0], penultimate: frames[n - 2], last: frames[n - 1],
       endpoint: displayFrame(finishOutput(replay ? replay.sample(end, draw) : draw(end, undefined, 1)), w), from, fps, count: n });
     fs.mkdirSync(path.dirname(f), { recursive: true });
     PNG.animate(f, frames, fps);
+    Compatibility.preview(compatibility.report(), compatibilityFile);
+    if (boundaries) require('./asset-files.js').json(boundaryReport,{...boundaries,times:ts,fps});
     if (audit) {
       const base = f.replace(/\.(?:a?png)$/i, '');
       PNG.write(base + '-join.png', audit.image.w, audit.image.h, audit.image.rgb);
@@ -3918,6 +4161,95 @@ const CMD = {
   /* a diorama beside a reference picture, both at true pixel size: the reference brought down to its art pixels (--px: how many of
      its pixels make one, as 2 for a picture shown at twice its size), the diorama drawn at the same size in art pixels, the two side
      by side scaled up alike (--up, 3), and the crisp measures of each, so a look can be held to a picture it is after */
+  'pixel-art'() {
+    const PixelArt = require('./pixel-art.js'), ViewSource = require('../src/pixel-view-source.js');
+    const { sourceBindings } = require('../src/art-passes.js');
+    const sourcePasses = [...ViewSource.channels,...sourceBindings,'pigment'];
+    function editScene(id,retained,historyLimit) {
+      if (!/\.json$/i.test(id)) throw new TypeError('This pixel destination needs an editable JSON diorama');
+      const bytes = retained === undefined ? fs.readFileSync(path.resolve(id)) : undefined;
+      const descriptor = dataScene(id,retained ?? JSON.parse(bytes));
+      if (!descriptor.openEditor) throw new TypeError('This pixel destination needs a plain JSON diorama');
+      return { editor:descriptor.openEditor({ historyLimit }),
+        ...(bytes && { revision:require('./asset-references.js').hash(bytes) }) };
+    }
+    function renderView(world,source,settings,{ id,index = 0 } = {}) {
+      let camera, sourceView;
+      const { w,h } = settings;
+      const options = id === undefined ? { shotFrame:row=>{
+        if (row.art.width === w && row.art.height === h) camera = row.camera;
+      } } : R.cameraCapture(null,(projection,sample)=>{
+        if (projection.width !== w || projection.height !== h) return;
+        const { view:matrix,eye,clipNear:near,clipFar:far } = projection;
+        const { frame,focal,fov } = sample;
+        camera = sample.camera;
+        sourceView = { id,source,grid:[w,h],origin:'top-left',frame:{ index,...frame },
+          camera:{ ...camera,matrix:Array.from(matrix),eye,near,far,fov,focal } };
+      });
+      const frame = R.render(world,view({ ...settings,...options }));
+      if (id === undefined) return { ...frame,camera };
+      if (frame.w !== w || frame.h !== h || frame.passes?.w !== w || frame.passes?.h !== h || !sourceView)
+        throw new RangeError('Scene source capture must use the requested native grid and camera');
+      return { ...frame,camera,scene:world.id,time:sourceView.frame.time,sourceView };
+    }
+    function capture(id,{ w = num('w',160),h = num('h',96),passes = ['objectId'],
+      palettePixel,strandPixel,inspectFragmentPixel,sceneInspection,captureId = 'capture',pixelSelection,time = num('t',0) } = {}) {
+      if (sceneInspection) ViewSource.grid(w,h);
+      const world = buildPreview(id), t = time;
+      pose(world,t);
+      const settings = { w,h,px:1,t,passes };
+      if (!sceneInspection) return pixelSelection ?
+        { ...R.render(world,view({ ...settings,pixelSelection,renderGrid:false,cameraGuides:false })),scene:id } :
+        R.render(world,view(settings));
+      return renderView(world,id,{ ...settings,passes:[...new Set([...sourcePasses,...passes])],
+        palettePixel,strandPixel,inspectFragmentPixel,pixelSelection,renderGrid:false,cameraGuides:false },{ id:captureId });
+    }
+    function captureMotion(id,raw,subject,retainSource) {
+      if (subject !== undefined && (typeof subject !== 'string' || !subject.trim()))
+        throw new TypeError('--subject needs a scene object ID');
+      const Motion = require('../src/pixel-motion-checks.js'), Review = require('./pixel-motion-review.js');
+      const w = num('w',160), h = num('h',96), { options,samples } = Review.plan(raw,'scene',w,h);
+      const world = buildPreview(id), surface = options.alignment === 'surface', history = R.sequenceHistory(lib().KIT);
+      const passes = [...(retainSource ? sourcePasses : ['objectId','coverage']),
+        ...(surface ? ['surfaceMotion','surfaceMotionValid','partMotion','partMotionValid'] : [])];
+      let matched = false;
+      const images = samples.map((row,index)=>{
+        pose(world,row.time);
+        const image = renderView(world,id,{ ...history,...row.camera,lockCamera:!!row.camera,w,h,px:1,t:row.time,
+          passes,transparent:true,renderGrid:false,cameraGuides:false,resetRenderHistory:index === 0 || !!row.cut
+        },retainSource ? { id:row.id,index } : undefined);
+        if (image.w !== w || image.h !== h || !image.camera)
+          throw new RangeError('Motion capture changed the native art grid or did not report its camera');
+        if (subject !== undefined && image.passes?.objects?.includes(subject)) matched = true;
+        return Review.fromRender(image,row,subject);
+      });
+      if (subject !== undefined && !matched) throw new RangeError('Unknown visible motion subject '+subject);
+      return { images,report:{ ...Motion.audit(images,options),source:id,...(subject !== undefined && { subject }) } };
+    }
+    function captureTrack(id,{ object,part }) {
+      const passes = [...sourcePasses];
+      let world, previousTime = Infinity;
+      return (row,index,[w,h])=>{
+        if (row.time < previousTime) world = buildPreview(id);
+        previousTime = row.time;
+        pose(world,row.time);
+        const settings = { ...row.camera,lockCamera:!!row.camera,w,h,px:1,t:row.time,passes,transparent:true,
+          renderGrid:false,cameraGuides:false,resetRenderHistory:true };
+        const scope = { object,...(part !== undefined && { part }) };
+        const view = { id:row.id,index };
+        return {
+          full:renderView(world,id,{ ...settings,pixelSelection:scope },view),
+          isolated:renderView(world,id,{ ...settings,pixelSelection:{ ...scope,isolated:true },trackPixelSources:true },view)
+        };
+      };
+    }
+    if (pos[0] === 'session') return PixelArt.sessionCommand(pos.slice(1),opt,{ scene:editScene,capture });
+    PixelArt.command(pos,opt,outputFile,{
+      capture,captureMotion,captureTrack,
+      world: id => buildPreview(id),
+      scene:editScene
+    });
+  },
   /* pixel-art lint: the mistakes pixel artists name, at a diorama's own pixel size, beside what the references come to (the medians
      of the pixel-art references at their own size): orphan pixels, doubles (lines two pixels thick at a step), jaggies (uneven steps
      along an edge), banding (tones that only echo an edge), pillow shading (darker all round the rim, whichever way it faces), noise
@@ -4596,7 +4928,8 @@ async function run() {
       console.error('UV asset import unavailable: ' + error.message + '. Using the geometry importer. Pass --uv to require UV import.');
     }
   }
-  await (CMD[cmd] || (() => die('unknown command "' + cmd + '". try: ink-studio help')))();
+  if (!Object.hasOwn(CMD, cmd)) die('unknown command "' + cmd + '". try: ink-studio help');
+  await CMD[cmd]();
   shotReplay?.verify();
 }
 run().catch(error => { console.error(error.message); process.exitCode = 1; });

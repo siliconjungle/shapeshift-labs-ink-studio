@@ -2,6 +2,8 @@
 const zlib = require('zlib'),
   fs = require('fs');
 const PNGBytes = require('../src/png-bytes.js');
+const PNGRaster = require('../src/png-raster.js');
+const PixelColors = require('../src/pixel-raster-colors.js');
 const chunk = (type, data) => Buffer.from(PNGBytes.chunk(type, data));
 const scanlines = (w, h, pixels, channels) =>
   zlib.deflateSync(PNGBytes.scanlines(w, h, pixels, channels), { level: 6 });
@@ -68,110 +70,27 @@ function writeIndexed(file, w, h, slots, palette) {
   const out = PNGBytes.indexed(w, h, colors, alpha, scanlines(w, h, pixels, 1));
   fs.writeFileSync(file, Buffer.concat(out));
 }
-function decode(file, capturePalette, layoutOnly = false) {
-  const b = Buffer.isBuffer(file) ? file : fs.readFileSync(file);
-  if (b.length < 33 || !b.subarray(0, 8).equals(signature)) throw new Error('Not a PNG file');
-  let p = 8, w = 0, h = 0, bits, color, interlace, table, transparency;
-  const parts = [];
-  while (p + 12 <= b.length) {
-    const len = b.readUInt32BE(p), type = b.toString('ascii', p + 4, p + 8);
-    if (p + 12 + len > b.length) throw new Error('Truncated PNG chunk');
-    const d = b.subarray(p + 8, p + 8 + len);
-    if (type === 'IHDR') {
-      if (len !== 13 || d[10] || d[11] || d[12] > 1) throw new Error('PNG must use standard filtering, compression and interlacing');
-      w = d.readUInt32BE(0);
-      h = d.readUInt32BE(4);
-      bits = d[8];
-      color = d[9];
-      interlace = d[12];
-    } else if (type === 'PLTE') table = d;
-    else if (type === 'tRNS') transparency = d;
-    else if (type === 'IDAT') parts.push(d);
-    else if (type === 'IEND') break;
-    p += 12 + len;
+function decode(file,capturePalette,layoutOnly) {
+  const bytes = file instanceof Uint8Array ? file : fs.readFileSync(file);
+  const reader = PNGRaster.decode(bytes,capturePalette,layoutOnly), first = reader.next();
+  if (first.done) return first.value;
+  const { parts,scanlineSize } = first.value;
+  return reader.next(zlib.inflateSync(Buffer.concat(parts),{ maxOutputLength:scanlineSize })).value;
+}
+function paintRaster(file) {
+  const source = decode(file,'paint');
+  if (source.ink) {
+    const width = source.w ?? source.value.width, height = source.h ?? source.value.height;
+    source.ink = zlib.inflateSync(source.ink,{ maxOutputLength:PixelColors.metadataLimit(width*height) });
   }
-  const ch = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }[color];
-  const allowed = color === 0 ? [1, 2, 4, 8, 16] : color === 3 ? [1, 2, 4, 8] : [8, 16];
-  if (!w || !h || w * h > 16777216 || !ch || !allowed.includes(bits))
-    throw new Error('Unsupported PNG dimensions or colour format');
-  const entries = table?.length / 3;
-  if (color === 3 && (!Number.isInteger(entries) || entries < 1 || entries > 2 ** bits || transparency?.length > entries))
-    throw new Error('Invalid indexed PNG palette');
-  const readIndices = capturePalette === 'indices';
-  if (readIndices && color !== 3) throw new Error('Indexed PNG asset needs a palette-indexed PNG');
-  if (layoutOnly) return { w, h };
-  const slots = readIndices ? new Uint8Array(w * h) : null;
-  const counts = capturePalette === true && color === 3 ? new Uint32Array(entries) : null;
-  const out = counts || slots ? null : bits === 16 ? new Uint16Array(w * h * 4) : new Uint8Array(w * h * 4);
-  const sampleMask = (1 << bits) - 1, max = color === 3 ? 255 : sampleMask;
-  const bpp = Math.ceil(ch * bits / 8);
-  const passLayouts = interlace ? [[0,0,8,8],[4,0,8,8],[0,4,4,8],[2,0,4,4],[0,2,2,4],[1,0,2,2],[0,1,1,2]] : [[0,0,1,1]];
-  const passes = passLayouts.map(([x,y,dx,dy]) => ({
-    x, y, dx, dy, width: Math.max(0, Math.ceil((w-x)/dx)), height: Math.max(0, Math.ceil((h-y)/dy))
-  })).filter(pass => pass.width && pass.height);
-  const scanlineSize = passes.reduce((n, {width,height}) => n + height * (1 + Math.ceil(width * ch * bits / 8)), 0);
-  const raw = zlib.inflateSync(Buffer.concat(parts), { maxOutputLength: scanlineSize });
-  if (raw.length !== scanlineSize) throw new Error('Invalid PNG scanline length');
-
-  const transparent = i => transparency && transparency.length >= 2 * (i + 1) ? transparency.readUInt16BE(2 * i) : -1;
-  const tr = transparent(0), tg = transparent(1), tb = transparent(2);
-  let cursor = 0;
-  for (const pass of passes) {
-    const {width,height,dx,dy} = pass, rowBytes = Math.ceil(width * ch * bits / 8);
-    const row = new Uint8Array(rowBytes), prev = new Uint8Array(rowBytes);
-    const sample = i => bits === 16 ? row[2 * i] * 256 + row[2 * i + 1]
-      : bits === 8 ? row[i]
-      : (row[(i * bits) >> 3] >> (8 - bits - (i * bits & 7))) & sampleMask;
-    for (let y = 0; y < height; y++) {
-      const filter = raw[cursor++];
-      if (filter > 4) throw new Error('Invalid PNG filter');
-      for (let i = 0; i < rowBytes; i++) {
-        const x = raw[cursor++], a = i >= bpp ? row[i - bpp] : 0,
-          u = prev[i], c = i >= bpp ? prev[i - bpp] : 0;
-        let v = x;
-        if (filter === 1) v = x + a;
-        else if (filter === 2) v = x + u;
-        else if (filter === 3) v = x + ((a + u) >> 1);
-        else if (filter === 4) {
-          const q = a + u - c, pa = Math.abs(q - a), pb = Math.abs(q - u), pc = Math.abs(q - c);
-          v = x + (pa <= pb && pa <= pc ? a : pb <= pc ? u : c);
-        }
-        row[i] = v & 255;
-      }
-      for (let x = 0; x < width; x++) {
-        const dst = ((pass.y + y*dy)*w + pass.x + x*dx)*4, src = x*ch;
-        if (color === 3) {
-          const index = sample(src);
-          if (index >= entries) throw new Error('PNG references a colour outside its palette');
-          if (counts) counts[index]++;
-          else if (slots) slots[dst / 4] = index;
-          else {
-            out[dst] = table[index*3]; out[dst+1] = table[index*3+1]; out[dst+2] = table[index*3+2];
-            out[dst+3] = transparency?.[index] ?? 255;
-          }
-        } else if (color === 0 || color === 4) {
-          const gray = sample(src);
-          out[dst] = out[dst+1] = out[dst+2] = gray;
-          out[dst+3] = color === 4 ? sample(src+1) : gray === tr ? 0 : max;
-        } else {
-          const r = sample(src), g = sample(src+1), bl = sample(src+2);
-          out[dst] = r; out[dst+1] = g; out[dst+2] = bl;
-          out[dst+3] = color === 6 ? sample(src+3) : r === tr && g === tg && bl === tb ? 0 : max;
-        }
-      }
-      prev.set(row);
-    }
-  }
-  if (slots) {
-    const dimensions = {width:w,height:h,channels:1};
-    return {
-      value: {...dimensions,data:slots},
-      alpha: {...dimensions,data:Uint8Array.from(slots,index=>transparency?.[index] ?? 255)},
-      palette: Array.from({length:entries},(_,index)=>table.readUIntBE(index*3,3))
-    };
-  }
-  if (counts) return { w, h, bitDepth: bits, indexed: { table, transparency, counts } };
-  return { w, h, data: out, max, ...(capturePalette && { bitDepth: bits }) };
+  return PixelColors.decode(source);
+}
+function encodePaint(raster,mode) {
+  const { width,height,channels,pixels,colors,alpha,ink } = PixelColors.encode(raster,mode);
+  const raw = scanlines(width,height,pixels,channels);
+  const metadata = zlib.deflateSync(ink);
+  return Buffer.concat(channels === 1 ? PNGBytes.indexed(width,height,colors,alpha,raw,metadata)
+    : PNGBytes.rgba(width,height,raw,metadata));
 }
 function raster(file) { return decode(file, false); }
 function layout(file, indexed = false) { return decode(file, indexed ? 'indices' : false, true); }
@@ -234,4 +153,4 @@ function encodeAnimation(frames, fps) {
 function animate(file, frames, fps) {
   fs.writeFileSync(file, encodeAnimation(frames.map(packFrame), fps));
 }
-module.exports = { encode, encodeGray, write, writeIndexed, read, raster, layout, indexedRaster, paletteSource, animate, packFrame, packRGBA, encodeFrame, encodeAnimation, animationDelay };
+module.exports = { paintRaster, encodePaint, encode, encodeGray, write, writeIndexed, read, raster, layout, indexedRaster, paletteSource, animate, packFrame, packRGBA, encodeFrame, encodeAnimation, animationDelay };

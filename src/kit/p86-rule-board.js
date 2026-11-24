@@ -50,7 +50,7 @@
         const {entries,palette:swatches}=K.pixelStamps.prepare(cel), slots=entries[0].slots;
         check(PixelGridMotion.matchSockets(slots,size,ports),
           'part '+name+' art must paint exactly the center pair of pixels on each declared socket');
-        image=K.pixelStamps.image({width:size,height:size,slots,palette:swatches},palette).rgba;
+        image=K.pixelStamps.image({width:size,height:size,slots,alpha:entries[0].alpha,palette:swatches},palette).rgba;
       }
       definitions.set(name,tile ? {paths:paths.slice(),image} :
         {inputs,outputs,type:type ?? (inputs ? 'any' : 'source'),data:data===undefined ? undefined : clone(data),image});

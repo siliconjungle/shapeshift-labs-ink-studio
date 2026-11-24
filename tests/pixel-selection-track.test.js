@@ -1,0 +1,162 @@
+const assert = require('node:assert/strict');
+const { test } = require('node:test');
+const { execFileSync } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
+const { setTimeout:pause } = require('node:timers/promises');
+const { withChrome } = require('../cli/canvas-grid-chrome.js');
+
+const cli = (...args)=>execFileSync(process.execPath,['cli/ink-studio.js','pixel-art',...args],
+  { cwd:path.resolve(__dirname,'..'),encoding:'utf8',stdio:['ignore','pipe','pipe'] });
+
+function workspace(t) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(),'ink-pixel-track-'));
+  t.after(()=>fs.rmSync(directory,{ recursive:true,force:true }));
+  const file = name=>path.join(directory,name);
+  const write = (name,value)=>{
+    fs.writeFileSync(file(name),typeof value === 'string' ? value : JSON.stringify(value));
+    return file(name);
+  };
+  return { directory,file,write };
+}
+
+function setup({ write },binding,pixels,samples,grid = [64,48]) {
+  const [width,height] = grid;
+  const design = { format:'ink-studio/pixel-art',version:2,width,height,pixelAspect:[1,1],
+    palette:{ bronze:'#bb763e' },layers:[{ id:'ink' }],
+    frames:[{ id:'key',durationMs:100,cels:{} }],
+    selections:[{ id:'accent',frame:'key',pixels }],
+    sceneBindings:[{ id:'study',frame:'key',...binding }] };
+  const document = write('design.json',design), plan = write('plan.json',{version:1,samples});
+  const run = (...options)=>JSON.parse(cli('track',document,'--selection','accent','--binding','study','--views',plan,...options));
+  return { run,document };
+}
+
+function scene({ write },overlap = false) {
+  return write('animated.js',`module.exports = ({KIT:K,makeBuilder,SpriteSurface}) => ({
+    id:'tracked-splats',name:'Tracked splats',build() {
+      const B = makeBuilder(12,[0x222234,0xeea729,0x469c89]);
+      B.iso(0,0,0,.3,B.P[1],3,{splatId:'moving-rest'});
+      B.describeSplats(0,1,{object:'assembly',target:{entity:'plant',part:'stem'}});
+      if (${overlap}) {
+        B.iso(0,0,.2,.3,B.P[1],.35,{nd:true,splatId:'stem-overlap'});
+        B.describeSplats(1,2,{object:'assembly',target:{entity:'plant',part:'stem'}});
+      }
+      const cover = SpriteSurface.make(16);
+      const points = [1,-.8,.8, 3,-.8,.8, 2,1,.8];
+      cover.meshRegion({points,restPoints:points,uvs:[0,0,1,0,.5,1],triangles:[0,1,2]},
+        cover.reserve(4,4,()=>0x469c89),{id:'cover-chart',objectId:'cover'});
+      const surface = cover.finish(), rest = surface.vertices.slice();
+      const world = B.finish({cam:{target:[0,0,0],dist:4,yaw:0,pitch:0,sway:0,ortho:true},radius:10,dither:0});
+      world.spriteSurfaces = surface;
+      K.stage(world).add({pre(_dt,t) {
+        const beat = Math.round(t);
+        world.data[0] = beat === 0 || beat >= 4 ? 0 : beat === 3 ? 7 : .45;
+        for (let i=0;i<rest.length;i+=5) {
+          surface.vertices[i] = rest[i]-(beat === 2 || beat === 5 ? 1.55 : 0);
+          surface.vertices[i+2] = rest[i+2]+.08*Math.sin(t);
+        }
+        surface.vertices[3] = rest[3]+(beat === 5 ? .05 : 0);
+        SpriteSurface.markGeometryDirty(surface);
+      }});
+      return world;
+    }
+  });`);
+}
+
+const count = (visible,moved,occluded,lost)=>({ visible,moved,occluded,lost });
+
+test('stable splat selection follows pose and camera, records depth occlusion, and returns after a loss',t=>{
+  const space = workspace(t), binding = { scene:scene(space),object:'plant',part:'stem' };
+  const samples = [{ id:'rest',time:0 },{ id:'shifted',time:1 },{ id:'hidden',time:2 },{ id:'outside',time:3 },
+    { id:'back',time:0,cut:true },{ id:'camera',time:0,camera:{ target:[.4,0,0],yaw:0,pitch:0,ortho:true } }];
+  const { run,document } = setup(space,binding,[[32,24],[33,24],[0,0]],samples);
+  const report = run();
+  assert.deepEqual(report.samples.map(row=>row.counts),[
+    count(2,0,0,1),count(2,2,0,1),count(0,0,2,1),count(0,0,0,3),count(2,0,0,1),count(2,2,0,1)
+  ]);
+  const [rest,shifted,hidden,outside,back,camera] = report.samples;
+  assert.equal(rest.examples[0].source.id,'moving-rest');
+  assert.deepEqual(shifted.runs.moved,[[24,40,2]]);
+  assert.deepEqual(hidden.runs.occluded,shifted.runs.moved);
+  assert.equal(hidden.examples[0].blocker.object,'cover');
+  assert.equal(outside.reasons['outside-view'],2);
+  assert.deepEqual(outside.runs.lost,[[0,0,1],[24,32,2]]);
+  assert.deepEqual(back.runs.visible,rest.runs.visible);
+  assert.deepEqual(camera.runs.moved,[[24,25,2]]);
+  assert.deepEqual(run(),report);
+  assert.deepEqual(JSON.parse(fs.readFileSync(document)).selections[0].pixels,[[32,24],[33,24],[0,0]]);
+  assert.throws(()=>run('--out',document),/separate paths/);
+});
+
+test('mesh barycentrics follow the posed triangle from a registered crop and reject changed topology addresses',t=>{
+  const space = workspace(t), binding = { scene:scene(space),object:'cover',
+    canvas:{ size:[64,48],offset:[61,23],scale:[1,1] } };
+  const samples = [{ id:'rest',time:0 },{ id:'moved',time:2,camera:{ yaw:.16,pitch:.07,ortho:false } },
+    { id:'uv-changed',time:5 },{ id:'back',time:0,cut:true }];
+  const { run } = setup(space,binding,[[0,0],[1,0]],samples,[2,1]);
+  const report = run(), [rest,moved,changed,back] = report.samples;
+  assert.deepEqual(report.grid,[64,48]);
+  assert.deepEqual(report.documentGrid,[2,1]);
+  assert.deepEqual(rest.examples[0].referenceAt,[61,23]);
+  assert.equal(rest.examples[0].source.chart,'cover-chart');
+  assert.equal(rest.examples[0].source.triangle,0);
+  assert.deepEqual(moved.counts,count(2,2,0,0));
+  assert.deepEqual(changed.counts,count(0,0,0,2));
+  assert.deepEqual(back.runs.visible,rest.runs.visible);
+});
+
+test('traced SDF locations reproject through a camera orbit and detect self-occlusion on the same field',t=>{
+  const space = workspace(t), file = space.write('sdf.json',{ id:'plate-study',style:'slate',
+    camera:{ target:[0,0,0],dist:5,yaw:0,pitch:0,sway:0,projection:'orthographic' },
+    solids:[{ id:'plate',kind:'box',at:[0,0,0],half:[.9,.6,.25],res:.1,mat:'stone' }] });
+  const views = [{ id:'front',time:0 },
+    { id:'orbit',time:0,camera:{ target:[.25,0,0],yaw:.3,pitch:.12,ortho:true } },
+    { id:'behind',time:0,camera:{ yaw:Math.PI,pitch:0,ortho:true } }];
+  const { run } = setup(space,{ scene:file,object:'plate' },[[32,24],[34,24]],views);
+  const [front,orbit,behind] = run('--sdf-assist','on').samples;
+  assert.equal(front.examples[0].source.kind,'sdf');
+  assert.ok(Math.abs(front.examples[0].source.local[2]-.25) < .01);
+  assert.deepEqual(orbit.counts,count(2,2,0,0));
+  assert.deepEqual(behind.counts,count(0,0,2,0));
+  assert.equal(behind.examples[0].blocker.object,'plate');
+});
+
+test('overlapping contributors stay unresolved in the standalone review',t=>{
+  const space = workspace(t), binding = { scene:scene(space,true),object:'plant' };
+  const html = space.file('track.html');
+  const { run } = setup(space,binding,[[32,24]],[
+    { id:'start',time:0 },{ id:'later',time:1 }
+  ]);
+  const [start,later] = run('--review',html).samples;
+  assert.equal(start.reasons['reference-ambiguous-source'],1);
+  assert.deepEqual(later.runs.lost,[[24,32,1]]);
+  assert.match(fs.readFileSync(html,'utf8'),/data:image\/png;base64/);
+});
+
+test('the standalone review shows lost marks over the reference grid',{ skip:!process.env.INK_TEST_CHROME },async t=>{
+  const space = workspace(t), binding = { scene:scene(space),object:'plant' };
+  const html = space.file('track.html');
+  const { run } = setup(space,binding,[[32,24]],[{ id:'start',time:0 },{ id:'gone',time:3 }]);
+  run('--review',html);
+  await withChrome(space.directory,{ hardware:true },async browser=>{
+    await browser.send('Page.navigate',{ url:pathToFileURL(html).href });
+    let status;
+    for (let i=0;i<120 && !status?.includes('1 lost');i++) {
+      status = await browser.evaluate("document.querySelector('#summary')?.textContent");
+      await pause(25);
+    }
+    assert.match(status,/1 lost/);
+    await browser.evaluate("document.querySelector('#mark').value='lost'; document.querySelector('#mark').dispatchEvent(new Event('change'));");
+    let alpha = 0;
+    for (let i=0;i<120 && !alpha;i++) {
+      alpha = await browser.evaluate(
+        "document.querySelector('.ink-grid-diagnostic').getContext('2d').getImageData(32,24,1,1).data[3]");
+      await pause(25);
+    }
+    assert.ok(alpha > 0);
+    assert.match(await browser.evaluate("document.querySelector('#summary').textContent"),/reference view/);
+  });
+});

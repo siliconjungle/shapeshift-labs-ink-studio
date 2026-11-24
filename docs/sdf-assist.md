@@ -2,13 +2,13 @@
 
 SDF assist uses the original sculpt to determine opaque coverage, depth and normals at the art-pixel grid. Baked splats provide surface color. When their footprints miss a point on the surface, the nearest compatible splat on that sculpt part supplies its color. The normal compositor draws foreground marks and transparent effects over the traced surface in depth order.
 
-The mode is opt-in in the headless Node and CLI renderer. Start with finite static architecture. Use the existing splat path for animated parts and translucent materials. Retained fields are live scene data. Rebuild the authored scene when replaying a shot or changing the geometry.
+The mode is opt-in in the headless Node and CLI renderer. It supports finite static sculpts and, with the posed option, affine-skinned opaque parts. See [native hero rendering](hero-render.md) for the posed path, traced fill and native reference fitting. Retained fields are live scene data. Rebuild the authored scene when replaying a shot or changing the geometry.
 
 The [offline SDF reference](sdf-reference.md) traces light through the retained geometry for a side-by-side review.
 
 ## Enable on a sculpt
 
-Set `S.keepRenderSdf = true` before baking the static architecture. Use `look.sdfAssist` in `B.finish()` for its default render mode, or pass `sdfAssist` as a Node render option. JSON dioramas keep the source automatically when `finish.look.sdfAssist` is enabled.
+Set `S.keepRenderSdf = true` before baking the sculpt. Use `look.sdfAssist` in `B.finish()` for its default render mode, or pass `sdfAssist` as a Node render option. JSON dioramas keep the source automatically when `finish.look.sdfAssist` is enabled.
 
 ```js
 S.keepRenderSdf = true;
@@ -23,7 +23,7 @@ const world = B.finish({
 });
 ```
 
-In the CLI, use `--sdf-assist on` to retain and render eligible static sculpts in a scene build. Use `off` to compare the splat-only result. Pass a JSON settings file for a scoped capture.
+In the CLI, use `--sdf-assist on` to retain and render eligible static sculpts in a scene build. Use `--sdf-assist posed` to include eligible rig parts, or `off` to compare the splat-only result. Pass a JSON settings file for a scoped capture.
 
 ```json
 {

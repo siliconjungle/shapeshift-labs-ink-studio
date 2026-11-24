@@ -289,7 +289,9 @@
       future = [],
       listeners = new Set(),
       previewListeners = new Set(),
-      hooks = new Set();
+      hooks = new Set(),
+      sessionListeners = new Set();
+    let sessionBatch = 0, sessionDirty = false;
     const limit = options.historyLimit === undefined ? 100 : options.historyLimit;
     if (!Number.isSafeInteger(limit) || limit < 0) throw new Error('historyLimit must be a non-negative integer');
     const doc = { listenerErrors: [], storageError: null };
@@ -350,9 +352,21 @@
     function finishScheduled() {
       if (transaction?.scheduled && !resolving) doc.commit();
     }
+    function sessionChanged() {
+      if (!sessionListeners.size) return;
+      sessionDirty = true;
+      if (!sessionBatch) {
+        sessionDirty = false;
+        for (const listener of sessionListeners) listener();
+      }
+    }
     function mutate(label, fn) {
       finishScheduled();
-      if (transaction) return fn();
+      if (transaction) {
+        const result = fn();
+        if (!resolving) sessionChanged();
+        return result;
+      }
       return doc.transact(label, fn);
     }
     function entity(id) {
@@ -402,7 +416,54 @@
     doc.seed = () => state.seed;
     doc.revision = () => revision;
     doc.pending = () => !!transaction;
+    doc.transactionBase = () => transaction ? immutable(transaction.before) : undefined;
     doc.history = () => freeze({ undo: past.map(e => e.label), redo: future.map(e => e.label) });
+    doc.onSessionChange = listener => {
+      sessionListeners.add(listener);
+      return () => sessionListeners.delete(listener);
+    };
+    doc.checkpointSession = sessionChanged;
+    doc.batchSession = fn => {
+      sessionBatch++;
+      try { return fn(); }
+      finally {
+        sessionBatch--;
+        if (sessionDirty && !sessionBatch) sessionChanged();
+      }
+    };
+    doc.exportSession = () => ({
+      format:'ink-studio/authoring-session', version:1, historyLimit:limit, revision,
+      current:transaction ? immutable(transaction.before) : doc.snapshot(),
+      undo:past.map(({ label,before }) => ({ label, snapshot:immutable(before) })),
+      redo:future.map(({ label,after }) => ({ label, snapshot:immutable(after) })),
+      ...(transaction && { draft:{ label:transaction.label, snapshot:doc.snapshot() } })
+    });
+    doc.restoreSession = (saved, verify = () => {}) => {
+      if (transaction || sessionListeners.size) throw new Error('Finish or close the active authoring session first');
+      if (saved?.format !== 'ink-studio/authoring-session' || saved.version !== 1 ||
+          saved.historyLimit !== limit || !Number.isSafeInteger(saved.revision) || saved.revision < 0 ||
+          !Array.isArray(saved.undo) || !Array.isArray(saved.redo) || saved.undo.length + saved.redo.length > limit)
+        throw new Error('Invalid authoring session or incompatible history limit');
+      function load(snapshot, draft = false) {
+        const next = draft ? read(snapshot) : loadSnapshot(snapshot);
+        verify(next,{ draft });
+        return next;
+      }
+      function entry(value, draft = false) {
+        if (!record(value) || !value.label) throw new Error('Invalid authoring session entry');
+        return { label:json(value.label), snapshot:load(value.snapshot,draft) };
+      }
+      const current = load(saved.current), undo = saved.undo.map(row => entry(row)), redo = saved.redo.map(row => entry(row));
+      const draft = saved.draft === undefined ? undefined : entry(saved.draft,true);
+      past.splice(0,past.length,...undo.map(({ label,snapshot },i) =>
+        ({ label, before:snapshot, after:undo[i+1]?.snapshot ?? current })));
+      future.splice(0,future.length,...redo.map(({ label,snapshot },i) =>
+        ({ label, before:redo[i+1]?.snapshot ?? current, after:snapshot })));
+      state = draft?.snapshot ?? current;
+      transaction = draft ? { label:draft.label, before:current } : null;
+      revision = saved.revision;
+      invalidateStyles();
+    };
     doc.onChange = fn => {
       listeners.add(fn);
       return () => listeners.delete(fn);
@@ -419,6 +480,7 @@
       finishScheduled();
       if (transaction) throw new Error('A document transaction is already active');
       transaction = { label: label || 'Edit', before: checkpoint(state) };
+      sessionChanged();
       return doc;
     };
     doc.preview = () => {
@@ -432,15 +494,20 @@
         transaction = null;
         state = tx.before;
         invalidateStyles();
+        sessionChanged();
         notify(previewListeners, event('cancel', before, tx.label));
         throw err;
       }
+      sessionChanged();
       notify(previewListeners, event('preview', transaction.before, transaction.label));
       return doc.snapshot();
     };
     function recordCommit(tx) {
       transaction = null;
-      if (sameDocument(tx.before, state)) return false;
+      if (sameDocument(tx.before, state)) {
+        sessionChanged();
+        return false;
+      }
       if (limit) {
         past.push({ label: tx.label, before: tx.before, after: checkpoint(state) });
         if (past.length > limit) past.shift();
@@ -448,6 +515,7 @@
       future.length = 0;
       revision++;
       save(tx.label);
+      sessionChanged();
       notify(listeners, event('commit', tx.before, tx.label));
       return true;
     }
@@ -461,6 +529,7 @@
         state = tx.before;
         invalidateStyles();
         transaction = null;
+        sessionChanged();
         throw err;
       }
       return recordCommit(tx);
@@ -502,6 +571,7 @@
       state = transaction.before;
       invalidateStyles();
       transaction = null;
+      sessionChanged();
       notify(previewListeners, event('cancel', before, label));
       return true;
     };
@@ -509,16 +579,18 @@
       if (typeof fn !== 'function') throw new Error('A transaction needs a function');
       if (Object.prototype.toString.call(fn) === '[object AsyncFunction]')
         throw new Error('Transactions must be synchronous');
-      doc.begin(label);
-      try {
-        const result = fn(doc);
-        if (result && typeof result.then === 'function') throw new Error('Transactions must be synchronous');
-        doc.commit();
-        return result;
-      } catch (err) {
-        doc.cancel();
-        throw err;
-      }
+      return doc.batchSession(() => {
+        doc.begin(label);
+        try {
+          const result = fn(doc);
+          if (result && typeof result.then === 'function') throw new Error('Transactions must be synchronous');
+          doc.commit();
+          return result;
+        } catch (err) {
+          doc.cancel();
+          throw err;
+        }
+      });
     };
     function travel(from, to, key, type) {
       finishScheduled();
@@ -531,6 +603,7 @@
       to.push(entry);
       revision++;
       save(entry.label);
+      sessionChanged();
       notify(listeners, event(type, before, entry.label));
       return true;
     }

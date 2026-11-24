@@ -2,11 +2,12 @@ const fs=require('node:fs'), path=require('node:path'), WAV=require('./wav.js');
 const {write,json}=require('./asset-files.js'), {timelineBank,readProductionAssets}=require('./music-production.js');
 const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 
-async function withLiveOptions(recipe,file,kit,use,onFile=value=>value) {
+async function liveOptions(recipe,file,kit,onFile=value=>value) {
   const {check,fields,record,id}=kit.KIT.procedural.musicInstruments;
   const settings=recipe.live ?? {}, opened=new Map(), streams={};
   check(fields(settings,['options','streams','traceOptions']) && record(settings.streams ?? {}) &&
     Object.keys(settings.streams ?? {}).length<=128,'Invalid live score recipe');
+  const close=()=>Promise.all([...opened.values()].map(row=>row.close()));
   try {
     for (const [name,row] of Object.entries(settings.streams ?? {})) {
       check(id(name) && fields(row,['file','gain','pan','send','priority','foreground']) && typeof row.file==='string',
@@ -16,11 +17,30 @@ async function withLiveOptions(recipe,file,kit,use,onFile=value=>value) {
       opened.set(name,page);
       streams[name]={frames:page.frames,sampleRate:page.sampleRate,channels:page.channels,...mix};
     }
-    return await use({...settings.options,streams,readPage:(name,first,frames)=>opened.get(name).readPage(first,frames)},
-      settings.traceOptions);
-  } finally {
-    await Promise.all([...opened.values()].map(row=>row.close()));
-  }
+    return { options:{...settings.options,streams,readPage:(name,first,frames)=>opened.get(name).readPage(first,frames)},
+      traceOptions:settings.traceOptions,close };
+  } catch(error) { await close(); throw error; }
+}
+
+async function withLiveOptions(recipe,file,kit,use,onFile) {
+  const {options,traceOptions,close}=await liveOptions(recipe,file,kit,onFile);
+  try { return await use(options,traceOptions); }
+  finally { await close(); }
+}
+
+async function openPerformanceScore(file,routePath,kit) {
+  const files=new Set([file,routePath]), note=source=>{ files.add(source); return source; };
+  const recipe=read(file), raw=read(routePath), {sources,timeline,paths}=timelineBank(recipe,file,note);
+  const {options,traceOptions,close}=await liveOptions(recipe,file,kit,note);
+  try {
+    const K=kit.KIT, live=K.music.production.live;
+    const route=raw.format ? live.fromTrace(raw,traceOptions) : raw;
+    for (const name of Object.values(paths)) note(name);
+    const playback=live.openReplay(sources,timeline,route,{
+      ...options,performanceTrace:true,assets:readProductionAssets(paths,K.procedural)
+    });
+    return { ...playback,files:[...files],close };
+  } catch(error) { await close(); throw error; }
 }
 
 module.exports=async function command([mode,file,routePath],opt,kit) {
@@ -41,3 +61,4 @@ module.exports=async function command([mode,file,routePath],opt,kit) {
   return summary;
 };
 module.exports.withLiveOptions=withLiveOptions;
+module.exports.openPerformanceScore=openPerformanceScore;

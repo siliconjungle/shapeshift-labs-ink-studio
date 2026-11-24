@@ -3,6 +3,7 @@ const CameraLens = require('../src/camera-lens.js');
 const ColorSpace = require('../src/color-space.js');
 const LightSchedule = require('../src/light-schedule.js');
 const Optical = require('../src/optical-materials.js');
+const PathInk = require('./path-ink.js');
 const RenderContract = require('../src/render-contract.js');
 const { unpack } = require('../src/render-stages.js');
 const SkyEnvironment = require('../src/sky-environment.js');
@@ -53,26 +54,10 @@ function frameLights(world, options, camera) {
     sunTint: lighting.celestial?.sun?.color ? linear(lighting.celestial.sun.color) : clear };
 }
 
-function trace(world, options, camera, settings) {
-  const { samples, bounces, epsilon, steps, seed, exposure } = settings;
-  const { intersect, rows, stats, bias, support } = bind(world,epsilon,steps);
-  const { sun, areas, local, environment, sky, background, sunTint } = frameLights(world,options,camera);
-  const { width:w, height:h, view, eye, ortho, tangent, clipNear, clipFar } = camera;
-  const rayAt = CameraLens.rays(view,eye,w,h,h*.5/tangent,ortho);
-  const skyRay = ortho && sky && CameraLens.rays(view,eye,w,h,h*.5/Math.tan(sky.orthoFov*.5),false);
-  const rgb = new Uint8Array(w*h*3), indirect = new Uint8Array(rgb.length), transmission = new Uint8Array(rgb.length);
-  const depth = new Float32Array(w*h).fill(Infinity), normals = new Float32Array(rgb.length);
-  const coverage = new Float32Array(w*h), sampling = new Float32Array(w*h), spacing = new Float32Array(w*h);
-  const even = new Float64Array(3), odd = new Float64Array(3), sumIndirect = new Float64Array(3), sumThrough = new Float64Array(3);
-  const transport = { indirectPixels: 0, transmissionPixels: 0 };
-  const film = (n,c) => display(n.map(v => clamp(v*exposure))).map(v => v * c);
-  const half = samples/2, shuffle = random(seed ^ 0x62c8f57d);
-  // Each half independently jitters across the same 2D Latin hypercube.
-  const strata = Array.from({length:half},(_,i)=>i);
-  for (let i=half-1;i>0;i--) {
-    const j = Math.floor(shuffle()*(i+1));
-    [strata[i],strata[j]] = [strata[j],strata[i]];
-  }
+function transportFor(world, options, camera, {bounces,epsilon,steps,posed,pathInk}) {
+  const geometry = bind(world,epsilon,steps,posed);
+  const {intersect,bias} = geometry, styles=PathInk.prepare(pathInk);
+  const {sun,areas,local,environment,sky,background,sunTint} = frameLights(world,options,camera);
 
   function attenuate(weight, media, distance) {
     let extinction = 0;
@@ -143,49 +128,128 @@ function trace(world, options, camera, settings) {
     }
   }
 
-  function path(ray, sx, sy, rng, output) {
-    let origin = ray.origin, direction = ray.direction, diffuse = 0, transmitted = false;
+  function oriented(hit) {
+    return hit.front ? hit.normal : hit.normal.map(n=>-n);
+  }
+
+  function boundary(hit, normal, direction, media) {
+    const { glass }=hit.profile, { front }=hit;
+    const cos=clamp(-dot(normal,direction));
+    const current=[...media.values()].at(-1)?.ior ?? (front ? 1 : glass.ior);
+    const exterior=[...media.entries()].filter(([source])=>source!==hit.source).at(-1)?.[1].ior ?? 1;
+    const ratio=current/(front ? glass.ior : exterior);
+    return {cos,ratio,discriminant:1-ratio*ratio*(1-cos*cos)};
+  }
+
+  function reflect(direction,normal,cos,scatter) {
+    const aim=along(direction,normal,2*cos);
+    if (!scatter) return aim;
+    const u=unit(cross(Math.abs(aim[1])<.9 ? [0,1,0] : [1,0,0],aim)), v=cross(aim,u);
+    const spread=unit(along(along(aim,u,scatter[0]),v,scatter[1]));
+    return dot(normal,spread)>0 ? spread : aim;
+  }
+
+  function refract(hit,normal,direction,media,{ratio,cos,discriminant}) {
+    if (hit.front) media.set(hit.source,hit.profile.glass);
+    else media.delete(hit.source);
+    return unit(along(direction.map(n=>n*ratio),normal,ratio*cos-Math.sqrt(discriminant)));
+  }
+
+  function resume(ray,events,clipNear,clipFar) {
+    let {origin,direction}=ray;
+    const media=new Map();
+    for (const [i,event] of events.entries()) {
+      const hit=intersect(origin,direction,i ? 0 : clipNear/ray.axial,i ? far : clipFar/ray.axial);
+      if (!hit || hit.source!==event.hit.source || hit.owner!==event.hit.owner || hit.front!==event.hit.front)
+        return null;
+      const normal=oriented(hit);
+      if (event.kind==='reflection') direction=reflect(direction,normal,clamp(-dot(normal,direction)),event.scatter);
+      else {
+        const glass=boundary(hit,normal,direction,media);
+        if (glass.discriminant<0) return null;
+        direction=refract(hit,normal,direction,media,glass);
+      }
+      origin=along(hit.point,hit.normal,dot(hit.normal,direction)>0 ? bias : -bias);
+    }
+    // Null means an optical interface changed. A missing final hit is a genuine silhouette.
+    return {hit:intersect(origin,direction,events.length ? 0 : clipNear/ray.axial,events.length ? far : clipFar/ray.axial)};
+  }
+
+  function inked(hit,normal,rule,events,footprint,clipNear,clipFar,rng,media) {
+    if (rule.line && footprint) {
+      const {width}=rule.line;
+      for (const [x,y] of [[width,0],[-width,0],[0,width],[0,-width]]) {
+        const neighbor=resume(footprint(x,y),events,clipNear,clipFar);
+        if (neighbor && styles.feature(hit,neighbor.hit,rule.line)) return {radiance:rule.line.color,line:true};
+      }
+    }
+    const lighting=hit.profile.albedo.map((n,i)=>n*rule.ambient+(hit.profile.em?.[i] ?? 0));
+    direct(hit,normal,rng,media,light=>{
+      for (let c=0;c<3;c++) lighting[c]+=light[c];
+    });
+    return {radiance:PathInk.color(rule,lighting),line:false};
+  }
+
+  function path(ray, rng, output, {clipNear=0,clipFar=far,primary=background,indirect,transmission,reflection,footprint,onInk,secondary=false}={}) {
+    let origin = ray.origin, direction = ray.direction, diffuse = 0, transmitted = false, reflected=false;
+    const events=styles && !secondary ? [] : null;
     const throughput = [1,1,1], media = new Map();
-    function add(light, indirect, through = transmitted) {
+    function add(light, bounced, through = transmitted) {
       for (let c=0;c<3;c++) {
         const amount = throughput[c]*light[c];
         output[c] += amount;
-        if (indirect) sumIndirect[c] += amount;
-        if (through) sumThrough[c] += amount;
+        if (bounced && indirect) indirect[c] += amount;
+        if (through && transmission) transmission[c] += amount;
+        if (reflected && reflection) reflection[c] += amount;
       }
     }
     for (let i=0;i<transportLimit;i++) {
       const hit = intersect(origin,direction,i ? 0 : clipNear/ray.axial,i ? far : clipFar/ray.axial);
       if (!hit) {
-        const light = i ? environment(direction) : sky ? environment(skyRay?.(sx,sy).direction ?? direction) : background;
-        add(light,diffuse>1);
+        if (i || !secondary) add(i ? environment(direction) : primary,diffuse>1);
         return i > 0;
       }
-      const { profile, front } = hit, normal = front ? hit.normal : hit.normal.map(n=>-n);
-      let anchor = hit;
+      const {profile,front}=hit, normal=oriented(hit);
+      let anchor=hit;
       attenuate(throughput,media,hit.t);
-      if (profile.em) add(profile.em,diffuse>1);
-      const { glass, thin, albedo } = profile;
-      if (glass) {
-        const cos = clamp(-dot(normal,direction));
-        const current = [...media.values()].at(-1)?.ior ?? (front ? 1 : glass.ior);
-        const exterior = [...media.entries()].filter(([source])=>source!==hit.source).at(-1)?.[1].ior ?? 1;
-        const ratio = current / (front ? glass.ior : exterior);
-        const discriminant = 1-ratio*ratio*(1-cos*cos);
-        if (discriminant < 0 || rng() < Optical.fresnel(glass.reflect,cos)) {
-          direction = along(direction,normal,2*cos);
-          multiply(throughput,glass.mirrorTint);
-        } else {
-          direction = unit(along(direction.map(n=>n*ratio),normal,ratio*cos-Math.sqrt(discriminant)));
-          multiply(throughput,glass.interfaceTint);
-          if (front) {
-            media.set(hit.source,glass);
-            for (let c=0;c<3;c++) throughput[c] *= glass.uncovered;
-          } else media.delete(hit.source);
-          transmitted = true;
+      const {glass,thin,albedo}=profile;
+      const mirror=events && styles.mirror(hit);
+      if (!glass && !mirror?.reflectance && events && !diffuse) {
+        const rule=styles.style(hit,events);
+        if (rule) {
+          const decision=inked(hit,normal,rule,events,footprint,clipNear,clipFar,rng,media);
+          add(decision.radiance,false);
+          onInk?.(rule,decision.line);
+          return true;
         }
+      }
+      if (profile.em) add(profile.em,diffuse>1);
+      if (glass) {
+        const visit=boundary(hit,normal,direction,media);
+        if (visit.discriminant<0 || rng()<Optical.fresnel(glass.reflect,visit.cos)) {
+          direction=reflect(direction,normal,visit.cos);
+          multiply(throughput,glass.mirrorTint);
+          reflected=true;
+          events?.push({kind:'reflection',hit});
+        } else {
+          direction=refract(hit,normal,direction,media,visit);
+          multiply(throughput,glass.interfaceTint);
+          if (front) for (let c=0;c<3;c++) throughput[c]*=glass.uncovered;
+          transmitted=true;
+          events?.push({kind:'transmission',hit});
+        }
+      } else if (mirror?.reflectance && rng()<mirror.reflectance) {
+        let scatter;
+        if (mirror.roughness) {
+          const angle=2*Math.PI*rng(), radius=mirror.roughness*Math.sqrt(rng());
+          scatter=[radius*Math.cos(angle),radius*Math.sin(angle)];
+        }
+        direction=reflect(direction,normal,clamp(-dot(normal,direction)),scatter);
+        multiply(throughput,mirror.tint);
+        reflected=true;
+        events.push({kind:'reflection',hit,scatter});
       } else {
-        if (diffuse > bounces) break;
+        if (diffuse > bounces - Number(secondary)) break;
         direct(hit,normal,rng,media,(light,through) => add(light,diffuse>0,transmitted || through));
         const through = thin && rng() < thin.strength*Math.exp(-thin.thickness);
         multiply(throughput,through ? thin.rgb : albedo);
@@ -204,6 +268,45 @@ function trace(world, options, camera, settings) {
     return true;
   }
 
+  function irradiance(point, normal, samples, seed) {
+    const sum=[0,0,0], origin=along(point,normal,bias);
+    for (let i=0;i<samples;i++) {
+      const rng=random(seed ^ Math.imul(i+1,0x85ebca77));
+      const direction=hemisphere(normal,rng);
+      path({origin,direction,axial:1},rng,sum,{secondary:true});
+    }
+    return sum.map(n=>n/samples);
+  }
+  return {...geometry,path,irradiance,environment,sky,background};
+}
+
+function trace(world, options, camera, settings) {
+  const { samples, seed, exposure } = settings;
+  const { intersect, rows, stats, support, environment, sky, background, path } = transportFor(world,options,camera,settings);
+  const { width:w, height:h, view, eye, ortho, tangent, clipNear, clipFar } = camera;
+  const rayAt = CameraLens.rays(view,eye,w,h,h*.5/tangent,ortho);
+  const skyRay = ortho && sky && CameraLens.rays(view,eye,w,h,h*.5/Math.tan(sky.orthoFov*.5),false);
+  const stylized=Boolean(settings.pathInk);
+  const probeRayAt=stylized && CameraLens.rays(view,eye,w,h,h*.5/tangent,ortho);
+  const reflection=stylized && new Uint8Array(w*h*3);
+  const inkCoverage=stylized && {camera:new Uint8Array(w*h),reflection:new Uint8Array(w*h),
+    transmission:new Uint8Array(w*h),lines:new Uint8Array(w*h)};
+  const sumReflection=stylized ? new Float64Array(3) : undefined, ruleSamples=new Map();
+  const rgb = new Uint8Array(w*h*3), indirect = new Uint8Array(rgb.length), transmission = new Uint8Array(rgb.length);
+  const depth = new Float32Array(w*h).fill(Infinity), normals = new Float32Array(rgb.length);
+  const coverage = new Float32Array(w*h), sampling = new Float32Array(w*h), spacing = new Float32Array(w*h);
+  const even = new Float64Array(3), odd = new Float64Array(3), sumIndirect = new Float64Array(3), sumThrough = new Float64Array(3);
+  const transport={indirectPixels:0,transmissionPixels:0};
+  if (stylized) Object.assign(transport,{reflectionPixels:0,inkReflectionPixels:0,inkTransmissionPixels:0,inkLinePixels:0});
+  const film = (n,c) => display(n.map(v => clamp(v*exposure))).map(v => v * c);
+  const half = samples/2, shuffle = random(seed ^ 0x62c8f57d);
+  // Each half independently jitters across the same 2D Latin hypercube.
+  const strata = Array.from({length:half},(_,i)=>i);
+  for (let i=half-1;i>0;i--) {
+    const j = Math.floor(shuffle()*(i+1));
+    [strata[i],strata[j]] = [strata[j],strata[i]];
+  }
+
   for (let y=0,p=0;y<h;y++) for (let x=0;x<w;x++,p++) {
     const ry = h-y-1, j = p*3;
     const center = rayAt(x+.5,ry+.5);
@@ -214,11 +317,21 @@ function trace(world, options, camera, settings) {
       spacing[p] = support(hit);
     }
     even.fill(0); odd.fill(0); sumIndirect.fill(0); sumThrough.fill(0);
+    sumReflection?.fill(0);
+    const counts=stylized && {camera:0,reflection:0,transmission:0,lines:0};
+    const onInk=stylized ? (rule,line)=>{
+      counts[rule.via]++;
+      if (line) counts.lines++;
+      ruleSamples.set(rule.id,(ruleSamples.get(rule.id) ?? 0)+1);
+    } : undefined;
     let hits = 0;
     for (let s=0;s<samples;s++) {
       const rng = random(Math.imul(p+1,0x9e3779b1) ^ Math.imul(s+1,0x85ebca77) ^ seed);
       const cell = s>>1, sx = x+(cell+rng())/half, sy = ry+(strata[cell]+rng())/half;
-      if (path(rayAt(sx,sy),sx,sy,rng,s&1 ? odd : even)) hits++;
+      const ray=rayAt(sx,sy);
+      const primary=sky ? environment(skyRay?.(sx,sy).direction ?? ray.direction) : background;
+      if (path(ray,rng,s&1 ? odd : even,{clipNear,clipFar,primary,indirect:sumIndirect,transmission:sumThrough,
+        reflection:sumReflection,onInk,footprint:probeRayAt && ((dx,dy)=>probeRayAt(sx+dx,sy+dy))})) hits++;
     }
     coverage[p] = hits/samples;
     const mean = Array.from(even,(n,c)=>(n+odd[c])/samples);
@@ -229,10 +342,21 @@ function trace(world, options, camera, settings) {
     transmission.set(film(through,255).map(Math.round),j);
     if (Math.max(...bounce) > .005) transport.indirectPixels++;
     if (Math.max(...through) > .005) transport.transmissionPixels++;
+    if (stylized) {
+      for (const [kind,count] of Object.entries(counts)) inkCoverage[kind][p]=Math.round(255*count/samples);
+      const reflected=Array.from(sumReflection,n=>n/samples);
+      reflection.set(film(reflected,255).map(Math.round),j);
+      if (Math.max(...reflected)>.005) transport.reflectionPixels++;
+      if (counts.reflection>=samples/4) transport.inkReflectionPixels++;
+      if (counts.transmission>=samples/4) transport.inkTransmissionPixels++;
+      if (counts.lines>=samples/4) transport.inkLinePixels++;
+    }
     const a = film(Array.from(even,n=>2*n/samples),1), b = film(Array.from(odd,n=>2*n/samples),1);
     sampling[p] = Math.max(...a.map((n,c)=>Math.abs(n-b[c])));
   }
-  return { w,h,rgb,indirect,transmission,coverage,depth,normals,sampling,spacing,rows,stats: { ...stats, ...transport } };
+  return {w,h,rgb,indirect,transmission,coverage,depth,normals,sampling,spacing,rows,
+    ...(stylized && {reflection,inkCoverage}),stats:{...stats,...transport,
+      ...(stylized && {ruleSamples:Object.fromEntries(ruleSamples)})}};
 }
 
-module.exports = { trace };
+module.exports = { trace,transportFor };

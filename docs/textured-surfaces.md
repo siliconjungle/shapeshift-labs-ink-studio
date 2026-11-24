@@ -94,6 +94,8 @@ shadow-casting geometry come from the same original tile. Degenerate UVs
 use the geometric normal. On WebGL, a mapped atlas evaluates its lights
 at visible fragments to retain relief as the light moves.
 
+[Local projection for selected props](multiprojection.md) can give a named mesh chart its own viewpoint while keeping its pins and scene depth on the master camera.
+
 ## PS1-style material projection
 
 Set `projection` on `face`, `mesh`, `faceRegion`, or `meshRegion`.

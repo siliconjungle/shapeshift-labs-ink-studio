@@ -7,9 +7,166 @@ moss, or give several cels different holds for a sparkle, bubble, or spell.
 Build the browser bundle with `npm run build` and open
 [Pixel Stamp Workshop](../examples/pixel-stamp-editor.html) through a local
 static server. The workshop has a one-pixel pencil, an optional pixel grid,
-and a brush, eraser and polygon for larger marks. It previews holds and saves
+and a brush, eraser, eyedropper, connected fill, and polygon. The eyedropper
+selects the swatch of the sampled texel. Fill replaces the connected region
+of that exact swatch or transparency on the current frame. It previews holds and saves
 the same JSON the renderer reads. The star, glint, and bubble studies let you
 open each separately drawn size.
+
+**Pixel-perfect pencil** starts enabled. As you draw, a one-pixel elbow
+resolves to a diagonal when the next pixel makes the middle one redundant.
+Both views show the resolved stroke before you release. Single taps and
+stroke endpoints stay in place. Turn the option off to draw square
+corners. Previously painted pixels stay in place during cleanup.
+
+Choose **Shape** to draw lines, Bézier curves, rectangles, ellipses,
+polygons, bitmap text, and stepped patterns. Drag from the first pixel
+to the last for lines, rectangles, and ellipses. Rectangles, ellipses, and
+polygons offer filled and outlined styles. For a curve, click the start,
+one or two control points, and the end. For a polygon, click each vertex
+in order. Apply or cancel the preview from the Draw panel. Text and
+staircases use a click to place the configured shape at its native anchor.
+Each placed shape has one undo step.
+
+In **Selection**, choose a rectangle or ellipse marquee, freehand lasso,
+polygon lasso, magic wand, or color range. Drag a marquee or freehand
+lasso on the native canvas. For a polygon, place vertices and use **Close
+polygon**, Enter, or a double-click to finish. The wand follows connected
+color and **Color range** also finds matching islands. Both use the color
+tolerance field.
+**Swatch** selects the exact palette entry under the pointer. **Swatch
+cluster** follows the same entry across edges, or across edges and
+corners. Scene object, part, material, channel, and depth masks can be
+saved through the CLI and recalled from a stamp export.
+[Semantic selections](pixel-art-authoring.md#select-by-meaning)
+
+The active mask limits painting on that frame. Use **New selection**
+to replace it, add to it, subtract the next selection, or intersect the
+two. **Modify selection** inverts, grows, shrinks, or outlines the active
+mask. Set the radius in art pixels and put outlines inside, outside, or
+on both sides of the boundary. **Undo** restores the previous mask.
+
+Use **Saved masks** to store a selection by ID and recall it on the
+current frame. These masks travel with the stamp JSON and can be recalled
+after reopening the file. **Clear** removes the active selection.
+[Selection query and mask syntax](pixel-art-authoring.md#edit-and-recall-masks)
+
+**Capture** turns the highlighted footprint into a reusable brush with
+its original colors and transparent gaps, then clears the mask so you can
+stamp elsewhere. Set the brush-local anchor, size, angle, and swatch mode
+in the brush controls. **Stamp brush** places the anchor
+at the pointer. Click for one dab or drag a stroke. **Save brush** and
+**Open brush** exchange the same brush JSON with the document tools.
+
+Enable **Brush dynamics** to set the stabilization time and map pen pressure
+and pointer speed to brush size. Mouse and touch use full pressure. The
+stabilized stroke previews on both canvases while you draw and ends at your
+release pixel. Brush JSON also saves the dynamics.
+[Brush capture and dynamics](pixel-art-authoring.md#brush-dynamics)
+
+Choose a **Brush mode** after capturing or opening a brush. **Recolor with
+coverage lock** applies the active swatch only to visible pixels of the
+current frame. **Shade along ramp** takes an ordered list of 1-based palette
+slots and a signed step. **Set alpha** changes opacity without changing the
+swatch. Use 0 to hide the pigment and 255 to bring it back. A stroke is one
+undo step. [Document shading operations](pixel-art-authoring.md#coverage-lock-and-shading)
+
+A stamp or animated frame can carry an optional `alpha` array with one byte
+per texel alongside its indexed paint. Omitting the array gives painted
+texels full opacity. Sprite atlases and projected indexed paint and masks
+carry this coverage through sampling. Optional `swatchIds` align with
+the palette entries and distinguish colors with identical RGB values.
+Use `pixelStamps.image(stamp, { preserveHidden: true })` to include the
+original RGB bytes at zero alpha in a straight RGBA image.
+
+Choose **RGBA** under **Pencil color** to paint with an RGB color and an
+alpha byte. Ink adds an exact swatch if needed and keeps the current
+swatch when only alpha changes. **Open stamp or PNG** loads stamp JSON
+or a still PNG. **Save PNG frame** exports the current frame as indexed
+or RGBA and keeps Ink's swatch IDs, indexed pixels, and alpha on reimport.
+Use **Save JSON** to retain the animation and guides.
+[PNG modes and editable RGBA patches](pixel-art-authoring.md#edit-and-exchange-exact-rgba-pixels)
+
+In **Palette**, name or lock the active swatch, or move it in the display
+order. **Edit swatch color in all frames** changes its definition.
+**Replace swatch in selection** paints over matching pixels in the
+active selection of the current frame. **Remap palette indices**
+reassigns matching pixels in every frame. Use **Palette ramps** to set an
+explicit order by swatch ID. Choose that ramp under the brush's
+**Saved ramp** control to shade with it after any palette reorder.
+**Palette files** can extract colors from the current frame or a PNG,
+merge a palette JSON, and export swatches, locks, and ramps. Each palette
+edit can be undone with the artwork.
+[Palette file and edit syntax](pixel-art-authoring.md#edit-palettes-and-ramps)
+
+Open **Edit layer stack** to add paint, mask, reference, group, or bound
+surface layers. Paint goes to the active layer. Use **Active layer** view
+to inspect a mask or cel and **Composite** to see how the stack blends.
+Set group membership, clipping, opacity, blend, visibility, and locks in
+the layer controls. **Merge down** or **Flatten group** applies across
+the animation and can be undone in one step.
+
+**Save JSON** keeps a layered deck that can be reopened or imported into
+a pixel document. **Save PNG frame** exports clean composited art.
+Use the CLI or SDK to edit the underlying chart of a bound surface layer.
+[Layer stack operations and deck exchange](pixel-art-authoring.md#edit-a-layer-stack)
+
+Open **Adjust pixels** to use curves, hue and saturation, gradients,
+replacement, dithering, or outlines. Choose the active selection, current
+frame, or an inclusive frame range. **Preview** shows the result in both
+canvas views. Scrub a range to check its frames before choosing **Apply
+adjustment**. **Cancel preview** returns to the source pixels. A range
+commits as one undo step.
+[Document scopes and adjustment settings](pixel-art-authoring.md#apply-scoped-adjustments)
+
+Under **Symmetry and wrapping**, enable **Mirror X** or **Mirror Y** and
+move the axis using its position field. Whole values run through pixel
+centers and half-pixels run between them. Enable **Wrap X** to repeat
+left and right, or **Wrap Y** to repeat above and below. Neighbor tiles
+update while you draw, and you can draw in any visible repeat. Zoom out
+to expose more of the neighboring tiles. Use both axes to check corners
+and both directions of a repeating texture.
+
+The Workshop saves one native tile and retains the drawing settings in the
+stamp JSON. [Symmetry and wraparound in document edits](pixel-art-authoring.md#symmetry-and-wraparound)
+
+Use **Transform pixels** to float the selected pixels. Drag on the
+canvas or use arrow keys for one-pixel nudges. The fields set integer
+position and size, flips, angle, and the rotation sampler. Watch both
+canvases as you edit. **Leave source** turns a move into a copy. Press
+Enter or **Apply transform** to commit, or Escape to cancel.
+
+**Copy** and **Paste** use the Workshop clipboard across frames or stamps
+opened in the same Workshop tab. The viewport also accepts Ctrl/Cmd+C and
+Ctrl/Cmd+V. Pasting starts an editable preview. A single undo restores
+the paint and selection. [Document transform and clipboard syntax](pixel-art-authoring.md#transform-and-paste-selections)
+
+The main canvas zooms in whole steps. Use **−**, **+**, and **Fit**, or
+Ctrl-scroll or ⌘-scroll around the cursor. Middle-drag, use **Pan** and drag,
+or focus the canvas and use the arrow keys to move it. The grid appears at
+4× and above when **Grid** is on. Cursor coordinates start at zero in the
+upper left. The second view stays at one CSS pixel per art pixel and
+updates during drawing and animation playback.
+
+Use **Canvas transforms** to transform all frames together. **Crop** keeps a
+rectangle you enter or takes the bounds of the active selection. **Trim**
+finds the bounds of visible paint across the animation. **Pad** adds
+transparent margins. **Resize** places the old grid at a chosen anchor
+inside the new bounds. **Resample** scales the artwork with nearest-pixel
+or area filtering.
+
+Pivots, registration guides, and saved selections follow the transform.
+If the stamp carries scene bindings, choose whether to preserve their
+source coordinates or map the whole new canvas before applying. Undo
+restores the previous grid, artwork, guides, and bindings.
+[Canvas transforms in a pixel document](pixel-art-authoring.md#transform-the-whole-canvas)
+
+Use **Guides** in the Workshop sidebar to add, edit, or remove grid origins,
+axes, pivots, and registration points. Put a guide on all frames or just
+the current frame. Enable **Snap** above the canvas to snap drawing near a
+guide. The cursor shows the resulting pixel and the guide that caught it.
+The **Guides** checkbox controls overlay visibility separately.
+
 The built-in studies include the two layers of the Red Spring spell, so
 the ink and the eye can be edited separately.
 The [animated tile library](pixel-tiles.md) uses the same editable cels
@@ -57,6 +214,41 @@ const stamp = {
 `KIT.pixelStamps.paint(width, height, cel)` resolves the marked slots.
 `KIT.pixelStamps.image(stamp, { time, scenePalette, paletteRoles })` gives a
 straight RGBA preview. Both methods work in the browser bundle and Node.
+
+To use the same viewport in another browser tool, import
+`mountPixelGridCanvas` from `src/pixel-grid-canvas.mjs` and load the matching
+CSS. Pass each native `{ width, height, rgba }` frame to `view.setFrame()`.
+Use `view.pixelAt(clientX, clientY)` to get the art coordinate for an edit
+and `view.dispose()` when removing the canvas.
+
+Open **Inspect pixel** in the Workshop to trace the composite, layer masks,
+and palette under the cursor. Pin a coordinate to see it update through
+edits or frame changes. To include bound source channel values and native
+scene hits, export a scene-backed canvas with the CLI.
+[Pixel inspection commands](pixel-art-authoring.md#inspect-pixel-contributors)
+
+To lock the current selection, open **Protect details**. Saved details
+travel with Workshop JSON and layer decks through their frame scopes and
+canvas transforms.
+[Authored detail protection](pixel-art-authoring.md#protect-authored-details)
+
+Open **Craft diagnostics** to step through flagged regions, inspect their
+pixels, and select the unprotected part for editing.
+[Craft diagnostics commands](pixel-art-authoring.md#navigate-craft-diagnostics)
+
+Stamp JSON stores guides shared by the whole animation in `guides`.
+Individual entries in `frames` can also carry a local `guides` list with its
+own IDs. Both use the [pixel guide definitions](pixel-art-authoring.md#register-frames-and-align-texture-pixels)
+with scope implied by the list. When using the browser canvas, pass
+`{ guideTool: KIT.pixelGuides }` when mounting, then call
+`view.setGuides(activeGuides)` on frame changes.
+
+To use a drawn pivot when placing an animated stamp, pass
+`{ pivotGuide: 'foot' }` to `KIT.pixelStamps.atlas` or `KIT.pixelStamps.place`.
+Each frame uses the matching pivot's exact position, including half pixels.
+Pass `{ pivotGuide: true }` to use one pivot per frame even when the IDs
+differ. The existing sprite pivot settings still apply when rendering
+without this option.
 
 ## Marking a surface
 

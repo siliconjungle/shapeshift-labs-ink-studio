@@ -1,6 +1,7 @@
 /* Exact native-pixel cels with explicit shot timing and visible surface anchors. */
 const ShotCorrections = (() => {
   const selectors = typeof TargetSelectors === 'undefined' ? require('./target-selectors.js') : TargetSelectors;
+  const splats = typeof SplatProvenance === 'undefined' ? require('./splat-provenance.js') : SplatProvenance;
   const prepared = new WeakSet();
   const record = value => value && Object.getPrototypeOf(value) === Object.prototype;
   const keys = (value, allowed) => record(value) && Object.keys(value).every(key => allowed.includes(key));
@@ -14,7 +15,7 @@ const ShotCorrections = (() => {
 
   function anchor(raw) {
     check(keys(raw, ['splat', 'offset', 'target', 'depthOffset']) &&
-      (integer(raw.splat, 0, Number.MAX_SAFE_INTEGER) || typeof raw.splat === 'string' && raw.splat.length > 0 && raw.splat.length <= 512),
+      (integer(raw.splat, 0, Number.MAX_SAFE_INTEGER) || splats.validId(raw.splat)),
     'anchor needs a splat row or stable splat ID');
     const { splat, offset = [0, 0], target, depthOffset = 0 } = raw;
     check(xy(offset, 8192) && Number.isFinite(depthOffset) && Math.abs(depthOffset) <= 4096,
@@ -87,7 +88,7 @@ const ShotCorrections = (() => {
     return Object.keys(target).some(key => key !== 'material') ? target : undefined;
   }
 
-  function resolve(art, passes, plan, world, { time = 0, shotCorrectionFrame, project } = {}) {
+  function resolve(art, passes, plan, world, { time = 0, shotCorrectionFrame, project, shotCorrectionHits } = {}) {
     const { w, h } = art;
     check(dimensions([w, h]) && w === plan.size[0] && h === plan.size[1],
       'native frame must match the authored grid');
@@ -101,20 +102,20 @@ const ShotCorrections = (() => {
       if (frame < frames[0] || frame > frames[1]) continue;
       let row = anchor.splat;
       if (typeof row === 'string') {
-        if (!byId) {
-          byId = new Map();
-          for (const [i, name] of (world.splatIds ?? []).entries()) {
-            if (byId.has(name)) byId.set(name, -1);
-            else byId.set(name, i);
-          }
-        }
-        row = byId.get(row) ?? -1;
+        byId ??= splats.identities(world);
+        row = byId.rowOf(row);
       }
       const rule = integer(row, 0, world.count - 1) ? target(row) : null;
       const domain = rule && targetOf(rule);
-      const center = rule && (!anchor.target || selectors.matches(anchor.target, rule)) && project(row, w, h);
+      const inScope = rule && (!anchor.target || selectors.matches(anchor.target, rule));
+      const center = inScope && project(row, w, h);
+      const skippedHits = id === shotCorrectionHits ? [] : undefined;
       if (!center) {
-        corrections.push({ id, at: null, painted: 0, clipped: ink.length });
+        if (skippedHits) {
+          const reason = !rule ? 'missing-anchor' : !inScope ? 'anchor-outside-target' : 'anchor-not-projected';
+          for (const [dx,dy] of ink) skippedHits.push({ offset:[dx,dy], at:null, reason });
+        }
+        corrections.push({ id, at: null, painted: 0, clipped: ink.length, ...(skippedHits && { skippedHits }) });
         continue;
       }
       const [u, v, scale, z] = center;
@@ -124,16 +125,25 @@ const ShotCorrections = (() => {
       const matches = new Map();
       for (const [dx, dy, color] of ink) {
         const x = x0 + dx, y = y0 + dy;
-        if (x < 0 || x >= w || y < 0 || y >= h) continue;
         const p = y * w + x, owner = owners[p];
-        if (owner < 1 || owner > world.count || art.alpha?.[p] === 0 || !Number.isFinite(depth[p]) ||
-            Math.abs(depth[p] - plane) > distance) continue;
-        if (!matches.has(owner)) matches.set(owner, domain ? selectors.matches(domain, target(owner - 1)) : owner - 1 === row);
-        if (!matches.get(owner)) continue;
+        let reason;
+        if (x < 0 || x >= w || y < 0 || y >= h) reason = 'outside-grid';
+        else if (owner < 1 || owner > world.count || art.alpha?.[p] === 0 || !Number.isFinite(depth[p]))
+          reason = 'no-surface';
+        else if (Math.abs(depth[p] - plane) > distance) reason = 'depth-mismatch';
+        else {
+          if (!matches.has(owner)) matches.set(owner, domain ? selectors.matches(domain, target(owner - 1)) : owner - 1 === row);
+          if (!matches.get(owner)) reason = 'different-owner';
+        }
+        if (reason) {
+          skippedHits?.push({ offset:[dx,dy], at:[x,y], reason });
+          continue;
+        }
         edits.set(p, parseInt(color.slice(1), 16));
         painted++;
       }
-      corrections.push({ id, at: [x0, y0], painted, clipped: ink.length - painted });
+      corrections.push({ id, at: [x0, y0], painted, clipped: ink.length - painted,
+        ...(skippedHits && { skippedHits }) });
     }
     return { edits, frame, corrections };
   }
@@ -154,10 +164,16 @@ const ShotCorrections = (() => {
     check(dimensions([w, h]) && splatId?.length === w * h && depth?.length === w * h && typeof project === 'function',
       'capture needs aligned depth, owners and projection on the native grid');
     const owners = splatId.slice(), distances = depth.slice(), rows = new Map(), target = selectors.index(world).row;
+    const ids = splats.identities(world);
     for (const owner of owners) {
       if (!integer(owner, 1, world.count) || rows.has(owner)) continue;
-      const row = owner - 1, center = project(row, w, h);
-      rows.set(owner, { center, target: targetOf(target(row)), splat: world.splatIds?.[row] ?? row });
+      const row = owner - 1;
+      if (ids.ambiguous(row)) {
+        rows.set(owner,null);
+        continue;
+      }
+      const center = project(row, w, h);
+      rows.set(owner, { center, target: targetOf(target(row)), splat: ids.idAt(row) ?? row });
     }
     function pin(x, y) {
       if (!integer(x, 0, w - 1) || !integer(y, 0, h - 1)) return null;

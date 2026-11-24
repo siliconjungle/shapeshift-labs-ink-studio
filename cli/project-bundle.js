@@ -130,7 +130,7 @@ function packProject(scene, { out, root, revision, assetPack, paint, attachments
     entry, files: Object.fromEntries([...records].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
       .map(([name,record])=>[name,experiment||story?{...record,sha256:digest(Buffer.from(record.data,record.encoding))}:record])),
     attachments: refs, atlases }, { digest });
-  return writeProjectBundle(project, { out: file });
+  return writeProjectBundle(require('./agent-project.js').initialize(project), { out: file });
 }
 
 function readProjectBundle(file) {
@@ -166,11 +166,13 @@ function mountProject(project, callback) {
   finally { fs.rmSync(directory, { recursive: true, force: true }); }
 }
 
-function withTakeSource(input, callback) {
+function withTakeSource(input, callback, otherBundle) {
   if (/\.json$/i.test(input)) {
     const raw = JSON.parse(fs.readFileSync(input, 'utf8'));
-    if (raw?.format === api().format && raw.version === api().takeVersion)
-      return mountProject(readProjectBundle(input), callback);
+    if (raw?.format === api().format) {
+      if (raw.version === api().takeVersion) return mountProject(readProjectBundle(input), callback);
+      if (otherBundle) return otherBundle(raw);
+    }
   }
   return callback(input);
 }

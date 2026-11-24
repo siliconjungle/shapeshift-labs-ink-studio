@@ -12,7 +12,7 @@
       Array.isArray(value.events) && value.events.length<=8192,
     'Live replay needs a bounded end, block size, and event list');
   }
-  async function replay(sources,spec,route,options={},observe,endFrame) {
+  function openReplay(sources,spec,route,options={},observe,endFrame) {
     settings(route);
     const {end,blockFrames=512,lookaheadFrames,events}=route;
     const {sampleRate=48000,startTime=0}=options, frames=endFrame ?? Math.round(end*sampleRate);
@@ -24,25 +24,34 @@
       ...(route.layerGains!==undefined && {layerGains:{...options.layerGains,...route.layerGains}}),
       ...(route.layerFactors!==undefined && {layerFactors:traceTools.mergeLayerFactors(options.layerFactors,route.layerFactors)}),
       ...(route.ambienceGains!==undefined && {ambienceGains:{...options.ambienceGains,...route.ambienceGains}})},observe);
-    const samples=new Float32Array(frames*2);
     const scheduled=events.map((event,index)=>{
       check(fields(event,['observedAt','intent']) && finite(event.observedAt,startTime,startTime+end),
         'A live replay event needs its observed arrival time');
       return {...event,index,frame:Math.round((event.observedAt-startTime)*sampleRate)};
     }).sort((a,b)=>a.frame-b.frame);
     let cursor=0,event=0;
-    while (cursor<frames) {
+    async function pull(to=frames) {
+      const end=Math.min(frames,to);
+      if (cursor>=end) return null;
       while (event<scheduled.length && scheduled[event].frame<=cursor) {
         const row=scheduled[event++];
         score.dispatch(row.intent,{observedAt:row.observedAt},row.index);
       }
-      const size=Math.min(blockFrames,frames-cursor,(scheduled[event]?.frame ?? frames)-cursor);
+      const size=Math.min(blockFrames,end-cursor,(scheduled[event]?.frame ?? frames)-cursor);
       if (options.streams && Object.keys(options.streams).length)
         await score.prefetch(lookaheadFrames ?? Math.max(size,(options.pageSize ?? 2048)*2));
-      samples.set(score.pull(size).samples,cursor*2);
+      const block=score.pull(size);
       cursor+=size;
+      return block;
     }
-    const value={samples,sampleRate,channels:2}, report=score.inspect();
+    return {sampleRate,frames,pull,inspect:score.inspect};
+  }
+  async function replay(sources,spec,route,options={},observe,endFrame) {
+    const run=openReplay(sources,spec,route,options,observe,endFrame);
+    const {frames,sampleRate}=run, samples=new Float32Array(frames*2);
+    for (let block; (block=await run.pull());)
+      samples.set(block.samples,block.firstFrame*2);
+    const value={samples,sampleRate,channels:2}, report=run.inspect();
     const joins=report.joins.map(join=>({...join,audio:P.adaptiveRehearsalEvidence.audioEvidence(value,join.time)}));
     return {value,report:{...report,joins}};
   }
@@ -58,5 +67,5 @@
       ...(trace.layerFactors && {layerFactors:trace.layerFactors}),
       ...(trace.ambienceGains && {ambienceGains:trace.ambienceGains})};
   }
-  P.musicProduction=Object.freeze({...A,live:Object.freeze({...A.live,replay,fromTrace})});
+  P.musicProduction=Object.freeze({...A,live:Object.freeze({...A.live,openReplay,replay,fromTrace})});
 })(KIT.procedural);

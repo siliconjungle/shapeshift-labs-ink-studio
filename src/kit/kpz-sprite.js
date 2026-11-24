@@ -190,6 +190,20 @@
       })
     );
   K.pixelStamps = PixelStamps;
+  K.pixelGuides = PixelGuides;
+  K.pixelPaintTools = PixelPaintTools;
+  K.pixelSelections = PixelSelections;
+  K.pixelSelectionTransforms = PixelSelectionTransforms;
+  K.pixelCanvasTransforms = PixelCanvasTransforms;
+  K.pixelAdjustments = PixelAdjustments;
+  K.pixelLayerStack = PixelLayerStack;
+  K.pixelInspection = PixelInspection;
+  K.pixelProtection = PixelProtection;
+  K.pixelCraft = PixelCraft;
+  K.pixelMotionChecks = PixelMotionChecks;
+  K.pixelCleanup = PixelCleanup;
+  K.pixelArtRules = PixelArtRules;
+  K.pixelBrushes = PixelBrushes;
   K.sprite = {
     scanlineBudget: SpriteScanlineBudget,
     atlas: AtlasSprites.compile,
