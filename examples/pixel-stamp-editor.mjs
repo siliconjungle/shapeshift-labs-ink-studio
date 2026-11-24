@@ -1,7 +1,7 @@
 import { mountPixelGridCanvas } from '../src/pixel-grid-canvas.mjs';
 
 const stamp = KIT.pixelStamps, guideTool = KIT.pixelGuides, paintTools = KIT.pixelPaintTools;
-const { stonePaint, flowingInk, bubble, glint, starTwinkle, line, fill, rect } = InkPixelStudies;
+const { stonePaint, flowingInk, bubble, glint, starTwinkle, line, rect } = InkPixelStudies;
 const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
 const state = { frame:0, swatch:0, tool:'pencil', points:[], undo:[] };
@@ -10,6 +10,9 @@ const maxPencilPixels = 4096;
 let sharedGuides, frameGuides, guideItems = [];
 const limit = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
 const notify = message => { $('status').textContent = message; };
+const dragShapes = new Set(['line','rect','ellipse']);
+const vertexShapes = new Set(['curve','polygon']);
+const shapeType = () => $('shape-type').value;
 const saveUndo = () => {
   state.undo.push({ data:structuredClone(state.doc), frame:state.frame });
   if (state.undo.length > 24) state.undo.shift();
@@ -44,10 +47,6 @@ function activeStrokes() {
     return tip ? [...points,tip].map(([x,y])=>rect(slot,x,y,1,1)) : [];
   }
   if (!points.length) return [];
-  if (tool === 'polygon') {
-    return points.length === 1 ? [rect(slot,points[0][0],points[0][1],1,1)] :
-      points.length === 2 ? [line(slot,points)] : [fill(slot,points.map(([x,y]) => [x+.5,y+.5]))];
-  }
   if (points.length > 1) return [line(slot,points,brushWidth)];
   const [x,y] = points[0], inset = Math.floor((brushWidth-1)/2);
   return [rect(slot,x-inset,y-inset,brushWidth,brushWidth)];
@@ -55,8 +54,16 @@ function activeStrokes() {
 
 function frameSlots(current) {
   const { width,height } = state.doc;
-  const marks=activeStrokes();
   const slotData=stamp.paint(width,height,current);
+  if (state.tool === 'shape') {
+    const draft = currentShape();
+    if (draft) {
+      try { paintShape(slotData,draft); }
+      catch (error) { notify(error.message); }
+    }
+    return slotData;
+  }
+  const marks=activeStrokes();
   return marks.length ? stamp.paint(width,height,{slots:slotData,strokes:marks}) : slotData;
 }
 
@@ -74,7 +81,7 @@ function draw() {
   $('pixel-perfect').disabled = state.tool !== 'pencil';
   $('remove').disabled = count === 1;
   $('duplicate').disabled = count >= 2048 || (count+1)*width*height > 2**20;
-  $('finish-shape').disabled = state.tool !== 'polygon' || state.points.length < 3;
+  showShapeControls();
 }
 
 function selectSwatch(index) {
@@ -129,6 +136,72 @@ function savePixels(current,slots) {
     state.doc.frames[state.frame] = { ...frame,slots,duration:current.duration ?? 1/(state.doc.fps ?? 12) };
     resetStroke();
   });
+}
+
+function currentShape(points = state.points) {
+  const [first] = points;
+  if (!first) return;
+  const type = shapeType(), last = points.at(-1), width = $('shape-width').valueAsNumber;
+  const fill = $('shape-fill').value === 'filled';
+  if (type === 'line' || (type === 'curve' || type === 'polygon') && points.length < 3)
+    return { type:'line',from:first,to:last,width:type === 'polygon' && fill ? 1 : width };
+  if (type === 'curve') return { type,points,width };
+  if (type === 'polygon') return { type,points,fill,...(!fill && { width }) };
+  if (type === 'text') return { type,at:first,text:$('shape-text').value,scale:$('shape-scale').valueAsNumber };
+  if (type === 'staircase') return { type,from:first,axis:$('shape-axis').value,
+    direction:[Number($('shape-dir-x').value),Number($('shape-dir-y').value)],
+    lengths:$('shape-lengths').value.split(',').map(value=>Number(value.trim())) };
+  const [x,y] = first, [u,v] = last;
+  return { type,rect:[Math.min(x,u),Math.min(y,v),Math.abs(x-u)+1,Math.abs(y-v)+1],fill,...(!fill && { width }) };
+}
+
+function paintShape(slots,shape) {
+  const { width,height } = state.doc, mask = KIT.pixelShapes.raster(width,height,shape);
+  let changed = false;
+  for (let p = 0; p < mask.length; p++) {
+    if (!mask[p] || slots[p] === state.swatch) continue;
+    slots[p] = state.swatch;
+    changed = true;
+  }
+  return changed;
+}
+
+function finishShape(shape) {
+  const { width,height } = state.doc, current = state.doc.frames[state.frame];
+  try {
+    const slots = stamp.paint(width,height,current);
+    if (paintShape(slots,shape)) savePixels(current,slots);
+    else {
+      resetStroke();
+      draw();
+    }
+    notify('');
+  } catch (error) {
+    resetStroke();
+    draw();
+    notify(error.message);
+  }
+}
+
+function showShapeControls() {
+  const active = state.tool === 'shape';
+  $('shape-controls').hidden = !active;
+  if (!active) return;
+  const type = shapeType(), vertices = vertexShapes.has(type), area = ['rect','ellipse','polygon'].includes(type);
+  const required = type === 'curve' ? Number($('shape-curve').value) : 3;
+  $('shape-fill-label').hidden = !area;
+  $('shape-width-label').hidden = !(type === 'line' || type === 'curve' || area && $('shape-fill').value === 'outline');
+  $('curve-label').hidden = type !== 'curve';
+  $('shape-text-controls').hidden = type !== 'text';
+  $('shape-step-controls').hidden = type !== 'staircase';
+  $('finish-shape').hidden = $('cancel-shape').hidden = !vertices;
+  $('finish-shape').disabled = state.points.length < required;
+  $('cancel-shape').disabled = !state.points.length;
+  if (type === 'curve') $('shape-hint').textContent = `Click ${required} points in order from start to end, including the controls.`;
+  else if (type === 'polygon') $('shape-hint').textContent = 'Click the vertices, then apply the shape.';
+  else if (type === 'text') $('shape-hint').textContent = 'Click the top-left pixel of the text.';
+  else if (type === 'staircase') $('shape-hint').textContent = 'Click the first pixel of the staircase.';
+  else $('shape-hint').textContent = 'Drag from the first pixel to the last.';
 }
 
 function pickOrFill(at) {
@@ -288,14 +361,18 @@ art.addEventListener('pointerdown',event => {
   if (!at) return;
   stop();
   if (state.tool === 'eyedropper' || state.tool === 'fill') { pickOrFill(at); return; }
-  if (state.tool === 'polygon') {
-    if (state.points.length < 120) state.points.push(at);
-  } else {
-    art.setPointerCapture(event.pointerId);
-    drawingPointer = event.pointerId;
-    if (state.tool === 'pencil') startPencil(at);
-    else state.points = [at];
+  if (state.tool === 'shape' && !dragShapes.has(shapeType())) {
+    if (vertexShapes.has(shapeType())) {
+      const max = shapeType() === 'curve' ? Number($('shape-curve').value) : 128;
+      if (state.points.length < max) state.points.push(at);
+      draw();
+    } else finishShape(currentShape([at]));
+    return;
   }
+  art.setPointerCapture(event.pointerId);
+  drawingPointer = event.pointerId;
+  if (state.tool === 'pencil') startPencil(at);
+  else state.points = [at];
   draw();
 });
 art.addEventListener('pointermove',event => {
@@ -307,14 +384,19 @@ art.addEventListener('pointermove',event => {
   if (state.points.length >= 120) return;
   const at=view.pixelAt(event.clientX,event.clientY,{ clamp:true }), last=state.points.at(-1);
   if (!at || !last || last[0]===at[0] && last[1]===at[1]) return;
-  state.points.push(at);
+  if (state.tool === 'shape') state.points[1] = at;
+  else state.points.push(at);
   draw();
 });
 art.addEventListener('pointerup',event => {
   if (drawingPointer !== event.pointerId) return;
   if (pencilStroke) extendPencil(event);
   drawingPointer = undefined;
-  commitStroke();
+  if (state.tool === 'shape' && state.points.length && dragShapes.has(shapeType())) {
+    const at = view.pixelAt(event.clientX,event.clientY,{ clamp:true });
+    if (at) state.points[1] = at;
+    finishShape(currentShape());
+  } else commitStroke();
 });
 art.addEventListener('lostpointercapture',event => {
   if (drawingPointer !== event.pointerId) return;
@@ -322,7 +404,12 @@ art.addEventListener('lostpointercapture',event => {
   resetStroke();
   draw();
 });
-$('finish-shape').addEventListener('click',commitStroke);
+$('finish-shape').addEventListener('click',() => finishShape(currentShape()));
+$('cancel-shape').addEventListener('click',() => { resetStroke(); draw(); });
+$('shape-controls').addEventListener('change',event => {
+  if (['shape-type','shape-curve'].includes(event.target.id)) resetStroke();
+  draw();
+});
 $('canvas-size').addEventListener('submit',event => {
   event.preventDefault();
   try {
@@ -337,7 +424,7 @@ $('tools').addEventListener('click',event => {
   state.tool=tool;
   resetStroke();
   $('tools').querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed',button.dataset.tool===tool));
-  notify(tool === 'polygon' ? 'Click the corners, then close the shape.' : '');
+  notify('');
   draw();
 });
 $('play').addEventListener('click',() => {

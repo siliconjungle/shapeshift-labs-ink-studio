@@ -19,6 +19,15 @@ Both views show the resolved stroke before you release. Single taps and
 stroke endpoints stay in place. Turn the option off to draw square
 corners. Previously painted pixels stay in place during cleanup.
 
+Choose **Shape** to draw lines, Bézier curves, rectangles, ellipses,
+polygons, bitmap text, and stepped patterns. Drag from the first pixel
+to the last for lines, rectangles, and ellipses. Rectangles, ellipses, and
+polygons offer filled and outlined styles. For a curve, click the start,
+one or two control points, and the end. For a polygon, click each vertex
+in order. Apply or cancel the preview from the Draw panel. Text and
+staircases use a click to place the configured shape at its native anchor.
+Each placed shape has one undo step.
+
 The main canvas zooms in whole steps. Use **−**, **+**, and **Fit**, or
 Ctrl-scroll or ⌘-scroll around the cursor. Middle-drag, use **Pan** and drag,
 or focus the canvas and use the arrow keys to move it. The grid appears at

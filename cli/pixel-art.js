@@ -132,22 +132,7 @@ function shapes(width, height, mark) {
     return [rect(...mark.at)];
   }
   if (!record(mark.steps)) throw new TypeError('A step stroke needs a start, axis, direction and run lengths');
-  const { from, axis, direction, lengths } = mark.steps;
-  if (!at(width,height,from) || !['x','y'].includes(axis) || !Array.isArray(direction) ||
-      direction.length !== 2 || direction.some(n => n !== 1 && n !== -1) ||
-      !Array.isArray(lengths) || !integer(lengths.length,1,512) || lengths.some(n => !integer(n,1,512)))
-    throw new RangeError('Invalid pixel step stroke');
-  const major = Number(axis === 'y'), minor = 1-major;
-  const cursor = from.slice(), result = [];
-  for (const length of lengths) {
-    const end = cursor.slice();
-    end[major] += direction[major]*(length-1);
-    if (!at(width,height,cursor) || !at(width,height,end)) throw new RangeError('A pixel step stroke leaves the native grid');
-    result.push(rect(Math.min(cursor[0],end[0]), Math.min(cursor[1],end[1]), major ? 1 : length, major ? length : 1));
-    cursor[major] = end[major]+direction[major];
-    cursor[minor] += direction[minor];
-  }
-  return result;
+  return RasterTools.staircase(width,height,mark.steps).map(bounds => rect(...bounds));
 }
 
 function rasterLayer(layer,base,ids,width,height,erase,count,spend) {
@@ -501,10 +486,10 @@ function edit(design, frame, patch, context) {
 
 function editRasterTool(design,frame,patch,destination,context) {
   const { operation } = patch;
-  if (patch.edits !== undefined || !fields(operation,['tool','layer','at','points','swatch','pixelPerfect']))
-    throw new TypeError('A raster tool needs a layer or cel and a pencil, eraser or fill operation');
-  const { tool, swatch } = operation, fill = tool === 'fill', erase = tool === 'eraser';
-  const { pixelPerfect } = operation;
+  if (patch.edits !== undefined || !fields(operation,['tool','layer','at','points','swatch','pixelPerfect','shape']))
+    throw new TypeError('A raster tool needs a layer or cel and a pencil, eraser, fill or shape operation');
+  const { tool,swatch,pixelPerfect,shape } = operation;
+  const fill = tool === 'fill', erase = tool === 'eraser', precise = tool === 'shape';
   if (pixelPerfect !== undefined && (tool !== 'pencil' || typeof pixelPerfect !== 'boolean'))
     throw new TypeError('Pixel-perfect cleanup is a boolean pencil option');
   const { width,height } = frame;
@@ -514,14 +499,18 @@ function editRasterTool(design,frame,patch,destination,context) {
       (patch.cel !== undefined && operation.layer !== undefined))
     throw new TypeError('Choose an existing raster layer or cel for the paint tool');
   const slot = erase ? -1 : frame.swatches.indexOf(swatch);
-  if (!['pencil','eraser','fill'].includes(tool) || (erase ? swatch !== undefined : slot < 0))
-    throw new TypeError('Pencil and fill need a known swatch. Eraser clears the active layer.');
+  if (!['pencil','eraser','fill','shape'].includes(tool) || (erase ? swatch !== undefined : slot < 0))
+    throw new TypeError('Pencil, fill and shape need a known swatch. Eraser clears the active layer.');
+  if (precise ? operation.at !== undefined || operation.points !== undefined : shape !== undefined)
+    throw new TypeError('Put shape geometry in the shape operation');
   const points = fill ? [operation.at] : operation.points;
-  if (fill ? operation.points !== undefined : operation.at !== undefined ||
-      !Array.isArray(points) || !integer(points.length,1,4096))
-    throw new TypeError('Fill needs a seed pixel. Pencil and eraser need up to 4096 path points.');
-  if (!Array.from(points).every(point => at(width,height,point)))
-    throw new RangeError('A paint tool needs points inside the native grid');
+  if (!precise) {
+    if (fill ? operation.points !== undefined : operation.at !== undefined ||
+        !Array.isArray(points) || !integer(points.length,1,4096))
+      throw new TypeError('Fill needs a seed pixel. Pencil and eraser need up to 4096 path points.');
+    if (!Array.from(points).every(point => at(width,height,point)))
+      throw new RangeError('A paint tool needs points inside the native grid');
+  }
 
   const captured = compile(design,frame.id,patch.cel,layer).layerSources.get(layer);
   const usable = p => !frame.locks[p] && (!captured.clipping || captured.clipping[p]);
@@ -531,10 +520,18 @@ function editRasterTool(design,frame,patch,destination,context) {
     throw Preview.conflict(code,'Paint tool cannot change this pixel',
       { at:[p%width,Math.floor(p/width)], layer });
   }
-  const first = points[0][1]*width+points[0][0], old = captured.slots[first];
-  check(first);
   let changed;
-  if (fill) {
+  if (precise) {
+    const mask = require('../index.js').load().KIT.pixelShapes.raster(width,height,shape);
+    changed = [];
+    for (let p = 0; p < mask.length; p++) {
+      if (!mask[p]) continue;
+      check(p);
+      if (captured.slots[p] !== slot) changed.push(p);
+    }
+  } else if (fill) {
+    const first = points[0][1]*width+points[0][0], old = captured.slots[first];
+    check(first);
     changed = old === slot ? [] : RasterTools.region(width,height,points[0],p => usable(p) && captured.slots[p] === old).sort();
   } else {
     const visited = new Set();
@@ -547,7 +544,7 @@ function editRasterTool(design,frame,patch,destination,context) {
   }
   const runs = RasterTools.runs(width,changed), cel = frame.cels?.get(layer) ?? (frame.id && frame.id+'/'+layer);
   context?.onRasterTool?.({ destination:destination.id, kind:'raster', tool,frame:frame.id ?? null, layer,
-    cel:cel ?? null, ...(pixelPerfect && { pixelPerfect }), pixelCount:changed.length,runs });
+    cel:cel ?? null, ...(pixelPerfect && { pixelPerfect }), ...(precise && { shape:shape.type }), pixelCount:changed.length,runs });
   if (!runs.length) return design;
   const mark = erase ? { clear:true,runs } : { swatch,runs };
   const revised = frame.id === undefined

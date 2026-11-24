@@ -41,7 +41,11 @@
   .guide-controls { display:grid; gap:9px; }
   .guide-controls > label { display:grid; gap:4px; color:var(--quiet); font-size:13px; }
   .guide-controls select { max-width:100%; color:#e6eeea; }
-  .guide-controls [hidden] { display:none; }
+  .guide-controls[hidden], .guide-controls [hidden] { display:none; }
+  #shape-controls { margin-top:12px; }
+  #shape-controls textarea, #shape-lengths { width:100%; }
+  #shape-controls textarea, #shape-lengths { font:inherit; color:inherit; border:1px solid #476062; border-radius:5px; background:#253437; padding:6px 10px; }
+  #shape-hint { font-size:13px; margin:0; }
   @media(max-width:780px) { .layout { grid-template-columns:1fr; } aside { grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); } }
 </style>
 <main>
@@ -76,11 +80,40 @@
           <button type="button" data-tool="erase" aria-pressed="false">Erase</button>
           <button type="button" data-tool="eyedropper" aria-pressed="false">Eyedropper</button>
           <button type="button" data-tool="fill" aria-pressed="false">Fill</button>
-          <button type="button" data-tool="polygon" aria-pressed="false">Shape</button>
+          <button type="button" data-tool="shape" aria-pressed="false">Shape</button>
         </div>
         <label class="side-label"><span>Pixel-perfect pencil</span><input id="pixel-perfect" type="checkbox" checked></label>
         <label class="side-label"><span>Brush width</span><input id="width" type="number" min="1" max="24" value="2"></label>
-        <div class="row" style="margin-top:12px"><button id="finish-shape" disabled>Close shape</button><button id="undo" disabled>Undo</button></div>
+        <div class="guide-controls" id="shape-controls" hidden>
+          <label>Shape<select id="shape-type">
+            <option value="line">Line</option><option value="curve">Curve</option>
+            <option value="rect">Rectangle</option><option value="ellipse">Ellipse</option>
+            <option value="polygon">Polygon</option><option value="text">Text</option>
+            <option value="staircase">Staircase</option>
+          </select></label>
+          <label id="shape-fill-label">Style<select id="shape-fill">
+            <option value="filled">Filled</option><option value="outline">Outline</option>
+          </select></label>
+          <label id="shape-width-label">Stroke width<input id="shape-width" type="number" min="1" max="32" value="1"></label>
+          <label id="curve-label">Curve<select id="shape-curve">
+            <option value="3">Quadratic</option><option value="4">Cubic</option>
+          </select></label>
+          <div class="guide-controls" id="shape-text-controls">
+            <label>Text<textarea id="shape-text" rows="2" maxlength="512"></textarea></label>
+            <label>Scale<input id="shape-scale" type="number" min="1" max="32" value="1"></label>
+          </div>
+          <div class="guide-controls" id="shape-step-controls">
+            <label>Run lengths<input id="shape-lengths" type="text" value="4, 3, 2"></label>
+            <label>Run axis<select id="shape-axis"><option value="x">X</option><option value="y">Y</option></select></label>
+            <div class="row">
+              <label>X direction <select id="shape-dir-x"><option value="1">Right</option><option value="-1">Left</option></select></label>
+              <label>Y direction <select id="shape-dir-y"><option value="1">Down</option><option value="-1">Up</option></select></label>
+            </div>
+          </div>
+          <p id="shape-hint" class="muted"></p>
+          <div class="row"><button id="finish-shape" disabled>Apply shape</button><button id="cancel-shape" disabled>Cancel</button></div>
+        </div>
+        <div class="row" style="margin-top:12px"><button id="undo" disabled>Undo</button></div>
       </section>
       <section>
         <h2>Canvas size</h2>

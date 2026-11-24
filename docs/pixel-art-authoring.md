@@ -136,6 +136,41 @@ composite or a layer. Export with `--destination patina --scene gate.json`
 to include a snapshot of a bound material channel for the source mode.
 Painting to a layered pixel document goes through the CLI or SDK.
 
+## Draw precise shapes
+
+Set `tool: "shape"` in a raster operation and supply the geometry in
+`operation.shape`. Choose the layer or cel and swatch as you would for
+the pencil. Shape edits use the same preview, revision guards, receipts,
+and undo history. A shape that touches protected pixels or crosses the
+active layer's clipping mask is rejected as a whole.
+
+```json
+{
+  "id": "window-frame",
+  "revision": "<current document revision>",
+  "frame": "front",
+  "operation": {
+    "tool": "shape",
+    "layer": "jacket",
+    "swatch": "indigo",
+    "shape": { "type": "rect", "rect": [20, 14, 9, 6], "fill": false, "width": 1 }
+  }
+}
+```
+
+| Shape | Geometry |
+| --- | --- |
+| `line` | `from` and `to` are inclusive pixel coordinates. Optional `width` defaults to one pixel. |
+| `curve` | `points` contains start, control, and end for a quadratic Bézier, or start, two controls, and end for a cubic. Optional `width` defaults to one pixel. |
+| `rect` or `ellipse` | `rect` is `[x, y, width, height]` in art pixels. Set `fill: false` for an inward outline and use `width` for its thickness. |
+| `polygon` | `points` contains at least three vertices in order. Ink closes the polygon. Set `fill: false` for an outline and use `width` for its thickness. |
+| `text` | Supply `at` for the top-left anchor and `text` for the lettering. Optional bitmap settings include integer `scale`, `tracking`, `leading`, `align`, and `columns`. |
+| `staircase` | Supply `from`, `axis` (`"x"` or `"y"`), `direction` as two signs, and ordered run `lengths`. Consecutive runs meet diagonally. |
+
+The receipt keeps the exact shape arguments and the resolved pixel runs.
+For reusable staircases in authored layers, the existing `steps` mark
+accepts the same start, axis, direction, and lengths.
+
 ## Author a drawing
 
 ```json

@@ -163,6 +163,49 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     assert.deepEqual(await raster(browser,preview,16,13),color);
     await click(browser,'#undo');
 
+    await click(browser,'[data-tool="shape"]');
+    const chooseShape = (type,settings = {}) => evaluate(browser,(type,settings) => {
+      for (const [id,value] of Object.entries(settings)) document.getElementById(id).value = value;
+      const control = document.querySelector('#shape-type');
+      control.value = type;
+      control.dispatchEvent(new Event('change',{ bubbles:true }));
+    },type,settings);
+    const anchor = (x,y) => place(canvasBounds,x,y);
+    const press = at => mouse('mousePressed',at,{ button:'left',buttons:1,clickCount:1 });
+    const release = at => mouse('mouseReleased',at,{ button:'left',clickCount:1 });
+    const tap = async (x,y) => { await press(anchor(x,y)); await release(anchor(x,y)); };
+    await chooseShape('rect',{ 'shape-fill':'outline' });
+    await press(anchor(10,10));
+    await mouse('mouseMoved',anchor(18,16),{ button:'left',buttons:1 });
+    assert.deepEqual(await raster(browser,preview,18,16),color);
+    await release(anchor(18,16));
+    assert.deepEqual(await raster(browser,preview,14,13),clear);
+    await click(browser,'#undo');
+
+    await chooseShape('ellipse',{ 'shape-fill':'filled' });
+    await press(anchor(10,10));
+    await release(anchor(18,16));
+    assert.deepEqual(await raster(browser,preview,14,13),color);
+    assert.deepEqual(await raster(browser,preview,10,10),clear);
+    await click(browser,'#undo');
+
+    await chooseShape('curve',{ 'shape-curve':3 });
+    await tap(10,20);
+    await tap(16,8);
+    assert.equal(await browser.evaluate("document.querySelector('#finish-shape').disabled"),true);
+    await tap(22,20);
+    assert.equal(await browser.evaluate("document.querySelector('#finish-shape').disabled"),false);
+    assert.deepEqual(await raster(browser,preview,16,14),color);
+    await click(browser,'#cancel-shape');
+    assert.deepEqual(await raster(browser,preview,16,14),clear);
+
+    await chooseShape('staircase',{ 'shape-lengths':'3, 2', 'shape-dir-x':-1 });
+    await tap(18,20);
+    assert.deepEqual(await raster(browser,preview,16,20),color);
+    assert.deepEqual(await raster(browser,preview,15,21),color);
+    assert.deepEqual(await raster(browser,preview,16,21),clear);
+    await click(browser,'#undo');
+
     const tick = place(await screen(browser,main),18,18);
     const dab = async () => {
       await mouse('mousePressed',tick,{ button:'left',buttons:1,clickCount:1 });
