@@ -1232,7 +1232,8 @@ node cli/ink-studio.js pixel-art trace examples/sdf-gatehouse.js \
   --subject gatehouse --w 116 --h 74 --out gatehouse-study
 ```
 
-Trace writes a version 2 `design.json` alongside the indexed PNG and review.
+Trace writes a version 2 `design.json`, the indexed PNG and review, and a
+`source-view.json` from the same render.
 The document records the input scene and subject in a binding scoped to its
 `capture` frame and `projection` layer. A raster cel's `slots` list uses named
 swatches and `null` for transparent cells.
@@ -1275,6 +1276,47 @@ document frames.
 The SDK uses `editor.inspect([x, y], { frame, destinations, references,
 renderFrame })` for an existing aligned render. A caller can also supply
 `captureSelection` to render the requested native passes and pixel traces.
+
+## Save and reopen a native source view
+
+```sh
+node cli/ink-studio.js pixel-art capture examples/opaque-surface-gate.js \
+  --view-id gate-orbit --w 120 --h 80 --t 0.45 --out gate-view.json
+node cli/ink-studio.js pixel-art inspect gate-design.json \
+  --source-view gate-view.json --at 60,40
+node cli/ink-studio.js pixel-art canvas gate-design.json \
+  --source-view gate-view.json --out gate-review.html
+```
+
+The document and source view must have the same native dimensions.
+A source view can be reopened without the scene or its assets. Keep using
+`--scene` to sample the live material channels of a bound destination.
+Pass `--at` during capture to retain detailed palette and fragment traces
+for one pixel. Scene-backed canvas reviews embed their capture. Each sample in
+a scene motion review embeds its own capture and inspection follows the selected
+sample and camera. When a motion review isolates a subject, the source passes
+still describe the full scene at that pixel.
+
+The version 1 `ink-studio/pixel-view-source` file records the scene reference,
+view ID, frame index, picture time, sampled pose, camera and sky times, and
+the exact art-grid camera. Its column-major world-to-view matrix includes
+art-grid camera snapping. The focal scale is in native pixels, with
+world-to-view projection divided by depth for perspective cameras.
+
+The top-down planes preserve rendered color and coverage, depth, object,
+part, material and splat IDs, surface kind, geometric and shading normals,
+world and rest positions, and surface UVs. The object, part and material
+tables resolve the numeric slots to scene identities. The UV validity mask
+distinguishes a valid `[0, 0]` from an unavailable coordinate. Rest positions
+use the renderer's object-position pass, which uses world coordinates for
+static surfaces with no separate rest geometry. Empty pixels have infinite
+depth. Ordinary coverage can still be present at a pixel with no opaque hit.
+
+Each plane stores a typed array name and base64-encoded little-endian bytes.
+Float32 depth, normal and coordinate values are preserved at render precision.
+In Node, pass the parsed file to `unpackPixelSourceView(record)` and use the
+returned frame with `editor.inspect([x, y], { renderFrame })` or
+`pickSurface(renderFrame.passes, x, y)`.
 
 ## Navigate craft diagnostics
 

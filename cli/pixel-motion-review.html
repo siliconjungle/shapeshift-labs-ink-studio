@@ -21,6 +21,7 @@ select { font:inherit; color:inherit; background:#253437; border:1px solid #4760
   <header><h1>Motion review</h1><label>Sample <select id="samples"></select></label></header>
   <div id="canvas"></div>
   <div id="checks"></div>
+  <div id="pixel-inspection" hidden></div>
   <p id="error" role="status" hidden></p>
 </main>
 <script type="module">
@@ -29,18 +30,37 @@ const { report,frames } = /*DATA*/;
 const view = mountPixelGridCanvas(document.querySelector('#canvas'));
 const input = document.querySelector('#samples'), status = document.querySelector('#error');
 const scratch = document.createElement('canvas'), context = scratch.getContext('2d',{ willReadFrequently:true });
-let request = 0, overlayEpoch = 0;
+let request = 0, overlayEpoch = 0, active;
+const inspectionRoot = document.querySelector('#pixel-inspection');
+const inspector = frames.some(row=>row.source) ? mountPixelInspector(inspectionRoot,view,at=>{
+  if (!active?.scene || at[0] >= active.width || at[1] >= active.height) return;
+  const p = (at[1]*active.width+at[0])*4, alpha = active.rgba[p+3];
+  const color = alpha ? PixelInspection.hex(active.rgba[p]*65536+active.rgba[p+1]*256+active.rgba[p+2]) : null;
+  return { display:{ color,alpha },scene:PixelInspection.scene(active.scene,at,ArtPasses) };
+}) : null;
+inspectionRoot.hidden = !inspector;
+
+async function readSource(source) {
+  if (!source) return null;
+  const bytes = Uint8Array.from(atob(source),value=>value.charCodeAt(0));
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
+  return PixelViewSource.unpack(await new Response(stream).json());
+}
 async function draw(index,finding) {
   const serial = ++request, epoch = overlayEpoch, image = new Image();
   try {
-    image.src = 'data:image/png;base64,'+frames[index];
-    await image.decode();
+    const { png,source } = frames[index];
+    image.src = 'data:image/png;base64,'+png;
+    const [,scene] = await Promise.all([image.decode(),readSource(source)]);
     if (serial !== request) return;
     const [width,height] = report.grid;
     scratch.width = width;
     scratch.height = height;
     context.drawImage(image,0,0);
-    view.setFrame({ width,height,rgba:context.getImageData(0,0,width,height).data });
+    const { data:rgba } = context.getImageData(0,0,width,height);
+    active = { width,height,rgba,scene };
+    view.setFrame(active);
+    inspector?.refresh();
     const highlight = epoch === overlayEpoch ? finding : undefined;
     view.setDiagnostic(highlight ?? null,'motion');
     if (highlight) view.focusRegion(highlight.bounds,'motion');

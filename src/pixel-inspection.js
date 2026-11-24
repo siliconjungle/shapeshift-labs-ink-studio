@@ -41,6 +41,7 @@ const PixelInspection = (() => {
     const fragments = pinned(frame.pixelFragments) ? frame.pixelFragments : undefined;
     const strands = pinned(frame.strandPixel) ? frame.strandPixel : undefined;
     return { ...(frame.scene !== undefined && { id:frame.scene }),...(frame.time !== undefined && { time:frame.time }),
+      ...(frame.sourceView && { sourceView:frame.sourceView }),
       ...(sample && { color:alpha ? hex(sample[0]*65536+sample[1]*256+sample[2]) : null,alpha }),
       ...(owner && { palette:{ ...owner,colors:owner.colors?.map(hex),...(owner.sharedColors && { sharedColors:owner.sharedColors.map(hex) }) } }),
       ...(trace && { paletteTrace:trace }),

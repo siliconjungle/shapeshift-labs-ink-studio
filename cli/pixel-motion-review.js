@@ -2,7 +2,9 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { deflateSync } = require('node:zlib');
 const Motion = require('../src/pixel-motion-checks.js');
+const ViewSource = require('../src/pixel-view-source.js');
 const PNG = require('./png.js');
 const files = require('./asset-files.js');
 
@@ -71,16 +73,21 @@ function fromRender(rendered,row,subject) {
       valid[p] = 255;
     }
   }
-  return { ...row,width,height,rgba,owners,ownerNames,vectors,valid,camera,cameraKey:JSON.stringify(camera) };
+  const source = rendered.sourceView &&
+    deflateSync(JSON.stringify(ViewSource.pack(rendered,{ color:false }))).toString('base64');
+  return { ...row,width,height,rgba,owners,ownerNames,vectors,valid,camera,cameraKey:JSON.stringify(camera),source };
 }
 
 function writeReview(file,frames,report) {
-  const data = JSON.stringify({ report,frames:frames.map(frame=>PNG.encode(frame.width,frame.height,frame.rgba,4).toString('base64')) })
+  const data = JSON.stringify({ report,frames:frames.map(frame=>({
+    png:PNG.encode(frame.width,frame.height,frame.rgba,4).toString('base64'),source:frame.source
+  })) })
     .replaceAll('<','\\u003c');
   const template = fs.readFileSync(path.join(__dirname,'pixel-motion-review.html'),'utf8');
   const source = name=>fs.readFileSync(path.join(__dirname,'../src',name),'utf8');
   files.write(file,template.replace('/*CSS*/',()=>source('pixel-grid-canvas.css'))
-    .replace('/*SCRIPTS*/',()=>[source('pixel-grid-canvas.mjs'),source('pixel-motion-panel.mjs')].join('\n'))
+    .replace('/*SCRIPTS*/',()=>['pixel-grid-canvas.mjs','pixel-motion-panel.mjs','pixel-inspector.mjs','pixel-view-source.js',
+      'pixel-inspection.js','art-passes.js'].map(source).join('\n'))
     .replace('/*DATA*/',()=>data));
 }
 

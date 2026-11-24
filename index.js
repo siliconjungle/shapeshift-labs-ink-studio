@@ -291,6 +291,7 @@ module.exports = {
   createPixelEditor(source, options) {
     return require('./cli/pixel-art.js').createEditor(source, options);
   },
+  unpackPixelSourceView: require('./src/pixel-view-source.js').unpack,
   openPixelEditorSession(directory, options) {
     return require('./cli/pixel-art.js').openEditorSession(directory, options);
   },

@@ -156,9 +156,9 @@ const nativePartMotion = Symbol('part motion native capture');
 const deferredShotCorrection = Symbol('shot correction after shutter integration');
 
 function cameraCapture(options, receive) {
-  return { [captureCamera](camera) {
-    receive(camera);
-    options?.[captureCamera]?.(camera);
+  return { [captureCamera](camera,sample) {
+    receive(camera,sample);
+    options?.[captureCamera]?.(camera,sample);
   } };
 }
 
@@ -848,8 +848,11 @@ function renderFrame(world, o, preparedPalettes) {
     PalettePixel.create(o.palettePixel,W,H) : undefined;
   if (paletteTrace && legacyLook) paletteTrace.colors = tone?.palette ?? evaluatedPalette ??
     (grade ? PixelLook.gradePalette(grade) : world.pal);
+  const shotCamera = () => ({ target:Array.from(T), yaw,pitch,distance:dist,lensScale,orthographic:ortho,
+    ...(fov !== FOV && { fov }) });
+  const shotSkyTime = () => ArtDirection.time(direction,o.skyTime ?? sceneTime,'environment');
   if (!o.samples && !o.captureCoverage) o.shotFrame?.({
-    time:sceneTime, skyTime:ArtDirection.time(direction,o.skyTime ?? sceneTime,'environment'), camera:{ target:Array.from(T), yaw, pitch, distance:dist, lensScale, orthographic:ortho, ...(fov !== FOV && { fov }) },
+    time:sceneTime, skyTime:shotSkyTime(), camera:shotCamera(),
     art:{ width:W, height:H, pixelSize:px }
   });
   const historyFrames = effects?.smear && o.artHistory ? o.artHistory.previous(t, W, H, o[reconstructionSource] ?? world) : [];
@@ -986,7 +989,9 @@ function renderFrame(world, o, preparedPalettes) {
   if(!o.reflectionPlane&&!probeView)o.cameraFrame?.({time:camera.time,pose:CameraLens.fromView(V),motion:camera.motion});
   if (!o.reflectionPlane && !probeView) o[captureCamera]?.({width: W, height: H, view: V, tangent: ortho ? oh : tangent, aspect: asp, ortho,
     clipNear: near, clipFar: 400, distance: eyeD, setback: eyeD - dist, depthRange: [eyeD - R, eyeD + R],
-    eye: [-(V[0]*V[12]+V[1]*V[13]+V[2]*V[14]), -(V[4]*V[12]+V[5]*V[13]+V[6]*V[14]), -(V[8]*V[12]+V[9]*V[13]+V[10]*V[14])]});
+    eye: [-(V[0]*V[12]+V[1]*V[13]+V[2]*V[14]), -(V[4]*V[12]+V[5]*V[13]+V[6]*V[14]), -(V[8]*V[12]+V[9]*V[13]+V[10]*V[14])]}, {
+    camera:shotCamera(),focal,fov,frame:{ time:sceneTime,poseTime:t,cameraTime:camera.time,skyTime:shotSkyTime() }
+  });
   const hex = i => {
       const h = world.pal[i];
       return [((h >> 16) & 255) / 255, ((h >> 8) & 255) / 255, (h & 255) / 255];

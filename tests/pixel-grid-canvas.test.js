@@ -1056,6 +1056,7 @@ test('the CLI exports an offline native canvas with both views on the selected v
     assert.match(inspected,/authored index/);
     assert.match(inspected,/paint-tip · accent · front/);
     assert.match(inspected,/face\/front\/wear.*0\.625/);
+    assert.match(inspected,/Source view.*panel.*8×6/);
     assert.match(inspected,/Scene hits/);
     await click(browser,'#pixel-inspection button');
     await moveTo(0,0);
@@ -1105,6 +1106,20 @@ test('the CLI exports an offline native canvas with both views on the selected v
     });
     await until(browser,"document.querySelector('[data-diagnostic-result]').value.includes('Accepted · glaze-study')");
 
+    const sourceView = path.join(directory,'native-view.json');
+    execFileSync(process.execPath,['cli/ink-studio.js','pixel-art','capture',scenePath,
+      '--w','8','--h','6','--t','.25','--view-id','paint-guide','--out',sourceView],{ cwd:root });
+    execFileSync(process.execPath,[...args,'--source-view',sourceView,'--at','4,3'],{ cwd:root });
+    await browser.send('Page.navigate',{ url:'about:blank' });
+    await load(browser,file);
+    await evaluate(browser,()=>document.querySelector('#pixel-inspection details').open = true);
+    await moveTo(4,3);
+    await until(browser,"document.querySelector('#pixel-inspection').textContent.includes('paint-guide')");
+    const sourceText = await browser.evaluate("document.querySelector('#pixel-inspection').textContent");
+    assert.match(sourceText,/time 0\.25 s/);
+    assert.match(sourceText,/Rest position/);
+    assert.match(sourceText,/Geometric normal/);
+
     const motionFile = path.join(directory,'motion.html');
     const sceneArt = { format:'ink-studio/pixel-art',version:2,width:8,height:6,pixelAspect:[1,1],
       palette:versioned.palette,layers:[{ id:'paint' }],frames:['quiet','flash','hold'].map(id=>({
@@ -1126,5 +1141,24 @@ test('the CLI exports an offline native canvas with both views on the selected v
     await until(browser,"document.querySelector('#samples').selectedIndex === 2");
     assert.deepEqual(await raster(browser,preview,1,2),[33,98,134,255]);
 
+    const plan = path.join(directory,'views.json');
+    fs.writeFileSync(plan,JSON.stringify({ version:1,samples:[
+      { id:'head-on',time:0,camera:{ yaw:0 } },{ id:'orbit',time:.5,camera:{ yaw:.35 } }
+    ] }));
+    execFileSync(process.execPath,['cli/ink-studio.js','pixel-art','motion',scenePath,'--views',plan,
+      '--w','16','--h','12','--review',motionFile],{ cwd:root });
+    await browser.send('Page.navigate',{ url:'about:blank' });
+    await load(browser,motionFile);
+    await evaluate(browser,()=>document.querySelector('#pixel-inspection details').open = true);
+    await moveTo(8,6);
+    await until(browser,"document.querySelector('#pixel-inspection').textContent.includes('head-on')");
+    await click(browser,'#pixel-inspection button');
+    await evaluate(browser,()=>{
+      const picker = document.querySelector('#samples');
+      picker.selectedIndex = 1;
+      picker.dispatchEvent(new Event('change'));
+    });
+    await until(browser,"document.querySelector('#pixel-inspection').textContent.includes('time 0.5 s')");
+    assert.match(await browser.evaluate("document.querySelector('#pixel-inspection').textContent"),/yaw 0\.35/);
   });
 });

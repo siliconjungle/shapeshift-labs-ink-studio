@@ -226,7 +226,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   paint layers|tune|clear <id> [--layer name]  list, adjust or clear corrections
   paint cause <id> <recipe.json> [--events <run.json>] [--replace]   bake geometry or committed events into paint layers
     layer controls: --angle degrees --feather degrees --opacity fraction --region JSON|file|off
-  pixel-art trace <scene> --subject object-id --out directory   save a native underdrawing from a scene
+  pixel-art capture <scene> --out view.json [--view-id id] [--w n --h n --t seconds] [--at x,y]   save the camera and native source passes
+  pixel-art trace <scene> --subject object-id --out directory   save a native underdrawing and its source view
   pixel-art palette export <document.json> --out palette.json
   pixel-art palette extract <image.png|document.json> --out palette.json [--size 32] [--alpha visible|opaque|all]
   pixel-art palette import <document.json> <palette.json> --out revised.json
@@ -236,7 +237,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art validate <design.json>           validate the versioned document and each frame
   pixel-art targets <design.json> --destination id --scene <bound scene>   list stable scene targets
   pixel-art preview <design.json> <edit.json> [--scene <bound scene>]   report a proposed edit and its conflicts
-  pixel-art canvas <design.json> --out canvas.html [--frame id] [--scene scene.json] [--destination ids] [--at x,y]   inspect the cursor and optional pinned scene pixel
+  pixel-art canvas <design.json> --out canvas.html [--frame id] [--scene scene.json | --source-view view.json] [--destination ids] [--at x,y]   inspect the cursor and optional pinned scene pixel
   pixel-art sample <design.json> --at x,y [--mode composite|layer|source]   sample art or a bound material channel
   pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id] [--scene path]   resolve a native selection
   pixel-art copy <design.json> --selection id [--frame id] --layer id|--cel id   print a pixel clipboard
@@ -248,7 +249,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art rules <design.json> [--frame id] [--layer id] [--art-shot id] [--out report.json]   inspect asset art rules and scene settings
   pixel-art lint <design.json> [--frame id] [--art-shot id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings
   pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint
-  pixel-art inspect <design.json> --at x,y [--frame id] [--scene scene.json] [--destination ids] [--references] [--out report.json]   show pixel contributors
+  pixel-art inspect <design.json> --at x,y [--frame id] [--scene scene.json | --source-view view.json] [--destination ids] [--references] [--out report.json]   show pixel contributors
   pixel-art edit <design.json> [--frame id]   work on a native indexed frame
   pixel-art edit <design.json> <edit.json> --out result.json   write an edit and print its receipt
   pixel-art stack export <document.json> --out deck.json   open in the layer Workshop
@@ -669,6 +670,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio patch wire` · `--out` · [source](../../cli/patch-cli.js)
 - `ink-studio pixel-art brush` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art canvas` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art capture` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art copy` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art draw` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art edit` · [source](../../cli/pixel-art.js)

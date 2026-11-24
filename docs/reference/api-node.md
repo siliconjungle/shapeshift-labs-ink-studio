@@ -144,6 +144,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.spriteAtlas` | function | `(world, options = {})` | [source](../../cli/sprite-atlas.js) |
 | `node.toolkitBuildHash` | function | `(kit)` | [source](../../index.js) |
 | `node.transitionReview` | function | `(world, { plan = world.transitionReview, width = 160, height = 90, scale = 1, view = {}, pose } = {})` | [guide](../transition-review.md#read-the-results), [guide](../transition-review.md), [source](../../cli/transition-review.js) |
+| `node.unpackPixelSourceView` | function | `(frame)` | [source](../../src/pixel-view-source.js) |
 | `node.unpackProject` | function | `(input, { out } = {})` | [source](../../cli/project-bundle.js) |
 | `node.validateStoryDocument` | function | `(document)` | [source](../../src/story-document.js) |
 | `node.verifyProjectExperiment` | function | `(...args)` | [source](../../index.js) |

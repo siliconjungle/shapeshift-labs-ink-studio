@@ -14,6 +14,7 @@ const CanvasTransforms = require('../src/pixel-canvas-transforms.js');
 const PixelAdjustments = require('../src/pixel-adjustments.js');
 const LayerStack = require('../src/pixel-layer-stack.js');
 const PixelInspection = require('../src/pixel-inspection.js');
+const ViewSource = require('../src/pixel-view-source.js');
 const Protection = require('../src/pixel-protection.js');
 const ArtPasses = require('../src/art-passes.js');
 const PixelColors = require('../src/pixel-raster-colors.js');
@@ -2010,7 +2011,7 @@ function motionCommand(source,opt,captureMotion) {
     throw new TypeError('Write the motion report and HTML review to separate paths');
   const plan = plans.length ? read(plans[0]) : undefined;
   const { images,report } = opt.views === undefined ? motionDocument(read(source),{ plan,layer:opt.layer }) :
-    captureMotion(source,plan,opt.subject);
+    captureMotion(source,plan,opt.subject,!!opt.review);
   if (opt.review) MotionReview.writeReview(path.resolve(opt.review),images,report);
   if (opt.out) files.json(path.resolve(opt.out),report);
   else process.stdout.write(JSON.stringify(report,null,2)+'\n');
@@ -2085,27 +2086,15 @@ function canvasReview(design,frameId,file,sources,scene,artShot) {
     frames:design.frames.map(row=>row.id),selections:design.selections
   };
   if (artShot !== undefined) ArtRules.describe(rulesFor(design),{ shot:artShot });
-  const data = JSON.stringify({ frames:deck,palette,materials,definitions,scene:scene && embedScene(scene),layerIds,rulesSource }).replaceAll('<','\\u003c');
+  const data = JSON.stringify({ frames:deck,palette,materials,definitions,scene:scene && ViewSource.pack(scene),layerIds,rulesSource }).replaceAll('<','\\u003c');
   files.write(file,template.replace('/*PIXEL_GRID_CSS*/',() => browserSource('css'))
     .replace('/*PIXEL_GUIDES_MODULE*/',() => fs.readFileSync(path.join(__dirname,'../src/pixel-guides.js'),'utf8'))
     .replace('/*PIXEL_GRID_MODULE*/',() => browserSource('mjs'))
     .replace('/*PIXEL_INSPECT_MODULES*/',() => [
-      'pixel-layer-stack.js','pixel-canvas-transforms.js','pixel-inspection.js','pixel-protection.js','art-passes.js',
+      'pixel-layer-stack.js','pixel-canvas-transforms.js','pixel-inspection.js','pixel-view-source.js','pixel-protection.js','art-passes.js',
       'pixel-craft.js','target-selectors.js','pixel-art-rules.js','pixel-inspector.mjs','pixel-craft-panel.mjs'
     ].map(file=>fs.readFileSync(path.join(__dirname,'../src',file),'utf8')).join('\n'))
     .replace('/*PIXEL_GRID_DATA*/',() => data));
-}
-
-function embedScene(frame) {
-  function encode(data) {
-    return { type:data.constructor.name,bytes:Buffer.from(data.buffer,data.byteOffset,data.byteLength).toString('base64') };
-  }
-  const { w,h,scene,time,palettePixel,pixelFragments,strandPixel } = frame;
-  const passes = frame.passes && Object.fromEntries([...PixelInspection.channels,...PixelInspection.tables]
-    .filter(key=>frame.passes[key] !== undefined)
-    .map(key=>[key,ArrayBuffer.isView(frame.passes[key]) ? encode(frame.passes[key]) : frame.passes[key]]));
-  return { w,h,scene,time,palettePixel,pixelFragments,strandPixel,passes,
-    ...(frame.rgb && { rgb:encode(frame.rgb) }),...(frame.alpha && { alpha:encode(frame.alpha) }) };
 }
 
 function trace(frame, object, scene) {
@@ -2135,7 +2124,7 @@ function trace(frame, object, scene) {
   return design;
 }
 
-const actions = ['trace','import','upgrade','validate','targets','draw','canvas','inspect','lint','rules','motion','sample','select','snap','brush','copy',
+const actions = ['capture','trace','import','upgrade','validate','targets','draw','canvas','inspect','lint','rules','motion','sample','select','snap','brush','copy',
   'preview','edit','replay'];
 const sessionActions = ['init','status','begin','apply','preview','commit','cancel','undo','redo',
   'inspect','sample','select','snap','brush','copy','targets','export'];
@@ -2206,14 +2195,34 @@ function command(pos,opt,outputFile,{ capture, captureMotion, world, scene }) {
   const writing = action === 'edit' || action === 'replay';
   if (!actions.includes(action) ||
       pos.length !== (writing || ['preview','select'].includes(action) ? 3 : 2))
-    throw new TypeError('Use pixel-art trace, import, upgrade, validate, targets, draw, canvas, inspect, lint, rules, motion, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
+    throw new TypeError('Use pixel-art capture, trace, import, upgrade, validate, targets, draw, canvas, inspect, lint, rules, motion, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
+  const sourceViewFile = opt['source-view'];
+  if (sourceViewFile !== undefined && (!['inspect','canvas'].includes(action) || !reference(sourceViewFile) || opt.scene !== undefined))
+    throw new TypeError('Use --source-view <view.json> by itself with pixel-art inspect or canvas');
   if (action === 'motion') return motionCommand(source,opt,captureMotion);
+  if (action === 'capture') {
+    if (!reference(opt.out) || path.resolve(source) === path.resolve(opt.out) ||
+        (opt['view-id'] !== undefined && !reference(opt['view-id'])))
+      throw new TypeError('Use pixel-art capture <scene> --out <view.json> [--view-id id]');
+    if (opt.w === true || opt.h === true) throw new TypeError('--w and --h need native grid dimensions');
+    const w = opt.w === undefined ? 160 : Number(opt.w), h = opt.h === undefined ? 96 : Number(opt.h);
+    ViewSource.grid(w,h);
+    const coordinate = opt.at === undefined ? undefined : inspectCoordinate(opt.at);
+    if (coordinate && !at(w,h,coordinate)) throw new RangeError('Scene pixel is outside the native grid');
+    const frame = inspectionCapture(w,h,coordinate,{
+      captureSelection:settings=>capture(source,{ ...settings,captureId:opt['view-id'] })
+    });
+    files.json(path.resolve(opt.out),ViewSource.pack(frame));
+    return;
+  }
   if (action === 'trace') {
     if (typeof opt.subject !== 'string' || !opt.subject.trim()) throw new TypeError('Trace needs --subject object-id');
-    const design = trace(capture(source), opt.subject, source);
+    const frame = capture(source,{ sceneInspection:true,captureId:'trace' });
+    const design = trace(frame,opt.subject,source), saved = ViewSource.pack(frame);
     const directory = outputFile('pixel-art-trace');
     draw(compile(design),directory);
     files.json(path.join(directory,'design.json'),design);
+    files.json(path.join(directory,'source-view.json'),saved);
     console.log('wrote',directory);
     return;
   }
@@ -2266,7 +2275,7 @@ function command(pos,opt,outputFile,{ capture, captureMotion, world, scene }) {
   }
   const context = {
     sceneRef:opt.scene,
-    captureSelection:reference(opt.scene) ? settings=>{
+    captureSelection:sourceViewFile ? ()=>ViewSource.unpack(read(sourceViewFile)) : reference(opt.scene) ? settings=>{
       if (out === path.resolve(opt.scene))
         throw new RangeError('Write the edit to a separate output from the rendered scene');
       return capture(opt.scene,settings);
@@ -2283,8 +2292,11 @@ function command(pos,opt,outputFile,{ capture, captureMotion, world, scene }) {
     if (typeof opt.out !== 'string' || !/\.html$/i.test(opt.out) || path.resolve(opt.out) === path.resolve(source))
       throw new TypeError('Use pixel-art canvas <design.json> --out <canvas.html>');
     const destinations = destinationList(opt.destination);
-    if ((destinations || opt.at !== undefined) && !reference(opt.scene))
-      throw new TypeError('Use --scene with surface destinations or a pinned scene pixel');
+    if ([opt.scene,sourceViewFile].some(input=>reference(input) && path.resolve(input) === path.resolve(opt.out)))
+      throw new RangeError('Write the canvas separately from its inputs');
+    if (destinations && !reference(opt.scene)) throw new TypeError('Use --scene with surface destinations');
+    if (opt.at !== undefined && !reference(opt.scene) && !sourceViewFile)
+      throw new TypeError('Use --scene or --source-view with a pinned scene pixel');
     documentShape(design);
     const coordinate = opt.at === undefined ? undefined : inspectCoordinate(opt.at);
     if (coordinate && !at(design.width,design.height,coordinate)) throw new RangeError('Scene pixel is outside the native grid');
@@ -2346,7 +2358,7 @@ function command(pos,opt,outputFile,{ capture, captureMotion, world, scene }) {
     const result = inspect(design,inspectCoordinate(opt.at),{ frame:opt.frame,cel:opt.cel,
       destinations,references:opt.references === true },context);
     if (typeof opt.out === 'string') {
-      if ([source,opt.scene].some(file=>reference(file) && path.resolve(opt.out) === path.resolve(file)))
+      if ([source,opt.scene,sourceViewFile].some(file=>reference(file) && path.resolve(opt.out) === path.resolve(file)))
         throw new RangeError('Write the inspection report separately from its inputs');
       files.json(path.resolve(opt.out),result);
     } else process.stdout.write(JSON.stringify(result,null,2)+'\n');

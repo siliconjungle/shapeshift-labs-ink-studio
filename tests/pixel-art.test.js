@@ -174,6 +174,11 @@ test('a named object can be traced on its native grid and redrawn as an indexed 
   execFileSync(process.execPath,['cli/ink-studio.js','pixel-art','trace','examples/sdf-gatehouse.js',
     '--subject','gatehouse','--w','64','--h','40','--out',directory],{cwd});
   const traced = JSON.parse(fs.readFileSync(path.join(directory,'design.json')));
+  const captured = require('..').unpackPixelSourceView(JSON.parse(fs.readFileSync(path.join(directory,'source-view.json'))));
+  assert.deepEqual(captured.sourceView.grid,[64,40]);
+  const projection = traced.frames[0].cels.projection.slots;
+  const gate = captured.passes.objects.indexOf('gatehouse');
+  assert.ok(projection.every((slot,p)=>(slot !== null) === (captured.passes.objectId[p] === gate)));
   const frame = compile(traced);
   assert.equal(traced.version,2);
   assert.deepEqual(traced.sceneBindings,[{

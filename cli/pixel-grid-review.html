@@ -63,14 +63,7 @@ const materialRows = materials.map(row=>({ ...row,
   data:new DataView(Uint8Array.from(atob(row.values),byte=>byte.charCodeAt(0)).buffer)
 }));
 const stack = PixelLayerStack.prepare(definitions), colors = palette.map(row=>Number.parseInt(row.color.slice(1),16));
-const byteTypes = { Uint8Array,Uint8ClampedArray,Uint16Array,Uint32Array,Int16Array,Int32Array,Float32Array,Float64Array };
-function bytes(value) {
-  return value?.bytes && byteTypes[value.type]
-    ? new byteTypes[value.type](Uint8Array.from(atob(value.bytes),byte=>byte.charCodeAt(0)).buffer) : value;
-}
-const scene = embeddedScene && { ...embeddedScene,rgb:bytes(embeddedScene.rgb),alpha:bytes(embeddedScene.alpha),
-  ...(embeddedScene.passes && { passes:{ w:embeddedScene.w,h:embeddedScene.h,...Object.fromEntries(
-    Object.entries(embeddedScene.passes).map(([key,value])=>[key,bytes(value)])) } }) };
+const scene = embeddedScene && PixelViewSource.unpack(embeddedScene);
 const inspector = mountPixelInspector(document.querySelector('#pixel-inspection'),view,at=>{
   if (!active || at[0] >= active.width || at[1] >= active.height) return;
   const p = at[1]*active.width+at[0];

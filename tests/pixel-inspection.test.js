@@ -102,3 +102,52 @@ test('CLI inspection uses aligned render hits, scene palette decisions and bound
   assert.equal(sdk.scene.color,'#000000');
   assert.throws(()=>editor.inspect([10,8],{ renderFrame:{ w:2,h:2 } }),/native grid/);
 });
+
+test('source views keep the exact camera, mesh UVs, SDF rest positions and empty depth offline',t=>{
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(),'ink-source-view-'));
+  t.after(()=>fs.rmSync(directory,{ recursive:true,force:true }));
+  const file = name=>path.join(directory,name+'.json');
+  const cli = (...args)=>execFileSync(process.execPath,['cli/ink-studio.js','pixel-art',...args],
+    { cwd:path.resolve(__dirname,'..'),encoding:'utf8' });
+  const scene = 'examples/opaque-surface-gate.js', width = 120, height = 80;
+  cli('capture',scene,'--w',String(width),'--h',String(height),'--t','.45','--view-id','gate-orbit','--out',file('view'));
+  const record = JSON.parse(fs.readFileSync(file('view'),'utf8'));
+  const renderFrame = ink.unpackPixelSourceView(record), { sourceView,passes } = renderFrame;
+  assert.equal(sourceView.id,'gate-orbit');
+  assert.equal(sourceView.source,scene);
+  assert.deepEqual(sourceView.grid,[width,height]);
+  assert.deepEqual(sourceView.frame,{ index:0,time:.45,poseTime:.45,cameraTime:.45,skyTime:.45 });
+  const { matrix,focal,orthographic } = sourceView.camera;
+  assert.equal(orthographic,false);
+  const coords = p=>[p%width,Math.floor(p/width)];
+  const meshPixel = passes.surfaceKind.indexOf(1);
+  const mesh = ink.pickSurface(passes,...coords(meshPixel));
+  assert.equal(mesh.object,'sluice-screen');
+  assert.ok(mesh.uv.every(n=>n >= 0 && n <= 1));
+  assert.notDeepEqual(mesh.geometricNormal,mesh.shadingNormal);
+  assert.notDeepEqual(mesh.position,mesh.restPosition);
+  const point = [0,1,2].map(i=>matrix[12+i]+mesh.position.reduce((n,value,j)=>n+value*matrix[i+j*4],0));
+  const [x,y] = coords(meshPixel);
+  assert.ok(Math.abs(width/2+focal*point[0]/-point[2]-x-.5) < .001);
+  assert.ok(Math.abs(height/2-focal*point[1]/-point[2]-y-.5) < .001);
+  assert.ok(Math.abs(-point[2]-mesh.depth) < .001);
+  const sdfPixel = passes.surfaceKind.indexOf(2), sdf = ink.pickSurface(passes,...coords(sdfPixel));
+  assert.equal(sdf.kind,'sdf');
+  assert.equal(sdf.uv,null);
+  assert.equal(passes.parts[passes.partId[sdfPixel]].object,sdf.object);
+  assert.deepEqual(sdf.position,sdf.restPosition);
+  const empty = passes.depth.indexOf(Infinity);
+  assert.equal(ink.pickSurface(passes,...coords(empty)),null);
+  assert.equal(passes.surfaceCoverage[empty],0);
+
+  const document = { ...design,width,height,layers:[{ id:'paint' }],frames:[{ id:'front',durationMs:100,cels:{} }] };
+  fs.writeFileSync(file('design'),JSON.stringify(document));
+  const at = coords(meshPixel);
+  const report = JSON.parse(cli('inspect',file('design'),'--source-view',file('view'),'--at',at.join(',')));
+  const json = value=>JSON.parse(JSON.stringify(value));
+  assert.deepEqual(report.scene.surface,json({ ...mesh,splatId:null }));
+  assert.deepEqual(report.scene.sourceView,sourceView);
+  assert.deepEqual(json(ink.createPixelEditor(document).inspect(at,{ renderFrame }).scene),report.scene);
+  const malformed = { ...record,passes:{ ...record.passes,surfaceUV:{ type:'Float32Array',bytes:'AA==' } } };
+  assert.throws(()=>ink.unpackPixelSourceView(malformed),/invalid pixel source view plane surfaceUV/i);
+});

@@ -63,7 +63,11 @@ export function mountPixelInspector(root,view,read) {
     if (scene.surface) {
       const hit = scene.surface;
       rows.push({ text:['Opaque hit',hit.kind,hit.object,hit.part,hit.material,
-        'depth '+showValue(hit.depth),hit.uv && 'UV '+showValue(hit.uv),hit.splatId && 'splat '+hit.splatId].filter(Boolean).join(' · ') });
+        'depth '+showValue(hit.depth),percent(hit.coverage)+' surface coverage',hit.uv && 'UV '+showValue(hit.uv),hit.splatId && 'splat '+hit.splatId].filter(Boolean).join(' · ') });
+      for (const [label,value] of [['World position',hit.position],['Rest position',hit.restPosition],
+        ['Geometric normal',hit.geometricNormal],['Shading normal',hit.shadingNormal]]) {
+        if (value) rows.push({ text:label+' '+showValue(value),depth:1 });
+      }
     }
     if (scene.frontStrand) rows.push({ text:['Front strand',scene.frontStrand.strand?.name ?? scene.frontStrand.id,
       'depth '+showValue(scene.frontStrand.depth),'coverage '+percent(scene.frontStrand.coverage)].join(' · ') });
@@ -86,14 +90,22 @@ export function mountPixelInspector(root,view,read) {
     body.replaceChildren();
     pin.disabled = !result;
     if (!result) { output.value = 'Move over the native canvas'; return; }
-    const { composite,palette,layers,scene,materials = [],display,protection = [] } = result;
+    const { composite,palette,layers = [],scene,materials = [],display,protection = [] } = result;
     const shown = display ?? composite;
     output.value = [at.join(', '),shown.layer,shown.color ?? 'Transparent','alpha '+shown.alpha].filter(Boolean).join(' · ');
     group('Layers',layerRows(layers));
     group('Protected details',protection.map(row=>({ text:[row.id,row.kind,
       row.frame ?? row.frames?.join(' to ') ?? 'All frames'].join(' · ') })));
-    const colors = [{ text:[palette.method.replaceAll('-',' '),palette.swatch?.id,palette.swatch?.color,
-      palette.color && 'output '+palette.color].filter(Boolean).join(' · ') }];
+    const colors = palette ? [{ text:[palette.method.replaceAll('-',' '),palette.swatch?.id,palette.swatch?.color,
+      palette.color && 'output '+palette.color].filter(Boolean).join(' · ') }] : [];
+    if (scene?.sourceView) {
+      const { id,frame,camera,grid } = scene.sourceView;
+      group('Source view',[
+        { text:[scene.id,id,grid.join('×'),'time '+showValue(frame.time)+' s'].join(' · ') },
+        { text:[camera.orthographic ? 'Orthographic' : 'Perspective','yaw '+showValue(camera.yaw),
+          'pitch '+showValue(camera.pitch),'eye '+showValue(camera.eye)].join(' · ') }
+      ]);
+    }
     if (scene?.palette) colors.push({ text:['Scene',scene.palette.domain,scene.palette.stage,scene.palette.asset,
       scene.color && 'output '+scene.color].filter(Boolean).join(' · ') });
     for (const choice of scene?.paletteTrace?.decisions ?? []) {
