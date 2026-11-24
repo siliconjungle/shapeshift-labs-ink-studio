@@ -27,7 +27,7 @@ const PixelLayerStack = (() => {
           clip.kind === 'reference' && layer.kind !== 'reference'))
         throw new RangeError('Layer '+layer.id+' must clip to an earlier compatible sibling');
       if (layer.kind === 'surface' ? !id(layer.destination) : layer.destination !== undefined)
-        throw new TypeError('A surface layer needs a named surface-channel destination');
+        throw new TypeError('A surface layer needs a named scene destination');
       const row = { ...layer,kind:layer.kind ?? 'paint',index:rows.size+1,
         effectiveLock:layer.locked || parent?.effectiveLock || false };
       rows.set(row.id,row);

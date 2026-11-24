@@ -151,10 +151,10 @@ function documentShape(design) {
   }
   Destinations.validate(destinations,bindingIds);
   for (const layer of layers) if (layer.kind === 'surface') {
-    const destination = destinations?.find(row=>row.id === layer.destination && row.kind === 'surface-channel');
+    const destination = destinations?.find(row=>row.id === layer.destination && ['surface-channel','decal-layer'].includes(row.kind));
     const binding = destination && sceneBindings.find(row=>row.id === destination.binding);
     if (!binding || binding.layer !== undefined && binding.layer !== layer.id)
-      throw new RangeError('Surface layer '+layer.id+' needs a matching surface-channel destination');
+      throw new RangeError('Surface layer '+layer.id+' needs a matching material channel or decal destination');
   }
 }
 
@@ -1489,7 +1489,7 @@ function editWithReceipt(design, patch, context, { runner, options, frameId, sho
       }
     } else if (destination.kind === 'splat-attributes') {
       target.splats = splats;
-    } else {
+    } else if (destination.kind !== 'decal-layer') {
       target.node = 'solid:' + binding.object;
       if (patch.operation.modifier) target.modifier = patch.id;
       if (patch.operation.updateModifier) target.modifier = patch.operation.updateModifier.id;

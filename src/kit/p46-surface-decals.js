@@ -10,6 +10,8 @@
   const label=value=>TargetSelectors.name(value) && value.length<=128;
   const key=({object,part})=>JSON.stringify([object,part??null]);
   const matches=({object,part},row)=>row.object===object && (part===undefined || row.part===part);
+  const reference=({node,socket})=>node===undefined ? undefined :
+    hierarchy.reference({node,...(socket!==undefined && {socket})});
   const clamp=value=>Math.max(0,Math.min(1,value));
   const bayer=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
   function need(value,message) {
@@ -22,9 +24,9 @@
   }
 
   function decal(row) {
-    need(fields(row,['id','kind','anchor','image','lifetime','grid','opacity','relief']) &&
+    need(fields(row,['id','kind','anchor','image','mask','lifetime','grid','opacity','relief']) &&
       label(row.id) && kinds.includes(row.kind??'paint'),'expected a decal ID and a supported kind');
-    const {id,kind='paint',anchor:a,image,lifetime={},grid=[12,12],opacity=1,relief}=row;
+    const {id,kind='paint',anchor:a,image,mask,lifetime={},grid=[12,12],opacity=1,relief}=row;
     const anchor=a?.uv===undefined ? restAnchor(a) : uvAnchor(a);
     const {depth,uv}=anchor;
     const {width,height,pixels}=image??{};
@@ -33,6 +35,7 @@
     need(fields(image,['width','height','pixels']) &&
       [width,height].every(n=>Number.isSafeInteger(n)&&range(n,1,256)) && raster(pixels,4),
       'an image needs top-down RGBA8 pixels up to 256 by 256');
+    need(mask===undefined || raster(mask,1),'a mask needs a top-down alpha byte per image pixel');
     need(fields(lifetime,['start','end','fadeIn','fadeOut']),'invalid lifetime fields');
     const {start=0,end,fadeIn=0,fadeOut=0}=lifetime;
     need(Number.isFinite(start) && fadeIn>=0 && Number.isFinite(fadeIn) && fadeOut>=0 && Number.isFinite(fadeOut) &&
@@ -43,7 +46,7 @@
     need(kind==='relief' ? fields(relief,['height','heights']) && range(relief.height,0,depth) &&
       (relief.heights===undefined || raster(relief.heights,1)) : relief===undefined,
       'only relief decals accept a height and optional matching grayscale heights');
-    return {id,kind,anchor,
+    return {id,kind,anchor,...(mask && {mask:mask.slice()}),
       image:{width,height,pixels:pixels.slice()},lifetime:{start,...(end!==undefined && {end}),fadeIn,fadeOut},
       ...(!uv&&{grid:grid.slice()}),opacity,...(relief && {relief:{height:relief.height,...(relief.heights && {heights:relief.heights.slice()})}})};
   }
@@ -58,7 +61,7 @@
       vector(size,2,n=>range(n,.001,1000)) && range(depth,.001,100) && range(bias,0,depth) &&
       range(maxStep,.0001,2000),'invalid projector axes, size, depth, bias or maxStep');
     need(minFacing===undefined||range(minFacing,1e-6,1),'a projection facing cosine must be greater than zero and at most one');
-    const attachment=a.node===undefined ? null : hierarchy.reference({node:a.node,...(a.socket!==undefined && {socket:a.socket})});
+    const attachment=reference(a);
     need(a.socket===undefined || attachment,'a socket needs an anchor node');
     const n=V.norm(normal), right=V.norm(V.cross(up,n));
     return {...target(a),...attachment,at:at.slice(),normal:n,up:V.cross(n,right),size:size.slice(),depth,bias,maxStep,
@@ -120,13 +123,49 @@
     return K.procedural.data.freeze({format,version:1,decals});
   }
 
+  function edit(input,id,operation) {
+    create(input);
+    const index=input.decals.findIndex(row=>row.id===id);
+    need(index>=0,'unknown decal '+id);
+    const row=input.decals[index], next={...row};
+    const {type,delta,image,mask}=operation??{};
+    const opFields={move:['delta'],mask:['mask'],replace:['image','mask'],bake:['image']};
+    need(Object.hasOwn(opFields,type) && fields(operation,['type',...opFields[type]]),
+      'choose a move, mask, replace or bake layer edit');
+    if (type==='move') {
+      const {anchor}=row, uv=anchor.uv;
+      need(vector(delta,uv?2:3),'a decal move needs a delta in its anchor coordinates');
+      const shift=position=>position.map((value,i)=>value+delta[i]);
+      next.anchor={...anchor,...(uv ? {uv:{min:shift(uv.min),max:shift(uv.max)}} : {at:shift(anchor.at)})};
+    } else if (type==='mask' || type==='replace') {
+      if (type==='replace') next.image=image;
+      need(type!=='mask' || mask!==undefined,'supply mask alpha bytes or null to clear it');
+      if (mask===null) delete next.mask;
+      else if (mask!==undefined) next.mask=mask;
+    } else {
+      if (image!==undefined) next.image=image;
+      const checked=decal(next);
+      if (checked.mask) {
+        const {image:{width,height,pixels},mask,relief}=checked;
+        if (relief && !relief.heights)
+          next.relief={height:relief.height,heights:pixels.filter((_value,i)=>i%4===3)};
+        for (let i=0;i<mask.length;i++) pixels[i*4+3]=Math.round(pixels[i*4+3]*mask[i]/255);
+        next.image={width,height,pixels};
+        delete next.mask;
+      }
+    }
+    const edited={...input,decals:input.decals.map((decal,i)=>i===index ? next : decal)};
+    create(edited);
+    return K.procedural.data.freeze(K.procedural.data.clone(edited));
+  }
+
   function bind(world,input,{receivers,graph=world?.sceneGraph}={}) {
     need(world && !world.surfaceDecals && Array.isArray(receivers) && receivers.length<=192,
       'bind needs a world with no existing binding and a receiver list');
     const document=create(input), groups=new Map();
     for (const row of receivers) {
       const id=key(target(row)), kind=row.representation;
-      const common=['object','part','representation'];
+      const common=['object','part','representation',...(kind==='mesh'?[]:['node','socket'])];
       need(representations.includes(kind) && fields(row,common.concat('bias',kind==='mesh'?['mesh']:
         kind==='sdf'?['field']:['source'])),'invalid receiver representation or fields');
       need(row.bias===undefined || range(row.bias,0,1),'receiver bias needs a distance between zero and one');
@@ -139,7 +178,13 @@
       if (kind==='splats') need(source.data instanceof Float32Array,'a splat receiver needs a baked rest source');
       const group=groups.get(id)??{active:kind,sources:new Map()};
       need(!group.sources.has(kind),'duplicate receiver representation');
-      group.sources.set(kind,{...row,source});
+      const attachment=reference(row);
+      need(row.socket===undefined || attachment,'a receiver socket needs a node');
+      if (attachment) {
+        need(graph,'a node receiver needs a scene graph');
+        graph.frame(attachment);
+      }
+      group.sources.set(kind,{...row,source,attachment});
       groups.set(id,group);
     }
 
@@ -147,11 +192,12 @@
     const entries=document.decals.map(spec=>{
       const a=spec.anchor, group=groups.get(key(a));
       need(group,'no receiver for '+spec.id);
-      if (a.node!==undefined) {
+      const attachment=reference(a);
+      if (attachment) {
         need(graph,'a node anchor needs a scene graph');
-        graph.frame({node:a.node,...(a.socket&&{socket:a.socket})});
+        graph.frame(attachment);
       }
-      if (!a.uv) return buildEntry(spec,group);
+      if (!a.uv) return {...buildEntry(spec,group),attachment};
       const mesh=group.sources.get('mesh')?.mesh;
       need(mesh,'a UV decal needs an indexed mesh receiver');
       const chart=a.chart, clip=chart&&{min:chart.min.map((n,k)=>n+chart.padding[k]),max:chart.max.map((n,k)=>n-chart.padding[k])};
@@ -187,11 +233,12 @@
         const alpha=Number(alive)*spec.opacity*(l.fadeIn ? clamp((time-l.start)/l.fadeIn):1)*
           (l.fadeOut ? clamp((l.end-time)/l.fadeOut):1);
         const source=group.sources.get(group.active);
-        const node=a.node===undefined ? undefined : graph.has(a.node) &&
-          (a.socket===undefined || graph.node(a.node).sockets.includes(a.socket)) &&
-          graph.frame({node:a.node,...(a.socket&&{socket:a.socket})});
+        const attachment=entry.attachment ?? source?.attachment;
+        const node=attachment && graph.has(attachment.node) &&
+          (attachment.socket===undefined || graph.node(attachment.node).sockets.includes(attachment.socket)) &&
+          graph.frame(attachment);
         const visible=alpha>0 && source && (!a.uv || group.active==='mesh') && (showMeshes!==false || group.active!=='mesh') &&
-          (a.node===undefined || node?.visible);
+          (!attachment || node?.visible);
         if (visible) {
           if (a.uv) poseUV(entry,source.mesh);
           else project(entry,source,node);
@@ -260,10 +307,11 @@
   function updateInk(entry,opacity) {
     const level=Math.round(opacity*64);
     if (entry.level===level) return;
-    const {pixels,width,height}=entry.spec.image, rgba=Uint8Array.from(pixels);
+    const {image:{pixels,width,height},mask}=entry.spec, rgba=Uint8Array.from(pixels);
     for (let y=0;y<height;y++) for (let x=0;x<width;x++) {
-      const i=(y*width+x)*4+3, threshold=(bayer[y%4*4+x%4]+.5)/16;
-      rgba[i]=pixels[i]*level/(255*64)>=threshold ? 255:0;
+      const p=y*width+x, i=p*4+3, threshold=(bayer[y%4*4+x%4]+.5)/16;
+      const alpha=mask ? Math.round(pixels[i]*mask[p]/255) : pixels[i];
+      rgba[i]=alpha*level/(255*64)>=threshold ? 255:0;
     }
     SpriteSurface.update(entry.atlas,{x:0,y:0,width,height},{w:width,h:height,rgba});
     entry.level=level;
@@ -272,8 +320,8 @@
   function splatPicker(receiver) {
     if (receiver.picker) return receiver.picker;
     const source=receiver.source, tags=TargetSelectors.index(source), rowMask=new Uint8Array(source.count);
-    for (let i=0;i<rowMask.length;i++) rowMask[i]=Number(matches(receiver,tags.row(i)));
-    const rest={...source,data:source.rest??source.data,anim:undefined};
+    for (let i=0;i<rowMask.length;i++) rowMask[i]=Number(!!TargetSelectors.objectScope(receiver,tags.row(i)));
+    const rest={...source,data:source.rest??source.anim?.base??source.data,anim:undefined};
     return receiver.picker=K.procedural.contributions.create(rest,{rowMask,time:0,sampleWithdrawal:0,cutaway:false});
   }
 
@@ -339,5 +387,5 @@
     entry.triangles=count;
   }
 
-  K.surfaceDecals=Object.freeze({format,create,fromBrush,bind});
+  K.surfaceDecals=Object.freeze({format,create,fromBrush,edit,bind});
 })(KIT);

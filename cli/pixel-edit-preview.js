@@ -27,9 +27,10 @@ function sourceChanges(scene, before, after) {
     for (const key of fieldsChanged(left,right)) {
       const old = left && Object.hasOwn(left,key) ? left[key] : undefined;
       const next = right && Object.hasOwn(right,key) ? right[key] : undefined;
-      const object = kind === 'solid' ? next?.id ?? old?.id ?? key : key;
-      const part = kind === 'solid' ? next?.part ?? old?.part : undefined;
-      result.push({ scene, kind, object, ...(part !== undefined && { part }),
+      const anchor = kind === 'decal' && (next?.anchor ?? old?.anchor);
+      const object = anchor ? anchor.object : kind === 'solid' ? next?.id ?? old?.id ?? key : key;
+      const part = anchor ? anchor.part : kind === 'solid' ? next?.part ?? old?.part : undefined;
+      result.push({ scene, kind, object, ...(anchor && {decal:key}), ...(part !== undefined && { part }),
         change:old === undefined ? 'added' : next === undefined ? 'removed' : 'modified',
         fields:fieldsChanged(old,next) });
     }
@@ -37,7 +38,9 @@ function sourceChanges(scene, before, after) {
   compare('solid',solids(before.solids),solids(after.solids));
   compare('part',before.parts,after.parts);
   compare('prefab',before.instances,after.instances);
-  const fields = fieldsChanged(before,after).filter(key => !['solids','parts','instances'].includes(key));
+  const decals = source => Object.fromEntries((source.surfaceDecals?.decals ?? []).map(row=>[row.id,row]));
+  compare('decal',decals(before),decals(after));
+  const fields = fieldsChanged(before,after).filter(key => !['solids','parts','instances','surfaceDecals'].includes(key));
   if (fields.length) result.push({ scene, kind:'scene', change:'modified', fields });
   return result;
 }
@@ -53,6 +56,7 @@ function sourceTarget({ destination,binding,layer }, patch) {
     ...(layer?.kind === 'surface' && { layer:layer.id, ...(patch.operation?.pixel !== undefined && { at:patch.operation.pixel }) }),
     ...(binding.part !== undefined && { part:binding.part }),
     ...(destination.chart !== undefined && { chart:destination.chart, channel:destination.channel }),
+    ...(destination.kind === 'decal-layer' && {decal:destination.decal,operation:patch.operation?.type}),
     ...(destination.kind === 'shot-correction' && Array.isArray(patch.edits) && {
       frame:patch.frame, pixels:patch.edits.map(edit => ({ at:edit?.at, from:edit?.from, to:edit?.to }))
     }),

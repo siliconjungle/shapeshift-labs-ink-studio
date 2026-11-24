@@ -36,12 +36,63 @@ triangle boundaries.
 Supply top-down RGBA8 pixels as a flat array, up to 256 × 256. Use
 `kind: 'lettering'` for lettering artwork and `kind: 'scuff'` for wear or
 impact graphics. Alpha, optional overall `opacity`, and lifetime fades use
-a stable cutout pattern in texture space. With `kind: 'relief'`, supply
+a stable cutout pattern in texture space. An optional `mask` is a flat
+array with one alpha byte per image pixel. Ink multiplies the image alpha
+by the mask before applying opacity and fades. With `kind: 'relief'`, supply
 `relief: { height, heights? }` where `height` is the maximum outward
 displacement in scene units. The optional grayscale byte raster matches
 the color image dimensions. Image alpha supplies height when that raster
 is omitted. The relief displaces the decal's render geometry. It leaves
 the receiver's collision and source geometry under the receiver's control.
+
+## Edit a decal layer
+
+Add the version 1 decal document as `surfaceDecals` on a JSON diorama.
+A rest projector names its receiving solid's stable ID in
+`anchor.object`. Include `anchor.part` to check the receiver's rig part.
+The projector uses the diorama's rest coordinates and follows the part's
+animated pose. The diorama binds its splat receivers automatically.
+Use native receiver bindings for mesh UV projectors or node and socket
+anchors.
+
+In the pixel document, add a `decal-layer` destination and link it to an
+existing scene binding for the receiving solid. A surface layer can point
+to that destination:
+
+```json
+{
+  "destinations": [
+    { "id": "label-edit", "kind": "decal-layer", "binding": "gate", "decal": "warning-label" }
+  ],
+  "layers": [
+    { "id": "label", "kind": "surface", "destination": "label-edit" }
+  ]
+}
+```
+
+Use `pixel-art targets --destination layer:label --scene gate.json` on the
+pixel document to inspect the anchor, lifetime, and source revision.
+Apply an edit using the regular pixel document revision, frame, and
+optional inspected source revision. Use `"destination": "layer:label"`
+to respect the layer's lock.
+
+| `operation.type` | Fields |
+| --- | --- |
+| `move` | `delta` in rest-space XYZ. The native API also accepts a two-component delta for a UV decal. |
+| `mask` | `mask` with one alpha byte per image pixel. Use `null` to clear. |
+| `replace` | Top-down RGBA `image` with `width`, `height`, and `pixels`. When resizing, supply a matching mask or clear it with `"mask": null`. |
+| `bake` | Flattens the mask into the current decal texture. Add `"source": "frame"` to bake the selected pixel frame's composite and apply the decal mask. The frame must fit within 256 × 256. |
+
+The texture bake keeps the decal ID, projection bounds, and lifetime.
+The saved layer continues to follow its receiver and fade on the scene
+clock. A shared pixel edit session can undo or redo the source edits
+alongside changes to the artwork. Preview and replay use the same
+revision checks as other bound edits.
+
+For a standalone decal document, use
+`K.surfaceDecals.edit(document, decalId, operation)` and bind the returned
+document to a receiver. To bake a new raster at the same anchor, pass the
+RGBA `image` to the native bake operation.
 
 ## Bind and switch receivers
 

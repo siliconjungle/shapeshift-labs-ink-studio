@@ -115,7 +115,7 @@
   }
 
   function sceneKey(spec, style, meshes) {
-    const { camera, name, blurb, ...geometry } = spec;
+    const { camera, name, blurb, surfaceDecals, ...geometry } = spec;
     return signature([geometry, style, meshes, globals.map(name => globalThis[name])]);
   }
   function pack(world) {

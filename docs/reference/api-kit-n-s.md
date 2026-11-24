@@ -1671,6 +1671,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.surfaceDecals` | namespace |  |  |
 | `KIT.surfaceDecals.bind` | function | `(world,input,{receivers,graph=world?.sceneGraph}={})` | [guide](../surface-decals.md#bind-and-switch-receivers), [source](../../src/kit/p46-surface-decals.js) |
 | `KIT.surfaceDecals.create` | function | `(input)` | [guide](../surface-decals.md), [source](../../src/kit/p46-surface-decals.js) |
+| `KIT.surfaceDecals.edit` | function | `(input,id,operation)` | [guide](../surface-decals.md#edit-a-decal-layer), [source](../../src/kit/p46-surface-decals.js) |
 | `KIT.surfaceDecals.format` | value | `string = "ink-studio/surface-decals"` |  |
 | `KIT.surfaceDecals.fromBrush` | function | `({id,tip,anchor,pixelSize,grid,opacity,lifetime}={})` | [guide](../surface-decals.md#retained-pixel-brushes), [source](../../src/kit/p46-surface-decals.js) |
 
