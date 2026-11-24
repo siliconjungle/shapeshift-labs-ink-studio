@@ -79,4 +79,5 @@ impacts and can be bound to a confirmed release with
 [Directional contact marks](contact-marks.md) use these contact points,
 normals, and headings to place native-pixel cels.
 [Portable material response recipes](material-response.md) can read the same
-contact records for WebGL preview and timed picture and sound export.
+contact records for WebGL preview and timed picture and sound export. A step
+can also [load a shoe and leave a fading trail](material-response.md#pick-up-and-transfer-material).

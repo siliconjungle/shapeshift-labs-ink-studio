@@ -47,6 +47,81 @@ Place the recipe and its recorded contacts in a JSON diorama under
 - A recipe supports eight materials and keeps up to 2,048 contacts. A
   contact with no matching rule stays in the log for future recipe edits.
 
+## Pick up and transfer material
+
+Add `pickup` to a source material such as mud and `transfer` to a different
+receiving material such as tile. A step increases the load on that shoe in
+mud. Each later step on qualifying tile deposits a fraction of what the
+same shoe still carries.
+
+```json
+{
+  "mud": { "pickup": { "amount": 1 } },
+  "tile": {
+    "chart": { "bounds": [-4, -1, 6, 1], "reach": 0.1 },
+    "resolution": [256, 64],
+    "transfer": {
+      "from": "mud",
+      "fraction": 0.5,
+      "size": [0.4, 0.62],
+      "bands": [
+        { "at": 0.02, "color": "#819088" },
+        { "at": 0.1, "color": "#705749" },
+        { "at": 0.35, "color": "#49372e" }
+      ]
+    }
+  }
+}
+```
+
+Put these entries inside the recipe's `materials` map. Give each sole a
+stable contact `carrier` ID such as `walker/left` or `walker/right`. For
+existing producers without a carrier, Ink uses the contact's source and
+entity as a single carrier. Step contacts with neither a carrier nor an
+entity have no transfer state.
+
+Each shoe can hold up to 1 unit of each source material. Ink scales pickup
+and deposits by contact load divided by `loadReference`, capped at 1. Speed
+doesn't affect transfer, so a stationary step with load can pick up mud.
+The receiver consumes mud only when the contact is inside its chart and
+within reach, and draws onto its selected material. Unrelated surfaces,
+wheels, and impacts leave the tracked load alone. When a receiving material
+also has pickup, the step deposits the old material before loading the new one.
+
+The tread follows the heading projected onto the chart. `size` specifies
+sole width and length in chart units. Ink includes a default sole. To draw
+your own, set `tread` to equal-width strings up to 32 by 32 cells, with
+`.` for a hole and digits `1`–`9` for coverage. The palette band uses
+deposited amount times local tread coverage. A low deposit may fall below
+the lightest band. `duration` defaults to 30 seconds and `decay` defaults
+to zero. Increase decay to fade a print after it lands.
+
+`track.transfers(time)` reports pickups and deposits through the requested
+time, including before and after amounts and the latest pickup that
+contributed to each deposit. If a contact arrives late, Ink replays the
+track in time order, breaking ties by contact ID. The same replay drives
+preview, scrubbing, and export. The [effect pixel inspector](#inspect-a-pixel)
+reports each mark's deposit and source pickup.
+
+### After the Rain
+
+The [editable diorama](../examples/material-transfer/scene.cjs) walks two
+boots from wet clay onto glazed tile. Export a still and read the transfer
+ledger from the same JSON:
+
+```sh
+node -e 'console.log(JSON.stringify(require("./examples/material-transfer/scene.cjs")()))' > after-the-rain.json
+node cli/ink-studio.js effect transfers after-the-rain.json --t 5.6
+node cli/ink-studio.js render after-the-rain.json --w 356 --h 128 --px 1 --t 5.6 --raw --out after-the-rain.png
+```
+
+Build the offline WebGL demo with a renderer bundle:
+
+```sh
+npm exec --yes --package=esbuild@0.25.12 -- esbuild examples/effect-recipes/preview.mjs --bundle --format=esm --minify --outfile=ink-renderer.mjs
+node examples/material-transfer/build-demo.cjs ink-renderer.mjs after-the-rain.html
+```
+
 ## Read live contacts
 
 Create and bind a track to an existing world, or use the track installed

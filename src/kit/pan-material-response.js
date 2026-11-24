@@ -28,6 +28,36 @@
       finite(threshold, .001, 1) && finite(speed, 0, 100) && finite(width, 1e-5, 100), 'invalid mark dimensions or timing');
     return { radius, duration, decay, threshold, rgb: swatch(color), speed, width };
   }
+  const sole = [
+    '...6666....', '..899998...', '.89999998..', '.899..998..', '.69999996..',
+    '.89999996..', '..79..97...', '..688887...', '...5..5....',
+    '...4.55....', '...78887...', '...89998...', '...89.98...',
+    '...89998...', '....777....'
+  ];
+  function pickup(value) {
+    fields(value, ['amount'], 'pickup');
+    const { amount = 1 } = value;
+    check(finite(amount, .001, 1), 'pickup amount must be in [.001, 1]');
+    return { amount };
+  }
+  function transfer(value) {
+    fields(value, ['from', 'fraction', 'size', 'tread', 'bands', 'duration', 'decay'], 'transfer');
+    const { from, fraction = .5, size = [.22, .38], tread = sole, duration = 30, decay = 0,
+      bands = [{ at: .02, color: '#a39884' }, { at: .055, color: '#887968' },
+        { at: .12, color: '#75604f' }, { at: .22, color: '#654c3d' }, { at: .35, color: '#49372e' }] } = value;
+    const w = tread?.[0]?.length, h = tread?.length;
+    check(id(from) && finite(fraction, .001, 1) && tuple(size, 2) && size.every(n => finite(n, 1e-5, 100)) &&
+      finite(duration, .001, 120) && finite(decay, 0, 1000), 'invalid transfer source, fraction, size or timing');
+    check(Array.isArray(tread) && Number.isInteger(w) && finite(w, 1, 32) && finite(h, 1, 32) &&
+      Array.from(tread).every(row => typeof row === 'string' && row.length === w && /^[.1-9]+$/.test(row)) &&
+      tread.some(row => /[1-9]/.test(row)), 'transfer tread needs equal-width rows of dots and weights 1–9');
+    const settings = FieldBands.settings({ stops: bands });
+    check(settings.stops[0].at > 0, 'transfer band thresholds must be positive');
+    const palette = FieldBands.bind(settings, swatch);
+    const mask = { width: w, height: h, data: [...tread.join('')].map(value => value === '.' ? 0 : Number(value)/9) };
+    return { from, fraction, size: size.slice(), mask, duration, decay, palette,
+      first: { at: settings.stops[0].at, rgb: palette.palette[0] } };
+  }
   function spray(value) {
     fields(value, ['count', 'speed', 'radius', 'duration', 'gravity', 'color'], 'particles');
     const { count = 8, speed = 1.6, radius = .024, duration = .48, gravity = 6, color } = value;
@@ -51,17 +81,19 @@
       finite(speedReference, .001, 1e4) && finite(loadReference, .001, 1e8) &&
       Number.isInteger(pixelSize) && finite(pixelSize, 1, 16), 'expected a version 1 recipe with 1–8 materials');
     const rules = new Map(Object.entries(materials).map(([name, row]) => {
-      fields(row, ['select', 'chart', 'resolution', 'mark', 'ripple', 'particles', 'sound'], 'material ' + name);
+      fields(row, ['select', 'chart', 'resolution', 'mark', 'ripple', 'particles', 'sound', 'pickup', 'transfer'], 'material ' + name);
       check(id(name), 'invalid material ID');
       const rule = {
         select: TargetSelectors.prepare(row.select ?? { material: name }),
         mark: row.mark === undefined ? null : mark(row.mark, false),
         ripple: row.ripple === undefined ? null : mark(row.ripple, true),
         particles: row.particles === undefined ? null : spray(row.particles),
-        sound: row.sound === undefined ? null : sound(row.sound)
+        sound: row.sound === undefined ? null : sound(row.sound),
+        pickup: row.pickup === undefined ? null : pickup(row.pickup),
+        transfer: row.transfer === undefined ? null : transfer(row.transfer)
       };
-      check(rule.mark || rule.ripple || rule.particles || rule.sound, 'material needs a response');
-      if (rule.mark || rule.ripple) {
+      check(rule.mark || rule.ripple || rule.particles || rule.sound || rule.pickup || rule.transfer, 'material needs a response');
+      if (rule.mark || rule.ripple || rule.transfer) {
         const { resolution = [128, 128] } = row;
         check(tuple(resolution, 2) && resolution.every(n => Number.isInteger(n) && finite(n, 8, 256)),
           'projected chart resolution must be 8–256 per axis');
@@ -69,14 +101,19 @@
         const [u, v, U, T] = chart.bounds;
         rule.chart = chart;
         rule.resolution = resolution.slice();
-        rule.field = K.splatEffects.field({ width: resolution[0], height: resolution[1], origin: [u, v],
-          cell: [(U - u) / resolution[0], (T - v) / resolution[1]],
+        rule.grid = { width: resolution[0], height: resolution[1], origin: [u, v],
+          cell: [(U - u) / resolution[0], (T - v) / resolution[1]] };
+        if (rule.mark || rule.ripple) rule.field = K.splatEffects.field({ ...rule.grid,
           channels: { mark: { decay: rule.mark?.decay ?? 0 }, ripple: { decay: rule.ripple?.decay ?? 0 } } });
-      } else check(row.chart === undefined && row.resolution === undefined, 'a chart needs a mark or ripple');
+      } else check(row.chart === undefined && row.resolution === undefined, 'a chart needs a mark, ripple or transfer');
       return [name, rule];
     }));
+    const receivers = [...rules.values()].filter(rule => rule.transfer);
+    for (const [material, rule] of rules) if (rule.transfer)
+      check(rule.transfer.from !== material && rules.get(rule.transfer.from)?.pickup,
+        'transfer on ' + material + ' needs a different source material with pickup');
     const rows = new Map();
-    let revision = 0, ordered, cues, mixed, bound;
+    let revision = 0, ordered, cues, mixed, transferState, bound;
 
     function add(records, { time } = {}) {
       check(Array.isArray(records) && records.length <= limits.contacts, 'expected a bounded contact list');
@@ -84,12 +121,13 @@
       for (const row of records) {
         check(record(row), 'expected a material contact record');
         const { id: key, interaction, material, point, speed, load = loadReference, normal = [0, 1, 0],
-          heading = [1, 0, 0], entity, wheel, source, time: at = time } = row;
+          heading = [1, 0, 0], entity, wheel, source, carrier, time: at = time } = row;
         check(typeof key === 'string' && key.length > 0 && key.length <= 256 && kinds.includes(interaction) &&
           (material == null || typeof material === 'string') && tuple(point, 3) &&
           tuple(normal, 3) && V.len(normal) > 1e-8 && tuple(heading, 3) &&
           finite(at, 0, 1e6) && finite(speed, 0, 1e8) && finite(load, 0, 1e12) &&
-          [entity, wheel, source].every(value => value == null || typeof value === 'string' && value.length <= 256),
+          [entity, wheel, source].every(value => value == null || typeof value === 'string' && value.length <= 256) &&
+          (carrier === undefined || typeof carrier === 'string' && carrier.length > 0 && carrier.length <= 256),
           'expected an ID, step/roll/impact, world position, speed and timestamp');
         if (rows.has(key) || pending.has(key)) continue;
         const rule = rules.get(material);
@@ -97,10 +135,11 @@
         const n = V.norm(normal), h = V.norm(V.mad(heading, n, -V.dot(heading, n)), V.perp(n));
         const hit = { id: key, interaction, material, point: point.slice(), normal: n, heading: h,
           time: at, speed, load, ...(entity != null && { entity }), ...(wheel != null && { wheel }), ...(source != null && { source }),
+          ...(carrier !== undefined && { carrier }),
           ...(Number.isSafeInteger(row.tick) && { tick: row.tick }),
           ...(Number.isSafeInteger(row.appliedTick) && { appliedTick: row.appliedTick }) };
         pending.set(key, { hit, rule, strength });
-        if (!rule?.chart || !strength) continue;
+        if (!rule?.field || !strength) continue;
         const relative = V.sub(point, rule.chart.origin);
         if (Math.abs(V.dot(relative, rule.chart.normal)) > rule.chart.reach) continue;
         const uv = [V.dot(relative, rule.chart.u), V.dot(relative, rule.chart.v)];
@@ -116,7 +155,7 @@
       if (pending.size) {
         for (const [rule, stamps] of writes) rule.field.stampMany(stamps);
         for (const [key, row] of pending) rows.set(key, row);
-        ordered = cues = mixed = undefined;
+        ordered = cues = mixed = transferState = undefined;
         revision++;
       }
       return pending.size;
@@ -124,6 +163,58 @@
     add(contacts);
     const contactsByTime = () => ordered ??= [...rows.values()].sort((a, b) => a.hit.time - b.hit.time ||
       (a.hit.id < b.hit.id ? -1 : a.hit.id > b.hit.id ? 1 : 0));
+    function compileTransfers() {
+      if (transferState) return transferState;
+      const byRule = new Map(receivers.map(rule => [rule, []]));
+      const loads = new Map(), deposits = new Map(), events = [];
+      for (const { hit, rule } of contactsByTime()) {
+        if (hit.interaction !== 'step' || !(rule?.pickup || rule?.transfer)) continue;
+        const carrier = hit.carrier ?? hit.entity;
+        if (!carrier || !hit.load) continue;
+        const key = hit.carrier === undefined ? JSON.stringify([hit.source, carrier]) : JSON.stringify([carrier]);
+        const pressure = Math.min(1, hit.load / loadReference);
+        if (!loads.has(key)) loads.set(key, new Map());
+        const carried = loads.get(key);
+        const info = { contact: hit.id, carrier, receiver: hit.material, time: hit.time,
+          ...(hit.source !== undefined && { source: hit.source }) };
+        if (rule.transfer) {
+          const fx = rule.transfer, charge = carried.get(fx.from);
+          const relative = V.sub(hit.point, rule.chart.origin);
+          const uv = [V.dot(relative, rule.chart.u), V.dot(relative, rule.chart.v)];
+          const [u, v, U, T] = rule.chart.bounds;
+          const amount = (charge?.amount ?? 0) * fx.fraction * pressure;
+          if (amount > 0 && Math.abs(V.dot(relative, rule.chart.normal)) <= rule.chart.reach &&
+              uv[0] >= u && uv[0] < U && uv[1] >= v && uv[1] < T) {
+            const before = charge.amount;
+            charge.amount -= amount;
+            const row = { ...info, action: 'deposit', material: fx.from, before, amount, after: charge.amount, pickup: charge.pickup };
+            const direction = [V.dot(hit.heading, rule.chart.u), V.dot(hit.heading, rule.chart.v)];
+            byRule.get(rule).push({
+              at: uv, time: hit.time, lifetime: fx.duration, source: hit.id, shape: 'mask', mask: fx.mask, size: fx.size,
+              direction: Math.hypot(...direction) > 1e-8 ? direction : [1, 0], values: { transfer: amount }
+            });
+            events.push(row);
+            deposits.set(hit.id, row);
+          }
+        }
+        if (rule.pickup) {
+          const before = carried.get(hit.material)?.amount ?? 0;
+          const amount = Math.min(1 - before, rule.pickup.amount * pressure);
+          if (amount > 0) {
+            carried.set(hit.material, { amount: before + amount, pickup: hit.id });
+            events.push({ ...info, action: 'pickup', material: hit.material, before, amount, after: before + amount });
+          }
+        }
+      }
+      const fields = new Map([...byRule].map(([rule, stamps]) => [rule,
+        K.splatEffects.field({ ...rule.grid, channels: { transfer: { decay: rule.transfer.decay } }, stamps })]));
+      return transferState = { fields, events, deposits };
+    }
+
+    function transfers(time = 1e6) {
+      check(finite(time, 0, 1e6), 'invalid transfer sample time');
+      return compileTransfers().events.filter(row => row.time <= time).map(row => ({ ...row }));
+    }
     function sounds() {
       if (cues) return cues;
       const last = new Map();
@@ -150,7 +241,7 @@
 
     function raster(rule, time) {
       const [w, h] = rule.resolution;
-      const frame = rule.field.frame(time), rgba = new Uint8Array(w * h * 4);
+      const frame = rule.field?.frame(time), rgba = new Uint8Array(w * h * 4);
       for (const key of ['mark', 'ripple']) {
         const effect = rule[key];
         if (!effect) continue;
@@ -161,13 +252,22 @@
           rgba[i * 4 + 3] = 255;
         }
       }
+      if (rule.transfer) {
+        const plane = compileTransfers().fields.get(rule).frame(time).data('transfer');
+        for (let i = 0; i < plane.length; i++) {
+          const band = rule.transfer.palette.sample(plane[i]);
+          if (!band) continue;
+          rgba.set(band.rgb, i * 4);
+          rgba[i * 4 + 3] = 255;
+        }
+      }
       return { w, h, rgba };
     }
 
     function inspectField(material, time, cell) {
       const rule = rules.get(material);
-      const frame = cell && rule.field.frame(time);
-      return ['mark', 'ripple'].filter(kind => rule[kind]).map(kind => {
+      const frame = cell && rule.field?.frame(time);
+      const channels = ['mark', 'ripple'].filter(kind => rule[kind]).map(kind => {
         const { threshold, rgb } = rule[kind];
         const sample = frame && frame.traceCell(kind, ...cell);
         const event = sample?.source && rows.get(sample.source)?.hit;
@@ -176,6 +276,18 @@
           event: event ? structuredClone(event) : null
         } : null };
       });
+      if (rule.transfer) {
+        const state = cell && compileTransfers();
+        const sample = state && state.fields.get(rule).frame(time).traceCell('transfer', ...cell);
+        const event = sample?.source && rows.get(sample.source)?.hit;
+        const deposit = sample?.source && state.deposits.get(sample.source);
+        const band = (sample && rule.transfer.palette.sample(sample.value)) ?? rule.transfer.first;
+        channels.push({ kind: 'transfer', rgb: band.rgb.slice(), threshold: band.at, sample: sample ? {
+          value: sample.value, contributors: sample.contributors, uv: sample.uv,
+          event: event ? structuredClone(event) : null, transfer: deposit ? { ...deposit } : null
+        } : null });
+      }
+      return channels;
     }
 
     function particlesAt(time) {
@@ -268,7 +380,7 @@
       world.materialResponse = api;
       return world;
     }
-    const api = Object.freeze({ add, bind, audioTimeline, effectPass,
+    const api = Object.freeze({ add, bind, audioTimeline, effectPass, transfers,
       createPlayback: (context, resolve) => playback(sounds, context, resolve),
       snapshot: () => ({ recipe: structuredClone(authored), contacts: contactsByTime().map(row => structuredClone(row.hit)) }),
       sounds: () => sounds().map(row => ({ ...row })),
@@ -277,6 +389,8 @@
         let end = 0;
         for (const { hit, rule } of rows.values()) if (rule) end = Math.max(end, hit.time +
           Math.max(rule.mark?.duration ?? 0, rule.ripple?.duration ?? 0, rule.particles?.duration ?? 0, rule.sound ? .001 : 0));
+        if (receivers.length) for (const deposit of compileTransfers().deposits.values())
+          end = Math.max(end, deposit.time + rules.get(deposit.receiver).transfer.duration);
         return end;
       } });
     const authored = structuredClone(recipe);

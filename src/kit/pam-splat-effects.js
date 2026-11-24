@@ -24,9 +24,9 @@
     const indices = new Map(names.map((name, i) => [name, i]));
     let revision = 0, previous;
     function prepare({ at, time = 0, radius = 0.1, values, lifetime = Infinity, shape = 'disk', source,
-      speed = 0, width = radius, velocity = [0, 0] } = {}) {
+      speed = 0, width = radius, velocity = [0, 0], mask, size, direction = [1, 0] } = {}) {
       if (!vector(at, 2) || !vector(velocity, 2) || !record(values) || !Object.keys(values).length ||
-          !['disk', 'ring'].includes(shape) || source !== undefined &&
+          !['disk', 'ring', 'mask'].includes(shape) || source !== undefined &&
           !(typeof source === 'string' && source.length > 0 && source.length <= 256))
         throw new TypeError('A field stamp needs UV, velocity, a shape, channel values and an optional source ID');
       if (lifetime !== Infinity) scalar(1e-6, 1e6, 'Stamp lifetime', lifetime);
@@ -39,7 +39,20 @@
         if (index === undefined) throw new RangeError('Unknown field channel: ' + name);
         return [index, scalar(-1e4, 1e4, 'Stamp amount', amount)];
       });
-      return { at: at.slice(), time, radius, lifetime, shape, speed, width, velocity: velocity.slice(), writes, source };
+      let footprint;
+      if (shape === 'mask') {
+        const { width: w, height: h, data } = mask ?? {};
+        const length = vector(direction, 2) && Math.hypot(...direction);
+        if (!Number.isInteger(w) || !Number.isInteger(h) || w < 1 || h < 1 || w > 32 || h > 32 ||
+            !(Array.isArray(data) || ArrayBuffer.isView(data)) || data.length !== w*h ||
+            !Array.from(data).every(value => number(value, 0, 1)) ||
+            !vector(size, 2) || !size.every(value => number(value, 1e-5, 100)) ||
+            !Number.isFinite(length) || length <= 1e-8 || speed !== 0)
+          throw new RangeError('Mask stamps need a bounded scalar raster, positive UV size, direction and zero spread');
+        footprint = { w, h, data: new Float32Array(data), size: size.slice(), u: direction[0]/length, v: direction[1]/length };
+        radius = Math.hypot(...size) * .5;
+      }
+      return { at: at.slice(), time, radius, lifetime, shape, speed, width, velocity: velocity.slice(), writes, source, footprint };
     }
     function append(items) {
       if (events.length + items.length > 4096) throw new RangeError('Effect field exceeds its stamp budget');
@@ -82,7 +95,16 @@
     stampMany(stamps);
     strokes.forEach(stroke);
 
-    function influence(event, radius, distance) {
+    function influence(event, radius, dx, dy) {
+      const footprint = event.footprint;
+      if (footprint) {
+        const { w, h, data, size, u, v } = footprint;
+        const across = .5 + (-v * dx + u * dy) / size[0];
+        const along = .5 - (u * dx + v * dy) / size[1];
+        return across >= 0 && across < 1 && along >= 0 && along < 1 ?
+          data[Math.floor(along * h) * w + Math.floor(across * w)] : 0;
+      }
+      const distance = Math.hypot(dx, dy);
       const q = event.shape === 'ring' ? Math.abs(distance - radius) / event.width : distance / radius;
       return q < 1 ? (1 - q * q) ** 2 : 0;
     }
@@ -118,8 +140,7 @@
           for (let i = left; i <= right; i++) {
             const cell = j * width + i;
             if (!open[cell]) continue;
-            const distance = Math.hypot(ox + (i + 0.5) * dx - u, y);
-            const weight = influence(event, radius, distance);
+            const weight = influence(event, radius, ox + (i + 0.5) * dx - u, y);
             if (!weight) continue;
             for (const { buffer, amount, sum } of writes) {
               const value = amount * weight;
@@ -150,7 +171,7 @@
           if (open[cell]) for (const row of active) {
             const write = row.writes.find(candidate => candidate.index === index);
             if (!write) continue;
-            const weight = influence(row.event, row.radius, Math.hypot(uv[0] - row.u, uv[1] - row.v));
+            const weight = influence(row.event, row.radius, uv[0] - row.u, uv[1] - row.v);
             const amount = Math.fround(write.amount * weight);
             if (write.sum ? !amount : amount <= 0) continue;
             contributors++;

@@ -1208,6 +1208,7 @@ const CMD = {
         '  effect-recipe open <id|file.json> [--out example.json]  copy an editable recipe',
         '  effect-recipe render <id|file.json> [--inputs edits.json] [--sample index] --out frame.png  export a recipe frame',
         '  effect-recipe check [id|file.json] [--chrome executable] [--out report.json]  compare WebGL preview with PNG export',
+        '  effect transfers <scene> [--t seconds] [--out report.json]   read material pickup and deposit events',
         '  effect inspect <scene> --at x,y [--t seconds] [--out report.json]   trace a rendered pixel to its material response and contact',
         '  palette fit <fit.json> [--format png|data] [--tile]   fit two approved swatches and preview at native size',
         '  palette dither-review <fit.json> [--out directory]   compare approved pairs and flag strong texture',
@@ -2425,6 +2426,20 @@ const CMD = {
     return require('./effect-recipes.js').command(pos,opt);
   },
   effect() {
+    if (pos[0] === 'transfers') {
+      if (pos.length !== 2 || Object.entries(opt).some(([key,value]) => !['t','out'].includes(key) || typeof value !== 'string'))
+        die('Use effect transfers <scene> [--t seconds] [--out report.json]');
+      const world = buildPreview(pos[1]);
+      const track = world.materialResponse;
+      if (!track) die('Effect transfers needs a scene with a material response track');
+      const time = num('t', 1e6);
+      const report = { format:'ink-studio/material-transfers', version:1, time, events:track.transfers(time) };
+      if (!opt.out) return process.stdout.write(JSON.stringify(report,null,2)+'\n');
+      const file = outputFile('material-transfers.json');
+      if (file === path.resolve(pos[1])) die('Choose a report path separate from the scene');
+      require('./asset-files.js').json(file,report);
+      return;
+    }
     if (pos[0] !== 'inspect' || pos.length !== 2 || typeof opt.at !== 'string' || !/^\d+\s*,\s*\d+$/.test(opt.at) ||
         ['t', 'out'].some(key => opt[key] === true))
       die('Use effect inspect <scene> --at x,y [--t seconds] [--out report.json]');
