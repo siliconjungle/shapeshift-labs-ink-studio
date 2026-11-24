@@ -935,6 +935,34 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     await click(browser,'#undo');
     assert.deepEqual(await download('#export'),cleanupOriginal);
 
+    const rulesFile = path.join(directory,'workshop-art-rules.json');
+    const artRules = {
+      version:1,
+      profiles:[{ id:'actor',ramps:['metal'] },{ id:'close-up',
+        exceptions:[{ id:'visor',check:'ramp',reason:'Hold the visor spot.',selection:'visor' }] }],
+      bindings:[{ profile:'actor',layer:'paint' },{ profile:'close-up',layer:'paint',shot:'close' }]
+    };
+    fs.writeFileSync(rulesFile,JSON.stringify({ width:4,height:3,swatchIds:['ink','rust','blue'],palette:['#142839','#c65126','#628ace'],
+      ramps:[{ id:'metal',swatches:['ink','blue'] }],frames:[{ id:'front',slots:slots([4,0],[5,0],[6,1]),duration:.25 }],
+      sharedSelections:[{ id:'visor',pixels:[[2,1]] }],artRules }));
+    await browser.send('DOM.setFileInputFiles',{ nodeId:imported.nodeId,files:[rulesFile] });
+    await until(browser,"document.querySelector('#status').textContent === 'Opened workshop-art-rules.json'");
+    await evaluate(browser,()=>{
+      const menu = document.querySelector('[data-diagnostic-kind]');
+      menu.value = 'ramp';
+      menu.dispatchEvent(new Event('change'));
+    });
+    await until(browser,`${diagnostic}.dataset.finding === 'ramp-2-1'`);
+    assert.equal(await browser.evaluate("document.querySelector('#art-shot-control').hidden"),false);
+    await change('art-shot','close');
+    await until(browser,`${diagnostic}.dataset.finding === ''`);
+    await click(browser,'[data-diagnostic-accepted]');
+    await until(browser,`${diagnostic}.value.includes('Accepted · visor')`);
+    assert.match(await browser.evaluate("document.querySelector('#craft-diagnostics p').textContent"),/Hold the visor spot/);
+    assert.equal(await browser.evaluate("document.querySelector('[data-diagnostic-select]').disabled"),true);
+    assert.deepEqual((await download('#export')).artRules,artRules);
+
+
 
 
 
@@ -1032,5 +1060,24 @@ test('the CLI exports an offline native canvas with both views on the selected v
     await load(browser,file);
     assert.equal(await browser.evaluate("document.querySelector('#frame-control').hidden"),true);
     assert.deepEqual(await raster(browser,preview,1,2),[33,98,134,255]);
+
+    versioned.palette.gold = '#f9bd66';
+    versioned.ramps = [{ id:'warm-ramp',swatches:['warm','gold'] }];
+    versioned.artRules = { version:1,
+      profiles:[{ id:'underpainting',ramps:['warm-ramp'],exceptions:[{ id:'glaze-study',check:'ramp',reason:'Test cool spill.' }] }],
+      bindings:[{ profile:'underpainting',layer:'paint',shot:'study' }] };
+    fs.writeFileSync(input,JSON.stringify(versioned));
+    execFileSync(process.execPath,[...args,'--frame','side','--art-shot','study'],{ cwd:root });
+    await browser.send('Page.navigate',{ url:'about:blank' });
+    await load(browser,file);
+    await evaluate(browser,()=>document.querySelector('#craft-diagnostics details').open = true);
+    await until(browser,"!document.querySelector('[data-diagnostic-accepted]').closest('label').hidden");
+    await click(browser,'[data-diagnostic-accepted]');
+    await evaluate(browser,()=>{
+      const menu = document.querySelector('[data-diagnostic-kind]');
+      menu.value = 'ramp';
+      menu.dispatchEvent(new Event('change'));
+    });
+    await until(browser,"document.querySelector('[data-diagnostic-result]').value.includes('Accepted · glaze-study')");
   });
 });

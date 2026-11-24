@@ -1,6 +1,7 @@
 const Selectors = require('../src/target-selectors.js');
 const RowAssets = require('./render-row-assets.js');
 const Fit = require('./splat-fit-asset.js');
+const {fitChannels} = require('./splat-fit-channels.js');
 const {render} = require('./render.js');
 
 const clamp = (n,lo,hi)=>Math.min(hi,Math.max(lo,n));
@@ -63,7 +64,7 @@ function measure(frame, wanted, rank, carrier) {
 }
 
 function fit(world, {views,pose,view,width:w,height:h,sdfAssist={posed:true},select,rounds=3,
-  prune=.08,tolerance=.0025,minimumScale=.4,maximumScale=1.6,objects}={}) {
+  prune=.08,tolerance=.0025,minimumScale=.4,maximumScale=1.6,objects,search,pins}={}) {
   if (!Number.isSafeInteger(w) || !Number.isSafeInteger(h) || Math.min(w,h)<8 || Math.max(w,h)>512 ||
       !Array.isArray(views) || !views.length || views.length>12 || w*h*views.length>1e6 ||
       !Number.isSafeInteger(rounds) || rounds<1 || rounds>8 || !Number.isFinite(prune) || prune<0 || prune>.4 ||
@@ -73,23 +74,34 @@ function fit(world, {views,pose,view,width:w,height:h,sdfAssist={posed:true},sel
     throw new RangeError('Invalid native grid or search budget for splat fit');
   if (world.anim?.stateful) throw new RangeError('Splat fit requires a seekable scene for repeated renders');
   const labels=Selectors.index(world), selectors=select===undefined ? [] : (Array.isArray(select) ? select : [select]).map(Selectors.prepare);
+  const pinsList=pins===undefined ? [] : Array.isArray(pins) ? pins : [pins];
+  if (pinsList.length>32) throw new RangeError('Splat fit accepts at most 32 pin selectors');
+  const pinSelectors=pinsList.map(Selectors.prepare);
   const asset={format:Fit.format,version:1,rows:world.count,signature:RowAssets.signature(world)};
   const eligible=[];
   for (let i=0;i<world.count;i++)
-    if (Fit.eligible(world,i) && (!selectors.length || selectors.some(selector=>Selectors.matches(selector,labels.row(i))))) eligible.push(i);
+    if (Fit.eligible(world,i) && (!selectors.length || selectors.some(selector=>Selectors.matches(selector,labels.row(i)))) &&
+        !pinSelectors.some(selector=>Selectors.matches(selector,labels.row(i)))) eligible.push(i);
   if (!eligible.length) throw new RangeError('Splat fit selection contains no eligible opaque splats');
   function draw(entry, settings) {
     pose(world,entry.time);
     return render(world,{...view({w,h,t:entry.time}),...entry.camera,...settings,w,h,px:1,
-      transparent:!objects,objectMattes:objects ?? false,passes:['splatId'],shutter:false,renderGrid:false,renderGraph:false,inspection:false,
+      transparent:!objects,objectMattes:objects ?? false,passes:settings.passes??['splatId'],shutter:false,renderGrid:false,renderGraph:false,inspection:false,
       composite:false,depthOfField:false,motionalCoverage:false,cameraGuides:false});
   }
-  const frames=views.map(entry=>{
+  for (const entry of views) {
     const {time,camera={},reference,mask,holdout=false}=entry;
     if (!Number.isFinite(time) || time<0 || time>3600 || typeof holdout!=='boolean' ||
         !Object.keys(camera).every(key=>['yaw','pitch','zoom','target','orbit','pan','dist','ortho'].includes(key)))
       throw new RangeError('Invalid native splat approval view');
     if (!reference) throw new TypeError('Splat fit needs an approved RGBA reference for every view');
+  }
+  if (search!==undefined || pins!==undefined || views.some(entry=>
+    ['depth','normal','pigment','pins'].some(key=>entry[key]!==undefined)))
+    return fitChannels({world,views,asset,eligible,w,h,draw,coverageOf,target,rounds,prune,tolerance,minimumScale,
+      maximumScale,sdfAssist,objects,search});
+  const frames=views.map(entry=>{
+    const {reference,mask}=entry;
     const wanted=target(reference,mask,w,h);
     const surface=draw(entry,{sdfAssist,splatFit:false});
     return {entry,wanted,carrier:surface.passes.splatId};

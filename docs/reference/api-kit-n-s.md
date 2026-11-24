@@ -214,6 +214,48 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelAdjustments` | namespace |  |  |
 | `KIT.pixelAdjustments.prepare` | function | `(operation,paletteEditor)` | [source](../../src/pixel-adjustments.js) |
 
+## KIT.pixelArtRules
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.pixelArtRules` | namespace |  |  |
+| `KIT.pixelArtRules.applyLook` | function | `(look,compiled)` | [source](../../src/pixel-art-rules.js) |
+| `KIT.pixelArtRules.audit` | function | `(raster,analysis,plan,options = {})` | [source](../../src/pixel-art-rules.js) |
+| `KIT.pixelArtRules.describe` | function | `(plan,options = {})` | [source](../../src/pixel-art-rules.js) |
+| `KIT.pixelArtRules.kinds` | namespace |  |  |
+| `KIT.pixelArtRules.kinds.band` | namespace |  |  |
+| `KIT.pixelArtRules.kinds.band.hint` | value | `string = "Check whether the middle strip can join a larger cluster or break away from the edge."` |  |
+| `KIT.pixelArtRules.kinds.band.label` | value | `string = "Banding"` |  |
+| `KIT.pixelArtRules.kinds.dither` | namespace |  |  |
+| `KIT.pixelArtRules.kinds.dither.hint` | value | `string = "Use an approved pair for this alternating patch."` |  |
+| `KIT.pixelArtRules.kinds.dither.label` | value | `string = "Unpermitted dither pairs"` |  |
+| `KIT.pixelArtRules.kinds.double` | namespace |  |  |
+| `KIT.pixelArtRules.kinds.double.hint` | value | `string = "Check whether removing the inside corner keeps the thin stroke connected."` |  |
+| `KIT.pixelArtRules.kinds.double.label` | value | `string = "Doubles"` |  |
+| `KIT.pixelArtRules.kinds.edge` | namespace |  |  |
+| `KIT.pixelArtRules.kinds.edge.hint` | value | `string = "Check the partial coverage against the asset’s hard edge rule."` |  |
+| `KIT.pixelArtRules.kinds.edge.label` | value | `string = "Edge coverage rules"` |  |
+| `KIT.pixelArtRules.kinds.hole` | namespace |  |  |
+| `KIT.pixelArtRules.kinds.hole.hint` | value | `string = "Check whether the transparent pocket is needed for the silhouette."` |  |
+| `KIT.pixelArtRules.kinds.hole.label` | value | `string = "Small enclosed holes"` |  |
+| `KIT.pixelArtRules.kinds.jaggy` | namespace |  |  |
+| `KIT.pixelArtRules.kinds.jaggy.hint` | value | `string = "Compare this run with its neighbor and check the rhythm of the edge."` |  |
+| `KIT.pixelArtRules.kinds.jaggy.label` | value | `string = "Uneven stairs"` |  |
+| `KIT.pixelArtRules.kinds.orphan` | namespace |  |  |
+| `KIT.pixelArtRules.kinds.orphan.hint` | value | `string = "Check whether the single pixel reads as an accent at 1×."` |  |
+| `KIT.pixelArtRules.kinds.orphan.label` | value | `string = "Isolated pixels"` |  |
+| `KIT.pixelArtRules.kinds.outline` | namespace |  |  |
+| `KIT.pixelArtRules.kinds.outline.hint` | value | `string = "Check whether this authored outline swatch belongs on this edge."` |  |
+| `KIT.pixelArtRules.kinds.outline.label` | value | `string = "Outline rules"` |  |
+| `KIT.pixelArtRules.kinds.ramp` | namespace |  |  |
+| `KIT.pixelArtRules.kinds.ramp.hint` | value | `string = "Use a swatch from the allowed ramps or author a scoped exception."` |  |
+| `KIT.pixelArtRules.kinds.ramp.label` | value | `string = "Unpermitted swatches"` |  |
+| `KIT.pixelArtRules.kinds.tangent` | namespace |  |  |
+| `KIT.pixelArtRules.kinds.tangent.hint` | value | `string = "Check whether the shapes should have a clear gap or a stronger overlap."` |  |
+| `KIT.pixelArtRules.kinds.tangent.label` | value | `string = "Tangent contacts"` |  |
+| `KIT.pixelArtRules.prepare` | function | `(definition,{ swatches,ramps = [],layers = [],frames = [],selections = [] })` | [source](../../src/pixel-art-rules.js) |
+| `KIT.pixelArtRules.scene` | function | `(plan,options = {})` | [source](../../src/pixel-art-rules.js) |
+
 ## KIT.pixelBrushes
 
 | Member | Kind | Signature or value | Guides and source |
@@ -265,26 +307,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelCraft.backgroundMask` | function | `(img, bg)` | [source](../../src/pixel-craft.js) |
 | `KIT.pixelCraft.colOf` | function | `(rgb, i)` | [source](../../src/pixel-craft.js) |
 | `KIT.pixelCraft.kinds` | namespace |  |  |
-| `KIT.pixelCraft.kinds.band` | namespace |  |  |
-| `KIT.pixelCraft.kinds.band.hint` | value | `string = "Check whether the middle strip can join a larger cluster or break away from the edge."` |  |
-| `KIT.pixelCraft.kinds.band.label` | value | `string = "Banding"` |  |
-| `KIT.pixelCraft.kinds.double` | namespace |  |  |
-| `KIT.pixelCraft.kinds.double.hint` | value | `string = "Check whether removing the inside corner keeps the thin stroke connected."` |  |
-| `KIT.pixelCraft.kinds.double.label` | value | `string = "Doubles"` |  |
-| `KIT.pixelCraft.kinds.hole` | namespace |  |  |
-| `KIT.pixelCraft.kinds.hole.hint` | value | `string = "Check whether the transparent pocket is needed for the silhouette."` |  |
-| `KIT.pixelCraft.kinds.hole.label` | value | `string = "Small enclosed holes"` |  |
-| `KIT.pixelCraft.kinds.jaggy` | namespace |  |  |
-| `KIT.pixelCraft.kinds.jaggy.hint` | value | `string = "Compare this run with its neighbor and check the rhythm of the edge."` |  |
-| `KIT.pixelCraft.kinds.jaggy.label` | value | `string = "Uneven stairs"` |  |
-| `KIT.pixelCraft.kinds.orphan` | namespace |  |  |
-| `KIT.pixelCraft.kinds.orphan.hint` | value | `string = "Check whether the single pixel reads as an accent at 1×."` |  |
-| `KIT.pixelCraft.kinds.orphan.label` | value | `string = "Isolated pixels"` |  |
-| `KIT.pixelCraft.kinds.tangent` | namespace |  |  |
-| `KIT.pixelCraft.kinds.tangent.hint` | value | `string = "Check whether the shapes should have a clear gap or a stronger overlap."` |  |
-| `KIT.pixelCraft.kinds.tangent.label` | value | `string = "Tangent contacts"` |  |
+| `KIT.pixelCraft.kinds.band` | alias | `Alias of KIT.pixelArtRules.kinds.band` |  |
+| `KIT.pixelCraft.kinds.double` | alias | `Alias of KIT.pixelArtRules.kinds.double` |  |
+| `KIT.pixelCraft.kinds.hole` | alias | `Alias of KIT.pixelArtRules.kinds.hole` |  |
+| `KIT.pixelCraft.kinds.jaggy` | alias | `Alias of KIT.pixelArtRules.kinds.jaggy` |  |
+| `KIT.pixelCraft.kinds.orphan` | alias | `Alias of KIT.pixelArtRules.kinds.orphan` |  |
+| `KIT.pixelCraft.kinds.tangent` | alias | `Alias of KIT.pixelArtRules.kinds.tangent` |  |
 | `KIT.pixelCraft.lint` | function | `(img, o = {})` | [source](../../src/pixel-craft.js) |
 | `KIT.pixelCraft.lintMap` | function | `(img, res)` | [source](../../src/pixel-craft.js) |
+| `KIT.pixelCraft.regions` | function | `(mark,w,h,locks,owners,layerIds,seeds)` | [source](../../src/pixel-craft.js) |
 
 ## KIT.pixelGrid
 

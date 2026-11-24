@@ -341,6 +341,10 @@ const PixelCraft = (() => {
       m = res.mark;
     for (let i = 0; i < w * h; i++) {
       let c = [rgb[i * 3] * 0.35, rgb[i * 3 + 1] * 0.35, rgb[i * 3 + 2] * 0.35];
+      if (m.ramp?.[i]) c = [255, 156, 68];
+      if (m.outline?.[i]) c = [198, 136, 255];
+      if (m.dither?.[i]) c = [255, 136, 156];
+      if (m.edge?.[i]) c = [132, 250, 210];
       if (m.hole?.[i]) c = [110, 172, 255];
       if (m.tangent?.[i]) c = [92, 235, 139];
       if (m.band[i]) c = [40, 220, 230];
@@ -422,11 +426,11 @@ const PixelCraft = (() => {
     return runs;
   }
 
-  function regions(mark,w,h,locks,owners,layerIds) {
+  function regions(mark,w,h,locks,owners,layerIds,seeds) {
     const results = [];
     for (const [kind,flags] of Object.entries(mark)) {
       const seen = new Uint8Array(flags.length);
-      for (let p = 0; p < flags.length; p++) {
+      for (const p of seeds ?? flags.keys()) {
         if (!flags[p] || seen[p]) continue;
         const pixels = [p], editable = [], layers = new Set();
         let left = p%w, right = left, top = Math.floor(p/w), bottom = top;
@@ -471,6 +475,6 @@ const PixelCraft = (() => {
     return { image,result,diagnostics:regions(result.mark,w,h,locks,owners,layerIds) };
   }
 
-  return Object.freeze({ lint,lintMap,backgroundMask,colOf,analyze,kinds });
+  return Object.freeze({ lint,lintMap,backgroundMask,colOf,analyze,regions,kinds });
 })();
 if (typeof module !== 'undefined') module.exports = PixelCraft;

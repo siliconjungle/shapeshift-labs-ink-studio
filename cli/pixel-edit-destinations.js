@@ -47,6 +47,7 @@ function resolve(design, name = 'raster') {
     (['canvas','document:canvas'].includes(name) && { id:'canvas',kind:'canvas' }) ||
     (['palette','document:palette'].includes(name) && { id:'palette',kind:'palette' }) ||
     (['adjustments','document:adjustments'].includes(name) && { id:'adjustments',kind:'adjustments' }) ||
+    (design.version === 2 && ['art-rules','document:art-rules'].includes(name) && { id:'art-rules',kind:'art-rules' }) ||
     (design.version === 2 && ['protection','document:protection'].includes(name) && { id:'protection',kind:'protection' }) ||
     (['layers','document:layers'].includes(name) && { id:'layers',kind:'layers' }) ||
     (design.version === 2 && ['guides','selections'].includes(name) && { id:name, kind:name });
@@ -152,10 +153,15 @@ function splats(edit, binding, world, bake, onSplat) {
   const previous = prior?.edits?.map(([source,scale]) =>
     [prior.version === 2 ? ids.rowOf(source) : source,scale]) ?? [];
   const merged = [...new Map([...previous,...edits])];
+  const attributes=prior?.attributes?.map(([source,change])=>{
+    const index=prior.version===2 ? ids.rowOf(source) : source;
+    return [stable ? ids.idAt(index) : index,change];
+  });
   const asset = stable
     ? { format:SplatFit.format, version:2, scene:SplatFit.sceneId(world), target,
       edits:merged.map(([index,scale]) => [ids.idAt(index),scale]) }
     : { format:SplatFit.format, version:1, rows:world.count, signature:bake, edits:merged };
+  if (attributes?.length) asset.attributes=attributes;
   SplatFit.prepare(world,asset);
   return asset;
 }

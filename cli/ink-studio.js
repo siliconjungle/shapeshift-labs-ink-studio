@@ -902,6 +902,16 @@ function bounceProbesOption() {
   return bounceProbesOverride ??= JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
+let artRulesOverride;
+function artRulesOption() {
+  if (artRulesOverride) return artRulesOverride;
+  const document = renderAssetOption('art-rules');
+  if (!document) return document;
+  const report = require('./pixel-art.js').artRulesReport(document,{ frame:opt['art-frame'],shot:opt['art-shot'] });
+  if (!report.definition) die('--art-rules needs a version 2 pixel document with artRules');
+  return artRulesOverride = report.scene;
+}
+
 const view = extra =>
   Object.assign(
     {
@@ -915,6 +925,7 @@ const view = extra =>
       stable: stabilityOption(),
       stableDetail: stableDetailOption(),
       edgeFilter: edgeFilterOption(),
+      assetArtRules: artRulesOption(),
       coverageFilter: coverageFilterOption(),
       surfaceHistory: surfaceHistoryOption(),
       protectedPixels: protectedPixelsOption(),
@@ -1414,13 +1425,15 @@ const CMD = {
         '  pixel-art brush <design.json> --selection id|--rect x,y,w,h --out brush.json   capture a portable indexed brush',
         '    dynamics options: --stabilization ms --pressure light,full --velocity pxPerSecond,slow,fast',
         '  pixel-art snap <design.json> --at x,y [--frame id] [--radius pixels]   resolve document guides',
-        '  pixel-art lint <design.json> [--frame id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings',
+        '  pixel-art rules <design.json> [--frame id] [--layer id] [--art-shot id] [--out report.json]   inspect asset art rules and scene settings',
+        '  pixel-art lint <design.json> [--frame id] [--art-shot id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings',
         '  pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint',
         '  pixel-art inspect <design.json> --at x,y [--frame id] [--scene scene.json] [--destination ids] [--references] [--out report.json]   show pixel contributors',
         '  pixel-art edit <design.json> [--frame id]   work on a native indexed frame',
         '  pixel-art edit <design.json> <edit.json> --out result.json   write an edit and print its receipt',
         '  pixel-art stack export <document.json> --out deck.json   open in the layer Workshop',
         '  pixel-art stack import <deck.json> --out document.json',
+        '    art-rules destination: set or remove versioned art rule profiles and scopes',
         '    protection destination: set or remove named pixel locks across frames',
         '    layers destination: add, update, reorder, set-cel, remove, merge-down, flatten-group, and flatten',
         '    raster cleanup tool: stair, fragment, outline, and cluster within a selection',
@@ -1746,6 +1759,7 @@ const CMD = {
         '  render <id> --compatibility-report [on|off]   save WebGL compatibility beside the preview',
         '  clip <id> --compatibility-report [on|off]   save WebGL compatibility across the previewed frames',
         'effect palette options: --effect-palettes on|off|file.json',
+        'asset art rules: --art-rules design.json [--art-frame id] [--art-shot id]',
         'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink on|off|file.json --ink-shot file.json --effects off --emissive-finishes off --stable on|off|file.json --stable-detail on|off|file.json --coverage-filter on|off|file.json --surface-history on|off|file.json --protected-pixels on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --area-lights on|off|file.json --bounce-probes on|off|file.json --snap on|off --dither-space screen|world|object|view --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface|selective --transparency-settings file.json --splat-coverage legacy|continuous|soft --splat-footprints on|off --palette-sampling off --semantic-mipmaps off --simulation-material-layers off --relief-lod auto|geometry|normal|painted|off --render-grid hex|triangle|diamond|off --grid-size 8 --grid-angle 0 --grid-aspect 1 --grid-gap 0 --grid-origin x,y --sdf-assist on|posed|off|file.json --traced-lighting file.json|off --splat-fit file.json|off --surface-decals off --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --cutaway file.json|off --render-graph file.json|off --shutter on|off|file.json --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
     ];
     if (opt.json) {
@@ -2233,16 +2247,29 @@ const CMD = {
     if (file===path.resolve(pos[0]) || file===plan) die('Write splat fit separately from its inputs');
     const {views,...settings}=JSON.parse(fs.readFileSync(plan,'utf8'));
     if (!Array.isArray(views) || !views.length) die('Splat fit needs approval views');
-    const load=image=>{
-      if (typeof image!=='string') throw new TypeError('Splat fit reference must name a PNG');
-      const input=path.resolve(path.dirname(plan),image);
+    const inputPath=name=>{
+      if (typeof name!=='string') throw new TypeError('Splat fit reference must name a file');
+      const input=path.resolve(path.dirname(plan),name);
       if (input===file) die('Write splat fit separately from its reference images');
-      return require('./png.js').raster(input);
+      return input;
+    };
+    const load=image=>require('./png.js').raster(inputPath(image));
+    const loadDepth=name=>{
+      const input=inputPath(name), count=settings.width*settings.height;
+      if (!Number.isSafeInteger(count) || count<64 || count>512**2 || fs.statSync(input).size!==count*4)
+        throw new RangeError('Splat fit depth needs a native-grid depth.f32le file');
+      const bytes=fs.readFileSync(input);
+      return Float32Array.from({length:count},(_,i)=>bytes.readFloatLE(i*4));
     };
     const asset=require('./splat-fit.js').fit(buildPreview(pos[0],{retainSdf:true}),{...settings,pose,view,
-      views:views.map(entry=>({...entry,reference:load(entry.reference),mask:entry.mask && load(entry.mask)}))});
+      views:views.map(entry=>({...entry,reference:load(entry.reference),mask:entry.mask && load(entry.mask),
+        ...(entry.depth!==undefined && {depth:loadDepth(entry.depth)}),
+        ...Object.fromEntries(['normal','pigment','pins'].filter(key=>entry[key]!==undefined).map(key=>[key,load(entry[key])]))}))});
     require('./asset-files.js').json(file,asset);
-    console.log('Fitted',asset.report.resized,'splats and omitted',asset.report.omitted,'splats. Wrote',file);
+    const {resized,omitted,reshaped,repainted,validation}=asset.report;
+    console.log('Resized',resized,'and omitted',omitted,'splats.',
+      ...(reshaped!==undefined ? ['Reshaped',reshaped,'and repainted',repainted,'splats.'] : []),'Wrote',file);
+    if (validation) console.log(validation.passed?'Passed':'Regressed on',validation.views,'held-out view(s).');
   },
   'path-ink'() {
     if (pos.length!==1 || typeof opt.out!=='string' || !/\.png$/i.test(opt.out) ||

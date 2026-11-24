@@ -14,8 +14,8 @@ const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
 let readInspection;
 const inspector = mountPixelInspector($('pixel-inspection'),view,at=>readInspection?.(at));
-const craft = KIT.pixelCraft, cleanup = KIT.pixelCleanup;
-const craftPanel = mountPixelCraftPanel($('craft-diagnostics'),view,craft.kinds,{
+const craft = KIT.pixelCraft, artRules = KIT.pixelArtRules, cleanup = KIT.pixelCleanup;
+const craftPanel = mountPixelCraftPanel($('craft-diagnostics'),view,artRules.kinds,{
   inspect(at) {
     stop();
     inspector.focus(at);
@@ -32,7 +32,8 @@ const craftPanel = mountPixelCraftPanel($('craft-diagnostics'),view,craft.kinds,
     drawSelection();
   }
 });
-let craftRevision = 0;
+let craftRevision = 0, artRulePlan;
+$('art-shot').addEventListener('change',draw);
 const flatStack = layerStack.prepare([{ id:'paint',label:'Paint' }]);
 const state = { frame:0, swatch:0, tool:'pencil', points:[], undo:[] };
 let drawingPointer, pencilStroke, grid;
@@ -115,7 +116,7 @@ function load(data) {
   });
   const revised = { ...rest,swatchIds,frames:loaded };
   if (stack) validateStackDeck(revised,stack);
-  else validateProtection(revised);
+  else { validateProtection(revised); workshopRules(revised); }
   stop();
   if (state.doc) saveUndo();
   state.doc = revised;
@@ -640,6 +641,15 @@ function inspectionReader(doc,frame,index,{ palette,swatchIds,slots,alpha,knocko
   };
 }
 
+function workshopRules(doc) {
+  if (doc.artRules === undefined) return;
+  const { swatchIds, palette, ramps, layers, frames, sharedSelections = [] } = doc;
+  return artRules.prepare(doc.artRules,{ swatches:swatchIds.map((id,i)=>({ id,color:palette[i] })),ramps,
+    layers:layers ?? [{ id:'paint' }],frames:frames.map(frame=>frame.id),
+    selections:[...sharedSelections,...frames.flatMap(frame=>
+      (frame.selections ?? []).map(row=>({ ...row,frame:frame.id })))] });
+}
+
 function craftFrame(doc,index,layer) {
   const frame = doc.frames[index], { width,height } = doc, stack = state.stack;
   const composite = protectionRaster(doc,frame,stack);
@@ -648,8 +658,8 @@ function craftFrame(doc,index,layer) {
     return { width,height,...composite };
   const current = layer === undefined ? frame : frame.cels[layer] ?? {};
   const slots = rasterSlots(width,height,current);
-  return { width,height,slots,opacity:current.alpha,colors:composite.colors,locks:composite.locks,
-    ...(layer !== undefined && { layerIds:[null,layer],owners:Uint8Array.from(slots,slot=>Number(slot !== null && slot >= 0)) }) };
+  return { width,height,slots,opacity:current.alpha,colors:composite.colors,locks:composite.locks,swatches:doc.swatchIds,
+    layerIds:[null,layer ?? 'paint'],owners:Uint8Array.from(slots,slot=>Number(slot !== null && slot >= 0)) };
 }
 
 function draw() {
@@ -694,9 +704,11 @@ function draw() {
   let reader;
   readInspection = at=>(reader ??= inspectionReader(doc,frame,index,{ palette,swatchIds,slots,alpha,knockouts,isolated }))(at);
   inspector.refresh();
-  const scopedLayer = isolated ? state.layer : undefined;
-  craftPanel.setSource(craftRevision+':'+index+':'+(scopedLayer ?? ''),()=>
-    craft.analyze(craftFrame(doc,index,scopedLayer)).diagnostics);
+  const scopedLayer = isolated ? state.layer : undefined, shot = $('art-shot').value || undefined;
+  craftPanel.setSource(JSON.stringify([craftRevision,index,scopedLayer,shot]),()=>{
+    const raster = craftFrame(doc,index,scopedLayer);
+    return artRules.audit(raster,craft.analyze(raster),artRulePlan,{ frame:frame.id,layer:scopedLayer,shot }).diagnostics;
+  });
   drawSelection();
   drawGuides(frame);
   const count = state.doc.frames.length;
@@ -708,8 +720,11 @@ function draw() {
   $('pixel-perfect').disabled = $('pencil-color-mode').disabled = state.tool !== 'pencil';
   $('pencil-rgba').hidden = !rgbaPencil();
   const boundFrame = frame.id !== undefined && ((state.doc.sceneBindings ?? []).some(row=>row.frame === frame.id) ||
-    (doc.protectedDetails ?? []).some(row=>row.frame === frame.id || row.frames?.includes(frame.id)));
-  $('remove').disabled = count === 1 || !!boundFrame;
+    (doc.protectedDetails ?? []).some(row=>row.frame === frame.id || row.frames?.includes(frame.id)) ||
+    (doc.artRules?.bindings ?? []).some(row=>row.frame === frame.id));
+  const boundSelection = doc.artRules?.profiles.some(profile=>profile.exceptions?.some(exception=>
+    exception.selection && frame.selections?.some(selection=>selection.id === exception.selection)));
+  $('remove').disabled = count === 1 || !!boundFrame || !!boundSelection;
   $('duplicate').disabled = count >= 2048 || (count+1)*width*height > 2**20;
   showShapeControls();
   showAdjustmentPreview();
@@ -756,6 +771,12 @@ function updateDrawing() {
 
 function update() {
   craftRevision++;
+  artRulePlan = workshopRules(state.doc);
+  const shot = $('art-shot'), previousShot = shot.value;
+  const shots = [...new Set((state.doc.artRules?.bindings ?? []).flatMap(row=>row.shot ? [row.shot] : []))];
+  shot.replaceChildren(new Option('Base rules',''),...shots.map(id=>new Option(id,id)));
+  if (shots.includes(previousShot)) shot.value = previousShot;
+  $('art-shot-control').hidden = !shots.length;
   updateDrawing();
   updateLayers();
   $('palette').replaceChildren(...state.doc.palette.map((color,index) => {
@@ -1599,6 +1620,7 @@ $('pencil-color-mode').addEventListener('change',()=>{
   draw();
 });
 function validateStackDeck(doc,stack = layerStack.prepare(doc.layers)) {
+  workshopRules(doc);
   const { width,height,frames,sceneBindings = [],destinations = [] } = doc;
   const cells = frames.reduce((n,frame)=>n+Object.keys(frame.cels).length,0);
   if (width*height*Math.max(cells,doc.layers.length) > 4_000_000)
@@ -2043,6 +2065,7 @@ function paletteEdit(operation,selected) {
     ...palettes.stampMetadata(palette),...(roles && { swatchRoles:roles }) };
   assertProtectionUnchanged(doc,next,state.stack);
   if (state.stack) validateStackDeck(next,state.stack);
+  else workshopRules(next);
   edit(()=>{
     state.doc = next;
     state.swatch = positions.get(selected ?? active) ?? positions.get(replacements?.get(active)) ?? 0;
