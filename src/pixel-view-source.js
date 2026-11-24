@@ -8,7 +8,7 @@ const PixelViewSource = (() => {
   });
   const optional = {
     pigment:1, foregroundCoverage:1, fogTransmittance:1, inkMask:1, inkShadow:1, emission:3,
-    paletteOwner:1, sourceSurface:1, sourceTriangle:1, sourceCoordinates:3,
+    paletteOwner:1, sourceSurface:1, sourceTriangle:1, sourceCoordinates:3, sourceRestNormal:3,
     sourceSplat:4, sourceSplatAlpha:4, sourceSplatDepth:4, sourceSplatWeight:4, sourceSplatOmitted:1,
     sourceSplatFrontRank:1, sourceSplatFront:1, sourceSplatFrontMetrics:3,
     strandId:1, strandDepth:1, strandCoverage:1, strandU:1, strandTangent:3

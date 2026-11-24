@@ -90,7 +90,7 @@ function bind(world, data, settings,allow,sourceBinding) {
 }
 
 const facing = (row,normal) => !row.normal || dot(row.normal,row.normal)<1e-8 || dot(row.normal,normal)>.25;
-function trace(source, ray, near, far, settings, clip, visible, x, y, sourceBinding) {
+function trace(source, ray, near, far, settings, clip, visible, x, y, sourceBinding, captureRestNormal) {
   const {origin,direction,axial} = ray, {min,max} = source.bounds, {epsilon,steps} = settings;
   const range = [near/axial,far/axial];
   for (let k=0;k<3;k++) if (!slab(range,origin[k],direction[k],min[k],max[k])) return null;
@@ -120,7 +120,7 @@ function trace(source, ray, near, far, settings, clip, visible, x, y, sourceBind
       if (row && (row.i<0 || !visible || visible(row.i,x,y)) && settings.allows(row.target,point)) {
         const rest = source.motion?.rest(...point) ?? point;
         return {z:along*axial,position:point,normal,row,objectPosition:rest,
-          ...(sourceBinding && { source:sdfSource(source,fieldOwner,row,rest) })};
+          ...(sourceBinding && { source:{ ...sdfSource(source,fieldOwner,row,rest),...(captureRestNormal && {restNormal:source.motion?.restNormal(...normal) ?? normal}) } })};
       }
     }
     along+=6*epsilon/Math.max(.12,normal ? Math.abs(dot(normal,direction)) : 1);
@@ -153,7 +153,7 @@ function editableSource(field) {
   }};
 }
 
-function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible,sourceBinding,allow,editable=[],trackSdf}) {
+function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible,sourceBinding,captureRestNormal=false,allow,editable=[],trackSdf}) {
   const {sources,rows} = bind(world,data,settings,allow,sourceBinding || trackSdf);
   for (const field of editable) {
     if (allow && !allow({object:field.objectId})) continue;
@@ -185,7 +185,7 @@ function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible,sourceBin
     const ray=rayAt(x+.5,y+.5);
     let closest;
     for (const source of sources) {
-      const hit=trace(source,ray,near,closest?.z ?? 400,settings,clip,visible,x,y,sourceBinding);
+      const hit=trace(source,ray,near,closest?.z ?? 400,settings,clip,visible,x,y,sourceBinding,captureRestNormal);
       if (hit && (!closest || closest.z>hit.z)) closest=hit;
     }
     if (!closest) continue;

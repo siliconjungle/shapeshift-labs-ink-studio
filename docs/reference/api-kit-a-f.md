@@ -1615,6 +1615,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.diorama.styles.slate.roles.wood` | value | `array` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.styles.slate.sky` | value | `number = 0.26` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.styles.slate.sun` | value | `array` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.surfaceChart` | function | `(solid,frame)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 
 ## KIT.directionDrawing
 

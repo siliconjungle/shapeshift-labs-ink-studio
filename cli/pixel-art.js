@@ -2148,6 +2148,44 @@ function reprobeCommand(source,opt,capture) {
   else process.stdout.write(JSON.stringify(report,null,2)+'\n');
 }
 
+function multiviewCommand(source,planFile,opt,{ scene,captureMultiview }) {
+  const { out,patch,review } = opt, raw = read(planFile), design = read(source);
+  documentShape(design);
+  if (!reference(raw?.destination)) throw new TypeError('A multiview plan needs a surface-channel destination');
+  const route = Destinations.resolve(design,raw.destination), { binding,layer } = route;
+  if (route.destination.kind !== 'surface-channel') throw new TypeError('Multiview edits need a surface-channel destination');
+  if (opt.scene !== undefined && (!reference(opt.scene) || !sameScene(binding.scene,opt.scene)))
+    throw new RangeError('The multiview destination is bound to '+binding.scene);
+  const sceneRef = opt.scene ?? binding.scene, outputs = [out,patch,review].filter(file=>file !== undefined);
+  const inputs = [source,planFile,sceneRef].map(file=>path.resolve(file));
+  if (outputs.some(file=>!reference(file) || inputs.includes(path.resolve(file))) ||
+      new Set(outputs.map(file=>path.resolve(file))).size !== outputs.length ||
+      review !== undefined && !/\.html$/i.test(review))
+    throw new TypeError('Write the multiview report, patch and HTML review to separate paths');
+  const original = scene(sceneRef), context = { scene:()=>original };
+  const target = Destinations.surfaceSource(route,context);
+  const compiled = compile(design,raw.frame ?? binding.frame,undefined,layer?.kind === 'surface' ? layer.id : undefined);
+  if (binding.frame !== undefined && binding.frame !== compiled.id) throw new RangeError('Multiview edit belongs to frame '+binding.frame);
+  const clipping = layer?.kind === 'surface' && compiled.layerSources?.get(layer.id)?.clipping;
+  const Multiview = require('./pixel-multiview.js');
+  const result = Multiview.review(raw,design,{ ...route,...target },{
+    revision:compiled.revision,frame:compiled.id,includeImages:!!review,
+    render:(candidate = original.editor.snapshot())=>captureMultiview(sceneRef,candidate),
+    preview:request=>edit(design,compiled,request,{
+      scene:()=>({ editor:original.editor.fork(),revision:original.revision })
+    }),
+    protect([x,y]) {
+      const p = y*compiled.width+x;
+      return compiled.locks[p] ? 'protected-pixel' : clipping && !clipping[p] ? 'clipped-pixel' : null;
+    }
+  });
+  if (review) Multiview.writeReview(path.resolve(review),result.report,result.images);
+  if (out) files.json(path.resolve(out),result.report);
+  else process.stdout.write(JSON.stringify(result.report,null,2)+'\n');
+  if (patch && result.patch) files.json(path.resolve(patch),result.patch);
+  else if (patch) process.exitCode = 2;
+}
+
 function draw(frame,directory,{ layer,colorMode,rules,shot } = {}) {
   const indexed = stamp(frame,layer), art = PNG.encodePaint(indexed,colorMode);
   const result = review(craftLayer(frame,layer),{ rules,shot,layer }), { w,h,rgb } = result.overlay;
@@ -2258,7 +2296,7 @@ function trace(frame, object, scene) {
   return design;
 }
 
-const actions = ['capture','trace','import','upgrade','validate','targets','draw','canvas','inspect','lint','rules','motion','track','reprobe','sample','select','snap','brush','copy',
+const actions = ['capture','trace','import','upgrade','validate','targets','draw','canvas','inspect','lint','rules','motion','track','reprobe','multiview','sample','select','snap','brush','copy',
   'preview','edit','replay'];
 const sessionActions = ['init','status','begin','apply','preview','commit','cancel','undo','redo',
   'inspect','sample','select','snap','brush','copy','targets','export'];
@@ -2322,16 +2360,17 @@ function inspectCoordinate(raw) {
   return raw.split(',').map(Number);
 }
 
-function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, world, scene }) {
+function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, captureMultiview, world, scene }) {
   if (pos[0] === 'stack') return stackCommand(pos.slice(1),opt);
   if (pos[0] === 'palette') return paletteCommand(pos.slice(1),opt);
   const [action, source, patch] = pos;
   const writing = action === 'edit' || action === 'replay';
   if (!actions.includes(action) ||
-      pos.length !== (writing || ['preview','select'].includes(action) ? 3 : 2))
-    throw new TypeError('Use pixel-art capture, trace, import, upgrade, validate, targets, draw, canvas, inspect, lint, rules, motion, track, reprobe, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
+      pos.length !== (writing || ['preview','select','multiview'].includes(action) ? 3 : 2))
+    throw new TypeError('Use pixel-art capture, trace, import, upgrade, validate, targets, draw, canvas, inspect, lint, rules, motion, track, reprobe, multiview, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
   if (action === 'track') return trackCommand(source,opt,captureTrack);
   if (action === 'reprobe') return reprobeCommand(source,opt,capture);
+  if (action === 'multiview') return multiviewCommand(source,patch,opt,{ scene,captureMultiview });
   const sourceViewFile = opt['source-view'];
   if (opt.binding !== undefined && (!['inspect','canvas'].includes(action) || !reference(opt.binding)))
     throw new TypeError('Use --binding id with pixel-art inspect or canvas');

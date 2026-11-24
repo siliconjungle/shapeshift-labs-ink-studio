@@ -1818,7 +1818,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.surfaceState.into` | function | `(point,box=full)` | [source](../../src/kit/pa9-surface-state.js) |
 | `KIT.procedural.surfaceState.isUv` | function | `(value)` | [source](../../src/kit/pa9-surface-state.js) |
 | `KIT.procedural.surfaceState.prepare` | function | `(list=[],{size=[1,1],definitions=defaults}={})` | [source](../../src/kit/pa9-surface-state.js) |
-| `KIT.procedural.surfaceState.projection` | function | `(spec)` | [guide](../deformation-materials.md#retained-sculpts-and-rigs), [source](../../src/kit/pa9-surface-state.js) |
+| `KIT.procedural.surfaceState.projection` | function | `(spec,{coordinatesOnly=false}={})` | [guide](../deformation-materials.md#retained-sculpts-and-rigs), [source](../../src/kit/pa9-surface-state.js) |
 | `KIT.procedural.surfaceState.ramp` | function | `(indices,palette,values)` | [source](../../src/kit/pa9-surface-state.js) |
 | `KIT.procedural.surfaceState.restSampler` | function | `({u,v,stamps})` | [source](../../src/kit/pa9-surface-state.js) |
 | `KIT.procedural.surfaceState.window` | function | `(box)` | [source](../../src/kit/pa9-surface-state.js) |

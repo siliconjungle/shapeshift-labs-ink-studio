@@ -23,7 +23,7 @@ function triangleAxes([a,b,c]) {
   return [right,cross(normal,right),normal];
 }
 
-function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,sourceBinding=false,trackMesh,allow,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,sourceBinding=false,captureRestNormal=false,trackMesh,allow,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection}) {
   if(!atlas)return [];
   const depth=depthOnly && new Float32Array(W*H).fill(Infinity);
   const fragments=depthOnly ? null : new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
@@ -111,6 +111,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
         source.topology = JSON.stringify([rest ? Array.from(rest) : input.flatMap(v=>v.p),
           uv ? Array.from(uv) : input.flatMap(v=>v.uv)]);
       }
+      const restNormal = captureRestNormal && rest && triangleAxes([0,3,6].map(i=>Array.from(rest.subarray(i,i+3))))[2];
       if (trackMesh && source?.identity.object) {
         const signature = JSON.stringify([(chart?.end ?? vertices.length/5)-(chart?.first ?? 0),
           input.map(row=>row.uv),rest ? Array.from(rest) : null]);
@@ -264,7 +265,9 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             ...(local && {localProjection:true}),
             ...(lightingTarget&&{lightingTarget}),
             ...(fogObject!==undefined&&{fogObject}),
-            ...(source && {source:{ ...source,coordinate:weights3 }}),
+            ...(source && {source:{ ...source,coordinate:weights3,
+              restNormal:restNormal && (dot(face,normal) < 0 ?
+                restNormal.map(n=>-n) : restNormal) }}),
             ...(mesh && {mesh,...(motion&&{weights:weights3}),...(uv&&{uv})})};
         }
       }

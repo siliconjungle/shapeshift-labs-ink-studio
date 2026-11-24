@@ -204,7 +204,7 @@ function scene(id) {
 const paintDirectory = id => path.resolve(CWD, opt.dir || path.join(cfg.paint || 'studio/paint', id));
 const readPaint = file => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
 function build(id, seedOverride, { paint = true, retainSdf = false, retainReferenceSdf = false,
-  parameterInputs, controls: suppliedControls } = {}) {
+  parameterInputs, controls: suppliedControls, retained } = {}) {
   if (opt.focus) {
     const f = list('focus'); // uneven detail: x,y,z then near, far, coarse
     globalThis.INK_FOCUS = { p: [f[0] || 0, f[1] || 0, f[2] || 0], near: f[3], far: f[4], coarse: f[5] };
@@ -224,7 +224,7 @@ function build(id, seedOverride, { paint = true, retainSdf = false, retainRefere
     require('../src/sculpt-sampling.js').prepare(globalThis.INK_ADAPTIVE_SAMPLING);
   }
   if (opt['sdf-assist'] !== undefined) globalThis.INK_RETAIN_RENDER_SDF = Boolean(sdfAssistOption());
-  const s = scene(id);
+  const s = retained === undefined ? scene(id) : dataScene(id,retained);
   // Load paint by scene ID so rendering the same file from another path finds its decals.
   const decalFile = path.join(paintDirectory(s.id), 'decals.json');
   shot?.dependency(decalFile);
@@ -1430,6 +1430,7 @@ const CMD = {
         '  pixel-art motion <scene> --views plan.json [--subject object] [--w n --h n] [--out report.json] [--review review.html]   check authored views',
         '  pixel-art track <document.json> --selection id --binding id --views plan.json [--out report.json] [--review review.html]   track a bound selection',
         '  pixel-art reprobe <document.json> --binding id --before view.json [--after view.json] --selection id|--rect x,y,w,h [--out report.json] [--invalidate checked.json]   check edited source bindings',
+        '  pixel-art multiview <document.json> <plan.json> [--out report.json] [--patch edit.json] [--review review.html]   combine approved view marks on a bound surface',
         '  pixel-art rules <design.json> [--frame id] [--layer id] [--art-shot id] [--out report.json]   inspect asset art rules and scene settings',
         '  pixel-art lint <design.json> [--frame id] [--art-shot id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings',
         '  pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint',
@@ -4226,26 +4227,31 @@ const CMD = {
       if (subject !== undefined && !matched) throw new RangeError('Unknown visible motion subject '+subject);
       return { images,report:{ ...Motion.audit(images,options),source:id,...(subject !== undefined && { subject }) } };
     }
-    function captureTrack(id,{ object,part }) {
-      const passes = [...sourcePasses];
+    function captureSourceSamples(id,retained,draw) {
       let world, previousTime = Infinity;
       return (row,index,[w,h])=>{
-        if (row.time < previousTime) world = buildPreview(id);
+        if (row.time < previousTime) world = buildPreview(id,{retained});
         previousTime = row.time;
         pose(world,row.time);
-        const settings = { ...row.camera,lockCamera:!!row.camera,w,h,px:1,t:row.time,passes,transparent:true,
-          renderGrid:false,cameraGuides:false,resetRenderHistory:true };
-        const scope = { object,...(part !== undefined && { part }) };
-        const view = { id:row.id,index };
-        return {
-          full:renderView(world,id,{ ...settings,pixelSelection:scope },view),
-          isolated:renderView(world,id,{ ...settings,pixelSelection:{ ...scope,isolated:true },trackPixelSources:true },view)
-        };
+        const settings = { ...row.camera,lockCamera:!!row.camera,w,h,px:1,t:row.time,passes:sourcePasses,
+          transparent:true,renderGrid:false,cameraGuides:false,resetRenderHistory:true };
+        return draw(extra=>renderView(world,id,{ ...settings,...extra },{ id:row.id,index }));
       };
+    }
+    function captureTrack(id,{ object,part }) {
+      const scope = { object,...(part !== undefined && { part }) };
+      return captureSourceSamples(id,undefined,render=>({
+        full:render({ pixelSelection:scope }),
+        isolated:render({ pixelSelection:{ ...scope,isolated:true },trackPixelSources:true })
+      }));
+    }
+    function captureMultiview(id,retained) {
+      const passes = [...sourcePasses,'sourceRestNormal'];
+      return captureSourceSamples(id,retained,render=>render({passes}));
     }
     if (pos[0] === 'session') return PixelArt.sessionCommand(pos.slice(1),opt,{ scene:editScene,capture });
     PixelArt.command(pos,opt,outputFile,{
-      capture,captureMotion,captureTrack,
+      capture,captureMotion,captureTrack,captureMultiview,
       world: id => buildPreview(id),
       scene:editScene
     });
