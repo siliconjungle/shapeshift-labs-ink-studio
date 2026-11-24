@@ -962,6 +962,31 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     assert.equal(await browser.evaluate("document.querySelector('[data-diagnostic-select]').disabled"),true);
     assert.deepEqual((await download('#export')).artRules,artRules);
 
+    const motionFile = path.join(directory,'workshop-motion.json');
+    const row = (id,anchor,glint)=>({ id,duration:.125,slots:slots([anchor+4,0],[anchor+5,glint]),
+      guides:[{ id:'pivot',kind:'registration',at:[anchor,1] }] });
+    fs.writeFileSync(motionFile,JSON.stringify({ width:4,height:3,swatchIds:['ink','light'],palette:['#142839','#eff9a4'],
+      frames:[row('base',0,0),row('flash',1,1),row('hold',0,0)] }));
+    await browser.send('DOM.setFileInputFiles',{ nodeId:imported.nodeId,files:[motionFile] });
+    await until(browser,"document.querySelector('#status').textContent === 'Opened workshop-motion.json'");
+    await evaluate(browser,()=>{
+      document.querySelector('#motion-checks details').open = true;
+    });
+    await until(browser,"document.querySelector('[data-motion-result]').dataset.finding === 'flash/flicker-2-1'");
+    await click(browser,'[data-motion-jump]');
+    assert.equal(await browser.evaluate("document.querySelector('#scrub').value"),'2');
+    assert.equal(await browser.evaluate("document.querySelector('.ink-grid-motion').hidden"),false);
+    assert.deepEqual(await raster(browser,preview,2,1),[239,249,164,255]);
+    await evaluate(browser,()=>{
+      const picker = document.querySelector('[data-motion-sample]');
+      picker.selectedIndex = 0;
+      picker.dispatchEvent(new Event('change'));
+    });
+    assert.equal(await browser.evaluate("document.querySelector('#scrub').value"),'1');
+    await until(browser,"document.querySelector('[data-inspection-result]').value.startsWith('1, 1')");
+    assert.deepEqual(await raster(browser,preview,1,1),[20,40,57,255]);
+
+
 
 
 
@@ -1079,5 +1104,27 @@ test('the CLI exports an offline native canvas with both views on the selected v
       menu.dispatchEvent(new Event('change'));
     });
     await until(browser,"document.querySelector('[data-diagnostic-result]').value.includes('Accepted · glaze-study')");
+
+    const motionFile = path.join(directory,'motion.html');
+    const sceneArt = { format:'ink-studio/pixel-art',version:2,width:8,height:6,pixelAspect:[1,1],
+      palette:versioned.palette,layers:[{ id:'paint' }],frames:['quiet','flash','hold'].map(id=>({
+        id,durationMs:125,cels:{ paint:{ marks:[{ at:[1,2],swatch:id === 'flash' ? 'gold' : 'cool' }] } }
+      })) };
+    fs.writeFileSync(input,JSON.stringify(sceneArt));
+    execFileSync(process.execPath,['cli/ink-studio.js','pixel-art','motion',input,'--review',motionFile],{ cwd:root });
+    await browser.send('Page.navigate',{ url:'about:blank' });
+    await load(browser,motionFile);
+    await until(browser,"document.querySelector('[data-motion-result]').dataset.finding === 'flash/flicker-1-2'");
+    await click(browser,'[data-motion-jump]');
+    await until(browser,"document.querySelector('#samples').selectedIndex === 1");
+    assert.deepEqual(await raster(browser,preview,1,2),[249,189,102,255]);
+    await evaluate(browser,()=>{
+      const picker = document.querySelector('[data-motion-sample]');
+      picker.selectedIndex = 2;
+      picker.dispatchEvent(new Event('change'));
+    });
+    await until(browser,"document.querySelector('#samples').selectedIndex === 2");
+    assert.deepEqual(await raster(browser,preview,1,2),[33,98,134,255]);
+
   });
 });

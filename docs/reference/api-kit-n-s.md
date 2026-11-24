@@ -315,6 +315,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelCraft.kinds.tangent` | alias | `Alias of KIT.pixelArtRules.kinds.tangent` |  |
 | `KIT.pixelCraft.lint` | function | `(img, o = {})` | [source](../../src/pixel-craft.js) |
 | `KIT.pixelCraft.lintMap` | function | `(img, res)` | [source](../../src/pixel-craft.js) |
+| `KIT.pixelCraft.pockets` | function | `(w,h,bg,limit = 9)` | [source](../../src/pixel-craft.js) |
 | `KIT.pixelCraft.regions` | function | `(mark,w,h,locks,owners,layerIds,seeds)` | [source](../../src/pixel-craft.js) |
 
 ## KIT.pixelGrid
@@ -358,6 +359,22 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelLayerStack.kinds` | value | `array` |  |
 | `KIT.pixelLayerStack.mergePlan` | function | `(layers,operation)` | [source](../../src/pixel-layer-stack.js) |
 | `KIT.pixelLayerStack.prepare` | function | `(layers)` | [source](../../src/pixel-layer-stack.js) |
+
+## KIT.pixelMotionChecks
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.pixelMotionChecks` | namespace |  |  |
+| `KIT.pixelMotionChecks.audit` | function | `(frames,raw)` | [guide](../pixel-art-authoring.md#check-motion-at-native-art-resolution), [source](../../src/pixel-motion-checks.js) |
+| `KIT.pixelMotionChecks.budget` | function | `(w,h,count)` | [source](../../src/pixel-motion-checks.js) |
+| `KIT.pixelMotionChecks.fromRaster` | function | `(raster,metadata)` | [source](../../src/pixel-motion-checks.js) |
+| `KIT.pixelMotionChecks.kinds` | namespace |  |  |
+| `KIT.pixelMotionChecks.kinds.cluster` | value | `string = "Unstable clusters"` |  |
+| `KIT.pixelMotionChecks.kinds.flicker` | value | `string = "Flicker"` |  |
+| `KIT.pixelMotionChecks.kinds.gap` | value | `string = "Lost gaps"` |  |
+| `KIT.pixelMotionChecks.kinds.highlight` | value | `string = "Highlight drift"` |  |
+| `KIT.pixelMotionChecks.registration` | function | `(guides = [],guide)` | [source](../../src/pixel-motion-checks.js) |
+| `KIT.pixelMotionChecks.settings` | function | `(value = {})` | [source](../../src/pixel-motion-checks.js) |
 
 ## KIT.pixelPaintTools
 

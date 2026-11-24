@@ -1,4 +1,5 @@
 import { mountPixelGridCanvas } from '../src/pixel-grid-canvas.mjs';
+import { mountPixelMotionPanel } from '../src/pixel-motion-panel.mjs';
 import { mountPixelCraftPanel } from '../src/pixel-craft-panel.mjs';
 import { mountPixelInspector } from '../src/pixel-inspector.mjs';
 import * as paletteModule from '../src/pixel-palette.js';
@@ -30,6 +31,25 @@ const craftPanel = mountPixelCraftPanel($('craft-diagnostics'),view,artRules.kin
     for (const [y,x,length] of finding.editableRuns ?? finding.runs) mask.fill(1,y*width+x,y*width+x+length);
     setActiveSelection(selectionFromMask(mask));
     drawSelection();
+  }
+});
+const motion = KIT.pixelMotionChecks;
+let motionFrame;
+const motionPanel = mountPixelMotionPanel($('motion-checks'),{
+  showSample(index,at,finding) {
+    if (drawingPointer !== undefined) return;
+    stop();
+    resetStroke();
+    state.frame = index;
+    draw();
+    motionFrame = index;
+    view.setDiagnostic(finding,'motion');
+    view.focusRegion(finding.bounds,'motion');
+    inspector.focus(at);
+  },
+  clear() {
+    motionFrame = undefined;
+    view.setDiagnostic(null,'motion');
   }
 });
 let craftRevision = 0, artRulePlan;
@@ -708,6 +728,23 @@ function draw() {
   craftPanel.setSource(JSON.stringify([craftRevision,index,scopedLayer,shot]),()=>{
     const raster = craftFrame(doc,index,scopedLayer);
     return artRules.audit(raster,craft.analyze(raster),artRulePlan,{ frame:frame.id,layer:scopedLayer,shot }).diagnostics;
+  });
+  if (motionFrame !== index) view.setDiagnostic(null,'motion');
+  motionPanel.setSource(JSON.stringify([craftRevision,scopedLayer]),()=>{
+    motion.budget(width,height,doc.frames.length);
+    let elapsed = 0;
+    const ids = new Set(doc.frames.map(row=>row.id).filter(Boolean));
+    const frames = doc.frames.map((row,i)=>{
+      const id = row.id ?? colors.uniqueId(ids,'frame-'+(i+1));
+      ids.add(id);
+      const durationMs = (row.duration ?? 1/(doc.fps ?? 12))*1000;
+      const sample = motion.fromRaster(craftFrame(doc,i,scopedLayer),{ id,label:row.label ?? id,
+        durationMs,time:elapsed/1000,anchor:motion.registration([...(doc.guides ?? []),...(row.guides ?? [])]),
+        gaps:frameProtection(doc,i).filter(row=>row.kind === 'gap').flatMap(row=>row.pixels) });
+      elapsed += durationMs;
+      return sample;
+    });
+    return motion.audit(frames);
   });
   drawSelection();
   drawGuides(frame);

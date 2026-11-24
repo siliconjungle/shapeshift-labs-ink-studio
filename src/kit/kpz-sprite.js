@@ -200,6 +200,7 @@
   K.pixelInspection = PixelInspection;
   K.pixelProtection = PixelProtection;
   K.pixelCraft = PixelCraft;
+  K.pixelMotionChecks = PixelMotionChecks;
   K.pixelCleanup = PixelCleanup;
   K.pixelArtRules = PixelArtRules;
   K.pixelBrushes = PixelBrushes;
