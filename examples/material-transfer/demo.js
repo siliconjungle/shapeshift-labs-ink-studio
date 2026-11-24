@@ -60,7 +60,7 @@ function draw(at) {
   el('clock').value=at.toFixed(2)+' s';
 }
 function stop() {
-  cancelAnimationFrame(frame);
+  clearTimeout(frame);
   running=false;
   play.textContent='Play walk';
 }
@@ -69,13 +69,13 @@ play.addEventListener('click',()=>{
   const start=performance.now()-(time>=end?0:time*1000);
   running=true;
   play.textContent='Pause';
-  function tick(now) {
-    const elapsed=Math.min(end,(now-start)/1000);
+  function tick() {
+    const elapsed=Math.min(end,(performance.now()-start)/1000);
     draw(elapsed);
     if (elapsed>=end) stop();
-    else frame=requestAnimationFrame(tick);
+    else frame=setTimeout(tick,1000/24);
   }
-  frame=requestAnimationFrame(tick);
+  tick();
 });
 slider.addEventListener('input',()=>{ stop(); draw(Number(slider.value)); });
 fraction.addEventListener('input',()=>{ el('fraction-value').value=fraction.value+'%'; });
