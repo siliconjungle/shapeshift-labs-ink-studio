@@ -72,6 +72,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     const cloud = await ink.readGaussianSplat(file);
     const world = gaussianSplatWorld(cloud, { size: size === undefined ? undefined : Number(size), up,
       objectId:'gaussian-cloud',colorMode:splatFit ? 'rgb' : 'baked' });
+    world.id = path.basename(file).replace(/\W+/g, '-');
     const manifest = await writeGaussianPack(world, out, {
       cellSize: cell === undefined ? undefined : Number(cell),
       voxelSizes: voxels === undefined ? undefined : voxels.split(',').map(Number),splatFit
