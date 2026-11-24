@@ -14,6 +14,7 @@ const CanvasTransforms = require('../src/pixel-canvas-transforms.js');
 const PixelAdjustments = require('../src/pixel-adjustments.js');
 const LayerStack = require('../src/pixel-layer-stack.js');
 const Timeline = require('./pixel-cel-timeline.js');
+const Directional = require('../src/pixel-directional-views.js');
 const CelBatch = require('./pixel-cel-batch.js');
 const PixelInspection = require('../src/pixel-inspection.js');
 const ViewSource = require('../src/pixel-view-source.js');
@@ -105,7 +106,7 @@ function documentShape(design) {
 
   const { pixelAspect,frames,selections,protectedDetails,sceneBindings = [],destinations,guides,legacyMetadata } = design;
   if (!fields(design,['format','version','width','height','pixelAspect','palette','layers','frames',
-    'selections','protectedDetails','sceneBindings','destinations','guides','ramps','legacyMetadata','artRules','tags']))
+    'selections','protectedDetails','sceneBindings','destinations','guides','ramps','legacyMetadata','artRules','tags','directional']))
     throw new TypeError('Unknown pixel document field');
   if (design.ramps !== undefined) paletteAsset(design);
   if (legacyMetadata !== undefined && !record(legacyMetadata)) throw new TypeError('Legacy pixel metadata must be an object');
@@ -132,6 +133,7 @@ function documentShape(design) {
   }
   const timed = Timeline.timing(frames);
   if (design.tags !== undefined) Timeline.validateTags(design,timed);
+  if (design.directional !== undefined) Directional.prepare(design.directional,frameIds,new Set(Object.keys(palette)));
   const lookup = Timeline.index(frames);
   namedRegions(selections,'Pixel selections',width,height,frameIds);
   Protection.validate(protectedDetails,width,height,[...frameIds]);
@@ -326,6 +328,12 @@ function compile(design, frameId, targetCel, capture,options) {
   return compileFrame(design,frame,fingerprint(design),paletteEntries(design.palette,design.version),capture,options,lookup);
 }
 
+function* compileDirectionalFrames(design,ids) {
+  const lookup = documentShape(design), revision = fingerprint(design), palette = paletteEntries(design.palette,design.version);
+  const frames = new Map(design.frames.map(frame=>[frame.id,frame]));
+  for (const id of ids) yield compileFrame(design,frames.get(id),revision,palette,undefined,undefined,lookup);
+}
+
 function validate(design) {
   const lookup = documentShape(design);
   const revision = fingerprint(design);
@@ -353,6 +361,7 @@ function validate(design) {
     ...(design.version === 2 && design.protectedDetails !== undefined && { protectedDetails:structuredClone(design.protectedDetails) }),
     ...(design.version === 2 && design.ramps !== undefined && { ramps:structuredClone(design.ramps) }),
     ...(design.version === 2 && design.tags !== undefined && { tags:structuredClone(design.tags) }),
+    ...(design.version === 2 && design.directional !== undefined && { directional:structuredClone(design.directional) }),
     ...(design.version === 2 && design.guides && { guides:structuredClone(design.guides) }),
     ...(design.version === 2 && design.destinations !== undefined && { destinations:design.destinations }) };
 }
@@ -1460,6 +1469,7 @@ function editCanvas(design,patch,context) {
             raster.layerSources.get(id),sampling)])) };
       });
       if (design.guides) revised.guides = CanvasTransforms.guides(map,design.guides);
+      if (design.directional) revised.directional = Directional.remap(design.directional,map);
       if (design.selections) revised.selections = design.selections.map(row=>({ ...row,pixels:CanvasTransforms.region(map,row.pixels).pixels }));
       if (mapping.rows) revised.protectedDetails = mapping.rows;
     }
@@ -2058,7 +2068,7 @@ function documentFromPNG(file) {
 const stackFormat = 'ink-studio/pixel-layer-deck';
 
 function layerDeck(design) {
-  const { width,height,layers,pixelAspect,sceneBindings,destinations,guides,protectedDetails,legacyMetadata,artRules,tags } = design;
+  const { width,height,layers,pixelAspect,sceneBindings,destinations,guides,protectedDetails,legacyMetadata,artRules,tags,directional } = design;
   const palette = paletteAsset(design), revision = fingerprint(design), lookup = Timeline.index(design.frames);
   const frames = design.frames.map(frame=>{
     const compiled = compileFrame(design,frame,revision,palette.swatches,true,undefined,lookup);
@@ -2077,13 +2087,13 @@ function layerDeck(design) {
     ...(guides?.some(row=>row.frame === undefined) && { guides:guides.filter(row=>row.frame === undefined) }),
     ...(design.selections?.some(row=>row.frame === undefined) && { sharedSelections:design.selections.filter(row=>row.frame === undefined) }),
     ...(sceneBindings && { sceneBindings }),...(destinations && { destinations }),...(protectedDetails && { protectedDetails }),
-    ...(artRules && { artRules }),...(legacyMetadata && { legacyMetadata }),...(tags && { tags }) };
+    ...(artRules && { artRules }),...(legacyMetadata && { legacyMetadata }),...(tags && { tags }),...(directional && { directional }) };
 }
 
 function documentFromDeck(deck) {
   if (deck?.format !== stackFormat || deck.version !== 1 || !Array.isArray(deck.frames) || !deck.frames.length)
     throw new TypeError('Expected a version 1 Ink pixel layer deck');
-  const { width,height,pixelAspect = [1,1],layers,swatchIds,sceneBindings,destinations,protectedDetails,legacyMetadata,artRules,tags } = deck;
+  const { width,height,pixelAspect = [1,1],layers,swatchIds,sceneBindings,destinations,protectedDetails,legacyMetadata,artRules,tags,directional } = deck;
   const asset = PixelPalette.fromStamp(deck);
   const guides = [...(deck.guides ?? [])], selections = [...(deck.sharedSelections ?? [])], frameIds = new Set();
   for (const frame of deck.frames) if (frame.id !== undefined) {
@@ -2114,7 +2124,7 @@ function documentFromDeck(deck) {
   const design = { format,version:2,width,height,pixelAspect,layers,frames,palette:paletteDefinition(asset.swatches),
     ...(asset.ramps.length && { ramps:asset.ramps }),...(guides.length && { guides }),...(selections.length && { selections }),
     ...(sceneBindings && { sceneBindings }),...(destinations && { destinations }),...(protectedDetails && { protectedDetails }),
-    ...(artRules && { artRules }),...(legacyMetadata && { legacyMetadata }),...(tags !== undefined && { tags }) };
+    ...(artRules && { artRules }),...(legacyMetadata && { legacyMetadata }),...(tags !== undefined && { tags }),...(directional !== undefined && { directional }) };
   validate(design);
   return design;
 }
@@ -2576,6 +2586,7 @@ function inspectCoordinate(raw) {
 }
 
 function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, captureMultiview, world, scene, view }) {
+  if (pos[0] === 'directions') return require('./pixel-directional-views.js').command(pos.slice(1),opt,{ compileFrames:compileDirectionalFrames,documentFromDeck });
   if (pos[0] === 'stack') return stackCommand(pos.slice(1),opt);
   if (pos[0] === 'palette') return paletteCommand(pos.slice(1),opt);
   const [action, source, patch] = pos;

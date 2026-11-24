@@ -147,6 +147,11 @@ At most two source tiles contribute to a draw, within 45 degrees of the observer
 
 The Aperture Relay comparison renders the original geometry, closest-view playback, and depth-reprojected playback on the same art grid. Its orbit and JSON report show both improvements and residual errors from single-layer source depth.
 
+Use [directional pixel editing](pixel-art-authoring.md#edit-a-set-of-directional-views)
+to compare and repaint neighboring atlas views with a shared palette and part
+anchors. A view marked `"handoff": "exact"` uses the nearest authored tile on
+both sides of a switch that involves it, even in a depth-reprojected atlas.
+
 ## Cutout coverage at a distance
 
 Add `"cutoutMipmaps": { "mode": "coverage", "cutoff": 0.5 }` to a card

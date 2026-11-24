@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Directional views · Ink Studio</title>
+<style>
+:root {color-scheme:dark;background:#10161b;color:#e6eeea;font:15px system-ui,sans-serif;--line:#354549;--quiet:#b3c5c3;}
+* {box-sizing:border-box}
+main {max-width:1100px;margin:auto;padding:clamp(16px,4vw,45px)}
+h1 {margin:0 0 16px;font:400 clamp(32px,5vw,52px)/1 Georgia,serif}
+h2 {font-size:15px;margin:0 0 8px}
+.controls {display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+select {font:inherit;color:inherit;background:#253437;border:1px solid #496062;border-radius:4px;padding:5px;max-width:100%}
+.panels {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr));gap:10px}
+figure {margin:0;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+figcaption {padding:7px 10px;color:var(--quiet)}
+.picture {display:grid;place-items:center;height:clamp(180px,31vw,330px);background:#182328;overflow:auto}
+.picture img {display:block;image-rendering:pixelated;background:repeating-conic-gradient(#263639 0% 25%,#314446 0% 50%) 0 / 16px 16px}
+#summary {color:var(--quiet)}
+section {margin-top:18px}
+ul {margin:0;padding-left:18px}
+#palette {display:flex;list-style:none;padding:0;gap:6px 12px;flex-wrap:wrap}
+#palette li {display:flex;align-items:center;gap:5px}
+#palette span {display:inline-block;width:15px;height:15px;border:1px solid var(--line);background:var(--color)}
+.key {display:flex;gap:10px;flex-wrap:wrap;color:var(--quiet);font-size:13px}
+</style>
+<main>
+<h1>Directional views</h1>
+<div class="controls">
+  <label>Views <select id="pairs"></select></label>
+  <label><input type="checkbox" id="aligned"> Align to <span id="alignment"></span></label>
+  <label>Zoom <select id="zoom"><option value="1">1×</option><option value="2">2×</option><option value="4" selected>4×</option><option value="8">8×</option></select></label>
+</div>
+<div class="panels">
+  <figure><figcaption id="left-name"></figcaption><div class="picture"><img id="left" alt="First view"></div></figure>
+  <figure id="right-panel"><figcaption id="right-name"></figcaption><div class="picture"><img id="right" alt="Adjacent view"></div></figure>
+  <figure id="difference-panel"><figcaption>Aligned differences</figcaption><div class="picture"><img id="difference" alt="Differences between aligned views"></div></figure>
+</div>
+<p id="summary" aria-live="polite"></p>
+<p class="key">Coral first-view coverage · Teal second-view coverage · Gold color · Violet alpha</p>
+<section><h2>Part anchors</h2><ul id="anchors"></ul></section>
+<section><h2>Approved swatches</h2><ul id="palette"></ul><p id="unapproved"></p></section>
+</main>
+<script type="module">
+const { report,pictures } = /*DIRECTIONAL_DATA*/;
+const at = id=>document.getElementById(id);
+const names = new Map(report.views.map((view,i)=>[view.frame,i]));
+const title = view=>view.frame+' · '+Math.round(view.yaw*180/Math.PI)+'° yaw · '+Math.round(view.pitch*180/Math.PI)+'° pitch';
+at('alignment').textContent = report.alignment;
+const paired = new Set(report.pairs.flatMap(({from,to})=>[from,to]));
+at('pairs').replaceChildren(...report.pairs.map(({from,to},i)=>new Option(from+' ↔ '+to,'p'+i)),
+  ...report.views.filter(view=>!paired.has(view.frame)).map(view=>new Option(view.frame,'v'+names.get(view.frame))));
+at('pairs').disabled = at('pairs').options.length === 1;
+for (const {id,color} of report.approved) {
+  const row = document.createElement('li'), swatch = document.createElement('span');
+  swatch.style.setProperty('--color',color);
+  row.append(swatch,id);
+  at('palette').append(row);
+}
+function show() {
+  const choice = at('pairs').value, index = Number(choice.slice(1));
+  const pair = choice.startsWith('p') ? report.pairs[index] : undefined;
+  const left = pair ? names.get(pair.from) : index, right = pair && names.get(pair.to);
+  const a = report.views[left], b = pair && report.views[right], size = Number(at('zoom').value);
+  function picture(id,png) {
+    const image = at(id);
+    image.src = 'data:image/png;base64,'+png;
+    image.width = report.grid[0]*size;
+    image.height = report.grid[1]*size;
+  }
+  at('left-name').textContent = title(a);
+  picture('left',pictures.views[left]);
+  at('right-panel').hidden = at('difference-panel').hidden = at('aligned').disabled = !pair;
+  if (pair) {
+    at('right-name').textContent = title(b);
+    picture('right',at('aligned').checked ? pictures.pairs[index].aligned : pictures.views[right]);
+    picture('difference',pictures.pairs[index].difference);
+    const {leftOnly,rightOnly,color,alpha}=pair.counts;
+    at('summary').textContent = leftOnly+' first-only · '+rightOnly+' second-only · '+color+
+      ' color · '+alpha+' alpha'+(pair.exact.length ? ' · Exact handoff for '+pair.exact.join(', ') : '');
+  } else at('summary').textContent = a.handoff === 'exact' ? 'Exact handoff for '+a.frame : '';
+  const rows = [a,...(b ? [b] : [])];
+  at('anchors').replaceChildren(...rows.flatMap(view=>view.anchors.map(anchor=>{
+    const node = document.createElement('li');
+    node.textContent = view.frame+' · '+anchor.part+' / '+anchor.id+' · '+anchor.at.map(n=>n.toFixed(2)).join(', ')+
+      (anchor.authored ? ' · Authored placement' : '');
+    return node;
+  })));
+  const colors = rows.flatMap(view=>view.unapproved.map(row=>view.frame+' '+row.color+' ('+row.pixels+')'));
+  at('unapproved').textContent = colors.length ? 'Unapproved colors · '+colors.join(', ') : '';
+}
+for (const id of ['pairs','aligned','zoom']) at(id).addEventListener('change',show);
+show();
+</script>
+</html>

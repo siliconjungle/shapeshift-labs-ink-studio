@@ -175,7 +175,7 @@ const AtlasSprites = (() => {
       .5*range[0]+.5*range[1] : 0;
     const groups=new Map(), timing=[], fps=m.fps??12;
     for (const entry of frames) {
-      const {frame=0,direction,yaw=0,pitch=m.pitch??0,rect,unitsPerPixel=m.unitsPerPixel??1,
+      const {frame=0,direction,yaw=0,pitch=m.pitch??0,rect,handoff,anchors,unitsPerPixel=m.unitsPerPixel??1,
         depthOrigin=m.depthOrigin??legacyOrigin}=entry??{};
       const {x,y,width:w,height:h}=rect??{};
       if (!integer(frame,0,32767)||!integer(x,0,width-1)||!integer(y,0,height-1)||
@@ -183,11 +183,17 @@ const AtlasSprites = (() => {
         throw new RangeError('Sprite atlas view rectangle or frame is out of range');
       if (cutoutMipmaps && w*h > cutouts.pixelLimit)
         throw new RangeError('Cutout mipmaps support up to 262144 pixels per view');
+      if (handoff!==undefined&&!['blend','exact'].includes(handoff))
+        throw new TypeError('Sprite view handoff must be blend or exact');
+      if (anchors!==undefined&&(Object.getPrototypeOf(anchors??{})!==Object.prototype||!anchors||
+          Object.values(anchors).some(at=>!Array.isArray(at)||at.length!==2||!Array.from(at).every(Number.isFinite))))
+        throw new TypeError('Sprite view anchors need finite XY positions');
       const pivot=entry.pivot??{x:w*.5,y:h*.5};
       const view={
         rect:{x,y,width:w,height:h}, pivot:{x:finite(pivot.x,'Sprite pivot X'),y:finite(pivot.y,'Sprite pivot Y')},
         unitsPerPixel:positive(unitsPerPixel,'Sprite units per pixel'), depthOrigin:finite(depthOrigin,'Sprite depth origin'),
-        frame, yaw:finite(yaw,'Sprite yaw'), pitch:finite(pitch,'Sprite pitch'), direction
+        frame, yaw:finite(yaw,'Sprite yaw'), pitch:finite(pitch,'Sprite pitch'), direction,
+        ...(handoff!==undefined&&{handoff}),...(anchors&&{anchors:structuredClone(anchors)})
       };
       view.basis=basis(view.yaw,view.pitch);
       if (!groups.has(frame)) groups.set(frame,[]);
@@ -234,6 +240,11 @@ const AtlasSprites = (() => {
       const view=mode==='card'||mode==='scenery'?views[0]:
         views.reduce((best,view)=>dot(view.basis.normal,direction)>dot(best.basis.normal,direction)?view:best);
       return edits?.held.get(view)??view;
+    }
+    function authoredView(frame,index) {
+      const view = groups.get(frame)?.[index];
+      if (!view) throw new RangeError('Unknown authored view of sprite pose '+frame);
+      return edits?.held.get(view) ?? view;
     }
     function readDepth(bytes,at,view) {
       const sample = depthFormat === 'gray' ? bytes[at]/255 :
@@ -319,7 +330,7 @@ const AtlasSprites = (() => {
     }
     const editedDepth=edits&&Array.from(edits.edited.values()).some(edit=>edit.maps.depth||edit.extensionDepth!==undefined);
     const transition=edits?.transition;
-    return Object.freeze({[assetBrand]:true,select,sample,effect,bakedPoint,...(edits?.fringe&&{fringe:edits.fringe}),
+    return Object.freeze({[assetBrand]:true,select,authoredView,sample,effect,bakedPoint,...(edits?.fringe&&{fringe:edits.fringe}),
       ...(bump&&{bumpHeight:(x,y)=>integer(x,0,width-1)&&integer(y,0,height-1) ? bump.heights[y*width+x] : 0}),
       ...(cutoutMipmaps&&{cutoutMipmaps,cutoutLevel:cutouts.level,cutoutSample:cutouts.sample,
         cutoutImage(view,level=0) {

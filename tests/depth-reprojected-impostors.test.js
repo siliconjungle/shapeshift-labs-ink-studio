@@ -116,6 +116,20 @@ test('nearest-view fallback is explicit when no registered depth was baked', () 
   assert.equal(Atlas.reproject(placement,view,direction,{distance:Infinity}),null);
 });
 
+test('exact handoff uses the authored tile on both sides of a directional switch', () => {
+  const source=scene(ink.load()).atlas.snapshot();
+  source.metadata.frames[0].handoff='exact';
+  const atlas=KIT.sprite.atlas(source), placement=KIT.sprite.placeAtlas({atlas,at:[0,0,0]});
+  for (const yaw of [-.04,.04]) {
+    const direction=Atlas.basis(yaw,0).normal, view=atlas.select(0,'impostor',direction);
+    assert.equal(view.yaw<0,yaw<0);
+    assert.equal(Atlas.reproject(placement,view,direction,{distance:Infinity,pixelsPerTexel:2}),null);
+    const out={color:[0,0,0],normal:[0,0,0],emission:[0,0,0]};
+    assert(atlas.sample(view,yaw<0?25:12,16,{},out));
+    assert.deepEqual(out.color.map(n=>Math.round(n*255)),yaw<0?[216,66,28]:[32,77,211]);
+  }
+});
+
 test('WebGL draws and picks the same cutout and registered relief', {skip: !process.env.INK_TEST_CHROME}, () => {
   const out=require('../cli/look-webgl')({hardware:true},scene,(kit,build,backend)=>{
     const {world}=build(kit);
