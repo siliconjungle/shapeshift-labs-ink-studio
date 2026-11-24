@@ -1671,6 +1671,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.splatProvenance.fromRecords` | function | `(records)` | [source](../../src/splat-provenance.js) |
 | `KIT.procedural.splatProvenance.identities` | function | `(world, { fresh = false } = {})` | [source](../../src/splat-provenance.js) |
 | `KIT.procedural.splatProvenance.join` | function | `(parts, options = {})` | [guide](../pixel-look.md#material-and-surface-provenance), [source](../../src/splat-provenance.js) |
+| `KIT.procedural.splatProvenance.restData` | function | `(world)` | [source](../../src/splat-provenance.js) |
 | `KIT.procedural.splatProvenance.subset` | function | `(world, selection)` | [source](../../src/splat-provenance.js) |
 | `KIT.procedural.splatProvenance.targetKey` | function | `(target)` | [source](../../src/splat-provenance.js) |
 | `KIT.procedural.splatProvenance.validId` | function | `(value)` | [source](../../src/splat-provenance.js) |

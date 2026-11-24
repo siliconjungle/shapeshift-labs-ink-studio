@@ -2,12 +2,22 @@ const { createHash } = require('node:crypto');
 const Targets = require('../src/target-selectors.js');
 const Provenance = require('../src/splat-provenance.js');
 const SplatFit = require('./splat-fit-asset.js');
+const PartMotion = require('./part-motion.js');
 
 const lanes = 4, minimum = 1e-6;
 
+function splatTargets(world, row=Targets.index(world).row) {
+  if (!world.anim?.rig && !world.anim?.bones) return row;
+  const {parts,rows}=PartMotion.catalog(world);
+  return i=>{
+    const target=row(i), part=parts[rows[i]]?.part;
+    return part!==undefined && target.part===undefined ? {...target,part} : target;
+  };
+}
+
 function rowRevision(world,row) {
   const hash = createHash('sha256');
-  const data = world.rest ?? world.data;
+  const data = Provenance.restData(world);
   for (const [key,values,stride,start = 0] of [
     ['base',data,16],['surface',world.surfaceData,8,1],['fine',world.fine,12],['curve',world.curveRest,16],
     ['attrs',world.attr,4],['pixels',world.pix,8],['optical',world.opticalSplats,12],
@@ -67,13 +77,13 @@ function splatBuffer(size) {
 
   function finish(world,topDown) {
     const splatSources = [null], slots = new Map();
-    const targets = Targets.index(world);
+    const target = splatTargets(world);
     let identities;
     function slot(row) {
       if (!slots.has(row)) {
-        const { object,entity,part,material } = targets.row(row);
+        const { object,entity,part,material } = target(row);
         slots.set(row,splatSources.length);
-        identities ??= Provenance.identities(world);
+        identities ??= Provenance.identities(world,{fresh:true});
         splatSources.push({ id:identities.idAt(row) ?? null,renderRow:row,object,entity,part,material,editable:SplatFit.eligible(world,row),revision:rowRevision(world,row) });
       }
       return slots.get(row);
@@ -131,4 +141,4 @@ function surfaces(size,atlasOwners,topDown) {
     sourceCoordinates:topDown(sourceCoordinates,3) };
 }
 
-module.exports = { splatBuffer, surfaces };
+module.exports = { splatBuffer, surfaces, rowRevision, splatTargets };

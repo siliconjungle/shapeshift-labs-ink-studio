@@ -1420,6 +1420,7 @@ const CMD = {
         '  pixel-art upgrade <design.json> --out <document.json>   open a legacy drawing as editable cels',
         '  pixel-art validate <design.json>           validate the versioned document and each frame',
         '  pixel-art targets <design.json> --destination id --scene <bound scene>   list stable scene targets',
+        '    --query splats.json [--source-view view.json] [--limit N]   pick splats by footprint, contribution, part, material or rest bounds',
         '  pixel-art preview <design.json> <edit.json> [--scene <bound scene>]   report a proposed edit and its conflicts',
         '  pixel-art canvas <design.json> --out canvas.html [--frame id] [--scene scene.json | --source-view view.json] [--binding id] [--destination ids] [--at x,y]   inspect the cursor and optional pinned scene pixel',
         '  pixel-art sample <design.json> --at x,y [--mode composite|layer|source]   sample art or a bound material channel',
@@ -4253,9 +4254,10 @@ const CMD = {
       return { ...frame,camera,scene:world.id,time:sourceView.frame.time,sourceView };
     }
     function capture(id,{ w = num('w',160),h = num('h',96),passes = ['objectId'],
-      palettePixel,strandPixel,inspectFragmentPixel,sceneInspection,captureId = 'capture',pixelSelection,time = num('t',0) } = {}) {
+      palettePixel,strandPixel,inspectFragmentPixel,sceneInspection,captureId = 'capture',pixelSelection,
+      time = num('t',0),sourceWorld } = {}) {
       if (sceneInspection) ViewSource.grid(w,h);
-      const world = buildPreview(id), t = time;
+      const world = sourceWorld ?? buildPreview(id), t = time;
       pose(world,t);
       const settings = { w,h,px:1,t,passes };
       if (!sceneInspection) return pixelSelection ?

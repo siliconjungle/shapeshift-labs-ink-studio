@@ -20,9 +20,13 @@ const SplatProvenance = (() => {
   }
 
   const validId = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 4096;
+  function restData(world) {
+    const base = world.anim?.base;
+    return world.rest ?? (base instanceof Float32Array && base.length>=world.count*16 ? base : world.data);
+  }
 
   function identities(world, { fresh = false } = {}) {
-    const rest = world.rest ?? world.data;
+    const rest = restData(world);
     const authored = world.splatIds, metadata = world.renderMetadata, count = world.count;
     const prior = identityCache.get(rest);
     if (!fresh && prior && prior.authored === authored && prior.metadata === metadata && prior.count === count) return prior.index;
@@ -247,6 +251,6 @@ const SplatProvenance = (() => {
     return api.bind(rows);
   }
 
-  return Object.freeze({ join, subset, fromRecords, targetKey, validId, identities });
+  return Object.freeze({ join, subset, fromRecords, targetKey, validId, identities, restData });
 })();
 if (typeof module !== 'undefined') module.exports = SplatProvenance;

@@ -238,6 +238,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art upgrade <design.json> --out <document.json>   open a legacy drawing as editable cels
   pixel-art validate <design.json>           validate the versioned document and each frame
   pixel-art targets <design.json> --destination id --scene <bound scene>   list stable scene targets
+    --query splats.json [--source-view view.json] [--limit N]   pick splats by footprint, contribution, part, material or rest bounds
   pixel-art preview <design.json> <edit.json> [--scene <bound scene>]   report a proposed edit and its conflicts
   pixel-art canvas <design.json> --out canvas.html [--frame id] [--scene scene.json | --source-view view.json] [--binding id] [--destination ids] [--at x,y]   inspect the cursor and optional pinned scene pixel
   pixel-art sample <design.json> --at x,y [--mode composite|layer|source]   sample art or a bound material channel

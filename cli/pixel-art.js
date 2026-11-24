@@ -1793,7 +1793,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
       PNG.encodePaint(stamp(compile(state().design,frame,cel,layer),layer),colorMode),
     renderOptions: (scene = sceneName) => structuredClone(renderOptions(scene)),
     targets(destination,options = {}) {
-      return inspectTargets(state().design,destination,editContext(options,false),options.limit);
+      return inspectTargets(state().design,destination,editContext(options,false),options.limit,options);
     },
     apply: (patch,context) => apply(patch,context),
     receipts: () => structuredClone(state().receipts),
@@ -2397,8 +2397,10 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
   const sourceViewFile = opt['source-view'];
   if (opt.binding !== undefined && (!['inspect','canvas'].includes(action) || !reference(opt.binding)))
     throw new TypeError('Use --binding id with pixel-art inspect or canvas');
-  if (sourceViewFile !== undefined && (!['inspect','canvas'].includes(action) || !reference(sourceViewFile) || opt.scene !== undefined))
-    throw new TypeError('Use --source-view <view.json> by itself with pixel-art inspect or canvas');
+  if (sourceViewFile !== undefined && (!reference(sourceViewFile) ||
+      (action === 'targets' ? !reference(opt.scene) || !reference(opt.query) :
+        !['inspect','canvas'].includes(action) || opt.scene !== undefined)))
+    throw new TypeError('Use --source-view by itself with inspect or canvas, or with --scene and --query for splat targets');
   if (action === 'motion') return motionCommand(source,opt,captureMotion);
   if (action === 'capture') {
     if (!reference(opt.out) || path.resolve(source) === path.resolve(opt.out) ||
@@ -2526,7 +2528,8 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
     const limit = opt.limit === undefined ? undefined : typeof opt.limit === 'string' ? Number(opt.limit) : NaN;
     if (typeof opt.destination !== 'string')
       throw new TypeError('Use pixel-art targets <design.json> --destination id --scene <bound scene> [--limit count]');
-    const report = inspectTargets(design,opt.destination,context,limit);
+    const query = targetQuery(opt);
+    const report = inspectTargets(design,opt.destination,context,limit,{query,frame:opt.frame});
     process.stdout.write(JSON.stringify(report,null,2)+'\n');
     return;
   }
@@ -2588,10 +2591,27 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
   }
 }
 
-function inspectTargets(design,destination,context,limit = 128) {
+function targetQuery(opt) {
+  if (opt.query === undefined) return;
+  if (!reference(opt.query)) throw new TypeError('--query needs a splat query JSON file');
+  return read(opt.query);
+}
+
+function inspectTargets(design,destination,context,limit = 128,{query,frame} = {}) {
   documentShape(design);
   if (!integer(limit,1,Number.MAX_SAFE_INTEGER)) throw new RangeError('Pixel target limit must be a positive integer');
-  const targets = Destinations.targets(Destinations.resolve(design,destination),context,limit);
+  const route=Destinations.resolve(design,destination);
+  let plan;
+  if (query !== undefined) {
+    if (route.destination.kind !== 'splat-attributes') throw new TypeError('A splat query needs a splat-attributes destination');
+    if (frame !== undefined && (!design.frames.some(row=>row.id===frame) || route.binding.frame!==undefined && route.binding.frame!==frame))
+      throw new RangeError('The requested frame is outside the splat binding scope');
+    const frameId=frame??route.binding.frame??design.frames[0].id;
+    plan=require('./pixel-splat-selection.js').prepare(query,[design.width,design.height],
+      id=>namedSelection(design,id,frameId).pixels);
+    plan.frame=frameId;
+  }
+  const targets = Destinations.targets(route,{...context,sameScene},limit,plan);
   return { documentRevision:fingerprint(design), ...targets };
 }
 
@@ -2651,7 +2671,12 @@ function sessionCommand(pos,opt,{ scene,capture }) {
     } else if (action === 'targets') {
       if (!reference(opt.destination)) throw new TypeError('--destination needs a destination ID');
       const limit = opt.limit === undefined ? undefined : typeof opt.limit === 'string' ? Number(opt.limit) : NaN;
-      result = editor.targets(opt.destination,{ limit });
+      const query=targetQuery(opt), sourceView=opt['source-view'];
+      if (sourceView!==undefined && (!reference(sourceView) || query===undefined))
+        throw new TypeError('Use --source-view with a splat query JSON file');
+      const captureTargets = sourceView ? ()=>ViewSource.unpack(read(sourceView)) :
+        capture && (settings=>capture(settings.scene,settings));
+      result = editor.targets(opt.destination,{limit,query,frame:opt.frame,captureSelection:captureTargets});
     } else if (action === 'export') {
       if (!reference(opt.out)) throw new TypeError('--out needs a file path');
       const out = path.resolve(opt.out), artifact = opt.artifact ?? 'document';
