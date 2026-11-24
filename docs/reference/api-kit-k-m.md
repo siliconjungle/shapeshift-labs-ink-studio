@@ -79,6 +79,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.linkedViews.patterns` | value | `array` | [guide](../linked-views.md#accessible-encodings) |
 | `KIT.linkedViews.symbols` | value | `array` | [guide](../linked-views.md#accessible-encodings) |
 
+## KIT.livePixelBoundaries
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.livePixelBoundaries` | namespace |  |  |
+| `KIT.livePixelBoundaries.memberships` | function | `(world,plan)` | [source](../../src/live-pixel-boundaries.js) |
+| `KIT.livePixelBoundaries.prepare` | function | `(value)` | [guide](../pixel-boundaries.md#live-named-boundaries-in-webgl), [source](../../src/live-pixel-boundaries.js) |
+| `KIT.livePixelBoundaries.region` | function | `(plan,w,h)` | [source](../../src/live-pixel-boundaries.js) |
+
 ## KIT.look
 
 | Member | Kind | Signature or value | Guides and source |

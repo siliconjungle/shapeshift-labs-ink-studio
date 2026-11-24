@@ -79,6 +79,7 @@ sorting or `specialize: false` in auto mode to compare the full resolve.
 | `colorLut` | Override a world's [3D color LUT](pixel-look.md#3d-color-luts), or pass `false` to disable it. |
 | `colorStack` | Override a world's [named color stack](pixel-look.md#named-color-stacks), or pass `false` to disable it. |
 | `clean`, `lineClean`, `damp` | Control isolated-pixel cleanup, line cleanup, and per-pixel flicker damping. |
+| `livePixelBoundaries` | Stabilize [named opaque pixel boundaries](pixel-boundaries.md#live-named-boundaries-in-webgl) with subpixel evidence, motion, and depth. |
 | `edges`, `lightShape` | Toggle surface edge sprites and per-pixel line shading. |
 | `scale`, `stepAnimation` | Change the splat size or explicitly enable the legacy 10 fps step for pixel looks. |
 | `afterimages` | Draw historical splat poses with scene depth. See [motion-aware afterimages](motion-afterimages.md). |

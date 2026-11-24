@@ -102,6 +102,7 @@
       ColorClusters.prepare(look?.colorClusters);
       ShotCorrections.prepare(look?.shotCorrections);
       BoundaryCels.prepare(look?.boundaryCels, { scenePalette: paletteOptions.palette, paletteRoles: paletteOptions.roles });
+      LivePixelBoundaries.prepare(look?.livePixelBoundaries);
       RenderGraph.prepare(look?.renderGraph);
       RenderStages.prepare(look?.renderStages, paletteOptions);
       RenderStages.optics(look?.optics, paletteOptions);
