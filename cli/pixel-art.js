@@ -28,6 +28,7 @@ const PixelColors = require('../src/pixel-raster-colors.js');
 const PixelPalette = require('../src/pixel-palette.js');
 const PaletteExtract = require('../src/palette-extract.js');
 const SelectionSources = require('./pixel-selection-sources.js');
+const { selectionIntents } = require('./pixel-intents.js');
 const PNG = require('./png.js');
 const Craft = require('../src/pixel-craft.js');
 const Motion = require('../src/pixel-motion-checks.js');
@@ -621,7 +622,7 @@ function samplePixel(design,coordinate,{ mode = 'composite',frame,layer,cel,dest
     ...(active.opacity && { alpha:active.opacity[p] }),protected:observed.protected };
 }
 
-function selectPixels(design,query,{ frame,layer,cel } = {},context) {
+function selectPixels(design,query,{ frame,layer,cel,targetRevision } = {},context,requireTarget = false) {
   if (layer !== undefined && cel !== undefined) throw new TypeError('Select from the composite, a layer or a cel');
   if (query?.type === 'recall' && frame === undefined && cel === undefined)
     frame = namedSelection(design,query.id).frame;
@@ -633,7 +634,7 @@ function selectPixels(design,query,{ frame,layer,cel } = {},context) {
   const { width,height } = active;
   const alpha = source ? raster.alpha : active.opacity;
   const visible = p => !raster.clipping || raster.clipping[p];
-  const rendering = SelectionSources.sourceFor(width,height,query,{
+  const selectionContext = {
     capture:context?.captureSelection,
     binding(id) {
       const binding = design.sceneBindings?.find(row=>row.id === id);
@@ -655,6 +656,12 @@ function selectPixels(design,query,{ frame,layer,cel } = {},context) {
         throw new RangeError('The source channel is bound to frame ' + reader.frame);
       return reader;
     }
+  };
+  const rendering = SelectionSources.sourceFor(width,height,query,selectionContext);
+  const intents = selectionIntents(active,{
+    pigment:p=>raster.slots[p] >= 0 && visible(p) && (alpha?.[p] ?? 255) > 0 ? active.swatches[raster.slots[p]] : null,
+    scope:{ layer,cel },findBinding:selectionContext.binding,sceneMatches:selectionContext.sceneMatches,
+    capture:selectionContext.capture,bindingCapture:(w,h,binding)=>inspectionCapture(w,h,undefined,context,binding)
   });
   const mask = PixelSelections.mask(width,height,query,p => {
     const slot = raster.slots[p];
@@ -666,10 +673,24 @@ function selectPixels(design,query,{ frame,layer,cel } = {},context) {
     if (meaning.at && !visible(meaning.at[1]*width+meaning.at[0])) return () => false;
     const test = PixelSelections.swatch(width,meaning,raster.slots,alpha,active.swatches);
     return p=>visible(p) && test(p);
-  });
-  const pixels = PixelSelections.pixels(width,mask), { sources } = rendering;
+  },intents.match);
+  const pixels = PixelSelections.pixels(width,mask), sources = [...rendering.sources,...intents.sources];
   return { revision:active.revision,frame:active.id ?? null,grid:[width,height],pixelCount:pixels.length,pixels,
-    ...(sources.length && { sources }) };
+    ...(sources.length && { sources }),...intents.report(query,mask,sources,targetRevision,requireTarget) };
+}
+
+function selectConflict(error) {
+  if (error.conflicts?.[0]?.code !== 'stale-target') throw error;
+  process.exitCode = 2;
+  return { verified:false,conflicts:error.conflicts };
+}
+
+function resolveSelection(resolve) {
+  try {
+    return resolve();
+  } catch (error) {
+    return selectConflict(error);
+  }
 }
 
 function namedSelection(design,id,frame) {
@@ -1657,17 +1678,17 @@ function saveNamedSelection(design,row) {
 function editSelection(design,frame,patch,context) {
   const { operation } = patch;
   if (patch.edits !== undefined || patch.cel !== undefined ||
-      !fields(operation,['id','query','layer','cel','sources']) || !name(operation.id))
+      !fields(operation,['id','query','layer','cel','sources','targetRevision']) || !name(operation.id))
     throw new TypeError('A selection edit needs a stable selection ID and a query');
-  const { id,query,layer,cel } = operation;
-  const { pixels,sources } = selectPixels(design,query,{ frame:frame.id,layer,cel },context);
+  const { id,query,layer,cel,targetRevision } = operation;
+  const { pixels,sources } = selectPixels(design,query,{ frame:frame.id,layer,cel,targetRevision },context,true);
   if (sources) context?.onSelectionSources?.(sources);
   if (operation.sources !== undefined && !equal(operation.sources,sources ?? []))
     throw Preview.conflict('stale-source','Selection sources differ from the inspected sources',
       { expected:operation.sources,actual:sources ?? [] });
   const runs = RasterTools.runs(frame.width,pixels.map(([x,y])=>y*frame.width+x));
   context?.onEditTarget?.({ destination:'selections',kind:'selections',selection:id,frame:frame.id,
-    tool:query.type,pixelCount:pixels.length,runs,...(sources && { sources }) });
+    tool:query.type,pixelCount:pixels.length,runs,...(targetRevision && { targetRevision }),...(sources && { sources }) });
   return saveNamedSelection(design,{ id,frame:frame.id,pixels });
 }
 
@@ -2875,8 +2896,8 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
     throw new TypeError('Use --binding id with pixel-art inspect or canvas');
   if (sourceViewFile !== undefined && (!reference(sourceViewFile) ||
       (action === 'targets' ? !reference(opt.scene) || !reference(opt.query) :
-        !['inspect','canvas'].includes(action) || opt.scene !== undefined)))
-    throw new TypeError('Use --source-view by itself with inspect or canvas, or with --scene and --query for splat targets');
+        !['inspect','canvas','select','edit','preview','replay'].includes(action) || opt.scene !== undefined)))
+    throw new TypeError('Use --source-view with inspect, canvas, select, edit, preview, or replay, or with --scene and --query for splat targets');
   if (action === 'motion') return motionCommand(source,opt,captureMotion);
   if (action === 'capture') {
     if (!reference(opt.out) || path.resolve(source) === path.resolve(opt.out) ||
@@ -2945,6 +2966,8 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
     return;
   }
   const out = writing && typeof opt.out === 'string' ? path.resolve(opt.out) : undefined;
+  if (out && sourceViewFile && out === path.resolve(sourceViewFile))
+    throw new RangeError('Write the edit to a separate output from the captured view');
   function sourceFor(binding) {
     if (!sameScene(binding.scene,opt.scene))
       throw new TypeError('Pass --scene ' + binding.scene + ' to use the bound source');
@@ -2952,10 +2975,11 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
       throw new RangeError('Write the scene edit to a separate output from its inputs');
     return opt.scene;
   }
+  let retainedView;
   const context = {
     sceneRef:opt.scene,splatView:view,splatDiagnostics:splatDiagnosticOptions(opt),
     time:opt.t===undefined ? undefined : typeof opt.t==='string' ? Number(opt.t) : NaN,
-    captureSelection:sourceViewFile ? ()=>ViewSource.unpack(read(sourceViewFile)) : reference(opt.scene) ? settings=>{
+    captureSelection:sourceViewFile ? ()=>retainedView ??= ViewSource.unpack(read(sourceViewFile)) : reference(opt.scene) ? settings=>{
       if (out === path.resolve(opt.scene))
         throw new RangeError('Write the edit to a separate output from the rendered scene');
       return capture(opt.scene,settings);
@@ -2965,7 +2989,9 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
   };
   if (action === 'select') {
     const { frame,layer,cel } = opt;
-    process.stdout.write(JSON.stringify(selectPixels(design,read(patch),{ frame,layer,cel },context),null,2)+'\n');
+    const result = resolveSelection(()=>selectPixels(design,read(patch),{ frame,layer,cel,
+      targetRevision:opt['target-revision'] },context));
+    process.stdout.write(JSON.stringify(result,null,2)+'\n');
     return;
   }
   if (action === 'canvas') {
@@ -3162,6 +3188,7 @@ function runSessionPixelCommand(editor,directory,input,opt,capture,attachedScene
     if (command.action === 'preview' && !result.valid) process.exitCode = 2;
     return { result,out };
   } catch (error) {
+    if (command.action === 'select') return { result:selectConflict(error),out };
     if (!error.receipt) throw error;
     process.exitCode = 2;
     return { result:error.receipt,out };
@@ -3174,7 +3201,6 @@ function sessionCommand(pos,opt,{ scene,capture,view }) {
   if (pos.length !== argc || !sessionActions.includes(action))
     throw new TypeError('Use a pixel-art session command. See ink-studio help for session actions.');
 
-  const captureSelection = reference(opt.scene) && capture ? settings=>capture(opt.scene,settings) : undefined;
   const run = (action,details,context)=>editor.execute(PixelCommands.envelope(action,details),context);
   let editor, result, reportFile;
   if (action === 'init') {
@@ -3194,6 +3220,15 @@ function sessionCommand(pos,opt,{ scene,capture,view }) {
       attachedScene = retained.ref;
       return retained.location && scene(retained.location,retained.source,historyLimit).editor;
     } });
+    const sourceFile = opt['source-view'];
+    const fromView = action === 'select' || PixelCommands.edits.includes(action);
+    if (fromView && sourceFile !== undefined && (!reference(sourceFile) || opt.scene !== undefined))
+      throw new TypeError('Use a single --scene or --source-view with this pixel command');
+    let savedView;
+    const captureSelection = fromView && sourceFile ? ()=>savedView ??= ViewSource.unpack(read(sourceFile)) :
+      reference(opt.scene) && capture ? settings=>capture(opt.scene,{
+        ...settings,...(editor.sceneEditor && sameScene(attachedScene,opt.scene) && { sourceWorld:editor.sceneEditor.build() })
+      }) : undefined;
     if (action === 'run') {
       ({ result,out:reportFile } = runSessionPixelCommand(editor,directory,input,opt,capture,attachedScene));
     } else if (action === 'begin') {
@@ -3202,7 +3237,7 @@ function sessionCommand(pos,opt,{ scene,capture,view }) {
       const sample = opt['shot-hit-frame'];
       const shotHitFrame = sample === undefined ? undefined : typeof sample === 'string' && /^\d+$/.test(sample)
         ? Number(sample) : NaN;
-      result = run(action,{ patch:read(input),options:{ shotHitFrame } },{ captureSelection });
+      result = run(action,{ patch:read(input),options:{ shotHitFrame } },{ captureSelection,sceneRef:opt.scene });
     } else if (action === 'preview') {
       const limit = opt.limit === undefined ? undefined : typeof opt.limit === 'string' ? Number(opt.limit) : NaN;
       result = run(action,{ options:{limit} },{ view,diagnostics:splatDiagnosticOptions(opt),
@@ -3218,7 +3253,8 @@ function sessionCommand(pos,opt,{ scene,capture,view }) {
       result = editor.sample(coordinate,options);
     } else if (action === 'select') {
       const { frame,layer,cel } = opt;
-      result = run(action,{ query:read(input),options:{ frame,layer,cel } },{ captureSelection });
+      result = resolveSelection(()=>run(action,{ query:read(input),
+        options:{ frame,layer,cel,targetRevision:opt['target-revision'] } },{ captureSelection,sceneRef:opt.scene }));
     } else if (action === 'copy') {
       const { selection,frame,layer,cel } = opt;
       result = editor.copySelection({ selection,frame,layer,cel });

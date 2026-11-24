@@ -467,8 +467,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.pixelSelections` | namespace |  |  |
 | `KIT.pixelSelections.combine` | function | `(type,base,operand)` | [source](../../src/pixel-selections.js) |
+| `KIT.pixelSelections.contains` | function | `(width,height,value)` | [source](../../src/pixel-selections.js) |
 | `KIT.pixelSelections.fromPixels` | function | `(width,height,pixels)` | [source](../../src/pixel-selections.js) |
-| `KIT.pixelSelections.mask` | function | `(width,height,query,read,recall,matches)` | [source](../../src/pixel-selections.js) |
+| `KIT.pixelSelections.mask` | function | `(width,height,query,read,recall,matches,intent)` | [source](../../src/pixel-selections.js) |
 | `KIT.pixelSelections.modify` | function | `(width,height,mask,operation)` | [source](../../src/pixel-selections.js) |
 | `KIT.pixelSelections.pixels` | function | `(width,mask)` | [source](../../src/pixel-selections.js) |
 | `KIT.pixelSelections.swatch` | function | `(width,query,slots,alpha,ids)` | [source](../../src/pixel-selections.js) |

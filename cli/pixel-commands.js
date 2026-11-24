@@ -17,7 +17,7 @@ const exportArtifacts = Object.freeze([
 ]);
 const optionFields = {
   inspect:['frame','cel','binding','destinations','references'],
-  select:['frame','layer','cel'],
+  select:['frame','layer','cel','targetRevision'],
   edit:['shotHitFrame'],
   preview:['limit'],
   export:{ preset:['preset','out','directory'],png:['frame','cel','layer','colorMode'],

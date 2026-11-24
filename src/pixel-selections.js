@@ -43,8 +43,8 @@ const PixelSelections = (() => {
     return result;
   }
 
-  function mask(width,height,query,read,recall,matches) {
-    gridSize(width,height);
+  function mask(width,height,query,read,recall,matches,intent) {
+    const size = gridSize(width,height);
     let remaining = 32;
     function evaluate(query) {
       if (--remaining < 0) throw new RangeError('A selection query supports at most 32 operations');
@@ -84,6 +84,11 @@ const PixelSelections = (() => {
         const result = new Uint8Array(width*height);
         for (let p = 0; p < result.length; p++) result[p] = Number(Boolean(match(p)));
         return result;
+      }
+      const resolved = intent?.(query);
+      if (resolved) {
+        requireMask(resolved,size);
+        return resolved;
       }
       const keys = types.get(type);
       if (!keys || !fields(query,['type',...keys]))
@@ -253,7 +258,7 @@ const PixelSelections = (() => {
     return result;
   }
 
-  return Object.freeze({ mask,pixels,fromPixels,combine,modify,swatch });
+  return Object.freeze({ mask,pixels,fromPixels,combine,modify,swatch,contains });
 })();
 
 if (typeof module !== 'undefined') module.exports = PixelSelections;

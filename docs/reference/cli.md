@@ -266,7 +266,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art splat-diagnostics <scene> [--before fit.json] [--splat-fit fit.json] [--rect x,y,w,h] [--at x,y] [--out report.json]
   pixel-art canvas <design.json> --out canvas.html [--frame id] [--scene scene.json | --source-view view.json] [--binding id] [--destination ids] [--at x,y]   inspect the cursor and optional pinned scene pixel
   pixel-art sample <design.json> --at x,y [--mode composite|layer|source]   sample art or a bound material channel
-  pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id] [--scene path]   resolve a native selection, including scoped bindings
+  pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id] [--scene path|--source-view view.json] [--target-revision sha256]   resolve and verify native selections
   pixel-art copy <design.json> --selection id [--frame id] --layer id|--cel id   print a pixel clipboard
   pixel-art brush <design.json> --selection id|--rect x,y,w,h --out brush.json   capture a portable indexed brush
     dynamics options: --stabilization ms --pressure light,full --velocity pxPerSecond,slow,fast

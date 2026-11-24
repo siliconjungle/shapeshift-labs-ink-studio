@@ -24,7 +24,9 @@ const evidence = {
   select:['selectResult',{
     '/revision':'Revision of the document on which the query ran.',
     '/pixels':'Resolved native coordinates. The pixel count covers the whole mask.',
-    '/sources':'Fingerprints of scene or channel inputs when a query uses them.'
+    '/sources':'Fingerprints of scene or channel inputs when a query uses them.',
+    '/targetRevision':'Pass this revision back to recheck the intent or to save its mask.',
+    '/intents':'Matched target identities, native runs, representative samples, and omitted evidence counts.'
   }],
   preview:['previewResult',{
     '/valid':'Whether the proposed edit or pending transaction validates.',
@@ -110,13 +112,17 @@ function examples(createEditor) {
   const editor = createEditor(document), { revision } = editor.describe();
   const make = Commands.envelope;
   const edit = (action,operation,scope = {frame:'art'})=>make(action,{patch:{id:'example-'+action,revision,...scope,operation}});
+  const shadow = {type:'shadow-cluster',swatches:['amber']};
+  const { targetRevision } = editor.select(shadow);
   const draw = edit('draw',{tool:'pencil',layer:'ink',points:[[2,1],[3,1]],swatch:'amber'});
   const begin = make('begin',{label:'Paint the badge'}), undo = make('undo');
   const inputs = {
     validate:[[make('validate')]], inspect:[[make('inspect',{at:[1,1],options:{frame:'art'}})]],
-    select:[[make('select',{query:{type:'rectangle',rect:[1,1,2,1]}})]],
+    select:[[make('select',{query:{type:'rectangle',rect:[1,1,2,1]}})],
+      [make('select',{query:shadow})],[make('select',{query:shadow,options:{targetRevision}})]],
     apply:[[edit('apply',{type:'duration',frame:'art',durationMs:125},{destination:'timeline'})]],
-    draw:[[draw]], mask:[[edit('mask',{id:'trim',query:{type:'grow',source:{type:'recall',id:'badge'}}})]],
+    draw:[[draw]], mask:[[edit('mask',{id:'trim',query:{type:'grow',source:{type:'recall',id:'badge'}}})],
+      [edit('mask',{id:'shadow',query:shadow,targetRevision})]],
     recolor:[[edit('recolor',{layer:'ink',selection:'badge',from:'amber',to:'rust'})],
       [edit('recolor',{type:'swatch',swatch:{id:'amber',color:'#e69143'}},{})]],
     transform:[[edit('transform',{layer:'ink',selection:'badge',transform:{offset:[2,1]},resultSelection:'moved'})],
@@ -172,7 +178,14 @@ function resultDefinitions(artifacts) {
     inspectResult:object({revision,frame:id,at:pixel,layer:nullable(id),swatch:nullable(id),protected:bool,
       composite:owner,layers:generic,materials:generic,scene:obj,underneath:obj,protection:generic},
     ['revision','frame','at','layer','swatch','protected','composite','layers','materials','underneath','protection'],true),
-    selectResult:object({revision,frame:id,grid:size,pixelCount:natural,pixels:array(pixel),sources:generic},
+    selectIntentTarget:object({pixelCount:positive,runCount:positive,runs:array(tuple(natural,natural,positive),1,128),
+      sample:object({at:pixel},['at'],true)},['pixelCount','runCount','runs','sample'],true),
+    selectIntent:object({type:choice('shadow-cluster','one-pixel-gap','protected-detail','visible-part','occluding-contributor'),
+      matchedPixels:natural,targetCount:natural,targets:array(ref('selectIntentTarget'),0,128),
+      omittedTargets:natural,unresolvedPixels:natural,truncatedPixels:natural},
+    ['type','matchedPixels','targetCount','targets','omittedTargets']),
+    selectResult:object({revision,frame:id,grid:size,pixelCount:natural,pixels:array(pixel),sources:generic,
+      targetRevision:revision,intents:array(ref('selectIntent'),1,32),verified:constant(true)},
       ['revision','frame','grid','pixelCount','pixels'],true),
     previewResult:object({format:constant('ink-studio/pixel-edit-preview'),version:constant(1),valid:bool,pixelCount:natural,
       pixels:generic,sources:generic,targets:generic,conflicts:array(conflict),sourceRevision:revision,warnings:generic},
@@ -312,7 +325,7 @@ function buildSchema({ createEditor,surfaceDefinitions }) {
   const fields = { at:pixel,query:ref('selectionQuery'),label:text,receipt:ref('replayReceipt'),
     edit:{oneOf:edits.map(action=>ref(action+'Command'))},artifact:choice(...exportArtifacts) };
   const optionTypes = {frame:id,cel,layer:id,binding:id,destinations:{...array(text),uniqueItems:true},references:bool,
-    limit:natural,shotHitFrame:int(0,1e9)};
+    limit:natural,shotHitFrame:int(0,1e9),targetRevision:revision};
   for (const action of Object.keys(members)) {
     const schemaName = action+'Command';
     const keys = optionFields[action] ?? (edits.includes(action) ? optionFields.edit : []);

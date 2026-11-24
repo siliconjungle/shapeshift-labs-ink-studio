@@ -1245,6 +1245,57 @@ material channels before saving their resolved pixels. Copy the selection
 report's `sources` into the save operation to guard it against changes
 since inspection. Recall the saved mask in the Workshop to use it as a paint boundary or brush footprint.
 
+### Query and verify a target before editing
+
+Agents can discover targets without knowing all their coordinates or source
+IDs in advance. These queries compose with regular masks, including
+`intersect` for narrowing a result to a region.
+
+| Query | Evidence |
+| --- | --- |
+| `{"type":"shadow-cluster","swatches":["oxide-dark","oxide-mid"]}` | Connected components of the approved shadow swatches. Use `ramp` and optional `steps` to take the first authored ramp entries, or `range` to read the normalized `inkShadow` pass on covered pixels. Supply `at` for one component or `connectivity:8` to include corners. |
+| `{"type":"one-pixel-gap","axis":"horizontal"}` | Transparent pixels with two immediately adjacent occupied neighbors on the requested axis. Defaults to either axis. The report gives each neighbor's swatch and flags protected gaps. |
+| `{"type":"protected-detail","kind":"gap"}` | Named protections active on the selected frame. Filter by `id` or use `at` to find complete details covering that pixel. |
+| `{"type":"visible-part","at":[12,8]}` | The visible part, object and entity at that coordinate. Omit `at` to discover every named owner, or filter by part `id`, `object` or `entity`. |
+| `{"type":"occluding-contributor","binding":"gate","scope":"full"}` | Opaque blockers and visible foreground splats where the bound target loses coverage. Choose `full`, `partial`, or `either` (default). Optional `object`, `part` and `at` narrow the search. |
+
+Visible-part and rendered shadow queries can use a saved native source
+view or the live scene. Occlusion needs matched visible and isolated
+coverage and depth from the same camera. Supply `--scene` in the CLI or
+`captureSelection(settings)` in the SDK. An SDK `renderFrame` can also be
+used when it already contains matching `bindingEvidence`. Coverage loss
+without an identified contributor is counted in `unresolvedPixels` and
+is excluded from the selection. The `truncatedPixels` count flags
+incomplete contributor lists. Both counts cover the requested binding
+region before applying any surrounding selection expression.
+
+The result includes the full selection and per-intent evidence for pixels
+that survive the final mask. Each intent shows up to 128 targets and up to
+128 row runs per target. `targetCount`, `omittedTargets`, and `runCount`
+show the full counts. A representative sample gives coordinates and the
+evidence for that target, such as visible and projected coverage for an
+occlusion.
+
+Pass the returned `targetRevision` as an SDK select option or use
+`--target-revision` to recheck the same query. A successful recheck returns
+`verified: true`. The CLI returns a `stale-target` conflict and exits with
+status 2 if the inspected target has changed. To save the selection, put the same query and
+`targetRevision` in the `selections` patch operation, and the report's
+document `revision` at the top level. Use the same frame, layer or cel, and
+scene source. Preview and apply reject missing verification or changed
+targets, and a successful save records the target revision in its receipt.
+
+```js
+const query = { type: 'shadow-cluster', swatches: ['oxide-dark'], at: [12, 8] };
+const result = editor.select(query, { frame: 'front', layer: 'ink' });
+const patch = {
+  id: 'pick-shadow', destination: 'selections', frame: 'front', revision: result.revision,
+  operation: { id: 'shadow', layer: 'ink', query, targetRevision: result.targetRevision }
+};
+const preview = editor.previewEdit(patch);
+if (preview.valid) editor.apply(patch);
+```
+
 ### Choose a scene selection scope
 
 Use a `binding` query to select against the object and optional part in

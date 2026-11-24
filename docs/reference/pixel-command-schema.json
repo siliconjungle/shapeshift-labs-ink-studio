@@ -603,6 +603,197 @@
           "type": "object",
           "properties": {
             "type": {
+              "const": "shadow-cluster"
+            },
+            "swatches": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "minItems": 1,
+              "maxItems": 255,
+              "uniqueItems": true
+            },
+            "ramp": {
+              "$ref": "#/$defs/id"
+            },
+            "steps": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            },
+            "range": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              ],
+              "minItems": 2,
+              "items": false
+            },
+            "at": {
+              "$ref": "#/$defs/pixel"
+            },
+            "connectivity": {
+              "enum": [
+                4,
+                8
+              ]
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "swatches"
+              ]
+            },
+            {
+              "required": [
+                "ramp"
+              ]
+            },
+            {
+              "required": [
+                "range"
+              ]
+            }
+          ],
+          "dependentRequired": {
+            "steps": [
+              "ramp"
+            ]
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "one-pixel-gap"
+            },
+            "axis": {
+              "enum": [
+                "horizontal",
+                "vertical",
+                "either"
+              ]
+            },
+            "at": {
+              "$ref": "#/$defs/pixel"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "protected-detail"
+            },
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "kind": {
+              "enum": [
+                "pixel",
+                "gap",
+                "contour",
+                "accent"
+              ]
+            },
+            "at": {
+              "$ref": "#/$defs/pixel"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "visible-part"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "object": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "entity": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "at": {
+              "$ref": "#/$defs/pixel"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "occluding-contributor"
+            },
+            "binding": {
+              "$ref": "#/$defs/id"
+            },
+            "object": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "part": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "scope": {
+              "enum": [
+                "full",
+                "partial",
+                "either"
+              ]
+            },
+            "at": {
+              "$ref": "#/$defs/pixel"
+            }
+          },
+          "required": [
+            "type",
+            "binding"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
               "const": "pixels"
             },
             "pixels": {
@@ -1848,6 +2039,9 @@
           "items": {
             "type": "object"
           }
+        },
+        "targetRevision": {
+          "$ref": "#/$defs/revision"
         }
       },
       "required": [
@@ -5465,6 +5659,112 @@
       ],
       "additionalProperties": true
     },
+    "selectIntentTarget": {
+      "type": "object",
+      "properties": {
+        "pixelCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "runCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "integer",
+                "minimum": 1
+              }
+            ],
+            "minItems": 3,
+            "items": false
+          },
+          "minItems": 1,
+          "maxItems": 128
+        },
+        "sample": {
+          "type": "object",
+          "properties": {
+            "at": {
+              "$ref": "#/$defs/pixel"
+            }
+          },
+          "required": [
+            "at"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "pixelCount",
+        "runCount",
+        "runs",
+        "sample"
+      ],
+      "additionalProperties": true
+    },
+    "selectIntent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "shadow-cluster",
+            "one-pixel-gap",
+            "protected-detail",
+            "visible-part",
+            "occluding-contributor"
+          ]
+        },
+        "matchedPixels": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "targetCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/selectIntentTarget"
+          },
+          "minItems": 0,
+          "maxItems": 128
+        },
+        "omittedTargets": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unresolvedPixels": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "truncatedPixels": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "type",
+        "matchedPixels",
+        "targetCount",
+        "targets",
+        "omittedTargets"
+      ],
+      "additionalProperties": false
+    },
     "selectResult": {
       "type": "object",
       "properties": {
@@ -5506,6 +5806,20 @@
           "items": {
             "type": "object"
           }
+        },
+        "targetRevision": {
+          "$ref": "#/$defs/revision"
+        },
+        "intents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/selectIntent"
+          },
+          "minItems": 1,
+          "maxItems": 32
+        },
+        "verified": {
+          "const": true
         }
       },
       "required": [
@@ -7087,6 +7401,9 @@
             },
             "cel": {
               "$ref": "#/$defs/celId"
+            },
+            "targetRevision": {
+              "$ref": "#/$defs/revision"
             }
           },
           "required": [],
@@ -7110,6 +7427,31 @@
               2,
               1
             ]
+          },
+          "format": "ink-studio/pixel-command",
+          "version": 1,
+          "action": "select"
+        },
+        {
+          "query": {
+            "type": "shadow-cluster",
+            "swatches": [
+              "amber"
+            ]
+          },
+          "format": "ink-studio/pixel-command",
+          "version": 1,
+          "action": "select"
+        },
+        {
+          "query": {
+            "type": "shadow-cluster",
+            "swatches": [
+              "amber"
+            ]
+          },
+          "options": {
+            "targetRevision": "a6f93f030f340742c2df6467f2e5b382f15c80cd1c865c1cbf99347c7e8e110c"
           },
           "format": "ink-studio/pixel-command",
           "version": 1,
@@ -7283,6 +7625,26 @@
                   "id": "badge"
                 }
               }
+            }
+          },
+          "format": "ink-studio/pixel-command",
+          "version": 1,
+          "action": "mask"
+        },
+        {
+          "patch": {
+            "id": "example-mask",
+            "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+            "frame": "art",
+            "operation": {
+              "id": "shadow",
+              "query": {
+                "type": "shadow-cluster",
+                "swatches": [
+                  "amber"
+                ]
+              },
+              "targetRevision": "a6f93f030f340742c2df6467f2e5b382f15c80cd1c865c1cbf99347c7e8e110c"
             }
           },
           "format": "ink-studio/pixel-command",
@@ -8202,7 +8564,9 @@
         "evidence": {
           "/revision": "Revision of the document on which the query ran.",
           "/pixels": "Resolved native coordinates. The pixel count covers the whole mask.",
-          "/sources": "Fingerprints of scene or channel inputs when a query uses them."
+          "/sources": "Fingerprints of scene or channel inputs when a query uses them.",
+          "/targetRevision": "Pass this revision back to recheck the intent or to save its mask.",
+          "/intents": "Matched target identities, native runs, representative samples, and omitted evidence counts."
         },
         "examples": [
           {
@@ -8239,6 +8603,138 @@
                   1
                 ]
               ]
+            }
+          },
+          {
+            "command": {
+              "query": {
+                "type": "shadow-cluster",
+                "swatches": [
+                  "amber"
+                ]
+              },
+              "format": "ink-studio/pixel-command",
+              "version": 1,
+              "action": "select"
+            },
+            "setup": [],
+            "result": {
+              "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+              "frame": "art",
+              "grid": [
+                6,
+                4
+              ],
+              "pixelCount": 1,
+              "pixels": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "targetRevision": "a6f93f030f340742c2df6467f2e5b382f15c80cd1c865c1cbf99347c7e8e110c",
+              "intents": [
+                {
+                  "type": "shadow-cluster",
+                  "matchedPixels": 1,
+                  "targetCount": 1,
+                  "targets": [
+                    {
+                      "origin": [
+                        1,
+                        1
+                      ],
+                      "connectivity": 4,
+                      "source": "palette",
+                      "pixelCount": 1,
+                      "runs": [
+                        [
+                          1,
+                          1,
+                          1
+                        ]
+                      ],
+                      "runCount": 1,
+                      "sample": {
+                        "at": [
+                          1,
+                          1
+                        ],
+                        "swatch": "amber"
+                      }
+                    }
+                  ],
+                  "omittedTargets": 0
+                }
+              ]
+            }
+          },
+          {
+            "command": {
+              "query": {
+                "type": "shadow-cluster",
+                "swatches": [
+                  "amber"
+                ]
+              },
+              "options": {
+                "targetRevision": "a6f93f030f340742c2df6467f2e5b382f15c80cd1c865c1cbf99347c7e8e110c"
+              },
+              "format": "ink-studio/pixel-command",
+              "version": 1,
+              "action": "select"
+            },
+            "setup": [],
+            "result": {
+              "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+              "frame": "art",
+              "grid": [
+                6,
+                4
+              ],
+              "pixelCount": 1,
+              "pixels": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "targetRevision": "a6f93f030f340742c2df6467f2e5b382f15c80cd1c865c1cbf99347c7e8e110c",
+              "intents": [
+                {
+                  "type": "shadow-cluster",
+                  "matchedPixels": 1,
+                  "targetCount": 1,
+                  "targets": [
+                    {
+                      "origin": [
+                        1,
+                        1
+                      ],
+                      "connectivity": 4,
+                      "source": "palette",
+                      "pixelCount": 1,
+                      "runs": [
+                        [
+                          1,
+                          1,
+                          1
+                        ]
+                      ],
+                      "runCount": 1,
+                      "sample": {
+                        "at": [
+                          1,
+                          1
+                        ],
+                        "swatch": "amber"
+                      }
+                    }
+                  ],
+                  "omittedTargets": 0
+                }
+              ],
+              "verified": true
             }
           }
         ]
@@ -8520,6 +9016,83 @@
                 "kind": "selections",
                 "documentRevision": "4581c61f987ae5242334411926ff8c0cc9b150d0052ad4ce77721d569b2c526d",
                 "artifactRevision": "4581c61f987ae5242334411926ff8c0cc9b150d0052ad4ce77721d569b2c526d"
+              }
+            }
+          },
+          {
+            "command": {
+              "patch": {
+                "id": "example-mask",
+                "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                "frame": "art",
+                "operation": {
+                  "id": "shadow",
+                  "query": {
+                    "type": "shadow-cluster",
+                    "swatches": [
+                      "amber"
+                    ]
+                  },
+                  "targetRevision": "a6f93f030f340742c2df6467f2e5b382f15c80cd1c865c1cbf99347c7e8e110c"
+                }
+              },
+              "format": "ink-studio/pixel-command",
+              "version": 1,
+              "action": "mask"
+            },
+            "setup": [],
+            "result": {
+              "format": "ink-studio/pixel-edit-receipt",
+              "version": 1,
+              "command": {
+                "runner": "sdk",
+                "action": "edit",
+                "options": {},
+                "patch": {
+                  "id": "example-mask",
+                  "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                  "frame": "art",
+                  "operation": {
+                    "id": "shadow",
+                    "query": {
+                      "type": "shadow-cluster",
+                      "swatches": [
+                        "amber"
+                      ]
+                    },
+                    "targetRevision": "a6f93f030f340742c2df6467f2e5b382f15c80cd1c865c1cbf99347c7e8e110c"
+                  },
+                  "destination": "selections"
+                },
+                "frame": "art"
+              },
+              "inputs": {
+                "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49"
+              },
+              "status": "applied",
+              "affectedTargets": [
+                {
+                  "destination": "selections",
+                  "kind": "selections",
+                  "selection": "shadow",
+                  "frame": "art",
+                  "tool": "shadow-cluster",
+                  "pixelCount": 1,
+                  "runs": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ],
+                  "targetRevision": "a6f93f030f340742c2df6467f2e5b382f15c80cd1c865c1cbf99347c7e8e110c"
+                }
+              ],
+              "skippedHits": [],
+              "outputs": {
+                "kind": "selections",
+                "documentRevision": "ca971960a50b6b7f64a3a7d24975103f9af149d68cfaedd71f9b595cf6b2bd2b",
+                "artifactRevision": "ca971960a50b6b7f64a3a7d24975103f9af149d68cfaedd71f9b595cf6b2bd2b"
               }
             }
           }
