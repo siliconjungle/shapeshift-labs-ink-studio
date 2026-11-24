@@ -231,7 +231,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-uv import <mesh> --out topology.json [--id id] [--uv-set n] [--join-coincident on|off]   retain triangle corner UVs for editing
   mesh-uv layout <mesh-or-scene.json> [--object id] [--out file]   inspect stable faces, seam sides, pins and islands
   mesh-uv select <mesh-or-scene.json> <query.json> [--object id] [--view file] [--preview dir] [--out file]   select UV elements by atlas or model position
-  mesh-uv edit <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file] [--preview dir] [--out file] [--report file]   plan or apply UV cuts, stitches, pins and island transforms
+  mesh-uv edit <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file] [--preview dir] [--out file] [--report file]   plan UV seam edits, local unwraps, relax and texel budgets
   scenery pack <scene.js> --out asset.inkscenery   pack indexed meshes and textures from a scenery hook
   scenery inspect <asset.inkscenery>   decode the pack and report its transfer sizes
   export-glb <scene.js|.json|.obj|.gltf|.glb> --out model.glb   write UV-mapped geometry with materials, skins and clips

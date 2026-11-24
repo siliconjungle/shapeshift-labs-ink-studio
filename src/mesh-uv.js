@@ -204,6 +204,24 @@ const MeshUV = (() => {
       padding:{required:padding,pairs:[...crowded.values()],checks,complete:paddingComplete}};
   }
 
-  return Object.freeze({ area2, sameUV, validate, topology, overlaps, inspect });
+  // Compare a proposed local layout only where coordinates actually moved.
+  function changedOverlaps(rows, maxChecks, visit) {
+    let checks = 0;
+    const sheets = new Map();
+    for (const [id, row] of rows.entries()) {
+      if (!sheets.has(row.material)) sheets.set(row.material, []);
+      sheets.get(row.material).push({ ...row, id, box: bounds(row.after) });
+    }
+    for (const sheet of sheets.values()) {
+      const complete = sweep(sheet, 0, () => checks++ < maxChecks, (a, b) => {
+        if ((a.changed || b.changed) && overlaps(a.after, b.after) && !overlaps(a.before, b.before))
+          visit(a.face, b.face);
+      });
+      if (!complete) return false;
+    }
+    return true;
+  }
+
+  return Object.freeze({ area2, sameUV, validate, topology, overlaps, metrics, changedOverlaps, inspect });
 })();
 if (typeof module !== 'undefined') module.exports = MeshUV;

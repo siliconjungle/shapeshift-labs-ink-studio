@@ -29,10 +29,12 @@ function composite(w, h, layers, draw, kit) {
 
 function view(input, standalone) {
   if (!input || Object.getPrototypeOf(input) !== Object.prototype ||
-      Object.keys(input).some(key => !['w', 'h', 't', 'camera', 'raw', 'materials', 'material'].includes(key)) ||
-      input.material !== undefined && !name(input.material))
+      Object.keys(input).some(key => !['w', 'h', 't', 'camera', 'raw', 'materials', 'material', 'readability', 'afterMaterials'].includes(key)) ||
+      input.material !== undefined && !name(input.material) ||
+      input.afterMaterials !== undefined && (!standalone || !Array.isArray(input.afterMaterials)))
     throw new TypeError('Use UV review camera, grid and optional atlas material settings');
-  return { ...viewSettings({ w: 220, h: 180, raw: true, ...input }, standalone), material: input.material };
+  return { ...viewSettings({ w: 220, h: 180, raw: true, ...input }, standalone), material: input.material,
+    readability: input.readability, afterMaterials: input.afterMaterials };
 }
 
 function capture(document, settings, kit, editor, object) {
@@ -134,7 +136,7 @@ function model(layout, { frame, mesh, camera }, selection, kit) {
   return composite(w, h, [{ source: { w, h, rgb } }], draw, kit);
 }
 
-function review(before, after, nativeBefore, nativeAfter, selected, settings, kit, paths) {
+function review(before, after, nativeBefore, nativeAfter, selected, settings, kit, paths, readability) {
   if (settings.h < 32) throw new RangeError('UV review needs at least 32 native rows');
   const UV = kit.KIT.meshTopology.uv;
   const layouts = [UV.inspect(before), UV.inspect(after)];
@@ -158,7 +160,12 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     text('Linked selection', [width * .80, height - 8], ink.selected, 8));
   views.push(composite(width, height, layers, draw, kit));
   for (const [i, image] of views.entries()) files.write(paths[i], PNG.encode(image.w, image.h, image.rgb));
-  return { material, grid: [w, h], files: imageNames };
+  const evidence = readability && {
+    time: settings.t, camera: nativeBefore.camera,
+    before: UV.readability(nativeBefore.mesh, nativeBefore.frame, readability),
+    after: UV.readability(nativeAfter.mesh, nativeAfter.frame, readability)
+  };
+  return { material, grid: [w, h], files: imageNames, ...(evidence && { readability: evidence }) };
 }
 
 function command([action, file, input, ...rest], opt, kit, openEditor) {
@@ -191,7 +198,7 @@ function command([action, file, input, ...rest], opt, kit, openEditor) {
         result = UV.pickModel(old.mesh, old.frame, request.model.pixel, request.domain);
       } else result = UV.select(document, request);
       value = result;
-      if (preview) result.preview = review(document, document, old, old, result, settings, kit, paths);
+      if (preview) result.preview = review(document, document, old, old, result, settings, kit, paths, settings.readability);
     } else {
       const plan = editor ? editor.planMeshUV(object, request) : UV.plan(document, request);
       result = { ...plan.report };
@@ -202,8 +209,12 @@ function command([action, file, input, ...rest], opt, kit, openEditor) {
         })() : UV.select(document, { domain: 'faces', ids: [...new Set(plan.report.corners.map(row => row.face))] });
         const draft = editor && Object.keys(plan.patch).length ? editor.fork() : editor;
         if (draft && draft !== editor) draft.editMeshTopology(object, plan.patch);
-        const next = plan.document === document ? old : capture(plan.document, settings, kit, draft, object);
-        result.preview = review(document, plan.document, old, next, selected, settings, kit, paths);
+        const revised = plan.report.canCommit && settings.afterMaterials ? { ...settings, materials: settings.afterMaterials } : settings;
+        const next = plan.document === document && revised === settings ? old : capture(plan.document, revised, kit, draft, object);
+        const budget = [...plan.report.operations].reverse().find(row => row.op === 'texel-budget' && row.evidence?.features);
+        const readability = settings.readability ?? (budget && { atlas: budget.evidence.atlas,
+          features: budget.evidence.features.map(({ id, faces }) => ({ id, faces })) });
+        result.preview = review(document, plan.document, old, next, selected, settings, kit, paths, readability);
       }
       if (out && plan.report.canCommit) {
         if (editor) result.transaction = editor.editMeshUV(object, request).topology;

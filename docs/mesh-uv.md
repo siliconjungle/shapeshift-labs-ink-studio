@@ -150,6 +150,107 @@ stitch that leaves the keeper's two pins in place.
 node examples/mesh-uv-workshop.cjs out/uv-workshop
 ```
 
+## Unwrap and relax a local region
+
+Use the same `mesh-uv edit` command to reproject or relax a connected set of
+face IDs. Each operation uses one material sheet. To hold named seam
+coordinates or a painted span, declare those targets in `protect` at the
+request level or on the operation. The solver also retains pinned corners and
+any welded corner used by a face outside the selection.
+
+```json
+{
+  "protect": {
+    "seams": ["trim-seam"],
+    "painted": [{ "id": "painted-badge", "faces": ["badge"] }]
+  },
+  "operations": [
+    { "op": "unwrap", "ids": ["sign"], "atlas": [128, 128] },
+    { "op": "relax", "ids": ["stitch-0", "stitch-1"], "atlas": [128, 128] }
+  ]
+}
+```
+
+- **Unwrap** uses a planar projection oriented towards the existing layout.
+  It fits a chart into the selection's current bounds, or into a normalized
+  `rect: [u, v, width, height]`. An optional world-space `normal` sets the
+  projection plane. The solver spreads the correction from held corners
+  into the free region. Use individual regions on strongly curved surfaces.
+- **Relax** redistributes free points with weights derived from the geometric
+  triangle angles and edge lengths. The rim of the selected region stays
+  fixed. `iterations` and `strength` control the solve.
+- **Painted spans** can list faces, edges, or both. A protected face retains
+  all its corner coordinates. A protected edge retains both UV sides.
+  The receipt includes held groups and the change in stretch and density.
+
+These operations reject newly collapsed or flipped triangles and new atlas
+overlap. Work through several smaller regions if a proposed change conflicts
+with the surrounding layout. UV movement uses the existing scene transaction
+and bake invalidation workflow. Use the registered paint inputs when
+[rebaking](registered-material-bake.md) a revised atlas.
+
+## Allocate texels for a shot
+
+A `texel-budget` operation redistributes space among named features on one
+material sheet. Each feature names existing islands and can set a relative
+density `weight`. The allocator scales each movable island uniformly in
+texel space and packs it into the free `pool`. It reserves islands that
+contain a pin, approved seam, or painted span, along with the unselected
+charts on the same sheet.
+
+```json
+{
+  "op": "texel-budget",
+  "atlas": [128, 128],
+  "maxTexels": 5600,
+  "gutter": 2,
+  "features": [
+    { "id": "sign", "islands": ["sign"], "weight": 4, "minDensity": 28 },
+    { "id": "cabinet", "islands": ["cabinet"], "weight": 0.7 }
+  ]
+}
+```
+
+`maxTexels` caps the summed triangle area of the named features in texels.
+Omit it to use their current footprint rounded up. `pool` is an optional
+integer `[x, y, width, height]` region in the atlas. `gutter` leaves
+space around chart bounds. Packing can leave some area unused. An optional
+`minDensity` specifies texels per scene unit that each island of a feature
+must reach before the operation can commit.
+
+With `--preview`, the edit receipt measures the named features through
+the same native camera before and after the edit. The view file can also
+set a `readability` object for any preview.
+
+```json
+{
+  "w": 246, "h": 164,
+  "camera": { "yaw": 0.11, "pitch": 0.07, "dist": 5.65, "ortho": true },
+  "readability": {
+    "atlas": [128, 128],
+    "features": [{ "id": "sign", "faces": ["sign"],
+      "minPixels": [95, 10], "minTexelsPerPixel": 0.58 }]
+  }
+}
+```
+
+The review reports each visible feature's projected extent and coverage,
+plus the 10th percentile and median of its lower-axis texels per native
+pixel. Sampling uses neighboring visible pixels on the same authored face.
+The thresholds measure coverage and sampling. Check the rendered feature
+at 1× for actual legibility. A standalone view can supply `materials` and
+`afterMaterials` to compare matching registered textures for each layout.
+
+Use `KIT.meshTopology.uv.plan` to make these edits through the SDK and
+`KIT.meshTopology.uv.readability` to measure native mesh source passes.
+The [ferry route board demo](../examples/mesh-uv-texel-budget.cjs) bakes the
+same rest-space pigment for both allocations. It keeps the approved badge
+registered while reallocating a fixed-size atlas to the sign.
+
+```sh
+node examples/mesh-uv-texel-budget.cjs out/ferry-route-board
+```
+
 ## Reduce an authored mesh
 
 Put protected triangle edges in the input's `protectedSeams` field or

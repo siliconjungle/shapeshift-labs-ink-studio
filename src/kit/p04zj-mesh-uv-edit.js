@@ -235,6 +235,88 @@
     return { faces, faceAt };
   }
 
+  function readability(mesh, frame, request) {
+    const source = topology.sourceDocument(mesh), { w, h, passes } = frame ?? {};
+    if (!source || !Number.isSafeInteger(w) || !Number.isSafeInteger(h) || w < 1 || h < 1 || w * h > 1048576 ||
+        passes?.sourceSurface?.length !== w * h || passes.sourceTriangle?.length !== w * h ||
+        passes.sourceCoordinates?.length !== w * h * 3 || !Array.isArray(passes.surfaceSources) ||
+        !fields(request, ['atlas', 'features']) || !Array.isArray(request.features) ||
+        request.features.length < 1 || request.features.length > 128)
+      throw new TypeError('Readability needs native mesh source passes, an atlas, and named face features');
+    const atlas = meshUVRegions.grid(request.atlas), g = graph(source), seen = new Set(), byFace = new Map();
+    const features = Array.from(request.features, row => {
+      if (!fields(row, ['id', 'faces', 'minPixels', 'minTexelsPerPixel']) ||
+          !meshUVRegions.name(row.id) || seen.has(row.id) ||
+          row.minPixels !== undefined && !tuple(row.minPixels, 2, n => Number.isInteger(n) && n >= 1) ||
+          row.minTexelsPerPixel !== undefined && (!Number.isFinite(row.minTexelsPerPixel) || row.minTexelsPerPixel <= 0))
+        throw new RangeError('Readability features need distinct IDs and optional minimum size and sampling requirements');
+      seen.add(row.id);
+      const faces = known(g, 'faces', row.faces);
+      if (!faces.length) throw new RangeError('Choose at least one readability face');
+      const feature = { ...row, faces, bounds: [w, h, -1, -1], pixels: 0, sampling: [] };
+      for (const id of faces) {
+        if (!byFace.has(id)) byFace.set(id, []);
+        byFace.get(id).push(feature);
+      }
+      return feature;
+    });
+    const lookup = new Map(), faceSlots = new Map(), faces = [];
+    const owners = new Int32Array(w * h).fill(-1), uv = new Float64Array(w * h * 2);
+    for (let p = 0; p < owners.length; p++) {
+      const slot = passes.surfaceSources[passes.sourceSurface[p]];
+      if (slot?.kind !== 'mesh' || slot.asset !== mesh.id || slot.object !== mesh.objectId ||
+          (slot.part ?? undefined) !== mesh.partId) continue;
+      const draw = slot.primitive / 3 + passes.sourceTriangle[p];
+      if (!lookup.has(draw)) {
+        const tri = topology.triangleSource(mesh, K.sceneMeshes.sourceTriangle(mesh, draw));
+        if (!tri || !byFace.has(tri.face)) lookup.set(draw, null);
+        else {
+          if (!faceSlots.has(tri.face)) { faceSlots.set(tri.face, faces.length); faces.push(tri.face); }
+          lookup.set(draw, { owner: faceSlots.get(tri.face), points: tri.corners.map(id => g.corners.get(id).uv) });
+        }
+      }
+      const tri = lookup.get(draw);
+      if (!tri) continue;
+      owners[p] = tri.owner;
+      for (let a = 0; a < 2; a++) for (let i = 0; i < 3; i++)
+        uv[p * 2 + a] += tri.points[i][a] * passes.sourceCoordinates[p * 3 + i] * atlas[a];
+    }
+    let work = 16e6;
+    for (let p = 0; p < owners.length; p++) {
+      const owner = owners[p];
+      if (owner < 0) continue;
+      const x = p % w, y = Math.floor(p / w);
+      const right = x + 1 < w && owners[p + 1] === owner ? 1 : x > 0 && owners[p - 1] === owner ? -1 : 0;
+      const down = y + 1 < h && owners[p + w] === owner ? w : y > 0 && owners[p - w] === owner ? -w : 0;
+      let sampling;
+      if (right && down) {
+        const a = uv[(p + right) * 2] - uv[p * 2], b = uv[(p + right) * 2 + 1] - uv[p * 2 + 1];
+        const c = uv[(p + down) * 2] - uv[p * 2], d = uv[(p + down) * 2 + 1] - uv[p * 2 + 1];
+        const det = a * d - b * c, trace = a * a + b * b + c * c + d * d;
+        const larger = (trace + Math.sqrt(Math.max(0, trace * trace - 4 * det * det))) / 2;
+        sampling = larger ? Math.abs(det) / Math.sqrt(larger) : 0;
+      }
+      const visible = byFace.get(faces[owner]);
+      if ((work -= visible.length) < 0) throw new RangeError('Readability crosses too many overlapping feature groups');
+      for (const feature of visible) {
+        const b = feature.bounds;
+        b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y); b[2] = Math.max(b[2], x); b[3] = Math.max(b[3], y);
+        feature.pixels++;
+        if (sampling !== undefined) feature.sampling.push(sampling);
+      }
+    }
+    return { grid: [w, h], atlas, features: features.map(({ bounds, pixels, sampling, minPixels, minTexelsPerPixel, ...row }) => {
+      const [x, y, r, b] = bounds, rect = pixels ? [x, y, r - x + 1, b - y + 1] : null;
+      sampling.sort((a, b) => a - b);
+      const quantile = q => sampling.length ? sampling[Math.floor((sampling.length - 1) * q)] : null;
+      const p10 = quantile(.1), p50 = quantile(.5);
+      const ready = !!rect && (!minPixels || rect[2] >= minPixels[0] && rect[3] >= minPixels[1]) &&
+        (minTexelsPerPixel === undefined || p10 !== null && p10 >= minTexelsPerPixel);
+      return { ...row, pixels, bounds: rect, samples: sampling.length, texelsPerPixel: { p10, p50 },
+        ...(minPixels && { minPixels }), ...(minTexelsPerPixel !== undefined && { minTexelsPerPixel }), ready };
+    }) };
+  }
+
   function targets(g, domain, { ids, selection: saved }) {
     const result = saved === undefined ? known(g, domain, ids) :
       ids === undefined ? select(g.doc, { domain, from: saved }).ids : [];
@@ -342,16 +424,23 @@
   }
 
   function draft(g, operation) {
-    if (!operation || typeof operation !== 'object' || !['cut', 'stitch', 'pin', 'transform'].includes(operation.op))
-      throw new TypeError('Use a UV cut, stitch, pin or transform operation');
+    if (!operation || typeof operation !== 'object' || !['cut', 'stitch', 'pin', 'transform', 'unwrap', 'relax', 'texel-budget'].includes(operation.op))
+      throw new TypeError('Use a UV cut, stitch, pin, transform, local solve or texel budget operation');
     const points = new Map(), edges = new Map(), pins = new Map(), conflicts = [];
     let count = 0;
     function conflict(code, evidence) {
       count++;
       if (conflicts.length < 128) conflicts.push({ code, ...evidence });
     }
-    let ids;
-    if (operation.op === 'transform') ids = transform(g, operation, points);
+    let ids, evidence;
+    const local = operation.op === 'unwrap' || operation.op === 'relax';
+    if (local) {
+      ids = targets(g, 'faces', operation);
+      evidence = meshUVRegions.local(g, ids, operation, points, conflict);
+    } else if (operation.op === 'texel-budget') {
+      evidence = meshUVTexelBudget.assign(g, operation, points, conflict);
+      ids = order((evidence.islands ?? []).map(row => row.id));
+    } else if (operation.op === 'transform') ids = transform(g, operation, points);
     else if (operation.op === 'stitch') ids = stitch(g, operation, points, edges, conflict);
     else if (operation.op === 'cut') {
       if (!fields(operation, ['op', 'ids', 'selection'])) throw new TypeError('Unknown UV cut setting');
@@ -377,10 +466,12 @@
       const after = area2(...corners.map(id => points.get(id) ?? g.corners.get(id).uv));
       if (Math.abs(before) > 1e-12 && Math.abs(after) <= 1e-12)
         conflict('collapsed-uv-triangle', { face, corners });
-      else if (operation.op === 'stitch' && before * after < 0)
+      else if ((operation.op === 'stitch' || local) && before * after < 0)
         conflict('flipped-uv-triangle', { face, corners });
     }
-    const report = { op: operation.op, ids, pointEdits: points.size, conflictCount: count, conflicts };
+    if (!count && local && points.size) meshUVRegions.checkOverlaps(g, points, conflict);
+    const report = { op: operation.op, ids, pointEdits: points.size, conflictCount: count, conflicts,
+      ...(evidence && { evidence }) };
     if (count) return { document: g.doc, report };
     const affectedFaces = new Set([...points.keys(), ...pins.keys()].map(id => g.corners.get(id).face));
     const faces = [...affectedFaces].map(id => {
@@ -397,7 +488,7 @@
 
   function plan(source, request) {
     const base = graph(source), revision = topology.revision(base.doc);
-    if (!fields(request, ['revision', 'operations']) || !Array.isArray(request.operations) ||
+    if (!fields(request, ['revision', 'operations', 'protect']) || !Array.isArray(request.operations) ||
         request.operations.length < 1 || request.operations.length > 32)
       throw new TypeError('Use a UV edit with 1–32 operations');
     if (request.revision !== undefined && request.revision !== revision)
@@ -405,7 +496,11 @@
     let document = base.doc;
     const operations = [];
     for (const operation of request.operations) {
-      const next = draft(graph(document), operation);
+      const local = ['unwrap', 'relax', 'texel-budget'].includes(operation?.op);
+      if (local && request.protect !== undefined && operation.protect !== undefined)
+        throw new TypeError('Choose transaction-wide or per-operation UV protection');
+      const next = draft(graph(document), local && request.protect !== undefined ?
+        { ...operation, protect: request.protect } : operation);
       operations.push(next.report);
       if (next.report.conflictCount) break;
       document = next.document;
@@ -466,5 +561,5 @@
     return topology.create({ id, vertices, faces, edges: [...cuts.values()] });
   }
 
-  K.meshTopology = Object.freeze({ ...topology, uv: Object.freeze({ fromTriangles, inspect, select, pickModel, modelFaces, plan }) });
+  K.meshTopology = Object.freeze({ ...topology, uv: Object.freeze({ fromTriangles, inspect, select, pickModel, modelFaces, readability, plan }) });
 })(KIT);
