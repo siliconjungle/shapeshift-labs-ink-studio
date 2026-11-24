@@ -24,13 +24,18 @@ function capture(world,meshes,fields,frames,{ X,Y,Z,AL,rayAt,V,W,H,focal,ortho,n
     return [W/2+(V[0]*x+V[4]*y+V[8]*z+V[12])*scale,
       H/2-(V[1]*x+V[5]*y+V[9]*z+V[13])*scale,depth];
   }
+  function localSplat(source,x,y) {
+    const pose = splat(source.id);
+    if (!pose || !Number.isFinite(source.depth)) return null;
+    const { origin,direction,axial } = rayAt(x+.5,H-y-.5);
+    const offset = origin.map((n,i)=>n+direction[i]*source.depth/axial-pose.center[i]);
+    return pose.frame.localOffset(...offset);
+  }
   return {
-    localSplat(source,x,y) {
-      const pose = splat(source.id);
-      if (!pose || !Number.isFinite(source.depth)) return null;
-      const { origin,direction,axial } = rayAt(x+.5,H-y-.5);
-      const offset = origin.map((n,i)=>n+direction[i]*source.depth/axial-pose.center[i]);
-      return pose.frame.localOffset(...offset);
+    localSplat,
+    restSplat(source,x,y) {
+      const local = localSplat(source,x,y);
+      return local ? local.map((n,i)=>n+splat(source.id).frame.rest[i]) : null;
     },
     projectSplat(id,local) {
       const pose = splat(id);

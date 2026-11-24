@@ -46,7 +46,8 @@ const labels = {
   'outside-registration':'Selected document pixel is outside the registered view',
   'source-unavailable-or-clipped':'Source is unavailable or beyond the camera depth range',
   'outside-view':'Source projects outside the image',
-  'no-corresponding-pixel':'Projected source has no verified pixel in this view'
+  'no-corresponding-pixel':'Projected source has no verified pixel in this view',
+  'no-registered-correspondence':'No sample from a registered representation matches the source point'
 };
 const colors = { moved:'#55d9e7aa',visible:'#82e39daa',occluded:'#feb35eaa',lost:'#ff7d9daa' };
 const [width,height] = report.grid;
@@ -70,6 +71,8 @@ async function draw() {
     const { visible,moved,occluded,lost } = row.counts;
     summary.textContent = visible+' visible, '+moved+' moved, '+occluded+' occluded, '+lost+' lost'+
       (status === 'lost' ? '. Lost pixels are marked on the reference view.' : '.');
+    if (row.mappings?.length) summary.textContent += ' Mapped from '+row.mappings.map(entry=>
+      entry.from+' to '+entry.to+' ('+(entry.visible+entry.occluded)+')').join(', ')+'.';
     reasons.replaceChildren(...Object.entries(row.reasons).map(([key,count])=>{
       const item = document.createElement('li');
       item.textContent = labels[key]+' ('+count+')';

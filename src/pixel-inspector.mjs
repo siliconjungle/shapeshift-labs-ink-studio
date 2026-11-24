@@ -75,6 +75,8 @@ export function mountPixelInspector(root,view,read) {
       geometry.barycentric && 'barycentric '+showValue(geometry.barycentric)].filter(Boolean).join(' · ') });
     if (geometry?.kind === 'sdf') rows.push({ text:['SDF source',geometry.entity ?? geometry.object,
       'local '+showValue(geometry.local)].filter(Boolean).join(' · ') });
+    if (geometry?.kind === 'sprite') rows.push({ text:['Baked card source','frame '+geometry.frame,
+      'local '+showValue(geometry.local)].join(' · ') });
     if (scene.frontStrand) rows.push({ text:['Front strand',scene.frontStrand.strand?.name ?? scene.frontStrand.id,
       'depth '+showValue(scene.frontStrand.depth),'coverage '+percent(scene.frontStrand.coverage)].join(' · ') });
     for (const hit of scene.fragments?.hits ?? []) rows.push({ text:[hit.kind,hit.object,hit.part,hit.material,
@@ -165,9 +167,11 @@ export function mountPixelInspector(root,view,read) {
     group('Hit diagnostics',issueRows(scene));
     group('Scene hits',sceneRows(scene));
     group('Splat contributors',splatRows(scene?.sources));
-    group('Scene bindings',(scene?.bindings ?? []).map(row=>({ text:[row.id,row.status.replaceAll('-',' '),
-      row.sourceAt && 'pixel '+showValue(row.sourceAt),
-      ...(row.hits ?? []).map(hit=>hit.id ?? hit.entity ?? hit.object)].filter(Boolean).join(' · ') })));
+    group('Scene bindings',(scene?.bindings ?? []).flatMap(row=>[
+      { text:[row.id,row.status.replaceAll('-',' '),row.sourceAt && 'pixel '+showValue(row.sourceAt),
+        ...(row.hits ?? []).map(hit=>hit.id ?? hit.entity ?? hit.object)].filter(Boolean).join(' · ') },
+      ...(row.mapping?.points.map(hit=>({ text:[row.mapping.id,hit.kind,showValue(hit.point)].join(' · '),depth:1 })) ?? [])
+    ]));
   }
 
   function setPinned(value) {

@@ -18,10 +18,12 @@ const PixelSourceBindings = (() => {
         depth:surface.depth,coverage:surface.coverage };
     } else if (surface?.kind === 'mesh' && (source?.kind === 'mesh' || surface.uv)) {
       geometry = { kind:'mesh',object:surface.object,part:surface.part,...source,
-        material:surface.material,depth:surface.depth,coverage:surface.coverage,uv:surface.uv,
+        material:surface.material,depth:surface.depth,coverage:surface.coverage,uv:surface.uv,rest:surface.restPosition,
         ...(source && coordinates?.every(Number.isFinite) && {
           triangle:passes.sourceTriangle[p],barycentric:coordinates
         }) };
+    } else if (surface?.kind === 'sprite' && source?.kind === 'sprite' && vector(coordinates,3)) {
+      geometry = { ...source,local:coordinates,material:surface.material,depth:surface.depth,coverage:surface.coverage };
     }
 
     const splats = [], omitted = passes.sourceSplatOmitted?.[p];
@@ -51,6 +53,10 @@ const PixelSourceBindings = (() => {
       }
     }
     if (!geometry && omitted === undefined && !pinned) return null;
+    if (surface?.kind === 'splat' && passes.splatId?.[p]) {
+      const owner = splats.find(hit=>hit.renderRow === passes.splatId[p]-1);
+      if (owner && vector(surface.restPosition,3)) Object.assign(owner,{ opaqueOwner:true,rest:surface.restPosition });
+    }
     const complete = omitted === undefined ? pinned && !truncated : omitted === 0;
     const frontSplat = splats.find(hit=>hit.frontmost) ?? (frontRank === undefined && complete ?
       splats.reduce((nearest,hit)=>!nearest || hit.depth < nearest.depth ? hit : nearest,null) : null);
@@ -64,11 +70,38 @@ const PixelSourceBindings = (() => {
     if (!hit) return false;
     if (hit.kind === 'splat') return named(hit.id);
     if (!named(hit.object) && !named(hit.entity)) return false;
-    return hit.kind === 'sdf' ? vector(hit.local,3) :
+    return ['sdf','sprite'].includes(hit.kind) ? vector(hit.local,3) :
       hit.kind === 'mesh' && (vector(hit.uv,2) || Number.isSafeInteger(hit.triangle) && vector(hit.barycentric,3));
   }
   const matches = (binding,hit) => hit && (hit.object === binding.object || hit.entity === binding.object) &&
     (binding.part === undefined || hit.part === binding.part);
+
+  const mappedKinds = ['mesh','sdf','splat','sprite'];
+  const record = value=>value && Object.getPrototypeOf(value) === Object.prototype;
+
+  function registeredMapping(mapping) {
+    if (!record(mapping) || Object.keys(mapping).some(key=>!['version','id','tolerance','sources'].includes(key)) ||
+        mapping.version !== 1 || typeof mapping.id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(mapping.id) ||
+        !Number.isFinite(mapping.tolerance) || mapping.tolerance <= 0 || !record(mapping.sources)) return false;
+    const sources = Object.entries(mapping.sources);
+    return sources.length >= 2 && sources.every(([kind,transform])=>{
+      if (!mappedKinds.includes(kind)) return false;
+      if (transform === true) return true;
+      if (!Array.isArray(transform) || transform.length !== 12 || !Array.from(transform).every(Number.isFinite)) return false;
+      const [a,b,c,,d,e,f,,g,h,i] = transform;
+      const determinant = a*(e*i-f*h)-b*(d*i-f*g)+c*(d*h-e*g);
+      return Number.isFinite(determinant) && determinant !== 0;
+    });
+  }
+
+  function partPoint(mapping,hit,rest) {
+    const transform = mapping?.sources?.[hit.kind];
+    const point = rest ?? (hit.kind === 'sprite' ? hit.local : hit.rest);
+    if (!transform || !vector(point,3)) return null;
+    if (transform === true) return point.slice();
+    const mapped = [0,4,8].map(row=>point.reduce((sum,n,i)=>sum+n*transform[row+i],transform[row+3]));
+    return vector(mapped,3) ? mapped : null;
+  }
 
   function issues(frame,at,ArtPasses,{ surface,sources,binding } = {}) {
     const { passes } = frame;
@@ -132,9 +165,13 @@ const PixelSourceBindings = (() => {
       hits.some(hit=>hit.kind !== 'splat') || diagnostics.some(issue=>issue.kind === 'unreliable') ? 'unreliable-source' :
         hits.length ? 'unidentified-splat' : evidence.truncated ? 'truncated' : 'miss';
     const frontSplat = matches(binding,evidence.frontSplat) ? evidence.frontSplat : null;
-    return { ...result,sourceAt,status,hits,frontSplat,omittedCoverage:evidence.omittedCoverage,truncated:evidence.truncated,...(diagnostics.length && { diagnostics }) };
+    const points = binding.mapping && hits.flatMap(hit=>{
+      const point = partPoint(binding.mapping,hit);
+      return point ? [{ kind:hit.kind,point,...(hit.id && { source:hit.id }) }] : [];
+    });
+    return { ...result,sourceAt,status,hits,frontSplat,...(points?.length && { mapping:{ id:binding.mapping.id,points } }),omittedCoverage:evidence.omittedCoverage,truncated:evidence.truncated,...(diagnostics.length && { diagnostics }) };
   }
 
-  return Object.freeze({ sample,resolve,issues });
+  return Object.freeze({ sample,resolve,issues,registeredMapping,partPoint });
 })();
 if (typeof module !== 'undefined') module.exports = PixelSourceBindings;

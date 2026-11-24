@@ -1460,6 +1460,59 @@ the counts still include each selected pixel, while the runs mark the cell
 once. The standalone HTML switches between sampled views and overlays each
 status, with lost marks displayed on the reference image.
 
+### Follow a part across representation changes
+
+A binding can carry an explicit registration for a named object and part.
+Each representation maps its captured surface coordinates into the same
+part space. In this binding, the lantern shell's mesh already uses that
+space. The baked atlas uses coordinates relative to its pivot, so its
+registration adds the pivot's height.
+
+```json
+{
+  "id": "shell",
+  "scene": "examples/part-representations.js",
+  "object": "brine-lantern",
+  "part": "shell",
+  "mapping": {
+    "version": 1,
+    "id": "shell-space",
+    "tolerance": 0.18,
+    "sources": {
+      "mesh": true,
+      "sprite": [1, 0, 0, 0, 0, 1, 0, 1.43, 0, 0, 1, 0]
+    }
+  }
+}
+```
+
+Use `true` for a shared coordinate frame or supply a row-major 3 × 4
+affine transform `[a,b,c,tx,d,e,f,ty,g,h,i,tz]`. Include at least two
+representation entries. The tolerance is a maximum distance in the
+registered part's units. Set it small enough to distinguish neighboring
+details, while allowing for sampling at the authored native resolution.
+
+| Source | Coordinates used in the registration |
+| --- | --- |
+| `mesh` | The rest position interpolated on the captured triangle. |
+| `sdf` | The rest position of the field hit before its live pose, in the field's build space. |
+| `splat` | The rest position of the sampled contributor, including its local hit offset. |
+| `sprite` | The baked texel center and recorded depth, in atlas space relative to the bake pivot. This covers directional impostors and placed depth cards with a named `objectId` and `partId`. |
+
+`pixel-art track` first tries the original source address. When a
+registered representation takes over, Ink finds the nearest sampled
+counterpart in that part within the authored tolerance. The full scene
+and isolated part render distinguish visible pixels from foreground
+blockers. A source can recover when its original representation returns.
+The report includes the representation pairs, match distances, and
+affected pixels. `pixel-art inspect` and the offline canvas show mapped
+coordinates available in native captures and saved source views.
+
+A match requires surface evidence. Color-only atlas pixels, synthesized
+or filtered atlas samples without direct texel provenance, and points
+with no sampled counterpart stay unresolved. Native edits to the
+original representation still require a valid source address.
+
 ## Navigate craft diagnostics
 
 Open **Craft diagnostics** below the canvas in the Pixel Stamp Workshop or

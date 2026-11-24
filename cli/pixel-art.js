@@ -134,7 +134,7 @@ function documentShape(design) {
   if (!Array.isArray(sceneBindings)) throw new TypeError('Pixel scene bindings must be an array');
   const bindingIds = new Set();
   for (const binding of sceneBindings) {
-    if (!fields(binding,['id','scene','object','part','revision','frame','layer','canvas']) || !name(binding.id) ||
+    if (!fields(binding,['id','scene','object','part','revision','frame','layer','canvas','mapping']) || !name(binding.id) ||
         bindingIds.has(binding.id) || !reference(binding.scene) || !reference(binding.object) ||
         (binding.part !== undefined && !reference(binding.part)) ||
         (binding.revision !== undefined && !reference(binding.revision)) ||
@@ -142,6 +142,8 @@ function documentShape(design) {
         (binding.layer !== undefined && !layerRows.has(binding.layer)) ||
         (binding.canvas !== undefined && !CanvasTransforms.registered(binding.canvas)))
       throw new TypeError('Pixel scene bindings need unique IDs, scene and object references, and valid frame and layer scopes');
+    if (binding.mapping !== undefined && (!binding.part || !SourceBindings.registeredMapping(binding.mapping)))
+      throw new TypeError('A pixel source mapping needs a part and a valid version 1 registration');
     bindingIds.add(binding.id);
   }
   Destinations.validate(destinations,bindingIds);

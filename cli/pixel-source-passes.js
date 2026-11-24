@@ -56,7 +56,7 @@ function splatBuffer(size) {
         const { object,entity,part,material } = targets.row(row);
         slots.set(row,splatSources.length);
         identities ??= Provenance.identities(world);
-        splatSources.push({ id:identities.idAt(row) ?? null,object,entity,part,material,editable:SplatFit.eligible(world,row) });
+        splatSources.push({ id:identities.idAt(row) ?? null,renderRow:row,object,entity,part,material,editable:SplatFit.eligible(world,row) });
       }
       return slots.get(row);
     }
