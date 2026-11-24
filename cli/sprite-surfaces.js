@@ -54,10 +54,11 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
     if (!layer) continue;
     const code=meshMask?.get(layer.sceneMeshId);
     if (code && spriteLOD.hidden(code)) continue;
-    const {vertices,pixels,normalPixels,width,height}=layer;
+    const {vertices,pixels,normalPixels,cornerNormals,width,height}=layer;
     if(!(vertices instanceof Float32Array)||vertices.length%15||!Number.isSafeInteger(width)||width<1||
       !Number.isSafeInteger(height)||height<1||!(pixels instanceof Uint8Array)||pixels.length!==width*height*4||
       (normalPixels!==undefined&&(!(normalPixels instanceof Uint8Array)||normalPixels.length!==pixels.length))||
+      (cornerNormals!==undefined&&(!(cornerNormals instanceof Float32Array)||cornerNormals.length!==vertices.length/5*3))||
       !vertices.every(Number.isFinite))throw new RangeError('Invalid sprite surface atlas');
     const plan=depthOnly ? null : layer[uvSlip];
     const ranges=plan?.vertices===vertices&&plan.width===width&&plan.height===height ? plan.ranges : [];
@@ -94,7 +95,8 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
       const lightingTarget=lightingMesh && chart && {
         object:chart.objectId,entity:chart.objectId,material:chart.materialId,part:chart.partId
       };
-      const trackWeights=sourceBinding || motion || chart && (sampleCharts || pbr?.materials[pbrMaterial-1]?.readBand);
+      const authored = !depthOnly && surfaceNormals && cornerNormals?.subarray(first * 3, first * 3 + 9);
+      const trackWeights=authored || sourceBinding || motion || chart && (sampleCharts || pbr?.materials[pbrMaterial-1]?.readBand);
       const input=identity.map((weights,i)=>transform(Array.from(vertices.subarray(offset+i*5,offset+i*5+5)),step,
         trackWeights ? weights : undefined,local));
       const mesh=capture && {object:chart?.objectId,material:chart?.materialId,part:chart?.partId,
@@ -220,17 +222,30 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
           }
           const position=[0,1,2].map(k=>row.reduce((s,n,i)=>s+n.p[k]*w[i]/sum,0));
           if(clip&&!clip(position) || omitLayer && omit(omitLayer,chart?.materialId,position))continue;
-          let mapped;
+          const weights3=trackWeights && identity.map((_,k)=>row.reduce((s,v,i)=>s+v.weights[k]*w[i]/sum,0));
+          let base = normal, mapped;
+          if (authored) {
+            const mixed = unit(normal.map((_, k) => weights3.reduce((sum, weight, i) => sum + authored[i * 3 + k] * weight, 0)));
+            if (mixed.some(Boolean)) base = mapped = dot(mixed, normal) < 0 ? mixed.map(n => -n) : mixed;
+          }
           if (restAxes) {
             const weights=restAxes.map(axis=>dot(axis,material.normal));
             const sign=dot(posedAxes[2],normal)<0 ? -1 : 1;
             mapped=unit(normal.map((_,k)=>sign*weights.reduce((sum,n,i)=>sum+n*posedAxes[i][k],0)));
           } else if (bitangent && (material || normalPixels?.[texel+3]>=128)) {
             const local = material?.normal ?? [0,1,2].map(k => Math.max(-127, normalPixels[texel+k]-128));
-            if (local.some(Boolean)) mapped = unit(normal.map((n,k) =>
-              local[0]*axes.right[k]+local[1]*bitangent[k]+local[2]*n));
+            if (local.some(Boolean)) {
+              let tangent = axes.right, up = bitangent;
+              if (base !== normal) {
+                const projection = dot(tangent, base);
+                tangent = unit(tangent.map((n, i) => n - projection * base[i]));
+                if (!tangent.some(Boolean)) tangent = unit(cross(bitangent, base));
+                up = cross(base, tangent);
+                if (dot(up, axes.up) < 0) up = up.map(n => -n);
+              }
+              mapped = unit(base.map((n,k) => local[0]*tangent[k]+local[1]*up[k]+local[2]*n));
+            }
           }
-          const weights3=trackWeights && identity.map((_,k)=>row.reduce((s,v,i)=>s+v.weights[k]*w[i]/sum,0));
           const at=chart && first-chart.first;
           const value=(data,components,k)=>weights3.reduce((s,n,i)=>s+n*data[(at+i)*components+k],0);
           let uv;

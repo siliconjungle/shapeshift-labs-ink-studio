@@ -90,9 +90,9 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
     const shaders = sharedShaders?.cache ?? new Map();
     const program = sharedShaders?.program ?? resources.program;
     function shaderFor(wet, section, lighting, normalMapped, environment, paletteSampling, styledProjection, maskedPart, glassLayers,
-      anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr,pbrSpecularSampling,pbrBands) {
+      anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr,pbrSpecularSampling,pbrBands,authored) {
       const chart = lighting && !normalMapped;
-      const marks=anchors || engraving, rest=marks||simulation||objectTexels||pbrBands, needsFrame=normalMapped||semantic||pbr;
+      const marks=anchors || engraving, rest=marks||simulation||objectTexels||pbrBands, needsFrame=normalMapped||semantic||pbr||authored;
       const key = [
         wet?.airPockets,
         wet?.layered,
@@ -106,7 +106,7 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
         paletteSampling,
         styledProjection,
         maskedPart,
-        glassLayers,anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr,pbrSpecularSampling,pbrBands
+        glassLayers,anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr,pbrSpecularSampling,pbrBands,authored
       ].join('/');
       if (shaders.has(key)) return shaders.get(key);
       const shader = program(
@@ -123,6 +123,7 @@ ${chart ? 'layout(location=2)in vec2 a_light;out vec2 v_light;' : ''}
 ${rest?'layout(location=3)in vec3 a_rest;out vec3 v_rest;':''}
 ${marks?'layout(location=4)in vec2 a_marks;flat out vec2 v_marks;':''}
 ${simulation?'layout(location=5)in vec2 a_simUV;out vec2 v_simUV;':''}
+${authored?'layout(location=6)in vec3 a_shadingNormal;out vec3 v_shadingNormal;':''}
 out float v_depth;
 out vec3 v_camera;
 ${styledProjection ? 'uniform vec2 u_surfaceViewport;uniform float u_vertexSnap;out vec2 v_affine;' : ''}
@@ -133,6 +134,7 @@ void main(){
   ${rest?'v_rest=a_rest;':''}
   ${marks?'v_marks=a_marks;':''}
   ${simulation?'v_simUV=a_simUV;':''}
+  ${authored?'v_shadingNormal=a_shadingNormal;':''}
   v_texel=a_texel;v_world=a_point;v_depth=-p.z;v_camera=p.xyz;
   gl_Position=u_proj*p;
   ${styledProjection ? `
@@ -168,6 +170,7 @@ ${lighting ? emitterGLSL : ''}
 ${chart ? 'uniform highp sampler2DArray u_surfaceLit;uniform int u_surfaceLightCount;in vec2 v_light;' : ''}
 ${normalMapped ? 'uniform highp sampler2D u_surfaceNormalMap;uniform bool u_hasSurfaceNormalMap;' : ''}
 ${needsFrame ? 'uniform bool u_surfaceNormals;uniform vec3 u_surfaceEye;' : ''}
+${authored?'in vec3 v_shadingNormal;':''}
 ${semantic ? semanticSource : ''}
 ${pbr ? 'uniform int u_surfacePbr;uniform bool u_pbrOrtho;uniform vec3 u_pbrBack;uniform float u_pbrArtScale;\n'+
   (pbrSpecularSampling?'#define INK_PBR_FOOTPRINT\n':'')+(pbrBands?'#define INK_PBR_BANDS\n':'')+pbrGLSL : ''}
@@ -191,6 +194,9 @@ vec3 surfaceNormal(vec3 normal,vec3 dx,vec3 dy,vec2 du,vec2 dv,vec4 map,bool con
   vec3 local=max(vec3(-127),(continuous?map.rgb*255.0:round(map.rgb*255.0))-128.0);
   if(dot(local,local)==0.0)return normal;
   vec3 tangent=normalize(dx*dv.y-dy*du.y)*sign(det);
+  ${authored ? `tangent-=normal*dot(normal,tangent);
+  if(dot(tangent,tangent)<1e-12)return normal;
+  tangent=normalize(tangent);` : ''}
   vec3 bitangent=cross(normal,tangent);
   // Positive map Y faces up the texture, opposite increasing row coordinates.
   bitangent*=dot(bitangent,(dx*dv.x-dy*du.x)*sign(det))<0.0?-1.0:1.0;
@@ -262,7 +268,12 @@ void main(){
   ${needsFrame ? `
   vec4 map=${normalMapped ? 'u_surfaceNormals&&u_hasSurfaceNormalMap?texelFetch(u_surfaceNormalMap,ivec2(texel),0):vec4(0)' : 'vec4(0)'};
   ${semantic?'if(u_semanticOn)map=u_semanticNormals&&u_surfaceNormals?vec4(detail.rgb,1):vec4(0);':''}
-  vec3 normal=surfaceNormal(geometricNormal,dpdx,dpdy,uvDx,uvDy,map,${semantic?'u_semanticOn':'false'});
+  vec3 base=geometricNormal;
+  ${authored ? `if(dot(v_shadingNormal,v_shadingNormal)>1e-12){
+    base=normalize(v_shadingNormal);
+    if(dot(base,geometricNormal)<0.0)base=-base;
+  }` : ''}
+  vec3 normal=surfaceNormal(base,dpdx,dpdy,uvDx,uvDy,map,${semantic?'u_semanticOn':'false'});
   ` : ''}
   ${objectTexels ? `
   if(u_semanticOn&&u_texelMaterial&&u_surfaceNormals){
@@ -340,6 +351,8 @@ void main(){
       activeVertices,
       activeBlockOnly,
       activeNormals,
+      activeCornerNormals,
+      cornerBuffer,
       normalTexture,
       revision = -1,
       geometryRevision = -1,
@@ -379,6 +392,7 @@ void main(){
         activeVertices === atlas.vertices &&
         activeBlockOnly === blockOnly &&
         activeNormals === atlas.normalPixels &&
+        activeCornerNormals === atlas.cornerNormals &&
         width === atlas.width &&
         height === atlas.height
       )
@@ -395,6 +409,8 @@ void main(){
         atlas.pixels.length !== atlas.width * atlas.height * 4 ||
         (atlas.normalPixels !== undefined &&
           (!(atlas.normalPixels instanceof Uint8Array) || atlas.normalPixels.length !== atlas.pixels.length)) ||
+        atlas.cornerNormals !== undefined && (!(atlas.cornerNormals instanceof Float32Array) ||
+          atlas.cornerNormals.length !== atlas.vertices.length / 5 * 3) ||
         !Number.isSafeInteger(next) ||
         next < 0 ||
         !Number.isSafeInteger(nextGeometry) ||
@@ -419,6 +435,13 @@ void main(){
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         gl.bufferSubData(gl.ARRAY_BUFFER, first * 20, values);
         stats.geometryBytes = values.byteLength;
+      }
+      if (atlas.cornerNormals && (replace || activeCornerNormals !== atlas.cornerNormals)) {
+        if (!atlas.cornerNormals.every(Number.isFinite)) throw new RangeError('Invalid surface corner normals');
+        cornerBuffer ??= resources.allocate('Buffer');
+        gl.bindBuffer(gl.ARRAY_BUFFER, cornerBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, atlas.cornerNormals, nextGeometry ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW);
+        stats.geometryBytes += atlas.cornerNormals.byteLength;
       }
       let x = 0, y = 0, w = atlas.width, h = atlas.height;
       if (!replace && revision !== next) {
@@ -465,6 +488,7 @@ void main(){
       activeVertices = atlas.vertices;
       activeBlockOnly = blockOnly;
       activeNormals = atlas.normalPixels;
+      activeCornerNormals = atlas.cornerNormals;
       revision = next;
       geometryRevision = nextGeometry;
       width = atlas.width;
@@ -751,7 +775,8 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       }
       const useSampling = filters.size > 0;
       const lit = Boolean(lighting?.active && !index && !coverageFilter);
-      const normalMapped = lit && Boolean(atlas.normalPixels||simulation||objectTexels||semantic?.some(row=>row.chain.scan));
+      const authored = Boolean(atlas.cornerNormals && surfaceNormals && !index && !coverageFilter);
+      const normalMapped = lit && Boolean(authored||atlas.normalPixels||simulation||objectTexels||semantic?.some(row=>row.chain.scan));
       if (normalMapped) {
         gl.activeTexture(gl.TEXTURE0 + 24);
         gl.bindTexture(gl.TEXTURE_2D, atlas.normalPixels?normalTexture:texture);
@@ -774,7 +799,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       if(etched || anchors || simulation || objectTexels || pbr?.hasBands)bindMarks(atlas,anchors,etched,simulation);
       if(etched)etched.bind();
       const shader = shaderFor(wet, section, lit, normalMapped, environment, useSampling, projections.length > 0, Boolean(geometryCode), glassLayers,
-        !!anchors,!!etched,!!semantic,simulation,!!blockRanges,objectTexels,!!pbr,!!pbr?.specularSampling,!!pbr?.hasBands);
+        !!anchors,!!etched,!!semantic,simulation,!!blockRanges,objectTexels,!!pbr,!!pbr?.specularSampling,!!pbr?.hasBands,authored);
       if (pbr) bindPbr();
       gl.useProgram(shader.p);
       shader.set({
@@ -789,7 +814,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         u_surfaceLightCount: lighting?.count ?? 0,
         u_surfaceLit: 24,
         ...(normalMapped && {u_surfaceNormalMap:24,u_hasSurfaceNormalMap:!!atlas.normalPixels}),
-        ...((normalMapped||semantic||pbr)&&{u_surfaceNormals:surfaceNormals,u_surfaceEye:eye??eyeFromView(view)}),
+        ...((normalMapped||semantic||pbr||authored)&&{u_surfaceNormals:surfaceNormals,u_surfaceEye:eye??eyeFromView(view)}),
         ...(pbr&&{...pbrUniforms,u_pbrOrtho:!!ortho,u_pbrBack:back,u_pbrArtScale:samplingScale}),
         ...(semantic&&{u_semanticAtlas:semanticUnit,u_semanticLevels:semanticMipmaps!==false,u_semanticScale:samplingScale,
           u_semanticEye:eye??eyeFromView(view),u_semanticBack:back,u_semanticOrtho:!!ortho}),
@@ -835,6 +860,11 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         }
       };
       gl.bindVertexArray(vao);
+      if (authored) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, cornerBuffer);
+        gl.enableVertexAttribArray(6);
+        gl.vertexAttribPointer(6, 3, gl.FLOAT, false, 12, 0);
+      } else gl.disableVertexAttribArray(6);
       for(const [i,on] of [[3,etched||anchors||simulation||objectTexels||pbr?.hasBands],[4,etched||anchors],[5,simulation]])
         if(on)gl.enableVertexAttribArray(i);else gl.disableVertexAttribArray(i);
       if (lit && !normalMapped) gl.enableVertexAttribArray(2);

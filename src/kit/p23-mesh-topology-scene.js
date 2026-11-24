@@ -123,6 +123,19 @@
     return result;
   }
 
+  function geometricRecord(row, kind) {
+    if (!row) return row;
+    if (kind === 'edges') {
+      const { smooth, crease, ...geometry } = row;
+      return geometry;
+    }
+    if (kind === 'corners') {
+      const { normal, ...geometry } = row;
+      return geometry;
+    }
+    return kind === 'faces' ? { ...row, corners: row.corners.map(corner => geometricRecord(corner, 'corners')) } : row;
+  }
+
   function bakeState(bake) {
     if (!bake) return null;
     return { id: bake.id, material: bake.material, status: bake.invalidated ? 'invalidated' : 'ready',
@@ -138,7 +151,7 @@
     for (const [id, binding] of oldBindings) {
       if (binding.review || !same(binding, newBindings.get(id))) continue;
       const prior = left[binding.domain].get(binding.element), next = right[binding.domain].get(binding.element);
-      if (!same(prior, next)) changes.bindings.push({ id, change: 'displaced', before: binding, after: binding,
+      if (!same(geometricRecord(prior, binding.domain), geometricRecord(next, binding.domain))) changes.bindings.push({ id, change: 'displaced', before: binding, after: binding,
         geometry: { before: prior ?? null, after: next ?? null } });
     }
     const oldBakes = (before?.bakes ?? []).map(bakeState), newBakes = (after?.bakes ?? []).map(bakeState);
@@ -165,6 +178,7 @@
     if (row.bakes) {
       const dirty = new Map();
       for (const { id, before: old, after: next } of recordsChanged(elements(before).faces, elements(document).faces)) {
+        if (same(geometricRecord(old, 'faces'), geometricRecord(next, 'faces'))) continue;
         for (const material of new Set([old?.material, next?.material])) {
           if (!dirty.has(material)) dirty.set(material, []);
           dirty.get(material).push(id);

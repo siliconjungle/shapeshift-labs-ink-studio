@@ -6417,6 +6417,136 @@
       ],
       "additionalProperties": false
     },
+    "meshShadingSettings": {
+      "type": "object",
+      "properties": {
+        "smooth": {
+          "type": "boolean"
+        },
+        "weighting": {
+          "enum": [
+            "uniform",
+            "area",
+            "angle",
+            "area-angle"
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "meshEdgeShading": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "smooth": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "crease": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "meshShadingRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_.-]{1,96}$"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/meshEdgeShading"
+          }
+        },
+        "corners": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "normal": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "minItems": 3,
+                    "items": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "normal"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "settings": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/meshShadingSettings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
     "meshTopologyOperation": {
       "type": "object",
       "properties": {
@@ -6437,6 +6567,9 @@
         },
         "bevel": {
           "$ref": "#/$defs/meshBevelRequest"
+        },
+        "shading": {
+          "$ref": "#/$defs/meshShadingRequest"
         },
         "patch": {
           "type": "object",
@@ -6539,6 +6672,22 @@
                           "minItems": 2,
                           "items": false
                         },
+                        "normal": {
+                          "type": "array",
+                          "prefixItems": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ],
+                          "minItems": 3,
+                          "items": false
+                        },
                         "attributes": {
                           "type": "object",
                           "properties": {},
@@ -6592,6 +6741,22 @@
                 "minLength": 1,
                 "pattern": "\\S"
               }
+            },
+            "edges": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/meshEdgeShading"
+              }
+            },
+            "shading": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/meshShadingSettings"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "lineage": {
               "type": "object",
@@ -6749,6 +6914,11 @@
         {
           "required": [
             "bevel"
+          ]
+        },
+        {
+          "required": [
+            "shading"
           ]
         }
       ],

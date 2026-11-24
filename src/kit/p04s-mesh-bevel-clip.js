@@ -69,7 +69,12 @@ const meshBevelClip = (function (K) {
         distances.set(vertex.id, 0);
         inserted.set(key, vertex.id);
       }
-      return corners(g, [inserted.get(key)], [cornerData([[a, 1 - f], [b, f]])], state.conflicts)[0];
+      const row = corners(g, [inserted.get(key)], [cornerData([[a, 1 - f], [b, f]])], state.conflicts)[0];
+      if (a.normal || b.normal) {
+        const normal = meshTopologyShading.direction(V.lerp(a.normal ?? b.normal, b.normal ?? a.normal, f));
+        if (V.len(normal)) row.normal = normal;
+      }
+      return row;
     }
 
     for (const face of affected.values()) {

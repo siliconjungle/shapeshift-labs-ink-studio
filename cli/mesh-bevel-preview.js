@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const PNG = require('./png.js');
-const R = require('./render.js');
+const { viewSettings, worldFor, render, cover, normalImage } = require('./mesh-native-view.js');
 const files = require('./asset-files.js');
 
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -14,11 +14,10 @@ const fields = (value, keys) => value && Object.getPrototypeOf(value) === Object
 function settings(raw, standalone) {
   if (!fields(raw, ['w', 'h', 't', 'camera', 'raw', 'materials', 'protectPixels']))
     throw new TypeError('Use a native bevel view with size, camera, optional materials and protected pixels');
-  const { w = 160, h = 112, t = 0, camera, raw: literal = standalone, materials, protectPixels = [] } = raw;
-  if (![w, h].every(n => Number.isSafeInteger(n) && n >= 1 && n <= 1024) || !Number.isFinite(t) || t < 0 ||
-      typeof literal !== 'boolean' || materials !== undefined && (!standalone || !Array.isArray(materials)) ||
-      !Array.isArray(protectPixels) || protectPixels.length > 8192)
-    throw new RangeError('Bevel view needs a native grid up to 1024 × 1024, optional standalone materials and bounded pixel guards');
+  const { protectPixels = [], ...options } = raw;
+  const base = viewSettings({ raw: standalone, ...options }, standalone), { w, h } = base;
+  if (!Array.isArray(protectPixels) || protectPixels.length > 8192)
+    throw new RangeError('Bevel view supports up to 8192 pixel guards');
   for (const row of protectPixels) {
     if (!fields(row, ['id', 'at', 'kind']) || row.id !== undefined && !name(row.id) ||
         !Array.isArray(row.at) || row.at.length !== 2 ||
@@ -26,29 +25,9 @@ function settings(raw, standalone) {
         !['color', 'coverage', 'gap'].includes(row.kind))
       throw new RangeError('A protected pixel needs native [x,y] coordinates and color, coverage or gap');
   }
-  return { w, h, t, camera, raw: literal, materials, protectPixels };
+  return { ...base, protectPixels };
 }
 
-function worldFor(document, view, { KIT, makeBuilder }, reference = document) {
-  const [entry] = KIT.authoring.meshTopologyScene.prepare({ workpiece: { document, materials: view.materials } });
-  const bounds = KIT.procedural.spatial.boxOf(reference.vertices.map(row => row.position));
-  const target = KIT.V.lerp(bounds.min, bounds.max, .5);
-  const span = Math.max(...KIT.V.sub(bounds.max, bounds.min));
-  return makeBuilder(23, [0x14242e]).finish({ meshes: [entry[1].mesh], dither: 0,
-    radius: Math.max(5, span), cam: { target, dist: Math.max(.01, span * 2.05), yaw: -.48, pitch: .37, ortho: true } });
-}
-
-function render(world, view, toolkit) {
-  require('./diarama-pose.js').pose(world, view.t, { kit: toolkit, maxSteps: 7200 });
-  const frame = R.render(world, { w: view.w, h: view.h, t: view.t, px: 1, camera: view.camera,
-    raw: view.raw, passes: ['depth', 'geometricNormal'], renderGrid: false, shutter: false, cameraGuides: false });
-  if (frame.w !== view.w || frame.h !== view.h || frame.passes?.depth?.length !== view.w * view.h ||
-      frame.passes?.geometricNormal?.length !== view.w * view.h * 3)
-    throw new RangeError('Bevel preview needs a matching native-grid depth and color capture');
-  return frame;
-}
-
-const cover = (frame, i) => Number.isFinite(frame.passes.depth[i]);
 const pigment = (frame, i) => Array.from(frame.rgb.subarray(i * 3, i * 3 + 3));
 const equalColor = (a, b, i) => [0, 1, 2].every(k => a.rgb[i * 3 + k] === b.rgb[i * 3 + k]);
 
@@ -69,18 +48,6 @@ function compare(before, after, view, paths) {
   });
   if (paths.length) files.write(paths[2], PNG.encode(before.w, before.h, diff));
   return { grid: [before.w, before.h], changedPixels: changed, changedCoverage: coverage, pixels };
-}
-
-function normalImage(frame) {
-  const rgb = new Uint8Array(frame.rgb.length), normal = frame.passes.geometricNormal;
-  for (let i = 0; i < frame.w * frame.h; i++) {
-    if (!cover(frame, i)) rgb.set([20, 36, 46], i * 3);
-    else for (let k = 0; k < 3; k++) {
-      const at = i * 3 + k;
-      rgb[at] = Math.round(Math.max(0, Math.min(255, 127.5 + normal[at] * 127.5)));
-    }
-  }
-  return PNG.encode(frame.w, frame.h, rgb);
 }
 
 function viewPlan(plan, source, editor, object, view, paths, toolkit) {

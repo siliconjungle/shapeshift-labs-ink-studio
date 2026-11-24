@@ -269,6 +269,13 @@ function createDefinitions() {
           ['id','origin','direction','distance']),0,256)
       })
     },['id','revision','bevel']),
+    meshShadingSettings:object({smooth:bool,weighting:choice('uniform','area','angle','area-angle')}),
+    meshEdgeShading:object({id:text,smooth:nullable(bool),crease:nullable(unit)},['id']),
+    meshShadingRequest:object({
+      id:{type:'string',pattern:'^[a-zA-Z0-9_.-]{1,96}$'},revision:text,
+      edges:array(ref('meshEdgeShading')),corners:array(object({id:text,normal:nullable(pos)},['id','normal'])),
+      settings:nullable(ref('meshShadingSettings'))
+    },['id','revision']),
     meshTopologyOperation:{ ...object({
       transform:ref('meshComponentTransform'),
       repair:ref('meshRepairRequest'),
@@ -276,13 +283,15 @@ function createDefinitions() {
       faceRegion:ref('meshFaceRegionRequest'),
       edgeEdit:ref('meshEdgeEditRequest'),
       bevel:ref('meshBevelRequest'),
+      shading:ref('meshShadingRequest'),
       patch:{
         ...object({
           vertices:array(object({id:text,position:pos,weights:nullable(object({},[],unit))},['id','position'])),
           faces:array(object({id:text,material:text,corners:array(object({
-            id:text,vertex:text,uv:tuple(unit,unit),attributes:object({},[],either(number,array(number,1,4)))
+            id:text,vertex:text,uv:tuple(unit,unit),normal:pos,attributes:object({},[],either(number,array(number,1,4)))
           },['id','vertex']),3,128)},['id','corners'])),
           removeVertices:array(text),removeFaces:array(text),
+          edges:array(ref('meshEdgeShading')),shading:nullable(ref('meshShadingSettings')),
           lineage:object(Object.fromEntries(['faces','edges','corners'].map(kind=>
             [kind,array(object({from:text,to:text},['from','to']))])))
         }),
@@ -290,7 +299,7 @@ function createDefinitions() {
       },
       projection:object({maxDistance:{type:'number',exclusiveMinimum:0},minNormalDot:unit,maxUVDistance:unit,minConfidence:unit,
         ambiguity:unit,maxChecks:int(1,2000000)},['maxDistance'])
-    }),oneOf:['patch','transform','repair','cut','faceRegion','edgeEdit','bevel'].map(prop) },
+    }),oneOf:['patch','transform','repair','cut','faceRegion','edgeEdit','bevel','shading'].map(prop) },
     sdfShapeOperation:either(...[
       ['parameters',obj],['modifier',obj],['updateModifier',object({id:text,patch:obj},['id','patch'])],
       ['protection',array(obj)],['brush',sdfBrush],['updateBrush',{type:'object',required:['id']}]

@@ -43,6 +43,7 @@
       const compact = [];
       function retain(kept, lost) {
         if (!sameUV(kept.uv, lost.uv)) throw new RangeError('Weld would collapse different corner UVs on ' + face.id);
+        if (!equal(kept.normal, lost.normal)) throw new RangeError('Weld would collapse different corner normals on ' + face.id);
         if (!equal(kept.attributes, lost.attributes)) throw new RangeError('Weld would collapse different corner attributes on ' + face.id);
         corners.push({ from: lost.id, to: kept.id });
       }
@@ -75,6 +76,8 @@
     const normal = V.mul(raw, 1 / length);
     const layout = corner => Object.entries(corner.attributes ?? {}).map(([name, data]) => [name, Array.isArray(data) ? data.length : 0]);
     const attributeLayout = layout(a);
+    if (corners.some(corner => !equal(corner.normal, a.normal)))
+      throw new RangeError('Dissolve would change authored corner normal interpolation');
     if (corners.some(corner => !equal(layout(corner), attributeLayout)))
       throw new RangeError('Dissolve would merge different corner attribute layouts');
     const channels = [...new Set(corners.flatMap(corner => Object.keys(g.vertices.get(corner.vertex).weights ?? {})))];
@@ -109,6 +112,8 @@
       throw new TypeError('Dissolve needs a shared edge and an optional plane tolerance');
     const g = incidence(doc), edge = g.edges.find(row => row.id === op.edge);
     if (edge?.uses.length !== 2) throw new RangeError('Dissolve needs a manifold edge between two faces');
+    if (edge.smooth === false || edge.crease > 0)
+      throw new RangeError('Dissolve would remove an authored hard edge or subdivision crease');
     const uses = [...edge.uses].sort((a, b) => a.face < b.face ? -1 : 1);
     if (op.keep !== undefined) {
       if (!uses.some(use => use.face === op.keep)) throw new RangeError('Dissolve keeper must be one of the incident faces');

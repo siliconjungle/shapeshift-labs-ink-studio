@@ -460,6 +460,17 @@
       }) });
     }
 
+    function planMeshShading(object, request, { part } = {}) {
+      return K.meshTopology.planShading(meshTopology(object, part).document, request);
+    }
+
+    function editMeshShading(object, request, options) {
+      const plan = planMeshShading(object, request, options);
+      return freeze({ shading: plan.report, ...(Object.keys(plan.patch).length && {
+        topology: editMeshTopology(object, plan.patch, options)
+      }) });
+    }
+
     function setBrushRegion(region) {
       const value = clone(region);
       const write = () => document.setEnvironment({ brushRegion: value });
@@ -573,6 +584,8 @@
       editMeshEdges,
       planMeshBevel,
       bevelMeshTopology,
+      planMeshShading,
+      editMeshShading,
       hybridRoute: address => A.hybridOwnership.route(snapshot().hybridOwnership, address),
       setBrushRegion,
       setBreakables,

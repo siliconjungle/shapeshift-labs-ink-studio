@@ -111,8 +111,10 @@ function maintenance(action, file, input, rest, opt, meshTopology, openEditor) {
 
 function command([action, file, input, ...rest], opt, toolkit, { build, openEditor } = {}) {
   const { KIT: { meshTopology } } = toolkit;
+  if (action === 'shading') return require('./mesh-shading-preview.js').command(file, input, rest, opt, toolkit, openEditor);
   if (action === 'bevel') return require('./mesh-bevel-preview.js').command(file, input, rest, opt, toolkit, openEditor);
-  if (opt.preview !== undefined) throw new TypeError('Use --preview with mesh-topology bevel');
+  if (opt.preview !== undefined) throw new TypeError('Use --preview with mesh-topology bevel or shading');
+  if (opt.subdivision !== undefined) throw new TypeError('Use --subdivision with mesh-topology shading');
   const { out, report, projection, lineage, 'match-ids': matchIds } = opt;
   if (action === 'select') {
     const result = select(file, input, rest, opt, meshTopology, build);

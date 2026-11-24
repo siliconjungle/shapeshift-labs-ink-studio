@@ -26,6 +26,41 @@ const SceneMeshes = (() => {
     return points;
   }
 
+  function unitNormal(row) {
+    const length = Math.hypot(...row);
+    return length ? row.map(value => value / length) : [0, 0, 0];
+  }
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const minus = (a, b) => a.map((value, i) => value - b[i]);
+  const cross = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+
+  function drawNormals(source, indices, rest, positions = rest) {
+    const result = new Float32Array(indices.length * 3);
+    const point = (stream, i) => Array.from(stream.subarray(i * 3, i * 3 + 3));
+    for (let i = 0; i < indices.length; i += 3) {
+      const ids = indices.subarray(i, i + 3);
+      const values = Array.from(ids, id => point(source, id));
+      if (!values.some(row => row.some(Boolean))) continue;
+      if (positions === rest) {
+        values.forEach((row, j) => result.set(row, (i + j) * 3));
+        continue;
+      }
+      const [a, b, c] = Array.from(ids, id => point(rest, id));
+      const u = minus(b, a), v = minus(c, a), n = unitNormal(cross(u, v));
+      const [A, B, C] = Array.from(ids, id => point(positions, id));
+      const U = minus(B, A), W = minus(C, A), N = unitNormal(cross(U, W));
+      const dual = [cross(W, N), cross(N, U), cross(U, W)];
+      if (!N.some(Boolean)) continue;
+      // The dual basis transports normals as covectors through the live triangle.
+      values.forEach((row, j) => {
+        const components = [dot(row, u), dot(row, v), dot(row, n)];
+        const normal = unitNormal(N.map((_, k) => dual.reduce((sum, axis, l) => sum + axis[k] * components[l], 0)));
+        result.set(normal, (i + j) * 3);
+      });
+    }
+    return result;
+  }
+
   function bounds(positions) {
     const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
     for (let i = 0; i < positions.length; i += 3) for (let k = 0; k < 3; k++) {
@@ -95,7 +130,7 @@ const SceneMeshes = (() => {
     return width;
   }
 
-  function create({ id, objectId = id, partId, positions: authored, uvs: uvInput, indices, materials, faceMaterials } = {}) {
+  function create({ id, objectId = id, partId, positions: authored, uvs: uvInput, normals: normalInput, indices, materials, faceMaterials } = {}) {
     if (!name(id) || !name(objectId) || partId !== undefined && !name(partId))
       throw new TypeError('An indexed scene mesh needs nonempty mesh, object and optional part IDs');
     const positions = positionsOf(authored), vertices = positions.length / 3;
@@ -103,6 +138,17 @@ const SceneMeshes = (() => {
         !array(indices) || !indices.length || indices.length % 3 || indices.length / 3 > maxTriangles ||
         !every(indices,n => Number.isSafeInteger(n) && n >= 0 && n < vertices))
       throw new RangeError('A mesh needs normalized UV pairs and valid indexed triangles');
+    let authoredNormals;
+    if (normalInput !== undefined) {
+      if (!array(normalInput) || normalInput.length !== positions.length || !every(normalInput, Number.isFinite))
+        throw new RangeError('Mesh normals need one finite XYZ triple per indexed vertex');
+      authoredNormals = new Float32Array(positions.length);
+      for (let i = 0; i < positions.length; i += 3) {
+        const row = Array.from(normalInput.slice(i, i + 3));
+        if (!Number.isFinite(Math.hypot(...row))) throw new RangeError('Mesh normals exceed the direction budget');
+        authoredNormals.set(unitNormal(row), i);
+      }
+    }
     const triangles = indices.length / 3;
     if (!Array.isArray(materials) || !materials.length || materials.length > 64 ||
         faceMaterials === undefined && materials.length !== 1 ||
@@ -155,10 +201,17 @@ const SceneMeshes = (() => {
     if(semantic.length)layer.semanticMipmaps=semantic;
     if (blocks.length) layer.blockTextures = { revision:layer.revision, ranges:blocks,
       complete:blocks.reduce((sum,row)=>sum+row.end-row.first,0)===source.length };
+    let sourceToDraw;
+    if (authoredNormals) {
+      layer.cornerNormals = drawNormals(authoredNormals, drawIndices, positions);
+      sourceToDraw = new Uint32Array(triangles);
+      drawTriangles.forEach((triangle, i) => { sourceToDraw[triangle] = i; });
+    }
     layer.sceneMeshId = id;
     const restBounds=bounds(positions);
     const data = { positions, rest:positions, restBounds, uvs, indices:source, drawIndices, drawTriangles, layer, regions, revision:0,
       materials:rows.map(row => row.id), faceMaterials:faceMaterials && Uint8Array.from(faceMaterials), bounds:restBounds,
+      ...(authoredNormals && { authoredNormals, sourceToDraw }),
       ...(scanSources && {scanSources,scanInfo:new Map()}) };
     return Object.freeze({ id, objectId, partId, vertices, triangles,
       materials:Object.freeze(tiles.map(tile=>tile.id).sort()), [state]:data });
@@ -229,6 +282,7 @@ const SceneMeshes = (() => {
       const at = data.drawIndices[i] * 3;
       for (let k = 0; k < 3; k++) target[i*5+k] = positions[at+k];
     }
+    if (data.authoredNormals) data.layer.cornerNormals = drawNormals(data.authoredNormals, data.drawIndices, data.rest, positions);
     Sprite.markGeometryDirty(data.layer);
     data.positions = positions;
     data.bounds = bounds(positions);
@@ -418,7 +472,7 @@ const SceneMeshes = (() => {
         ...(roughness&&{roughness}),...(normal&&{normal})};
     }
     const edited=create({id:mesh.id,objectId:mesh.objectId,partId:mesh.partId,positions:data.rest,uvs:data.uvs,
-      indices:data.indices,faceMaterials:data.faceMaterials,materials});
+      indices:data.indices,faceMaterials:data.faceMaterials,materials,normals:data.authoredNormals});
     return data.positions===data.rest ? edited : pose(edited,data.positions);
   }
 
@@ -515,9 +569,17 @@ const SceneMeshes = (() => {
       const at=pigmentAt(layer,region,uv);
       if (layer.pixels[at+3] < 128) continue;
       const normal = V.norm(V.cross(ab,ac).map(n => n*Math.sign(det)));
+      let shadingNormal;
+      if (data.authoredNormals) {
+        const at = data.sourceToDraw[triangle] * 9, rows = data.layer.cornerNormals;
+        const live = restSpace ? interpolate(data.authoredNormals, 3) :
+          normal.map((_, k) => rows[at + k] * u + rows[at + 3 + k] * v + rows[at + 6 + k] * w);
+        shadingNormal = V.len(live) ? V.norm(live) : normal;
+        if (V.dot(shadingNormal, normal) < 0) shadingNormal = V.mul(shadingNormal, -1);
+      }
       const hit = { kind:'mesh', index:-1, id:mesh.objectId, mesh:mesh.id, triangle,
         target:{object:mesh.objectId,material:materials[slot],...(mesh.partId && {entity:mesh.objectId,part:mesh.partId})},
-        distance, point:V.mad(origin,direction,distance), normal, uv, restPosition:interpolate(rest,3), alpha:1, solid:true,
+        distance, point:V.mad(origin,direction,distance), normal, ...(shadingNormal && { geometricNormal: normal, shadingNormal }), uv, restPosition:interpolate(rest,3), alpha:1, solid:true,
         ...(pigment && {pigment:layer.pixels[at]*65536+layer.pixels[at+1]*256+layer.pixels[at+2]}),
         ...(restSpace && {vertices:[a,b,c],weights:[u,v,w]}) };
       if (accept && !accept(hit)) continue;

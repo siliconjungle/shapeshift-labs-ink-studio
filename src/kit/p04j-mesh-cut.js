@@ -161,7 +161,13 @@
       const values = triangle.loop.map(row => row.attributes[key]);
       return [key, Array.isArray(value) ? value.map((_, i) => weighted(values.map(data => data[i]), weights)) : weighted(values, weights)];
     }));
-    return { id: fresh('corner'), vertex: id, uv, ...(attributes && { attributes }) };
+    let normal;
+    if (triangle.loop.some(row => row.normal)) {
+      const fallback = meshTopologyShading.triangleNormal(triangle.positions);
+      const sum = triangle.loop.reduce((sum, row, i) => V.mad(sum, row.normal ?? fallback, weights[i]), [0, 0, 0]);
+      if (V.len(sum)) normal = meshTopologyShading.direction(sum);
+    }
+    return { id: fresh('corner'), vertex: id, uv, ...(attributes && { attributes }), ...(normal && { normal }) };
   }
 
   function cutFaces(doc, config, pool, fresh) {

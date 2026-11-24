@@ -89,12 +89,36 @@
     return frozen(Object.fromEntries(entries.map(([key, data]) => [key, Array.isArray(data) ? frozen(data.slice()) : data])));
   }
 
+  function edgeShading({ smooth, crease }) {
+    if (smooth !== undefined && typeof smooth !== 'boolean' || crease !== undefined && !unit(crease))
+      throw new RangeError('Edge smooth needs a boolean and crease needs a weight in [0, 1]');
+    return { ...(smooth !== undefined && { smooth }), ...(crease !== undefined && { crease }) };
+  }
+
+  function shadingSettings(source) {
+    if (source === undefined || source === null) return undefined;
+    if (Object.getPrototypeOf(source) !== Object.prototype ||
+        Object.keys(source).some(key => key !== 'smooth' && key !== 'weighting') ||
+        source.smooth !== undefined && typeof source.smooth !== 'boolean' ||
+        source.weighting !== undefined && !['uniform', 'area', 'angle', 'area-angle'].includes(source.weighting))
+      throw new TypeError('Mesh shading needs smooth and a uniform, area, angle or area-angle weighting');
+    return frozen({ ...(source.smooth !== undefined && { smooth: source.smooth }),
+      ...(source.weighting !== undefined && { weighting: source.weighting }) });
+  }
+
+  function cornerNormal(value) {
+    if (value === undefined) return undefined;
+    const length = vector(value, 3, Number.isFinite) && Math.hypot(...value);
+    if (!Number.isFinite(length) || !length) throw new RangeError('An authored corner normal needs a finite nonzero XYZ vector');
+    return frozen(Array.from(value, n => Math.abs(1 - length) < 1e-12 ? n : n / length));
+  }
+
   function build(source, keepEdges = false) {
     if (documents.has(source)) return source;
-    const { format: type = format, version = 1, id, vertices: inputVertices, edges: inputEdges = [], faces: inputFaces } = source ?? {};
+    const { format: type = format, version = 1, id, shading: authoredShading, vertices: inputVertices, edges: inputEdges = [], faces: inputFaces } = source ?? {};
     if (type !== format || version !== 1 || !name(id))
       throw new TypeError('Use a version 1 mesh topology document with a mesh ID');
-    const vertices = new Map();
+    const shading = shadingSettings(authoredShading), vertices = new Map();
     for (const [key, { position, weights }] of index(inputVertices, 'Vertices')) {
       if (!vector(position, 3, value => Number.isFinite(value) && Number.isFinite(Math.fround(value))))
         throw new RangeError('Vertex ' + key + ' needs a finite XYZ position');
@@ -106,7 +130,7 @@
         throw new RangeError('Edge ' + key + ' needs two distinct vertex IDs');
       const endpoints = edgeKey(...edge.vertices);
       if (authoredEdges.has(endpoints)) throw new RangeError('Duplicate edge endpoints for ' + key);
-      authoredEdges.set(endpoints, key);
+      authoredEdges.set(endpoints, { id: key, ...edgeShading(edge) });
     }
 
     const corners = new Set(), edges = new Map(), faces = [], triangles = [];
@@ -124,18 +148,18 @@
           throw new RangeError('Face ' + key + ' needs unique corners, distinct existing vertices and normalized UV pairs');
         corners.add(cornerId);
         used.add(vertex);
-        const attributes = cornerAttributes(corner.attributes, key);
+        const attributes = cornerAttributes(corner.attributes, key), normal = cornerNormal(corner.normal);
         const shape = JSON.stringify(Object.entries(attributes ?? {}).map(([id, data]) => [id, Array.isArray(data) ? data.length : 0]));
         if (layout !== undefined && layout !== shape) throw new TypeError('Face ' + key + ' must use one corner attribute layout');
         layout = shape;
-        return frozen({ id: cornerId, vertex, uv: frozen(Array.from(uv)), ...(attributes && { attributes }) });
+        return frozen({ id: cornerId, vertex, uv: frozen(Array.from(uv)), ...(attributes && { attributes }), ...(normal && { normal }) });
       })) });
       for (const [i, corner] of face.corners.entries()) {
         const next = face.corners[(i + 1) % face.corners.length];
         const endpoints = edgeKey(corner.vertex, next.vertex);
         if (!edges.has(endpoints)) {
           edges.set(endpoints, {
-            id: authoredEdges.get(endpoints) ?? 'edge/' + endpoints,
+            ...(authoredEdges.get(endpoints) ?? { id: 'edge/' + endpoints }),
             vertices: frozen(pair(corner.vertex, next.vertex)),
             uses: []
           });
@@ -146,12 +170,13 @@
       for (const local of tessellate(face, vertices)) triangles.push({ face, local });
     }
     if (!keepEdges) for (const [endpoints, key] of authoredEdges) {
-      if (!edges.has(endpoints)) throw new RangeError('Edge ' + key + ' is not a polygon boundary');
+      if (!edges.has(endpoints)) throw new RangeError('Edge ' + key.id + ' is not a polygon boundary');
     }
     const retainedEdges = [...edges.values()];
     index(retainedEdges, 'Edges');
     const doc = frozen({ format, version, id, vertices: frozen([...vertices.values()]),
-      edges: frozen(retainedEdges.map(({ id, vertices }) => frozen({ id, vertices }))), faces: frozen(faces) });
+      edges: frozen(retainedEdges.map(({ uses, ...edge }) => frozen(edge))), faces: frozen(faces),
+      ...(shading && { shading }) });
     documents.set(doc, { vertices, triangles, edges: retainedEdges });
     return doc;
   }
@@ -171,13 +196,24 @@
     return [...values.values()];
   }
 
-  function edit(source, { vertices = [], faces = [], removeVertices = [], removeFaces = [] } = {}) {
+  function edit(source, { vertices = [], faces = [], removeVertices = [], removeFaces = [], edges = [], shading } = {}) {
     const doc = create(source), prior = new Map(doc.vertices.map(row => [row.id, row]));
     const updates = [...index(vertices, 'Updated vertices').values()].map(row => {
       const { id, position, weights = prior.get(row.id)?.weights } = row;
       return { id, position, ...(weights !== undefined && weights !== null && { weights }) };
     });
-    return build({ ...doc,
+    const byEdge = index(edges, 'Updated edge shading'), knownEdges = new Set(doc.edges.map(edge => edge.id));
+    for (const [id, edge] of byEdge) {
+      if (!knownEdges.has(id) || Object.keys(edge).some(key => !['id', 'smooth', 'crease'].includes(key)))
+        throw new RangeError('Update smooth or crease on a retained edge ' + id);
+    }
+    const edgeRows = doc.edges.map(edge => {
+      const changes = byEdge.get(edge.id);
+      if (!changes) return edge;
+      const { id, vertices, smooth, crease } = { ...edge, ...changes };
+      return { id, vertices, ...edgeShading({ smooth: smooth ?? undefined, crease: crease ?? undefined }) };
+    });
+    return build({ ...doc, edges: edgeRows, shading: shading === undefined ? doc.shading : shading,
       vertices: apply(doc.vertices, updates, removeVertices, 'vertices'),
       faces: apply(doc.faces, faces, removeFaces, 'faces')
     }, true);
@@ -187,12 +223,13 @@
     const doc = create(source);
     const { edges, triangles } = documents.get(doc);
     return { id: doc.id, vertices: doc.vertices.length, faces: doc.faces.length, triangles: triangles.length,
-      edges: edges.map(({ id, vertices, uses }) => ({ id, vertices, uses: uses.slice() })) };
+      edges: edges.map(({ uses, ...edge }) => ({ ...edge, uses: uses.slice() })) };
   }
 
-  function fromIndexed({ id, positions, indices, uvs, materials = ['default'], faceMaterials } = {}) {
+  function fromIndexed({ id, positions, indices, uvs, normals, materials = ['default'], faceMaterials } = {}) {
     if (!list(positions) || positions.length % 3 || !list(indices) || indices.length % 3 ||
         indices.length / 3 > maxTriangles || indices.length && !positions.length ||
+        normals !== undefined && (!list(normals) || normals.length !== positions.length) ||
         uvs !== undefined && (!list(uvs) || uvs.length !== positions.length / 3 * 2) ||
         faceMaterials !== undefined && (!list(faceMaterials) || faceMaterials.length !== indices.length / 3) ||
         !Array.isArray(materials) || !materials.length || !Array.from(materials).every(name) ||
@@ -206,7 +243,8 @@
       if (!Number.isSafeInteger(slot) || !materials[slot]) throw new RangeError('Missing material slot for triangle ' + i);
       return { id: 'f/' + i, material: materials[slot], corners: [0, 1, 2].map(j => {
         const offset = i * 3 + j, vertex = indices[offset];
-        return { id: 'c/' + offset, vertex: vertices[vertex].id, uv: uvs?.slice(vertex * 2, vertex * 2 + 2) };
+        return { id: 'c/' + offset, vertex: vertices[vertex].id, uv: uvs?.slice(vertex * 2, vertex * 2 + 2),
+          normal: normals?.slice(vertex * 3, vertex * 3 + 3) };
       }) };
     });
     return create({ id, vertices, faces });
@@ -214,8 +252,9 @@
 
   function triangulate(source) {
     const doc = create(source);
-    const { vertices, triangles } = documents.get(doc);
-    const positions = [], uvs = [], indices = [], materials = [], faceMaterials = [], triangleSources = [];
+    const { vertices, triangles, edges } = documents.get(doc);
+    const directions = meshTopologyShading.resolve(doc, edges, vertices);
+    const positions = [], uvs = [], normals = [], indices = [], materials = [], faceMaterials = [], triangleSources = [];
     const renderVertices = new Map(), slots = new Map();
     for (const { face, local } of triangles) {
       if (!slots.has(face.material)) {
@@ -224,18 +263,22 @@
       }
       faceMaterials.push(slots.get(face.material));
       const corners = local.map(i => face.corners[i]);
-      for (const { vertex, uv } of corners) {
-        const key = JSON.stringify([vertex, ...uv]);
+      const active = directions && corners.some(row => directions.has(row.id));
+      const geometric = active && meshTopologyShading.triangleNormal(corners.map(row => vertices.get(row.vertex).position));
+      for (const { id, vertex, uv } of corners) {
+        const normal = active && (directions.get(id) ?? geometric);
+        const key = JSON.stringify(normal ? [vertex, ...uv, ...normal] : [vertex, ...uv]);
         if (!renderVertices.has(key)) {
           renderVertices.set(key, positions.length / 3);
           positions.push(...vertices.get(vertex).position);
           uvs.push(...uv);
+          if (directions) normals.push(...(normal || [0, 0, 0]));
         }
         indices.push(renderVertices.get(key));
       }
       triangleSources.push(frozen({ face: face.id, corners: frozen(corners.map(corner => corner.id)) }));
     }
-    return { positions, uvs, indices, materials, faceMaterials, triangleSources };
+    return { positions, uvs, ...(directions && { normals }), indices, materials, faceMaterials, triangleSources };
   }
 
   function toSceneMesh(source, { materials, objectId, partId, meshId } = {}) {

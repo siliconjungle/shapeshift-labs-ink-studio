@@ -739,3 +739,60 @@ scenes expose `editor.planMeshBevel(object, request)` and
 submit `operation.bevel` for the same topology journal and undo path.
 Use the example in `examples/mesh-bevel` for matched native previews
 and replayable requests.
+
+## Author corner normals and creases
+
+A retained polygon can store a `normal` on each face corner. Edges can
+store a `smooth` override and a subdivision `crease` from 0 to 1.
+The edit addresses stable corner and edge IDs. Positions, UVs, skin
+weights, material assignments, and registered paint stay on the source
+cage.
+
+```sh
+ink-studio mesh-topology shading mesh.json
+ink-studio mesh-topology shading mesh.json normals.json --out revised.json --report receipt.json
+ink-studio mesh-topology shading revised.json --view view.json --preview art-grid
+ink-studio mesh-topology shading revised.json --view view.json --preview rounded --subdivision 2
+```
+
+An edit request has an `id`, the current topology `revision`, and one or
+more of these fields.
+
+- `edges` contains rows with an `id` and `smooth: true` or
+  `smooth: false` for smooth or hard shading. Omit a field to leave it
+  alone. Set it to `null` to clear the override.
+- `corners` contains rows with an `id` and a `normal: [x,y,z]` in
+  stored mesh coordinates. The direction is normalized. Use
+  `normal: null` to return the corner to generated shading.
+- `settings` sets the document-wide `smooth` default and
+  `weighting`, which can be `uniform`, `area`, `angle` (default),
+  or `area-angle`. Without a smooth default or edge override,
+  the mesh keeps its flat rendering. Set `settings: null` to clear
+  document-wide settings.
+
+A smooth fan averages the geometric normals of faces connected at a
+vertex through smooth, consistently wound manifold edges. UV islands
+can share the resulting shading direction while retaining their own UVs.
+An explicit corner direction takes precedence over the generated fan.
+Headless and WebGL rendering use the interpolated direction for surface
+lighting. Geometry still controls depth, coverage, and ray hits.
+The native preview writes `beauty.png`, `geometric.png`, and
+`shading.png` on the same 1× grid. Each normal image encodes XYZ as RGB.
+
+An edge's `crease` controls subdivision separately from `smooth`.
+Zero uses the standard smooth mask, one keeps a sharp ridge, and
+fractional values blend the masks. Catmull–Clark preview treats open
+boundaries as sharp and carries crease strengths onto their descendant
+edges at each level. It keeps material assignments, interpolates skin
+weights, and refines UVs separately on each face. Use up to three
+`--subdivision` levels with `--preview` to inspect the result and write
+`derived.json`. The regular `--out` file remains the editable cage.
+Standalone view files support the same `w`, `h`, `camera`, `t`,
+`raw`, and `materials` settings as bevel captures.
+
+The SDK exposes `KIT.meshTopology.planShading`, `inspectShading`,
+and `subdivide`. Retained scenes expose `editor.planMeshShading`
+and `editor.editMeshShading`. A bound pixel transaction can use
+`operation.shading` to record the edit in the same undo and replay
+journal. Run `node examples/mesh-shading/render.cjs <directory>` for
+a worked example.

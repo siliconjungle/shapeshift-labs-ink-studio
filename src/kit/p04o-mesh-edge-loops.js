@@ -46,7 +46,12 @@ const meshEdgeLoops = (function (K) {
     const touched = new Set(queue.flatMap(row => row.edge.uses.map(use => use.face)));
     function knot(a, b, cut) {
       const f = a.vertex === cut.a ? op.fraction : 1 - op.fraction;
-      return corners(g, [cut.vertex.id], [cornerData([[a, 1 - f], [b, f]])], conflicts)[0];
+      const row = corners(g, [cut.vertex.id], [cornerData([[a, 1 - f], [b, f]])], conflicts)[0];
+      if (a.normal || b.normal) {
+        const normal = meshTopologyShading.direction(V.lerp(a.normal ?? b.normal, b.normal ?? a.normal, f));
+        if (V.len(normal)) row.normal = normal;
+      }
+      return row;
     }
     for (const id of touched) {
       const face = g.faces.get(id), ring = [];
