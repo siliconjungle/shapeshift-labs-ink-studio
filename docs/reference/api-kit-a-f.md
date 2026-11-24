@@ -1874,7 +1874,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.frameComposite` | namespace |  |  |
-| `KIT.frameComposite.layers` | function | `(plan, world, time, camera, gl, sceneTime)` | [source](../../src/kit/ku-frame-composite.js) |
+| `KIT.frameComposite.layers` | function | `(plan, world, time, camera, gl, sceneTime, drawLighting)` | [source](../../src/kit/ku-frame-composite.js) |
 | `KIT.frameComposite.prepare` | function | `(value, w, h, pixelSize = 1)` | [source](../../src/frame-composite.js) |
 
 ## KIT.frameSplats

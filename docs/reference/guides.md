@@ -268,6 +268,7 @@ All checked-in guides, indexed by title and section headings.
 - [Native pixel-art authoring](../pixel-art-authoring.md)
 - [Pixel-art craft and tooling research](../pixel-art-craft.md)
 - [Pixel boundaries across a shot](../pixel-boundaries.md)
+- [Native-grid 2D lighting](../pixel-lighting.md)
 - [Tone and stipple](../pixel-look.md)
 - [Persistent pixel scans](../pixel-scanner.md)
 - [Indexed pixel drawing and animated stamps](../pixel-stamps.md)

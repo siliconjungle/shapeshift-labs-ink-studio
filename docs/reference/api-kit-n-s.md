@@ -361,6 +361,18 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelLayerStack.mergePlan` | function | `(layers,operation)` | [source](../../src/pixel-layer-stack.js) |
 | `KIT.pixelLayerStack.prepare` | function | `(layers)` | [source](../../src/pixel-layer-stack.js) |
 
+## KIT.pixelLighting
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.pixelLighting` | namespace |  | [guide](../pixel-lighting.md#add-it-to-a-preview-or-export) |
+| `KIT.pixelLighting.format` | value | `string = "ink-studio/pixel-lighting"` | [guide](../pixel-lighting.md#add-it-to-a-preview-or-export) |
+| `KIT.pixelLighting.frame` | function | `(spec, options = {})` | [guide](../pixel-lighting.md#add-it-to-a-preview-or-export), [guide](../pixel-lighting.md), [source](../../src/pixel-lighting.js) |
+| `KIT.pixelLighting.maxLights` | value | `number = 8` | [guide](../pixel-lighting.md#add-it-to-a-preview-or-export) |
+| `KIT.pixelLighting.maxShadowSteps` | value | `number = 512` | [guide](../pixel-lighting.md#add-it-to-a-preview-or-export) |
+| `KIT.pixelLighting.prepare` | function | `(spec)` | [guide](../pixel-lighting.md#add-it-to-a-preview-or-export), [guide](../pixel-lighting.md), [source](../../src/pixel-lighting.js) |
+| `KIT.pixelLighting.render` | function | `(spec, options)` | [guide](../pixel-lighting.md#add-it-to-a-preview-or-export), [guide](../pixel-lighting.md), [source](../../src/pixel-lighting.js) |
+
 ## KIT.pixelMotionChecks
 
 | Member | Kind | Signature or value | Guides and source |
@@ -775,7 +787,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.renderGraph.feedbackMotion` | function | `({ warp }, time, elapsed, w, h)` | [guide](../../README.md#license), [guide](../render-graph.md), [source](../../src/render-graph.js) |
 | `KIT.renderGraph.history` | function | `({ release = () => {}, releaseAge = release } = {})` | [guide](../render-graph.md#target-scoped-screen-history), [guide](../render-graph.md#fixed-step-playback-and-exports), [guide](../../README.md#license), [guide](../render-graph.md), [source](../../src/render-graph.js) |
 | `KIT.renderGraph.indexedSchedule` | function | `(node, sources, packet)` | [guide](../../README.md#license), [guide](../render-graph.md), [source](../../src/render-graph.js) |
-| `KIT.renderGraph.layer` | function | `(node, w, h, world, time, camera, gl, sceneTime, inputs)` | [guide](../../README.md#license), [source](../../src/kit/ku-render-graph.js) |
+| `KIT.renderGraph.layer` | function | `(node, w, h, world, time, camera, gl, sceneTime, inputs, drawLighting)` | [guide](../../README.md#license), [source](../../src/kit/ku-render-graph.js) |
 | `KIT.renderGraph.motionRaster` | function | `(node, sources, width, height)` | [guide](../../README.md#license), [guide](../render-graph.md), [source](../../src/render-graph.js) |
 | `KIT.renderGraph.ownerGroups` | function | `(world)` | [guide](../../README.md#license), [guide](../render-graph.md), [source](../../src/render-graph.js) |
 | `KIT.renderGraph.prepare` | function | `(value, capture = [])` | [guide](../render-graph.md#bounded-film-and-signal-effects), [guide](../../README.md#license), [guide](../render-graph.md), [source](../../src/render-graph.js) |

@@ -25,6 +25,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `webgl.createLtcDecoder` | function | `({ sampleRate, fps = 30, threshold = .08 } = {})` | [source](../../src/show/clocks.mjs) |
 | `webgl.createMidiBeatClock` | function | `({ timeout = 0.5 } = {})` | [source](../../src/show/clocks.mjs) |
 | `webgl.createMidiTimecode` | function | `()` | [source](../../src/show/clocks.mjs) |
+| `webgl.createPixelLightingPass` | function | `(gl, api, sharedResources)` | [guide](../pixel-lighting.md), [source](../../src/webgl/pixel-lighting.mjs) |
 | `webgl.createProjectionMapper` | function | `(canvas, definition = [])` | [source](../../src/show/projection.mjs) |
 | `webgl.createRenderer` | function | `(canvas, { toolkit, specialize = true, reuseOrder = true, resolve = 'auto', contextAttributes, input } = {})` | [source](../../src/webgl/renderer.mjs) |
 | `webgl.createSpatialAudioPlayer` | function | `(context, { resolveAsset, destination=context?.destination, destinations={}, panning='HRTF', maxVoices, smoothing=.025, captions }={})` | [source](../../src/webgl/spatial-audio-player.mjs) |
