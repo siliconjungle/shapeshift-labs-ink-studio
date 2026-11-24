@@ -152,10 +152,15 @@ function splats(edit, binding, world, bake, onSplat) {
   const previous = prior?.edits?.map(([source,scale]) =>
     [prior.version === 2 ? ids.rowOf(source) : source,scale]) ?? [];
   const merged = [...new Map([...previous,...edits])];
+  const attributes=prior?.attributes?.map(([source,change])=>{
+    const index=prior.version===2 ? ids.rowOf(source) : source;
+    return [stable ? ids.idAt(index) : index,change];
+  });
   const asset = stable
     ? { format:SplatFit.format, version:2, scene:SplatFit.sceneId(world), target,
       edits:merged.map(([index,scale]) => [ids.idAt(index),scale]) }
     : { format:SplatFit.format, version:1, rows:world.count, signature:bake, edits:merged };
+  if (attributes?.length) asset.attributes=attributes;
   SplatFit.prepare(world,asset);
   return asset;
 }

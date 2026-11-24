@@ -102,3 +102,49 @@ test('multi-view fitting improves native coverage and replays the same row edits
   assert.notDeepEqual(fitted.alpha,baseline.alpha);
   assert.throws(()=>render(world,{...options,splatFit:{...saved,edits:[[world.count,1.2]]}}),/Invalid/);
 });
+
+test('channel fitting chooses a rotated footprint and pigment while preserving pins and reserving holdouts',()=>{
+  const {signature}=require('../cli/render-row-assets.js');
+  const {format}=require('../cli/splat-fit-asset.js');
+  const B=makeBuilder(10,base);
+  B.disc(-.42,0,0,[0,0,1],.47,.015,B.P[2],1.2);
+  B.describeSplats(0,1,{object:'medallion',material:'enamel'});
+  B.describeFootprint(0,1,{shape:'circle',softness:.08});
+  B.disc(.64,0,.12,[0,0,1],.17,.015,B.P[1],1.6);
+  B.describeSplats(1,2,{object:'medallion',material:'badge'});
+  B.describeFootprint(1,2,{shape:'square',softness:.03});
+  const world=B.finish({cam:{target:[0,0,0],dist:4,yaw:0,pitch:0,ortho:true},radius:4,dither:0});
+  const settings={...view,w:50,h:40,passes:[...view.passes,'pigment']};
+  const footprint={shape:'square',stretch:[.74,.74],softness:.04};
+  const approved={format,version:1,rows:world.count,signature:signature(world),edits:[],
+    attributes:[[0,{footprint:{...footprint,rotation:Math.PI/4},pigment:base[3]}]]};
+  const entry=(yaw,time,holdout=false)=>{
+    const before=render(world,{...settings,yaw,t:time});
+    const target=render(world,{...settings,yaw,t:time,splatFit:approved});
+    const data=new Uint8Array(settings.w*settings.h*4), pins=data.slice();
+    for (let p=0;p<target.alpha.length;p++){
+      data.set(target.rgb.subarray(p*3,p*3+3),p*4);
+      data[p*4+3]=target.alpha[p];
+      if (before.passes.splatId[p]===2 && before.alpha[p]>250) pins.set([255,255,255,255],p*4);
+    }
+    assert(pins.some(Boolean));
+    return {time,camera:{yaw},reference:{w:settings.w,h:settings.h,max:255,data},holdout,
+      depth:target.passes.depth,normal:target.passes.normal,pigment:target.passes.pigment,
+      pins:{w:settings.w,h:settings.h,max:255,data:pins}};
+  };
+  const seen=[];
+  const views=[entry(-.13,0),entry(.14,.2),entry(.31,.4,true)];
+  const fitted=fit(world,{width:settings.w,height:settings.h,views,pose:(_,t)=>seen.push(t),view:()=>settings,
+    pins:{material:'badge'},search:{footprints:[footprint],rotations:[Math.PI/4,0],trials:36},
+    rounds:3,prune:0,sdfAssist:false});
+  assert.deepEqual(seen.slice(-2),[.4,.4]);
+  assert(!seen.slice(0,-2).includes(.4));
+  assert.deepEqual(fitted.attributes,approved.attributes);
+  assert(fitted.report.frames.every(({before,after})=>after.pinChanges===0 &&
+    after.silhouette<before.silhouette && after.pigment<before.pigment));
+  assert.deepEqual(fitted.report.validation,{views:1,passed:true});
+  const replay=render(world,{...settings,yaw:.31,splatFit:JSON.parse(JSON.stringify(fitted))});
+  const expected=render(world,{...settings,yaw:.31,splatFit:approved});
+  assert.deepEqual(replay.rgb,expected.rgb);
+  assert.deepEqual(replay.passes.pigment,expected.passes.pigment);
+});
