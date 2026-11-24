@@ -86,10 +86,12 @@ export function mountPixelInspector(root,view,read) {
     body.replaceChildren();
     pin.disabled = !result;
     if (!result) { output.value = 'Move over the native canvas'; return; }
-    const { composite,palette,layers,scene,materials = [],display } = result;
+    const { composite,palette,layers,scene,materials = [],display,protection = [] } = result;
     const shown = display ?? composite;
     output.value = [at.join(', '),shown.layer,shown.color ?? 'Transparent','alpha '+shown.alpha].filter(Boolean).join(' · ');
     group('Layers',layerRows(layers));
+    group('Protected details',protection.map(row=>({ text:[row.id,row.kind,
+      row.frame ?? row.frames?.join(' to ') ?? 'All frames'].join(' · ') })));
     const colors = [{ text:[palette.method.replaceAll('-',' '),palette.swatch?.id,palette.swatch?.color,
       palette.color && 'output '+palette.color].filter(Boolean).join(' · ') }];
     if (scene?.palette) colors.push({ text:['Scene',scene.palette.domain,scene.palette.stage,scene.palette.asset,

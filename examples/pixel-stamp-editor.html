@@ -183,6 +183,33 @@
               </div>
             </div>
           </details>
+          <details id="protection-tools">
+            <summary>Protect details</summary>
+            <div class="guide-controls" style="margin-top:9px">
+              <label>Detail ID <input id="protection-id" type="text" maxlength="64" placeholder="eye-highlight"></label>
+              <label>Kind <select id="protection-kind">
+                <option value="pixel">Pixels</option>
+                <option value="gap">Transparent gap</option>
+                <option value="contour">Contour span</option>
+                <option value="accent">Focal accent</option>
+              </select></label>
+              <label>Scope <select id="protection-scope">
+                <option value="frame">Current frame</option>
+                <option value="all">All frames</option>
+                <option value="range">Frame range</option>
+              </select></label>
+              <div class="canvas-size" id="protection-range" hidden>
+                <label>First frame <input id="protection-first" type="number" min="1" step="1" value="1"></label>
+                <label>Last frame <input id="protection-last" type="number" min="1" step="1" value="1"></label>
+              </div>
+              <button type="button" id="protection-lock" disabled>Lock selected pixels</button>
+              <label>Saved detail <select id="protection-saved"><option value="">Choose a detail</option></select></label>
+              <div class="row">
+                <button type="button" id="protection-show" disabled>Select detail</button>
+                <button type="button" id="protection-unlock" disabled>Unlock detail</button>
+              </div>
+            </div>
+          </details>
           <details>
             <summary>Transform pixels</summary>
             <div class="guide-controls" style="margin-top:9px">
@@ -203,6 +230,7 @@
                   <label><input id="transform-flip-x" type="checkbox"> Flip X</label>
                   <label><input id="transform-flip-y" type="checkbox"> Flip Y</label>
                   <label id="transform-duplicate-label"><input id="transform-duplicate" type="checkbox"> Leave source</label>
+                  <label id="transform-protection-label"><input id="transform-protection" type="checkbox"> Carry frame locks</label>
                 </div>
                 <label>Rotation<select id="transform-rotation">
                   <option value="nearest">Nearest pixel</option>

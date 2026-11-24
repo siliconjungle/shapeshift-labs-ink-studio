@@ -14,6 +14,7 @@ const CanvasTransforms = require('../src/pixel-canvas-transforms.js');
 const PixelAdjustments = require('../src/pixel-adjustments.js');
 const LayerStack = require('../src/pixel-layer-stack.js');
 const PixelInspection = require('../src/pixel-inspection.js');
+const Protection = require('../src/pixel-protection.js');
 const ArtPasses = require('../src/art-passes.js');
 const PixelColors = require('../src/pixel-raster-colors.js');
 const PixelPalette = require('../src/pixel-palette.js');
@@ -120,7 +121,7 @@ function documentShape(design) {
     }
   }
   namedRegions(selections,'Pixel selections',width,height,frameIds);
-  namedRegions(protectedDetails,'Protected pixel details',width,height,frameIds);
+  Protection.validate(protectedDetails,width,height,[...frameIds]);
   PixelGuides.prepare(guides,frameIds);
   if (!Array.isArray(sceneBindings)) throw new TypeError('Pixel scene bindings must be an array');
   const bindingIds = new Set();
@@ -244,6 +245,12 @@ function composite(width,height,entries,layers,capture,options,legacy = false) {
   return { ...compiled,colors,swatches,layerStack:stack };
 }
 
+function frameProtection(design,frame) {
+  if (!design.protectedDetails?.length) return [];
+  const frames = design.frames.map(row=>row.id);
+  return Protection.active(design.protectedDetails,frames,frames.indexOf(frame));
+}
+
 function compileFrame(design, frame, revision, palette,capture,options) {
   const { width,height,layers } = design;
   if (!frame) return { ...composite(width,height,palette,layers,capture,options,true), revision,paletteEntries:palette };
@@ -255,11 +262,12 @@ function compileFrame(design, frame, revision, palette,capture,options) {
     return { ...layer,marks:cel?.marks ?? [],slots:cel?.slots };
   });
   const raster = composite(width,height,palette,stack,capture,options);
-  for (const detail of design.protectedDetails ?? []) {
-    if (detail.frame !== undefined && detail.frame !== frame.id) continue;
-    for (const [x,y] of detail.pixels) raster.locks[y*width+x] = 1;
+  const protectedDetails = frameProtection(design,frame.id), layerLocks = raster.locks;
+  if (protectedDetails.length) {
+    raster.locks = layerLocks.slice();
+    Protection.paintLocks(protectedDetails,width,raster,{ validateGaps:!options?.references });
   }
-  return { ...raster, cels, revision,paletteEntries:palette,ramps:design.ramps, id:frame.id, durationMs:frame.durationMs, pixelAspect:design.pixelAspect.slice(),
+  return { ...raster,layerLocks,protectedDetails,cels, revision,paletteEntries:palette,ramps:design.ramps, id:frame.id, durationMs:frame.durationMs, pixelAspect:design.pixelAspect.slice(),
     ...(design.guides && { guides:PixelGuides.active(design.guides,frame.id) }),
     ...(design.sceneBindings?.length && { sceneBindings:design.sceneBindings.filter(row=>row.frame === undefined || row.frame === frame.id) }),
     ...(design.selections && { selections:design.selections.filter(row=>row.frame === undefined || row.frame === frame.id) }) };
@@ -302,6 +310,7 @@ function validate(design) {
     pixelAspect:design.version === 1 ? [1,1] : design.pixelAspect, frames:frames.map(frame => ({
       id:frame?.id ?? null, durationMs:frame?.durationMs ?? null, ...(frame?.label !== undefined && { label:frame.label })
     })), ...(identities && { identities }),
+    ...(design.version === 2 && design.protectedDetails !== undefined && { protectedDetails:structuredClone(design.protectedDetails) }),
     ...(design.version === 2 && design.ramps !== undefined && { ramps:structuredClone(design.ramps) }),
     ...(design.version === 2 && design.guides && { guides:structuredClone(design.guides) }),
     ...(design.version === 2 && design.destinations !== undefined && { destinations:design.destinations }) };
@@ -362,8 +371,9 @@ function inspect(design,coordinate,{ frame,cel,destinations,references = false }
     .filter(row=>row.frame === undefined || row.frame === compiled.id)
     .map(source=>inspectMaterial(source,coordinate,width,height));
   const scene = inspectionCapture(width,height,coordinate,context);
+  const protection = Protection.at(compiled.protectedDetails ?? [],...coordinate);
   return { revision:compiled.revision,...frameMetadata(compiled),...cell(compiled,p),...description,
-    materials,...(scene && { scene:PixelInspection.scene(scene,coordinate,ArtPasses) }) };
+    protection,materials,...(scene && { scene:PixelInspection.scene(scene,coordinate,ArtPasses) }) };
 }
 
 function hexColor(packed) {
@@ -516,7 +526,7 @@ function frameMetadata(frame) {
 
 function review(frame) {
   const color = image(frame);
-  const result = Critic.lint(color, { background:Uint8Array.from(frame.slots, slot => Number(slot < 0)) });
+  const result = Critic.lint(color, { background:Uint8Array.from(frame.slots,(slot,p)=>Number(slot < 0 || frame.opacity?.[p] === 0)) });
   const { mark, bg, ...metrics } = result;
   const findings = {}, protectedMarks = {};
   for (const [issue, flags] of Object.entries(mark)) {
@@ -540,6 +550,8 @@ function review(frame) {
   return {
     report:{ format:'ink-studio/pixel-art-review', version:1, grid:[frame.width,frame.height], revision:frame.revision,
       ...frameMetadata(frame), metrics,
+      ...(frame.protectedDetails?.length && { protectedDetails:frame.protectedDetails.map(({ id,kind,pixels })=>
+        ({ id,kind:kind ?? 'pixel',pixelCount:pixels.length })) }),
       swatches:Object.fromEntries(frame.swatches.map((id, i) => [id,used[i]])), findings, protectedMarks },
     overlay:Critic.lintMap(color,result)
   };
@@ -588,10 +600,11 @@ function edit(design, frame, patch, context) {
     { expected:frame.revision, actual:revision });
   const route = Destinations.resolve(design,patch.destination);
   if (design.version === 2 && patch.frame !== frame.id &&
-      (patch.frame !== undefined || (patch.cel === undefined && !['guides','canvas','palette','adjustments','layers'].includes(route.destination.kind))))
+      (patch.frame !== undefined || (patch.cel === undefined && !['guides','canvas','palette','adjustments','layers','protection'].includes(route.destination.kind))))
     throw Preview.conflict('wrong-frame','Pixel edit needs the observed frame ID',{ expected:patch.frame, actual:frame.id });
   if (patch.sourceRevision !== undefined && (!route.binding || !isRevision(patch.sourceRevision)))
     throw Preview.conflict('invalid-source-revision','An inspected sourceRevision must be a SHA-256 digest for a scene destination');
+  if (route.destination.kind === 'protection') return editProtection(design,patch,context);
   if (route.destination.kind === 'layers') return editLayers(design,patch,context);
   if (route.destination.kind === 'adjustments') return editAdjustment(design,patch,context);
   if (route.destination.kind === 'canvas') return editCanvas(design,patch,context);
@@ -837,23 +850,28 @@ function replaceSwatch(design,frame,patch,destination,context) {
 
 function editTransform(design,frame,patch,destination,context) {
   const { operation } = patch, paste = operation.tool === 'paste';
-  const input = paste ? ['clipboard'] : ['selection','mode'];
+  const input = paste ? ['clipboard'] : ['selection','mode','carryProtection'];
   if (patch.edits !== undefined || !fields(operation,['tool','layer','transform','resultSelection',...input]))
     throw new TypeError('A transform needs a named selection or an indexed clipboard to paste');
-  const { tool,selection,resultSelection,mode = 'move',transform,clipboard } = operation;
+  const { tool,selection,resultSelection,mode = 'move',transform,clipboard,carryProtection = false } = operation;
+  if (typeof carryProtection !== 'boolean' || carryProtection && mode !== 'move')
+    throw new TypeError('Only a selection move can carry protection');
   if ((!paste && !['move','copy'].includes(mode)) ||
       (resultSelection !== undefined && (design.version !== 2 || !name(resultSelection))))
     throw new TypeError('Use move or copy and an optional result selection ID in a version 2 document');
   const { width,height } = frame, layer = rasterToolLayer(frame,patch);
   const source = compile(design,frame.id,patch.cel,layer).layerSources.get(layer);
   const palette = paletteEntries(design.palette,design.version), current = { ...source,palette };
-  const clip = paste ? clipboard : PixelTransforms.capture(width,height,current,
-    PixelSelections.fromPixels(width,height,namedSelection(design,selection,frame.id).pixels));
-  const result = PixelTransforms.stage(width,height,current,clip,transform,{ move:!paste && mode === 'move',named:true });
+  const mask = !paste && PixelSelections.fromPixels(width,height,namedSelection(design,selection,frame.id).pixels);
+  const clip = paste ? clipboard : PixelTransforms.capture(width,height,current,mask);
+  const result = PixelTransforms.stage(width,height,current,clip,transform,
+    { move:!paste && mode === 'move',named:true,captureSources:carryProtection });
+  const carried = carryProtection ? Protection.carry(frame.protectedDetails ?? [],frame.id,width,mask,result.sources) : undefined;
   const changed = [...result.writes.keys()].sort((a,b)=>a-b);
   for (const p of changed) {
-    if (frame.locks[p] || source.clipping && !source.clipping[p])
-      throw Preview.conflict(frame.locks[p] ? 'protected-pixel' : 'clipped-pixel','Transform cannot change this pixel',
+    const locked = carried ? frame.layerLocks[p] || carried.locked.has(p) : frame.locks[p];
+    if (locked || source.clipping && !source.clipping[p])
+      throw Preview.conflict(locked ? 'protected-pixel' : 'clipped-pixel','Transform cannot change this pixel',
         { layer,at:[p%width,Math.floor(p/width)] });
   }
   const marks = rasterWriteMarks(width,source,result.palette,result.writes,changed);
@@ -865,8 +883,16 @@ function editTransform(design,frame,patch,destination,context) {
     selectionRuns = RasterTools.runs(width,pixels.map(([x,y])=>y*width+x));
     revised = saveNamedSelection(revised,{ id:resultSelection,frame:frame.id,pixels });
   }
+  if (carried?.moved.size) {
+    const after = compile({ ...revised,protectedDetails:undefined },frame.id);
+    const problem = Protection.carriedChange(carried,width,frame,after);
+    if (problem) throw Preview.conflict('protected-pixel','Transform would change protected detail '+problem.id,
+      { layer,detail:problem.id,at:problem.at });
+    revised = { ...revised,protectedDetails:revised.protectedDetails.map(row=>carried.moved.get(row.id) ?? row) };
+  }
   compile(revised,frame.id);
   context?.onEditTarget?.({ destination:destination.id,kind:'raster',tool,frame:frame.id ?? null,layer,
+    ...(carried?.moved.size && { carriedProtection:[...carried.moved.values()] }),
     cel:frame.cels?.get(layer) ?? (frame.id ? frame.id+'/'+layer : null),
     ...(!paste && { selection,mode }),...(resultSelection !== undefined && { resultSelection,selectionRuns }),
     bounds:result.bounds,clippedPixels:result.clippedPixels,pixelCount:changed.length,
@@ -918,6 +944,47 @@ function brushChanges(design,frame,brush,override,{ points,samples,shading },{ s
   }
   return { changed,added:palette.slice(original.length),
     marks:[...bySwatch].map(([swatch,pixels])=>({ swatch,runs:RasterTools.runs(width,pixels) })) };
+}
+
+function editProtection(design,patch,context) {
+  const { operation } = patch;
+  if (patch.frame !== undefined || patch.cel !== undefined || patch.edits !== undefined ||
+      !record(operation) || !name(operation.id))
+    throw new TypeError('A protection edit needs a stable detail ID and its own frame scope');
+  const details = new Map((design.protectedDetails ?? []).map(row=>[row.id,row]));
+  const { type,id,kind,frame,frames,selection } = operation, before = details.get(id);
+  if (type === 'remove' && fields(operation,['type','id'])) {
+    if (!details.delete(id)) throw Preview.conflict('missing-protection','Unknown protected detail '+id,{ detail:id });
+  } else if (type === 'set' && fields(operation,['type','id','kind','frame','frames','pixels','selection']) &&
+      Protection.kinds.includes(kind) && (operation.pixels !== undefined) !== (selection !== undefined)) {
+    const saved = selection === undefined ? null : namedSelection(design,selection,frame);
+    if (saved?.frame !== undefined && saved.frame !== frame)
+      throw new RangeError('A frame-scoped selection needs the same protection frame');
+    details.set(id,{ id,kind,...(frame !== undefined && { frame }),...(frames !== undefined && { frames }),
+      pixels:saved?.pixels ?? operation.pixels });
+  } else {
+    throw new TypeError('Set protection from pixels or a saved selection, or remove a protected detail');
+  }
+  const revised = { ...design,protectedDetails:[...details.values()] };
+  validate(revised);
+  context?.onEditTarget?.({ destination:'protection',kind:'protection',tool:type,id,before:before ?? null,after:details.get(id) ?? null });
+  return revised;
+}
+
+function assertProtectionUnchanged(design,revised) {
+  if (!design.protectedDetails?.length) return;
+  documentShape(revised);
+  const beforePalette = paletteEntries(design.palette,2), afterPalette = paletteEntries(revised.palette,2);
+  const next = { ...revised,protectedDetails:undefined };
+  for (let i = 0; i < design.frames.length; i++) {
+    const frame = design.frames[i], active = frameProtection(design,frame.id);
+    if (!active.length) continue;
+    const before = compileFrame(design,frame,undefined,beforePalette);
+    const after = compileFrame(next,revised.frames[i],undefined,afterPalette);
+    const change = Protection.changed(active,design.width,before,after);
+    if (change) throw Preview.conflict('protected-pixel','Edit would change protected detail '+change.id+' at '+change.at.join(', '),
+      { frame:frame.id,detail:change.id,at:change.at });
+  }
 }
 
 function editLayers(design,patch,context) {
@@ -983,6 +1050,7 @@ function editLayers(design,patch,context) {
   } else {
     throw new TypeError('Choose add, update, reorder, set-cel, remove, merge-down, flatten-group, or flatten');
   }
+  assertProtectionUnchanged(design,revised);
   validate(revised);
   context?.onEditTarget?.({ destination:'layers',kind:'layers',tool:type,
     before:design.layers,after:revised.layers,...(typeof layer === 'string' && { layer }),...report });
@@ -1096,6 +1164,7 @@ function editPalette(design,patch,context) {
       return changed ? { ...frame,cels:Object.fromEntries(cels) } : frame;
     });
   }
+  assertProtectionUnchanged(design,revised);
   validate(revised);
   context?.onEditTarget?.({ destination:'palette',kind:'palette',tool:operation.type,
     before,after:palette,...(replacements && { remappedCels,map:Object.fromEntries(replacements),removed }),
@@ -1130,8 +1199,8 @@ function editCanvas(design,patch,context) {
   const bindings = [], droppedProtected = [];
   let revised = design;
 
-  function resizeCel(cel,source) {
-    const raster = CanvasTransforms.raster(map,source.slots,source.alpha);
+  function resizeCel(cel,source,sampling = map) {
+    const raster = CanvasTransforms.raster(sampling,source.slots,source.alpha);
     const knockout = [], byAlpha = new Map();
     const slots = raster.slots.map((slot,p) => {
       if (slot === -2) knockout.push(p);
@@ -1153,20 +1222,17 @@ function editCanvas(design,patch,context) {
       const { layerSources } = compileFrame(design,undefined,revision,palette,true);
       revised.layers = design.layers.map(layer=>resizeCel(layer,layerSources.get(layer.id)));
     } else {
+      const mapping = Protection.remap(map,design.protectedDetails,CanvasTransforms.region,
+        (id,pixels)=>droppedProtected.push({ id,pixels }));
       revised.frames = frames.map(frame => {
-        const { layerSources } = compileFrame(design,frame,revision,palette,true);
+        const raster = compileFrame(design,frame,revision,palette,true);
+        const sampling = mapping.forFrame(raster.protectedDetails,raster);
         return { ...frame,cels:Object.fromEntries(Object.entries(frame.cels).map(([id,cel])=>
-          [id,resizeCel(cel,layerSources.get(id))])) };
+          [id,resizeCel(cel,raster.layerSources.get(id),sampling)])) };
       });
       if (design.guides) revised.guides = CanvasTransforms.guides(map,design.guides);
-      for (const key of ['selections','protectedDetails']) {
-        if (!design[key]) continue;
-        revised[key] = design[key].map(row => {
-          const { pixels,discarded } = CanvasTransforms.region(map,row.pixels);
-          if (key === 'protectedDetails' && discarded) droppedProtected.push({ id:row.id,pixels:discarded });
-          return { ...row,pixels };
-        });
-      }
+      if (design.selections) revised.selections = design.selections.map(row=>({ ...row,pixels:CanvasTransforms.region(map,row.pixels).pixels }));
+      if (mapping.rows) revised.protectedDetails = mapping.rows;
     }
   }
   if (sourceBindings?.length) {
@@ -1254,7 +1320,7 @@ function editWithReceipt(design, patch, context, { runner, options, frameId, sho
         { expected:expected.inputs.documentRevision, actual:documentRevision });
     const route = Destinations.resolve(design,patch?.destination), { destination,binding,layer } = route;
     const frame = compile(design,frameId,patch?.cel,layer?.kind === 'surface' ? layer.id : undefined);
-    command.frame = ['canvas','palette','adjustments','layers'].includes(destination.kind) ? null : frame.id ?? null;
+    command.frame = ['canvas','palette','adjustments','layers','protection'].includes(destination.kind) ? null : frame.id ?? null;
     if (shotHitFrame !== undefined && (destination.kind !== 'shot-correction' || !integer(shotHitFrame,0,1e9)))
       throw new TypeError('A shot hit sample needs a shot-correction edit and a nonnegative shot frame');
     const result = edit(design,frame,patch,{
@@ -1484,7 +1550,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     const request = structuredClone(patch);
     if (legacyRevision !== null && request?.revision === legacyRevision) {
       request.revision = fingerprint(design);
-      if (request.frame === undefined && request.cel === undefined && !['canvas','document:canvas','palette','document:palette','adjustments','document:adjustments','layers','document:layers'].includes(request.destination))
+      if (request.frame === undefined && request.cel === undefined && !['canvas','document:canvas','palette','document:palette','adjustments','document:adjustments','layers','document:layers','protection','document:protection'].includes(request.destination))
         request.frame = 'artwork';
     }
     return request;
@@ -1562,7 +1628,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
           sourceChecked:patch.sourceRevision !== undefined || verifiedReplays.has(index) });
       }
       const [painted] = receipt.affectedTargets;
-      if (['canvas','palette','selections','adjustments','layers'].includes(painted?.kind) || painted?.kind === 'raster' && painted.tool) targetsByKey.set(index,structuredClone(painted));
+      if (['canvas','palette','selections','adjustments','layers','protection'].includes(painted?.kind) || painted?.kind === 'raster' && painted.tool) targetsByKey.set(index,structuredClone(painted));
     }
     const targets = [...targetsByKey.values()];
     let candidate = state().design, scene = sceneEditor?.snapshot(), issues = [];
@@ -1855,7 +1921,7 @@ function canvasReview(design,frameId,file,sources,scene) {
     const { width,height,rgba } = stampImage(stamp(compiled));
     const encode = bytes => Buffer.from(bytes).toString('base64');
     return { label:frame?.label ?? frame?.id ?? 'Drawing', png:encode(PNG.encode(width,height,rgba,4)),
-      guides:compiled.guides ?? [], id:frame?.id, composite:encodeSlots(compiled.slots),
+      guides:compiled.guides ?? [], id:frame?.id, protectedDetails:compiled.protectedDetails ?? [], composite:encodeSlots(compiled.slots),
       ...(compiled.opacity && { alpha:encode(compiled.opacity),rgb:encode(image(compiled).rgb) }),
       layers:[...compiled.layerSources].map(([id,row]) => ({
         id,cel:compiled.cels?.get(id) ?? null,slots:encodeSlots(row.slots),...(row.alpha && { alpha:encode(row.alpha) }),
@@ -1891,7 +1957,7 @@ function canvasReview(design,frameId,file,sources,scene) {
     .replace('/*PIXEL_GUIDES_MODULE*/',() => fs.readFileSync(path.join(__dirname,'../src/pixel-guides.js'),'utf8'))
     .replace('/*PIXEL_GRID_MODULE*/',() => browserSource('mjs'))
     .replace('/*PIXEL_INSPECT_MODULES*/',() => [
-      'pixel-layer-stack.js','pixel-canvas-transforms.js','pixel-inspection.js','art-passes.js','pixel-inspector.mjs'
+      'pixel-layer-stack.js','pixel-canvas-transforms.js','pixel-inspection.js','pixel-protection.js','art-passes.js','pixel-inspector.mjs'
     ].map(file=>fs.readFileSync(path.join(__dirname,'../src',file),'utf8')).join('\n'))
     .replace('/*PIXEL_GRID_DATA*/',() => data));
 }

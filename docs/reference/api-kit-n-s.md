@@ -304,6 +304,21 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelPaintTools.staircase` | function | `(width,height,spec,grid)` | [source](../../src/pixel-paint-tools.js) |
 | `KIT.pixelPaintTools.visit` | function | `(seed, marks, id, matches, { width,height,steps,queue,wrapX,wrapY })` | [source](../../src/pixel-paint-tools.js) |
 
+## KIT.pixelProtection
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.pixelProtection` | namespace |  |  |
+| `KIT.pixelProtection.active` | function | `(details,frames,index)` | [source](../../src/pixel-protection.js) |
+| `KIT.pixelProtection.at` | function | `(details,x,y)` | [source](../../src/pixel-protection.js) |
+| `KIT.pixelProtection.carriedChange` | function | `(carry,width,before,after)` | [source](../../src/pixel-protection.js) |
+| `KIT.pixelProtection.carry` | function | `(details,frame,width,selection,sources)` | [source](../../src/pixel-protection.js) |
+| `KIT.pixelProtection.changed` | function | `(details,width,before,after)` | [source](../../src/pixel-protection.js) |
+| `KIT.pixelProtection.kinds` | value | `array` |  |
+| `KIT.pixelProtection.paintLocks` | function | `(details,width,raster,{ validateGaps = true } = {})` | [source](../../src/pixel-protection.js) |
+| `KIT.pixelProtection.remap` | function | `(map,details,region,onLoss)` | [source](../../src/pixel-protection.js) |
+| `KIT.pixelProtection.validate` | function | `(details,width,height,frames)` | [source](../../src/pixel-protection.js) |
+
 ## KIT.pixelScanner
 
 | Member | Kind | Signature or value | Guides and source |
@@ -318,7 +333,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelSelectionTransforms` | namespace |  |  |
 | `KIT.pixelSelectionTransforms.capture` | function | `(width,height,{ slots,alpha,palette },mask)` | [source](../../src/pixel-selection-transforms.js) |
 | `KIT.pixelSelectionTransforms.format` | value | `string = "ink-studio/pixel-clipboard"` |  |
-| `KIT.pixelSelectionTransforms.stage` | function | `(width,height,current,raw,settings = {},{ move = false, named = false, limit = 255 } = {})` | [source](../../src/pixel-selection-transforms.js) |
+| `KIT.pixelSelectionTransforms.stage` | function | `(width,height,current,raw,settings = {},{ move = false, named = false, limit = 255, captureSources = false } = {})` | [source](../../src/pixel-selection-transforms.js) |
 | `KIT.pixelSelectionTransforms.validate` | function | `(clip)` | [source](../../src/pixel-selection-transforms.js) |
 
 ## KIT.pixelSelections

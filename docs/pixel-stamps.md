@@ -227,6 +227,11 @@ edits or frame changes. To include bound source channel values and native
 scene hits, export a scene-backed canvas with the CLI.
 [Pixel inspection commands](pixel-art-authoring.md#inspect-pixel-contributors)
 
+To lock the current selection, open **Protect details**. Saved details
+travel with Workshop JSON and layer decks through their frame scopes and
+canvas transforms.
+[Authored detail protection](pixel-art-authoring.md#protect-authored-details)
+
 Stamp JSON stores guides shared by the whole animation in `guides`.
 Individual entries in `frames` can also carry a local `guides` list with its
 own IDs. Both use the [pixel guide definitions](pixel-art-authoring.md#register-frames-and-align-texture-pixels)

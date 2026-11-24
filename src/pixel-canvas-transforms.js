@@ -95,6 +95,12 @@ const PixelCanvasTransforms = (() => {
       const horizontal = areaWeights(width,w), vertical = areaWeights(height,h);
       const area = width/w*height/h;
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const p = y*w+x;
+        if (map.protectedSamples?.has(p)) {
+          const source = index[p], slot = slots[source];
+          if (slot !== -1 && slot !== null) set(p,slot,alpha?.[source] ?? 255);
+          continue;
+        }
         const weights = new Map();
         let pigment = 0, knockout = 0, coverage = 0;
         for (const [v,yWeight] of vertical[y]) for (const [u,xWeight] of horizontal[x]) {
@@ -109,7 +115,6 @@ const PixelCanvasTransforms = (() => {
           pigment += weight;
           coverage += amount;
         }
-        const p = y*w+x;
         if (knockout > pigment) { set(p,-2,255); continue; }
         let best, swatch;
         for (const [slot,weight] of weights) {
