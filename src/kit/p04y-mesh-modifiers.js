@@ -27,20 +27,20 @@
       Object.fromEntries(Object.entries({ ...row, ...clone(patch) }).filter(([, value]) => value !== null))));
   }
 
-  function ancestry(doc) {
-    let prior = Object.fromEntries(domains.map(domain => [domain, new Map(ids(doc, domain).map(id => [id, new Set([id])]))]));
+  function ancestry(doc, tracked = domains) {
+    let prior = Object.fromEntries(tracked.map(domain => [domain, new Map(ids(doc, domain).map(id => [id, new Set([id])]))]));
     return {
       advance(next, hints) {
-        const current = Object.fromEntries(domains.map(domain => [domain, new Map(ids(next, domain)
+        const current = Object.fromEntries(tracked.map(domain => [domain, new Map(ids(next, domain)
           .filter(id => prior[domain].has(id)).map(id => [id, prior[domain].get(id)]))]));
-        for (const domain of domains) for (const { from, to } of hints?.[domain] ?? []) {
+        for (const domain of tracked) for (const { from, to } of hints?.[domain] ?? []) {
           const sources = prior[domain].get(from);
           if (sources) current[domain].set(to, new Set([...(current[domain].get(to) ?? []), ...sources]));
         }
         prior = current;
       },
       links() {
-        return Object.fromEntries(domains.map(domain => [domain, [...prior[domain]].flatMap(([to, sources]) =>
+        return Object.fromEntries(tracked.map(domain => [domain, [...prior[domain]].flatMap(([to, sources]) =>
           [...sources].flatMap(from => from === to ? [] : [{ from, to }]))]));
       }
     };
@@ -51,40 +51,60 @@
     return { revision: topology.revision(document), vertices, edges: edges.length, faces, triangles };
   }
 
-  function evaluateModifiers(source, modifiers, { through, target } = {}) {
+  function evaluateModifiers(source, modifiers, { through, target, diagnostics = false } = {}) {
     const cage = topology.create(source), stack = modifierStack(modifiers);
     const stop = through === undefined ? stack.length : stack.findIndex(row => row.id === through) + 1;
     if (through !== undefined && !stop) throw new RangeError('Unknown mesh modifier stage ' + through);
     const before = describe(cage), stages = [], lineage = ancestry(cage);
+    const watchLineage=diagnostics ? ancestry(cage,['vertices',...domains]) : null;
+    const captures = [], inspected = new WeakMap();
+    const probe = value => {
+      if (!inspected.has(value)) inspected.set(value,K.procedural.modelingDiagnostics.inspect(value));
+      return inspected.get(value);
+    };
+    function record(stage, prior, links, start) {
+      if (diagnostics) {
+        const elapsedMs = performance.now() - start;
+        stage.diagnostics = K.procedural.modelingDiagnostics.compare(probe(prior),probe(document),{lineage:links});
+        stage.elapsedMs = elapsedMs;
+        captures.push({id:stage.id,before:prior,after:document,lineage:links??{}});
+      }
+      stages.push(stage);
+    }
     let document = cage, canApply = true, current = before, consumed = 0;
     for (const op of stack.slice(0, stop)) {
-      const { id, kind } = op, input = current;
-      if (op.enabled === false) stages.push({ id, kind, status: 'bypassed', input, output: input });
+      const { id, kind } = op, input = current, prior = document;
+      const start = diagnostics ? performance.now() : 0;
+      if (op.enabled === false) record({ id, kind, status: 'bypassed', input, output: input },prior,undefined,start);
       else {
+        let result;
         try {
-          let result;
           if (kind === 'subdivision') {
             const trace = ancestry(document);
             const subdivision = meshTopologySubdivision.run(document, op.levels, (next, links) => trace.advance(next, links), id);
             result = { document: topology.create({ ...subdivision, id: cage.id }), lineage: trace.links(),
               evidence: { levels: op.levels } };
-          } else result = operations[kind](document, op, target);
-          if (result.document !== document) lineage.advance(result.document, result.lineage);
+          } else result = operations[kind](document, op, target, diagnostics);
+          if (result.document !== document) {
+            lineage.advance(result.document, result.lineage);
+            watchLineage?.advance(result.document,result.diagnosticLineage??result.lineage);
+          }
           document = result.document;
           current = document === cage ? before : describe(document);
-          stages.push({ id, kind, status: 'evaluated', input, output: current, ...(result.evidence && { evidence: result.evidence }) });
         } catch (error) {
           if (!(error instanceof RangeError || error instanceof TypeError)) throw error;
           canApply = false;
-          stages.push({ id, kind, status: 'blocked', input, message: error.message,
-            ...(error.report && { evidence: error.report }) });
+          record({ id, kind, status: 'blocked', input, message: error.message,
+            ...(error.report && { evidence: error.report }) },prior,undefined,start);
           break;
         }
+        record({ id, kind, status: 'evaluated', input, output: current, ...(result.evidence && { evidence: result.evidence }) },
+          prior,result.diagnosticLineage??result.lineage,start);
       }
       consumed++;
     }
     const remaining = stack.slice(consumed);
-    return freeze({ document, remaining, lineage: lineage.links(),
+    return freeze({ document, remaining, lineage: lineage.links(), ...(diagnostics && {captures,diagnosticLineage:watchLineage.links()}),
       report: { format: 'ink-studio/mesh-modifier-evaluation', version: 1, mesh: cage.id, before,
         output: current, canApply, stages, remaining: remaining.map(row => row.id) } });
   }

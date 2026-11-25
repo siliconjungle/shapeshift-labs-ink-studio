@@ -34,7 +34,13 @@ function welded(snapshot) {
 
 test('local CSG edits reuse other chunks and agree with a full fresh bake across seams',()=>{
   const {surface,options,cut,P}=fixture(ink.load()), before=surface.current();
-  const after=surface.edit(cut), full=P.brickMeshes.create({...options,bricks:after.bricks}).current();
+  const work=[], onModelingWork=row=>work.push(row);
+  const after=surface.edit(cut,{onModelingWork}), full=P.brickMeshes.create({...options,bricks:after.bricks}).current();
+  assert.equal(surface.update(after.bricks,{onModelingWork}),after);
+  assert.equal(work.length,1);
+  assert.equal(work[0].kind,'remesh');
+  assert(work[0].sourceIds.includes('gate'));
+  assert.equal(work[0].counts.samples,after.work.samples);
   assert(after.work.rebuilt.length<after.chunks.length);
   assert(after.work.reused.length>after.work.changed.length);
   assert(after.work.samples<full.work.samples);

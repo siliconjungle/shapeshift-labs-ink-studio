@@ -178,7 +178,15 @@
     const lockPadding=cell*2;
 
     let current, currentSites, currentShape, currentSculpt, updating=false;
-    function update(bricks) { return publishRevision(bricks,currentMasks); }
+    function update(bricks,{onModelingWork}={}) {
+      const previous=current, next=publishRevision(bricks,currentMasks);
+      if (onModelingWork && next!==previous) {
+        const {rebuilt,recolored,seamNeighbors,cells,samples,triangles}=next.work;
+        onModelingWork({kind:'remesh',sourceIds:[objectId,...new Set([...rebuilt,...recolored])],
+          counts:{rebuilt:rebuilt.length,recolored:recolored.length,seamNeighbors:seamNeighbors.length,cells,samples,triangles}});
+      }
+      return next;
+    }
 
     function publishRevision(bricks,masks) {
       if (updating) throw new Error('Cannot update a brick field while deriving its assets');
@@ -272,13 +280,13 @@
         return authored*value;
       };
     }
-    function edit(brush) {
+    function edit(brush, work) {
       if (brush?.material!=null && !materialSlots.has(brush.material))
         throw new RangeError('Unknown brick mesh material: '+brush.material);
       const {masks:selection,weight,...settings}=brush ?? {};
-      return update(current.bricks.edit({...settings,weight:influenceFor(selection,weight)}));
+      return update(current.bricks.edit({...settings,weight:influenceFor(selection,weight)}),work);
     }
-    function sculpt(stroke,{masks,weight,maxSamples=524288}={}) {
+    function sculpt(stroke,{masks,weight,maxSamples=524288,onModelingWork}={}) {
       const program=P.freeformSculpt.prepare(stroke), source=current.bricks;
       if (!bounded(maxSamples,1,4000000)) throw new RangeError('A freeform stroke needs a valid sample budget');
       const budget=program.regions.reduce((total,{min,max})=>total+
@@ -288,7 +296,7 @@
       let edited=source;
       for (const bounds of program.regions)
         edited=edited.edit({ bounds,operation:'reshape',transform,weight:influence,maxSamples });
-      return update(edited);
+      return update(edited,{onModelingWork});
     }
     function captureDetail(coarse,settings) {
       return P.sculptDetail.capture(coarse,current.bricks,{...settings,object:objectId});

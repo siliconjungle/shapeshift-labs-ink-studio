@@ -1057,6 +1057,27 @@ ink-studio mesh-topology modifiers apply staged.json --object housing --through 
 ink-studio mesh-topology modifiers apply staged.json --object housing --out applied.json
 ```
 
+### Inspect modeling stages
+
+```sh
+ink-studio mesh-topology modifiers inspect staged.json --object housing \
+  --diagnostics --preview stage-images --report stage-report.json
+```
+
+The stage report shows topology findings on each side of the operation,
+affected source IDs, changed attribute values, and elapsed evaluation time.
+Each stage gets a before and after PNG from the same native camera and pixel
+grid. Bypassed stages keep their inputs. A blocked stage preserves its
+input and reports the operation error. For scene meshes with registered
+bakes, the diagnostic lists the bake and affected faces as required work.
+A separately measured rebake records the sampled charts and texels.
+
+In the SDK, pass `{ diagnostics: true }` to
+`evaluateModifiers()` or `sceneEditor.inspectMeshModifiers()`. The result
+includes the retained stage documents in `captures` and their diagnostics
+in `report.stages`. Copy lineage used for inspection preserves the existing
+binding remap behavior of the apply operation.
+
 An update file is shaped like `{ "id": "trim", "patch": { "enabled": false } }`.
 Without `--out`, applying writes a dry run with topology, binding and bake
 effects. With `--through`, applying consumes the prefix through that

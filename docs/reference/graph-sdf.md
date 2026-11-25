@@ -70,7 +70,7 @@ Samples the graph clock.
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
 | Output | `value` | `mesh` | — | {"layout":"XYZ vertices with in-range indices"} |
 
-Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes)
+Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes), [guide](../patch-tooling.md#attribute-downstream-work)
 
 Get the runnable example with `ink-studio graph describe sdf.mesh --example > example.json`.
 Run it with `ink-studio graph run example.json`.

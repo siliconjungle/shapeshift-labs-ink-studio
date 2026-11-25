@@ -784,6 +784,11 @@ const specifications = {
     after: {revision: 2, solids: {left: {}, right: {}}, generation: {version: 1, model: 'signal',
       sections: {solids: {left: 'trim', right: 'trim'}}}}
   }},
+  'model.modifiers': {inputs:{
+    source:{id:'sample-panel',vertices:[{id:'a',position:[0,0,0]},{id:'b',position:[1,0,0]},
+      {id:'c',position:[0,1,0]}],faces:[{id:'face',corners:[{id:'ca',vertex:'a'},{id:'cb',vertex:'b'},{id:'cc',vertex:'c'}]}]},
+    modifiers:[{id:'copies',kind:'array',count:2,step:[1.3,0,0]}]
+  }},
   tiles: { inputs: { settings: { bounds: { min: [0, 0], max: [2, 2] } } } }
 };
 

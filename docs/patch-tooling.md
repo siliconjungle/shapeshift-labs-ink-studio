@@ -96,6 +96,56 @@ ffmpeg -re -i night-current/night-current-input.mp4 -an \
     --out night-current/live --progress
 ```
 
+### Inspect a modeling stage
+
+```sh
+ink-studio patch run vent.graph.json --watch 'cut=carve:@model,mesh=remesh:@model' \
+  --size 168x106 --out watches
+```
+
+Use `node:@model` on a modeling node, including `group/inner:@model`.
+The report names the operation, its input links, and its cache status. It
+uses the primary geometry input and output for the comparison. For a
+multi-input signed-field operation the first operand is the before view.
+The before and after PNGs use one camera, time, and native art grid. The
+report counts changed RGB pixels when both views are available.
+
+Retained meshes show added, removed, and changed elements, affected source
+IDs, and changed or copied attributes. Health checks show non-manifold edges,
+duplicate vertices, winding errors, slivers, and self-intersections and say
+when the pair budget or issue list was exhausted. Indexed triangle streams
+use local indices in each health check. Use retained topology for stable
+element correspondence. Portable attribute tables show their changed
+channels, source IDs, and unresolved remaps alongside any geometry evidence.
+
+`model.modifiers` evaluates a retained modifier stack and publishes the
+stack report. For images of each modifier, use
+[the retained stack inspector](mesh-topology.md#inspect-modeling-stages).
+
+In Node, pass a watch such as `{ cut: { node: 'carve', modeling: true } }`
+to `previewFrame()`. The preview options accept `modelingView` with
+`w`, `h`, and an optional camera. With `encodeArtifacts: false` the
+watch returns diagnostics without rendering PNGs.
+
+#### Attribute downstream work
+
+The watch reports performed work under the executing node. Its upstream
+links identify the edits that fed the operation. Cached nodes contribute
+no new receipts. During a modeling watch, host operations can pass their
+`context.recordWork` callback to `exportGlb` with `rebakeFrom`, to
+`brickMeshes` controller `update`, `edit`, or `sculpt`, or to the WebGL
+renderer as `onModelingWork`. The stock `sdf.mesh` node records directly.
+The counters are sampled cells and triangles for an SDF remesh, dirty
+chunks and samples for brick updates, changed charts and sampled texels
+for a registered rebake, and bytes submitted for WebGL mesh and atlas
+uploads. Upload counts measure submissions. Node profiling measures
+elapsed host time.
+Reports include counts when their receipt or source ID lists are shortened.
+
+The [Kiln Vent demo](../examples/modeling-stage-diagnostics/demo.cjs) runs
+these watches with a retained panel, a signed-field cut, and an overlapping
+array. Add `--webgl` to measure real upload submissions with Chrome or Chromium.
+
 ## Track fixed-camera footage
 
 Capture a clean plate of the empty scene in the same framing, crop and resolution as the processing frame. Save it as a PNG and load it through `pngAsset`. Keep the camera locked and avoid moving backgrounds. The region tracker supports up to 500,000 pixels per frame, so a 640×360 working frame leaves room for its contour budget. Match the plate to `--size` when processing at a lower resolution.

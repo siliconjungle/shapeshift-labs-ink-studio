@@ -22,6 +22,26 @@ Guides: [guide](../procedural.md#stable-identities-for-generated-parts)
 Get the runnable example with `ink-studio graph describe model.compare --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### model.modifiers
+
+Evaluate a retained mesh modifier stack with its stable source lineage and stage report.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `record` | Required | {"layout":"Plain named object"} |
+| Input | `modifiers` | `array<record>` | Required | {"items":"record"} |
+| Input | `targets` | `record` | `{}` | {"layout":"Plain named object"} |
+| Output | `value` | `record` | — | {"layout":"Plain named object"} |
+| Output | `report` | `record` | — | {"layout":"Plain named object"} |
+| Output | `lineage` | `record` | — | {"layout":"Plain named object"} |
+
+Guides: [guide](../patch-tooling.md#inspect-a-modeling-stage)
+
+Get the runnable example with `ink-studio graph describe model.modifiers --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### model.prefab
 
 Collect keyed group outputs into a revisioned visual or world prefab with stable member IDs.

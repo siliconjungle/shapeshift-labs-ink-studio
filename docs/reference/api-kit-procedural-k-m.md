@@ -2045,6 +2045,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.model.prefab` | function | `({model, revision, sections, base = {}, kind = 'visual'} = {})` | [source](../../src/kit/p23-procedural-parts.js) |
 | `KIT.procedural.model.validate` | function | `(definition, kind)` | [source](../../src/kit/p23-procedural-parts.js) |
 
+## KIT.procedural.modelingDiagnostics
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.modelingDiagnostics` | namespace |  |  |
+| `KIT.procedural.modelingDiagnostics.attributes` | function | `(before,after,remap)` | [source](../../src/kit/p23-modeling-diagnostics.js) |
+| `KIT.procedural.modelingDiagnostics.compare` | function | `(before, after, {limit=64,lineage={}}={})` | [source](../../src/kit/p23-modeling-diagnostics.js) |
+| `KIT.procedural.modelingDiagnostics.inspect` | function | `(value, { limit=64 }={})` | [source](../../src/kit/p23-modeling-diagnostics.js) |
+| `KIT.procedural.modelingDiagnostics.receipt` | function | `(value)` | [source](../../src/kit/p23-modeling-diagnostics.js) |
+
 ## KIT.procedural.mosaic
 
 | Member | Kind | Signature or value | Guides and source |

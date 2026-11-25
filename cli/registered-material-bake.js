@@ -8,7 +8,7 @@ const Geometry = require('./geometry-masks.js');
 const Cage = require('./material-cage.js');
 const UV = require('../src/material-uv.js');
 
-function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometryMasks,cageBake}) {
+function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometryMasks,cageBake,onModelingWork}) {
   if ([bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,cageBake].every(value=>value===undefined) &&
       (geometryMasks === undefined || geometryMasks === false)) return null;
   if(chartEdits!==undefined && rebakeFrom===undefined)throw new TypeError('Chart edits need a rebake baseline');
@@ -16,7 +16,7 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
     throw new TypeError('Geometry masks need a registered bake directory');
   if(typeof bakeDir!=='string'||!bakeDir || paintViews!==undefined && capturePaint!==undefined)
     throw new TypeError('Registered baking needs a bake directory and one paint or capture plan at a time');
-  const directory=path.resolve(bakeDir), meshes=[], atlases=new Map(), output=new Map(), captures=[];
+  const directory=path.resolve(bakeDir), meshes=[], atlases=new Map(), output=new Map(), captures=[], work=[];
   const baseline=charts.readBaseline(rebakeFrom), edits=charts.readPlan(chartEdits);
   const geometrySettings=Geometry.settings(geometryMasks === undefined ? baseline?.document.geometryMasks : geometryMasks);
   const sameDirectory=baseline && fs.existsSync(directory) && fs.realpathSync(directory)===baseline.directory;
@@ -69,6 +69,14 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
       ...(baked.geometryMasks && {geometryMaskTexels:chartBake.geometry.calculate ? baked.geometryMasks.texels : 0})
     };
     const mipmaps=writeMips(baked,size,dirty,source?.row.mipmaps,baseline?.read,map,sidecar);
+    if (onModelingWork && source) {
+      const charts=state.charts.filter(chart=>dirty.has(chart.id)), labels=state.identity?.labels;
+      const mipTexels=mipmaps.levels.reduce((total,row)=>total+row.filteredTexels,0);
+      if (charts.length||baked.sampledTexels||mipTexels)
+        work.push({kind:'rebake',sourceIds:[...new Set([mesh.name,...(labels?charts.flatMap(chart=>chart.faces.map(face=>labels[face])):[])])],
+          uvSet:set,charts:chartReport.updated,counts:{updatedCharts:charts.length,reusedCharts:chartReport.reused.length,
+            sampledTexels:baked.sampledTexels,mipTexels}});
+    }
     const row={index,name:mesh.name,geometry:projection.geometryHash(mesh.points,faces),
       uvLayout:projection.digest(JSON.stringify([faces,uvs])),texCoord:set,width:size,height:size,padding,
       coverage,emissionStrength:strength,maps,masks,mipmaps,paintViews:[...paintReceipts.values()],
@@ -136,6 +144,7 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
     }
     const file=path.join(directory,'material-bake.json');
     files.json(file,document);
+    if (onModelingWork) for (const row of work) onModelingWork(row);
     return file;
   }
 

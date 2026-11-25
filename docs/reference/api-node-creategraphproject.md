@@ -17,7 +17,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createGraphProject().inspect` | function | `(target,options)` | [guide](../headless-authoring.md), [source](../../cli/graph-project.js) |
 | `node.createGraphProject().plan` | function | `(inputs,{memory=false}={})` | [guide](../headless-authoring.md), [source](../../cli/graph-project.js) |
 | `node.createGraphProject().prepareBatch` | function | `(cases,defaults={})` | [guide](../headless-authoring.md), [source](../../cli/graph-project.js) |
-| `node.createGraphProject().previewFrame` | function | `(targets, options, { profile = false, encodeArtifacts = true } = {})` | [guide](../headless-authoring.md), [source](../../cli/graph-project.js) |
+| `node.createGraphProject().previewFrame` | function | `(targets, options, { profile = false, encodeArtifacts = true, modelingView } = {})` | [guide](../headless-authoring.md), [source](../../cli/graph-project.js) |
 | `node.createGraphProject().run` | function | `(options)` | [guide](../headless-authoring.md), [source](../../cli/graph-project.js) |
 | `node.createGraphProject().snapshot` | function | `(options={})` | [guide](../headless-authoring.md), [source](../../cli/graph-project.js) |
 | `node.createGraphProject().sockets` | function | `(node)` | [guide](../headless-authoring.md), [source](../../src/kit/paq-node-graph.js) |

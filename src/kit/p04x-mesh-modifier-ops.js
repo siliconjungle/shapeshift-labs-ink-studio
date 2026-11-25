@@ -42,43 +42,50 @@ const meshModifierOps = (function (K) {
     if (triangles * times > 250000 || vertices * times > 750000)
       throw new RangeError('Mesh copies exceed the topology budget');
   }
-  function copies(doc, op) {
+  function copies(doc, op, diagnostics) {
     const g = context(doc, { id: op.id, revision: revision(doc) });
-    return { vertices: [...doc.vertices], edges: [...doc.edges], faces: [...doc.faces], fresh: g.fresh };
+    return { vertices: [...doc.vertices], edges: [...doc.edges], faces: [...doc.faces], fresh: g.fresh,
+      ...(diagnostics&&{lineage:{vertices:[],edges:[],faces:[],corners:[]}}) };
   }
   function copy(doc, state, vertex, normal, flip, flipU) {
     const names = new Map(doc.vertices.map(row => [row.id, vertex(row)]));
+    for (const [from,to] of names) if(from!==to) state.lineage?.vertices.push({from,to});
+    function next(domain,kind,from) {
+      const to=state.fresh(kind);
+      state.lineage?.[domain].push({from,to});
+      return to;
+    }
     for (const edge of doc.edges) {
       const vertices = edge.vertices.map(id => names.get(id));
-      if (vertices.some((id, i) => id !== edge.vertices[i])) state.edges.push({ ...edge, id: state.fresh('edge'), vertices });
+      if (vertices.some((id, i) => id !== edge.vertices[i])) state.edges.push({ ...edge, id:next('edges','edge',edge.id), vertices });
     }
     for (const face of doc.faces) {
-      const corners = face.corners.map(row => ({ ...row, id: state.fresh('corner'), vertex: names.get(row.vertex),
+      const corners = face.corners.map(row => ({ ...row, id:next('corners','corner',row.id), vertex: names.get(row.vertex),
         ...(row.normal && normal && { normal: normal(row.normal) }), ...(flipU && { uv: [1 - row.uv[0], row.uv[1]] }) }));
-      state.faces.push({ ...face, id: state.fresh('face'), corners: flip ? corners.reverse() : corners });
+      state.faces.push({ ...face, id:next('faces','face',face.id), corners: flip ? corners.reverse() : corners });
     }
   }
   function result(doc, { vertices, edges, faces }) {
     return topology.create({ ...doc, vertices, edges, faces });
   }
 
-  function array(doc, op) {
+  function array(doc, op, _target, diagnostics) {
     if (op.count === 1) return { document: doc };
     if (!(V.len(op.step) > 0)) throw new RangeError('Array step needs a nonzero offset');
     repeatBudget(doc, op.count);
-    const state = copies(doc, op);
+    const state = copies(doc, op, diagnostics);
     for (let i = 1; i < op.count; i++) copy(doc, state, source => {
       const id = state.fresh('vertex');
       state.vertices.push({ ...source, id, position: V.mad(source.position, op.step, i) });
       return id;
     });
-    return { document: result(doc, state), evidence: { copies: op.count } };
+    return { document: result(doc, state), diagnosticLineage:state.lineage,evidence: { copies: op.count } };
   }
 
-  function mirror(doc, op) {
+  function mirror(doc, op, _target, diagnostics) {
     repeatBudget(doc, 2);
     const { origin = [0, 0, 0], tolerance = .000001, weld = true } = op;
-    const axis = unit(op.normal, 'Mirror normal'), state = copies(doc, op);
+    const axis = unit(op.normal, 'Mirror normal'), state = copies(doc, op, diagnostics);
     const dist = new Map(doc.vertices.map(row => [row.id, V.dot(V.sub(row.position, origin), axis)]));
     const seam = new Set(weld ? [...dist].filter(([, d]) => Math.abs(d) <= tolerance).map(([id]) => id) : []);
     if (weld && [...dist.values()].some(d => d > tolerance) && [...dist.values()].some(d => d < -tolerance))
@@ -103,7 +110,8 @@ const meshModifierOps = (function (K) {
       if (edge.vertices.every(id => seam.has(id)) && edge.uses.length > 2)
         throw new RangeError('Welded mirror would create a non-manifold seam at ' + edge.id);
     }
-    return { document, evidence: { weldedVertices: seam.size, removedPlaneFaces: doc.faces.length - faces.length } };
+    return { document, diagnosticLineage:state.lineage,
+      evidence: { weldedVertices: seam.size, removedPlaneFaces: doc.faces.length - faces.length } };
   }
 
   function convexEdges(doc) {

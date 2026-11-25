@@ -661,6 +661,11 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
             samplingScale: options.u_materialGridScale ?? 1,
             geometryCode: options.surfaceFrame?.meshCodes?.get(atlas.sceneMeshId),
             partGrid: options.spriteGrid });
+          if (atlas.sceneMeshId && surfaceFrame.onModelingWork) {
+            const {geometryBytes,textureBytes,blockBytes}=surface.stats;
+            if (geometryBytes || textureBytes) surfaceFrame.onModelingWork({kind:'upload',
+              sourceIds:[atlas.sceneMeshId], counts:{geometryBytes,textureBytes,blockBytes}});
+          }
           if (atlas.blockTextures && !surfaceFrame.index && !options.u_markPass)
             surfaceFrame.sceneryDeliveryFrame?.({id:atlas.sceneMeshId,...surface.stats});
           if (atlas.sceneMeshId) gl.depthFunc(gl.LEQUAL);
@@ -1659,6 +1664,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         scanFrame:toolkit.KIT?.sceneMeshes?.scanFrame(frame.scanDaylight,frame.scanAppearance),simulationLayers,anchors:marks,engraving,eye:camera.eye,back,ortho:camera.ortho,
         sceneryBlockTextures:frame.sceneryBlockTextures,
         sceneryDeliveryFrame:reflectionCapture || plane!==zero ? undefined : frame.sceneryDeliveryFrame,
+        onModelingWork:frame.onModelingWork,
         sun:spriteRows?.length || meshLayers.some(layer=>layer.semanticMipmaps?.some(row=>row.objectTexels)) ?
           spriteLOD.light(world.liveSun,frame.liveSun,t) : undefined};
       if(layeredGlass){

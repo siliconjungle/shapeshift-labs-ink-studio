@@ -602,18 +602,26 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     return {sources,traces,projectHash,time,seed};
   }
 
-  async function previewFrame(targets, options, { profile = false, encodeArtifacts = true } = {}) {
+  async function previewFrame(targets, options, { profile = false, encodeArtifacts = true, modelingView } = {}) {
     const watches=named(targets,'patch previews');
     if (watches.length>64) throw new RangeError('A patch frame supports up to 64 previews');
     separateNames(watches.map(([name])=>name),'Patch previews');
     for (const [,target] of watches) {
-      const {output,node,port}=fields(target,['output','node','port'],'patch preview');
+      const {output,node,port,modeling}=fields(target,['output','node','port','modeling'],'patch preview');
       if ((output===undefined)===(node===undefined) || output!==undefined && (!id(output) || !Object.hasOwn(rootPlan.outputs,output)) ||
-          node!==undefined && (typeof node!=='string' || !node.split('/').every(id) || port!==undefined && !id(port)))
+          node!==undefined && (typeof node!=='string' || !node.split('/').every(id) || port!==undefined && !id(port)) ||
+          modeling!==undefined && (modeling!==true || node===undefined || port!==undefined))
         throw new TypeError('Patch preview needs a known output or node and port');
     }
-    const {frame,report}=await evaluateAsync(request(options),profile);
-    const results=watches.map(([name,{output,node,port}])=>{
+    const modeling=watches.some(([,target])=>target.modeling);
+    const prepared=request(options);
+    const {frame,report}=await evaluateAsync({...prepared,modeling},profile);
+    const results=watches.map(([name,{output,node,port,modeling}])=>{
+      if (modeling) {
+        const {value,artifacts}=require('./modeling-watch.js').review(frame.stage(node),
+          {name,node,kit,time:prepared.time,view:modelingView,encodeArtifacts});
+        return {name,value,links:[],modeling,artifacts:artifacts.map(item=>({...item,sha256:sha256(item.bytes)}))};
+      }
       const value=output!==undefined ? frame.outputs[output] : frame.preview(node,port);
       const artifact=encodeArtifacts && preview(value,{grayscale:true});
       const links=kit.KIT.world.inspectionLinks.references(value);
@@ -621,9 +629,10 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     });
     const assertions=prepareFrameChecks(frame);
     return {outputs:frame.outputs,values:Object.fromEntries(results.map(({name,value})=>[name,value])),
-      artifacts:results.flatMap(({artifact})=>artifact?[artifact]:[]),
+      artifacts:results.flatMap(({artifact,artifacts})=>artifacts??(artifact?[artifact]:[])),
       report:{...report,kind:'patch-frame',...assertions,...(frame.timings && {timingsMs:frame.timings}),
-        previews:Object.fromEntries(results.map(({name,value,artifact,links})=>[name,{value:describe(value),
+        previews:Object.fromEntries(results.map(({name,value,artifact,links,modeling,artifacts})=>[name,{value:modeling?value:describe(value),
+          ...(artifacts && {artifacts:artifacts.map(({file,sha256})=>({file,sha256}))}),
           ...(links.length&&{links}),
           ...(artifact && {file:artifact.file,sha256:artifact.sha256})}]))}};
   }

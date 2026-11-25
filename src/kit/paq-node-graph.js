@@ -157,7 +157,7 @@
       return schedule;
     }
 
-    function begin(input, { take, sequence, time = take?.start ?? 0, seed = 0, workers }) {
+    function begin(input, { take, sequence, time = take?.start ?? 0, seed = 0, workers, modeling = false }) {
       if (take !== undefined) {
         P.takeTime.requireFrame(take);
         if (time !== take.start) throw new RangeError('Graph seconds must match the take frame start');
@@ -181,9 +181,15 @@
             return Object.is(value, prior) || bindings[i][2].kind === 'track' && Array.isArray(value) &&
               Array.isArray(prior) && value.length === prior.length && value.every((n, k) => Object.is(n, prior[k]));
           });
+        const work = modeling && !reused ? [] : undefined;
+        const evidence=work && {};
         const context = reused ? undefined : { time, ...(take !== undefined && { take }),
-          ...(sequence !== undefined && { sequence }), seed: P.data.hash(name, seed), node: name };
-        return { config, inputs: reused ? undefined : Object.fromEntries(entries), context, comparable, reused, previous };
+          ...(sequence !== undefined && { sequence }), seed: P.data.hash(name, seed), node: name,
+          ...(work && {modeling, recordWork(receipt) {
+            if (work.length<256) work.push(P.modelingDiagnostics.receipt(receipt));
+            else evidence.workOmitted=(evidence.workOmitted??0)+1;
+          }, recordModeling(value) { evidence.modeling=value; }}) };
+        return { config, inputs: reused ? undefined : Object.fromEntries(entries), context, comparable, reused, previous, work,evidence };
       }
       function invoke(row, asynchronous = false) {
         const { config: { run, nested }, inputs, context } = row;
@@ -191,7 +197,7 @@
         return nested && workers ? run(inputs, context, workers) : run(inputs, context);
       }
       function complete(row, ...answers) {
-        const { config: { name, run, outputs }, comparable, reused, previous } = row;
+        const { config: { name, run, outputs }, comparable, reused, previous, work,evidence } = row;
         if (reused) pending.set(name, previous);
         else {
           const produced = answers.length ? answers[0] : invoke(row);
@@ -203,7 +209,9 @@
           for (const [key, socket] of Object.entries(outputs))
             if (!Object.hasOwn(produced, key) || !validator(socket.type)(produced[key]))
               throw new TypeError('Wrong output from graph node ' + name + '.' + key);
-          pending.set(name, { seed, time, take, sequence, values: comparable, outputs: produced, subgraph: run.inspect?.() });
+          pending.set(name, { seed, time, take, sequence, values: comparable, outputs: produced, work:work && Object.freeze(work),
+            modeling:evidence?.modeling,workOmitted:evidence?.workOmitted,
+            subgraph: run.inspect?.() });
         }
       }
       function finish() {
@@ -218,6 +226,21 @@
           if (!result || !Object.hasOwn(result.outputs, port))
             throw new RangeError('Unknown graph preview output ' + node + '.' + port);
           return result.outputs[port];
+        }, stage(node) {
+          const [name,...nested]=node.split('/'), result=snapshot.get(name);
+          if (!result) throw new RangeError('Unknown graph stage '+node);
+          if (nested.length) {
+            if (!result.subgraph) throw new RangeError('Unknown graph stage '+node);
+            const stage=result.subgraph.stage(nested.join('/'));
+            return status[name]==='cached' ? {...stage,status:'cached',work:[],workOmitted:0} : stage;
+          }
+          const {op,bindings}=configs.get(name);
+          const cached=status[name]==='cached';
+          return {op,status:status[name],outputs:result.outputs,work:cached?[]:(result.work??[]),
+            workOmitted:cached?0:result.workOmitted,modeling:result.modeling,
+            inputs:Object.fromEntries(bindings.map(([key,,link],i)=>[key,{value:result.values[i],
+              ...(link.kind==='node' && {node:link.id,port:link.port}),
+              ...(link.kind==='input' && {input:link.id})}]))};
         }, inspectGroup(name) { return snapshot.get(name)?.subgraph || null; } };
       }
 

@@ -109,21 +109,32 @@
 
   function evaluator(rows) {
     const known = new Map(Object.entries(rows)), visited = new Set(), cache = new Map();
-    function evaluate(id, through) {
-      if (through === undefined && cache.has(id)) return cache.get(id);
+    function evaluate(id, through, diagnostics = false) {
+      if (!diagnostics && through === undefined && cache.has(id)) return cache.get(id);
       if (visited.has(id)) throw new RangeError('Mesh modifier projection cycle at ' + [...visited, id].join(' → '));
       const row = known.get(id);
       if (!row) throw new RangeError('Unknown editable mesh ' + id);
       visited.add(id);
       try {
-        const plan = topology.evaluateModifiers(row.document, row.modifiers ?? [], { through,
+        const plan = topology.evaluateModifiers(row.document, row.modifiers ?? [], { through, diagnostics,
           target(id) {
             const target = known.has(id) && evaluate(id);
             if (target) requireComplete(target);
             return target?.document;
           } });
-        if (through === undefined) cache.set(id, plan);
-        return plan;
+        if (!diagnostics && through === undefined) cache.set(id, plan);
+        if (!diagnostics || !row.bakes?.length) return plan;
+        const stages = plan.report.stages.map((stage,index) => {
+          const {before,after} = plan.captures[index];
+          if (before===after || stage.status!=='evaluated') return stage;
+          const original = {...row,document:before,bindings:undefined,
+            bakes:row.bakes.map(({invalidated,...bake})=>bake)};
+          const {bakes} = transition(original,before,after);
+          const work = bakes.filter(item=>item.after?.status==='invalidated').map(({id,after})=>
+            ({kind:'rebake',status:'required',sourceIds:after.faces,counts:{bakes:1},bake:id}));
+          return work.length ? {...stage,work} : stage;
+        });
+        return K.procedural.data.freeze({...plan,report:{...plan.report,stages}});
       } finally {
         visited.delete(id);
       }

@@ -250,6 +250,19 @@
       outputs: { value: 'record' },
       run({before, after, kind}) { return {value: P.model.compare(before, after, {kind})}; }
     },
+    'model.modifiers': {
+      description: 'Evaluate a retained mesh modifier stack with its stable source lineage and stage report.',
+      inputs: {source:'record',modifiers:'array<record>',targets:{type:'record',default:{}}},
+      outputs: {value:'record',report:'record',lineage:'record'},
+      run({source,modifiers,targets},context) {
+        const plan=K.meshTopology.evaluateModifiers(source,modifiers,{diagnostics:context.modeling,
+          target:id=>Object.hasOwn(targets,id)?targets[id]:undefined});
+        const {stages}=plan.report;
+        if (context.modeling) context.recordModeling({stages,lineage:plan.diagnosticLineage});
+        const report=context.modeling ? {...plan.report,stages:stages.map(({diagnostics,elapsedMs,...stage})=>stage)} : plan.report;
+        return {value:plan.document,report,lineage:plan.lineage};
+      }
+    },
     ...P.raster.operations,
     ...P.drawing2d.operations,
     ...P.motionDeformation.operations,

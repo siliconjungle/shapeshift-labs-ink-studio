@@ -625,9 +625,9 @@
       }) });
     }
 
-    function inspectMeshModifiers(object, { through, part } = {}) {
+    function inspectMeshModifiers(object, { through, part, diagnostics = false } = {}) {
       meshTopology(object, part);
-      return A.meshTopologyScene.evaluator(snapshot().topologyMeshes)(object, through);
+      return A.meshTopologyScene.evaluator(snapshot().topologyMeshes)(object, through, diagnostics);
     }
 
     function writeMeshModifiers(object, row, label) {

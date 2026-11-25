@@ -80,7 +80,7 @@
     },
     'sdf.mesh': {
       inputs: { source: 'field', options }, time: true,
-      ...value('mesh', ({ source, options }, ctx) => A.sdfMesh(source, clock(options, ctx)))
+      ...value('mesh', ({ source, options }, ctx) => A.sdfMesh(source, {...clock(options, ctx),onModelingWork:ctx.recordWork}))
     },
     'sdf.voxels': {
       inputs:{source:'field',options}, time:true, ...value('record',({source,options},ctx)=>{

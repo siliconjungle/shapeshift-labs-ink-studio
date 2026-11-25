@@ -9,11 +9,13 @@
     return { sd: evaluate, bounds, resolution };
   }
 
-  function polygonize({ sd, bounds, resolution }, { maxCells = 30000, color = [0.7, 0.7, 0.7] }) {
+  function polygonize({ sd, bounds, resolution }, { maxCells = 30000, color = [0.7, 0.7, 0.7], onModelingWork }) {
     const geometry = K.procedural.geometry;
     const surface = geometry.implicitSurface(p => sd(...p), bounds, { resolution, maxCells });
     if (!surface.positions.length) throw new RangeError('No zero surface found within the supplied bounds');
-    return geometry.toKitMesh(surface, () => color);
+    const mesh=geometry.toKitMesh(surface, () => color);
+    onModelingWork?.({kind:'remesh',counts:{cells:surface.sampling.cells,vertices:mesh.pos.length/3,triangles:mesh.tri.length/3}});
+    return mesh;
   }
 
   function sculpt(S, mesh, sd, material, options) {

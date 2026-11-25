@@ -144,11 +144,17 @@ test('export-glb writes a structured result for retained topology and refuses ch
 test('a UV-only revision updates geometry masks on the moved chart and keeps other charts byte-identical', t => {
   const { bake } = target(t);
   const base = bake('baseline', topology(), { textureSize: 256, geometryMasks: true });
-  const moved = bake('moved', topology({ movedOnly: true }), { rebakeFrom: base.materialBake });
+  const work=[];
+  const moved = bake('moved', topology({ movedOnly: true }), { rebakeFrom: base.materialBake,
+    onModelingWork:row=>work.push(row) });
   const a = readMesh(base), b = readMesh(moved), aDir = path.dirname(base.materialBake), bDir = path.dirname(moved.materialBake);
   assert.equal(a.geometry, b.geometry);
   const chart = faceRow(b, 'relocated');
   assert.deepEqual(b.chartReport.updated, [chart.id]);
+  assert.equal(work.length,1);
+  assert.equal(work[0].kind,'rebake');
+  assert(work[0].sourceIds.includes('relocated'));
+  assert.equal(work[0].counts.sampledTexels,b.chartReport.sampledTexels);
   assert.equal(b.geometryMasks.scope, 'updated-charts');
   assert.equal(b.geometryMasks.texels, chart.sampledTexels);
   const exposure = PNG.raster(path.join(bDir, b.masks.exposure.file));

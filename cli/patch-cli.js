@@ -17,7 +17,7 @@ const usage = [
   'ink-studio patch plan <project.json> [--json | --dot]',
   'ink-studio patch nodes [--json]',
   'ink-studio patch describe <operation> [--json]',
-  'ink-studio patch run <project.json> [--video file|-] [--audio file.wav|video] [--watch name=node:port,...]',
+  'ink-studio patch run <project.json> [--video file|-] [--audio file.wav|video] [--watch name=node:port|name=node:@model,...]',
   '  [--frames 120] [--fps 12] [--size 320x180] [--controls controls.json] [--out folder] [--keep] [--progress]',
   'ink-studio patch show <cues.json> [--rehearse] [--report rehearsal.json] [--ffmpeg path] [--gpu-module path]',
   '  [--record-interventions journal.ndjson [--intervention-input <recording.json|->]]',
@@ -50,9 +50,14 @@ function parseWatches(text, plan) {
     const [name,source,extra]=pair.split('=');
     if (!watchName.test(name)||['__proto__','prototype','constructor'].includes(name)||used.has(name.toLowerCase())||extra!==undefined)
       throw new TypeError('Use --watch name=node:port,name=\$output with unique names');
-    const target=edit.endpoint(source);
+    const modeling=source?.endsWith(':@model');
+    const target=edit.endpoint(modeling?source.slice(0,-7):source);
     if (target.input) throw new TypeError('Watch a node port or a named output');
     used.add(name.toLowerCase());
+    if (modeling) {
+      if (!target.node || source.slice(0,-7).includes(':')) throw new TypeError('Use node:@model for modeling watches');
+      return [name,{node:target.node,modeling:true}];
+    }
     return [name,target];
   }));
 }
@@ -85,6 +90,7 @@ async function run(file,opt,settings) {
   const operations={...settings.operations,...patchNodes(settings.kit,media,gpu)};
   const project=readGraphProject(file,{...settings,operations});
   const plan=project.plan(), watches=parseWatches(opt.watch,plan);
+  const modelingView=opt.size===undefined?undefined:{w:dimensions.width,h:dimensions.height};
   const sourceFiles=project.sourceFiles().concat([opt.video,opt.audio,opt.controls].filter(value=>value&&value!=='-'&&value!=='video'));
   const fsWriter=opt.out && graphOutputs(sourceFiles.filter(name=>fs.existsSync(name)));
   const take=readControls(opt.controls,project);
@@ -106,7 +112,7 @@ async function run(file,opt,settings) {
       media.frame=frame;
       const {inputs,error}=take();
       if (index===0 && error) throw new Error('Invalid initial patch controls: '+error);
-      const result=await project.previewFrame(watches,{inputs,time:index/fps},{profile:true});
+      const result=await project.previewFrame(watches,{inputs,time:index/fps},{profile:true,modelingView});
       const frameFolder=opt.keep && 'frames/'+String(index).padStart(6,'0');
       report={...result.report,frame:index,fps,...(frameFolder && {frameFolder}),...(error && {controlsError:error})};
       passed&&=report.passed;
