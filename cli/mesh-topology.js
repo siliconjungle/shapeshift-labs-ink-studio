@@ -187,6 +187,8 @@ function command([action, file, input, ...rest], opt, toolkit, { build, openEdit
     return require('./construction-plane.js').command(file,input === undefined ? rest : [input,...rest],opt,toolkit,openEditor,projectTexelsPerUnit);
   if (action === 'move') return moveVertex(file,input,rest,opt,meshTopology,openEditor);
   if (action === 'overlaps') return overlaps(file,input,rest,opt,meshTopology);
+  if (action === 'isolate-prefab')
+    return require('./prefab-edit-isolation.js').command(file,input,rest,opt,toolkit,openEditor);
   if (opt.preview !== undefined) throw new TypeError('Use --preview with mesh-topology bevel or shading');
   if (opt.subdivision !== undefined) throw new TypeError('Use --subdivision with mesh-topology shading');
   const { out, report, projection, lineage, 'match-ids': matchIds } = opt;

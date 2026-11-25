@@ -382,7 +382,7 @@
   }
   const parameterRoots = ['solids', 'roles', 'palette', 'motion', 'light', 'effects', 'finish', 'tap'];
   function resolveParameters(source, env) {
-    let { spec: expanded } = K.authoring.scenePrefabs.expand(source, env);
+    let { spec: expanded, meshPlacements } = K.authoring.scenePrefabs.expand(source, env);
     if (expanded?.dataMarks !== undefined && expanded.solids === undefined) expanded = { ...expanded, solids: [] };
     let dataInputs;
     if (expanded?.dataInputs !== undefined) {
@@ -393,7 +393,7 @@
         throw error;
       }
     }
-    if (expanded?.parameterBindings === undefined) return { spec: expanded, dataInputs };
+    if (expanded?.parameterBindings === undefined) return { spec: expanded, dataInputs, meshPlacements };
     try {
       const { parameterBindings, timeline, dataInputs: authoredData, ...base } = expanded;
       const program = K.parameters.prepare(parameterBindings);
@@ -402,7 +402,7 @@
       const inputs = { ...env?.parameterInputs, ...(dataInputs && { dataInputs }) };
       const { document, values } = program.apply(base, inputs);
       const spec = timeline === undefined ? document : { ...document, timeline };
-      return { spec, program, values, inputs, dataInputs };
+      return { spec, program, values, inputs, dataInputs, meshPlacements };
     } catch (error) {
       error.problems = [{ level: 'error', path: 'parameterBindings', problem: error.message, hint: '' }];
       throw error;
@@ -416,9 +416,9 @@
     } catch (error) {
       return error.problems ?? [{ level: 'error', path: 'prefabs', problem: error.message, hint: '' }];
     }
-    return checkResolved(resolved.spec, env, {}, resolved.dataInputs);
+    return checkResolved(resolved.spec, env, {}, resolved.dataInputs, resolved.meshPlacements);
   };
-  function checkResolved(spec, env, presentation, dataInputs) {
+  function checkResolved(spec, env, presentation, dataInputs, meshPlacements) {
     const out = [],
       bad = (path, problem, hint) => out.push({ level: 'error', path, problem, hint: hint || '' }),
       warn = (path, problem, hint) => out.push({ level: 'warning', path, problem, hint: hint || '' });
@@ -477,7 +477,7 @@
     }
     if (spec.topologyMeshes !== undefined && (!hasTilesets || tilesets)) {
       try {
-        presentation.topologyMeshes = K.authoring.meshTopologyScene.prepare(spec.topologyMeshes, tilesets);
+        presentation.topologyMeshes = K.authoring.meshTopologyScene.prepare(spec.topologyMeshes, tilesets, meshPlacements);
         const names = new Set([...DIO.solids(spec).map(solid => solid?.id), ...Object.keys(spec.assetParts ?? {})]);
         for (const [object] of presentation.topologyMeshes) {
           if (names.has(object)) throw new RangeError('Editable mesh conflicts with scene object ' + object);
@@ -1550,7 +1550,7 @@
     let problems;
     try {
       resolved = resolveParameters(source, env);
-      problems = checkResolved(resolved.spec, env, presentation, resolved.dataInputs);
+      problems = checkResolved(resolved.spec, env, presentation, resolved.dataInputs, resolved.meshPlacements);
     } catch (error) {
       if (!error.problems) throw error;
       problems = error.problems;

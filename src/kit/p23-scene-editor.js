@@ -64,9 +64,10 @@
       return node;
     });
     const linked = A.scenePrefabs.expand(scene, env).instances;
-    for (const [id, { instance, revision, solids }] of linked) {
-      const node = Object.assign(parent('prefab', id), { instance, revision, solids });
-      for (const name of solids) byEntity.set(name, node.key);
+    for (const [id, { instance, revision, solids, meshes }] of linked) {
+      const objects = Array.from(meshes.values(), entry => entry.object);
+      const node = Object.assign(parent('prefab', id), { instance, revision, solids, ...(objects.length && { meshes: objects }) });
+      for (const name of [...solids, ...objects]) byEntity.set(name, node.key);
       roots.push(node);
     }
     for (const [id, mesh] of Object.entries(scene.topologyMeshes ?? {})) {
@@ -339,6 +340,34 @@
       };
       if (document.pending()) document.batchSession(write);
       else document.transact('Edit prefab instance ' + id, write);
+    }
+
+    function preparePrefabIsolation(request) {
+      const before = snapshot(), plan = prefabEditIsolation.plan(before, buildEnv, request, requireMeshShapeOwner);
+      if (!plan.report.changed) return plan;
+      const problems = DIO.check(plan.draft, buildEnv).filter(row => row.level === 'error');
+      if (!problems.length) return plan;
+      return { draft: before, report: freeze({ ...plan.report, problems, canCommit: false, changed: false }) };
+    }
+
+    function planPrefabIsolation(request) {
+      return preparePrefabIsolation(request).report;
+    }
+
+    function previewPrefabIsolation(request, { time = 0 } = {}) {
+      if (!Number.isFinite(time) || time < 0) throw new RangeError('Prefab preview time must be nonnegative');
+      const { draft, report } = preparePrefabIsolation(request);
+      const world = DIO.build(draft, { ...buildEnv, parameterInputs: { ...buildEnv.parameterInputs, time } });
+      const renderOptions = report.hideSurroundings ?
+        { pixelSelection: { objects: report.objects, isolated: true }, reflections: false, water: false } : {};
+      return { world, renderOptions, report };
+    }
+
+    function editIsolatedPrefab(request) {
+      const { instance, report } = preparePrefabIsolation(request);
+      if (!report.canCommit) throw Object.assign(new RangeError('Isolated prefab edits need review'), { report });
+      if (report.changed) setPrefabInstance(report.instance, instance);
+      return report;
     }
 
     function storeTileset(before, next, id, label) {
@@ -1041,6 +1070,7 @@
       setModifiers,
       updateModifier,
       setPrefabInstance,
+      planPrefabIsolation, previewPrefabIsolation, editIsolatedPrefab,
       planPrefabRefresh, refreshPrefabs,
       registerTileset,
       extractTileset,

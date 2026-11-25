@@ -18,10 +18,10 @@
     return map;
   }
 
-  function elements(document) {
+  function elements(document, frame) {
     if (!document) return Object.fromEntries(['vertices', ...elementKinds].map(kind => [kind, new Map()]));
     const vertices = index(document.vertices, 'Vertices');
-    const point = id => vertices.get(id).position;
+    const point = id => frame ? K.sceneGraph.point(frame, vertices.get(id).position) : vertices.get(id).position;
     const corners = new Map(), faces = new Map(), edges = new Map();
     for (const face of document.faces) {
       for (const corner of face.corners)
@@ -55,7 +55,7 @@
     return value;
   }
 
-  function prepareRow(object, row, evaluation, tilesets) {
+  function prepareRow(object, row, evaluation, tilesets, frame) {
     if (!TargetSelectors.name(object) || !fields(row, ['document', 'part', 'label', 'materials', 'bindings', 'bakes', 'modifiers', 'attachments', 'shapeKeys']) ||
         (row.part !== undefined && !TargetSelectors.name(row.part)) || (row.label !== undefined && !name(row.label)))
       throw new TypeError('An editable scene mesh needs an object ID, document, and optional named part');
@@ -87,11 +87,11 @@
         active.set(bake.material, { ...base, ...bake.maps, sampling: bake.maps.mipmaps ? undefined : sampling });
       }
     }
-    const mesh = topology.toSceneMesh(document, { objectId: object, partId: row.part, meshId: 'topology/' + object,
+    const mesh = topology.toSceneMesh(document, { objectId: object, partId: row.part, meshId: 'topology/' + object, frame,
       materials: [...active.values()].map(input => material(input, tilesets)) });
     const moved = document !== cage && bindings.size ?
       remapBindings([...bindings.values()], topology.correspond(cage, document, { lineage: evaluation.lineage })) : [...bindings.values()];
-    const visible = document !== cage && bindings.size ? elements(document) : records;
+    const visible = bindings.size && (frame || document !== cage) ? elements(document, frame) : records;
     const resolvedBindings = Object.fromEntries(moved.filter(binding => !binding.review)
       .map(binding => [binding.id, { ...binding, geometry: visible[binding.domain].get(binding.element) }]));
     const skin = document.skin && K.meshTopology.skin.bind(mesh);
@@ -102,14 +102,14 @@
     const attachmentBinding=manifest && manifest.revision===topology.revision(document) && topology.attachments.bind(mesh,manifest);
     const attachmentStatus=manifest && (attachmentBinding ? 'ready' : 'needs-transfer');
     const shapeKeyStatus=row.shapeKeys!==undefined && K.meshTopology.shapeKeys.status(document,row.shapeKeys);
-    const shapeKeys=shapeKeyStatus==='ready' && K.meshTopology.shapeKeys.bind(mesh,row.shapeKeys);
+    const shapeKeys=shapeKeyStatus==='ready' && K.meshTopology.shapeKeys.bind(mesh,row.shapeKeys,frame);
     return { mesh, document, bindings: moved, resolvedBindings, bakes: [...bakes.values()], ...(skin && {skin}),
       ...(shapeKeyStatus && {shapeKeyStatus}), ...(shapeKeys && {shapeKeys}),
       ...(attachmentStatus && {attachmentStatus}), ...(attachmentBinding && {attachments:attachmentBinding}),
       ...(evaluation && { cage, modifierReport: evaluation.report }) };
   }
 
-  function evaluator(rows) {
+  function evaluator(rows, placements) {
     const known = new Map(Object.entries(rows)), visited = new Set(), cache = new Map();
     function evaluate(id, through, diagnostics = false) {
       if (!diagnostics && through === undefined && cache.has(id)) return cache.get(id);
@@ -119,10 +119,16 @@
       visited.add(id);
       try {
         const plan = topology.evaluateModifiers(row.document, row.modifiers ?? [], { through, diagnostics,
-          target(id) {
-            const target = known.has(id) && evaluate(id);
+          target(targetId) {
+            const target = known.has(targetId) && evaluate(targetId);
             if (target) requireComplete(target);
-            return target?.document;
+            const source = target?.document, from = placements?.get(targetId), to = placements?.get(id);
+            if (!source || from === to) return source;
+            const world = K.sceneGraph.transform(from), local = K.sceneGraph.inverse(K.sceneGraph.transform(to));
+            const frame = K.sceneGraph.compose(local, world);
+            return topology.edit(source, { vertices: source.vertices.map(vertex => ({
+              ...vertex, position: K.sceneGraph.point(frame, vertex.position)
+            })) });
           } });
         if (!diagnostics && through === undefined) cache.set(id, plan);
         if (!diagnostics || !row.bakes?.length) return plan;
@@ -152,12 +158,12 @@
     return plan;
   }
 
-  function prepare(rows, tilesets = A.tilesets.prepare()) {
+  function prepare(rows, tilesets = A.tilesets.prepare(), placements) {
     if (rows === undefined) return [];
     if (!record(rows) || Object.keys(rows).length > 32) throw new TypeError('Scene topologyMeshes needs a map of up to 32 editable meshes');
-    const evaluate = evaluator(rows);
+    const evaluate = evaluator(rows, placements);
     return Object.entries(rows).map(([object, row]) => [object,
-      prepareRow(object, row, row?.modifiers === undefined ? undefined : requireComplete(evaluate(object)), tilesets)]);
+      prepareRow(object, row, row?.modifiers === undefined ? undefined : requireComplete(evaluate(object)), tilesets, placements?.get(object))]);
   }
 
   function mount(world, prepared) {

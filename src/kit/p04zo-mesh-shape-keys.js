@@ -173,13 +173,16 @@
     return {document,shapeKeys,patch,report};
   }
 
-  function bind(mesh,asset) {
+  function bind(mesh,asset,frame) {
     const doc=topology.sourceDocument(mesh);
     need(doc,'bind shape keys to retained mesh topology');
     const layers=compile(doc,asset), source=index(doc), skin=doc.skin&&topology.skin.bind(mesh);
     const drivers=Object.freeze([...new Set(layers.flatMap(row=>row.joints.map(joint=>joint.part)))]);
     const ids=Array.from({length:mesh.vertices},(_,i)=>topology.sourceVertex(mesh,i));
-    const rest=Float32Array.from(ids.flatMap(id=>source.get(id).position)), shaped=new Float32Array(rest.length);
+    const rest=Float32Array.from(ids.flatMap(id=>{
+      const point=source.get(id).position;
+      return frame ? K.sceneGraph.point(frame,point) : point;
+    })), shaped=new Float32Array(rest.length);
     let state=[];
     function sample(weights) {
       const sums=new Map();
@@ -196,7 +199,9 @@
       shaped.set(rest);
       for (const [i,id] of ids.entries()) {
         const edit=sums.get(id);
-        if (edit) for (let k=0;k<3;k++) shaped[i*3+k]+=edit.delta[k]/Math.max(1,edit.weight);
+        if (!edit) continue;
+        const delta=frame ? K.M.app(frame.matrix,edit.delta) : edit.delta;
+        for (let k=0;k<3;k++) shaped[i*3+k]+=delta[k]/Math.max(1,edit.weight);
       }
       state=layers.map(({id,pose,points},i)=>({id,pose,weight:weights[i],vertices:points.size}));
       return shaped;
