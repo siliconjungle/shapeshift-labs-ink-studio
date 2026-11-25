@@ -59,6 +59,8 @@ const dimension = { constraints: { integer: true, min: 1, max: 8192 } };
 const ports = {
   'array.broadcast': { mode: oneOf('zip', 'cycle', 'hold', 'cartesian', 'cartesianReverse'), limit: limit(1, 100000, true) },
   'array.sort': { direction: oneOf('asc', 'desc') },
+  'model.prefab': {revision: {constraints: {integer: true, min: 1}}, kind: oneOf('visual', 'world')},
+  'model.compare': {kind: oneOf('visual', 'world')},
   'raster.canvas': { width: dimension, height: dimension,
     color: { unit: 'byte levels', constraints: { lengths: [3, 4], min: 0, max: 255 } } },
   'raster.select': { index: { unit: 'zero-based index', constraints: { integer: true, min: 0 } } },
@@ -379,6 +381,7 @@ const simulationClock = { dt: property('number', { ...seconds, ...limit(.001, .1
 
 const specialization = {
   'array.map': { field: 'group', description: 'The group declares item, optional numeric index and value. Extra group inputs become ports.' },
+  'array.mapById': {field: 'group', description: 'The group takes a record item and optional numeric index. Each result carries the source ID and optional split ancestry.'},
   'array.filter': { field: 'group', description: 'The group returns a boolean value. Extra group inputs become ports.' },
   'array.reduce': { field: 'group', description: 'The group declares item and accumulator, and returns a compatible value. Initial uses the accumulator type.' },
   'array.sort': { field: 'group', optional: true, description: 'Optional group returns a numeric or string key. With no group the items are their own keys.' },

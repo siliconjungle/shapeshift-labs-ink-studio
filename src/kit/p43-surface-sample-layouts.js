@@ -11,6 +11,45 @@
     return P.data.freeze(out);
   }
 
+  function grid({bounds, id, origin, step, radius = 0, jitter = 0, seed = 0, accept} = {}) {
+    const size = bounds?.min?.length;
+    checkGrid([2, 3].includes(size), 'A scatter grid needs 2D or 3D bounds');
+    const axis = vector => Array.isArray(vector) && vector.length === size && Array.from(vector).every(Number.isFinite);
+    const spacing = typeof step === 'number' ? Array(size).fill(step) : step;
+    checkGrid(axis(bounds.min) && axis(bounds.max) &&
+      bounds.min.every((n, i) => n < bounds.max[i]) && axis(origin) && axis(spacing) &&
+      spacing.every(n => n > 0) && K.world.data.id(id) && id.length <= 55 && Number.isSafeInteger(seed) &&
+      Number.isFinite(jitter) && jitter >= 0 && jitter <= 1 && Number.isFinite(radius) && radius >= 0 &&
+      Math.min(...spacing) * (1 - jitter) >= radius && (accept === undefined || typeof accept === 'function'),
+    'A scatter grid needs an ID, finite origin and positive step with enough room for its radius and jitter');
+    const first = origin.map((n, i) => Math.ceil((bounds.min[i] - n) / spacing[i] - jitter / 2));
+    const last = origin.map((n, i) => Math.floor((bounds.max[i] - n) / spacing[i] + jitter / 2));
+    const counts = first.map((n, i) => Math.max(0, last[i] - n + 1));
+    const count = counts.reduce((a, b) => a * b, 1);
+    checkGrid([...first, ...last].every(n => limit(n, -1e9, 1e9)) && count <= 100000,
+      'Scatter grid exceeds its cell budget or coordinate range');
+    const samples = [], report = {mode: 'grid', candidates: count, outside: 0, masked: 0};
+    for (let index = 0; index < count; index++) {
+      let cell = index;
+      const coordinates = counts.map((n, axis) => {
+        const component = first[axis] + cell % n;
+        cell = Math.floor(cell / n);
+        return component;
+      });
+      const key = id + '.' + coordinates.join('.');
+      const dice = K.grow.dice(P.data.hash(key, seed));
+      const point = coordinates.map((n, i) => origin[i] + (n + (dice() - .5) * jitter) * spacing[i]);
+      if (point.some((n, i) => n < bounds.min[i] || n > bounds.max[i])) report.outside++;
+      else if (accept && !accept(point)) report.masked++;
+      else samples.push({id: key, point, cell: coordinates});
+    }
+    return P.data.freeze({samples, report: {...report, accepted: samples.length}});
+  }
+
+  function checkGrid(condition, message) {
+    if (!condition) throw new RangeError(message);
+  }
+
   function triangles(input, { count, seed = 0, accept, maxTriangles = 200000 } = {}) {
     const positions = input?.positions ?? input;
     if (
@@ -97,5 +136,5 @@
     return P.data.freeze({ indices: selection, work });
   }
 
-  Object.assign(P.sampling, { patch, triangles, geodesicSpacing });
+  Object.assign(P.sampling, { patch, grid, triangles, geodesicSpacing });
 })(KIT);

@@ -185,6 +185,8 @@ const assetFixtures = {
 const dynamic = {
   'quantity.convert': {inputs:{value:12.5,from:{unit:'kPa'},to:{unit:'Pa'}}},
   'array.map': { inputs: { items: [1, 2, 3] }, callback: group({ item: 'number' }, 'multiply', { a: param('item'), b: 2 }) },
+  'array.mapById': { inputs: { items: [{id: 'panel', width: 2}, {id: 'trim', width: .15}] },
+    callback: group({item: 'record'}, 'data.get', {record: param('item'), key: 'width'}) },
   'array.filter': { inputs: { items: [1, 2, 3] }, callback: group({ item: 'number' }, 'lessThan', { a: 1, b: param('item') }) },
   'array.reduce': { inputs: { items: [1, 2, 3], initial: 0 },
     callback: group({ accumulator: 'number', item: 'number' }, 'add', { a: param('accumulator'), b: param('item') }) },
@@ -774,6 +776,14 @@ const specifications = {
     lineage:[{id:'child',from:[{id:'parent',weight:1}]}] },
     nodes:{attrs:{op:'attributeTable',inputs:{domain:'splat',entities:[{id:'parent',point:[0,0,0]}],
       channels:{conductance:{type:'number',values:[.6]}}}}} },
+  'proc.scatter': {inputs: {options: {grid: {id: 'fastener', origin: [.2, .2], step: .3, jitter: .15}}}, output: 'samples'},
+  'model.prefab': {inputs: {model: 'signal', revision: 1,
+    sections: {solids: [{id: 'panel', value: {kind: 'box', at: [0, 0, 0], half: [.6, .4, .1], mat: 'metal'}}]}}},
+  'model.compare': {inputs: {
+    before: {revision: 1, solids: {trim: {}}, generation: {version: 1, model: 'signal', sections: {solids: {trim: null}}}},
+    after: {revision: 2, solids: {left: {}, right: {}}, generation: {version: 1, model: 'signal',
+      sections: {solids: {left: 'trim', right: 'trim'}}}}
+  }},
   tiles: { inputs: { settings: { bounds: { min: [0, 0], max: [2, 2] } } } }
 };
 

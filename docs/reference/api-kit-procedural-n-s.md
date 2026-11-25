@@ -1219,6 +1219,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sampling.centeredGridRange` | function | `(domain, count, region = domain)` | [source](../../src/kit/p45-centered-grid-range.js) |
 | `KIT.procedural.sampling.eliminate` | function | `(input, { count, radius, weights, power = 8, progressive = false, maxChecks = 3000000 } = {})` | [source](../../src/kit/p42-sample-layouts.js) |
 | `KIT.procedural.sampling.geodesicSpacing` | function | `(points, links, { distance, candidates, maxTraversals = 3000000 } = {})` | [source](../../src/kit/p43-surface-sample-layouts.js) |
+| `KIT.procedural.sampling.grid` | function | `({bounds, id, origin, step, radius = 0, jitter = 0, seed = 0, accept} = {})` | [source](../../src/kit/p43-surface-sample-layouts.js) |
 | `KIT.procedural.sampling.lloyd` | function | `(input, { bounds, spacing = 0.1, iterations = 4, amount = 1, mask, density, fixed = [], maxCells = 120000, maxChecks = 12000000 } = {})` | [source](../../src/kit/p42-sample-layouts.js) |
 | `KIT.procedural.sampling.patch` | function | `(spec)` | [source](../../src/kit/p43-surface-sample-layouts.js) |
 | `KIT.procedural.sampling.phyllotaxis` | namespace |  | [guide](../surface-phyllotaxis.md), [guide](../surface-phyllotaxis.md#grow-from-one-pole), [guide](../surface-phyllotaxis.md#use-a-curved-surface) |

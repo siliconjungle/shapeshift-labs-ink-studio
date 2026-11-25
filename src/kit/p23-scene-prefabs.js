@@ -51,11 +51,12 @@
     const available = new Map();
     for (const [key, def] of [...Object.entries(external ?? {}), ...Object.entries(prefabs)]) {
       check(id(key) && record(def) && !available.has(key) && Number.isSafeInteger(def.revision) && def.revision >= 1 &&
-        Object.keys(def).every(field => field === 'revision' || tables.includes(field)) && record(def.solids),
+        Object.keys(def).every(field => field === 'revision' || field === 'generation' || tables.includes(field)) && record(def.solids),
       'Invalid or duplicate visual prefab ' + key);
       for (const field of tables)
         check(def[field] === undefined || record(def[field]) && Object.entries(def[field]).every(([key, row]) => id(key) && record(row)),
           'Expected named records in prefab ' + key + '/' + field);
+      K.procedural.model.validate(def, 'visual');
       available.set(key, def);
     }
     const spec = { ...rest, solids: [...(rest.solids ?? [])], parts: { ...rest.parts }, groups: { ...rest.groups },
@@ -80,7 +81,12 @@
         // Refuse to recreate or silently discard overridden members.
         for (const edit of edits) {
           const [table, member] = selector(edit.path);
-          check(own(baseline[table], member), 'Override refers to missing ' + table + '/' + member);
+          if (!own(baseline[table], member)) {
+            const descendants = Object.entries(definition.generation?.sections[table] ?? {})
+              .filter(([, parent]) => parent === member).map(([id]) => id).sort();
+            check(false, 'Override refers to missing ' + table + '/' + member +
+              (descendants.length ? '. Split descendants are ' + descendants.join(', ') : ''));
+          }
         }
         const resolved = W.apply(baseline, edits, { validate: null }).world;
         const name = local => key + '.' + local;
@@ -138,5 +144,24 @@
     return { spec, instances: links };
   }
 
-  A.scenePrefabs = Object.freeze({ expand });
+  function review(source, before, after) {
+    const {equal, own, selector} = K.world.data;
+    return Object.entries(source.instances ?? {}).flatMap(([id, instance]) => {
+      const {prefab} = instance;
+      const from = source.prefabs?.[prefab] ?? before?.[prefab], to = source.prefabs?.[prefab] ?? after?.[prefab];
+      if (!from || !to || !(from.generation || to.generation) || equal(from, to)) return [];
+      const generation = K.procedural.model.compare(from, to);
+      const overrides = (instance.overrides ?? []).map(edit => {
+        const path = selector(edit.path), [table, member] = path;
+        const entry = generation.sections[table]?.[member];
+        const status = entry?.status ?? (own(to[table], member) ? 'retained' : 'removed');
+        return {path: [...path], status: status === 'retained' ? 'preserved' : status,
+          ...(entry?.descendants && {descendants: entry.descendants})};
+      });
+      return [{instance: id, prefab, generation, overrides,
+        ok: generation.ok && overrides.every(row => row.status === 'preserved')}];
+    });
+  }
+
+  A.scenePrefabs = Object.freeze({ expand, review });
 })(KIT);

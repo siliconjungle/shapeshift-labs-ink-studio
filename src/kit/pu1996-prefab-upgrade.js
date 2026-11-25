@@ -34,6 +34,11 @@
       issue('revision',{reason:'The placed revision definition is unavailable',required:from});
       return finish();
     }
+    if(previous.generation||targetDefinition.generation){
+      report.generation=K.procedural.model.compare(previous,targetDefinition,{kind:'world'});
+      for(const conflict of report.generation.conflicts)issue('generation',conflict);
+      if(!report.generation.ok)return finish();
+    }
     if(checkpoint)check(checkpoint.format===R.checkpointFormat&&checkpoint.version===1&&equal(checkpoint.world,world),
       'The saved checkpoint belongs to a different world');
     const prefix=instance+'.', local=name=>name===instance?'@root':name.slice(prefix.length);
@@ -218,6 +223,8 @@
       const {mapped,rule}=mapEditPath(path);
       if(rule&&rule[1]===null){report.overrides.push({from:pointer(sourcePath),status:'discarded'});continue;}
       const reportRow={from:pointer(sourcePath),...(mapped&&{to:pointer([mapped[0],local(mapped[1]),...mapped.slice(2)])})};
+      const identity=report.generation?.sections[section]?.[local(name)];
+      if(!mapped&&identity?.status==='split')reportRow.descendants=identity.descendants;
       try{
         if(edit.op==='remove'&&(!mapped||read(draft,mapped)===undefined)){
           report.overrides.push({...reportRow,status:'already-removed'});continue;

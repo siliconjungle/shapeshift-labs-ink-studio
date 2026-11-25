@@ -562,16 +562,18 @@ must stay immutable while cached.
 
 ### Array operations
 
-`array.map`, `array.filter`, `array.reduce`, and keyed `array.sort` take
+`array.map`, `array.mapById`, `array.filter`, `array.reduce`, and keyed `array.sort` take
 `items` and name a reusable callback with the node's `group` field. The group
 declares an `item` input and a `value` output. It can also declare a numeric
 `index` for the zero-based index in the input array. Further group inputs
 become ports on the array node. Each item gets a deterministic seed based
-on its index and the node seed.
+on its index and the node seed. `array.mapById` seeds each callback from
+its authored ID and keeps that ID with the result.
 
 | Operation | Group output and result |
 | --- | --- |
 | `array.map` | Replace each item with the group's `value`. |
+| `array.mapById` | Take record items with unique string IDs, and return `{id, value}` rows in input order. An optional `splitFrom` on the source carries into the row. The callback still receives the current index when declared. |
 | `array.filter` | Keep items whose group returns `true`, in input order. |
 | `array.reduce` | Pass `initial` to the group's `accumulator` input, then feed each returned `value` into the next call in input order. An empty array returns `initial`. |
 | `array.sort` | Use finite numbers or strings as keys, in `asc` or `desc` order. Equal keys preserve input order in both directions. Omit `group` to sort an array of numbers or strings directly. |
@@ -1698,7 +1700,7 @@ the graph clock in seconds. Set `options.time` to hold a specific sample.
 | `proc.repeat` | Repeat a raster at an explicit output size with pixel `offset` and two-axis `scale`. Channel counts and numeric values are retained. |
 | `proc.tiles` | Lay out weighted `definitions` with north, east, south and west sockets. `mode: "solve"` accepts `pins`, `ports`, `boundary` and `wrap`. `mode: "wang"` uses `labels` and a world-cell `origin` for independently generated chunks. Returns a layout with a status and, on success, row-major IDs. |
 | `proc.tileImage` | Paint a successful `layout` with an `images` record keyed by tile ID. Each tile uses the same pixel dimensions. Masked cells stay transparent. |
-| `proc.scatter` | Scatter points in 2D or 3D `bounds` at a minimum `radius`. Use a scalar field or raster `mask` and an exclusive `threshold`. A raster spans XY for planar scatter or XZ for spatial scatter. The default mask channel is alpha for RGBA and channel zero otherwise. Outputs include points, stable sample records and a work report. |
+| `proc.scatter` | Scatter points in 2D or 3D `bounds` at a minimum `radius`. Use a scalar field or raster `mask` and an exclusive `threshold`. A raster spans XY for planar scatter or XZ for spatial scatter. The default mask channel is alpha for RGBA and channel zero otherwise. Outputs include points, sample records and a work report. Set `grid` for cell IDs that persist across changes to the bounds or mask. |
 | `proc.path` | Make a typed path from planar or spatial `points`. Choose `mode: "linear"` or `"spline"`, interpolation `steps`, optional `closed`, and an optional count of equal-distance `samples`. Raw `points` and arc `length` have their own ports. |
 | `proc.reaction` | Sample Ink’s Gray–Scott grid at an integer `steps` input. Set `width`, `height`, `feed`, `kill`, `wrap`, a same-size `mask`, or authored row-major `spots`. Returns V as `value`, U as `u` and update counts as `report`. Use step easing when keying the integer step count. |
 | `proc.rain` | Rasterize `rain` or `snow` with configurable count, speed, wind, mark length, opacity and an optional raster mask. The `particles` port returns positions, tails and opacity in pixel space. |

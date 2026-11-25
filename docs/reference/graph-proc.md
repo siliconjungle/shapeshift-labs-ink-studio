@@ -392,7 +392,7 @@ Samples the graph clock.
 | Output | `samples` | `array<record>` | — | {"items":"record"} |
 | Output | `report` | `record` | — | {"layout":"Plain named object"} |
 
-Guides: [guide](../headless-authoring.md#procedural-generation-and-recipes)
+Guides: [guide](../headless-authoring.md#procedural-generation-and-recipes), [guide](../procedural.md#stable-identities-for-generated-parts)
 
 Get the runnable example with `ink-studio graph describe proc.scatter --example > example.json`.
 Run it with `ink-studio graph run example.json`.

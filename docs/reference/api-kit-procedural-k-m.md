@@ -2036,6 +2036,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.mediaGraph.warpTones` | function | `(audio,out,pieces)` | [guide](../graph-media.md#recorded-control-events), [source](../../src/kit/par-audio-warp-tones.js) |
 | `KIT.procedural.mediaGraph.yinPitchLag` | function | `(signal,first,width,min,max,threshold,diff)` | [guide](../graph-media.md#recorded-control-events), [source](../../src/kit/par-audio-instrument-analysis.js) |
 
+## KIT.procedural.model
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.model` | namespace |  |  |
+| `KIT.procedural.model.compare` | function | `(before, after, {kind = 'visual'} = {})` | [source](../../src/kit/p23-procedural-parts.js) |
+| `KIT.procedural.model.prefab` | function | `({model, revision, sections, base = {}, kind = 'visual'} = {})` | [source](../../src/kit/p23-procedural-parts.js) |
+| `KIT.procedural.model.validate` | function | `(definition, kind)` | [source](../../src/kit/p23-procedural-parts.js) |
+
 ## KIT.procedural.mosaic
 
 | Member | Kind | Signature or value | Guides and source |

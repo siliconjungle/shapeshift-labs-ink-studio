@@ -237,6 +237,19 @@
   P.graph.operations = Object.freeze({
     ...P.conversions.operations,
     ...P.graph.arrays.operations,
+    'model.prefab': {
+      description: 'Collect keyed group outputs into a revisioned visual or world prefab with stable member IDs.',
+      inputs: { model: 'string', revision: 'number', sections: 'record',
+        base: {type: 'record', default: {}}, kind: {type: 'string', default: 'visual'} },
+      outputs: { value: 'record' },
+      run(spec) { return {value: P.model.prefab(spec)}; }
+    },
+    'model.compare': {
+      description: 'Compare procedural prefab identities and report retained, added, removed, split and conflicting members.',
+      inputs: { before: 'record', after: 'record', kind: {type: 'string', default: 'visual'} },
+      outputs: { value: 'record' },
+      run({before, after, kind}) { return {value: P.model.compare(before, after, {kind})}; }
+    },
     ...P.raster.operations,
     ...P.drawing2d.operations,
     ...P.motionDeformation.operations,

@@ -58,6 +58,24 @@ Guides: [guide](../headless-authoring.md#discover-registered-nodes), [guide](../
 Get the runnable example with `ink-studio graph describe array.map --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### array.mapById
+
+
+
+Origin: toolkit.
+Samples the graph clock.
+The group takes a record item and optional numeric index. Each result carries the source ID and optional split ancestry.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `items` | `array<record>` | Required | {"items":"record"} |
+| Output | `value` | `array<record>` | — | {"items":"record"} |
+
+Guides: [guide](../headless-authoring.md#array-operations), [guide](../procedural.md#stable-identities-for-generated-parts)
+
+Get the runnable example with `ink-studio graph describe array.mapById --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### array.reduce
 
 

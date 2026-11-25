@@ -45,7 +45,7 @@
   }
 
   function scatter({ bounds = { min: [0, 0], max: [1, 1] }, radius = .08, mask, maskChannel, threshold = 0, time = 0,
-    seed = 0, reseed = mask === undefined ? 0 : 32, ...options } = {}) {
+    seed = 0, reseed, grid, ...options } = {}) {
     clock(time, seed);
     if (!Number.isFinite(threshold) || ![2, 3].includes(bounds?.min?.length) || !vector(bounds.min, bounds.min.length) ||
         !vector(bounds.max, bounds.min.length) || bounds.min.some((n, i) => n >= bounds.max[i]))
@@ -62,7 +62,15 @@
     } else if (mask !== undefined) {
       throw new TypeError('Scatter mask needs a scalar field or raster');
     }
-    const { samples, ...report } = P.sampling.poisson({ ...options, bounds, radius, mask: gate, seed, reseed });
+    if (grid !== undefined) {
+      if (!P.graphTypes.validator('record')(grid) || Object.keys(grid).some(key => !['id', 'origin', 'step', 'jitter'].includes(key)) ||
+          reseed !== undefined || Object.keys(options).length)
+        throw new TypeError('Grid scatter uses id, origin, step and jitter without Poisson options');
+      const {samples, report} = P.sampling.grid({...grid, bounds, radius, seed, accept: gate});
+      return {value: samples.map(row => row.point), samples, report};
+    }
+    const { samples, ...report } = P.sampling.poisson({ ...options, bounds, radius, mask: gate, seed,
+      reseed: reseed === undefined ? (mask === undefined ? 0 : 32) : reseed });
     return { value: samples.map(row => row.point), samples: samples.map((row, id) => ({ id, ...row })), report };
   }
 

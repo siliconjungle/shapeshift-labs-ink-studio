@@ -323,7 +323,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.generator.reaction` | function | `({ width = 64, height = 48, steps = 400, spots, seed = 0, mask, maskChannel, threshold = 0, ...options } = {})` | [guide](../headless-authoring.md#procedural-generation-and-recipes), [source](../../src/kit/par-generate-fields.js) |
 | `KIT.procedural.generator.repeat` | function | `(source, { width = source?.width, height = source?.height, offset = [0, 0], scale = [1, 1] } = {})` | [guide](../headless-authoring.md#procedural-generation-and-recipes), [source](../../src/kit/par-generate-layout.js) |
 | `KIT.procedural.generator.sample` | function | `(source, { origin = [0, 0, 0], u = [1, 0, 0], v = [0, 1, 0], time = 0, ...size } = {})` | [guide](../headless-authoring.md#procedural-generation-and-recipes), [source](../../src/kit/par-generate-fields.js) |
-| `KIT.procedural.generator.scatter` | function | `({ bounds = { min: [0, 0], max: [1, 1] }, radius = .08, mask, maskChannel, threshold = 0, time = 0, seed = 0, reseed = mask === undefined ? 0 : 32, ...options } = {})` | [guide](../headless-authoring.md#procedural-generation-and-recipes), [source](../../src/kit/par-generate-fields.js) |
+| `KIT.procedural.generator.scatter` | function | `({ bounds = { min: [0, 0], max: [1, 1] }, radius = .08, mask, maskChannel, threshold = 0, time = 0, seed = 0, reseed, grid, ...options } = {})` | [guide](../headless-authoring.md#procedural-generation-and-recipes), [source](../../src/kit/par-generate-fields.js) |
 | `KIT.procedural.generator.shadeFieldSprite` | function | `(surface,materials=[],{time=surface?.time ?? 0}={})` | [guide](../headless-authoring.md#procedural-generation-and-recipes), [source](../../src/kit/par-generate-field-material.js) |
 | `KIT.procedural.generator.smpteColorBars` | function | `({ pattern = 'eg1', levels = 'full', blueOnly = false, width = 128, height = Math.max(1, Math.round(width * (pattern === 'rp219' ? 9 / 16 : 3 / 4))) } = {})` | [guide](../headless-authoring.md#procedural-generation-and-recipes), [source](../../src/kit/par-generate-broadcast.js) |
 | `KIT.procedural.generator.sparks` | function | `({ origin, time = 0, seed = 0, angle = -Math.PI / 2, spread = 1.2, speed = [17, 43], gravity = 24, start = 0, end = Infinity, rate = 26, lifetime = [.4, 1.2], tail = .075, size: radius = .8, core = '#fff1ab', edge = '#ef6839', ...options } = {})` | [guide](../headless-authoring.md#procedural-generation-and-recipes), [source](../../src/kit/par-generate-effects.js) |
@@ -434,6 +434,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graph.arrays.operations["array.filter"].specialize` | function | `(spec, groups)` | [source](../../src/kit/par-graph-arrays.js) |
 | `KIT.procedural.graph.arrays.operations["array.map"]` | namespace |  |  |
 | `KIT.procedural.graph.arrays.operations["array.map"].specialize` | function | `(spec, groups)` | [source](../../src/kit/par-graph-arrays.js) |
+| `KIT.procedural.graph.arrays.operations["array.mapById"]` | namespace |  |  |
+| `KIT.procedural.graph.arrays.operations["array.mapById"].specialize` | function | `(spec, groups)` | [source](../../src/kit/par-graph-arrays.js) |
 | `KIT.procedural.graph.arrays.operations["array.reduce"]` | namespace |  |  |
 | `KIT.procedural.graph.arrays.operations["array.reduce"].specialize` | function | `(spec, groups)` | [source](../../src/kit/par-graph-arrays.js) |
 | `KIT.procedural.graph.arrays.operations["array.sort"]` | namespace |  |  |

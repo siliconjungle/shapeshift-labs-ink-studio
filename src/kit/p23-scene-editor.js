@@ -299,12 +299,32 @@
       ...buildEnv, parameterInputs:inputs,retainRenderSdf,retainPartRenderSdf
     }), { spec:snapshot() });
 
-    function refreshPrefabs(prefabs, { assets = buildEnv.assets } = {}) {
+    function preparePrefabRefresh(prefabs, assets) {
       const bindings = { ...buildEnv, assets, prefabs: freeze(clone(prefabs)) };
-      validate(snapshot(), bindings);
+      const source = snapshot();
+      let instances = [], error;
+      try {
+        instances = A.scenePrefabs.review(source, buildEnv.prefabs, bindings.prefabs);
+        validate(source, bindings);
+      } catch (failure) {
+        error = failure;
+      }
+      const problems = error?.problems ?? (error ? [{level: 'error', problem: error.message}] : []);
+      return {bindings, error, report: freeze({ok: !error && instances.every(row => row.ok), instances, problems})};
+    }
+
+    function planPrefabRefresh(prefabs, { assets = buildEnv.assets } = {}) {
+      return preparePrefabRefresh(prefabs, assets).report;
+    }
+
+    function refreshPrefabs(prefabs, { assets = buildEnv.assets } = {}) {
+      const {bindings, error, report} = preparePrefabRefresh(prefabs, assets);
+      if (!report.ok)
+        throw Object.assign(error ?? new Error('Procedural prefab identities need review'), {report});
       Object.assign(buildEnv, bindings, { brushSession: A.brushRegions.create() });
       indexScene = undefined;
       document.checkpointSession();
+      return report;
     }
 
     function setPrefabInstance(id, instance) {
@@ -745,7 +765,7 @@
       setModifiers,
       updateModifier,
       setPrefabInstance,
-      refreshPrefabs,
+      planPrefabRefresh, refreshPrefabs,
       meshTopology,
       selectMeshTopology: (object, request, { part, visibility } = {}) =>
         K.meshTopology.select(meshTopology(object, part).document, request, { visibility }),

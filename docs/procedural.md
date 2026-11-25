@@ -1975,6 +1975,56 @@ node cli/ink-studio.js render examples/poisson-patches.js --seed 0 --ortho --col
 node cli/ink-studio.js render examples/poisson-patches.js --seed 1 --ortho --colored
 ```
 
+### Stable identities for generated parts
+
+Use `proc.scatter` with `options.grid` or call
+`P.sampling.grid({bounds, id, origin, step, radius, jitter, seed, accept})`
+to distribute replaceable fasteners, strands, or other repeated members on a
+fixed 2D or 3D lattice. Each sample reports its signed integer `cell` and
+an ID such as `fastener.-1.0.0`. The position is based on the origin and
+step in the model's coordinate space. Seeded jitter is evaluated per cell.
+Changing the clipping bounds or mask leaves the positions and IDs of the
+remaining cells intact. Keep the layout ID with its authored role and use
+a new layout ID if changing the lattice assigns those roles differently.
+The smallest step multiplied by `1 - jitter` must cover the requested
+minimum radius. Ordinary Poisson scatter still returns run-local indices.
+
+Pass sample records, or authored records such as `{id: "door-panel", ...}`,
+into `array.mapById` with a reusable group. The group can build a solid,
+part, or world entity with any parameters it needs. The array operation
+returns the group's result as `value` beside the original ID. Reordering or
+filtering records preserves the seed of each surviving item. Keep
+index-driven styling in groups where order is intentional.
+
+Collect the rows using `model.prefab` or
+`P.model.prefab({model, revision, sections, base, kind})`. Each section can
+take a row array or a record of named row arrays. A visual prefab accepts
+`solids`, `parts`, `groups`, `motion`, and `effects`. With
+`kind: "world"`, supply `entities` and `systems`. Use `base` for ordinary
+prefab settings and authored records. Local member IDs must be unique within
+each section, including the base records. The returned prefab carries a
+versioned generation record and uses its member IDs in ordinary scene
+override paths. Use a stable model ID and advance the revision when publishing
+an edited definition.
+
+When a role splits, give every successor a fresh ID and set its
+`splitFrom` to the retired local ID. Use `model.compare` or
+`P.model.compare(before, after, {kind})` to inspect retained, added,
+removed, and split roles and their successor IDs. Reusing the old role
+alongside a split, declaring a single split descendant, or claiming an
+existing generated ID for a different model produces a conflict when
+comparing those revisions.
+
+The [Mothlight Relay demo](../examples/procedural-part-identity/demo.cjs)
+builds three revisions, previews their scene-local overrides, and renders
+the compatible rebuild and a reviewed split.
+
+```sh
+node examples/procedural-part-identity/demo.cjs relay-review
+node cli/ink-studio.js graph run relay-review/relay.graph.json \
+  --inputs relay-review/r2.inputs.json --out relay-graph
+```
+
 ### Progressive samples and surface detail
 
 - `P.sampling.eliminate(points, {count, progressive, weights})` removes

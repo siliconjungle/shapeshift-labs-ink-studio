@@ -3,7 +3,7 @@
   const P = K.procedural;
   const {validator,compatible} = P.graphTypes;
   const modes = ['zip','cycle','hold','cartesian','cartesianReverse'];
-  const operators = ['array.map','array.filter','array.reduce','array.sort'];
+  const operators = ['array.map','array.mapById','array.filter','array.reduce','array.sort'];
   const maxRows = 100000;
 
   function broadcast(arrays, {mode,limit=maxRows}={}) {
@@ -68,6 +68,7 @@
   function groupOperation(spec, groups) {
     const group=typeof spec.group==='string' && Object.hasOwn(groups,spec.group) && groups[spec.group];
     const sorting=spec.op==='array.sort', reducing=spec.op==='array.reduce', filtering=spec.op==='array.filter';
+    const keyed=spec.op==='array.mapById';
     if (!group && sorting && spec.group===undefined) return {
       inputs:{items:'array',direction:{type:'string',default:'asc'}}, outputs:{value:'array'},
       run({items,direction}) { return {value:stableSort(items,item=>item,direction)}; }
@@ -77,6 +78,8 @@
     const value=socketType(group.outputs?.value), accumulator=socketType(group.inputs?.accumulator);
     if (!validator(item) || !validator(value) || index!==undefined && !compatible('number',index))
       throw new TypeError(spec.op+' groups need item input, value output and an optional numeric index');
+    if (keyed && !compatible('record',item))
+      throw new TypeError('array.mapById groups must accept a record item');
     if (reducing ? !validator(accumulator) || !compatible(value,accumulator) : accumulator!==undefined)
       throw new TypeError('Only array.reduce groups need a compatible accumulator input and value output');
     if (filtering && !compatible(value,'boolean')) throw new TypeError('Array filter groups must return a boolean');
@@ -85,33 +88,60 @@
     const extra=Object.fromEntries(Object.entries(group.inputs).filter(([key])=>!['item','index','accumulator'].includes(key)));
     if (Object.hasOwn(extra,'items') || reducing && Object.hasOwn(extra,'initial') || sorting && Object.hasOwn(extra,'direction'))
       throw new TypeError('Array group input conflicts with an array operation port');
-    const type='array<'+item+'>';
+    const type='array<'+(keyed ? 'record' : item)+'>';
     const inputs={items:type,...extra,...(reducing && {initial:accumulator}),
       ...(sorting && {direction:{type:'string',default:'asc'}})};
-    return {inputs,outputs:{value:reducing ? accumulator : 'array<'+(sorting || filtering ? item : value)+'>'},time:true,workerGroup:true,
+    return {inputs,outputs:{value:reducing ? accumulator : 'array<'+(keyed ? 'record' : sorting || filtering ? item : value)+'>'},time:true,workerGroup:true,
       instantiate() {
         let segment;
-        const lanes=[];
+        const lanes=[], byId=new Map();
         function truncate(length) {
           for (let i=length; i<lanes.length; i++) lanes[i]?.clear?.();
           if (lanes.length>length) lanes.length=length;
         }
+        function prune(ids) {
+          for (const [key,lane] of byId) if (!ids?.has(key)) {
+            lane.clear?.();
+            byId.delete(key);
+          }
+        }
+        function clear() {
+          truncate(0);
+          prune();
+        }
         function run({items,...args},{time,seed,take,sequence},workers) {
           const cost=Math.max(1,group.expandedNodes??1);
           if (items.length*cost>maxRows) throw new RangeError('Array operation exceeds its '+maxRows+' node visit budget');
+          let ids;
+          if (keyed) {
+            ids=new Set();
+            for (const {id,splitFrom} of items) {
+              if (!K.world.data.id(id) || ids.has(id) ||
+                  splitFrom!==undefined && (!K.world.data.id(splitFrom) || splitFrom===id))
+                throw new RangeError('array.mapById needs unique part IDs and valid split sources');
+              ids.add(id);
+            }
+          }
           if (segment!==sequence) {
-            truncate(0);
+            clear();
             segment=sequence;
           }
-          truncate(items.length);
+          if (keyed) prune(ids);
+          else truncate(items.length);
           const start=reducing ? args.initial : undefined, order=sorting ? args.direction : undefined;
           if (reducing) delete args.initial;
           if (sorting) delete args.direction;
           const transient=sequence===undefined ? group.instantiate() : undefined;
           const apply=(item,i,accumulator)=>{
-            const evaluate=transient ?? (lanes[i]??=group.instantiate());
+            const key=keyed ? item.id : i;
+            let evaluate=transient;
+            if (!evaluate && keyed) {
+              if (!byId.has(key)) byId.set(key,group.instantiate());
+              evaluate=byId.get(key);
+            }
+            evaluate??=(lanes[i]??=group.instantiate());
             return evaluate({...args,item,...(index && {index:i}),...(reducing && {accumulator})},
-              {time,take,sequence,seed:P.data.hash(String(i),seed)},workers).value;
+              {time,take,sequence,seed:P.data.hash(String(key),seed)},workers).value;
           };
           try {
             if (reducing) return {value:items.reduce((acc,item,i)=>apply(item,i,acc),start)};
@@ -121,12 +151,17 @@
               if (typeof keep!=='boolean') throw new TypeError('Array filter groups must return a boolean');
               return keep;
             })};
-            return {value:items.map((item,i)=>apply(item,i))};
+            return {value:items.map((item,i)=>{
+              const value=apply(item,i);
+              if (!keyed) return value;
+              const {id,splitFrom}=item;
+              return {id,value,...(splitFrom!==undefined && {splitFrom})};
+            })};
           } finally {
             transient?.clear?.();
           }
         }
-        run.clear=()=>truncate(0);
+        run.clear=clear;
         return run;
       }
     };

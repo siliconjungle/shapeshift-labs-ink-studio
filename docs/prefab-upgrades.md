@@ -44,6 +44,14 @@ Use null to retire a mapping or discard an override intentionally.
 An in-use attachment or port needs a valid replacement. Added solvers
 inherit the old chunk when the instance had a single owner.
 
+For [procedural prefabs](procedural.md#stable-identities-for-generated-parts),
+the upgrade report includes `generation` with retained, added, removed, and
+split member IDs. Overrides on surviving IDs follow the normal upgrade path.
+An override on a split member reports its descendant IDs and awaits an
+explicit mapping or discard using `overridePaths`. Unused retired members
+can leave the assembly as part of the same upgrade. Conflicting identity
+claims block the release.
+
 New stamps record their parameter and override choices, including
 explicit values that matched an old default. The upgrade compares the
 original definition with the current instance so later local edits can

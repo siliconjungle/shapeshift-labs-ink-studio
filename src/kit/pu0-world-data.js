@@ -65,12 +65,13 @@
     check(Array.isArray(result.connections) && result.connections.length <= 50000 && Array.isArray(result.commands),
       'World connections and commands must be arrays');
     for (const [key, prefab] of Object.entries(result.prefabs)) {
-      check(Object.keys(prefab).every(name => ['entities','systems','connections','ports','params','revision','source','packs','lookAsset','sockets'].includes(name)),
+      check(Object.keys(prefab).every(name => ['entities','systems','connections','ports','params','revision','source','packs','lookAsset','sockets','generation'].includes(name)),
         'Unknown prefab property in ' + key);
       check(Number.isSafeInteger(prefab.revision ?? 1) && (prefab.revision ?? 1) > 0, 'Invalid prefab revision for ' + key);
       check(record(prefab.entities ?? {}) && record(prefab.systems ?? {}) && Array.isArray(prefab.connections ?? []) &&
         record(prefab.ports ?? {}) && record(prefab.params ?? {}) && record(prefab.sockets ?? {}) && Array.isArray(prefab.packs ?? []),
         'Invalid prefab ' + key);
+      K.procedural.model.validate(prefab, 'world');
     }
     return data.freeze(result);
   }
