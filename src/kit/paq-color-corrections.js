@@ -329,8 +329,20 @@ const TypedImageCorrections = ({
     });
   }
 
+  function curve(source, definition, options = {}) {
+    const input = frame(source), { channel = 'all' } = options;
+    if (!(input.color ? ['all', 'r', 'g', 'b'].includes(channel) : channel === 'all' || channel === 'value'))
+      throw new RangeError('Curve channel does not match the typed image');
+    const evaluate = ColorCurves.scalar(definition);
+    const selected = ['r', 'g', 'b'].indexOf(channel);
+    return apply(input, options, (rgb, out) => {
+      for (let c = 0; c < input.components; c++)
+        out[c] = selected < 0 || c === selected ? evaluate(rgb[c]) : rgb[c];
+    });
+  }
+
   return Object.freeze({
-    levels, autoLevels, histogram: (source, options) => histogramStats(frame(source), options), histogramAdjust,
+    curve, levels, autoLevels, histogram: (source, options) => histogramStats(frame(source), options), histogramAdjust,
     hsl: (source, options = {}) => hueGrade(source, options, true),
     hsv: (source, options = {}) => hueGrade(source, options, false),
     exposure, contrast, threshold, invert, posterize, colorSelect, colorReplace

@@ -138,6 +138,24 @@ Guides: [guide](../graph-image-types.md#make-and-convert-uniform-images), [guide
 Get the runnable example with `ink-studio graph describe image.convert --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.curve
+
+Apply an editable channel curve with named stops, cubic handles and clamp or repeat addressing.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `curve` | `record` | Required | {"layout":"Plain named object"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"channel":{"type":"string","constraints":{"choices":["all","r","g","b","value"]},"default":"all"}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-curves-gradients.md)
+
+Get the runnable example with `ink-studio graph describe image.curve --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.declare
 
 Attach a verified image contract to a legacy raster using a literal descriptor.
@@ -171,6 +189,60 @@ Origin: toolkit.
 Guides: [guide](../material-color-corrections.md)
 
 Get the runnable example with `ink-studio graph describe image.exposure --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.gradient
+
+Sample an authored gradient ramp into a typed RGBA image along a UV segment.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `ramp` | `record` | Required | {"layout":"Plain named object"} |
+| Input | `width` | `pixelCount` | Required | pixels · {"integer":true,"min":1} |
+| Input | `height` | `pixelCount` | Required | pixels · {"integer":true,"min":1} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]},"default":"float64"},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"error"},"from":{"type":"vec2","constraints":{"min":0,"max":1},"default":[0,0.5]},"to":{"type":"vec2","constraints":{"min":0,"max":1},"default":[1,0.5]}} |
+| Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
+
+Guides: [guide](../material-curves-gradients.md)
+
+Get the runnable example with `ink-studio graph describe image.gradient --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.gradientFromImage
+
+Sample editable gradient pins along a UV path in an input color image.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `colorImage` | Required | {"layout":"Typed RGB or RGBA image"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"path":{"type":"array<vec2>","constraints":{"minItems":2,"maxItems":32},"default":[[0,0.5],[1,0.5]]},"count":{"type":"number","constraints":{"min":2,"max":256,"integer":true},"default":9},"filter":{"type":"string","constraints":{"choices":["nearest","linear"]}},"interpolation":{"type":"string","constraints":{"choices":["step","linear","smooth","bezier"]},"default":"linear"},"address":{"type":"string","constraints":{"choices":["clamp","repeat"]},"default":"clamp"},"interpolationSpace":{"type":"string","constraints":{"choices":["native","linear"]},"default":"native"}} |
+| Output | `value` | `record` | — | {"layout":"Plain named object"} |
+
+Guides: [guide](../material-curves-gradients.md)
+
+Get the runnable example with `ink-studio graph describe image.gradientFromImage --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.gradientMap
+
+Map a typed measurement channel through a gradient ramp while retaining image alignment and coverage.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `ramp` | `record` | Required | {"layout":"Plain named object"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]},"default":"float64"},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"error"},"channel":{"type":"string","constraints":{"choices":["value","luminance","r","g","b","alpha"]}},"range":{"type":"vec2","constraints":{"increasing":true},"default":[0,1]}} |
+| Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
+
+Guides: [guide](../material-curves-gradients.md)
+
+Get the runnable example with `ink-studio graph describe image.gradientMap --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.histogram
@@ -451,6 +523,24 @@ Origin: toolkit.
 Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes)
 
 Get the runnable example with `ink-studio graph describe image.toRaster --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.transferPreset
+
+Load a fresh editable curve or gradient ramp preset by stable name.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `name` | `string` | Required | {"choices":["linear","soft-contrast","lifted-ink","copper-tide","silver-mist","night-signal"]} |
+| Output | `value` | `record` | — | {"layout":"Plain named object"} |
+| Output | `kind` | `string` | — |  |
+| Output | `label` | `string` | — |  |
+
+Guides: [guide](../material-curves-gradients.md)
+
+Get the runnable example with `ink-studio graph describe image.transferPreset --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.uniform

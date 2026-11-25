@@ -1,0 +1,20 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const Ink = require('../..');
+const files = require('../../cli/asset-files.js');
+const { tideImages, tideGraph, tideDefaults } = require('./tide.js');
+const out = path.resolve(process.argv[2] ?? 'studio/out/typed-material-curves');
+const at = file => path.join(out, file);
+const I = Ink.load().KIT.procedural.graphImages;
+const source = tideDefaults(tideGraph(I.transfers), tideImages(I));
+const file = at('copper-tide.material.json');
+Ink.writeMaterialGraph(file, Ink.openMaterialGraph(source, { id: 'copper-tide' }));
+const result = Ink.readGraphProject(file).run();
+assert.equal(result.outputs.sampled.stops.length, 7);
+assert.equal(result.outputs.graded.descriptor.precision, 'float32');
+for (const artifact of result.artifacts) files.write(at(artifact.file), artifact.bytes);
+for (const name of ['index.html', 'editor.js', 'tide.js'])
+  files.write(at(name), fs.readFileSync(path.join(__dirname, name)));
+files.write(at('ink-studio.browser.js'), Buffer.from(Ink.bundle()));
+console.log('Wrote the Copper Tide editable graph and live curve editor to ' + out);
