@@ -2,16 +2,11 @@
 
 Compare two short animations on a shared playhead. Mark the frame where
 a particular beat happens in each source. The workbench holds source
-frames and maps the time between those marks, so an early ignition can
-line up with a late ignition. Both original frame numbers stay visible.
+frames and maps the time between those marks. Both original frame
+numbers stay visible.
 
-```sh
-node examples/reference-clip-workbench.cjs ./rose-engine-review
-```
-
-Open `rose-engine-review/index.html` from disk. Jump to **First pressure
-ring**, **Ignition**, or **Falloff**. Turn on **Loop beat** to play from
-that marker up to the next one. Use **±1 frame** to step on the reference
+Turn on **Loop beat** to play from a marker up to the next one.
+Use **±1 frame** to step on the reference
 clock, or scrub continuously to see how faster candidate frames land.
 Open **Edit beat alignment** to preview the two source frames independently.
 Save them with a label to add or revise a marker. Download the alignment
@@ -31,30 +26,30 @@ PNG frames and renders an Ink graph directly at a different cadence.
 {
   "format": "ink-studio/reference-clip-review",
   "version": 1,
-  "title": "Rocket pressure and ignition",
+  "title": "Status panel timing",
   "reference": {
     "directory": "./reference-frames",
     "fps": 18,
     "startFrame": 10
   },
   "candidate": {
-    "graph": "./engine.json",
+    "graph": "./panel.json",
     "output": "beauty",
     "from": 100,
     "to": 152,
     "fps": { "numerator": 24000, "denominator": 1001 }
   },
   "beats": [
-    { "id": "first-ring", "label": "First pressure ring", "reference": 15, "candidate": 109 },
-    { "id": "ignition", "label": "Ignition", "reference": 19, "candidate": 119 },
-    { "id": "falloff", "label": "Falloff", "reference": 26, "candidate": 134 }
+    { "id": "check", "label": "Meter check", "reference": 15, "candidate": 109 },
+    { "id": "signal", "label": "Signal on", "reference": 19, "candidate": 119 },
+    { "id": "reset", "label": "Reset", "reference": 26, "candidate": 134 }
   ]
 }
 ```
 
 ```sh
 ink-studio reference-clip review.json --out comparison
-ink-studio reference-clip review.json --beat ignition --mode difference --sheet --out ignition-review
+ink-studio reference-clip review.json --beat signal --mode difference --sheet --out signal-review
 ```
 
 Each side accepts one source.
@@ -103,12 +98,12 @@ pixels, and 64 MiB of unique encoded frames.
 ```js
 const ink = require('@shapeshift-labs/ink-studio');
 const review = ink.createReferenceClipReview('review.json');
-const [start, end] = review.alignment.range('ignition');
+const [start, end] = review.alignment.range('signal');
 const { address, image } = review.frame(start, { mode: 'difference' });
 const notes = review.alignment.notes([
   { id: 'rim', time: start, text: 'Check how long the rim remains visible.' }
 ]);
-review.write('ignition-review', { time: start, includeSheet: true });
+review.write('signal-review', { time: start, includeSheet: true });
 ```
 
 Use `KIT.referenceClips.create({reference, candidate, beats})` for the

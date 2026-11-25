@@ -7,13 +7,13 @@ graph, and the edited setup exports as a reusable graph group.
 ## Edit a clip
 
 ```sh
-ink-studio effect-clip serve examples/rose-engine.effect.json
+ink-studio effect-clip serve examples/status-panel.effect.json
 ```
 
-Open the loopback URL printed by Ink. In **Rose Engine**, choose
-**Ignition**, jump to the cue, then move it later while keeping the
-playhead still. The pressure front, hot core and nozzle light sample
-the same new cue timing. Jump to the new cue to see the ignition again.
+Open the loopback URL printed by Ink. In **Status Panel**, choose
+**Signal on**, jump to the cue, then move it later while keeping the
+playhead still. The meter, lamp, and status bars update together.
+Jump to the new cue to see the lamp switch on.
 
 The timeline steps at the clip's picture rate. Scrubbing and key times
 can also use fractional seconds. Select a lane to edit its keys. Change
@@ -88,20 +88,20 @@ cue schedule comes from another part of the graph.
 ## Run headlessly and reuse a group
 
 ```sh
-ink-studio effect-clip preview examples/rose-engine.effect.json --at 0.97 --out frame
-ink-studio effect-clip export examples/rose-engine.effect.json --edits delayed.json --out take
-ink-studio graph clip take/rose-engine.project.json --output beauty --from 0 --to 58 --fps 24 --out render
+ink-studio effect-clip preview examples/status-panel.effect.json --at 0.97 --out frame
+ink-studio effect-clip export examples/status-panel.effect.json --edits delayed.json --out take
+ink-studio graph clip take/status-panel.project.json --output beauty --from 0 --to 58 --fps 24 --out render
 ```
 
 An edits file contains partial tables, for example
-`{"cues":{"ignition":1.2},"parameters":{"power":0.8}}`.
+`{"cues":{"signal":1.2},"parameters":{"power":0.8}}`.
 A `lanes` edit replaces the key array for each named lane. A `pins` edit
 replaces the list of pinned passes. Invalid times or values leave the
 last valid edit intact.
 
 The companion project forwards the exported group's inputs and outputs.
 Use [a shared graph group](headless-authoring.md#reference-a-shared-group)
-in any parent graph, override `cue-ignition` or another named input, or
+in any parent graph, override `cue-signal` or another named input, or
 place a group on a child clock with `anim.retime`. Graph-owned assets
 still use the surrounding project's named asset table. Use ordinary
 [graph clip warm-up and cuts](graph-clips.md#warm-up-and-cuts) for
@@ -109,8 +109,8 @@ sequence-dependent feedback when printing the result.
 
 ```js
 const ink = require('@shapeshift-labs/ink-studio');
-const clip = ink.readEffectClip('rose-engine.effect.json');
-clip.edit({ cues: { ignition: 1.2 }, pins: ['beauty', 'pressure', 'nozzle'] });
+const clip = ink.readEffectClip('status-panel.effect.json');
+clip.edit({ cues: { signal: 1.2 }, pins: ['beauty', 'meter', 'status'] });
 const { report, artifacts } = await clip.preview(1.21);
 clip.export('./take');
 clip.clear();

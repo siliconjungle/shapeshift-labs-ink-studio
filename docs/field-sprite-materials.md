@@ -68,8 +68,4 @@ const {value, materialId} = G.shadeFieldSprite(trace.surface, [wood, hoops]);
 ```sh
 ink-studio graph describe proc.fieldSpriteShade --example > shade.json
 ink-studio graph run shade.json --out shaded
-node examples/field-sprite-materials.cjs ./cask-study
 ```
-
-Open `cask-study/index.html` for one turntable with independent wood and
-metal edits, plus the position, illumination, and material-slot passes.
