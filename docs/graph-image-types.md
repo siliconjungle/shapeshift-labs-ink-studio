@@ -44,6 +44,8 @@ ink-studio graph run /tmp/ink-lantern-glass/lantern-glass.material.json --out /t
 
 For compositing typed maps, see [Material image blend modes](material-image-blend.md). For routing channels and retaining sub-code math, see [Split, shuffle, and pack typed image channels](material-image-channels.md).
 
+For levels, histograms, tonal edits and alpha-aware swatch masks, see [Typed material color corrections](material-color-corrections.md).
+
 ## Convert color to relief
 
 The `fx.relight` height socket accepts typed height in `art-px` and existing uncolored scalar rasters. A connection from a known RGB source fails graph validation. For dynamically sourced images, the socket validates their value before relighting. Convert deliberately with `image.toHeight`.

@@ -484,11 +484,38 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.blend` | function | `(background, foreground, { mode = 'copy', opacity = 1, mask = null, crop = {}, alpha = 'source', clamp = 'auto' } = {})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.channelMath` | function | `(a, b, operation, { precision = 'float64', outOfRange = 'error' } = {})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.convert` | function | `(source, target, { outOfRange = 'error', dropAlpha = false } = {})` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.corrections` | namespace |  |  |
+| `KIT.procedural.graphImages.corrections.autoLevels` | function | `(source, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
+| `KIT.procedural.graphImages.corrections.colorReplace` | function | `(source, from, to, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
+| `KIT.procedural.graphImages.corrections.colorSelect` | function | `(source, color, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
+| `KIT.procedural.graphImages.corrections.contrast` | function | `(source, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
+| `KIT.procedural.graphImages.corrections.exposure` | function | `(source, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
+| `KIT.procedural.graphImages.corrections.histogram` | function | `(source, options)` | [source](../../src/kit/paq-color-corrections.js) |
+| `KIT.procedural.graphImages.corrections.histogramAdjust` | function | `(source, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
+| `KIT.procedural.graphImages.corrections.hsl` | function | `(source, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
+| `KIT.procedural.graphImages.corrections.hsv` | function | `(source, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
+| `KIT.procedural.graphImages.corrections.invert` | function | `(source, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
+| `KIT.procedural.graphImages.corrections.levels` | function | `(source, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
+| `KIT.procedural.graphImages.corrections.posterize` | function | `(source, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
+| `KIT.procedural.graphImages.corrections.threshold` | function | `(source, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
 | `KIT.procedural.graphImages.declare` | function | `(source, settings)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.displaySamples` | function | `(source, bitDepth, outOfRange = 'clamp')` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.format` | value | `string = "ink-studio/graph-image"` |  |
 | `KIT.procedural.graphImages.inspect` | function | `(source)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.autoLevels"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.autoLevels"].description` | value | `string = "Fit linked levels from exact percentiles of visible decoded samples and return the measured bounds."` |  |
+| `KIT.procedural.graphImages.operations["image.autoLevels"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options.default` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options.type` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.autoLevels"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.autoLevels"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.autoLevels"].outputs.report` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.autoLevels"].outputs.value` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.autoLevels"].outputs.value.type` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.autoLevels"].outputs.value.typeFrom` | value | `string = "source"` |  |
+| `KIT.procedural.graphImages.operations["image.autoLevels"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.blend"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.blend"].description` | value | `string = "Blend typed images at native precision with a grayscale opacity mask, crop, alpha policy and explicit clamping."` |  |
 | `KIT.procedural.graphImages.operations["image.blend"].inputs` | namespace |  |  |
@@ -531,12 +558,79 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.channelMath"].outputs.value.type` | value | `string = "typedImage"` |  |
 | `KIT.procedural.graphImages.operations["image.channelMath"].outputs.value.typeFrom` | value | `string = "a"` |  |
 | `KIT.procedural.graphImages.operations["image.channelMath"].run` | function | `({ a, b, operation, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.colorReplace"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.colorReplace"].description` | value | `string = "Replace an authored color with a typed swatch while retaining coverage and precision."` |  |
+| `KIT.procedural.graphImages.operations["image.colorReplace"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.colorReplace"].inputs.from` | value | `string = "any"` |  |
+| `KIT.procedural.graphImages.operations["image.colorReplace"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.colorReplace"].inputs.source` | value | `string = "colorImage"` |  |
+| `KIT.procedural.graphImages.operations["image.colorReplace"].inputs.to` | value | `string = "any"` |  |
+| `KIT.procedural.graphImages.operations["image.colorReplace"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.colorReplace"].outputs.value` | value | `string = "colorImage"` |  |
+| `KIT.procedural.graphImages.operations["image.colorReplace"].run` | function | `({ source, from, to, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.colorSelect"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.colorSelect"].description` | value | `string = "Generate a typed mask for a swatch using RGB, OKLab or OKLab chroma distance."` |  |
+| `KIT.procedural.graphImages.operations["image.colorSelect"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.colorSelect"].inputs.color` | value | `string = "any"` |  |
+| `KIT.procedural.graphImages.operations["image.colorSelect"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.colorSelect"].inputs.source` | value | `string = "colorImage"` |  |
+| `KIT.procedural.graphImages.operations["image.colorSelect"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.colorSelect"].outputs.value` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.colorSelect"].run` | function | `({ source, color, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.contrast"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.contrast"].description` | value | `string = "Scale the distance of decoded samples from an authored pivot."` |  |
+| `KIT.procedural.graphImages.operations["image.contrast"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.contrast"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.contrast"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.contrast"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.contrast"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.contrast"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.convert"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.convert"].description` | value | `string = "Convert the channel layout, precision, color space or alpha convention of a typed image."` |  |
 | `KIT.procedural.graphImages.operations["image.convert"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.declare"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.declare"].description` | value | `string = "Attach a verified image contract to a legacy raster using a literal descriptor."` |  |
 | `KIT.procedural.graphImages.operations["image.declare"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.exposure"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.exposure"].description` | value | `string = "Apply exposure stops in linear light, retaining HDR in floating linear images."` |  |
+| `KIT.procedural.graphImages.operations["image.exposure"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.exposure"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.exposure"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.exposure"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.exposure"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.exposure"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.histogram"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.histogram"].description` | value | `string = "Count decoded samples with explicit bins, clipping counts and range."` |  |
+| `KIT.procedural.graphImages.operations["image.histogram"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.histogram"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.histogram"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.histogram"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.histogram"].outputs.value` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.histogram"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.histogramAdjust"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.histogramAdjust"].description` | value | `string = "Equalize, remap, shift, scan or select an interval of sample values."` |  |
+| `KIT.procedural.graphImages.operations["image.histogramAdjust"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.histogramAdjust"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.histogramAdjust"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.histogramAdjust"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.histogramAdjust"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.histogramAdjust"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.hsl"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.hsl"].description` | value | `string = "Rotate HSL hue and adjust saturation and lightness in display RGB."` |  |
+| `KIT.procedural.graphImages.operations["image.hsl"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.hsl"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.hsl"].inputs.source` | value | `string = "colorImage"` |  |
+| `KIT.procedural.graphImages.operations["image.hsl"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.hsl"].outputs.value` | value | `string = "colorImage"` |  |
+| `KIT.procedural.graphImages.operations["image.hsl"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.hsv"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.hsv"].description` | value | `string = "Rotate HSV hue and adjust saturation and value in display RGB."` |  |
+| `KIT.procedural.graphImages.operations["image.hsv"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.hsv"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.hsv"].inputs.source` | value | `string = "colorImage"` |  |
+| `KIT.procedural.graphImages.operations["image.hsv"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.hsv"].outputs.value` | value | `string = "colorImage"` |  |
+| `KIT.procedural.graphImages.operations["image.hsv"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.inspect"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.inspect"].description` | value | `string = "Report image extent and the full sampling and sample encoding contract."` |  |
 | `KIT.procedural.graphImages.operations["image.inspect"].inputs` | namespace |  |  |
@@ -544,9 +638,33 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.inspect"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.inspect"].outputs.value` | value | `string = "record"` |  |
 | `KIT.procedural.graphImages.operations["image.inspect"].run` | function | `({ source })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.invert"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.invert"].description` | value | `string = "Invert decoded samples around a pivot while preserving alpha."` |  |
+| `KIT.procedural.graphImages.operations["image.invert"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.invert"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.invert"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.invert"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.invert"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.invert"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.levels"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.levels"].description` | value | `string = "Map input black and white through gamma to an output range."` |  |
+| `KIT.procedural.graphImages.operations["image.levels"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.levels"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.levels"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.levels"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.levels"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.levels"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.pack"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.pack"].description` | value | `string = "Pack selected typed image channels and numeric constants into one image."` |  |
 | `KIT.procedural.graphImages.operations["image.pack"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.posterize"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.posterize"].description` | value | `string = "Quantize decoded samples to tonal steps or an ordered RGB palette."` |  |
+| `KIT.procedural.graphImages.operations["image.posterize"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.posterize"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.posterize"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.posterize"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.posterize"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.posterize"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.resize"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.resize"].description` | value | `string = "Resample a typed image using its own per-axis tiling and sampling policy. The output keeps the source port type."` |  |
 | `KIT.procedural.graphImages.operations["image.resize"].inputs` | namespace |  |  |
@@ -564,6 +682,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.split"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.split"].description` | value | `string = "Split explicitly selected native channels into named scalar images, including alpha coverage."` |  |
 | `KIT.procedural.graphImages.operations["image.split"].specialize` | function | `({ params, inputs })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.threshold"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.threshold"].description` | value | `string = "Create a typed coverage mask from a threshold with optional feathering."` |  |
+| `KIT.procedural.graphImages.operations["image.threshold"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.threshold"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.threshold"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.threshold"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.threshold"].outputs.value` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.threshold"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.toDisplay"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.toDisplay"].description` | value | `string = "Convert typed color to straight-alpha sRGB8 for legacy compositing and PNG exports."` |  |
 | `KIT.procedural.graphImages.operations["image.toDisplay"].inputs` | namespace |  |  |

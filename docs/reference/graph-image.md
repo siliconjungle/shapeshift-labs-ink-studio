@@ -4,6 +4,24 @@
 
 Ports, defaults, and constraints come from the registered operations. Use `graph describe <op> --json` for the full structured record.
 
+### image.autoLevels
+
+Fit linked levels from exact percentiles of visible decoded samples and return the measured bounds.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"outputRange":{"type":"vec2","default":[0,1]},"gamma":{"type":"number","constraints":{"exclusiveMin":0},"default":1},"percentiles":{"type":"vec2","constraints":{"min":0,"max":1,"increasing":true},"default":[0.01,0.99]},"channel":{"type":"string","constraints":{"choices":["all","luminance","r","g","b","alpha","value"]},"default":"all"}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `report` | `record` | — | {"layout":"Plain named object"} |
+
+Guides: [guide](../material-color-corrections.md)
+
+Get the runnable example with `ink-studio graph describe image.autoLevels --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.blend
 
 Blend typed images at native precision with a grayscale opacity mask, crop, alpha policy and explicit clamping.
@@ -46,6 +64,60 @@ Guides: [guide](../material-image-channels.md), [guide](../material-image-channe
 Get the runnable example with `ink-studio graph describe image.channelMath --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.colorReplace
+
+Replace an authored color with a typed swatch while retaining coverage and precision.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `colorImage` | Required | {"layout":"Typed RGB or RGBA image"} |
+| Input | `from` | `any` | Required |  |
+| Input | `to` | `any` | Required |  |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"metric":{"type":"string","constraints":{"choices":["rgb","perceptual","chroma"]},"default":"perceptual"},"tolerance":{"type":"number","constraints":{"min":0},"default":0.04},"softness":{"type":"number","constraints":{"min":0},"default":0},"amount":{"type":"number","constraints":{"min":0,"max":1},"default":1}} |
+| Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
+
+Guides: [guide](../material-color-corrections.md)
+
+Get the runnable example with `ink-studio graph describe image.colorReplace --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.colorSelect
+
+Generate a typed mask for a swatch using RGB, OKLab or OKLab chroma distance.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `colorImage` | Required | {"layout":"Typed RGB or RGBA image"} |
+| Input | `color` | `any` | Required |  |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]},"default":"float64"},"useAlpha":{"type":"boolean","default":true},"invert":{"type":"boolean","default":false},"metric":{"type":"string","constraints":{"choices":["rgb","perceptual","chroma"]},"default":"perceptual"},"tolerance":{"type":"number","constraints":{"min":0},"default":0.04},"softness":{"type":"number","constraints":{"min":0},"default":0}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-color-corrections.md)
+
+Get the runnable example with `ink-studio graph describe image.colorSelect --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.contrast
+
+Scale the distance of decoded samples from an authored pivot.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"factor":{"type":"number","constraints":{"min":0},"default":1},"pivot":{"type":"number","default":0.5}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-color-corrections.md)
+
+Get the runnable example with `ink-studio graph describe image.contrast --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.convert
 
 Convert the channel layout, precision, color space or alpha convention of a typed image.
@@ -84,6 +156,91 @@ Guides: [guide](../graph-image-types.md)
 Get the runnable example with `ink-studio graph describe image.declare --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.exposure
+
+Apply exposure stops in linear light, retaining HDR in floating linear images.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"stops":{"type":"number","unit":"stops","default":0}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-color-corrections.md)
+
+Get the runnable example with `ink-studio graph describe image.exposure --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.histogram
+
+Count decoded samples with explicit bins, clipping counts and range.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"channel":{"type":"string","constraints":{"choices":["all","luminance","r","g","b","alpha","value"]},"default":"luminance"},"bins":{"type":"number","constraints":{"min":2,"max":4096,"integer":true},"default":256},"range":{"type":"vec2","constraints":{"increasing":true},"default":[0,1]},"includeTransparent":{"type":"boolean","default":false}} |
+| Output | `value` | `record` | — | {"layout":"Plain named object"} |
+
+Guides: [guide](../material-color-corrections.md)
+
+Get the runnable example with `ink-studio graph describe image.histogram --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.histogramAdjust
+
+Equalize, remap, shift, scan or select an interval of sample values.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"mode":{"type":"string","constraints":{"choices":["equalize","range","shift","scan","select"]},"default":"equalize"},"range":{"type":"vec2","constraints":{"increasing":true},"default":[0,1]},"bins":{"type":"number","constraints":{"min":2,"max":4096,"integer":true},"default":256},"position":{"type":"number","default":0.5},"span":{"type":"number","constraints":{"exclusiveMin":0},"default":0.5},"offset":{"type":"number","default":0},"softness":{"type":"number","constraints":{"min":0},"default":0}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-color-corrections.md)
+
+Get the runnable example with `ink-studio graph describe image.histogramAdjust --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.hsl
+
+Rotate HSL hue and adjust saturation and lightness in display RGB.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `colorImage` | Required | {"layout":"Typed RGB or RGBA image"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"degrees":{"type":"number","unit":"degrees","default":0},"saturation":{"type":"number","constraints":{"min":0},"default":1},"inputRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"error"},"lightness":{"type":"number","constraints":{"min":-1,"max":1},"default":0}} |
+| Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
+
+Guides: [guide](../material-color-corrections.md)
+
+Get the runnable example with `ink-studio graph describe image.hsl --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.hsv
+
+Rotate HSV hue and adjust saturation and value in display RGB.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `colorImage` | Required | {"layout":"Typed RGB or RGBA image"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"degrees":{"type":"number","unit":"degrees","default":0},"saturation":{"type":"number","constraints":{"min":0},"default":1},"inputRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"error"},"valueFactor":{"type":"number","constraints":{"min":0},"default":1}} |
+| Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
+
+Guides: [guide](../material-color-corrections.md)
+
+Get the runnable example with `ink-studio graph describe image.hsv --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.inspect
 
 Report image extent and the full sampling and sample encoding contract.
@@ -98,6 +255,40 @@ Origin: toolkit.
 Guides: [guide](../graph-image-types.md)
 
 Get the runnable example with `ink-studio graph describe image.inspect --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.invert
+
+Invert decoded samples around a pivot while preserving alpha.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"pivot":{"type":"number","default":0.5}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-color-corrections.md)
+
+Get the runnable example with `ink-studio graph describe image.invert --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.levels
+
+Map input black and white through gamma to an output range.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"inputRange":{"type":"vec2","constraints":{"increasing":true},"default":[0,1]},"outputRange":{"type":"vec2","default":[0,1]},"gamma":{"type":"number","constraints":{"exclusiveMin":0},"default":1}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-color-corrections.md)
+
+Get the runnable example with `ink-studio graph describe image.levels --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.pack
@@ -117,6 +308,23 @@ The optional literal descriptor selects the output image type.
 Guides: [guide](../material-image-channels.md)
 
 Get the runnable example with `ink-studio graph describe image.pack --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.posterize
+
+Quantize decoded samples to tonal steps or an ordered RGB palette.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"steps":{"type":"number","constraints":{"min":2,"max":65536,"integer":true},"default":4},"range":{"type":"vec2","constraints":{"increasing":true},"default":[0,1]},"palette":{"type":"array","constraints":{"minItems":1,"maxItems":256}}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-color-corrections.md)
+
+Get the runnable example with `ink-studio graph describe image.posterize --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.resize
@@ -173,6 +381,23 @@ The literal selector keys become typed scalar output ports.
 Guides: [guide](../material-image-channels.md)
 
 Get the runnable example with `ink-studio graph describe image.split --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.threshold
+
+Create a typed coverage mask from a threshold with optional feathering.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]},"default":"float64"},"useAlpha":{"type":"boolean","default":true},"invert":{"type":"boolean","default":false},"channel":{"type":"string","constraints":{"choices":["luminance","r","g","b","alpha","value"]},"default":"luminance"},"level":{"type":"number","default":0.5},"softness":{"type":"number","constraints":{"min":0},"default":0}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-color-corrections.md)
+
+Get the runnable example with `ink-studio graph describe image.threshold --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.toDisplay
