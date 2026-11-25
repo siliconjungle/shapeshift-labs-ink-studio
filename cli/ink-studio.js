@@ -20,7 +20,7 @@ const argv = process.argv.slice(2),
   pos = [],
   opt = {};
 const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' || cmd === 'effect-recipe' ? ['json'] :
-  cmd === 'modeling-benchmark' ? ['repairs-complete'] : cmd === 'mesh-topology' ? ['from-camera', 'detach-edge', 'coincident'] : cmd === 'tileset' ? ['brush', 'clear', 'accept-external', 'snap-grid', 'paint-flip-x', 'paint-flip-y', 'brush-size'] : [];
+  cmd === 'modeling-benchmark' ? ['repairs-complete'] : cmd === 'mesh-topology' ? ['from-camera', 'detach-edge', 'coincident', 'replay'] : cmd === 'tileset' ? ['brush', 'clear', 'accept-external', 'snap-grid', 'paint-flip-x', 'paint-flip-y', 'brush-size'] : [];
 for (let i = 1; i < argv.length; i++) {
   const a = argv[i];
   if (a.startsWith('--')) {
@@ -1452,7 +1452,8 @@ const CMD = {
         '  mesh-topology plane <scene.json> --snap-origin bounds|average --object ID --selection selection.json [--detach-edge] [--out file.json]   snap the working origin to a selected center',
         '  mesh-topology move <mesh-or-scene.json> [--object id] [--part id] --vertex id --by X,Y,Z [--space local|world|plane|camera] [--view file] [--align plane|grid] [--coincident [--coincident-distance N]] [--expect revision] [--out file.json]   move a vertex and optionally its coincident copies',
         '  mesh-topology pivot <mesh-or-scene.json> [request.json] [--object id] [--part id] [--selection file] [--out file.json]   place an independent transform pivot',
-        '  mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file | --pivot file] [--out file] [--report file]   move, rotate, scale, snap, align, flatten, collapse or push mesh components',
+        '  mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file | --pivot file] [--out file] [--report file]   transform, snap, push or randomize mesh components',
+        '  mesh-topology transform <mesh-or-scene.json> <random-receipt.json> --replay [--object id] [--out file] [--report file]   replay recorded positions on the source revision',
         '  mesh-topology health <mesh-or-scene.json> [settings.json] [--object id] [--out report.json]   locate local topology and geometry problems',
         '  mesh-topology overlaps <mesh-or-scene.json> [settings.json] [--object id] [--part id] [--out report.json | --selection-out faces.json]   review same-facing coincident polygons',
         '  mesh-topology isolate-prefab <scene.json> <request.json> [--preview image.png] [--view settings.json] [--out scene.json]   limit prefab instance edits to active faces',

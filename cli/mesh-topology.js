@@ -33,18 +33,26 @@ function select(file, input, rest, opt, meshTopology, build) {
 
 function transform(file, input, rest, opt, toolkit, openEditor) {
   const { meshTopology } = toolkit.KIT;
-  const { object, selection, out, report, view, pivot } = opt;
+  const { object, selection, out, report, view, pivot, replay } = opt;
   const filenames = [file, input, selection, out, report, view, pivot].filter(value => value !== undefined);
   if (!file || !input || rest.length || filenames.some(name => typeof name !== 'string' || !name.trim()) ||
       object !== undefined && (typeof object !== 'string' || !object.trim()) || report && !out ||
-      view && !object || pivot && object ||
+      view && !object || pivot && object || replay !== undefined && (replay !== true || selection || view || pivot) ||
       ['from', 'visibility', 'projection', 'lineage', 'match-ids', 'coincident', 'coincident-distance'].some(key => opt[key] !== undefined))
-    throw new TypeError('Use mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file | --pivot file] [--out file] [--report file]');
+    throw new TypeError('Use mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file | --pivot file] [--out file] [--report file], or use a random transform receipt with --replay');
   const inputs = [file, input, selection, view, pivot].filter(Boolean).map(name => path.resolve(name));
   const outputs = [out, report].filter(Boolean).map(name => path.resolve(name));
   if (outputs.some(name => inputs.includes(name)) || new Set(outputs).size !== outputs.length)
     throw new RangeError('Write transform outputs to separate files from the inputs');
-  const source = read(file), request = read(input);
+  const source = read(file), payload = read(input);
+  let request = payload;
+  if (replay) {
+    const receipt = payload?.transform ?? payload?.report ?? payload;
+    request = receipt?.operation?.replay;
+    if (receipt?.format !== 'ink-studio/mesh-component-transform' || receipt.operation?.kind !== 'randomize' ||
+        request?.operation?.kind !== 'replay-randomize')
+      throw new TypeError('Use --replay with a random transform preview or receipt');
+  }
   if (selection) {
     if (!request || Object.getPrototypeOf(request) !== Object.prototype || Object.hasOwn(request, 'selection'))
       throw new TypeError('Give one saved selection with --selection or in the request');
@@ -223,6 +231,7 @@ function maintenance(action, file, input, rest, opt, meshTopology, openEditor) {
 
 function command([action, file, input, ...rest], opt, toolkit, { build, openEditor, projectTexelsPerUnit } = {}) {
   const { KIT: { meshTopology } } = toolkit;
+  if (opt.replay !== undefined && action !== 'transform') throw new TypeError('Use --replay with mesh-topology transform');
   if (action === 'transfer-attachments')
     return require('./mesh-attachment-transfer.js').command([file,input,...rest],opt,toolkit);
   if (action === 'transfer-materials')
