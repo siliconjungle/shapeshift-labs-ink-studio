@@ -717,6 +717,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.exposure"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.exposure"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
 | `KIT.procedural.graphImages.operations["image.exposure"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.floodRegions"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.floodRegions"].description` | value | `string = "Label connected typed-image regions, with stable IDs and unwrapped charts at tile seams."` |  |
+| `KIT.procedural.graphImages.operations["image.floodRegions"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.floodRegions"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.floodRegions"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.floodRegions"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.floodRegions"].outputs.labels` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.floodRegions"].outputs.regions` | value | `string = "array<record>"` |  |
+| `KIT.procedural.graphImages.operations["image.floodRegions"].outputs.value` | value | `string = "regionField"` |  |
+| `KIT.procedural.graphImages.operations["image.floodRegions"].run` | function | `({ source, options }, context)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.gaussianBlur"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.gaussianBlur"].description` | value | `string = "Blur a typed material image with a separable Gaussian kernel."` |  |
 | `KIT.procedural.graphImages.operations["image.gaussianBlur"].inputs` | namespace |  |  |
@@ -968,6 +978,24 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.radialBlur"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.radialBlur"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
 | `KIT.procedural.graphImages.operations["image.radialBlur"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.regionLookup"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.regionLookup"].description` | value | `string = "Sample a typed texture by region-local UV, centroid, seed or unwrapped position."` |  |
+| `KIT.procedural.graphImages.operations["image.regionLookup"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.regionLookup"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.regionLookup"].inputs.regions` | value | `string = "regionField"` |  |
+| `KIT.procedural.graphImages.operations["image.regionLookup"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.regionLookup"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.regionLookup"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.regionLookup"].run` | function | `({ regions: field, source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.regionMap"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.regionMap"].description` | value | `string = "Bake position, geometry, random color, local UV or gradients from a flood region field."` |  |
+| `KIT.procedural.graphImages.operations["image.regionMap"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.regionMap"].inputs.kind` | value | `string = "string"` |  |
+| `KIT.procedural.graphImages.operations["image.regionMap"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.regionMap"].inputs.source` | value | `string = "regionField"` |  |
+| `KIT.procedural.graphImages.operations["image.regionMap"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.regionMap"].outputs.value` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.regionMap"].run` | function | `({ source, kind, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.resize"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.resize"].description` | value | `string = "Resample a typed image using its own per-axis tiling and sampling policy. The output keeps the source port type."` |  |
 | `KIT.procedural.graphImages.operations["image.resize"].inputs` | namespace |  |  |
@@ -1113,6 +1141,11 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.vectorWarp"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
 | `KIT.procedural.graphImages.operations["image.vectorWarp"].run` | function | `({ source, map, direction: angleMap, intensity, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.pack` | function | `(sources, routes, target = { intent: 'data' })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.regions` | namespace |  |  |
+| `KIT.procedural.graphImages.regions.floodRegions` | function | `(source, options = {}, graphSeed = 0)` | [source](../../src/kit/paq-flood-region-images.js) |
+| `KIT.procedural.graphImages.regions.regionLookup` | function | `(source, texture, options = {})` | [source](../../src/kit/paq-flood-region-images.js) |
+| `KIT.procedural.graphImages.regions.regionMap` | function | `(source, kind, options = {})` | [source](../../src/kit/paq-flood-region-images.js) |
+| `KIT.procedural.graphImages.regions.valid` | function | `(value)` | [source](../../src/kit/paq-flood-region-images.js) |
 | `KIT.procedural.graphImages.resize` | function | `(source, width, height)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.shuffle` | function | `(source, routes, target)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.spatial` | namespace |  |  |

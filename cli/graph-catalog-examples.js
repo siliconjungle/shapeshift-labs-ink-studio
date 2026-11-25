@@ -185,6 +185,7 @@ const assetFixtures = {
 const declareColor = { op: 'image.declare', inputs: { source: rgba,
   descriptor: { intent: 'color', precision: 'unorm8', tiling: { u: 'wrap', v: 'clamp' }, sampling: 'linear' } } };
 const declareData = { op: 'image.declare', inputs: { source: mask, descriptor: { intent: 'data' } } };
+const floodExample = { op: 'image.floodRegions', inputs: { source: link('data'), options: { border: 'wrap', seed: 12 } } };
 const declareHeight = { op: 'image.toHeight', inputs: { source: link('data'), scale: 2 } };
 const uniformNormal = { op: 'image.uniform', inputs: {
   value: [.6, 0, .8], width: mask.width, height: mask.height, descriptor: { intent: 'normal' } } };
@@ -322,6 +323,11 @@ const specifications = {
   'image.heightBlend': { nodes: { data: declareData, base: declareHeight,
     raised: { op: 'image.toHeight', inputs: { source: link('data'), scale: 3 } } },
     inputs: { base: link('base'), layer: link('raised'), options: { softness: .5 } } },
+  'image.floodRegions': { nodes: { data: declareData }, inputs: floodExample.inputs },
+  'image.regionMap': { nodes: { data: declareData, field: floodExample },
+    inputs: { source: link('field'), kind: 'gradient', options: { align: 'orientation', angle: 40 } } },
+  'image.regionLookup': { nodes: { data: declareData, field: floodExample },
+    inputs: { regions: link('field'), source: link('data'), options: { coordinates: 'localUV', filter: 'linear' } } },
   'image.toDisplay': { nodes: { color: declareColor }, inputs: { source: link('color') } },
   'image.toRaster': { nodes: { color: declareColor }, inputs: { source: link('color') } },
   'image.inspect': { nodes: { color: declareColor }, inputs: { source: link('color') } },

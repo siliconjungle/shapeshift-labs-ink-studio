@@ -1,6 +1,5 @@
 /* Exact distance and mask operations over typed material-image pixel centers. */
-const TypedImageMorphology = ({ requireImage, descriptor, wrap, storage, alphaAt, integerMax,
-  convertColor, luminance, fields, geometry }) => {
+const TypedImageMorphology = ({ requireImage, descriptor, wrap, storage, integerMax, measure, fields, geometry }) => {
   const finite = Number.isFinite, maxCells = 6000000;
   const modes = ['clamp', 'wrap', 'mirror', 'transparent'];
   const saturated = value => Math.min(1, Math.max(0, value));
@@ -11,29 +10,6 @@ const TypedImageMorphology = ({ requireImage, descriptor, wrap, storage, alphaAt
     const { u = spec.tiling.u, v = spec.tiling.v } = typeof border === 'string' ? { u: border, v: border } : border;
     if (!modes.includes(u) || !modes.includes(v)) throw new RangeError('Unknown material morphology border');
     return [u, v];
-  }
-
-  function measure(source, { channel } = {}) {
-    const { raster: grid, descriptor: spec } = requireImage(source);
-    const { width, height, channels, data } = grid;
-    if (width * height > maxCells) throw new RangeError('Material morphology exceeds its grid budget');
-    const color = spec.intent === 'color';
-    const name = channel ?? (color ? spec.alpha === 'none' ? 'luminance' : 'alpha' : 'value');
-    if (color ? !['luminance', 'r', 'g', 'b', 'alpha'].includes(name) :
-      channels !== 1 || spec.intent === 'normal' || name !== 'value')
-      throw new TypeError('Material morphology needs a color channel or a single-plane numeric image');
-    const divisor = integerMax(spec.precision) || 1;
-    const component = ['r', 'g', 'b'].indexOf(name), rgb = [0, 0, 0];
-    const decode = color && name !== 'alpha' && convertColor(spec, name === 'luminance' ? 'srgb-linear' : spec.colorSpace);
-    function sample(p) {
-      if (!color) return data[p] / divisor;
-      const i = p * channels;
-      if (name === 'alpha') return alphaAt(data, i, spec);
-      if (!alphaAt(data, i, spec)) return 0;
-      decode(data, i, rgb);
-      return component < 0 ? luminance(rgb) : rgb[component];
-    }
-    return { grid, spec, width, height, sample, units: color ? 'unitless' : spec.units };
   }
 
   function plane(image, data, settings) {

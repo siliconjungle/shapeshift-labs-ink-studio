@@ -66,10 +66,13 @@ const PixelPaintTools = (() => {
     return { width,height,wrapX,wrapY,contains,quantize,primary,pixels,copies };
   }
 
-  function visit(seed, marks, id, matches, { width,height,steps,queue,wrapX,wrapY }) {
+  function visit(seed, marks, id, matches, { width,height,steps,queue,wrapX,wrapY,chart }) {
     const startX = seed%width, startY = Math.floor(seed/width);
     let left=startX, right=startX, top=startY, bottom=startY, area=1;
     marks[seed]=id; queue[0]=seed;
+    const chartX = chart?.x, chartY = chart?.y;
+    if (chartX) chartX[seed] = startX;
+    if (chartY) chartY[seed] = startY;
     for (let i=0; i<area; i++) {
       const p=queue[i], x=p%width, y=Math.floor(p/width);
       left=Math.min(left,x); right=Math.max(right,x);
@@ -83,10 +86,41 @@ const PixelPaintTools = (() => {
         if (!marks[key] && matches(key)) {
           marks[key]=id;
           queue[area++]=key;
+          if (chartX) chartX[key] = chartX[p] + dx;
+          if (chartY) chartY[key] = chartY[p] + dy;
+        } else if (chart && marks[key] === id) {
+          // Different lifts of the same texel identify a closed path around the tile.
+          if (chartX && chartX[key] !== chartX[p] + dx) chart.winding[0] = true;
+          if (chartY && chartY[key] !== chartY[p] + dy) chart.winding[1] = true;
         }
       }
     }
     return { id,area,seed:[startX,startY],rect:{ x:left,y:top,width:right-left+1,height:bottom-top+1 } };
+  }
+
+  function labelComponents(width, height, steps, selected, {
+    minArea = 1, wrapX = false, wrapY = false, stable = false, chart, describe
+  } = {}) {
+    const count = width * height, blocked = 0xffffffff;
+    const labels = new Uint32Array(count), queue = new Uint32Array(count), regions = [];
+    const work = { width, height, steps, queue, wrapX, wrapY, chart };
+    function active(p) {
+      if (selected(p)) return true;
+      labels[p] = blocked;
+      return false;
+    }
+    for (let p = 0; p < count; p++) {
+      if (labels[p] || !active(p)) continue;
+      if (chart) chart.winding.fill(false);
+      const region = visit(p, labels, stable ? p + 1 : regions.length + 1, active, work);
+      if (region.area < minArea) for (let q = 0; q < region.area; q++) labels[queue[q]] = blocked;
+      else {
+        if (regions.length >= 32768) throw new RangeError('Raster exceeds its connected-component budget');
+        regions.push(describe ? describe(region, queue) : region);
+      }
+    }
+    for (let p = 0; p < count; p++) if (labels[p] === blocked) labels[p] = 0;
+    return { regions, labels };
   }
 
   function region(width,height,point,matches,diagonal = false) {
@@ -185,7 +219,7 @@ const PixelPaintTools = (() => {
     return spans;
   }
 
-  return Object.freeze({ four,eight,visit,region,drawingGrid,fillPixels,segment,freehand,runs,insideEllipse,staircase });
+  return Object.freeze({ four,eight,visit,labelComponents,region,drawingGrid,fillPixels,segment,freehand,runs,insideEllipse,staircase });
 })();
 
 if (typeof module !== 'undefined') module.exports = PixelPaintTools;

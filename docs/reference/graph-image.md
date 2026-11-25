@@ -349,6 +349,25 @@ Guides: [guide](../material-color-corrections.md)
 Get the runnable example with `ink-studio graph describe image.exposure --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.floodRegions
+
+Label connected typed-image regions, with stable IDs and unwrapped charts at tile seams.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"channel":{"type":"string","constraints":{"choices":["value","luminance","r","g","b","alpha"]}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"threshold":{"type":"number","default":0.5},"invert":{"type":"boolean","default":false},"connectivity":{"type":"number","constraints":{"choices":[4,8]},"default":4},"minArea":{"type":"number","constraints":{"min":1,"max":4000000,"integer":true},"default":1},"seed":{"type":"number","constraints":{"integer":true}}} |
+| Output | `value` | `regionField` | — | {"layout":"Versioned stable label image, unwrapped image positions and per-region records","maxRegions":32768} |
+| Output | `labels` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `regions` | `array<record>` | — | {"items":"record"} |
+
+Guides: [guide](../material-flood-region-maps.md)
+
+Get the runnable example with `ink-studio graph describe image.floodRegions --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.gaussianBlur
 
 Blur a typed material image with a separable Gaussian kernel.
@@ -876,6 +895,42 @@ Origin: toolkit.
 Guides: [guide](../material-image-filters.md)
 
 Get the runnable example with `ink-studio graph describe image.radialBlur --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.regionLookup
+
+Sample a typed texture by region-local UV, centroid, seed or unwrapped position.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `regions` | `regionField` | Required | {"layout":"Versioned stable label image, unwrapped image positions and per-region records","maxRegions":32768} |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"coordinates":{"type":"string","constraints":{"choices":["localUV","center","seed","position"]},"default":"localUV"},"filter":{"type":"string","constraints":{"choices":["nearest","linear"]}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-flood-region-maps.md), [guide](../material-flood-region-maps.md#derived-maps)
+
+Get the runnable example with `ink-studio graph describe image.regionLookup --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.regionMap
+
+Bake position, geometry, random color, local UV or gradients from a flood region field.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `regionField` | Required | {"layout":"Versioned stable label image, unwrapped image positions and per-region records","maxRegions":32768} |
+| Input | `kind` | `string` | Required | {"choices":["id","area","orientation","center","bounds","position","localUV","randomValue","randomColor","gradient"]} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"units":{"type":"string","constraints":{"choices":["pixels","normalized"]},"default":"pixels"},"angle":{"type":"number","unit":"degrees","default":0},"align":{"type":"string","constraints":{"choices":["tile","orientation"]},"default":"tile"},"seed":{"type":"number","constraints":{"integer":true}},"palette":{"type":"array<string>","constraints":{"minItems":1,"maxItems":256}}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-flood-region-maps.md)
+
+Get the runnable example with `ink-studio graph describe image.regionMap --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.resize

@@ -604,8 +604,9 @@
     requireImage, descriptor, wrap, storage, pack, alphaAt, integerMax, convertColor, luminance, sampler, dimensions, fields
   });
   const filters = TypedImageFilters({ requireImage, descriptor, wrap, storage, pack, integerMax, convertColor, fields });
+  const measure = TypedImageMeasure({ requireImage, alphaAt, integerMax, convertColor, luminance });
   const morphology = TypedImageMorphology({
-    requireImage, descriptor, wrap, storage, alphaAt, integerMax, convertColor, luminance, fields, geometry: P.geometry
+    requireImage, descriptor, wrap, storage, integerMax, measure, fields, geometry: P.geometry
   });
   const { spatial, resample, sampler: spatialSampler, borders } = TypedImageSpatial({
     requireImage, descriptor, wrap, storage, pack, integerMax, convertColor, dimensions, fields
@@ -616,6 +617,9 @@
   const normals = TypedImageNormals({
     requireImage, declare, descriptor, wrap, pack, storage, integerMax, precisionOf, raster, fields, alignedGrid, borders,
     V: KIT.V, M: KIT.M
+  });
+  const regions = TypedImageRegions({
+    measure, validImage: valid, descriptor, wrap, fields, borders, alignedGrid, resample, hash01: P.data.hash01
   });
   const correctionOptions = { type: 'record', default: {} };
   const sameImage = { type: 'typedImage', typeFrom: 'source' };
@@ -848,6 +852,25 @@
       outputs: { value: 'heightImage', weight: 'typedImage' },
       run({ base, layer, mask, options }) { return normals.heightBlend(base, layer, options, mask); }
     },
+    'image.floodRegions': {
+      description: 'Label connected typed-image regions, with stable IDs and unwrapped charts at tile seams.',
+      inputs: { source: 'typedImage', options: correctionOptions },
+      outputs: { value: 'regionField', labels: 'typedImage', regions: 'array<record>' },
+      run({ source, options }, context) {
+        const value = regions.floodRegions(source, options, context.seed);
+        return { value, labels: value.labels, regions: value.regions };
+      }
+    },
+    'image.regionMap': {
+      description: 'Bake position, geometry, random color, local UV or gradients from a flood region field.',
+      inputs: { source: 'regionField', kind: 'string', options: correctionOptions }, outputs: { value: 'typedImage' },
+      run({ source, kind, options }) { return { value: regions.regionMap(source, kind, options) }; }
+    },
+    'image.regionLookup': {
+      description: 'Sample a typed texture by region-local UV, centroid, seed or unwrapped position.',
+      inputs: { regions: 'regionField', source: 'typedImage', options: correctionOptions }, outputs: { value: sameImage },
+      run({ regions: field, source, options }) { return { value: regions.regionLookup(field, source, options) }; }
+    },
     'image.toDisplay': {
       description: 'Convert typed color to straight-alpha sRGB8 for legacy compositing and PNG exports.',
       inputs: { source: 'typedImage', outOfRange: { type: 'string', default: 'clamp' } },
@@ -864,5 +887,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, regions, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);

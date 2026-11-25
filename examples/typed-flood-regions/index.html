@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harbor Mosaic · Ink Studio</title>
+<style>
+  :root{color-scheme:dark;--page:#192029;--panel:#23313a;--rule:#42616a;--text:#fbefd9;--muted:#b8cacd;--gold:#ffd191;
+    font:15px/1.44 system-ui,sans-serif}
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--text);background:radial-gradient(ellipse at 20% -26%,#3d5559,var(--page) 62%)}
+  main{max-width:1140px;margin:auto;padding:24px 28px}
+  header{display:flex;justify-content:space-between;align-items:end;gap:15px;margin-bottom:15px}
+  h1{margin:2px 0 5px;font:normal clamp(3rem,7vw,5rem)/.98 Georgia,serif;letter-spacing:-.052em}
+  a{color:var(--text);text-underline-offset:4px}
+  small{color:var(--gold);font:600 .71rem ui-monospace,monospace;letter-spacing:.1em}
+  p,figcaption,label,dt{color:var(--muted);margin:0}
+  .layout{display:grid;grid-template-columns:minmax(0,2.35fr) minmax(274px,1fr);gap:12px;align-items:start}
+  figure,aside{margin:0;min-width:0;border:1px solid var(--rule);background:var(--panel)}
+  aside{padding:12px}
+  .view{position:relative}
+  canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
+  #tile{cursor:crosshair}
+  #overlay,.guides{position:absolute;inset:0;pointer-events:none}
+  .guides{opacity:.52}
+  .guides::before,.guides::after{content:'';position:absolute}
+  .guides::before{left:50%;height:100%;border-left:1px dashed #ffe4b7}
+  .guides::after{top:50%;width:100%;border-top:1px dashed #ffe4b7}
+  figcaption{display:flex;gap:8px;justify-content:space-between;align-items:center;font-size:.81rem;
+    padding:8px 10px;border-top:1px solid var(--rule)}
+  figcaption span:first-child{color:var(--text)}
+  h2{font:normal 1.5rem Georgia,serif;margin:12px 0 6px}
+  .controls{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .wide{grid-column:1/-1}
+  label,dt{font-size:.81rem}
+  select,input[type=number]{display:block;width:100%;padding:6px;margin:3px 0 0;background:var(--page);
+    color:var(--text);border:1px solid var(--rule);border-radius:2px;font:inherit}
+  input[type=range]{display:block;width:100%;margin:3px 0 0}
+  input{accent-color:var(--gold)}
+  .slider{display:flex;justify-content:space-between}
+  output,dd{font:.79rem ui-monospace,monospace;color:var(--text);margin:0}
+  .toggles{display:flex;flex-wrap:wrap;gap:1px 12px;margin-top:7px}
+  .toggles input{margin-left:0;vertical-align:middle}
+  dl{display:grid;gap:5px;margin:0}
+  dl div{display:grid;grid-template-columns:1fr 1.68fr;gap:4px;align-items:baseline}
+  .note{margin-top:9px;font-size:.85rem}
+  #error{color:#ffb7a8}
+  [hidden]{display:none!important}
+  :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+  @media(max-width:690px){main{padding:18px 12px}header{display:block}header a{display:inline-block;margin-top:8px}
+    .layout{grid-template-columns:1fr}}
+</style>
+<main>
+  <header>
+    <div><small>INK STUDIO · MATERIAL GRAPHS</small><h1>Harbor Mosaic</h1>
+      <p>Inspect and texture the same connected regions across a repeating tile.</p></div>
+    <a href="harbor-mosaic.material.json" download>Editable material graph</a>
+  </header>
+  <div class="layout">
+    <section aria-label="Repeating mosaic">
+      <figure>
+        <div class="view">
+          <canvas id="tile" width="272" height="184" aria-label="Four repeated tiles. Click a tile to inspect its region."></canvas>
+          <canvas id="overlay" width="272" height="184" aria-hidden="true"></canvas><div class="guides" id="guides"></div>
+        </div>
+        <figcaption><span id="caption"></span><small>2 × 2 REPEAT · 136 × 92 TEXELS PER TILE</small></figcaption>
+      </figure>
+      <p class="note" id="note"></p>
+    </section>
+    <aside aria-label="Region controls and selection">
+      <div class="controls">
+        <label class="wide">Map <select id="mode"></select></label>
+        <label>Horizontal edge <select id="u"><option value="wrap">Wrap</option><option value="clamp">Clamp</option></select></label>
+        <label>Vertical edge <select id="v"><option value="wrap">Wrap</option><option value="clamp">Clamp</option></select></label>
+        <label>Connectivity <select id="connectivity"><option value="4">4 neighbors</option><option value="8">8 neighbors</option></select></label>
+        <label>Random seed <input id="seed" type="number" step="1" value="86"></label>
+        <label class="wide"><span class="slider">Gradient angle <output id="angle-value" for="angle"></output></span>
+          <input id="angle" type="range" min="-180" max="180" step="1" value="-33"></label>
+      </div>
+      <div class="toggles">
+        <label><input type="checkbox" id="seams" checked> Tile seams</label>
+        <label><input type="checkbox" id="bounds" checked> Region bounds</label>
+      </div>
+      <h2>Selected region</h2>
+      <dl aria-live="polite">
+        <div><dt>Region ID</dt><dd id="id"></dd></div>
+        <div><dt>Area</dt><dd id="area"></dd></div>
+        <div><dt>Centroid</dt><dd id="center"></dd></div>
+        <div><dt>Chart bounds</dt><dd id="box"></dd></div>
+        <div><dt>Major axis</dt><dd id="orientation"></dd></div>
+        <div><dt>Crosses seam</dt><dd id="crosses"></dd></div>
+        <div><dt>Regions in tile</dt><dd id="count"></dd></div>
+      </dl>
+      <p id="error" role="status"></p>
+    </aside>
+  </div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="mosaic.js"></script>
+<script>
+  const get = id => document.getElementById(id);
+  const sources = mosaicSources(), graph = KIT.procedural.graph.create(mosaicGraph());
+  const atlas = get('tile'), ink = atlas.getContext('2d'), overlay = get('overlay').getContext('2d');
+  const notes = {
+    glaze:'At the middle junction, one region spans all four source corners when both axes wrap.',
+    id:'Every connected shape keeps one ID. Clamp an edge to split the shapes that cross it.',
+    center:'Red and green encode the region centroid. Blue marks regions that cross a tile seam.',
+    bounds:'Color encodes the region bounds. The outline follows the unwrapped rectangle.',
+    area:'Larger connected regions are lighter.',
+    orientation:'The ramp encodes the major-axis angle measured from the horizontal.',
+    position:'Red and green encode texel positions in each unwrapped chart.',
+    randomValue:'One seeded scalar per region. Change the seed to redistribute values.',
+    randomColor:'One palette swatch per region. Change the seed to redistribute colors.',
+    localUV:'Red and green encode U and V from the chart bounds. The same ramp continues through each wrapped edge.',
+    gradient:'Each shape gets a ramp aligned to its major axis. Adjust the angle to rotate every ramp.',
+    lookup:'A small pigment stamp uses the region’s local UVs. At the junction, four corners form one stamp.'
+  };
+  for (const [key,label] of Object.entries(mosaicModes)) get('mode').add(new Option(label,key));
+  const mod = (n,period) => (n % period + period) % period;
+  let probe = [mosaicWidth,mosaicHeight], latest;
+
+  function inspect() {
+    const [x,y] = probe, u = mod(x,mosaicWidth), v = mod(y,mosaicHeight);
+    const id = latest.id.raster.data[v * mosaicWidth + u], region = latest.field.regions.find(r => r.id === id);
+    overlay.clearRect(0,0,atlas.width,atlas.height);
+    get('count').textContent = latest.field.regions.length;
+    get('guides').hidden = !get('seams').checked;
+    if (!region) {
+      for (const key of ['id','area','center','box','orientation','crosses']) get(key).textContent = '—';
+      return;
+    }
+    const { area, center, chartCenter, angle, bounds, crosses, winding } = region;
+    get('id').textContent = id;
+    get('area').textContent = area + ' texels';
+    get('center').textContent = center.map(n => n.toFixed(1)).join(', ');
+    get('box').textContent = [bounds.x,bounds.y].join(', ') + ' · ' + bounds.width + ' × ' + bounds.height;
+    get('orientation').textContent = (angle * 180 / Math.PI).toFixed(1) + '°';
+    get('crosses').textContent = crosses.map((flag,i) => flag ? ['U','V'][i] + (winding[i] ? ' winding' : '') : null)
+      .filter(Boolean).join(' and ') || 'None';
+    if (!get('bounds').checked) return;
+    overlay.strokeStyle = '#fff1cf';
+    for (const dy of [-mosaicHeight,0,mosaicHeight]) for (const dx of [-mosaicWidth,0,mosaicWidth]) {
+      overlay.setLineDash([2,2]);
+      overlay.strokeRect(bounds.x+dx+.5,bounds.y+dy+.5,bounds.width,bounds.height);
+      overlay.setLineDash([]);
+      const cx = Math.floor(chartCenter[0]+dx)+.5, cy = Math.floor(chartCenter[1]+dy)+.5;
+      overlay.beginPath();
+      overlay.moveTo(cx-2,cy); overlay.lineTo(cx+2,cy);
+      overlay.moveTo(cx,cy-2); overlay.lineTo(cx,cy+2); overlay.stroke();
+    }
+  }
+
+  function render() {
+    try {
+      const mode = get('mode').value, angle = Number(get('angle').value), border = { u:get('u').value,v:get('v').value };
+      latest = graph.evaluate({...sources,flood:{ border,seed:Number(get('seed').value),connectivity:Number(get('connectivity').value) },
+        grad:{ angle,align:'orientation' },edge:{border,maxDistance:24}}).outputs;
+      const { width,height,data } = mosaicPreview(latest,mode);
+      const tile = new ImageData(new Uint8ClampedArray(data),width,height);
+      for (const y of [0,height]) for (const x of [0,width]) ink.putImageData(tile,x,y);
+      get('caption').textContent = mosaicModes[mode];
+      get('angle-value').value = angle + '°';
+      get('note').textContent = notes[mode];
+      get('error').textContent = '';
+      inspect();
+    } catch (error) { get('error').textContent = error.message; }
+  }
+
+  atlas.addEventListener('pointerdown', event => {
+    const bounds = atlas.getBoundingClientRect();
+    probe = [Math.floor((event.clientX-bounds.left)*atlas.width/bounds.width),
+      Math.floor((event.clientY-bounds.top)*atlas.height/bounds.height)];
+    if (latest) inspect();
+  });
+  let pending = false;
+  for (const id of ['mode','u','v','connectivity','seed','angle']) get(id).addEventListener('input', () => {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => { pending = false; render(); });
+  });
+  for (const id of ['seams','bounds']) get(id).addEventListener('input', () => { if (latest) inspect(); });
+  render();
+</script>
+</html>

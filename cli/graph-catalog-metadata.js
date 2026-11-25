@@ -22,6 +22,7 @@ const types = {
   colorImage: { layout: 'Typed RGB or RGBA image' },
   heightImage: { layout: 'Typed floating-point height with units' },
   normalImage: { layout: 'Typed XYZ or XYZA normal map with signed float or biased integer samples' },
+  regionField: { layout: 'Versioned stable label image, unwrapped image positions and per-region records', maxRegions: 32768 },
   reliefHeight: { layout: 'Typed height in art pixels or a legacy numeric scalar raster' },
   materialChannels: { layout: 'Versioned named raster channels with independent grids and metadata', minItems: 1, maxItems: 64 },
   image: { layout: 'Width, height and image data' },
@@ -64,6 +65,7 @@ const connectivity = property('number', oneOf(4, 8), 4);
 const dimension = { constraints: { integer: true, min: 1, max: 8192 } };
 
 const ports = {
+  'image.regionMap': { kind: oneOf('id','area','orientation','center','bounds','position','localUV','randomValue','randomColor','gradient') },
   'array.broadcast': { mode: oneOf('zip', 'cycle', 'hold', 'cartesian', 'cartesianReverse'), limit: limit(1, 100000, true) },
   'array.sort': { direction: oneOf('asc', 'desc') },
   'model.prefab': {revision: {constraints: {integer: true, min: 1}}, kind: oneOf('visual', 'world')},
@@ -298,6 +300,14 @@ const options = {
     mode:property('string',oneOf('height','mix'),'height'), bias:property('number',unit('height units'),0),
     offset:property('number',unit('height units'),0), softness:property('number',{unit:'height units',...positive},0),
     opacity:property('number',limit(0,1),1) },
+  'image.floodRegions': { channel:imageGeometry.channel, border:imageGeometry.border, threshold:property('number',{},.5),
+    invert:property('boolean',{},false), connectivity:{...connectivity,default:4}, minArea:property('number',limit(1,4e6,true),1),
+    seed:property('number',{constraints:{integer:true}}) },
+  'image.regionMap': { units:property('string',spatialUnits,'pixels'), angle:filterAngle,
+    align:property('string',oneOf('tile','orientation'),'tile'), seed:property('number',{constraints:{integer:true}}),
+    palette:property('array<string>',{constraints:{minItems:1,maxItems:256}}) },
+  'image.regionLookup': { coordinates:property('string',oneOf('localUV','center','seed','position'),'localUV'),
+    filter:spatialSampling.filter, border:spatialSampling.border },
   'image.curve': { ...correctionOutput, channel:property('string',oneOf('all','r','g','b','value'),'all') },
   'image.gradient': { precision:{...imagePrecision,default:'float64'}, outOfRange:{...imageRangePolicy,default:'error'},
     from:property('vec2',limit(0,1),[0,.5]), to:property('vec2',limit(0,1),[1,.5]) },
