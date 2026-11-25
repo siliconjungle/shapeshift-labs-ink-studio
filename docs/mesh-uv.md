@@ -128,7 +128,8 @@ default of 16, in that order.
 To use the scene's [construction plane](mesh-topology.md#set-a-construction-plane),
 pass `--plane U,V` in place of an explicit origin and axes. The lower-left
 corner uses that plane grid coordinate and the face follows its right and up
-directions.
+directions. Use a [camera pick or axis lock](mesh-topology.md#pick-and-lock-a-plane-from-the-camera)
+to set that frame before stamping.
 
 The quad has four editable vertices and stable face corners. Its pigment UVs
 address the first and last texel centers in the crop, including when an axis

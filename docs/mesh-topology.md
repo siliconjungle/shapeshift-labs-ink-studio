@@ -180,6 +180,38 @@ editor's undo journal. Stamp requests take `planeAt:[u,v]`. A standalone
 Run `node examples/tileset-pick/construction-plane-demo.cjs plane-demo`
 to replay a relocated plane, two stamps, a pivot rotation, and grid alignment.
 
+### Pick and lock a plane from the camera
+
+Use `--from-camera` to choose the most face-on world plane from the
+authored view. A yaw or pitch override also requests a pick. Angles
+are in radians, as for `render`. Use `--at` and `--camera-shot` to sample
+a rigged camera. The pick preserves the plane origin and grid interval.
+Its normal faces the camera and its grid axes follow the screen as
+closely as the cardinal axes allow. Equal scores prefer Z, then X, then Y.
+
+```sh
+ink-studio mesh-topology plane draft.json --from-camera --out auto.json
+ink-studio mesh-topology plane auto.json --lock x --out locked.json
+ink-studio mesh-topology plane locked.json --from-camera --yaw 3.14 --out orbited.json
+ink-studio mesh-topology plane orbited.json --from-camera --lock off --out repicked.json
+```
+
+X, Y, and Z locks name the plane's normal axis. Once saved, a lock
+holds the exact right and up vectors through later camera picks,
+including an orbit to the opposite side. `--lock off` clears the lock.
+Combine it with `--from-camera` to pick a new orientation immediately.
+Read the preview's `camera.axis` and `camera.kept` to see the choice.
+Stamps, pivots, and alignment use the saved plane.
+
+Hosts with a live camera pose can call
+`KIT.authoring.constructionPlane.pick(plane, pose, {lock})` with a
+`CameraLens` pose. Omit `lock` to honor the stored setting or pass `null`
+for automatic picking. Save the returned plane with
+`editor.setConstructionPlane({...picked.plane,lock:picked.plane.lock ?? null})`.
+
+Run `node examples/tileset-pick/camera-plane-demo.cjs orbit-demo`
+to compare automatic and locked placement through the same orbit.
+
 ## Move one vertex
 
 Run `mesh-topology move` with an existing vertex ID and an XYZ offset in

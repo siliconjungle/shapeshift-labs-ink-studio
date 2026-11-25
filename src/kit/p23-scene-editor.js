@@ -461,10 +461,12 @@
       if (!changes || Object.getPrototypeOf(changes) !== Object.prototype)
         throw new TypeError('Construction plane changes need a record');
       const next = A.constructionPlane.resolve({...constructionPlane(),...changes}).plane;
-      const write = () => {
+      const write = () => document.batchSession(() => {
+        // A complete plane replacement also removes an explicitly cleared lock.
+        document.setEnvironment({constructionPlane:null});
         document.setEnvironment({constructionPlane:next});
         return next;
-      };
+      });
       return document.pending() ? write() : document.transact('Set construction plane',write);
     }
 

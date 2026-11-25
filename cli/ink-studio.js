@@ -20,7 +20,7 @@ const argv = process.argv.slice(2),
   pos = [],
   opt = {};
 const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' || cmd === 'effect-recipe' ? ['json'] :
-  cmd === 'modeling-benchmark' ? ['repairs-complete'] : cmd === 'tileset' ? ['brush', 'clear', 'accept-external'] : [];
+  cmd === 'modeling-benchmark' ? ['repairs-complete'] : cmd === 'mesh-topology' ? ['from-camera'] : cmd === 'tileset' ? ['brush', 'clear', 'accept-external'] : [];
 for (let i = 1; i < argv.length; i++) {
   const a = argv[i];
   if (a.startsWith('--')) {
@@ -1443,7 +1443,7 @@ const CMD = {
         '  mesh-topology sections edit <source.json> <request.json> [--mesh mesh.json] [--out source.json] [--out-mesh mesh.json] [--out-patch patch.json] [--report file.json]   rebuild named sections',
         '  mesh-topology edit <mesh.json> <patch.json> [--out file.json] [--report map.json]   edit polygon topology with an optional correspondence receipt',
         '  mesh-topology select <mesh-or-scene.json> <query.json> [--object id] [--from selection.json] [--view settings.json | --visibility capture.json] [--out file.json]   select authored components',
-        '  mesh-topology plane <scene.json> [--origin X,Y,Z] [--right X,Y,Z] [--up X,Y,Z] [--grid N] [--out file.json]   inspect or set the shared construction plane',
+        '  mesh-topology plane <scene.json> [--origin X,Y,Z] [--right X,Y,Z] [--up X,Y,Z] [--grid N] [--from-camera] [--yaw R] [--pitch R] [--at seconds] [--camera-shot ID] [--lock x|y|z|off] [--out file.json]   set or camera-pick the shared construction plane',
         '  mesh-topology move <mesh-or-scene.json> [--object id] [--part id] --vertex id --by X,Y,Z [--space local|world|plane] [--align plane|grid] [--expect revision] [--out file.json]   preview or move one existing vertex',
         '  mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--out file] [--report file]   move, rotate, scale and snap authored components',
         '  mesh-topology health <mesh-or-scene.json> [settings.json] [--object id] [--out report.json]   locate local topology and geometry problems',
