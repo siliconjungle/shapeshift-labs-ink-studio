@@ -140,6 +140,7 @@
   const checks = {
     any: () => true,
     number: Number.isFinite,
+    integer: Number.isSafeInteger,
     unitScalar: unit,
     liveSnapshot: value => value===null||K.world?.liveSnapshots?.validPacket(value)===true,
     worldFrame: value => value===null||value?.format==='ink-studio/world-graph-frame'&&value.version===1&&
@@ -151,6 +152,7 @@
     string: value => typeof value === 'string',
     vec2: value => vector(value, 2),
     vec3: value => vector(value, 3),
+    vec4: value => vector(value, 4),
     array: Array.isArray,
     record: value => record(value) && [Object.prototype,null].includes(Object.getPrototypeOf(value)),
     geometry: value => record(value) && ((value.points && value.faces) || (value.pos && value.tri) || value.positions || mesh(value)),
@@ -193,6 +195,7 @@
   };
   // Semantic ports retain compatibility with legacy numeric and raster sockets.
   const semantics = {
+    integer: ['signed safe integer'],
     unitScalar: ['normalized scalar in [0,1]', 'number'],
     pixels: ['top-left pixel coordinates', 'vec2'],
     uv: ['normalized top-left UV coordinates', 'vec2'],
@@ -226,6 +229,7 @@
     'worldPosition/pixels': 'coord.project', 'worldPosition/uv': 'coord.project (uv output)',
     'pixels/worldPosition': 'coord.unproject with axial depth',
     'uv/worldPosition': 'coord.uvToPixel, then coord.unproject with axial depth',
+    'number/integer': 'fn.toInteger',
     'seconds/frames': 'time.toFrames', 'frames/seconds': 'time.toSeconds',
     'rgb8/srgb': 'color.fromRGB8', 'srgb/rgb8': 'color.toRGB8',
     'srgb/srgb-linear': 'color.toLinear', 'srgb-linear/srgb': 'color.toDisplay',
@@ -256,6 +260,8 @@
   }
   function compatible(from,to) {
     if (from === to || from === 'any' || to === 'any') return true;
+    if (from === 'integer') return ['number','pixelCount','frames','unitScalar'].includes(to);
+    if (to === 'integer') return ['pixelCount','frames'].includes(from);
     if (to === 'typedImage' && ['colorImage', 'heightImage', 'normalImage'].includes(from)) return true;
     if (from === 'typedImage' && ['normalImage', 'heightImage'].includes(to)) return true;
     if (to === 'reliefHeight') return ['heightImage', 'typedImage', 'scalarRaster', 'raster'].includes(from);

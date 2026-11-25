@@ -491,6 +491,48 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graph.simulation` | function | `({ initial, step, dt = 1 / 60, checkpoint = 15, cache = 32, maxSteps = 10000, clone = P.data.clone, seed = 0 } = {})` | [source](../../src/kit/paq-node-graph.js) |
 | `KIT.procedural.graph.tiles` | function | `({ bounds, cell = [1, 1], seed = 0, mask = () => 1, vector = () => [0, 0], scale = 1, jitter = .25, limit = 65536, time = 0 } = {})` | [source](../../src/kit/par-graph-assets.js) |
 
+## KIT.procedural.graphFunctions
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.graphFunctions` | namespace |  |  |
+| `KIT.procedural.graphFunctions.compatible` | function | `(from, to)` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.operations` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.color"]` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.color"].description` | value | `string = "Build RGB(A), read components or luminance, and mix colors in linear light."` |  |
+| `KIT.procedural.graphFunctions.operations["fn.color"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.operations["fn.compare"]` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.compare"].description` | value | `string = "Compare two values of a declared type and return a Boolean."` |  |
+| `KIT.procedural.graphFunctions.operations["fn.compare"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.operations["fn.logic"]` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.logic"].description` | value | `string = "Combine Boolean values with and, or, xor, or not."` |  |
+| `KIT.procedural.graphFunctions.operations["fn.logic"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.operations["fn.math"]` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.math"].description` | value | `string = "Evaluate a named numeric function or arithmetic operation in a declared scalar type."` |  |
+| `KIT.procedural.graphFunctions.operations["fn.math"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.operations["fn.select"]` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.select"].description` | value | `string = "Choose one of two computed values that have the same declared type."` |  |
+| `KIT.procedural.graphFunctions.operations["fn.select"].specialize` | function | `({type})` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.operations["fn.text"]` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.text"].description` | value | `string = "Join strings, count UTF-16 code units or test for a substring."` |  |
+| `KIT.procedural.graphFunctions.operations["fn.text"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.operations["fn.toInteger"]` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.toInteger"].description` | value | `string = "Convert a finite number to a signed safe integer with an explicit rounding policy."` |  |
+| `KIT.procedural.graphFunctions.operations["fn.toInteger"].inputs` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.toInteger"].inputs.a` | value | `string = "number"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.toInteger"].inputs.rounding` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.toInteger"].inputs.rounding.default` | value | `string = "exact"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.toInteger"].inputs.rounding.type` | value | `string = "string"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.toInteger"].outputs` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.toInteger"].outputs.value` | value | `string = "integer"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.toInteger"].run` | function | `({a,rounding})` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.operations["fn.vector"]` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.vector"].description` | value | `string = "Construct or operate on a declared two-, three-, or four-component vector."` |  |
+| `KIT.procedural.graphFunctions.operations["fn.vector"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.typedOperations` | value | `array` |  |
+| `KIT.procedural.graphFunctions.types` | value | `array` |  |
+| `KIT.procedural.graphFunctions.validType` | function | `(type)` | [source](../../src/kit/paq-graph-functions.js) |
+
 ## KIT.procedural.graphImages
 
 | Member | Kind | Signature or value | Guides and source |

@@ -129,7 +129,7 @@ function publishMaterialSubgraph(file, source, { revision = 1, baseDir = path.di
   const document = openMaterialGraph(source);
   if (Object.keys(document.resources ?? {}).length || document.settings?.base !== undefined)
     throw new TypeError('Publish a portable subgraph with explicit inputs for material resources and base settings');
-  const { inputs, nodes, outputs, groups } = toGraphProject(document);
+  const { inputs, nodes, outputs, groups, result } = toGraphProject(document);
   const target = path.resolve(file), folder = path.dirname(target);
   function relocate(declarations) {
     return Object.fromEntries(Object.entries(declarations).map(([name, definition]) => {
@@ -141,7 +141,7 @@ function publishMaterialSubgraph(file, source, { revision = 1, baseDir = path.di
       return [name, typeof definition === 'string' ? relocated : { ...definition, file: relocated }];
     }));
   }
-  const body = { ...(inputs && { inputs }), nodes, outputs, ...(groups && { groups: relocate(groups) }) };
+  const body = { ...(inputs && { inputs }), nodes, outputs, ...(result!==undefined && {result}), ...(groups && { groups: relocate(groups) }) };
   const inspector = portVisibility(document.graph, document.controls);
   const definition = { format: graphFormat, version: 1, revision, ...body, ...(inspector && { inspector }) };
   // Register the body as a group to compile the same public interface its consumers will receive.

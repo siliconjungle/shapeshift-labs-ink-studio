@@ -237,6 +237,7 @@
   P.graph.operations = Object.freeze({
     ...P.conversions.operations,
     ...P.graph.arrays.operations,
+    ...P.graphFunctions.operations,
     'model.prefab': {
       description: 'Collect keyed group outputs into a revisioned visual or world prefab with stable member IDs.',
       inputs: { model: 'string', revision: 'number', sections: 'record',

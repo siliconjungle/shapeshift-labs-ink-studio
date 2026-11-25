@@ -28,6 +28,13 @@
   function create(source, { operations = {}, groups = {}, planOnly = false } = {}) {
     const stored = P.data.freeze(P.data.clone(source));
     const specInputs = schema(stored.inputs || {});
+    const fn = P.graphFunctions, declared = Object.hasOwn(stored, 'result');
+    if (declared && (!fn.validType(stored.result) || !record(stored.outputs) ||
+        Object.keys(stored.outputs).length !== 1 || !Object.hasOwn(stored.outputs, 'result')))
+      throw new TypeError('Function graph needs one output named result and a declared value type');
+    if (declared && Object.values(specInputs).some(socket => !fn.validType(socket.type)))
+      throw new TypeError('Function graph inputs must use declared value types');
+    const linkTypes = declared ? fn.compatible : compatible;
     if (!record(stored.nodes) || !record(stored.outputs) || Object.keys(stored.nodes).length > 2000)
       throw new RangeError('A graph needs named nodes and outputs within its node budget');
     const specs = stored.nodes, configs = new Map(), stack = new Set(), order = [];
@@ -74,6 +81,13 @@
       const template = Object.hasOwn(operations, spec.op) ? operations[spec.op] :
         Object.hasOwn(groups, spec.op) ? groups[spec.op] : K.world?.kernels?.operation(spec.op) ??
           (Object.hasOwn(P.graph.operations || {}, spec.op) ? P.graph.operations[spec.op] : null);
+      if (declared) {
+        const fnOp = Object.hasOwn(fn.operations,spec.op) && fn.operations[spec.op] === template;
+        const typedValue = spec.op === 'data.typed' && template === P.graph.arrays.operations['data.typed'] && fn.validType(spec.type);
+        const fnCall = Object.hasOwn(groups,spec.op) && groups[spec.op] === template && fn.validType(template?.functionResult);
+        if (!fnOp && !typedValue && !fnCall)
+          throw new TypeError('Function graph node ' + name + ' needs a pure value operation or declared function call: ' + spec.op);
+      }
       const operation = template?.specialize ? template.specialize(spec,groups) : template;
       if (typeof operation?.run !== 'function' && typeof operation?.instantiate !== 'function')
         throw new TypeError('Unknown graph operation ' + spec.op);
@@ -85,8 +99,10 @@
         if (!Object.hasOwn(given, key) && !Object.hasOwn(socket, 'default'))
           throw new RangeError('Missing graph socket ' + name + '.' + key);
         const link = binding(Object.hasOwn(given, key) ? given[key] : { value: socket.default });
+        if (declared && link.kind === 'track')
+          throw new TypeError('Function graph node ' + name + '.' + key + ' cannot read keyframes');
         const source = link.kind === 'node' ? link.id + '.' + link.port : link.kind === 'input' ? 'input ' + link.id : 'keyframes';
-        if (link.kind !== 'value' && (link.kind !== 'track' || planOnly) && !compatible(link.type,socket.type)) {
+        if (link.kind !== 'value' && (link.kind !== 'track' || planOnly) && !linkTypes(link.type,socket.type)) {
           const convert = conversion(link.type, socket.type);
           throw new TypeError('Incompatible graph socket ' + name + '.' + key + ': ' + source + ' provides ' +
             description(link.type) + ', expected ' + description(socket.type) + (convert ? '. Use ' + convert + '.' : '.'));
@@ -117,7 +133,12 @@
     for (const name of Object.keys(specs)) visit(name);
     const results = Object.entries(stored.outputs).map(([name, link]) => {
       if (!id(name)) throw new RangeError('Invalid graph output name ' + name);
-      return [name, binding(link)];
+      const bound = binding(link);
+      if (!declared) return [name,bound];
+      const valid = validator(stored.result);
+      if (bound.kind === 'track' || (bound.kind === 'value' ? !valid(bound.value) : !linkTypes(bound.type,stored.result)))
+        throw new TypeError('Function result requires ' + description(stored.result) + '; received ' + description(bound.type));
+      return [name,{ ...bound,type:stored.result }];
     });
 
     const resolve = (link, values, time, pending) => {
@@ -224,6 +245,8 @@
       function finish() {
         const status = Object.fromEntries(order.map(name => [name, pending.get(name) === marks.get(name) ? 'cached' : 'evaluated']));
         const outputs = Object.fromEntries(results.map(([key, link]) => [key, resolve(link, values, time, pending)]));
+        if (declared && !validator(stored.result)(outputs.result))
+          throw new TypeError('Wrong value for function result: expected ' + description(stored.result));
         const snapshot = new Map(pending);
         for (const [name, item] of snapshot) marks.set(name, item);
         return { outputs, status, preview(node, port = 'value') {
@@ -308,6 +331,7 @@
       }
       return P.data.clone({
         inputs: specInputs,
+        ...(declared && {result:stored.result}),
         nodes: order.map(name => {
           const {op,group,type,outputs,bindings,clock,seed,asset} = configs.get(name);
           return {id:name,op,...(group!==undefined && {group}),...(type!==undefined && {type}),time:clock,outputs,
@@ -334,10 +358,14 @@
 
   function group(spec, { operations, groups, outputs } = {}) {
     const inputTypes = schema(spec.inputs || {});
+    const declared = Object.hasOwn(spec,'result');
     const inferred = outputs === undefined && create(spec,{operations,groups,planOnly:true}).plan().outputs;
     const outputTypes = schema(outputs ?? Object.fromEntries(Object.entries(inferred).map(([name,{type,quantity}]) =>
-      [name,quantity ? {type,quantity} : 'any'])));
-    return { inputs: inputTypes, outputs: outputTypes, expandedNodes:Object.keys(spec.nodes ?? {}).length, time: true, instantiate() {
+      [name,quantity ? {type,quantity} : declared ? type : 'any'])));
+    if (declared && (Object.keys(outputTypes).length !== 1 || outputTypes.result?.type !== spec.result))
+      throw new TypeError('Function group outputs must match its declared result');
+    return { inputs: inputTypes, outputs: outputTypes, expandedNodes:Object.keys(spec.nodes ?? {}).length,
+      time: !declared, ...(declared && {functionResult:spec.result}), instantiate() {
       const graph = create(spec, { operations, groups });
       let latest;
       const run = (inputs, context, workers) => {
