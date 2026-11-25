@@ -311,7 +311,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelCanvasTransforms.coordinate` | function | `(map,value,axis)` | [source](../../src/pixel-canvas-transforms.js) |
 | `KIT.pixelCanvasTransforms.extent` | function | `(width,height)` | [source](../../src/pixel-canvas-transforms.js) |
 | `KIT.pixelCanvasTransforms.guides` | function | `(map,rows)` | [source](../../src/pixel-canvas-transforms.js) |
-| `KIT.pixelCanvasTransforms.plan` | function | `(width,height,operation,trim)` | [source](../../src/pixel-canvas-transforms.js) |
+| `KIT.pixelCanvasTransforms.plan` | function | `(width,height,operation,trim,maxEdge = 512)` | [source](../../src/pixel-canvas-transforms.js) |
 | `KIT.pixelCanvasTransforms.preserve` | function | `(map,previous)` | [source](../../src/pixel-canvas-transforms.js) |
 | `KIT.pixelCanvasTransforms.raster` | function | `(map,slots,alpha)` | [source](../../src/pixel-canvas-transforms.js) |
 | `KIT.pixelCanvasTransforms.region` | function | `(map,pixels)` | [source](../../src/pixel-canvas-transforms.js) |

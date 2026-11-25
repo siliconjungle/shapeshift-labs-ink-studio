@@ -151,5 +151,5 @@
     return {tilesetDefaults:{...scene.tilesetDefaults,texelsPerUnit:density}};
   }
 
-  A.tilesets = Object.freeze({ dimensions, blank, prepare, register, gridPatch, positiveScale, scalePatch });
+  A.tilesets = Object.freeze({ maxEdge, dimensions, blank, prepare, register, gridPatch, positiveScale, scalePatch });
 })(KIT);

@@ -244,6 +244,47 @@ a PNG path, PNG bytes, or an imported tileset image. It returns a reusable
 Run `node examples/tileset-pick/repack-demo.cjs tile-repack-demo` for the
 padded TIDE sign, its compact atlas, and the rectangle map.
 
+### Resize a canvas or resample a sheet
+
+`tileset resize` keeps existing texels at their original size. It pads
+with transparency or crops at the chosen anchor. The nine anchors run from
+`top-left` (the default) through `center` to `bottom-right`.
+`tileset resample` uses nearest-neighbor sampling across the whole image
+and keeps the faces' normalized UVs. It uses the same sampling for indexed
+and RGBA art. Indexed canvas padding uses a transparent palette slot,
+adding one if possible. A full opaque palette with new transparent padding
+promotes to RGBA8.
+
+```sh
+ink-studio tileset resize --scene original.json --id sign \
+  --width 96 --height 32 --anchor bottom-right
+ink-studio tileset resize --scene original.json --id sign \
+  --width 96 --height 32 --anchor bottom-right --out resized.json
+ink-studio tileset resample --scene original.json --id sign \
+  --width 96 --height 32 --out resampled.json
+```
+
+Omit `--out` to preview the before and after pigment UVs by object,
+face, and corner. Resize updates eligible UVs to follow the original
+texels. The preview identifies cuts through face references, moved pins,
+and registered material maps that need their own migration. The edit
+writes a new scene only when the report permits it. The report includes
+any bakes marked for refresh. For separately saved brush records, find the
+new texel-edge coordinate with `(source - sourceOffset) / sourceScale` on
+each axis.
+
+Resize moves the tile grid with the content. Resample scales the grid.
+If the resulting grid no longer fits or uses fractional texels, supply
+a replacement grid with `--tile-width` and `--tile-height`. In the Node SDK,
+`editor.planTilesetCanvas(id, { type, size, anchor })` previews the change.
+`editor.transformTilesetCanvas(id, operation)` commits the raster and
+face references in one undoable edit. The SDK also accepts `tileSize`
+with the usual grid options.
+
+Run `node examples/tileset-pick/canvas-demo.cjs tile-canvas-demo` for two
+edits of the same sheet with matching face geometry and before/after UV
+receipts.
+
 ### Set brush size in world units
 
 Set `texelsPerUnit` once in the project's existing `ink-studio.config.js`.

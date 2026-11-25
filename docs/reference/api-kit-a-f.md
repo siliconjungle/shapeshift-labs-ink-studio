@@ -856,10 +856,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.storyExchange.validate` | function | `(manifest)` | [source](../../src/kit/p23zz-story-exchange.js) |
 | `KIT.authoring.styles` | namespace |  |  |
 | `KIT.authoring.styles.resolve` | function | `(source, id)` | [source](../../src/kit/p25-authoring-bindings.js) |
+| `KIT.authoring.tilesetCanvas` | namespace |  |  |
+| `KIT.authoring.tilesetCanvas.plan` | function | `(scene, id, operation)` | [source](../../src/kit/p23-tileset-canvas.js) |
 | `KIT.authoring.tilesets` | namespace |  |  |
 | `KIT.authoring.tilesets.blank` | function | `({ width, height, background = 'transparent' } = {})` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.dimensions` | function | `(width, height)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.gridPatch` | function | `(scene, key, size)` | [source](../../src/kit/p23-tilesets.js) |
+| `KIT.authoring.tilesets.maxEdge` | value | `number = 2048` |  |
 | `KIT.authoring.tilesets.positiveScale` | function | `(value, label)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.prepare` | function | `(sources = {}, defaults = {})` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.register` | function | `(scene, key, source)` | [source](../../src/kit/p23-tilesets.js) |

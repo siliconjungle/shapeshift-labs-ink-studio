@@ -10,7 +10,7 @@ const PixelCanvasTransforms = (() => {
   const integer = (n,lo,hi) => Number.isSafeInteger(n) && n >= lo && n <= hi;
   const pair = (v,test) => Array.isArray(v) && v.length === 2 && Array.from(v).every(test);
   const record = value => value && Object.getPrototypeOf(value) === Object.prototype;
-  const dimensions = value => pair(value,n=>integer(n,1,512));
+  const dimensions = (value,maxEdge = 512) => pair(value,n=>integer(n,1,maxEdge));
   const half = value => Math.round(value*2)/2 || 0;
 
   function extent(width,height) {
@@ -24,8 +24,8 @@ const PixelCanvasTransforms = (() => {
     };
   }
 
-  function plan(width,height,operation,trim) {
-    if (!dimensions([width,height]) || !record(operation) || !Object.hasOwn(schemas,operation.type) ||
+  function plan(width,height,operation,trim,maxEdge = 512) {
+    if (!dimensions([width,height],maxEdge) || !record(operation) || !Object.hasOwn(schemas,operation.type) ||
         Object.keys(operation).some(key=>key !== 'type' && !schemas[operation.type].includes(key)))
       throw new TypeError('Choose a crop, trim, pad, resize, or resample canvas operation');
     const { type } = operation;
@@ -45,7 +45,7 @@ const PixelCanvasTransforms = (() => {
       size = [width+margins[0]+margins[2],height+margins[1]+margins[3]];
     } else {
       size = operation.size;
-      if (!dimensions(size)) throw new RangeError('Canvas dimensions must be whole pixels from 1 to 512');
+      if (!dimensions(size,maxEdge)) throw new RangeError('Canvas dimensions must be whole pixels from 1 to '+maxEdge);
       if (type === 'resize') {
         const { anchor = 'top-left' } = operation;
         if (!Object.hasOwn(anchors,anchor)) throw new RangeError('Choose a canvas resize anchor');
@@ -56,7 +56,7 @@ const PixelCanvasTransforms = (() => {
         scale = [width/size[0],height/size[1]];
       }
     }
-    if (!dimensions(size)) throw new RangeError('Canvas dimensions must be whole pixels from 1 to 512');
+    if (!dimensions(size,maxEdge)) throw new RangeError('Canvas dimensions must be whole pixels from 1 to '+maxEdge);
     const [w,h] = size, index = new Int32Array(w*h).fill(-1);
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       const u = Math.floor(offset[0]+(x+.5)*scale[0]), v = Math.floor(offset[1]+(y+.5)*scale[1]);

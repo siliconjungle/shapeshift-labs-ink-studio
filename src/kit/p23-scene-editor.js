@@ -375,6 +375,34 @@
       return document.pending() ? write() : document.transact('Set tileset texels per unit',write);
     }
 
+    function stageTilesetCanvas(id,operation) {
+      const before = snapshot(), {asset,meshes,report} = A.tilesetCanvas.plan(before,id,operation);
+      if (!asset) return {report};
+      const patch = {tilesets:{[id]:asset},...(Object.keys(meshes).length && {topologyMeshes:meshes})};
+      const candidate = {...before,tilesets:{...before.tilesets,[id]:asset},
+        ...(patch.topologyMeshes && {topologyMeshes:{...before.topologyMeshes,...meshes}})};
+      const problems = DIO.check(candidate,buildEnv).filter(problem=>problem.level === 'error');
+      return problems.length ? {report:freeze({...report,canCommit:false,problems})} : {patch,report};
+    }
+
+    function planTilesetCanvas(id,operation) {
+      return stageTilesetCanvas(id,operation).report;
+    }
+
+    function transformTilesetCanvas(id,operation) {
+      const {patch,report} = stageTilesetCanvas(id,operation);
+      if (!report.canCommit)
+        throw Object.assign(new RangeError('Tileset canvas edit needs reference or tile grid review'),{report});
+      if (!patch) return report;
+      const write = () => document.batchSession(() => {
+        // Replace the raster record in full so a promoted RGBA image drops its indexed fields.
+        document.setEnvironment({tilesets:{[id]:null}});
+        document.setEnvironment(patch);
+        return report;
+      });
+      return document.pending() ? write() : document.transact('Edit tileset canvas '+id,write);
+    }
+
     function meshTopology(object, part) {
       const meshes = snapshot().topologyMeshes ?? {};
       const mesh = Object.hasOwn(meshes, object) ? meshes[object] : null;
@@ -804,6 +832,8 @@
       tilesetGrid,
       setTilesetGrid,
       setTilesetTexelsPerUnit,
+      planTilesetCanvas,
+      transformTilesetCanvas,
       meshTopology,
       selectMeshTopology: (object, request, { part, visibility } = {}) =>
         K.meshTopology.select(meshTopology(object, part).document, request, { visibility }),

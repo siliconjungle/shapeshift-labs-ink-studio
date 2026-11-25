@@ -288,6 +288,8 @@ function brushUVCommand([file,...rest], options, toolkit, openEditor) {
 }
 
 function command([action, ...args], options, toolkit, projectTexelsPerUnit, openEditor) {
+  if (action === 'resize' || action === 'resample')
+    return require('./tileset-canvas.js').command(action,args,options,openEditor);
   if (action === 'repack') return require('./tileset-repack.js').command(args,options,toolkit);
   if (action === 'grid') return gridCommand(args,options,toolkit);
   if (action === 'world-scale') return worldScaleCommand(args,options,toolkit,projectTexelsPerUnit);
@@ -301,7 +303,7 @@ function command([action, ...args], options, toolkit, projectTexelsPerUnit, open
   const allowed = ['id','scene','out',...tileFields,...(create ? ['width','height','background'] : [])];
   if (!['import','create'].includes(action) || rest.length || Object.keys(options).some(key => !allowed.includes(key)) ||
       ![id,scene,out].every(value => typeof value === 'string' && value.trim()))
-    throw new TypeError('Use tileset import, create, repack, grid, world-scale, pick, brush-uv, brush-size, or brush-preview');
+    throw new TypeError('Use tileset import, create, repack, resize, resample, grid, world-scale, pick, brush-uv, brush-size, or brush-preview');
   if (create) {
     if (source !== undefined || ![width,height].every(value => typeof value === 'string' && /^\d+$/.test(value)))
       throw new TypeError('Use tileset create --width <texels> --height <texels> [--background <color>]');
