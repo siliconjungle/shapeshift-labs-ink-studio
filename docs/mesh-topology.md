@@ -579,6 +579,55 @@ ink-studio mesh-topology transform bench.json flatten.json --object plates --sel
 node examples/tileset-pick/mesh-plane-alignment-demo.cjs plane-alignment-review
 ```
 
+### Push components against a mesh
+
+Use a `push` operation to translate selected components along one direction
+until they meet a stationary retained mesh. The sweep checks full selected
+edges and faces as well as single vertices, so a narrow stop can catch a
+face even when none of its corners would hit.
+
+```json
+{
+  "space": "world",
+  "operation": {
+    "kind": "push",
+    "mode": "assembly",
+    "direction": [0, 0, 1],
+    "maxDistance": 2,
+    "clearance": 0.025,
+    "target": { "object": "fixture.stops" }
+  }
+}
+```
+
+- `individual` is the default. Vertices move independently. Selected
+  edges or faces that share a vertex move as one piece.
+- `assembly` translates the whole selection by the first piece's
+  available travel, so spacing stays fixed across disconnected pieces.
+
+The direction uses the request's transform space. Reach and clearance are
+world units along that direction. Initial contact stops the group at zero.
+`coincident` can join compatible copies to the same group, and a pinned
+vertex holds its group. Push uses a rigid translation per group.
+
+Omit the target object to use stationary faces in the edited mesh.
+`target.faces` can restrict the sweep to named faces. A scene can target
+another retained mesh or a placed prefab member. Each independent piece
+tests the same stationary geometry snapshot.
+Contact uses the authored triangles in their placement frame.
+
+On a miss, the default `"miss": "keep"` leaves that group in place.
+`"limit"` uses the full reach and `"error"` rejects the edit.
+`maxPairs` bounds the number of candidate tests and defaults to 250,000.
+Exceeding it rejects the plan. Preview and commit report each group's
+travel, contact distance, source element, target face, and target revision.
+
+```sh
+ink-studio mesh-topology transform bench.json push.json --object plates --selection plates.json
+ink-studio mesh-topology transform bench.json push.json --object plates --selection plates.json --out fitted.json --report fit-receipt.json
+node examples/tileset-pick/mesh-push-demo.cjs push-review
+```
+
 ## Place a pivot independently
 
 ```sh

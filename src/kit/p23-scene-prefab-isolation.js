@@ -108,7 +108,7 @@ const prefabEditIsolation = (function (K) {
         requireShapeOwner(target.object, spec.topologyMeshes[target.object].part, scene, 'Transform');
         const selection = raw.selection ?? pickActive();
         const transformed = T.planTransform(doc, { ...raw, selection, frame: link.frame }, {
-          pivot: row.pivot,
+          object: target.object, pivot: row.pivot,
           ...(raw.constructionPlane === undefined && meshComponentSnap.usesConstructionPlane(raw) ?
             { constructionPlane: A.constructionPlane.forScene(scene).plane } : {}),
           ...(raw.space === 'camera' && raw.camera === undefined && { camera: camera ??= authoredCamera() }),
