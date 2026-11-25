@@ -1273,3 +1273,84 @@ Build the curves into `builder` before finishing the world. Bind the splat
 group while its rows are still in the original rest pose. Subsequent updates
 reuse that captured rest data. The mesh attachment host also accepts
 `stitches` whose endpoints have an `attachment` ID.
+
+## Drive a mesh shape key from a named pose
+
+Use `mesh-topology shape-keys` to preview a rest edit or capture a pose
+correction on stable vertex IDs. A pose edit stores a separate shape key
+set tied to the rest revision. Its activation uses the local joint rotation
+falloff from [pose-space correctives](pose-correctives.md). Vertex
+trajectories use the [geometry morph sampler](geometry-morphs.md).
+
+```sh
+node examples/mesh-shape-keys/demo.cjs hoist-review
+
+node cli/ink-studio.js mesh-topology shape-keys hoist-review/mesh.json \
+  hoist-review/shape-request.json --view hoist-review/view.json \
+  --preview preview --report review.json
+```
+
+The Faraday Hoist demo adjusts the outside of a folding mesh collar and its
+splat rivets using the same elbow rotation. The native review shows
+the rest model, an inactive pose, a transition, and the captured pose.
+The output includes a second request that explicitly changes the rest
+model.
+
+### Choose the edit destination
+
+- `destination: "rest"` changes the authored mesh positions. Use
+  `moves` with stable vertex IDs and offsets in rest coordinates, or
+  `strokes` with the same center, radius and move fields as the pose
+  sculpt brush. Existing keys keep their original revision pin and show
+  `needs-recapture` when the rest revision changes.
+- `destination: "pose"` needs a key `id` and a named capture `pose`.
+  Supply the skin `matrices` in named or joint order and the driver's
+  local 3 × 3 `rotations` by name. Use `drivers` with `part` and an
+  angular `radius` in degrees, or supply a captured splat
+  `corrective` and its matching capture pose. A pose named `rest` is
+  reserved for the undeformed comparison lane.
+- Vertex `moves` and brush `strokes` on a pose edit use the captured
+  pose's coordinates. Ink converts the offsets through the blended skin
+  transform and applies them before skinning. A saved topology
+  `selection` or a list of vertex IDs scopes the edit. A vertex move
+  can carry intermediate `keys` with `at`, `move`, and optional
+  `ease` for that trajectory. These waypoints use the capture pose's
+  vector basis.
+- Recapture with the same key ID to revise it. Use
+  `{ "destination": "pose", "id": "outer-fold", "remove": true }`
+  to remove it. A recapture on a changed rest revision starts a new key
+  set and lists the previous stale keys in the receipt.
+
+The receipt names the destination, compares the rest revisions, lists
+affected vertices, and reports key activation and changed pixels for each
+preview view. Give the review file a `poses` array for additional named
+samples. Ink always captures the canonical rest model and uses the exact
+capture pose from the edit request.
+
+Add `--out` to save the revision bundle. Pass that bundle back to
+`mesh-topology shape-keys` to inspect, recapture, or make a rest edit.
+Use `--object` to edit the retained mesh inside a scene. The scene editor
+provides `planMeshShapeKeys(object, request)` and
+`editMeshShapeKeys(object, request)` with undo and redo.
+
+### Connect to a rig
+
+```js
+const { shapeKeys } = KIT.meshTopology;
+const binding = shapeKeys.bind(mesh, revision.shapeKeys);
+const disconnect = puppet.correctives.attachMesh(binding);
+```
+
+The puppet updates the mesh and splat corrections on the same rig tick.
+Named mesh joints select the first bone of the matching puppet part.
+Pass `{bones: { elbow: 7 }}` when a mesh joint uses another rig bone
+slot. Use `puppet.correctives.meshPose(binding.joints)` after posing to
+capture inputs from the live rig. A built scene exposes the ready binding
+as `world.topologyMeshes[object].shapeKeys`.
+
+For a manual frame, call `binding.pose(matrices, {rotations})`. For
+authored animation curves, use `binding.morph({ "outer-fold": 0.5 },
+matrices)`. Read the current blend weights with `binding.state()`.
+`binding.rest()` returns the mesh to its stored geometry. Overlapping
+keys normalize their contributions per vertex when their weights sum
+above one.

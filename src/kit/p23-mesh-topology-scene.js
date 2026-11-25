@@ -54,7 +54,7 @@
   }
 
   function prepareRow(object, row, evaluation) {
-    if (!TargetSelectors.name(object) || !fields(row, ['document', 'part', 'label', 'materials', 'bindings', 'bakes', 'modifiers', 'attachments']) ||
+    if (!TargetSelectors.name(object) || !fields(row, ['document', 'part', 'label', 'materials', 'bindings', 'bakes', 'modifiers', 'attachments', 'shapeKeys']) ||
         (row.part !== undefined && !TargetSelectors.name(row.part)) || (row.label !== undefined && !name(row.label)))
       throw new TypeError('An editable scene mesh needs an object ID, document, and optional named part');
     const cage = topology.create(row.document), document = evaluation?.document ?? cage;
@@ -99,7 +99,10 @@
       throw new TypeError('An editable mesh needs a version 1 attachment manifest');
     const attachmentBinding=manifest && manifest.revision===topology.revision(document) && topology.attachments.bind(mesh,manifest);
     const attachmentStatus=manifest && (attachmentBinding ? 'ready' : 'needs-transfer');
+    const shapeKeyStatus=row.shapeKeys!==undefined && K.meshTopology.shapeKeys.status(document,row.shapeKeys);
+    const shapeKeys=shapeKeyStatus==='ready' && K.meshTopology.shapeKeys.bind(mesh,row.shapeKeys);
     return { mesh, document, bindings: moved, resolvedBindings, bakes: [...bakes.values()], ...(skin && {skin}),
+      ...(shapeKeyStatus && {shapeKeyStatus}), ...(shapeKeys && {shapeKeys}),
       ...(attachmentStatus && {attachmentStatus}), ...(attachmentBinding && {attachments:attachmentBinding}),
       ...(evaluation && { cage, modifierReport: evaluation.report }) };
   }
@@ -203,6 +206,9 @@
     }
     const oldBakes = (before?.bakes ?? []).map(bakeState), newBakes = (after?.bakes ?? []).map(bakeState);
     changes.bakes = recordsChanged(index(oldBakes, 'Mesh bakes'), index(newBakes, 'Mesh bakes'));
+    if (before?.shapeKeys || after?.shapeKeys)
+      changes.shapeKeys=recordsChanged(index(before?.shapeKeys?.keys??[],'Mesh shape keys'),
+        index(after?.shapeKeys?.keys??[],'Mesh shape keys'));
     if (before?.attachments || after?.attachments)
       changes.attachments=recordsChanged(index(before?.attachments?.attachments??[],'Mesh attachments'),
         index(after?.attachments?.attachments??[],'Mesh attachments'));

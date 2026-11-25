@@ -44,3 +44,7 @@ node cli/ink-studio.js pose-correctives review examples/pose-correctives/switchy
 Open `review/index.html` to play or scrub the original rig, the corrected rig, and actual tiles from the sprite atlas. **Show sculpt changes** marks where the correction affected the image. The review also writes animated PNGs, weight and pixel measurements, and the atlas with depth, normal, emission, and silhouette maps.
 
 For a scene authored in JavaScript, update the puppet to the reference pose, call `puppet.correctives.capture(plan)`, and install it with `puppet.correctives.set([asset])`. Use `puppet.correctives.assets()` to export the installed layers and `puppet.correctives.state()` to read their current weights. A scene tool can access the same editor through `KIT.poseCorrectives.forWorld(world)`.
+
+Use the same named local rotations to
+[drive retained mesh shape keys](mesh-topology.md#drive-a-mesh-shape-key-from-a-named-pose).
+A mesh key can reuse a captured splat corrective's drivers.

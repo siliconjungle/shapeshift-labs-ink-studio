@@ -551,6 +551,11 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.poseCorrectives` | namespace |  |  |
 | `KIT.poseCorrectives.bind` | function | `(world,puppet,data)` | [source](../../src/kit/kj-pose-correctives.js) |
 | `KIT.poseCorrectives.forWorld` | function | `(world)` | [guide](../pose-correctives.md#apply-and-review), [source](../../src/kit/kj-pose-correctives.js) |
+| `KIT.poseCorrectives.kernel` | namespace |  |  |
+| `KIT.poseCorrectives.kernel.brush` | function | `(strokes)` | [source](../../src/kit/kj-pose-correctives.js) |
+| `KIT.poseCorrectives.kernel.rotation` | function | `(value)` | [source](../../src/kit/kj-pose-correctives.js) |
+| `KIT.poseCorrectives.kernel.sculpt` | function | `(point,strokes)` | [source](../../src/kit/kj-pose-correctives.js) |
+| `KIT.poseCorrectives.kernel.weight` | function | `(joints, motions)` | [source](../../src/kit/kj-pose-correctives.js) |
 
 ## KIT.presentationTimeline
 

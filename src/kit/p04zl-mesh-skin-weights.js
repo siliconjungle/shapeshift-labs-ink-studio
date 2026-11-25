@@ -244,17 +244,27 @@
       return [id,Object.entries(result.weights).map(([joint,value])=>[solve.slots.get(joint),value])];
     }));
     const skin = native.skin(mesh,Array.from({length:mesh.vertices},(_,i)=>weights.get(topology.sourceVertex(mesh,i))));
-    function pose(matrices) {
+    function matricesFor(matrices) {
       let rows = matrices;
       if (matrices && Object.getPrototypeOf(matrices)===Object.prototype) {
         if (Object.keys(matrices).length!==joints.length || !joints.every(joint=>has(matrices,joint) && vec(matrices[joint],12)))
           throw new RangeError('A named mesh pose needs one finite twelve-value matrix for each joint');
         rows = joints.flatMap(joint=>Array.from(matrices[joint]));
       }
-      if (rows?.length !== joints.length*12) throw new RangeError('Provide a matrix for every named skin joint');
-      return skin.pose(rows);
+      if (rows?.length !== joints.length*12 || !vec(rows,joints.length*12))
+        throw new RangeError('Provide a finite matrix for every named skin joint');
+      return rows;
     }
-    return Object.freeze({mesh,joints,pose});
+    function linear(matrices) {
+      const values=matricesFor(matrices);
+      return id=>{
+        const influences=weights.get(id);
+        if (!influences) throw new RangeError('No skin vertex '+id);
+        const total=sum(influences.map(([,n])=>n));
+        return Array.from({length:9},(_,i)=>sum(influences.map(([joint,n])=>values[joint*12+i]*n))/total);
+      };
+    }
+    return Object.freeze({mesh,joints,linear,pose:(matrices,shape)=>skin.pose(matricesFor(matrices),shape)});
   }
 
   function normalizer(source) {

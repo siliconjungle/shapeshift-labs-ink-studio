@@ -556,6 +556,29 @@
       }) });
     }
 
+    function planMeshShapeKeys(object, request, {part}={}) {
+      const row=meshTopology(object,part);
+      return K.meshTopology.shapeKeys.plan(row.document,request,{shapeKeys:row.shapeKeys});
+    }
+
+    function editMeshShapeKeys(object, request, options={}) {
+      const plan=planMeshShapeKeys(object,request,options);
+      if (plan.report.destination==='rest') {
+        requireMeshShapeOwner(object,meshTopology(object,options.part).part,snapshot(),'Edit');
+        return freeze({shape:plan.report,topology:editMeshTopology(object,plan.patch,
+          {...options,label:'Edit rest shape of '+object})});
+      }
+      function write() {
+        const before=meshTopology(object,options.part);
+        const row={...before,shapeKeys:plan.shapeKeys};
+        const next={topologyMeshes:{...snapshot().topologyMeshes,[object]:row}};
+        validate({...snapshot(),...next});
+        document.setEnvironment(next);
+        return freeze({shape:plan.report,changes:A.meshTopologyScene.diff(before,row)});
+      }
+      return document.pending() ? write() : document.transact('Edit pose shape of '+object,write);
+    }
+
     function planMeshSkin(object, request, { part } = {}) {
       return K.meshTopology.skin.plan(meshTopology(object, part).document, request);
     }
@@ -748,6 +771,8 @@
       editMeshShading,
       planMeshSkin,
       editMeshSkin,
+      planMeshShapeKeys,
+      editMeshShapeKeys,
       planMeshAttachmentTransfer,
       transferMeshAttachments,
       planMeshUV,

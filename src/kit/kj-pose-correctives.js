@@ -56,6 +56,28 @@
 
   function bind(world,puppet,data) {
     let layers=[], rows=new Map(), buffer, base=puppet.bones, weights=[], driverNames=[];
+    const meshBindings=new Map();
+    function mapping(joints, slots) {
+      check(Array.isArray(joints)&&joints.every(joint=>puppet.names.includes(joint)||Object.hasOwn(slots??{},joint)),
+        'mesh joints need a named puppet part or an explicit bone slot');
+      const order=joints.map(joint=>Object.hasOwn(slots??{},joint)?slots[joint]:puppet.parts[joint].first);
+      check(order.every(i=>Number.isSafeInteger(i)&&i>=0&&i<puppet.bones.length/12),'invalid mesh bone slot');
+      return order;
+    }
+    const sampleRotations=()=>Object.fromEntries(puppet.names.map(name=>[name,driver(puppet.parts[name])]));
+    const meshMatrices=(bones,order)=>order.flatMap(i=>Array.from(bones.subarray(i*12,i*12+12)));
+    function meshPose(joints,{bones}={}) {
+      return {matrices:meshMatrices(puppet.bones,mapping(joints,bones)),rotations:sampleRotations()};
+    }
+    function attachMesh(binding,{bones}={}) {
+      check(binding?.mesh&&Array.isArray(binding.drivers)&&Array.isArray(binding.joints)&&typeof binding.pose==='function'&&
+        binding.drivers.every(name=>puppet.names.includes(name))&&![...meshBindings.keys()].some(row=>row.mesh===binding.mesh),
+        'attach a distinct mesh shape-key binding driven by named puppet parts');
+      const order=mapping(binding.joints,bones);
+      binding.pose(meshMatrices(puppet.bones,order),{rotations:sampleRotations()});
+      meshBindings.set(binding,order);
+      return ()=>meshBindings.delete(binding);
+    }
     const currentKind=i=>Math.round(data[i*16+11])%16;
     const skin=i=>currentKind(i)===12||currentKind(i)===13;
     function rest(i) {
@@ -189,6 +211,10 @@
     }
     function frame(bones) {
       base=bones;
+      if (meshBindings.size) {
+        const rotations=sampleRotations();
+        for (const [binding,order] of meshBindings) binding.pose(meshMatrices(bones,order),{rotations});
+      }
       if (!buffer) { weights=[]; return bones; }
       const snapshots=new Map(driverNames.map(part=>[part,driver(puppet.parts[part])]));
       weights=layers.map(layer=>weight(layer.joints,snapshots));
@@ -203,14 +229,15 @@
         world.data=world.posedBuf=K.bones.posed({ data,anim:puppet.anim,posedBuf:world.posedBuf });
     }
     const editor=Object.freeze({
-      capture,set,
+      capture,set,meshPose,attachMesh,
       get size() { return layers.length; },
       assets:()=>structuredClone(layers),
       state:()=>layers.map(({id,rows},i)=>({id,rows:rows.length,weight:weights[i]??0}))
     });
     rigs.set(world,editor);
-    return {editor,frame,refresh,viewFrame};
+    return {editor,frame,refresh,viewFrame,hasMeshes:()=>meshBindings.size>0};
   }
 
-  K.poseCorrectives=Object.freeze({ bind, forWorld:world=>rigs.get(world) });
+  K.poseCorrectives=Object.freeze({ bind, forWorld:world=>rigs.get(world),
+    kernel:Object.freeze({rotation,weight,brush,sculpt}) });
 })(KIT);

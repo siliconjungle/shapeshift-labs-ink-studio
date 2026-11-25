@@ -88,3 +88,7 @@ opening into an armillary. Moving lights in both studies use point constraints.
 node cli/ink-studio.js clip examples/geometry-morph-studies.js --w 940 --h 560 --px 2 --to 6.4 --fps 10 --out signal-to-surveyor.png
 node cli/ink-studio.js clip examples/geometry-morph-studies.js --params '{"study":"armillary"}' --w 940 --h 560 --px 2 --to 6.4 --fps 10 --out armillary-seal.png
 ```
+
+[Mesh shape keys](mesh-topology.md#drive-a-mesh-shape-key-from-a-named-pose)
+use the point sampler for stable authored vertices. Their progress can
+come from a rig's local joint rotations or authored animation weights.

@@ -428,11 +428,12 @@ const SceneMeshes = (() => {
       return pairs.map(([bone,weight])=>[bone*12,weight/total]);
     });
     const positions=new Float32Array(rest.length);
-    return Object.freeze({mesh,pose(matrices) {
+    return Object.freeze({mesh,pose(matrices,shape) {
       if (!array(matrices) || matrices.length%12 || matrices.length<(lastBone+1)*12 || !every(matrices,Number.isFinite))
         throw new RangeError('Mesh skinning needs a finite twelve-value matrix per bone');
+      const base=shape===undefined ? rest : positionsOf(shape,rest.length);
       for (const [i,row] of weights.entries()) {
-        const p=i*3, x=rest[p], y=rest[p+1], z=rest[p+2];
+        const p=i*3, x=base[p], y=base[p+1], z=base[p+2];
         for (let k=0;k<3;k++) {
           let next=0;
           for (const [bone,weight] of row) {

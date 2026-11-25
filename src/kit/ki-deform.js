@@ -1297,7 +1297,7 @@
     }
     pup.flush = () => {
       writeBones(Mx);
-      if (pup.correctives.size) corrective.refresh(Mx);
+      if (pup.correctives.size || corrective.hasMeshes()) corrective.refresh(Mx);
       return pup;
     };
     /* On a stage (K.stage) the puppet is one of its systems: the stage keeps the world's anim, and is given the bones */
