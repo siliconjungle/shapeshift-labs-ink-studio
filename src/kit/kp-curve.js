@@ -160,14 +160,14 @@
         return [0, 1, 2].map(k => pts[i][k] + (f.N[k] * u + f.B[k] * v) * amp * end);
       });
     },
-    frames: (pts, up) => {
+    frames: (pts, up, closedHint) => {
       const n = pts.length,
         out = [],
         T = [];
       let L = 0;
       const cum = [0];
       for (let i = 1; i < n; i++) cum.push((L += Math.hypot(...sub(pts[i], pts[i - 1]))));
-      const closed = n > 3 && Math.hypot(...sub(pts[0], pts[n-1])) < 1e-8;
+      const closed = closedHint ?? (n > 3 && Math.hypot(...sub(pts[0], pts[n-1])) < 1e-8);
       for (let i = 0; i < n; i++) {
         const tangent = closed && (i === 0 || i === n-1) ? sub(pts[1], pts[n-2]) :
           sub(pts[Math.min(n-1,i+1)], pts[Math.max(0,i-1)]);

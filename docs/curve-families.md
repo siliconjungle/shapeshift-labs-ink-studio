@@ -84,6 +84,86 @@ The smooth mathematical curve is sampled into straight segments. More segments i
 
 `K.curve.path(points, {closed,up})` adapts arbitrary polylines to the same contract. Its snapshot contains points, closure and frame up; restore with `K.curve.path(snapshot.points, {closed:snapshot.closed,up:snapshot.up})`. The original generators remain backward compatible. Family definitions and compiled paths are distinct from raw point arrays.
 
+## Edit retained splines
+
+Use `KIT.curve.retained` when a cable, rail, or stroke needs named geometry
+that stays editable. A version 1 `ink-studio/retained-splines` document
+contains ordered splines, each with control points and directed segments.
+Spline, control-point, segment, and attachment IDs are unique within their
+respective namespaces in the document. Handles are XYZ offsets from the
+control point. Radius is in world units and tilt is in radians around the
+transported tangent.
+
+```js
+const api = K.curve.retained;
+const rail = api.create({
+  format: api.format, version: 1, id: 'relay-panel',
+  splines: [{
+    id: 'cable',
+    points: [
+      { id: 'start', position: [-2, 0, 0], outHandle: [.7, 1, 0], radius: .08 },
+      { id: 'end', position: [2, 0, 0], inHandle: [-1, .3, 0], radius: .16, tilt: .5 }
+    ],
+    segments: [{ id: 'span', from: 'start', to: 'end' }]
+  }],
+  attachments: [{ id: 'socket', spline: 'cable', segment: 'span', t: .72 }]
+});
+const plan = api.plan(rail, {
+  revision: api.revision(rail),
+  operations: [
+    { op: 'split', segment: 'span', t: .4, point: 'junction', rightSegment: 'tail' }
+  ]
+});
+const revised = api.compile(plan.document, 'cable');
+const socket = revised.anchor('tail', plan.document.attachments[0].t);
+```
+
+| Operation | Effect |
+| --- | --- |
+| `set-point` | Address a control point by `point` and change any of `position`, `inHandle`, `outHandle`, `radius`, or `tilt`. Moving the point carries its relative handles. |
+| `split` | Insert a `point` at cubic parameter `t` on a `segment`. The leading span keeps the original ID and the trailing span gets `rightSegment`. Supply `newSpline` and `newStart` to separate an open route at the new point. |
+| `cut` | Open a closed route at `point` or separate an open route at an interior point. `newStart` names the duplicate boundary point. Separating an open route also needs `newSpline`. The segment IDs are retained. |
+| `join` | Join two open routes named `first` and `second`. Use optional `firstEnd` and `secondEnd` (0 for start, 1 for end) to select the ends. The first route keeps its ID. Default endpoint tolerance is `1e-8` world units. |
+
+A split divides the cubic and its radius and tilt profiles without changing
+their evaluated values. A join reverses either chain when required, swaps
+its in/out handles, and negates its tilt. A welded join keeps the first
+endpoint's position, radius, and tilt and reports the differences at the
+removed endpoint. To preserve both endpoints across a gap, specify a new
+`bridge` segment ID and a tolerance that reaches the other end. This keeps
+the existing curves and adds a connector.
+
+`plan` validates the source revision, evaluates the whole edit, and returns
+the frozen replacement document, an operation and attachment receipt, and
+`mapStation(spline, station)` for external normalized route stations.
+Stored attachments use cubic parameter `t` within their segment. The
+[route-station remapper](procedural.md#route-station-remapping) keeps that
+address through edits and computes its new arc-length station. Topology-only
+splits and cuts preserve attachment centers. Handle or position edits move
+attached points with the edited curve. Transported frames are rebuilt along
+the revised route.
+
+`compile(document, splineId)` returns the shared curve path plus
+`locate(station)`, `anchor(segment, t)`, `radiusAt(distance)`, and
+named `sections`. Anchor positions use the cubic. Normalized stations and
+the shared route path use bounded adaptive arc-length samples. A one-spline
+document can also be passed to `KIT.curve.create`. For finite strands,
+use the compiled path with `KIT.curveSplats.draw`, or a scene strand source
+of `{ kind: 'retained-spline', document, spline: 'cable' }`. Radius comes
+from the curve unless the strand supplies a width or radius. Elliptical
+and flattened strands use the authored tilt with the curve frame.
+
+```sh
+node cli/ink-studio.js curve topology inspect original.json
+node cli/ink-studio.js curve topology edit original.json split-edit.json --out split.json --report split-receipt.json
+node cli/ink-studio.js curve split.json --spline return --station .4
+node examples/retained-splines.cjs demo
+```
+
+Omit `--out` on `curve topology edit` to preview the receipt. The demo
+replays a split, a weld, and a handle, radius, and tilt edit on a signal
+cable, with matched native renders and a receipt for each socket.
+
 ## Cameras and drawings
 
 Family camera rails use the same definition without converting into an independently smoothed spline:

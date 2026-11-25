@@ -49,14 +49,19 @@
       if (pieces.some((piece,i) => i>0 && piece.fromRange[0]<pieces[i-1].fromRange[1]))
         throw Error('Route station mappings overlap');
     }
-    return u => {
-      const from = old.locate(u);
-      if (!from) return null;
-      const pieces = ranges.get(from.key);
-      if (!pieces) return next.at(from.key,from.t);
-      const piece = pieces.find(({fromRange:[a,b]}) => from.t >= a && from.t <= b);
-      return piece ? next.at(piece.to,lerp(...piece.toRange,(from.t-piece.fromRange[0])/(piece.fromRange[1]-piece.fromRange[0]))) : null;
-    };
+    function address(key,t) {
+      if (!old.byKey.has(key) || !unit(t)) throw Error('Invalid route section address');
+      const pieces = ranges.get(key);
+      if (!pieces) return next.byKey.has(key) ? {key,t} : null;
+      const piece = pieces.find(({fromRange:[a,b]}) => t >= a && t <= b);
+      if (!piece) return null;
+      const [a,b]=piece.fromRange;
+      return {key:piece.to,t:lerp(...piece.toRange,(t-a)/(b-a))};
+    }
+    return Object.assign(u => {
+      const from = old.locate(u), target=from && address(from.key,from.t);
+      return target ? next.at(target.key,target.t) : null;
+    },{address});
   }
 
   P.routeStations = Object.freeze({ remap });

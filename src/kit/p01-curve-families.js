@@ -385,7 +385,7 @@
       return { p: V.lerp(points[lo], points[hi], t), tan: V.norm(V.sub(points[hi], points[lo])) };
     };
     const frameAt = distance => {
-      frames ??= C.frames(points, up);
+      frames ??= C.frames(points, up, closed);
       const { lo, hi, t, d } = locate(distance),
         p = V.lerp(points[lo], points[hi], t);
       rotations ??= frames.map(f => K.Q.fromMatrix(M.cols(f.T, f.N, f.B)));
@@ -434,6 +434,7 @@
   }
   function create(definition) {
     if (isPath(definition)) return definition;
+    if (C.retained && definition?.format === C.retained.format) return C.retained.compile(definition);
     check(record(definition), 'expected a curve family definition');
     const def = clone(json(definition));
     if (RecursiveCurves.families.includes(def.type)) return RecursiveCurves.compile(def, frame).level();

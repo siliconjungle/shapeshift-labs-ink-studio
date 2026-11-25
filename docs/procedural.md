@@ -1148,6 +1148,8 @@ band boundaries and maps their positions, normals, UVs and material groups.
 Affine mirrored contours retain outward winding. The chart can carry any
 swept detail whose bounds fit the region and the safe inset.
 
+### Route station remapping
+
 `P.routeStations.remap(before, after, edits)` returns a function mapping an old
 normalized route station to a new one. Supply ordered `{key,length}` sections
 and optional `{from,to,fromRange,toRange}` interval mappings. Ranges default to
@@ -1156,6 +1158,10 @@ Dividing one old range among new sections models a split, and
 dividing one new section among old spans models a join. Sections whose keys
 persist keep their local fraction. An empty or removed section with no
 target yields `null`, so an attachment host can choose its geometric fallback.
+Use `map.address(key, t)` when a source address is already known. The result
+is a target `{key,t}` or `null`, and keeps distinct source addresses that
+happen to share a normalized route station. [Retained splines](curve-families.md#edit-retained-splines)
+use it to transfer cubic parameters before recomputing arc-length stations.
 
 `P.routes.spline(route, {radius, spacing, clearance, minClearance})`
 rounds corners using quadratic splines, shrinking the trim when needed.

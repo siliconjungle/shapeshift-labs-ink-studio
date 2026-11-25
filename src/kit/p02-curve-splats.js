@@ -25,13 +25,14 @@
   }
   function pathSpec(path) {
     return { ...(path.id !== undefined && { id: path.id }), points: path.points, closed: path.closed, up: path.up,
-      frame: typeof path.frame === 'function' ? distance => path.frame(distance).N : undefined };
+      frame: typeof path.frame === 'function' ? distance => path.frame(distance).N : undefined,
+      ...(typeof path.radiusAt === 'function' && {radiusAt:distance=>path.radiusAt(distance)}) };
   }
 
   function bundle(spec) {
     check(spec && typeof spec === 'object' && !Array.isArray(spec), 'expected bundle settings');
     const input = spec.guide;
-    check(Array.isArray(input) || input && ['path', 'spline', 'family', 'surface'].includes(input.kind ?? 'path'),
+    check(Array.isArray(input) || input && ['path', 'spline', 'family', 'surface', 'retained-spline'].includes(input.kind ?? 'path'),
       'a strand bundle needs one guide path, spline, family or surface stroke');
     const guide = input.kind === 'family' ? K.curve.create(input.definition) : input;
     const compiled = typeof guide.frame === 'function' && typeof guide.at === 'function';
@@ -68,6 +69,7 @@
         return [{ id: source.id, points: K.curve.spline(controls, per), up: source.up }];
       }
       case 'family': return [pathSpec(K.curve.create(source.definition))];
+      case 'retained-spline': return [pathSpec(source.points ? source : K.curve.retained.compile(source.document,source.spline))];
       case 'surface': return [surfacePath(source)];
       case 'bundle': return bundlePaths(bundle(source));
       case 'bundle-plan':
@@ -739,8 +741,8 @@
           if (active && (next - previous) * length >= 1e-7) {
             const [tip, fade] = ends ? endWeights(sample, run, caps, closed) : [1, 1];
             const pool = ends ? poolAt(sample, pools, closed) : { spread: 1, density: 1 };
-            const size = Math.min(100, (profileWidth ? profileWidth.sample(sample) / 2 : baseRadius) *
-              profileTaper.sample(sample) * tip * pool.spread);
+            const strandRadius = profileWidth ? profileWidth.sample(sample) / 2 : radius ?? strand.radiusAt?.(arc) ?? baseRadius;
+            const size = Math.min(100, strandRadius * profileTaper.sample(sample) * tip * pool.spread);
             const rowOpacity = styledOpacity(materials.opacity?.sample(sample) ?? opacity, fade, pool.density, edge);
             if (size < 1e-6) {
               previous = next;

@@ -36,6 +36,7 @@ world position, arc distance, and textile UV when present.
 | --- | --- |
 | Path | An array of 3D points, a compiled `K.curve.path`, or a `{ kind: 'path', points, closed }` record. |
 | Spline | `{ kind: 'spline', points, samples }` samples a Catmull–Rom spline through editable control points. `samples` is per pair of controls. |
+| [Retained spline](curve-families.md#edit-retained-splines) | `{ kind: 'retained-spline', document, spline }` or a compiled retained path. Radius and tilted frames come from the control points. |
 | Curve family | `{ kind: 'family', definition }` uses an existing `K.curve.create` definition. |
 | Strand bundle | `{ kind: 'bundle', style, guide, count, separation, lengthVariation, seed }` generates member paths from one guide. A version 1 `bundle-plan` can be drawn directly. |
 | Surface stroke | `{ kind: 'surface', chart, points, lift, inset }` follows an editable UV path on a chart. |
