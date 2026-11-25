@@ -266,7 +266,7 @@ ink-studio tileset resample --scene original.json --id sign \
 
 Omit `--out` to preview the before and after pigment UVs by object,
 face, and corner. Resize updates eligible UVs to follow the original
-texels. The preview identifies cuts through face references, moved pins,
+texel centers. The preview identifies cuts through face references, moved pins,
 and registered material maps that need their own migration. The edit
 writes a new scene only when the report permits it. The report includes
 any bakes marked for refresh. For separately saved brush records, find the

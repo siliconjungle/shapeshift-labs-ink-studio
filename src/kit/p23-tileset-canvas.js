@@ -91,8 +91,11 @@
         const corners = face.corners.map(corner=>{
           const before = MaterialUV.uv(corner,uvSet);
           const after = operation.type === 'resize' ? before.map((value,i)=>{
-            const uv = (value*map.before[i]-map.offset[i])/map.size[i];
-            return uv>=-1e-12 && uv<=1+1e-12 ? Math.max(0,Math.min(1,uv)) : uv;
+            if (map.before[i] === map.size[i] && map.offset[i] === 0) return value;
+            // Mesh UV zero and one address the centers of the first and last texels.
+            const center = value*(map.before[i]-1)-map.offset[i], span = map.size[i]-1;
+            if (center < -1e-12 || center > span+1e-12) return center/Math.max(1,span);
+            return span ? Math.max(0,Math.min(span,center))/span : 0;
           }) : before;
           return {id:corner.id,before,after};
         });
@@ -101,10 +104,11 @@
         const conflicts = [];
         const channels = usesBase ? rasterChannels(material) : rasterChannels(bake?.maps);
         if (channels.length) conflicts.push({reason:'registered-material-maps',channels});
-        if (moved) {
+        if (operation.type === 'resize') {
           if (override) conflicts.push({reason:'shared-uv-textures'});
           for (const [i,{id:corner,before,after}] of corners.entries()) {
-            if (after.some(value=>value<0 || value>1)) conflicts.push({reason:'outside-canvas',corner});
+            if (after.some((value,axis)=>map.size[axis] === 1 && map.before[axis] !== 1 ?
+              value !== 0 : value<0 || value>1)) conflicts.push({reason:'outside-canvas',corner});
             if (MaterialUV.pinned(face.corners[i],uvSet) && after.some((value,axis)=>value!==before[axis]))
               conflicts.push({reason:'pinned-uv',corner});
           }

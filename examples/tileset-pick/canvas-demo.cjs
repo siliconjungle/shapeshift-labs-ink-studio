@@ -44,7 +44,7 @@ for (const [type,id,...options] of results) {
 const resized = read('resized-receipt.json'), resampled = read('resampled-receipt.json');
 assert.equal(resized.references[0].status,'remapped');
 assert.deepEqual(resized.sourceOffset,[-48,-16]);
-assert.deepEqual(resized.references[0].corners[3].after,[.5,.5]);
+assert.deepEqual(resized.references[0].corners[3].after,[48/95,16/31]);
 assert.equal(resampled.references[0].status,'resampled');
 assert.deepEqual(resampled.references[0].corners[3].after,[0,0]);
 const clipped = JSON.parse(studio('tileset','resize','--scene','original.json','--id','sign','--width','24','--height','16'));
@@ -67,6 +67,8 @@ for (let y=0;y<32;y++) for (let x=0;x<96;x++) {
     x>=48 && y>=16 ? [...expected.subarray(old,old+4)] : [0,0,0,0]);
   assert.deepEqual([...captures[2].rgba.subarray(start,start+4)],[...expected.subarray(sample,sample+4)]);
 }
+const originalFace = PNG.raster(file('original-face.png'));
+assert.deepEqual(PNG.raster(file('resized-face.png')).data,originalFace.data);
 write('COMMANDS.sh','#!/bin/sh\nset -eu\n'+commands.join('\n')+'\n');
 
 const W=806,H=336;
@@ -85,7 +87,7 @@ const board = ink.load().KIT.procedural.drawing2d.render({width:W,height:H,edges
   text('ORIGINAL CORNER UV',24,261,1,'#adbfc4'),
   text('0, 0',24,279,2),
   text('CORNER UV MOVES WITH THE ART',218,261,1,'#adbfc4'),
-  text('0.5, 0.5',218,279,2),
+  text('0.505, 0.516',218,279,2),
   text('CORNER UV STAYS IN PLACE',513,261,1,'#adbfc4'),
   text('0, 0',513,279,2),
   text('THE SIGN FACE IS 3 X 1 WORLD UNITS IN ALL THREE SCENES',24,314,1,'#9be1c4')

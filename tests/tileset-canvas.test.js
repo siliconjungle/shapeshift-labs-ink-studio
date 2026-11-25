@@ -29,7 +29,7 @@ test('centered resize preserves art texels, remaps pigment references, and undoe
   assert.deepEqual(plan.sourceOffset,[-1,-1]);
   assert.deepEqual(plan.grid.after,{width:2,height:2,offsetX:1,offsetY:1});
   assert.equal(plan.references[0].status,'remapped');
-  assert.deepEqual(plan.references[0].corners[0],{id:'uv0',before:[.25,.75],after:[2/6,4/6]});
+  assert.deepEqual(plan.references[0].corners[0],{id:'uv0',before:[.25,.75],after:[.35,.65]});
   assert.deepEqual(editor.snapshot(),before);
   assert.deepEqual(editor.transformTilesetCanvas('painted',operation),plan);
 
@@ -39,7 +39,7 @@ test('centered resize preserves art texels, remaps pigment references, and undoe
   const oldMesh = before.topologyMeshes.panel.document, newMesh = after.topologyMeshes.panel.document;
   assert.deepEqual(newMesh.vertices,oldMesh.vertices);
   assert.deepEqual(newMesh.faces[0].corners.map(corner=>corner.uv),oldMesh.faces[0].corners.map(corner=>corner.uv));
-  assert.deepEqual(newMesh.faces[0].corners[0].attributes['uv/1'],[2/6,4/6]);
+  assert.deepEqual(newMesh.faces[0].corners[0].attributes['uv/1'],[.35,.65]);
   assert.deepEqual(after.topologyMeshes.panel.bakes[0].invalidated,{faces:['plate']});
   editor.undo();
   assert.deepEqual(editor.snapshot(),before);
