@@ -61,6 +61,20 @@ const CurveGrowth = (() => {
     };
   }
 
+  function meshSurface({binding}) {
+    need(binding?.mesh && typeof binding.root==='function' && typeof binding.revision==='function',
+      'a mesh root needs a retained attachment binding');
+    return {
+      anchor({attachment}={}) {
+        need(label(attachment),'a mesh root needs an attachment ID');
+        return {attachment};
+      },
+      context() { return binding.revision(); },
+      changed(previous,next) { return previous!==next; },
+      read(anchor) { return frame(binding.root(anchor.attachment)); }
+    };
+  }
+
   function sdfSurface({field,reach=.35,steps=32,minFacing=.35}) {
     const sparse=K.procedural.sparseBricks, spatial=K.procedural.spatial;
     need(field && bounded(reach,.001,100) && integer(steps,4,128) && bounded(minFacing,0,1),
@@ -144,7 +158,8 @@ const CurveGrowth = (() => {
   }
 
   function grow(builder,host,growth={},appearance={},initialContext={}) {
-    need(keys(host,['kind','mesh','chart','intact','field','reach','steps','minFacing']) && ['uv','sdf'].includes(host.kind) &&
+    if (host?.kind==='mesh') need(keys(host,['kind','binding']),'expected a mesh attachment binding');
+    else need(keys(host,['kind','mesh','chart','intact','field','reach','steps','minFacing']) && ['uv','sdf'].includes(host.kind) &&
       (host.kind==='uv' ? host.field===undefined && host.reach===undefined && host.steps===undefined && host.minFacing===undefined :
         host.mesh===undefined && host.chart===undefined && host.intact===undefined),'expected a UV or SDF surface');
     need(keys(growth,['seed','roots','scatter','stitches','segments','length','lean','bend','offset']),'invalid growth settings');
@@ -158,7 +173,7 @@ const CurveGrowth = (() => {
     const generated=scatterRoots(scatter,random);
     need(roots.length+stitches.length+generated.length<=limit &&
       (roots.length+stitches.length+generated.length)*segments<=K.curveSplats.segmentLimit,'surface growth exceeds the curve budget');
-    const adapter=host.kind==='uv' ? uvSurface(host) : sdfSurface(host);
+    const adapter={uv:uvSurface,sdf:sdfSurface,mesh:meshSurface}[host.kind](host);
     let source=adapter.context(initialContext), updates;
     const specs=[], ids=new Set();
     let skipped=0;
@@ -177,8 +192,8 @@ const CurveGrowth = (() => {
     }
     for (const [index,value] of [...roots,...generated].entries()) {
       const root=Array.isArray(value) ? {uv:value} : value;
-      need(keys(root,host.kind==='uv' ? ['id','uv','triangle','heading','length'] : ['id','point','normal','tangent','heading','length']),
-        'invalid root coordinate or appearance');
+      const address={uv:['uv','triangle'],sdf:['point','normal','tangent'],mesh:['attachment']};
+      need(keys(root,['id','heading','length',...address[host.kind]]),'invalid root coordinate or appearance');
       const id=root.id ?? 'root-'+index;
       need(label(id),'a root needs a stable ID');
       const height=root.length ?? lengths[0]+(lengths[1]-lengths[0])*random.sample([id,'length']);
@@ -243,9 +258,9 @@ const CurveGrowth = (() => {
     function describe(samples,counts) {
       return {kind:host.kind,seed,skipped,updates:{...counts},strands:specs.map(({id,anchors})=>{
         const sites=samples?.get(id) ?? anchors.map(anchor=>anchor.live);
-        return {id,attached:sites.every(Boolean),roots:anchors.map(({uv,point,normal},i)=>{
+        return {id,attached:sites.every(Boolean),roots:anchors.map(({uv,point,normal,attachment},i)=>{
           const live=sites[i];
-          return {...(uv ? {uv:uv.slice()} : {seedPoint:point.slice(),seedNormal:normal.slice()}),
+          return {...(attachment ? {attachment} : uv ? {uv:uv.slice()} : {seedPoint:point.slice(),seedNormal:normal.slice()}),
             ...(samples && !live && anchors[i].live && {restPoint:anchors[i].live.p.slice()}),
             ...(live && {point:live.p.slice(),normal:live.n.slice(),
               ...(live.triangle!==undefined && {triangle:live.triangle,weights:live.weights.slice()})})};

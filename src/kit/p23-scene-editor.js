@@ -341,6 +341,23 @@
       return document.pending() ? write() : document.transact(label ?? 'Edit topology of ' + object, write);
     }
 
+    function planMeshAttachmentTransfer(object, patch, {part,projection, ...settings} = {}) {
+      return A.meshTopologyScene.transferAttachments(meshTopology(object,part),patch,settings,projection);
+    }
+
+    function transferMeshAttachments(object, patch, options) {
+      const {row,...plan}=planMeshAttachmentTransfer(object,patch,options);
+      if (!plan.report.canCommit)
+        throw Object.assign(new RangeError('Mesh attachment transfer needs review'),{report:plan.report});
+      function write() {
+        const next={topologyMeshes:{...snapshot().topologyMeshes,[object]:row}};
+        validate({...snapshot(),...next});
+        document.setEnvironment(next);
+        return freeze(plan);
+      }
+      return document.pending() ? write() : document.transact('Transfer mesh attachments of '+object,write);
+    }
+
     function requireMeshShapeOwner(object, part, scene, action) {
       const ownership = A.hybridOwnership, policy = scene.hybridOwnership;
       if (ownership.manages(policy, { object, part })) {
@@ -731,6 +748,8 @@
       editMeshShading,
       planMeshSkin,
       editMeshSkin,
+      planMeshAttachmentTransfer,
+      transferMeshAttachments,
       planMeshUV,
       editMeshUV,
       inspectMeshModifiers,

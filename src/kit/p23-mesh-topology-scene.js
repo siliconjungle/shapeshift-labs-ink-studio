@@ -54,7 +54,7 @@
   }
 
   function prepareRow(object, row, evaluation) {
-    if (!TargetSelectors.name(object) || !fields(row, ['document', 'part', 'label', 'materials', 'bindings', 'bakes', 'modifiers']) ||
+    if (!TargetSelectors.name(object) || !fields(row, ['document', 'part', 'label', 'materials', 'bindings', 'bakes', 'modifiers', 'attachments']) ||
         (row.part !== undefined && !TargetSelectors.name(row.part)) || (row.label !== undefined && !name(row.label)))
       throw new TypeError('An editable scene mesh needs an object ID, document, and optional named part');
     const cage = topology.create(row.document), document = evaluation?.document ?? cage;
@@ -93,7 +93,14 @@
     const resolvedBindings = Object.fromEntries(moved.filter(binding => !binding.review)
       .map(binding => [binding.id, { ...binding, geometry: visible[binding.domain].get(binding.element) }]));
     const skin = document.skin && K.meshTopology.skin.bind(mesh);
+    const manifest=row.attachments;
+    if (manifest && (!record(manifest) || manifest.format!=='ink-studio/mesh-attachments' || manifest.version!==1 ||
+        manifest.mesh!==cage.id || !name(manifest.revision) || !Array.isArray(manifest.attachments)))
+      throw new TypeError('An editable mesh needs a version 1 attachment manifest');
+    const attachmentBinding=manifest?.revision===topology.revision(document) && topology.attachments.bind(mesh,manifest);
+    const attachmentStatus=manifest && (attachmentBinding ? 'ready' : 'needs-transfer');
     return { mesh, document, bindings: moved, resolvedBindings, bakes: [...bakes.values()], ...(skin && {skin}),
+      ...(attachmentStatus && {attachmentStatus}), ...(attachmentBinding && {attachments:attachmentBinding}),
       ...(evaluation && { cage, modifierReport: evaluation.report }) };
   }
 
@@ -196,6 +203,9 @@
     }
     const oldBakes = (before?.bakes ?? []).map(bakeState), newBakes = (after?.bakes ?? []).map(bakeState);
     changes.bakes = recordsChanged(index(oldBakes, 'Mesh bakes'), index(newBakes, 'Mesh bakes'));
+    if (before?.attachments || after?.attachments)
+      changes.attachments=recordsChanged(index(before?.attachments?.attachments??[],'Mesh attachments'),
+        index(after?.attachments?.attachments??[],'Mesh attachments'));
     return changes;
   }
 
@@ -251,5 +261,13 @@
     return result;
   }
 
-  A.meshTopologyScene = Object.freeze({ prepare, mount, diff, revise, evaluator, applyModifiers });
+  function transferAttachments(row, patch, settings, projection) {
+    const before=topology.create(row.document);
+    const {document,correspondence}=topology.editWithCorrespondence(before,patch,{projection});
+    const plan=topology.transferAttachments(before,document,correspondence,{attachments:row.attachments,...settings});
+    const updated=transition({...row,attachments:plan.attachments},before,plan.document,correspondence).row;
+    return {row:updated, correspondence, report:plan.report, changes:diff(row,updated)};
+  }
+
+  A.meshTopologyScene = Object.freeze({ prepare, mount, diff, revise, evaluator, applyModifiers, transferAttachments });
 })(KIT);

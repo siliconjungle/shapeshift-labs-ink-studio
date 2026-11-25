@@ -818,6 +818,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.meshTopologyScene.mount` | function | `(world, prepared)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.prepare` | function | `(rows)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.revise` | function | `(row, patch, { projection } = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
+| `KIT.authoring.meshTopologyScene.transferAttachments` | function | `(row, patch, settings, projection)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.physicalMaterials` | namespace |  |  |
 | `KIT.authoring.physicalMaterials.checkContactEffects` | function | `(value)` | [source](../../src/kit/p90-asset-materials.js) |
 | `KIT.authoring.physicalMaterials.checkStructural` | function | `(key,value,wet=true)` | [source](../../src/kit/p90-asset-materials.js) |
@@ -1204,7 +1205,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.curveSplats.drivers.sockets` | function | `(anchors)` | [guide](../curve-splats.md#drive-strands-from-rigs-and-simulation), [guide](../surface-grown-strands.md#grow-from-uvs), [source](../../src/kit/p02-curve-pose-drivers.js) |
 | `KIT.curveSplats.drivers.xpbd` | function | `(solver, indices, { links } = {})` | [guide](../curve-splats.md#drive-strands-from-rigs-and-simulation), [guide](../surface-grown-strands.md#grow-from-uvs), [source](../../src/kit/p02-curve-pose-drivers.js) |
 | `KIT.curveSplats.format` | value | `string = "ink-studio/curve-splat-scene"` | [guide](../curve-splats.md#drive-strands-from-rigs-and-simulation), [guide](../surface-grown-strands.md#grow-from-uvs) |
-| `KIT.curveSplats.grow` | function | `(builder,host,growth={},appearance={},initialContext={})` | [guide](../surface-grown-strands.md), [guide](../surface-grown-strands.md#grow-from-an-editable-sdf), [guide](../curve-splats.md#drive-strands-from-rigs-and-simulation), [guide](../surface-grown-strands.md#grow-from-uvs), [source](../../src/kit/p02-curve-growth.js) |
+| `KIT.curveSplats.grow` | function | `(builder,host,growth={},appearance={},initialContext={})` | [guide](../mesh-topology.md#use-the-rebound-attachments), [guide](../surface-grown-strands.md), [guide](../surface-grown-strands.md#grow-from-an-editable-sdf), [guide](../curve-splats.md#drive-strands-from-rigs-and-simulation), [guide](../surface-grown-strands.md#grow-from-uvs), [source](../../src/kit/p02-curve-growth.js) |
 | `KIT.curveSplats.lightingPresets` | namespace |  | [guide](../curve-splats.md#light-strands-along-their-tangent), [guide](../curve-splats.md#drive-strands-from-rigs-and-simulation), [guide](../surface-grown-strands.md#grow-from-uvs) |
 | `KIT.curveSplats.lightingPresets["backlit-fibre"]` | namespace |  | [guide](../curve-splats.md#drive-strands-from-rigs-and-simulation), [guide](../surface-grown-strands.md#grow-from-uvs) |
 | `KIT.curveSplats.lightingPresets["backlit-fibre"].anisotropy` | value | `number = 0.8` | [guide](../curve-splats.md#drive-strands-from-rigs-and-simulation), [guide](../surface-grown-strands.md#grow-from-uvs) |

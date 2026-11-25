@@ -1177,3 +1177,98 @@ A built scene exposes the mesh binding as
 `world.topologyMeshes[object].skin`. Include that binding in
 `KIT.bones.bind`'s `meshBindings` array when the rig matrices use its
 declared joint order. Unposed topology meshes still render in rest space.
+
+## Transfer skin weights and attachments after editing
+
+Transfer a weighted mesh, prop sockets, surface-grown curve roots, and
+static splat groups through a pinned
+[topology correspondence](#record-correspondence-through-an-edit).
+Ink uses stable vertices and exact mapped corners first. New vertices and
+anchors on split faces sample only the linked surfaces. Coincident
+competing surfaces, lost bindings, and exceeded error budgets require
+review. A candidate and its evidence are available before commit.
+
+```sh
+node examples/mesh-attachment-transfer/demo.cjs semaphore-review
+
+node cli/ink-studio.js mesh-topology transfer-attachments \
+  semaphore-review/source.json semaphore-review/replacement.json semaphore-review/map.json \
+  --attachments semaphore-review/attachments.json --settings semaphore-review/settings.json \
+  --view semaphore-review/view.json --preview preview --report review.json
+```
+
+Add `--out accepted.json` to save the document and its rebound attachment
+manifest when the checks pass. A rejected transfer still writes its report
+and available preview frames. The demo includes a semaphore panel split
+with a retained lamp socket, a two-root braid, and a glass-bead splat group.
+It tests the result at rest and in raised and lowered poses. A second
+review uses a tighter posed budget and shows the measurements that block it.
+
+### Author a mesh attachment manifest
+
+Use `KIT.meshTopology.attachments.create(document, rows)` to create a
+revision-pinned manifest. An attachment has a stable `id`, `kind`, and
+an `anchor` with an authored face ID, the three corner IDs of one derived
+triangle, and three matching barycentric `weights`. Read valid corner
+triples from `triangulate(document).triangleSources`. You can supply a
+rest-space `tangent` and a local `offset` in tangent, bitangent, normal
+order.
+
+- A `socket` names an existing scene graph `node` and `socket`.
+- A `curve-root` resolves to a retained surface frame. Both ends of a
+  stitch can use independent attachment IDs.
+- A `splat-group` names the `group` and its stable splat `members`.
+  Members are static packed splats. The accepted manifest keeps the
+  original frame as a reference for applying the transfer to the source
+  group. Position, covariance, and footprint frames follow the new
+  attachment frame. The report measures the group's anchor and angle.
+
+### Review and accept
+
+The settings accept named `poses` of the form `{id, matrices}`.
+Use the same ordered, named skin joints on both meshes. Matrices take
+points from rest space into each approved pose. Ink compares the candidate
+against the corresponding point on the posed source mesh. It records
+position error for weights and attachment anchors, orientation error
+for attachments, and total absolute weight error per vertex. Replacement
+weights on explicitly locked joints take precedence. The skin normalizer
+applies Ink's four-influence limit and records dropped values.
+
+`maxRestError`, `maxPoseError`, and `maxProjectDistance` use mesh
+units. Defaults are 2%, 2.5%, and 7.5% of the source bounding-box diagonal.
+`maxAngle` defaults to 15 degrees and `maxWeightError` to 0.1.
+`minConfidence`, `minNormalDot`, `ambiguityDistance`, and `maxChecks`
+bound the mapped-surface search. Supply the poses the asset must pass.
+The report lists every evaluated pose and uses a null peak pose error if
+there is no pose measurement.
+
+In JavaScript, call
+`KIT.meshTopology.transferAttachments(before, replacement, map, settings)`.
+The plan contains a candidate `document`, rebound `attachments`, and
+`report.canCommit`. Scene editors provide
+`planMeshAttachmentTransfer(object, patch, settings)` and
+`transferMeshAttachments(object, patch, settings)`. A successful scene
+transfer writes the mesh and manifest together in the undo journal.
+Built topology meshes expose an `attachmentStatus` and an `attachments`
+binding when the manifest matches the rendered topology revision.
+
+### Use the rebound attachments
+
+```js
+const binding = KIT.meshTopology.attachments.bind(mesh, accepted.attachments);
+const group = binding.bindSplats(world);
+const braid = KIT.curveSplats.grow(builder, { kind: 'mesh', binding }, {
+  roots: [{ id: 'braid-end', attachment: 'thread-root', length: 0.14 }]
+}, { width: 0.02, color: '#e7b46b' });
+
+// Update attachment consumers after posing the host mesh.
+skin.pose(jointMatrices);
+binding.poseSockets(graph);
+braid.pose(world);
+group.pose();
+```
+
+Build the curves into `builder` before finishing the world. Bind the splat
+group while its rows are still in the original rest pose. Subsequent updates
+reuse that captured rest data. The mesh attachment host also accepts
+`stitches` whose endpoints have an `attachment` ID.

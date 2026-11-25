@@ -257,5 +257,11 @@
     return Object.freeze({mesh,joints,pose});
   }
 
-  K.meshTopology = Object.freeze({...topology,skin:Object.freeze({inspect,plan,bind})});
+  function normalizer(source) {
+    const skin = topology.create(source).skin;
+    if (!skin) throw new TypeError('Normalization needs named mesh joints');
+    return solver(skin).resolve;
+  }
+
+  K.meshTopology = Object.freeze({...topology,skin:Object.freeze({inspect,plan,bind,normalizer})});
 })(KIT);
