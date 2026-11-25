@@ -31,7 +31,7 @@ const center = [0,1.3,0], angle = 73*Math.PI/180, width = 2.5, height = 1.28;
 const right = [Math.cos(angle),Math.sin(angle),0], up = [-right[1],right[0],0];
 const origin = K.V.mad(K.V.mad(center,right,-width/2),up,-height/2);
 const scene = {id:'level-indicator',style:'slate',solids:[],
-  camera:{target:center,dist:3.7,yaw:0,pitch:0,projection:'orthographic',sway:0},
+  camera:{target:center,dist:4.6,yaw:0,pitch:0,projection:'orthographic',sway:0},
   tilesets:{plate:ink.readTilesetImage(atlas)}};
 const editor = ink.createSceneEditor(scene);
 const selection = ink.pickTilesetRectangle(scene,'plate',{x:0,y:0,width:54,height:30});
