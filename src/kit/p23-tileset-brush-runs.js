@@ -13,7 +13,7 @@
       brushScale=saved?.brushScale,texelsPerUnit=saved?.texelsPerUnit} = request ?? {};
     if (!request || Object.getPrototypeOf(request) !== Object.prototype ||
         Object.keys(request).some(key=>!fields.includes(key)) || !pair(at) ||
-        !Object.hasOwn(directions,direction) || !['abut','overlap'].includes(spacing) || !['edge','anchor'].includes(align) ||
+        typeof direction !== 'string' || !Object.hasOwn(directions,direction) || !['abut','overlap'].includes(spacing) || !['edge','anchor'].includes(align) ||
         typeof snapGrid !== 'boolean' || anchor !== undefined && (align !== 'anchor' || !pair(anchor)) ||
         !Number.isSafeInteger(count) || count<1 || saved?.format !== 'ink-studio/tileset-brush' || saved.version !== 1)
       throw new TypeError('A brush run needs a saved tile brush, grid address, positive stamp count, and supported spacing and alignment');

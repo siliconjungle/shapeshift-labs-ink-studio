@@ -94,6 +94,7 @@ test('vertical runs align by the travel edge and reuse the saved brush scale and
   assert.throws(()=>editor.planTilesetBrushRun({...request,spacing:'overlap',overlapTiles:3}),/smaller than the brush/);
   assert.throws(()=>editor.planTilesetBrushRun({...request,align:'anchor',anchor:[13,0]}),/inside the compact brush/);
   assert.throws(()=>editor.planTilesetBrushRun({...request,count:1000}),/4096 sampled cells/);
+  assert.throws(()=>editor.planTilesetBrushRun({...request,direction:['right']}),/supported spacing and alignment/);
   assert.throws(()=>editor.planTilesetBrushRun({...request,brush:{...brush,columns:4}}),/row and column counts/);
 });
 
