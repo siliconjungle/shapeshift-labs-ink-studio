@@ -1132,6 +1132,43 @@ Guides: [guide](../material-shape-library.md), [guide](../material-shape-library
 Get the runnable example with `ink-studio graph describe image.shape --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.shapeSplatter
+
+Scatter signed planar and volumetric shapes and project aligned material maps from the highest visible surfaces.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `width` | `pixelCount` | `96` | pixels · {"integer":true,"min":1} |
+| Input | `height` | `pixelCount` | `64` | pixels · {"integer":true,"min":1} |
+| Input | `columns` | `number` | `8` | {"finite":true,"min":1,"max":128,"integer":true} |
+| Input | `rows` | `number` | `6` | {"finite":true,"min":1,"max":128,"integer":true} |
+| Input | `shapes` | `array<shape2d>` | `[]` | {"items":"shape2d","maxItems":32} |
+| Input | `volumes` | `array<field>` | `[]` | {"items":"field","maxItems":32,"bounds":"Finite local XYZ AABB"} |
+| Input | `background` | `any` | `null` | {"intent":"height","channels":[1]} |
+| Input | `density` | `any` | `null` | {"intent":["data","mask"],"channels":[1],"units":"unitless"} |
+| Input | `mask` | `any` | `null` | {"intent":["data","mask"],"channels":[1],"units":"unitless"} |
+| Input | `clip` | `any` | `null` | {"intent":["data","mask"],"channels":[1],"units":"unitless"} |
+| Input | `time` | `seconds` | `0` | seconds · {"finite":true} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"span":{"type":"vec2","unit":"height units","constraints":{"min":0.0001,"max":10000},"default":[1,1]},"crop":{"type":"array<number>","unit":"texture coordinates","constraints":{"length":4,"order":"left, top, right, bottom"},"default":[0,0,1,1]},"wrap":{"type":"array<boolean>","constraints":{"length":2},"default":[true,true]},"mapFilter":{"type":"string","constraints":{"choices":["image","nearest","linear"]},"default":"image"},"units":{"type":"string"},"jitter":{"type":"number","constraints":{"min":0,"max":1},"default":0.88},"density":{"type":"number","constraints":{"min":0,"max":1},"default":1},"scale":{"type":"number\|vec3","unit":"height units","constraints":{"min":0.00001,"max":10000},"default":[0.16,0.16,0.16]},"scaleJitter":{"type":"vec3","constraints":{"min":0,"max":0.95},"default":[0,0,0]},"rotation":{"type":"vec3","unit":"degrees XYZ","default":[0,0,0]},"rotationJitter":{"type":"vec3","unit":"degrees XYZ","constraints":{"min":0,"max":360},"default":[0,0,0]},"slopeAlignment":{"type":"number","constraints":{"min":0,"max":1},"default":1},"heightOffset":{"type":"number","unit":"height units","constraints":{"min":-10000,"max":10000},"default":0},"heightJitter":{"type":"number","unit":"height units","constraints":{"min":0,"max":10000},"default":0},"extrusion":{"type":"number","unit":"local shape units","constraints":{"min":0.01,"max":2},"default":0.25},"rounding":{"type":"number","unit":"local shape units","constraints":{"min":0,"max":1},"default":0.035},"maskThreshold":{"type":"number","constraints":{"min":0,"max":1},"default":0.5},"clipThreshold":{"type":"number","constraints":{"min":0,"max":1},"default":0.5},"samples":{"type":"number","unit":"samples per axis","constraints":{"choices":[1,2,4]},"default":1},"steps":{"type":"number","constraints":{"min":8,"max":128,"integer":true},"default":64},"epsilon":{"type":"number","unit":"local shape units","constraints":{"min":0.000001,"max":0.025},"default":0.0006},"safety":{"type":"number","constraints":{"min":0.1,"max":1},"default":0.78},"orientation":{"type":"string","constraints":{"choices":["opengl","directx"]},"default":"opengl"},"uv":{"type":"record","properties":{"mode":{"type":"string","constraints":{"choices":["planar","cylindrical","spherical"]},"default":"planar"},"scale":{"type":"vec2","constraints":{"min":-64,"max":64},"default":[1,1]},"offset":{"type":"vec2","constraints":{"min":-64,"max":64},"default":[0,0]},"angle":{"type":"number","unit":"degrees clockwise","default":0},"address":{"type":"string","constraints":{"choices":["raw","wrap","clamp"]},"default":"raw"}}},"seed":{"type":"number","constraints":{"integer":true,"safe":true}},"seeds":{"type":"record","properties":{"layout":{"type":"number","constraints":{"integer":true,"safe":true}},"density":{"type":"number","constraints":{"integer":true,"safe":true}},"shape":{"type":"number","constraints":{"integer":true,"safe":true}},"scale":{"type":"number","constraints":{"integer":true,"safe":true}},"rotation":{"type":"number","constraints":{"integer":true,"safe":true}},"height":{"type":"number","constraints":{"integer":true,"safe":true}}}}} |
+| Output | `value` | `heightImage` | — | {"layout":"Typed floating-point height with units"} |
+| Output | `normal` | `normalImage` | — | {"layout":"Typed XYZ or XYZA normal map with signed float or biased integer samples"} |
+| Output | `instanceId` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `shapeId` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `uv` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `coverage` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `layout` | `record` | — | {"layout":"Plain named object"} |
+
+- Planar definitions become rounded extrusions. Volumetric fields need local XYZ bounds and use local Y as their height axis.
+- Projection keeps the top visible hit. Height, normal, IDs and stamp UVs refer to that hit; coverage measures subpixel visibility.
+- Density and mask gate placements; clip gates individual surface samples. Background height also drives slope alignment and occlusion.
+
+Guides: [guide](../material-shape-splatter.md)
+
+Get the runnable example with `ink-studio graph describe image.shapeSplatter --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.sharpen
 
 Sharpen with a four-neighbor cross while retaining original coverage.

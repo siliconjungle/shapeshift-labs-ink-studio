@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Silt &amp; Stone · Ink Studio</title>
+<style>
+  :root{color-scheme:dark;--paper:#f1e6d5;--soft:#ccc0aa;--lit:#f6c68e;--line:#605344;--panel:#302922;--well:#231f1b}
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  body{margin:0;background:#211d1b;color:var(--paper);font:14px/1.4 system-ui,sans-serif}
+  main{max-width:1330px;margin:auto;padding:22px 30px 25px}
+  header{display:flex;align-items:end;justify-content:space-between;gap:14px;padding-bottom:16px;border-bottom:1px solid var(--line);margin-bottom:14px}
+  h1,h2,p,figure{margin:0}
+  h1{font:400 clamp(42px,5.8vw,78px)/.95 Georgia,serif;letter-spacing:-.06em;margin-top:5px}
+  h2{font-size:14px;font-weight:650}
+  .mono{font:11px/1.36 ui-monospace,Menlo,monospace}
+  .eyebrow{text-transform:uppercase;letter-spacing:.16em;color:var(--lit)}
+  a,button,select,input[type=number]{font:inherit;color:inherit;background:var(--well);border:1px solid var(--line);border-radius:4px;padding:5px 8px}
+  a{color:var(--lit);text-decoration:none;white-space:nowrap}
+  button,select{cursor:pointer}
+  a:hover,button:hover,select:hover{color:var(--lit);border-color:#b39473}
+  :focus-visible{outline:2px solid var(--lit);outline-offset:3px}
+  .stage{display:grid;grid-template-columns:minmax(0,820px) minmax(306px,1fr);gap:13px;align-items:start}
+  .viewer,.controls{min-width:0;border:1px solid var(--line);background:var(--panel);border-radius:6px;overflow:hidden}
+  .bar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 11px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .bar label{display:flex;gap:6px;align-items:center;white-space:nowrap;font-size:12px}
+  .bar select{font-size:12px;padding:4px 6px}
+  .plate{aspect-ratio:1.5;background:#183130}
+  canvas{display:block;width:100%;image-rendering:pixelated}
+  .plate canvas{height:100%}
+  .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line)}
+  .stats div{padding:7px 11px;border-right:1px solid var(--line);color:var(--soft);font-size:11px}
+  .stats div:last-child{border:0}
+  .stats strong{display:block;color:var(--lit);margin-top:3px}
+  fieldset{border:0;padding:5px 11px 8px;margin:0;min-width:0}
+  fieldset+fieldset{border-top:1px solid var(--line)}
+  legend{padding:0 4px;color:var(--soft)}
+  .row{display:grid;grid-template-columns:101px minmax(40px,1fr) 43px;align-items:center;gap:6px;min-height:26px}
+  .row label,.pick label{font-size:12px}
+  .row output{color:var(--lit);text-align:right}
+  .pick{min-height:30px;display:grid;grid-template-columns:101px minmax(0,1fr);gap:6px;align-items:center}
+  input[type=checkbox],input[type=range]{accent-color:var(--lit);margin:0}
+  input[type=range]{width:100%;cursor:pointer}
+  .pick select,.pick input{min-width:0;width:100%;font-size:12px;padding:4px 6px}
+  .checks{display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;margin:4px 0 3px}
+  .checks label{display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer}
+  .actions{padding:8px 11px;border-top:1px solid var(--line)}
+  #error{padding:7px 10px;color:#ffc5a3}
+  #error:empty{display:none}
+  .outputs{margin-top:14px}
+  .outputs h2{margin-bottom:7px}
+  .cards{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px}
+  .cards button{padding:4px;min-width:0;text-align:left;background:var(--panel);font-size:11px}
+  .cards canvas{aspect-ratio:1.5;border-radius:2px}
+  .cards span{display:block;margin:4px 2px 1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cards button[aria-pressed=true]{border-color:var(--lit);color:var(--lit);background:#433225}
+  @media(max-width:1000px){main{padding-inline:16px}.stage{grid-template-columns:minmax(0,1fr) 286px}.row{grid-template-columns:83px minmax(24px,1fr) 36px}}
+  @media(max-width:730px){.stage{grid-template-columns:minmax(0,1fr)}.cards{grid-template-columns:repeat(4,minmax(0,1fr))}}
+  @media(max-width:440px){main{padding:12px 9px}header a{font-size:11px}.bar{padding:6px 7px}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><p class="mono eyebrow">Ink Studio / Material graphs</p><h1>Silt &amp; Stone</h1></div>
+    <a href="silt-and-stone.material.json" download>Download graph</a>
+  </header>
+  <div class="stage">
+    <section class="viewer" aria-labelledby="relief-title">
+      <div class="bar">
+        <h2 id="relief-title">Riverbed scatter</h2>
+        <label>View <select id="view"></select></label>
+        <label><input id="repeat" type="checkbox"> 2×2 repeat</label>
+      </div>
+      <figure class="plate"><canvas id="plate" aria-label="Projected SDF shapes on a riverbed"></canvas></figure>
+      <div class="stats">
+        <div>Placed instances<strong class="mono" id="placed"></strong></div>
+        <div>Rejected by density<strong class="mono" id="sparse"></strong></div>
+        <div>Rejected by mask<strong class="mono" id="masked"></strong></div>
+      </div>
+    </section>
+    <section class="controls" aria-label="Shape Splatter controls">
+      <fieldset>
+        <legend class="mono">Placement</legend>
+        <div class="pick"><label for="kind">Shape library</label><select id="kind"><option value="mixed">2D and 3D</option><option value="planar">2D extrusions</option><option value="volume">3D SDFs</option></select></div>
+        <div class="row"><label for="density">Density</label><input id="density" type="range" min="0" max="1" step=".01"><output class="mono"></output></div>
+        <div class="pick"><label for="seed">Seed</label><input id="seed" type="number" step="1"></div>
+        <div class="checks">
+          <label><input id="bed" type="checkbox"> Terrain height</label><label><input id="densityMap" type="checkbox"> Density map</label>
+          <label><input id="placementMask" type="checkbox"> Placement mask</label><label><input id="channel" type="checkbox"> Channel clip</label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend class="mono">Transform</legend>
+        <div class="row"><label for="slope">Slope follow</label><input id="slope" type="range" min="0" max="1" step=".01"><output class="mono"></output></div>
+        <div class="row"><label for="scale">Size</label><input id="scale" type="range" min=".42" max="1.42" step=".01"><output class="mono"></output></div>
+        <div class="row"><label for="tilt">Rotation X</label><input id="tilt" type="range" min="-65" max="65" step="1"><output class="mono"></output></div>
+        <div class="row"><label for="spin">Rotation Y</label><input id="spin" type="range" min="-180" max="180" step="1"><output class="mono"></output></div>
+        <div class="row"><label for="roll">Rotation Z</label><input id="roll" type="range" min="-65" max="65" step="1"><output class="mono"></output></div>
+        <div class="row"><label for="heightOffset">Height offset</label><input id="heightOffset" type="range" min="-.12" max=".14" step=".005"><output class="mono"></output></div>
+      </fieldset>
+      <fieldset>
+        <legend class="mono">Local UVs</legend>
+        <div class="pick"><label for="uvMode">Projection</label><select id="uvMode"><option value="planar">Planar</option><option value="cylindrical">Cylindrical</option><option value="spherical">Spherical</option></select></div>
+        <div class="row"><label for="uvScale">Scale</label><input id="uvScale" type="range" min=".4" max="3" step=".05"><output class="mono"></output></div>
+      </fieldset>
+      <div class="actions"><button type="button" id="reset">Reset riverbed</button></div>
+      <p id="error" role="alert"></p>
+    </section>
+  </div>
+  <section class="outputs" aria-labelledby="outputs-title">
+    <h2 id="outputs-title">Aligned outputs</h2><div class="cards" id="cards"></div>
+  </section>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="silt.js"></script>
+<script>
+  const P=KIT.procedural,get=id=>document.getElementById(id), fixture=siltMaps(P.graphImages);
+  const graphs=new Map(), cards=new Map(), previews=new Map();
+  const controls=Object.keys(siltDefaults);
+  let outputs,pending=0;
+  function paint(canvas,{width,height,data},copies=1) {
+    canvas.width=width*copies;canvas.height=height*copies;
+    const ctx=canvas.getContext('2d'),image=new ImageData(new Uint8ClampedArray(data),width,height);
+    for(let y=0;y<copies;y++)for(let x=0;x<copies;x++)ctx.putImageData(image,x*width,y*height);
+  }
+  for(const [id,label] of Object.entries(siltPorts)){
+    const button=document.createElement('button'), canvas=document.createElement('canvas'), title=document.createElement('span');
+    button.type='button';button.dataset.output=id;title.textContent=label;
+    button.append(canvas,title);get('cards').append(button);cards.set(id,{button,canvas});
+    get('view').add(new Option(label,id));button.addEventListener('click',()=>select(id));
+  }
+  function select(id) {
+    get('view').value=id;
+    for(const [key,{button}] of cards)button.setAttribute('aria-pressed',String(key===id));
+    if(previews.has(id)) paint(get('plate'),previews.get(id),get('repeat').checked?2:1);
+  }
+  const numeric=id=>typeof siltDefaults[id]==='number', flag=id=>typeof siltDefaults[id]==='boolean';
+  function controlValues(){
+    return Object.fromEntries(controls.map(id=>[id,numeric(id)?get(id).valueAsNumber:flag(id)?get(id).checked:get(id).value]));
+  }
+  function draw(){
+    pending=0;
+    try{
+      const value=controlValues();
+      if(!Number.isSafeInteger(value.seed)) throw new RangeError('Enter an integer seed.');
+      const {kind}=value;
+      if(!graphs.has(kind))graphs.set(kind,P.graph.create(siltGraph(fixture,kind)));
+      outputs=graphs.get(kind).evaluate({options:siltSettings(value),background:value.bed?fixture.background:null,
+        density:value.densityMap?fixture.density:null,mask:value.placementMask?fixture.mask:null,
+        clip:value.channel?fixture.clip:null}).outputs;
+      for(const [id,{canvas}] of cards) {
+        const image=siltPreview(outputs,id);previews.set(id,image);paint(canvas,image);
+      }
+      const {placements,rejected}=outputs.layout;
+      get('placed').textContent=placements.length+' / '+(siltColumns*siltRows);
+      get('sparse').textContent=rejected.density;get('masked').textContent=rejected.mask;
+      for(const id of controls.filter(numeric)){
+        const out=get(id).nextElementSibling;
+        if(out?.tagName==='OUTPUT')out.value=value[id]+(['tilt','spin','roll'].includes(id)?'°':'');
+      }
+      get('error').textContent='';select(get('view').value);
+    }catch(error){get('error').textContent=error.message;}
+  }
+  function schedule(){if(!pending)pending=requestAnimationFrame(draw);}
+  function reset(){for(const id of controls){
+      if(flag(id))get(id).checked=siltDefaults[id];
+      else get(id).value=siltDefaults[id];
+    }
+    get('repeat').checked=false;select('relief');schedule();
+  }
+  for(const id of controls)get(id).addEventListener('input',schedule);
+  for(const id of ['view','repeat'])get(id).addEventListener('input',()=>select(get('view').value));
+  get('reset').addEventListener('click',reset);reset();
+</script>
+</body>
+</html>

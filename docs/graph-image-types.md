@@ -70,6 +70,8 @@ For repeatable stamp grids, brick bonds, crops and course labels, see [Material 
 
 For per-cell map controls, independent seeds and overlap ordering, see [Map-driven Tile Sampler](material-tile-sampler.md).
 
+For projected 2D and 3D signed shapes, terrain alignment and material bake maps, see [SDF Shape Splatter](material-shape-splatter.md).
+
 ## Convert color to relief
 
 The `fx.relight` height socket accepts typed height in `art-px` and existing uncolored scalar rasters. A connection from a known RGB source fails graph validation. For dynamically sourced images, the socket validates their value before relighting. Convert deliberately with `image.toHeight`.
