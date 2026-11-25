@@ -183,7 +183,7 @@ face selection in place of its ID list to validate the topology revision.
 Omit `faces` to include every face of the instance's retained meshes.
 Omit `edits` to inspect the scope or capture an unedited view.
 
-Each edit takes one `patch`, `transform`, or `reskin` request. Patches edit
+Each edit takes one `patch`, `transform`, `reskin`, or `pivot` request. Patches edit
 retained faces, corners, and their vertices or edges. A transform defaults
 to the active faces. Its local axes follow the prefab and its world axes
 follow the scene. Use the normal transform pins to hold vertices shared
@@ -191,6 +191,8 @@ with inactive faces. A reskin reuses the existing tile brush, crop and
 tileset modes. A request that changes an inactive face, shared boundary,
 or shared bake used outside the scope blocks the batch and lists the
 affected faces. Face IDs created outside the active set also block.
+A [pivot placement](mesh-topology.md#place-a-pivot-independently) stores
+an instance-local point that subsequent transforms in the batch can use.
 
 ```sh
 ink-studio mesh-topology isolate-prefab station.json edit.json \

@@ -33,13 +33,14 @@ function select(file, input, rest, opt, meshTopology, build) {
 
 function transform(file, input, rest, opt, toolkit, openEditor) {
   const { meshTopology } = toolkit.KIT;
-  const { object, selection, out, report, view } = opt;
-  const filenames = [file, input, selection, out, report, view].filter(value => value !== undefined);
+  const { object, selection, out, report, view, pivot } = opt;
+  const filenames = [file, input, selection, out, report, view, pivot].filter(value => value !== undefined);
   if (!file || !input || rest.length || filenames.some(name => typeof name !== 'string' || !name.trim()) ||
       object !== undefined && (typeof object !== 'string' || !object.trim()) || report && !out ||
-      view && !object || ['from', 'visibility', 'projection', 'lineage', 'match-ids'].some(key => opt[key] !== undefined))
-    throw new TypeError('Use mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file] [--out file] [--report file]');
-  const inputs = [file, input, selection, view].filter(Boolean).map(name => path.resolve(name));
+      view && !object || pivot && object ||
+      ['from', 'visibility', 'projection', 'lineage', 'match-ids'].some(key => opt[key] !== undefined))
+    throw new TypeError('Use mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file | --pivot file] [--out file] [--report file]');
+  const inputs = [file, input, selection, view, pivot].filter(Boolean).map(name => path.resolve(name));
   const outputs = [out, report].filter(Boolean).map(name => path.resolve(name));
   if (outputs.some(name => inputs.includes(name)) || new Set(outputs).size !== outputs.length)
     throw new RangeError('Write transform outputs to separate files from the inputs');
@@ -51,7 +52,16 @@ function transform(file, input, rest, opt, toolkit, openEditor) {
   }
   if (!object) {
     if (source?.topologyMeshes) throw new TypeError('Choose an editable mesh with --object');
-    const plan = meshTopology.planTransform(source, request);
+    let context;
+    if (pivot) {
+      const saved = read(pivot);
+      if (saved?.format !== 'ink-studio/mesh-pivot' || saved.version !== 1 || saved.object !== undefined ||
+          saved.mesh !== source?.id || !Array.isArray(saved.after?.local) ||
+          request?.pivot !== undefined || request?.planePivot !== undefined)
+        throw new RangeError('Use one saved pivot for this mesh or specify the pivot in the transform request');
+      context = { pivot: saved.after.local };
+    }
+    const plan = meshTopology.planTransform(source, request, context);
     return { document: plan.document, patch: plan.patch, evidence: plan.report };
   }
   if (out && path.dirname(path.resolve(file)) !== path.dirname(path.resolve(out)))
@@ -69,6 +79,31 @@ function transform(file, input, rest, opt, toolkit, openEditor) {
   }
   const evidence = editor.transformMeshTopology(object, request);
   return { document: editor.snapshot(), evidence };
+}
+
+function pivot(file, input, rest, opt, meshTopology, openEditor) {
+  const { object, part, selection, out } = opt;
+  const name = value => typeof value === 'string' && value.trim();
+  if (!name(file) || input !== undefined && !name(input) || rest.length || part !== undefined && object === undefined ||
+      Object.entries(opt).some(([key,value]) => !['object','part','selection','out'].includes(key) || !name(value)))
+    throw new TypeError('Use mesh-topology pivot <mesh-or-scene.json> [request.json] [--object id] [--part id] [--selection file] [--out file.json]');
+  const source = path.resolve(file), destination = out && path.resolve(out);
+  if (destination && (!/\.json$/i.test(out) || [file,input,selection].filter(Boolean).some(name => path.resolve(name) === destination) ||
+      object && path.dirname(source) !== path.dirname(destination)))
+    throw new RangeError('Write a separate pivot output and keep revised scenes beside their source');
+  const request = input === undefined ? {} : read(input);
+  if (selection) {
+    if (request?.target?.kind !== 'center' || Object.hasOwn(request.target, 'selection'))
+      throw new TypeError('Use --selection with a center pivot or put the selection in the request');
+    request.target.selection = read(selection);
+  }
+  const editor = object && openEditor(source);
+  const document = !editor && read(source);
+  if (document?.topologyMeshes || document?.instances) throw new TypeError('Choose an editable mesh with --object');
+  const report = editor ? (destination ? editor.setMeshPivot(object,request,{part}) : editor.planMeshPivot(object,request,{part})) :
+    meshTopology.planPivot(document,request);
+  if (destination) files.publishJson(destination,editor ? editor.snapshot() : report,'A different pivot output already exists at '+destination);
+  process.stdout.write(JSON.stringify(report,null,2)+'\n');
 }
 
 function moveVertex(file, input, rest, opt, toolkit, openEditor) {
@@ -200,6 +235,7 @@ function command([action, file, input, ...rest], opt, toolkit, { build, openEdit
   if (action === 'plane')
     return require('./construction-plane.js').command(file,input === undefined ? rest : [input,...rest],opt,toolkit,openEditor,projectTexelsPerUnit);
   if (action === 'move') return moveVertex(file,input,rest,opt,toolkit,openEditor);
+  if (action === 'pivot') return pivot(file,input,rest,opt,meshTopology,openEditor);
   if (action === 'overlaps') return overlaps(file,input,rest,opt,meshTopology);
   if (action === 'isolate-prefab')
     return require('./prefab-edit-isolation.js').command(file,input,rest,opt,toolkit,openEditor);

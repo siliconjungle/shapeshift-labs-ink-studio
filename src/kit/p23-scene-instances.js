@@ -24,5 +24,20 @@
     });
   }
 
-  A.sceneInstances = Object.freeze({select});
+  function assetSocket(scene, env, instance, binding) {
+    if (!Object.hasOwn(scene.assetParts ?? {}, instance)) return;
+    const bindings = env?.assetPartImports?.[instance]?.part?.bindings ?? {};
+    const row = Object.hasOwn(bindings, binding) && bindings[binding];
+    if (row?.kind === 'socket' && row.status === 'bound') return row.resolved.position;
+  }
+
+  function anchor(scene, env, { instance, instanceKind, anchor }) {
+    const row = select(scene, { kind: instanceKind, ids: [instance] })[0];
+    if (anchor === undefined) return row;
+    const target = row.instanceKind === 'asset-part' && assetSocket(scene, env, instance, anchor);
+    if (!target) throw new RangeError('No bound instance socket ' + instance + '/' + anchor);
+    return { ...row, target };
+  }
+
+  A.sceneInstances = Object.freeze({select,assetSocket,anchor});
 })(KIT);

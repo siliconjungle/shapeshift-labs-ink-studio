@@ -67,11 +67,16 @@ const prefabEditIsolation = (function (K) {
       members: Array.from(scope, ([member, entry]) => ({ member, object: entry.object, selection: entry.selection })),
       edits: [], conflicts: [], canCommit: true };
     let camera;
+    const targetMesh = object => {
+      const staged = [...scope.values()].find(entry => entry.object === object);
+      const mesh = staged?.row ?? (Object.hasOwn(spec.topologyMeshes, object) && spec.topologyMeshes[object]);
+      return mesh && { document: mesh.document, frame: meshPlacements.get(object) };
+    };
     for (const [index, edit] of edits.entries()) {
-      const kinds = ['patch', 'transform', 'reskin'];
+      const kinds = ['patch', 'transform', 'reskin', 'pivot'];
       if (!fields(edit, ['member', ...kinds]) || !K.world.data.id(edit.member) ||
           kinds.filter(key => Object.hasOwn(edit, key)).length !== 1)
-        throw new TypeError('Each isolated edit needs a mesh member and one patch, transform, or reskin');
+        throw new TypeError('Each isolated edit needs a mesh member and one patch, transform, reskin, or pivot');
       const { member } = edit, kind = kinds.find(key => Object.hasOwn(edit, key));
       const target = scope.get(member);
       if (!target) {
@@ -80,21 +85,34 @@ const prefabEditIsolation = (function (K) {
       }
       const row = target.row, doc = T.create(row.document), beforeRevision = T.revision(doc);
       let next = row, changes, evidence;
+      const pickActive = () => T.select(doc, { domain: 'faces', ids: doc.faces.filter(face => target.active.has(face.id)).map(face => face.id) });
       if (kind === 'patch') ({ row: next, ...changes } = revise(row, edit.patch));
+      if (kind === 'pivot') {
+        const raw = edit.pivot;
+        if (!record(raw) || Object.hasOwn(raw, 'frame')) throw new TypeError('An isolated pivot uses the prefab placement frame');
+        const anchor = raw.target;
+        const pivotTarget = anchor?.kind === 'center' && anchor.object === undefined && anchor.selection === undefined ?
+          { ...anchor, selection: pickActive() } : anchor;
+        evidence = T.planPivot(doc, { ...raw, target: pivotTarget, frame: link.frame }, {
+          pivot: row.pivot, mesh: targetMesh, instance: target => A.sceneInstances.anchor(scene, env, target)
+        });
+        if (evidence.changed) {
+          next = { ...row };
+          if (evidence.after) next.pivot = evidence.after.local;
+          else delete next.pivot;
+        }
+      }
       if (kind === 'transform') {
         const raw = edit.transform;
         if (!record(raw) || Object.hasOwn(raw, 'frame')) throw new TypeError('An isolated transform uses the prefab placement frame');
         requireShapeOwner(target.object, spec.topologyMeshes[target.object].part, scene, 'Transform');
-        const selection = raw.selection ?? T.select(doc, { domain: 'faces', ids: doc.faces.filter(face => target.active.has(face.id)).map(face => face.id) });
+        const selection = raw.selection ?? pickActive();
         const transformed = T.planTransform(doc, { ...raw, selection, frame: link.frame }, {
+          pivot: row.pivot,
           ...(raw.constructionPlane === undefined && (raw.space === 'plane' || raw.snap?.kind === 'construction-plane') ?
             { constructionPlane: A.constructionPlane.forScene(scene).plane } : {}),
           ...(raw.space === 'camera' && raw.camera === undefined && { camera: camera ??= authoredCamera() }),
-          mesh: object => {
-            const staged = [...scope.values()].find(entry => entry.object === object);
-            const mesh = staged?.row ?? (Object.hasOwn(spec.topologyMeshes, object) && spec.topologyMeshes[object]);
-            return mesh && { document: mesh.document, frame: meshPlacements.get(object) };
-          }
+          mesh: targetMesh
         });
         if (transformed.patch.vertices.length) ({ row: next, ...changes } = revise(row, transformed.patch));
         evidence = transformed.report;
