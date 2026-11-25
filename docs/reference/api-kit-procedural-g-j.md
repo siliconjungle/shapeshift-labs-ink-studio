@@ -1110,6 +1110,78 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.scanCleanup"].outputs.repaired` | value | `string = "typedImage"` |  |
 | `KIT.procedural.graphImages.operations["image.scanCleanup"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
 | `KIT.procedural.graphImages.operations["image.scanCleanup"].run` | function | `({ source, mask, illumination, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.scatterColor"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterColor"].description` | value | `string = "Apply a solid or UV texture to selected color stamp surfaces."` |  |
+| `KIT.procedural.graphImages.operations["image.scatterColor"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterColor"].inputs.base` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.scatterColor"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.scatterColor"].inputs.selection` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterColor"].inputs.selection.default` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterColor"].inputs.selection.type` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterColor"].inputs.source` | value | `string = "scatterSurface"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterColor"].inputs.textures` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterColor"].inputs.textures.default` | value | `array` |  |
+| `KIT.procedural.graphImages.operations["image.scatterColor"].inputs.textures.type` | value | `string = "array<typedImage>"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterColor"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterColor"].outputs.mask` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterColor"].outputs.value` | value | `string = "colorImage"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterColor"].run` | function | `({source,base,textures,selection,options},{seed})` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.scatterColor"].seed` | value | `string = "options"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterEdit"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterEdit"].description` | value | `string = "Turn a scatter selection into a hide or replacement edit for a fresh shape bake."` |  |
+| `KIT.procedural.graphImages.operations["image.scatterEdit"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterEdit"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.scatterEdit"].inputs.selection` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterEdit"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterEdit"].outputs.value` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterEdit"].run` | function | `({selection,options})` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.scatterGrayscale"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterGrayscale"].description` | value | `string = "Apply a solid or UV texture to selected grayscale stamp surfaces."` |  |
+| `KIT.procedural.graphImages.operations["image.scatterGrayscale"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterGrayscale"].inputs.base` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.scatterGrayscale"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.scatterGrayscale"].inputs.selection` | alias | `Alias of KIT.procedural.graphImages.operations["image.scatterColor"].inputs.selection` |  |
+| `KIT.procedural.graphImages.operations["image.scatterGrayscale"].inputs.source` | value | `string = "scatterSurface"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterGrayscale"].inputs.textures` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterGrayscale"].inputs.textures.default` | value | `array` |  |
+| `KIT.procedural.graphImages.operations["image.scatterGrayscale"].inputs.textures.type` | value | `string = "array<typedImage>"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterGrayscale"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterGrayscale"].outputs.mask` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterGrayscale"].outputs.value` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterGrayscale"].run` | function | `({source,base,textures,selection,options},{seed})` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.scatterGrayscale"].seed` | value | `string = "options"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterInspect"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterInspect"].description` | value | `string = "Inspect a resolved stamp at a texel or by instance ID."` |  |
+| `KIT.procedural.graphImages.operations["image.scatterInspect"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterInspect"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.scatterInspect"].inputs.source` | value | `string = "scatterSurface"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterInspect"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterInspect"].outputs.mask` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterInspect"].outputs.value` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterInspect"].run` | function | `({source,options})` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.scatterMask"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterMask"].description` | value | `string = "Select visible stamps by instance or shape ID, range, or stable seeded subset."` |  |
+| `KIT.procedural.graphImages.operations["image.scatterMask"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterMask"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.scatterMask"].inputs.source` | value | `string = "scatterSurface"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterMask"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterMask"].outputs.selection` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterMask"].outputs.value` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterMask"].run` | function | `({source,options},{seed})` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.scatterMask"].seed` | value | `string = "options"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterSurface"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterSurface"].description` | value | `string = "Reassemble aligned scatter maps from independent typed images."` |  |
+| `KIT.procedural.graphImages.operations["image.scatterSurface"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterSurface"].inputs.coverage` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterSurface"].inputs.height` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.scatterSurface"].inputs.instanceId` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterSurface"].inputs.layout` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.scatterSurface"].inputs.normal` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.scatterSurface"].inputs.shapeId` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterSurface"].inputs.uv` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterSurface"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scatterSurface"].outputs.value` | value | `string = "scatterSurface"` |  |
+| `KIT.procedural.graphImages.operations["image.scatterSurface"].run` | function | `(inputs)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.seamRepair"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.seamRepair"].description` | value | `string = "Join opposite tile edges with a scoped, alpha-safe crossfade that preserves the interior."` |  |
 | `KIT.procedural.graphImages.operations["image.seamRepair"].inputs` | namespace |  |  |
@@ -1145,6 +1217,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.columns.default` | value | `number = 8` |  |
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.columns.type` | value | `string = "number"` |  |
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.density` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.edits` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.height` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.height.default` | value | `number = 64` |  |
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.height.type` | value | `string = "pixelCount"` |  |
@@ -1171,9 +1244,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.layout` | value | `string = "record"` |  |
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.normal` | value | `string = "normalImage"` |  |
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.shapeId` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.surface` | value | `string = "scatterSurface"` |  |
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.uv` | value | `string = "typedImage"` |  |
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.value` | value | `string = "heightImage"` |  |
-| `KIT.procedural.graphImages.operations["image.shapeSplatter"].run` | function | `({width,height,columns,rows,shapes,volumes,options,time,...maps},{seed})` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].run` | function | `({width,height,columns,rows,shapes,volumes,options,time,edits,...maps},{seed})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].seed` | value | `string = "options"` |  |
 | `KIT.procedural.graphImages.operations["image.sharpen"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.sharpen"].description` | value | `string = "Sharpen with a four-neighbor cross while retaining original coverage."` |  |
@@ -1390,8 +1464,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.regions.regionMap` | function | `(source, kind, options = {})` | [source](../../src/kit/paq-flood-region-images.js) |
 | `KIT.procedural.graphImages.regions.valid` | function | `(value)` | [source](../../src/kit/paq-flood-region-images.js) |
 | `KIT.procedural.graphImages.resize` | function | `(source, width, height)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.scatterMappers` | namespace |  |  |
+| `KIT.procedural.graphImages.scatterMappers.color` | function | `(src,base,textures,select,options,seed)` | [source](../../src/kit/paq-def-scatter-mappers.js) |
+| `KIT.procedural.graphImages.scatterMappers.edit` | function | `(selection,options={})` | [source](../../src/kit/paq-def-scatter-mappers.js) |
+| `KIT.procedural.graphImages.scatterMappers.grayscale` | function | `(src,base,textures,select,options,seed)` | [source](../../src/kit/paq-def-scatter-mappers.js) |
+| `KIT.procedural.graphImages.scatterMappers.inspect` | function | `(input,options={})` | [source](../../src/kit/paq-def-scatter-mappers.js) |
+| `KIT.procedural.graphImages.scatterMappers.mask` | function | `(surface,options={},seed=0)` | [source](../../src/kit/paq-def-scatter-mappers.js) |
+| `KIT.procedural.graphImages.scatterMappers.surface` | function | `({instanceId,shapeId,uv,coverage,height=null,normal=null,layout=null})` | [source](../../src/kit/paq-def-scatter-mappers.js) |
+| `KIT.procedural.graphImages.scatterMappers.valid` | function | `(source)` | [source](../../src/kit/paq-def-scatter-mappers.js) |
 | `KIT.procedural.graphImages.shape` | function | `(source,width,height,options={})` | [guide](../material-shape-library.md#share-shapes-across-bakes), [source](../../src/kit/paq-graph-images.js) |
-| `KIT.procedural.graphImages.shapeSplatter` | function | `(width,height,columns=8,rows=6,shapes=[],volumes=[],maps={},options={},root=0,time=0)` | [guide](../material-shape-splatter.md#aligned-outputs), [source](../../src/kit/paq-def-splatter.js) |
+| `KIT.procedural.graphImages.shapeSplatter` | function | `(...args)` | [guide](../material-shape-splatter.md#aligned-outputs), [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.shuffle` | function | `(source, routes, target)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.spatial` | namespace |  |  |
 | `KIT.procedural.graphImages.spatial.crop` | function | `(source, options = {})` | [source](../../src/kit/paq-coordinate-sampling.js) |

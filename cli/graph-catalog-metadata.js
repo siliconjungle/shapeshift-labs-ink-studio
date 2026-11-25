@@ -23,6 +23,7 @@ const types = {
   heightImage: { layout: 'Typed floating-point height with units' },
   normalImage: { layout: 'Typed XYZ or XYZA normal map with signed float or biased integer samples' },
   regionField: { layout: 'Versioned stable label image, unwrapped image positions and per-region records', maxRegions: 32768 },
+  scatterSurface: { layout: 'Versioned aligned ID, UV, coverage and optional height, normal and placement maps' },
   shape2d: { layout: 'Serializable planar geometry, profile, symbol or bevel definition' },
   shapeLibrary: { layout: 'Versioned planar shape definitions by stable ID', maxEntries:128 },
   reliefHeight: { layout: 'Typed height in art pixels or a legacy numeric scalar raster' },
@@ -295,7 +296,26 @@ const tileControls = {
   seeds:property('record',{properties:Object.fromEntries(['selection','position','scale','rotation','color','density'].map(
     name=>[name,property('number',{constraints:{integer:true,safe:true}})]))})
 };
+const scatterIds=property('array<number>',{constraints:{min:1,max:4096,integer:true,uniqueItems:true,maxItems:4096}});
+const scatterSelection={
+  instanceIds:scatterIds,shapeIds:scatterIds,instanceRange:property('vec2',limit(1,4096,true)),
+  shapeRange:property('vec2',limit(1,4096,true)),fraction:property('number',limit(0,1),1),
+  invert:property('boolean',{},false),seed:tileLayout.seed
+};
+const scatterMaterial={
+  mode:property('string',oneOf('replace','tint'),'replace'),opacity:property('number',limit(0,1),1),
+  textureBy:property('string',oneOf('shape','instance','random'),'shape'),
+  uvScale:property('vec2',limit(-64,64),[1,1]),uvOffset:property('vec2',limit(-64,64),[0,0]),
+  uvAngle:property('number',{unit:'degrees'},0),filter:tileControls.mapFilter,
+  border:property('string|record'),seed:tileLayout.seed
+};
 const options = {
+  'image.scatterMask': scatterSelection,
+  'image.scatterColor': {...scatterMaterial,value:property('string|srgb',{},'#ffffff')},
+  'image.scatterGrayscale': {...scatterMaterial,value:property('number',limit(0,1),1)},
+  'image.scatterInspect': {pixel:property('vec2',{unit:'pixels',constraints:{integer:true,inBounds:true}}),
+    instanceId:property('number',limit(1,4096,true))},
+  'image.scatterEdit': {action:property('string',oneOf('hide','replace'),'hide'),shapeId:property('number',limit(1,32,true))},
   'image.shapeSplatter': {
     span:property('vec2',{unit:'height units',...limit(1e-4,1e4)},[1,1]),
     crop:tileLayout.crop,wrap:tileLayout.wrap,mapFilter:tileControls.mapFilter,units:property('string'),
@@ -714,7 +734,16 @@ const specialization = {
 const notes = {
   'image.shapeSplatter': ['Planar definitions become rounded extrusions. Volumetric fields need local XYZ bounds and use local Y as their height axis.',
     'Projection keeps the top visible hit. Height, normal, IDs and stamp UVs refer to that hit; coverage measures subpixel visibility.',
-    'Density and mask gate placements; clip gates individual surface samples. Background height also drives slope alignment and occlusion.'],
+    'Density and mask gate placements; clip gates individual surface samples. Background height also drives slope alignment and occlusion.',
+    'Connect surface to a scatter mapper. Use edits from image.scatterEdit on a downstream copy of the bake to hide or replace stamps.'],
+  'image.scatterColor': ['Connect a scatterMask selection output or supply selection rules directly.',
+    'Color composes in linear light with coverage and texture alpha. A base is required for tint mode.'],
+  'image.scatterGrayscale': ['Textures and optional base must be single-channel unitless data or masks.',
+    'A base is required for tint mode. Texture samples are clamped to 0 through 1.'],
+  'image.scatterMask': ['Each rule applies per stamp. Zero is background. The mask keeps fractional coverage.',
+    'Link the selection output to both mappers and scatterEdit to share exactly the same subset.'],
+  'image.scatterInspect': ['Supply one integer texel coordinate or one positive instance ID.',
+    'Layout can identify a fully occluded stamp. Bounds are left, top, right, bottom with exclusive right and bottom.'],
   'image.tileGenerator': ['Tile and course IDs are one-based. Zero marks the background.',
     'Wrapped rows and columns quantize stagger to a closed cycle. Layout reports authored and effective offsets.',
     'Crops change the sampled window while keeping the same placements and IDs. Connect a shape definition to stamp for custom coverage.'],
@@ -798,6 +827,7 @@ function socketDetails(id, name, type, input) {
   const details = Object.hasOwn(ports, id) && Object.hasOwn(ports[id], name) ? ports[id][name] : {};
   const properties = !input ? undefined : id === 'sim.define' && name === 'clock' ? simulationClock :
     id === 'image.tileSampler' && name === 'controls' ? tileControls :
+    ['image.scatterColor','image.scatterGrayscale'].includes(id) && name === 'selection' ? scatterSelection :
     (name === 'options' || name === 'timing') && Object.hasOwn(options, id) ? options[id] : undefined;
   return { unit: details.unit ?? dimension.unit ?? semanticUnits[type] ?? null,
     constraints: { ...base, ...dimension.constraints, ...details.constraints }, ...(properties && { properties }) };
