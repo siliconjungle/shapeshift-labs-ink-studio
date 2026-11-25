@@ -75,6 +75,7 @@ The keyword search includes the curated features, CLI usages, public API members
 - [rig](graph-rig.md)
 - [scene](graph-scene.md)
 - [sdf](graph-sdf.md)
+- [shape](graph-shape.md)
 - [sim](graph-sim.md)
 - [textile](graph-textile.md)
 - [time](graph-time.md)

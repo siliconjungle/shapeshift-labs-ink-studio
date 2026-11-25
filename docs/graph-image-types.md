@@ -64,6 +64,8 @@ For slope trails, seam repair, scan cleanup and height analysis, see [Advanced t
 
 For seeded scalar image generation, per-axis periods and higher-dimensional slices, see [Named noise in material graphs](material-named-noise.md).
 
+For reusable signed geometry, profiles, symbols and bevel bakes, see [Editable material shape library](material-shape-library.md).
+
 ## Convert color to relief
 
 The `fx.relight` height socket accepts typed height in `art-px` and existing uncolored scalar rasters. A connection from a known RGB source fails graph validation. For dynamically sourced images, the socket validates their value before relighting. Convert deliberately with `image.toHeight`.

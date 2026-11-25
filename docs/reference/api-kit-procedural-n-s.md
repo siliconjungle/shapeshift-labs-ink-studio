@@ -1637,6 +1637,144 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sectionMeshes.revolve` | function | `(outline,origin=[0,0,0],options={})` | [source](../../src/kit/p59a-section-meshes.js) |
 | `KIT.procedural.sectionMeshes.sweep` | function | `(path, profile={}, options={})` | [source](../../src/kit/p59a-section-meshes.js) |
 
+## KIT.procedural.shapeLibrary
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.shapeLibrary` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.compile` | function | `(source)` | [source](../../src/kit/paq-def-shape.js) |
+| `KIT.procedural.shapeLibrary.define` | function | `(source)` | [source](../../src/kit/paq-def-shape.js) |
+| `KIT.procedural.shapeLibrary.open` | function | `(source)` | [guide](../material-shape-library.md#share-shapes-across-bakes), [source](../../src/kit/paq-def-shape.js) |
+| `KIT.procedural.shapeLibrary.operations` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.define"]` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.define"].description` | value | `string = "Validate and preserve an editable signed planar shape definition."` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.define"].inputs` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.define"].inputs.definition` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.define"].inputs.definition.default` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.define"].inputs.definition.default.radius` | value | `number = 0.1` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.define"].inputs.definition.default.type` | value | `string = "rectangle"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.define"].inputs.definition.type` | value | `string = "record"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.define"].outputs` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.define"].outputs.value` | value | `string = "shape2d"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.define"].run` | function | `({definition})` | [source](../../src/kit/paq-def-shape.js) |
+| `KIT.procedural.shapeLibrary.operations["shape.field"]` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.field"].description` | value | `string = "Use an analytic signed shape or profile in procedural sampling."` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.field"].inputs` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.field"].inputs.source` | value | `string = "shape2d"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.field"].outputs` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.field"].outputs.height` | value | `string = "field"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.field"].outputs.profile` | value | `string = "field"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.field"].outputs.value` | value | `string = "field"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.field"].run` | function | `({source})` | [source](../../src/kit/paq-def-shape.js) |
+| `KIT.procedural.shapeLibrary.operations["shape.library"]` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].description` | value | `string = "Open a versioned library of reusable signed shapes by stable ID."` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.bevel` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.bevel.definition` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.bevel.definition.height` | value | `number = 0.06` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.bevel.definition.shape` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.bevel.definition.shape.parts` | value | `array` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.bevel.definition.shape.type` | value | `string = "symbol"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.bevel.definition.type` | value | `string = "bevel"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.bevel.definition.width` | value | `number = 0.05` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.bevel.label` | value | `string = "Round beveled crescent"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-linear"]` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-linear"].definition` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-linear"].definition.height` | value | `number = 0.06` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-linear"].definition.profile` | value | `string = "linear"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-linear"].definition.shape` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-linear"].definition.shape.type` | value | `string = "polygon"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-linear"].definition.type` | value | `string = "bevel"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-linear"].definition.width` | value | `number = 0.055` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-linear"].label` | value | `string = "Linear raised hexagon"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-smooth"]` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-smooth"].definition` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-smooth"].definition.height` | value | `number = -0.055` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-smooth"].definition.profile` | value | `string = "smooth"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-smooth"].definition.shape` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-smooth"].definition.shape.type` | value | `string = "disc"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-smooth"].definition.side` | value | `string = "both"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-smooth"].definition.type` | value | `string = "bevel"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-smooth"].definition.width` | value | `number = 0.065` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries["bevel-smooth"].label` | value | `string = "Smooth recessed disc"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.crescent` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.crescent.definition` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.crescent.definition.parts` | value | `array` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.crescent.definition.type` | value | `string = "symbol"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.crescent.label` | value | `string = "Crescent symbol"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.disc` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.disc.definition` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.disc.definition.type` | value | `string = "disc"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.disc.label` | value | `string = "Disc"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.gradient` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.gradient.definition` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.gradient.definition.curve` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.gradient.definition.curve.stops` | value | `array` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.gradient.definition.source` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.gradient.definition.source.from` | value | `array` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.gradient.definition.source.to` | value | `array` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.gradient.definition.source.type` | value | `string = "linear"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.gradient.definition.type` | value | `string = "gradient"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.gradient.label` | value | `string = "Gradient bands"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.keyhole` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.keyhole.definition` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.keyhole.definition.parts` | value | `array` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.keyhole.definition.type` | value | `string = "symbol"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.keyhole.label` | value | `string = "Keyhole symbol"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.linear` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.linear.definition` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.linear.definition.type` | value | `string = "linear"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.linear.label` | value | `string = "Linear profile"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.polygon` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.polygon.definition` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.polygon.definition.type` | value | `string = "polygon"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.polygon.label` | value | `string = "Hexagon"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.radial` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.radial.definition` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.radial.definition.type` | value | `string = "radial"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.radial.label` | value | `string = "Radial profile"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.rectangle` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.rectangle.definition` | alias | `Alias of KIT.procedural.shapeLibrary.operations["shape.define"].inputs.definition.default` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.rectangle.label` | value | `string = "Rounded rectangle"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.spot` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.spot.definition` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.spot.definition.type` | value | `string = "spot"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.spot.label` | value | `string = "Soft spot"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.star` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.star.definition` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.star.definition.innerRadius` | value | `number = 0.14` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.star.definition.tips` | value | `number = 4` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.star.definition.type` | value | `string = "star"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.star.label` | value | `string = "Compass star"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.stroke` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.stroke.definition` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.stroke.definition.type` | value | `string = "stroke"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.entries.stroke.label` | value | `string = "Round stroke"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.format` | value | `string = "ink-studio/shape-library"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default.version` | value | `number = 1` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.type` | value | `string = "record"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].outputs` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].outputs.value` | value | `string = "shapeLibrary"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.library"].run` | function | `({source})` | [source](../../src/kit/paq-def-shape.js) |
+| `KIT.procedural.shapeLibrary.operations["shape.pick"]` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.pick"].description` | value | `string = "Select one editable definition by its stable shape library ID."` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.pick"].inputs` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.pick"].inputs.id` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.pick"].inputs.id.default` | value | `string = "rectangle"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.pick"].inputs.id.type` | value | `string = "string"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.pick"].inputs.source` | value | `string = "shapeLibrary"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.pick"].outputs` | namespace |  |  |
+| `KIT.procedural.shapeLibrary.operations["shape.pick"].outputs.value` | value | `string = "shape2d"` |  |
+| `KIT.procedural.shapeLibrary.operations["shape.pick"].run` | function | `({source,id})` | [source](../../src/kit/paq-def-shape.js) |
+| `KIT.procedural.shapeLibrary.pick` | function | `(source,id)` | [source](../../src/kit/paq-def-shape.js) |
+| `KIT.procedural.shapeLibrary.presets` | alias | `Alias of KIT.procedural.shapeLibrary.operations["shape.library"].inputs.source.default` |  |
+| `KIT.procedural.shapeLibrary.types` | value | `array` |  |
+| `KIT.procedural.shapeLibrary.valid` | function | `(value)` | [source](../../src/kit/paq-def-shape.js) |
+| `KIT.procedural.shapeLibrary.validShape` | function | `(value)` | [source](../../src/kit/paq-def-shape.js) |
+
 ## KIT.procedural.signalRecovery
 
 | Member | Kind | Signature or value | Guides and source |
