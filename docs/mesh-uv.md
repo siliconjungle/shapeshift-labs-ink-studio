@@ -197,6 +197,52 @@ Use `createTilesetCollection(scene, draft)`,
 Run `node examples/tileset-pick/weighted-collection-demo.cjs brick-demo`
 to assemble a wall with common, worn, and mossy brick variants.
 
+### Play a tile collection in sequence
+
+Add a `sequence` array of entry IDs to the collection draft and save it
+with `tileset collection create`. Repeat an ID anywhere it belongs in
+the motif. An entry with weight zero can still play in the sequence.
+
+```json
+"sequence": ["plain", "seam", "crest", "seam"]
+```
+
+`tileset collection play` resolves one step and can save a pick for the
+ordinary `stamp` command. Steps are zero-based and loop after the last
+entry. The receipt includes the requested step and its index in the
+authored sequence.
+
+```sh
+ink-studio tileset collection play facade-tiles.json --scene wall.json --step 6 --out pick.json
+```
+
+Use the collection directly in a draw stroke or a rectangle fill. Set
+`sequenceStart` in the request to change the first step. The default
+is zero. In the SDK, pass the saved document as `collection` in the
+request, or call `playTilesetCollection(scene, collection, {step})` to
+resolve one pick. The collection takes the place of `selection`.
+
+```json
+{"mode":"fill","id":"frieze","object":"wall","from":[0,0],"to":[11,0],"sequenceStart":2}
+```
+
+```sh
+ink-studio tileset rectangle frieze.json --scene wall.json --collection facade-tiles.json
+ink-studio tileset rectangle frieze.json --scene wall.json --collection facade-tiles.json --out frieze-wall.json
+```
+
+Rectangles follow increasing U within each row, then increasing V.
+Strokes follow the path at the requested interval. Occupied cells and
+repeated positions retain their place in the pattern, so they do not
+shift later picks. The preview lists each placed variant and its step.
+Rectangle tiles fill the grid cell. Stroke tiles use their normal
+brush size and scale. Variants from different sheets use their own
+material slots. A custom `material` can only cover placements from
+one sheet. Each committed run is one undoable edit.
+
+Run `node examples/tileset-pick/sequence-collection-demo.cjs facade-demo`
+to render three courses from the same authored pattern at different offsets.
+
 ### Draw and erase a run of painted faces
 
 Give a stroke a path of construction-plane `[u,v]` addresses and an

@@ -115,6 +115,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.planSplatGroups` | function | `(world, {groups, target, base=world.look?.splatFit} = {})` | [source](../../cli/splat-fit-asset.js) |
 | `node.planSplatRedistribution` | function | `(world, {target, operations, review, base=world.look?.splatFit, edit='redistribution'} = {})` | [source](../../cli/splat-redistribution.js) |
 | `node.planSubjectReframe` | function | `(frames, options)` | [guide](../subject-reframe.md), [source](../../cli/subject-reframe.js) |
+| `node.playTilesetCollection` | function | `(scene, collection, options)` | [source](../../index.js) |
 | `node.preflightStoryDocument` | function | `(document, {story} = {})` | [source](../../cli/story-document.js) |
 | `node.prepareModelingBenchmark` | function | `(...args)` | [source](../../index.js) |
 | `node.previewTimeline` | function | `(world, { timeline = world.animationTimeline, width, height, frames, before = false, maps = ['silhouette'], view = {}, yaw, pivot } = {})` | [guide](../animation-timeline.md#library), [guide](../animation-timeline.md), [source](../../cli/animation-timeline.js) |

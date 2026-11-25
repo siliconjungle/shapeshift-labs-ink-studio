@@ -1,4 +1,4 @@
-/* Weighted exact texel picks for authored tile variants. */
+/* Weighted and ordered exact texel picks for authored tile variants. */
 (function (K) {
   const A = K.authoring, {freeze,hash01} = K.procedural.data;
   const format = 'ink-studio/tileset-collection';
@@ -7,7 +7,7 @@
 
   function create(scene, request) {
     if (!record(request) || !id(request.id) || !Array.isArray(request.entries) || !request.entries.length ||
-        Object.keys(request).some(key => !['format','version','id','entries'].includes(key)))
+        Object.keys(request).some(key => !['format','version','id','entries','sequence'].includes(key)))
       throw new TypeError('A tile collection needs an ID and a nonempty list of entries');
     if (('format' in request || 'version' in request) && (request.format !== format || request.version !== 1))
       throw new TypeError('Expected a version 1 tile collection');
@@ -27,13 +27,21 @@
       return {id:entry.id,weight:entry.weight || 0,selection:TilesetSelection.pick(selection.tileset,asset,selection)};
     });
     if (!entries.some(entry => entry.weight > 0)) throw new RangeError('A tile collection needs a positive weight');
+    const {sequence} = request;
+    if (sequence !== undefined && (!Array.isArray(sequence) || !sequence.length ||
+        !Array.from(sequence).every(entry => seen.has(entry))))
+      throw new RangeError('A tile collection sequence needs a nonempty array of existing entry IDs');
     entries.sort((a,b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-    return freeze({format,version:1,id:request.id,entries});
+    return freeze({format,version:1,id:request.id,entries,...(sequence && {sequence:[...sequence]})});
+  }
+
+  function read(scene, document) {
+    if (document?.format !== format || document.version !== 1) throw new TypeError('Expected a version 1 tile collection');
+    return create(scene,document);
   }
 
   function inspect(scene, document) {
-    if (document?.format !== format || document.version !== 1) throw new TypeError('Expected a version 1 tile collection');
-    const collection = create(scene,document);
+    const collection = read(scene,document);
     const max = collection.entries.reduce((weight,entry) => Math.max(weight,entry.weight),0);
     const total = collection.entries.reduce((sum,entry) => sum+entry.weight/max,0);
     return freeze({collection,entries:collection.entries.map(entry => ({...entry,probability:(entry.weight/max)/total}))});
@@ -54,5 +62,23 @@
     return freeze({collection:collection.id,version:collection.version,seed,key,...selected});
   }
 
-  A.tilesetCollections = Object.freeze({create,inspect,sample});
+  function prepareSequence(scene, document) {
+    const collection = read(scene,document);
+    if (!collection.sequence) throw new RangeError('The tile collection has no authored sequence');
+    const byId = new Map(collection.entries.map(entry => [entry.id,entry]));
+    const entries = collection.sequence.map(id => byId.get(id));
+    function at(step) {
+      if (!Number.isSafeInteger(step) || step < 0)
+        throw new RangeError('A tile sequence step must be a nonnegative safe integer');
+      const sequenceIndex = step%entries.length;
+      return freeze({collection:collection.id,version:collection.version,step,sequenceIndex,...entries[sequenceIndex]});
+    }
+    return Object.freeze({id:collection.id,length:entries.length,at});
+  }
+
+  function play(scene, document, {step=0} = {}) {
+    return prepareSequence(scene,document).at(step);
+  }
+
+  A.tilesetCollections = Object.freeze({create,inspect,sample,prepareSequence,play});
 })(KIT);

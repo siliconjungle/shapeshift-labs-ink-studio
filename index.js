@@ -322,6 +322,9 @@ module.exports = {
   sampleTilesetCollection(scene, collection, options) {
     return module.exports.load().KIT.authoring.tilesetCollections.sample(scene,collection,options);
   },
+  playTilesetCollection(scene, collection, options) {
+    return module.exports.load().KIT.authoring.tilesetCollections.play(scene,collection,options);
+  },
   sizeTilesetBrush: require('./cli/tileset-image.js').sizeTilesetBrush,
   tilesetBrushUV: require('./cli/tileset-image.js').tilesetBrushUV,
   tilesetBrushCellUV: require('./cli/tileset-image.js').tilesetBrushCellUV,

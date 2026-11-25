@@ -2,6 +2,7 @@
 (function (K) {
   const A = K.authoring, topology = K.meshTopology, {V} = K, {freeze} = K.procedural.data;
   const brushFields = ['selection','material','texelsPerUnit','brushScale','paint'];
+  const sequenceFields = ['collection','sequenceStart'];
   const fields = ['mode','id','object','part','snapGrid'];
   const strokeFields = ['path','interval'];
   const rectangleFields = ['from','to'];
@@ -45,9 +46,18 @@
     return A.tilesetFaces.prepare(scene,{object,part,face:id,selection,material,texelsPerUnit,brushScale,paint,planeAt:at},options,cellSize);
   }
 
-  function draw(brush, id, samples) {
+  function draw(scene, request, start, samples, options, cellSize) {
     const api = A.tilesetFaces;
-    const {source,material,density,brushScale,size,conflicts} = brush;
+    const {id,selection,collection,sequenceStart=0} = request;
+    if (collection !== undefined && selection !== undefined || collection === undefined && request.sequenceStart !== undefined)
+      throw new TypeError('Draw with a selection or a sequenced collection. sequenceStart requires a collection');
+    const sequence = collection === undefined ? null : A.tilesetCollections.prepareSequence(scene,collection);
+    if (sequence && (!Number.isSafeInteger(sequenceStart) || sequenceStart < 0 ||
+        !Number.isSafeInteger(sequenceStart+(samples.length-1))))
+      throw new RangeError('A tile sequence needs nonnegative safe integer steps across the placement');
+    const single = sequence ? null : prepareBrush(scene,request,start,options,cellSize);
+    const conflicts = [...(single?.conflicts ?? [])];
+    const variants = new Map(), materials = new Map();
     const stamps = [], visited = new Set();
     for (const sample of samples) {
       if (sample.status) continue;
@@ -57,14 +67,33 @@
         continue;
       }
       visited.add(key);
+      let brush = single;
+      if (sequence) {
+        const {id:entryId,step,sequenceIndex,selection} = sequence.at(sequenceStart+sample.index);
+        sample.variant = {id:entryId,step,sequenceIndex};
+        if (!variants.has(entryId)) {
+          const prepared = prepareBrush(scene,{...request,selection},start,options,cellSize);
+          const prior = materials.get(prepared.material);
+          if (prior && prior.source.selection.tileset !== selection.tileset)
+            prepared.conflicts.push({reason:'material-in-use',material:prepared.material});
+          else materials.set(prepared.material,prepared);
+          variants.set(entryId,prepared);
+          conflicts.push(...prepared.conflicts);
+        }
+        brush = variants.get(entryId);
+      }
       const face = id+'/'+sample.index;
       const stamp = api.stamp(brush,face,sample.point);
-      Object.assign(sample,{face,status:stamp.conflicts.length ? 'conflict' : 'draw'});
+      Object.assign(sample,{face,status:stamp.conflicts.length || (sequence && brush.conflicts.length) ? 'conflict' : 'draw'});
       conflicts.push(...stamp.conflicts);
       stamps.push(stamp);
     }
-    return {brush:{source,material,texelsPerUnit:density,brushScale,size},conflicts,
-      ...(!conflicts.length && stamps.length>0 && {row:api.append(brush,stamps)})};
+    const brush = single && {source:single.source,material:single.material,
+      ...(!cellSize && {texelsPerUnit:single.density,brushScale:single.brushScale}),size:single.size};
+    const playback = sequence && {collection:sequence.id,start:sequenceStart,length:sequence.length};
+    return {brush,sequence:playback,conflicts,...(!conflicts.length && stamps.length>0 && {
+      row:api.append(single ?? materials.values().next().value,stamps,sequence ? materials.values() : undefined)
+    })};
   }
 
   function tileBinding(binding) {
@@ -148,17 +177,21 @@
   function plan(scene, request, options) {
     const {mode,id,object,part,path,interval,snapGrid=false} = request ?? {};
     const drawing = mode === 'draw';
-    if (!validRequest(request,strokeFields,drawing ? brushFields : []) || !['draw','erase'].includes(mode) ||
+    if (!validRequest(request,strokeFields,drawing ? [...brushFields,...sequenceFields] : []) || !['draw','erase'].includes(mode) ||
         !Array.isArray(path) || !path.length || path.length>maxSamples || !Array.from(path).every(pair) ||
         !Number.isFinite(interval) || interval<=0)
       throw new TypeError('A tile stroke needs draw or erase mode, stroke and mesh IDs, a finite grid path, and a positive scene-unit interval');
     const frame = A.constructionPlane.forScene(scene);
     const {length,samples} = samplePath(frame,path,interval,snapGrid);
     const {existing,doc} = meshSource(scene,object);
-    const result = drawing ? draw(prepareBrush(scene,request,path[0],options),id,samples) : erase(existing,doc,frame,samples,part);
+    const result = drawing ? draw(scene,request,path[0],samples,options) : erase(existing,doc,frame,samples,part);
     return finish(frame,existing,doc,result,{format:'ink-studio/tileset-face-stroke',version:1,id,object,mode,
       ...((existing?.part ?? part) && {part:existing?.part ?? part}),constructionPlane:frame.plane,
-      path:path.map(point=>point.slice()),interval,length,snapGrid,samples,...(result.brush && {brush:result.brush})});
+      path:path.map(point=>point.slice()),interval,length,snapGrid,samples,...drawSource(result)});
+  }
+
+  function drawSource({brush,sequence}) {
+    return {...(brush && {brush}),...(sequence && {sequence})};
   }
 
   function meshSource(scene, object) {
@@ -245,7 +278,7 @@
 
   function planRectangle(scene, request, options) {
     const {mode,id,object,part,from,to,snapGrid=false} = request ?? {}, filling = mode === 'fill';
-    if (!validRequest(request,rectangleFields,filling ? ['selection','material','paint'] : []) ||
+    if (!validRequest(request,rectangleFields,filling ? ['selection','material','paint',...sequenceFields] : []) ||
         !['fill','erase'].includes(mode) || !pair(from) || !pair(to))
       throw new TypeError('A tile rectangle needs fill or erase mode, edit and mesh IDs, and two grid cell addresses');
     const frame = A.constructionPlane.forScene(scene), footprint = rectangle(frame,from,to,snapGrid);
@@ -259,9 +292,7 @@
     }
     let result;
     if (filling) {
-      const brush = prepareBrush(scene,request,bounds.min,options,bounds.cellSize);
-      const draws = draw(brush,id,cells);
-      result = {...draws,brush:{source:brush.source,material:brush.material,size:bounds.cellSize}};
+      result = draw(scene,request,bounds.min,cells,options,bounds.cellSize);
       for (const cell of cells) if (cell.status === 'draw') cell.status = 'fill';
     } else {
       const conflicts = existing && part !== undefined && part !== existing.part ? [{reason:'different-mesh-part'}] : [];
@@ -270,7 +301,7 @@
     }
     return finish(frame,existing,doc,result,{format:'ink-studio/tileset-face-rectangle',version:1,id,object,mode,
       ...((existing?.part ?? part) && {part:existing?.part ?? part}),constructionPlane:frame.plane,
-      from:from.slice(),to:to.slice(),snapGrid,footprint:bounds,cells,affected,...(result.brush && {brush:result.brush})});
+      from:from.slice(),to:to.slice(),snapGrid,footprint:bounds,cells,affected,...drawSource(result)});
   }
 
   A.tilesetStrokes = Object.freeze({plan,planRectangle});

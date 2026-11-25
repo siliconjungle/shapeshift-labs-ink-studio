@@ -292,10 +292,11 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   tileset collection create <request.json> --scene <scene.json> [--out <collection.json>]   save weighted tile variants
   tileset collection inspect <collection.json> --scene <scene.json>   validate picks and show relative probabilities
   tileset collection sample <collection.json> --scene <scene.json> --seed N --key <key> [--out <pick.json>]   select a reproducible tile variant
+  tileset collection play <collection.json> --scene <scene.json> [--step N] [--out <pick.json>]   resolve one step of an authored sequence
   tileset eyedrop --scene <scene.json> --object <mesh-id> --face <face-id> [--part ID] [--brush-size] [--out <pick.json>]   recover a reusable painted face pick for stamp --selection
   tileset reskin --scene <scene.json> --object <mesh-id> --face <face-id> --mode crop|tileset|relative (--selection <pick.json> | --id <tileset-id>) [--part ID] [--column N --row N] [--out <new-scene.json>]   change the paint on an existing mesh face
-  tileset stroke <stroke.json> --scene <scene.json> [--out <new-scene.json>]   draw or erase an interval-sampled run of painted faces
-  tileset rectangle <request.json> --scene <scene.json> [--out <new-scene.json>]   fill or erase an inclusive rectangle of construction grid cells
+  tileset stroke <stroke.json> --scene <scene.json> [--collection <collection.json>] [--out <new-scene.json>]   draw or erase an interval-sampled run of painted faces
+  tileset rectangle <request.json> --scene <scene.json> [--collection <collection.json>] [--out <new-scene.json>]   fill or erase an inclusive rectangle of construction grid cells
   tileset brush-run <request.json> --scene <scene.json> [--brush-file <brush.json>] [--out <new-scene.json>]   stamp a saved multi-tile brush with edge or anchor alignment and overlap control
   tileset place --scene <scene.json> --object <mesh-id> --face <face-id> (--selection <selection.json> | --id <tileset-id> --x N --y N --width N --height N) [--plane U,V [--snap-grid] | --origin X,Y,Z --right X,Y,Z --up X,Y,Z] [--part ID] [--material ID] [--texels-per-unit N] [--brush-scale N] [--paint-rotate 0|90|180|270] [--paint-flip-x] [--paint-flip-y] [--out <new-scene.json>]   place one painted tile as an editable mesh face
   tileset extract --scene <scene.json> (--selection <selection.json> | --id <tileset-id> --x N --y N --width N --height N) --new-id <tileset-id> --out <new-scene.json>   register an exact crop as a new tileset
@@ -1092,7 +1093,6 @@ These options are read by CLI code. Follow each source link for the accepted val
 - `--splat-proxy-tolerance` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--spread` · [cli/depth.js](../../cli/depth.js)
 - `--sprite-clip` · [cli/ink-studio.js](../../cli/ink-studio.js)
-- `--step` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--strand-passes` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--tint` · [cli/pixel-art.js](../../cli/pixel-art.js)
 - `--to-local` · [cli/hierarchy.js](../../cli/hierarchy.js)

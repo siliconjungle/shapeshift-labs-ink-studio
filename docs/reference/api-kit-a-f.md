@@ -879,6 +879,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetCollections` | namespace |  |  |
 | `KIT.authoring.tilesetCollections.create` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-collections.js) |
 | `KIT.authoring.tilesetCollections.inspect` | function | `(scene, document)` | [source](../../src/kit/p23-tileset-collections.js) |
+| `KIT.authoring.tilesetCollections.play` | function | `(scene, document, {step=0} = {})` | [source](../../src/kit/p23-tileset-collections.js) |
+| `KIT.authoring.tilesetCollections.prepareSequence` | function | `(scene, document)` | [source](../../src/kit/p23-tileset-collections.js) |
 | `KIT.authoring.tilesetCollections.sample` | function | `(scene, document, {seed,key} = {})` | [source](../../src/kit/p23-tileset-collections.js) |
 | `KIT.authoring.tilesetEyedrop` | namespace |  |  |
 | `KIT.authoring.tilesetEyedrop.inspect` | function | `(scene, row, {object,face,brushSize=false} = {})` | [source](../../src/kit/p23-tileset-eyedrop.js) |
@@ -886,7 +888,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetEyedrop.recover` | function | `(asset, tileset, texels, binding)` | [source](../../src/kit/p23-tileset-eyedrop.js) |
 | `KIT.authoring.tilesetEyedrop.sourceBinding` | function | `(row, face)` | [source](../../src/kit/p23-tileset-eyedrop.js) |
 | `KIT.authoring.tilesetFaces` | namespace |  |  |
-| `KIT.authoring.tilesetFaces.append` | function | `(brush, stamps)` | [source](../../src/kit/p23-tileset-faces.js) |
+| `KIT.authoring.tilesetFaces.append` | function | `(brush, stamps, brushes = [brush])` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.cornersFor` | function | `(brush, face, ids)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.cropSource` | function | `(asset, crop, texelBounds = [crop.x,crop.y,crop.x+crop.width,crop.y+crop.height], paint)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.isSourceBinding` | function | `(binding)` | [source](../../src/kit/p23-tileset-faces.js) |

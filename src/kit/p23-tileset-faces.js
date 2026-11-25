@@ -121,8 +121,8 @@
     return {polygon,binding,vertices,conflicts};
   }
 
-  function append(brush, stamps) {
-    const {existing,doc,part,object,slot,material,source,materialDefinition} = brush;
+  function append(brush, stamps, brushes = [brush]) {
+    const {existing,doc,part,object} = brush;
     const added = {vertices:stamps.flatMap(row=>row.vertices),faces:stamps.map(row=>row.polygon)};
     const row = existing ? A.meshTopologyScene.revise(existing,added).row :
       {document:topology.create({id:object,...added}),...(part && {part})};
@@ -132,8 +132,10 @@
       if (row.attachments?.revision === before) row.attachments = {...row.attachments,revision:after};
       if (row.shapeKeys?.restRevision === before) row.shapeKeys = {...row.shapeKeys,restRevision:after};
     }
+    const materials = [...brushes].filter(item=>!item.slot).map(({material,source,materialDefinition})=>
+      materialDefinition ?? {id:material,texture:{tileset:source.selection.tileset}});
     return {...row,bindings:[...(row.bindings ?? []),...stamps.map(stamp=>stamp.binding)],
-      materials:slot ? row.materials : [...(row.materials ?? []),materialDefinition ?? {id:material,texture:{tileset:source.selection.tileset}}]};
+      materials:materials.length ? [...(row.materials ?? []),...materials] : row.materials};
   }
 
   function plan(scene, request, options) {
