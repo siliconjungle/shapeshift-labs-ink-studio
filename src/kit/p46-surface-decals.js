@@ -100,7 +100,7 @@
     if(inUV) {
       need(vector(anchor.uv,2,n=>range(n,0,1)),'a mesh brush needs a unit UV anchor');
       const start=anchor.uv.map((n,k)=>n+coordinates[k]*pixelSize[k]);
-      placed={...anchor,uv:{min:start,max:start.map((n,k)=>n+size[k])}};
+      placed={...anchor,uvSet:anchor.uvSet ?? 'pigment',uv:{min:start,max:start.map((n,k)=>n+size[k])}};
     } else {
       const a=restAnchor({...anchor,size}), right=V.cross(a.up,a.normal);
       const offset=coordinates.map((n,k)=>n*pixelSize[k]+size[k]/2);

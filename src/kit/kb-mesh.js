@@ -229,7 +229,11 @@
       matOf = new Map();
     let anyCol = false,
       skipped = 0;
-    const coordinates=new Map(), bindingValues=new Map(), hasMetadata=new Set();
+    const coordinates=new Map(), bindingValues=new Map(), textureValues=new Map(), hasMetadata=new Set();
+    function registerValue(collection,name,set) {
+      if (!collection.has(name)) collection.set(name,new Set());
+      collection.get(name).add(set);
+    }
     function registerUVs(part,mesh,firstFace,base,count) {
       const ink=mesh.extras?.inkStudioMaterialUV;
       if (ink && ink.version!==1) throw new TypeError('Unsupported Ink material UV version');
@@ -256,12 +260,10 @@
         const set=ref.extensions?.KHR_texture_transform?.texCoord ?? ref.texCoord ?? 0;
         if (ink && MaterialUV.resolve(explicit,name)!==set)
           throw new RangeError('GLB texture conflicts with its Ink material UV binding');
+        registerValue(textureValues,name,set);
         if (!ink) primitive[name]=set;
       }
-      for(const [name,set] of Object.entries(primitive)) {
-        if(!bindingValues.has(name)) bindingValues.set(name,new Set());
-        bindingValues.get(name).add(set);
-      }
+      for (const [name,set] of Object.entries(primitive)) registerValue(bindingValues,name,set);
     }
     const useMat = i => {
       if (i === undefined) return 0;
@@ -346,14 +348,21 @@
     }
     if (allUVSets) {
       mesh.uvSets=Object.fromEntries([...coordinates].map(([set,rows])=>[set,Array.from({length:TM.length},(_,i)=>rows[i] ?? null)]));
-      const assignments=[], conflicts=[];
+      const assignments={}, conflicts=new Map();
+      const conflict=(name,sets)=>conflicts.set(name,{channel:name,uvSets:[...sets].sort((a,b)=>a-b)});
       for (const [name,sets] of bindingValues) {
-        const values=[...sets];
-        if(values.length!==1) conflicts.push({channel:name,uvSets:values.sort((a,b)=>a-b)});
-        else if(values[0] || hasMetadata.has(name)) assignments.push([name,values[0]]);
+        const [set]=sets;
+        if (sets.size!==1) conflict(name,sets);
+        else if (set || hasMetadata.has(name)) assignments[name]=set;
       }
-      if (assignments.length) mesh.uvBindings=MaterialUV.bindings(Object.fromEntries(assignments));
-      if (conflicts.length) mesh.uvBindingConflicts=conflicts;
+      // Include effective selectors from textures that inherit an Ink binding.
+      for (const [name,sets] of textureValues) {
+        if (conflicts.has(name)) continue;
+        const expected=new Set([...sets,MaterialUV.resolve(assignments,name)]);
+        if (expected.size>1) conflict(name,expected);
+      }
+      if (Object.keys(assignments).length) mesh.uvBindings=MaterialUV.bindings(assignments);
+      if (conflicts.size) mesh.uvBindingConflicts=[...conflicts.values()];
     }
     mesh.skipped = skipped;
     return mesh;

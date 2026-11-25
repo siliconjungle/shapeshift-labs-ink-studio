@@ -128,8 +128,9 @@ Every face corner needs coordinates for each bound set. `normal`,
 `metallicRoughness`, and `emission` may override `bake`. A named mask such
 as `mask/wear` inherits `masks`, then `bake`, if it has no override.
 The default layout is UV 0. Native pigment uses `pigment`, and UV-anchored
-decals use `decal` unless the anchor specifies its own `uvSet`. Coverage
-and opacity share the pigment layout.
+decals use `decal` unless the anchor specifies its own `uvSet`. Retained
+UV brush stamps default to `pigment`. Coverage and opacity share the
+pigment layout.
 
 ```sh
 node cli/ink-studio.js mesh-uv layout case-topology.json --channel decal
@@ -148,7 +149,7 @@ GLB exports carry each authored UV set. Standard material textures reference
 their set through glTF texture selectors. Ink keeps decal and named-mask
 assignments in the mesh's versioned extras. `mesh-uv import` retains all sets
 and their assignments by default. When source parts disagree on a channel,
-import each part into its own retained document. Supply `--channel` or
+supply a separate source asset for each retained part. Supply `--channel` or
 `--uv-set` to import or reduce a single layout intentionally. The JavaScript
 reader exposes the source arrays with `readMesh(file, { allUVSets: true })`.
 

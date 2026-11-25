@@ -86,6 +86,17 @@ test('rebaking a moved decal layout keeps original map and mip hashes and round-
   const reimport=JSON.parse(fs.readFileSync(out,'utf8'));
   assert.deepEqual(reimport.uvBindings,demo.bindings);
   assert.equal(UV.inspect(reimport,'mask/wear').uvSet,3);
+
+  const maskEdit=UV.plan(edit.document,{uvSet:'mask/wear',operations:[
+    {op:'transform',ids:['rear'],translate:[0,.04]}
+  ]});
+  assert(maskEdit.report.canCommit);
+  const third=demo.bake({...source,document:maskEdit.document},path.join(root,'wear'),
+    {rebakeFrom:path.join(after,'material-bake.json')});
+  assert.deepEqual(third.maps.pigment,second.maps.pigment);
+  assert.deepEqual(third.maps.normal,second.maps.normal);
+  assert.notEqual(third.masks.wear.sha256,second.masks.wear.sha256);
+  assert.equal(third.uvAtlases[3].chartReport.updated.length,1);
 });
 
 test('approved camera paint coverage stays on the pigment layout',t=>{
