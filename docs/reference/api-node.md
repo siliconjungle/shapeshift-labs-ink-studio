@@ -120,6 +120,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.readStoryDocument` | function | `(file)` | [source](../../cli/story-document.js) |
 | `node.readTake` | function | `(file, { kit = require('../index.js').load(), checkpoint, ...options } = {})` | [guide](../take-clock.md#library-and-shared-domains), [source](../../cli/take.js) |
 | `node.readWav` | function | `(file, options)` | [guide](../graph-media.md#wav-and-frame-analysis), [source](../../cli/wav.js) |
+| `node.rebindPixelFeature` | function | `(design,request,{render,graph,decals,replacementScene}={})` | [source](../../cli/feature-rebind.js) |
 | `node.recordInputEvents` | function | `(source, { initial, signal, kit = require('../index.js').load() } = {})` | [guide](../graph-media.md#recorded-control-events), [source](../../cli/graph-host.js) |
 | `node.reframeRaster` | function | `(image, delivery, time)` | [guide](../subject-reframe.md), [source](../../cli/subject-reframe.js) |
 | `node.render` | function | `(world, o, preparedPalettes)` | [guide](../aerial-perspective.md), [guide](../art-passes.md#part-motion-and-previous-depth), [guide](../art-passes.md#deep-compositing), [guide](../art-passes.md#shared-opaque-surfaces), [guide](../brick-meshes.md#choose-direct-tracing-for-a-close-up), [source](../../cli/render.js) |
@@ -156,6 +157,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.silhouetteReview` | function | `(world,{ width=96, height=96, directions=8, pitches, yaw=world.cam.yaw, pivot=world.cam.target, time=0, view={}, columns=4, scale=1 }={})` | [source](../../cli/silhouette-review.js) |
 | `node.spriteAtlas` | function | `(world, options = {})` | [source](../../cli/sprite-atlas.js) |
 | `node.toolkitBuildHash` | function | `(kit)` | [source](../../index.js) |
+| `node.trackPixelSelection` | function | `({ binding,selection,documentGrid,revision,views,render,review,visit,feature })` | [source](../../cli/pixel-selection-track.js) |
 | `node.transitionReview` | function | `(world, { plan = world.transitionReview, width = 160, height = 90, scale = 1, view = {}, pose } = {})` | [guide](../transition-review.md#read-the-results), [guide](../transition-review.md), [source](../../cli/transition-review.js) |
 | `node.unpackPixelSourceView` | function | `(frame)` | [source](../../src/pixel-view-source.js) |
 | `node.unpackProject` | function | `(input, { out } = {})` | [source](../../cli/project-bundle.js) |

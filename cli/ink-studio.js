@@ -1502,6 +1502,7 @@ const CMD = {
         '  pixel-art snap <design.json> --at x,y [--frame id] [--radius pixels]   resolve document guides',
         '  pixel-art motion <design.json> [--plan plan.json] [--layer id] [--out report.json] [--review review.html]   check native animation samples',
         '  pixel-art motion <scene> --views plan.json [--subject object] [--w n --h n] [--out report.json] [--review review.html]   check authored views',
+        '  pixel-art feature-rebind <document.json> <plan.json> [--scene source --replacement scene] [--graph hierarchy.json --decals paint.json] --out bundle.json [--report review.json]',
         '  pixel-art track <document.json> --selection id --binding id --views plan.json [--out report.json] [--review review.html]   track a bound selection',
         '  pixel-art correct <document.json> <plan.json> [--out report.json] [--review review.html] [--apply artifact.json] [--patch edit.json] [--approval digest]   apply approved edits to cels, rest charts, or shot keys',
         '  pixel-art reprobe <document.json> --binding id --before view.json [--after view.json] --selection id|--rect x,y,w,h [--out report.json] [--invalidate checked.json]   check edited source bindings',
@@ -4584,11 +4585,12 @@ const CMD = {
         return draw(extra=>renderView(world,id,{ ...settings,...extra },{ id:row.id,index }));
       };
     }
-    function captureTrack(id,{ object,part },{ shot = false } = {}) {
+    function captureTrack(id,{ object,part,featureMapping },{ shot = false } = {}) {
       const scope = { object,...(part !== undefined && { part }) };
+      const passes=featureMapping ? [...sourcePasses,'strandId','strandU','strandDepth','strandCoverage'] : sourcePasses;
       return captureSourceSamples(id,undefined,render=>({
-        full:render({ pixelSelection:scope,...(shot && { captureShotCorrectionSurface:true,shotCorrections:false }) }),
-        isolated:render({ pixelSelection:{ ...scope,isolated:true },trackPixelSources:true })
+        full:render({ passes,pixelSelection:scope,...(shot && { captureShotCorrectionSurface:true,shotCorrections:false }) }),
+        isolated:render({ passes,pixelSelection:{ ...scope,isolated:true },trackPixelSources:true })
       }));
     }
     function captureMultiview(id,retained) {
@@ -5232,7 +5234,7 @@ async function run() {
     shotReplay?.verify();
     return;
   }
-  const pixelInputs=cmd==='pixel-art' ? (['capture','splat-diagnostics'].includes(pos[0]) ? [pos[1]] : [opt.scene]).filter(value=>typeof value==='string') : [];
+  const pixelInputs=cmd==='pixel-art' ? (['capture','splat-diagnostics'].includes(pos[0]) ? [pos[1]] : [opt.scene,...(pos[0]==='feature-rebind' ? [opt.replacement] : [])]).filter(value=>typeof value==='string') : [];
   const splatFiles = cmd === 'pixel-art' ? pixelInputs.filter(gaussianFile) : cmd === 'snap' ? pos.filter(gaussianFile) : ['render', 'turn', 'sheet', 'clip', 'atlas', 'splat-groups', 'splat-redistribute'].includes(cmd)
     ? pos.slice(0, 1).filter(gaussianFile) : [];
   if (splatFiles.length) {

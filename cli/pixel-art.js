@@ -34,6 +34,7 @@ const Craft = require('../src/pixel-craft.js');
 const Motion = require('../src/pixel-motion-checks.js');
 const MotionReview = require('./pixel-motion-review.js');
 const SelectionTrack = require('./pixel-selection-track.js');
+const FeatureMappings = require('./feature-mappings.js');
 const TrackedCorrection = require('./pixel-tracked-correction.js');
 const ArtRules = require('../src/pixel-art-rules.js');
 const Cleanup = require('../src/pixel-cleanup.js');
@@ -157,7 +158,7 @@ function documentShape(design) {
   if (!Array.isArray(sceneBindings)) throw new TypeError('Pixel scene bindings must be an array');
   const bindingIds = new Set();
   for (const binding of sceneBindings) {
-    if (!fields(binding,['id','scene','object','part','revision','frame','layer','canvas','mapping','stale']) || !name(binding.id) ||
+    if (!fields(binding,['id','scene','object','part','revision','frame','layer','canvas','mapping','featureMapping','stale']) || !name(binding.id) ||
         bindingIds.has(binding.id) || !reference(binding.scene) || !reference(binding.object) ||
         (binding.part !== undefined && !reference(binding.part)) ||
         (binding.revision !== undefined && !reference(binding.revision)) ||
@@ -167,6 +168,7 @@ function documentShape(design) {
       throw new TypeError('Pixel scene bindings need unique IDs, scene and object references, and valid frame and layer scopes');
     if (binding.mapping !== undefined && (!binding.part || !SourceBindings.registeredMapping(binding.mapping)))
       throw new TypeError('A pixel source mapping needs a part and a valid version 1 registration');
+    if (binding.featureMapping !== undefined) FeatureMappings.compile(binding.featureMapping,binding);
     if (binding.stale !== undefined && !SourceBindings.validStale(binding.stale,width,height))
       throw new TypeError('Stale binding pixels need ordered, non-overlapping native row runs');
     bindingIds.add(binding.id);
@@ -2941,6 +2943,37 @@ function motionCommand(source,opt,captureMotion) {
   else process.stdout.write(JSON.stringify(report,null,2)+'\n');
 }
 
+function featureRebindCommand(source,planFile,opt,captureTrack) {
+  const { out,report,graph,decals,scene,replacement }=opt;
+  if (!(reference(out)||reference(report))||[out,report,graph,decals,scene,replacement].some(value=>
+      value!==undefined&&!reference(value)))
+    throw new TypeError('Use pixel-art feature-rebind <document.json> <plan.json> [--scene source --replacement scene] [--graph hierarchy.json --decals paint.json] --out bundle.json [--report review.json]');
+  const design=read(source), plan=read(planFile), binding=design.sceneBindings?.find(row=>row.id===plan.binding);
+  if (!binding || scene!==undefined&&!sameScene(binding.scene,scene))
+    throw new RangeError('Feature replacement source must match its document binding');
+  const from=scene??binding.scene, to=replacement??from;
+  const inputs=[source,planFile,graph,decals,from,to].filter(reference).map(file=>path.resolve(file));
+  const outputs=[out,report].filter(reference).map(file=>path.resolve(file));
+  if (outputs.some(file=>inputs.includes(file))||new Set(outputs).size!==outputs.length)
+    throw new RangeError('Feature replacement outputs must be separate from the inputs');
+  let referenceRender,replacementRender;
+  function render(row,index,grid) {
+    if (index) {
+      replacementRender??=captureTrack(to,binding);
+      return replacementRender(row,0,grid);
+    }
+    referenceRender??=captureTrack(from,binding);
+    return referenceRender(row,0,grid);
+  }
+  const result=require('./feature-rebind.js').rebindPixelFeature(design,plan,
+    {render,replacementScene:to,...(graph&&{graph:read(graph)}),...(decals&&{decals:read(decals)})});
+  if (report) files.json(path.resolve(report),result.report);
+  if (!result.document) {
+    if (!report) process.stdout.write(JSON.stringify(result.report,null,2)+'\n');
+    process.exitCode=2;
+  } else if (out) files.json(path.resolve(out),{format:'ink-studio/feature-rebind-bundle',version:1,...result});
+}
+
 function trackCommand(source,opt,captureTrack) {
   const { selection:id,binding:bindingId,views,scene,out,review } = opt;
   if (![id,bindingId,views].every(reference) || scene !== undefined && !reference(scene) ||
@@ -3364,6 +3397,10 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
   if (pos[0] === 'directions') return require('./pixel-directional-views.js').command(pos.slice(1),opt,{ compileFrames:compileDirectionalFrames,documentFromDeck });
   if (pos[0] === 'slices') return sliceCommand(pos.slice(1),opt);
   if (pos[0] === 'tilemap') return tilemapCommand(pos.slice(1),opt);
+  if (pos[0] === 'feature-rebind') {
+    if (pos.length!==3) throw new TypeError('Use pixel-art feature-rebind <document.json> <plan.json>');
+    return featureRebindCommand(pos[1],pos[2],opt,captureTrack);
+  }
   if (pos[0] === 'stack') return stackCommand(pos.slice(1),opt);
   if (pos[0] === 'palette') return paletteCommand(pos.slice(1),opt);
   const [action, source, patch] = pos;

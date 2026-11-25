@@ -2457,6 +2457,134 @@ or filtered atlas samples without direct texel provenance, and points
 with no sampled counterpart stay unresolved. Native edits to the
 original representation still require a valid source address.
 
+### Name a feature across representations
+
+Use `featureMapping` on a scene binding to retain the identity of a
+patch, seam, connector, or other part detail. The version 1 document
+has one object and part. Each named feature has multiple named sites.
+A site identifies its native source and maps captured positions into
+the feature's shared coordinate frame. A newly generated mesh can
+declare a new site even when its vertex and face IDs all change.
+
+```json
+{
+  "format": "ink-studio/feature-mapping",
+  "version": 1,
+  "id": "relay-features",
+  "object": "relay",
+  "part": "cover",
+  "features": [{
+    "id": "service-port",
+    "tolerance": 0.06,
+    "sites": [
+      {
+        "id": "panel-original",
+        "kind": "mesh",
+        "match": { "asset": "relay-cover-v1", "faces": ["port-face"] },
+        "region": { "min": [-0.4, 0.2, 0.1], "max": [0.4, 0.6, 0.2] },
+        "toFeature": true,
+        "worldFrame": true
+      },
+      {
+        "id": "panel-rebuilt",
+        "kind": "mesh",
+        "match": { "asset": "relay-cover-v2", "faces": ["port-upper", "port-lower"] },
+        "region": { "min": [-0.2, 0.2, 0.1], "max": [0.6, 0.6, 0.2] },
+        "toFeature": [1,0,0,-0.2, 0,1,0,0, 0,0,1,0],
+        "worldFrame": [1,0,0,0.2, 0,1,0,0, 0,0,1,0]
+      }
+    ]
+  }]
+}
+```
+
+| Site kind | Native match |
+| --- | --- |
+| `mesh` | Mesh asset ID with optional chart ID, native triangle list, or stable mesh-topology face IDs. |
+| `sdf` | Named field owner or the exact field address exposed by a traced source hit. The region restricts the field coordinates. |
+| `splat` | Retained group ID from the active splat fit, or an explicit list of stable splat IDs. |
+| `curve` | Authored strand name and normalized station range. The `station` pair gives the two corresponding XYZ points in feature space. |
+| `sprite` | Depth-backed card placement ID from `budgetId`, with object ID as the default. An optional frame list limits the baked views. |
+
+For mesh, SDF, splat, and sprite sites, give a `region` in the
+captured source coordinates and a `toFeature` transform. Use
+`true` for identity or a row-major 3 × 4 affine transform. Card
+coordinates are relative to the bake pivot. Curve sites use their
+authored one-dimensional station range. Their feature-space segment
+should align with the corresponding strip in the other representations.
+
+The ordinary `pixel-art track` command uses named sites when the
+binding includes `featureMapping`. It reports the feature, source and
+destination site, and match distance. A pixel must have direct native
+capture evidence. Missing samples, overlapping site registrations,
+and unresolved occlusion are reported without moving the selection
+to another feature on the same part.
+
+### Carry feature attachments to a replacement
+
+`pixel-art feature-rebind` transfers native paint cells, protected
+details, sockets, and retained rest-space decals. Use two view samples
+and an explicit source and destination site. The new frame receives a
+separate scene binding. The plan keeps the original frame available for
+review. A page with several features can run one handoff per named feature.
+
+```json
+{
+  "format": "ink-studio/feature-rebind",
+  "version": 1,
+  "id": "replace-service-port",
+  "binding": "cover",
+  "bindReplacement": "rebuilt-cover",
+  "feature": "service-port",
+  "from": "panel-original",
+  "to": "panel-rebuilt",
+  "sourceFrame": "reference",
+  "replacementFrame": "revision",
+  "views": { "version": 1, "samples": [
+    { "id": "before", "time": 0 },
+    { "id": "after", "time": 0 }
+  ] },
+  "paint": { "layer": "paint", "pixels": [[42, 23], [43, 23]] },
+  "details": [{ "from": "port-glint", "id": "rebuilt-port-glint" }],
+  "sockets": [{ "node": "cover", "socket": "sensor" }],
+  "decals": ["port-label"]
+}
+```
+
+Paint keeps the indexed swatch and alpha in the destination paint
+layer. Existing unrelated paint, protection, or unresolved sample
+collisions block the handoff. For a protected `gap`, add a `gaps`
+list to the detail request. Each entry supplies `at` for the blank
+pixel and `anchors` for the two adjacent rim pixels. The remapped rims
+must still straddle a clear native cell.
+
+Socket and decal transfers use an explicit `worldFrame` on both
+sites. It maps the shared feature frame into the world of the
+corresponding representation. The transferred hierarchy keeps each
+socket ID and its children. A retained projector decal carries the
+image, mask, and lifetime to the new part frame. Supply a rest-space
+projector on the bound part. Use the projected paint with the standard
+surface decal receiver or bake it with the source before creating a
+card. Native pixel paint can also be transferred directly to a captured
+card or curve view.
+
+```sh
+ink-studio pixel-art feature-rebind design.json handoff.json \
+  --scene original.js --replacement rebuilt.js --graph hierarchy.json \
+  --decals paint.json --out rebuilt-feature.json --report review.json
+```
+
+The bundle contains an editable pixel document and any transferred
+hierarchy and decal assets. Omit `--out` to inspect just the report.
+An unresolved handoff exits with status 2 and writes the review.
+Use `trackPixelSelection` and `rebindPixelFeature` for the equivalent
+Node workflows with a callback returning paired full and isolated native
+captures.
+
+Run `node examples/feature-mappings.cjs coupler-review` for a rebuilt
+mesh and an SDF, splat group, curve and newly baked card linked to the
+same indicator strip.
+
 ## Place a tracked edit on a moving part
 
 A version 2 `pixel-tracked-correction` plan uses the same named binding,

@@ -139,12 +139,13 @@ function surfaces(size,atlasOwners,topDown) {
   for (const [p,hit] of atlasOwners ?? []) {
     const source = hit.source;
     if (!source) continue;
-    const { key,identity,coordinate,triangle,topology } = source;
+    const { key,identity,coordinate,triangle,topology,face } = source;
     if (!slots.has(key)) {
       slots.set(key,surfaceSources.length);
-      surfaceSources.push({ ...identity,...(topology && { triangles:{} }) });
+      surfaceSources.push({ ...identity,...(topology && { triangles:{} }),...(face!==undefined && { faces:{} }) });
     }
-    const slot = slots.get(key), triangles = surfaceSources[slot].triangles;
+    const slot = slots.get(key), entry = surfaceSources[slot], triangles = entry.triangles;
+    if (face!==undefined) (entry.faces??={})[triangle]=face;
     if (triangles && topology && !Object.hasOwn(triangles,triangle))
       triangles[triangle] = createHash('sha256').update(topology).digest('hex');
     sourceSurface[p] = slot;

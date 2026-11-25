@@ -12,6 +12,7 @@ const { meshKey } = require('./pixel-source-tracking.js');
 const Review = require('./pixel-motion-review.js');
 const PNG = require('./png.js');
 const files = require('./asset-files.js');
+const Features = require('./feature-mappings.js');
 
 const sdfKey = source=>source.field ? JSON.stringify(['sdf',source.field]) : null;
 const coordinate = (p,w)=>[p%w,Math.floor(p/w)];
@@ -25,6 +26,14 @@ function address(geometry) {
   return null;
 }
 
+function curveAt(frame,at) {
+  const {passes}=frame, p=at[1]*frame.w+at[0];
+  const row=passes.strands?.[passes.strandId?.[p]];
+  const depth=passes.strandDepth?.[p], u=passes.strandU?.[p], coverage=passes.strandCoverage?.[p];
+  return row?.name&&Number.isFinite(depth)&&Number.isFinite(u)&&coverage>minimumCoverage ?
+    {kind:'curve',strand:row.name,object:row.object,part:row.part,depth,u,coverage} : null;
+}
+
 function sourceAt(frame,at,binding) {
   const p = at[1]*frame.w+at[0];
   if (!(frame.pixelSelection.coverage[p] > minimumCoverage)) return { reason:'reference-not-visible' };
@@ -32,10 +41,12 @@ function sourceAt(frame,at,binding) {
   if (!sample) return { reason:'reference-address-unavailable' };
   const matches = hit=>hit && Targets.objectScope(binding,hit);
   const geometry = matches(sample.geometry) && sample.geometry;
+  const curve=binding.featureMapping&&curveAt(frame,at);
+  if (matches(curve)&&(!geometry||curve.depth<=geometry.depth+1e-5)) return {source:curve};
   // The SDF pass also shades with splat carriers at the exact traced depth.
   const hits = sample.splats.filter(hit=>matches(hit) &&
     !(geometry?.kind === 'sdf' && Math.abs(hit.depth-geometry.depth) <= 1e-5));
-  const owner = binding.mapping?.sources.splat && hits.find(hit=>hit.opaqueOwner);
+  const owner = (binding.featureMapping||binding.mapping?.sources.splat) && hits.find(hit=>hit.opaqueOwner);
   if (!geometry && owner && !hits.some(hit=>hit.depth < owner.depth-1e-5)) return { source:owner };
   if ((!geometry && sample.truncated) || hits.length+Number(!!geometry) > 1)
     return { reason:'reference-ambiguous-source' };
@@ -49,10 +60,14 @@ function mappedPoint(mapping,source,at,tracking) {
   return Bindings.partPoint(mapping,source,tracking.restSplat(source,...at));
 }
 
-function sourceAnchor(full,isolated,at,binding) {
+function sourceAnchor(full,isolated,at,binding,features,scope) {
   const { source,reason } = sourceAt(full,at,binding);
   if (!source) return { reason };
   const tracking = isolated.pixelSourceTracking;
+  if (features) {
+    const named=featurePoint(features,source,at,tracking,scope);
+    return named.address ? {source,named:named.address} : {reason:named.reason};
+  }
   const point = binding.mapping && mappedPoint(binding.mapping,source,at,tracking);
   const anchor = source.kind === 'splat' ? source.id &&
     { local:tracking.localSplat(source,...at) } : address(source);
@@ -74,12 +89,16 @@ function observe(frame,source,at,expected,tolerance,occlusionTolerance = toleran
   const sample = Bindings.sample(frame,at,ArtPasses,surface);
   const { geometry,splats = [] } = sample ?? {};
   let matching;
-  if (source.kind === 'splat') matching = splats.find(hit=>source.id ? hit.id === source.id :
+  if (source.kind === 'curve') {
+    const curve=curveAt(frame,at);
+    if (curve?.strand===source.strand&&curve.object===source.object&&curve.part===source.part&&
+        Math.abs(curve.u-source.u)<1e-6) matching=curve;
+  } else if (source.kind === 'splat') matching = splats.find(hit=>source.id ? hit.id === source.id :
     source.opaqueOwner && hit.opaqueOwner && hit.renderRow === source.renderRow);
   else if (geometry?.kind === source.kind) {
     if (source.kind === 'sprite') {
       const same = source.object === geometry.object && source.part === geometry.part &&
-        source.frame === geometry.frame && source.yaw === geometry.yaw && source.pitch === geometry.pitch &&
+        source.asset === geometry.asset && source.frame === geometry.frame && source.yaw === geometry.yaw && source.pitch === geometry.pitch &&
         source.local.every((value,i)=>value === geometry.local[i]);
       if (same) matching = geometry;
     } else {
@@ -147,7 +166,51 @@ function mappedLocation(anchor,indices,full,mapping) {
     mapping:{ id:mapping.id,from:anchor.source.kind,to:source.kind,point,distance:best.distance } };
 }
 
-function track({ binding,selection,documentGrid,revision,views,render,review,visit }) {
+function featurePoint(map,source,at,tracking,scope) {
+  const rest=source.kind==='sprite' ? source.local : source.kind==='splat' ?
+    source.rest??(source.id&&tracking.restSplat(source,...at)) : source.rest;
+  return Features.identify(map,source,rest,tracking,scope);
+}
+
+function featureView(frame,binding,features,scope) {
+  const {nearest}=require('../index.js').load().KIT.procedural.attributes, groups=new Map();
+  for (let p=0;p<frame.w*frame.h;p++) {
+    if (!(frame.pixelSelection.coverage[p]>minimumCoverage)) continue;
+    const at=coordinate(p,frame.w), {source}=sourceAt(frame,at,binding);
+    if (!source) continue;
+    const {address}=featurePoint(features,source,at,frame.pixelSourceTracking,scope);
+    if (!address) continue;
+    const list=groups.get(address.site)??[];
+    list.push({at,source,...address});
+    groups.set(address.site,list);
+  }
+  return [...groups.values()].map(rows=>({
+    feature:rows[0].feature,index:nearest({points:rows.map(row=>row.point),entities:rows,read:i=>rows[i]})
+  }));
+}
+
+function featureLocation(anchor,indices,full,map) {
+  const hits=indices.filter(row=>row.feature===anchor.named.feature)
+    .map(({index})=>index.sample(anchor.named.point))
+    .filter(hit=>hit&&hit.distance<=anchor.named.tolerance).sort((a,b)=>a.distance-b.distance);
+  if (!hits.length) return {status:'lost',reason:'no-named-feature-correspondence'};
+  const best=hits[0], next=hits[1];
+  if (next&&Math.abs(next.distance-best.distance)<=Math.max(1e-6,anchor.named.tolerance*.1))
+    return {status:'lost',reason:'ambiguous-feature-destination'};
+  const {at,source,point,site,feature}=best.values, hit=observe(full,source,at,source.depth,1e-5);
+  if (!hit.visible&&!(hit.blocker&&hit.blocker.depth<source.depth-1e-5))
+    return {status:'lost',reason:'no-verified-feature-pixel'};
+  return {status:hit.visible?'visible':'occluded',at,...(!hit.visible&&{blocker:hit.blocker}),
+    mapping:{id:map.raw.id,feature,fromSite:anchor.named.site,toSite:site,
+      from:anchor.source.kind,to:source.kind,point,distance:best.distance}};
+}
+
+function track({ binding,selection,documentGrid,revision,views,render,review,visit,feature }) {
+  const features=binding.featureMapping&&Features.compile(binding.featureMapping,binding);
+  if (feature) {
+    if (!features) throw new TypeError('Tracking a named feature needs a feature mapping');
+    Features.pair(features,feature);
+  }
   const grid = binding.canvas?.size ?? documentGrid, [w,h] = grid;
   const { samples } = Review.plan(views,'scene',w,h);
   if (samples.length < 2) throw new RangeError('Selection tracking needs a reference and at least one destination view');
@@ -162,7 +225,8 @@ function track({ binding,selection,documentGrid,revision,views,render,review,vis
     if (!anchors) anchors = selection.pixels.map(documentAt=>{
       const referenceAt = Canvas.sourcePoint(documentGrid,documentAt,binding.canvas)?.map(Math.floor);
       const anchor = Bindings.staleAt(binding,documentAt) ? { reason:'stale-source-binding' } :
-        referenceAt ? sourceAnchor(full,isolated,referenceAt,binding) : { reason:'outside-registration' };
+        referenceAt ? sourceAnchor(full,isolated,referenceAt,binding,features,
+          feature&&{feature:feature.feature,site:feature.from}) : { reason:'outside-registration' };
       return { documentAt,referenceAt,...anchor };
     });
 
@@ -173,8 +237,13 @@ function track({ binding,selection,documentGrid,revision,views,render,review,vis
     let mapped;
     for (const anchor of anchors) {
       const { documentAt,referenceAt,source } = anchor;
-      let result = !source ? { status:'lost',reason:anchor.reason } :
-        index === 0 ? { status:'visible',at:referenceAt } : locate(anchor,full,isolated);
+      let result;
+      if (!source) result={status:'lost',reason:anchor.reason};
+      else if (index===0) result={status:'visible',at:referenceAt,...(anchor.named&&{feature:anchor.named})};
+      else if (anchor.named) {
+        mapped??=featureView(isolated,binding,features,feature&&{feature:feature.feature,site:feature.to});
+        result=featureLocation(anchor,mapped,full,features);
+      } else result=locate(anchor,full,isolated);
       if (result.status === 'lost' && anchor.point) {
         mapped ??= mappedView(isolated,binding);
         const transfer = mappedLocation(anchor,mapped,full,binding.mapping);
@@ -184,8 +253,8 @@ function track({ binding,selection,documentGrid,revision,views,render,review,vis
       }
       const { status,at,reason,mapping } = result;
       if (mapping) {
-        const key = mapping.from+'-'+mapping.to;
-        if (!mappings.has(key)) mappings.set(key,{ from:mapping.from,to:mapping.to,visible:0,occluded:0 });
+        const {from,to,feature,fromSite,toSite}=mapping, key=JSON.stringify([from,to,feature,fromSite,toSite]);
+        if (!mappings.has(key)) mappings.set(key,{from,to,...(feature&&{feature,fromSite,toSite}),visible:0,occluded:0});
         mappings.get(key)[status]++;
       }
       const mark = at ?? referenceAt;
@@ -200,7 +269,8 @@ function track({ binding,selection,documentGrid,revision,views,render,review,vis
         const match = { documentAt,referenceAt:referenceAt ?? null,...result,
         ...(source && { source:{ kind:source.kind,object:source.object ?? source.entity ?? null,part:source.part ?? null,
           ...(source.kind === 'splat' && { id:source.id }),
-          ...(source.kind === 'mesh' && { chart:source.chart,triangle:source.triangle }),
+          ...(source.kind === 'mesh' && { chart:source.chart,triangle:source.triangle,...(source.face&&{face:source.face}) }),
+          ...(source.kind === 'curve' && { strand:source.strand,u:source.u }),
           ...(source.kind === 'sdf' && { field:source.field,local:source.local }),
           ...(source.kind === 'sprite' && { frame:source.frame,yaw:source.yaw,pitch:source.pitch,local:source.local })
         }}) };
@@ -210,7 +280,7 @@ function track({ binding,selection,documentGrid,revision,views,render,review,vis
     }
 
     results.push({ id:row.id,label:row.label ?? row.id,frame:full.sourceView.frame,camera:full.sourceView.camera,
-      counts,reasons,examples,...(binding.mapping && { mappings:[...mappings.values()] }),runs:Object.fromEntries(Object.entries(masks)
+      counts,reasons,examples,...((binding.mapping||features) && { mappings:[...mappings.values()] }),runs:Object.fromEntries(Object.entries(masks)
         .map(([status,pixels])=>[status,runs(w,[...pixels].sort((a,b)=>a-b))])) });
     visit?.({ index,row,full,matches });
     if (review) {
@@ -221,7 +291,7 @@ function track({ binding,selection,documentGrid,revision,views,render,review,vis
   return { images,report:{ format:'ink-studio/pixel-selection-track',version:1,
     scene:binding.scene,binding:binding.id,object:binding.object,part:binding.part ?? null,
     selection:selection.id,documentFrame:selection.frame ?? binding.frame ?? null,revision,grid,documentGrid,
-    scope:'visible',...(binding.mapping && { mapping:binding.mapping }),reference:samples[0].id,selectedPixels:anchors.length,samples:results } };
+    scope:'visible',...(binding.mapping && { mapping:binding.mapping }),...(features && {featureMapping:features.raw.id}),reference:samples[0].id,selectedPixels:anchors.length,samples:results } };
 }
 
 function writeReview(file,images,report) {

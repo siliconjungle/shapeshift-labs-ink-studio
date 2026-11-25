@@ -847,7 +847,7 @@
       const start = builder.count();
       const group = nextGroup && rows.length ? nextGroup++ : undefined;
       const strand = rows.length && builder.registerCurveStrand?.({ name: id, object: plan.object,
-        material: plan.material, length, ...(isProxy && { aggregate: true }) });
+        material: plan.material, length, ...(plan.target?.part!==undefined && {part:plan.target.part}), ...(isProxy && { aggregate: true }) });
       for (const { from, to, shade, radius, opacity, profile, clips, finish, lighting, timeRange, pattern, arc, attachment } of rows)
         builder.curveSplat(from, to, radius, shade, opacity, profile, plan.edge, group, clips, finish, lighting,
           timing && [timing, ...timeRange], pattern && { ...pattern, program }, plan.shadows, strand ? [strand, ...arc] : undefined,

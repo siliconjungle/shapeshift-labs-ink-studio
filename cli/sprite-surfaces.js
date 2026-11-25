@@ -108,7 +108,8 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
         key:JSON.stringify([slot,chart?.first ?? 0]),
         identity:{ kind:'mesh',asset:layer.sceneMeshId ?? layer.surfaceMotionKey ?? null,
           chart:chart?.id ?? null,stageSlot:slot,primitive:chart?.first ?? 0,object:chart?.objectId,part:chart?.partId },
-        triangle:(first-(chart?.first ?? 0))/3
+        triangle:(first-(chart?.first ?? 0))/3,
+        face:layer.featureFaces?.[first/3]
       };
       const rest = source && chart?.rest?.subarray(source.triangle*9,source.triangle*9+9);
       if (source) {

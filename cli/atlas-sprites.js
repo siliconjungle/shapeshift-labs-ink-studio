@@ -94,7 +94,7 @@ function rasterize(placements, settings) {
     const source = sourceBinding && placement.objectId && part && placement.depth &&
       !reprojection && (!mip || mip.width === tile.rect.width && mip.height === tile.rect.height) && !transition && !fixed && {
         key:placement,
-        identity:{ kind:'sprite',object:placement.objectId,part,frame:authored.frame,yaw:authored.yaw,pitch:authored.pitch }
+        identity:{ kind:'sprite',asset:placement.budgetId ?? placement.objectId,object:placement.objectId,part,frame:authored.frame,yaw:authored.yaw,pitch:authored.pitch }
       };
     const {x:tileX,y:tileY,width,height}=tile.rect, px=tile.pivot.x,py=tile.pivot.y;
     // Round the card origin once. Every texel then gets one integer art-pixel address.

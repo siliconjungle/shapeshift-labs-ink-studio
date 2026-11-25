@@ -9,7 +9,7 @@ const PixelSourceBindings = (() => {
     if (!passes) return null;
     const p = at[1]*frame.w+at[0];
     const entry = passes.surfaceSources?.[passes.sourceSurface?.[p]];
-    const { triangles,...source } = entry ?? {};
+    const { triangles,faces,...source } = entry ?? {};
     const triangle = passes.sourceTriangle?.[p];
     const coordinates = point(passes.sourceCoordinates,p,3);
     if (surface === undefined && passes.depth && passes.surfaceKind && passes.position)
@@ -23,7 +23,7 @@ const PixelSourceBindings = (() => {
       geometry = { kind:'mesh',object:surface.object,part:surface.part,...source,
         material:surface.material,depth:surface.depth,coverage:surface.coverage,uv:surface.uv,rest:surface.restPosition,
         ...(entry && coordinates?.every(Number.isFinite) && {
-          triangle,barycentric:coordinates,...(triangles?.[triangle] && { revision:triangles[triangle] })
+          triangle,barycentric:coordinates,...(faces?.[triangle] && { face:faces[triangle] }),...(triangles?.[triangle] && { revision:triangles[triangle] })
         }) };
     } else if (surface?.kind === 'sprite' && source.kind === 'sprite' && vector(coordinates,3)) {
       geometry = { ...source,local:coordinates,material:surface.material,depth:surface.depth,coverage:surface.coverage };

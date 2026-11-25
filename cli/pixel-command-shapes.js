@@ -113,8 +113,8 @@ function createDefinitions() {
     sceneBinding:{
       ...object({id,scene:text,object:text,part:text,revision:text,frame:id,layer:id,
         canvas:object({size,offset:tuple(number,number),scale:tuple({type:'number',exclusiveMinimum:0},{type:'number',exclusiveMinimum:0})},['size','offset','scale']),
-        mapping:obj,stale:array(tuple(natural,natural,positive))},['id','scene','object']),
-      dependentRequired:{mapping:['part']}
+        mapping:obj,featureMapping:obj,stale:array(tuple(natural,natural,positive))},['id','scene','object']),
+      dependentRequired:{mapping:['part'],featureMapping:['part']}
     },
     selectionQuery:{ anyOf:[
       ...['rectangle','ellipse'].map(name=>variant(name,{rect:rectangle},['rect'])),

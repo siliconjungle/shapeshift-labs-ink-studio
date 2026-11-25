@@ -197,6 +197,9 @@
         "mapping": {
           "type": "object"
         },
+        "featureMapping": {
+          "type": "object"
+        },
         "stale": {
           "type": "array",
           "items": {
@@ -228,6 +231,9 @@
       "additionalProperties": false,
       "dependentRequired": {
         "mapping": [
+          "part"
+        ],
+        "featureMapping": [
           "part"
         ]
       }

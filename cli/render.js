@@ -3578,7 +3578,7 @@ function renderFrame(world, o, preparedPalettes) {
   const deepFrame = deep?.finish();
   const objectMattes = mattes?.finish(), selectionCoverage = pixelSelection?.finish();
   const pixelSourceTracking = trackMeshes && PixelSourceTracking.capture(world,trackMeshes,trackFields,sampleFrames(world,t),{
-    X,Y,Z,AL,rayAt,V,W,H,focal,ortho,near,far:camera.clipFar
+    X,Y,Z,AL,rayAt,V,W,H,focal,ortho,near,far:camera.clipFar,splatGroups:(o.splatFit ?? look.splatFit)?.groups
   });
   if (selectionCoverage?.depth) selectionCoverage.view = {
     matrix:Array.from(V),focal,orthographic:ortho,near,far:camera.clipFar,time:sceneTime,poseTime:t

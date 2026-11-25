@@ -307,6 +307,8 @@
       return options?.get(id) ?? { id };
     });
     const mesh = K.sceneMeshes.create({ id: meshId ?? doc.id, objectId, partId, ...geometry, materials: definitions });
+    K.sceneMeshes.layer(mesh).featureFaces=Array.from({length:mesh.triangles},(_,i)=>
+      triangleSources[K.sceneMeshes.sourceTriangle(mesh,i)].face);
     renderSources.set(mesh, { document: doc, triangles: triangleSources });
     return mesh;
   }

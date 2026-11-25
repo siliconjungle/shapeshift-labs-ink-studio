@@ -5,8 +5,8 @@ const Provenance = require('../src/splat-provenance.js');
 const meshKey = (source,triangle = source.triangle)=>JSON.stringify(['mesh',source.object,source.part,
   source.asset,source.chart,source.stageSlot,source.primitive,triangle]);
 
-function capture(world,meshes,fields,frames,{ X,Y,Z,AL,rayAt,V,W,H,focal,ortho,near,far }) {
-  const poses = new Map();
+function capture(world,meshes,fields,frames,{ X,Y,Z,AL,rayAt,V,W,H,focal,ortho,near,far,splatGroups }) {
+  const poses = new Map(), groups = new Map(splatGroups?.map(({id,members})=>[id,new Set(members)]));
   let ids;
   function splat(id) {
     if (!poses.has(id)) {
@@ -33,6 +33,7 @@ function capture(world,meshes,fields,frames,{ X,Y,Z,AL,rayAt,V,W,H,focal,ortho,n
   }
   return {
     localSplat,
+    inSplatGroup:(group,id)=>groups.get(group)?.has(id)===true,
     restSplat(source,x,y) {
       const local = localSplat(source,x,y);
       return local ? local.map((n,i)=>n+splat(source.id).frame.rest[i]) : null;

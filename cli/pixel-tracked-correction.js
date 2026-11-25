@@ -410,4 +410,4 @@ function writeReview(file, images, report) {
   files.write(file,template.replace('/*DATA*/',() => data));
 }
 
-module.exports = { run,runMotion,writeReview };
+module.exports = { run,runMotion,writeReview,bridge,inverseRegistration };

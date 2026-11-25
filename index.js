@@ -304,6 +304,8 @@ module.exports = {
   pixelDocumentFromAsepriteTiles(document, options) {
     return require('./cli/pixel-art.js').documentFromAsepriteTiles(document, options);
   },
+  trackPixelSelection: require('./cli/pixel-selection-track.js').track,
+  rebindPixelFeature: require('./cli/feature-rebind.js').rebindPixelFeature,
   createPixelEditor(source, options) {
     return require('./cli/pixel-art.js').createEditor(source, options);
   },
