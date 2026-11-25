@@ -183,6 +183,43 @@ Run `node examples/tileset-pick/revisions-demo.cjs tile-revisions-demo`
 to review a wall revision, its combined atlas, and the retained clip and
 prefab dependencies.
 
+### Link a source image
+
+Link a registered sheet to an external PNG. The scene records the relative
+path, refresh mode, and last accepted image fingerprint alongside the embedded
+sheet. A linked sheet retains its ID, tile grid, face references, and other
+dependencies.
+
+```sh
+ink-studio tileset link paint/brick.png --scene scene.json --id brick --out linked.json
+ink-studio tileset reload --scene linked.json --id brick
+ink-studio tileset reload --scene linked.json --id brick --expect "$reviewed_sha" --out updated.json
+```
+
+Omit `--out` for a preview. The JSON review includes the incoming fingerprint
+(`incoming.sha256`), changed, added, and removed texel counts, bounds, sample
+before and after values, and indexed palette and slot changes. Pass the
+reviewed fingerprint as `--expect` to catch file changes between review and
+acceptance. Write the accepted revision to a new scene beside its source.
+
+The review flags local paint when the embedded raster has changed since
+the last accepted image. To overwrite it, pass `--accept-external` after
+reviewing the diff. The same flag approves a first link whose PNG differs
+from the embedded sheet. Grid and scene validation still apply. Reload
+never writes to the source PNG.
+
+Refresh defaults to `manual`. Pass `--refresh on-load` to `tileset link`
+for a sheet that should refresh when the CLI loads a local editable scene.
+Changing the mode of an existing link can be done separately from reloading
+the image. Automatic refresh uses compatible clean updates in memory. It
+reports and uses the embedded sheet if the link is unavailable, the image
+dimensions or encoding changed, or the embedded raster has local paint.
+An explicit reload persists an accepted revision. Packaged scenes use their
+embedded images.
+
+Run `node examples/tileset-pick/source-link-demo.cjs tile-link-demo` to
+compare manual refresh, automatic refresh, and a protected local paint edit.
+
 ### Pick a brush of neighboring tiles
 
 Give the picker a tile width and height in texels. The default grid starts

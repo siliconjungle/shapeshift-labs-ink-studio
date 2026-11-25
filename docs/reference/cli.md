@@ -270,6 +270,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   tileset import <image.png> [--tile-width N --tile-height N] [--padding-x N --padding-y N] [--offset-x N --offset-y N] --scene <scene.json> --id <tileset-id> --out <new-scene.json>   register a shared tileset image
   tileset create --width <texels> --height <texels> [--background <color>] [--tile-width N --tile-height N] [--padding-x N --padding-y N] [--offset-x N --offset-y N] --scene <scene.json> --id <tileset-id> --out <new-scene.json>   register a blank tileset
   tileset dependencies --scene <scene.json> [--id <tileset-id>]   list face, clip, and prefab dependencies
+  tileset link <image.png> --scene <scene.json> --id <tileset-id> [--refresh manual|on-load] [--expect sha256] [--accept-external] [--out <new-scene.json>]   link a source PNG and preview incoming paint
+  tileset reload --scene <scene.json> --id <tileset-id> [--expect sha256] [--accept-external] [--out <new-scene.json>]   preview or accept a changed linked image
   tileset clone --scene <scene.json> --id <tileset-id> --new-id <tileset-id> [--out <new-scene.json>]   clone a tileset revision
   tileset replace <image.png> --scene <scene.json> --id <tileset-id> [--out <new-scene.json>]   replace the image behind a stable tileset ID
   tileset combine --scene <scene.json> --ids <id,id,...> --new-id <tileset-id> [--axis x|y] [--out <new-scene.json>]   combine sheets into a new atlas

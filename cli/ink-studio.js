@@ -20,7 +20,7 @@ const argv = process.argv.slice(2),
   pos = [],
   opt = {};
 const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' || cmd === 'effect-recipe' ? ['json'] :
-  cmd === 'modeling-benchmark' ? ['repairs-complete'] : cmd === 'tileset' ? ['brush', 'clear'] : [];
+  cmd === 'modeling-benchmark' ? ['repairs-complete'] : cmd === 'tileset' ? ['brush', 'clear', 'accept-external'] : [];
 for (let i = 1; i < argv.length; i++) {
   const a = argv[i];
   if (a.startsWith('--')) {
@@ -92,7 +92,7 @@ function meshScene(file) {
   };
 }
 /* a diorama written as data (see lab/data-shrine.json). --style puts it in another style; meshes it names are looked for beside the file */
-function dataScene(file, override, { installedPacks = false } = {}) {
+function dataScene(file, override, { installedPacks = false, refreshTilesets = true } = {}) {
   const K = lib().KIT, Assets = require('./asset-references.js'),
     raw = override ?? JSON.parse(fs.readFileSync(path.resolve(file), 'utf8')),
     source = Assets.visual(K.authoring.assetReferences, raw, 'scene', file, shot?.dependency);
@@ -158,7 +158,20 @@ function dataScene(file, override, { installedPacks = false } = {}) {
     die('--asset-cache expects a directory');
   const bakeCache = cacheDirectory && require('./bake-cache.js').open(path.resolve(cacheDirectory), require('../index.js'), K.authoring.bakeCache);
   const env={assets,prefabs,bakeCache,resolveSpriteAtlas,assetPartImports};
-  const descriptor=K.diorama.scene(spec,env);
+  let rendering = spec;
+  if (refreshTilesets && !project && source === raw && raw.format === undefined &&
+      Object.values(spec.tilesetSources ?? {}).some(link=>link.refresh === 'on-load')) {
+    const editor = K.authoring.sceneEditor.create(spec,{env,historyLimit:0});
+    const reports = require('./tileset-source-links.js').refresh(editor,file,lib(),filename=>shot?.dependency(filename));
+    for (const report of reports) {
+      if (report.status === 'current') continue;
+      const detail = report.applied ? 'refreshed in memory' :
+        'used embedded image ('+(report.blockers[0]?.reason ?? 'revision needs review')+')';
+      console.error('Tileset '+report.tileset+': '+detail);
+    }
+    rendering = editor.snapshot();
+  }
+  const descriptor=K.diorama.scene(rendering,env);
   const atlases=new Map();
   return { ...descriptor, project: project?.metadata, lookPreviewPacks:spec.assetPacks,
     ...(source === raw && source.format === undefined && { openEditor: options => K.authoring.sceneEditor.create(spec,{ ...options,env }) }),
@@ -175,12 +188,12 @@ function dataScene(file, override, { installedPacks = false } = {}) {
   } };
 }
 function openUVEditor(file) {
-  const descriptor = scene(file);
+  const descriptor = scene(file,{refreshTilesets:false});
   if (!descriptor.openEditor) throw new TypeError('UV authoring needs a plain editable scene');
   return descriptor.openEditor();
 }
 
-function scene(id) {
+function scene(id, options) {
   if (!id) die('which diorama? try: ink-studio scenes');
   if (id.startsWith('@')) {
     const file = opt['asset-registry'];
@@ -204,7 +217,7 @@ function scene(id) {
     return descriptor;
   }
   if (/\.(obj|gltf|glb)$/i.test(id)) return gaussianGltfScenes.get(id) ?? meshScene(id);
-  if (id.endsWith('.json')) return dataScene(id);
+  if (id.endsWith('.json')) return dataScene(id,undefined,options);
   if (id.endsWith('.js')) return require(path.resolve(id))(lib());
   const s = lib().SCENES.find(q => q.id === id);
   if (!s) die('no diorama called "' + id + '"');
@@ -1467,6 +1480,8 @@ const CMD = {
         '  tileset import <image.png> [--tile-width N --tile-height N] [--padding-x N --padding-y N] [--offset-x N --offset-y N] --scene <scene.json> --id <tileset-id> --out <new-scene.json>   register a shared tileset image',
         '  tileset create --width <texels> --height <texels> [--background <color>] [--tile-width N --tile-height N] [--padding-x N --padding-y N] [--offset-x N --offset-y N] --scene <scene.json> --id <tileset-id> --out <new-scene.json>   register a blank tileset',
         '  tileset dependencies --scene <scene.json> [--id <tileset-id>]   list face, clip, and prefab dependencies',
+        '  tileset link <image.png> --scene <scene.json> --id <tileset-id> [--refresh manual|on-load] [--expect sha256] [--accept-external] [--out <new-scene.json>]   link a source PNG and preview incoming paint',
+        '  tileset reload --scene <scene.json> --id <tileset-id> [--expect sha256] [--accept-external] [--out <new-scene.json>]   preview or accept a changed linked image',
         '  tileset clone --scene <scene.json> --id <tileset-id> --new-id <tileset-id> [--out <new-scene.json>]   clone a tileset revision',
         '  tileset replace <image.png> --scene <scene.json> --id <tileset-id> [--out <new-scene.json>]   replace the image behind a stable tileset ID',
         '  tileset combine --scene <scene.json> --ids <id,id,...> --new-id <tileset-id> [--axis x|y] [--out <new-scene.json>]   combine sheets into a new atlas',

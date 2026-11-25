@@ -416,9 +416,10 @@
       return A.tilesetRevisions.dependencies(snapshot(),id,buildEnv.prefabs);
     }
 
-    function stageTilesetRevision(request) {
+    function stageTilesetRevision(request, links) {
       const before = snapshot(), {patch,report} = A.tilesetRevisions.plan(before,request,buildEnv.prefabs);
       if (!patch) return {report};
+      if (links) patch.tilesetSources = {...before.tilesetSources,...links};
       const problems = DIO.check({...before,...patch},buildEnv).filter(problem=>problem.level === 'error');
       return problems.length ? {report:freeze({...report,canCommit:false,problems})} : {patch,report};
     }
@@ -430,12 +431,26 @@
     function editTilesetRevision(request) {
       const {patch,report} = stageTilesetRevision(request);
       if (!report.canCommit) throw Object.assign(new RangeError('Tileset revision needs review'),{report});
+      return commitTilesetRevision(patch,report,'Revise tilesets');
+    }
+
+    function commitTilesetRevision(patch,report,label) {
       const write = () => document.batchSession(() => {
-        document.setEnvironment({tilesets:null});
+        document.setEnvironment({tilesets:null,...(patch.tilesetSources && {tilesetSources:null})});
         document.setEnvironment(patch);
         return report;
       });
-      return document.pending() ? write() : document.transact('Revise tilesets',write);
+      return document.pending() ? write() : document.transact(label,write);
+    }
+
+    function planTilesetSource(id,asset,source) {
+      return stageTilesetRevision({type:'replace',id,asset},{[id]:source}).report;
+    }
+
+    function updateTilesetSource(id,asset,source) {
+      const {patch,report} = stageTilesetRevision({type:'replace',id,asset},{[id]:source});
+      if (!report.canCommit) throw Object.assign(new RangeError('Tileset source needs review'),{report});
+      return commitTilesetRevision(patch,report,'Reload tileset '+id);
     }
 
     function meshTopology(object, part) {
@@ -871,6 +886,7 @@
       planTilesetCanvas,
       transformTilesetCanvas,
       tilesetDependencies, planTilesetRevision, editTilesetRevision,
+      planTilesetSource, updateTilesetSource,
       meshTopology,
       selectMeshTopology: (object, request, { part, visibility } = {}) =>
         K.meshTopology.select(meshTopology(object, part).document, request, { visibility }),

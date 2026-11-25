@@ -312,6 +312,8 @@ function brushUVCommand([file,...rest], options, toolkit, openEditor) {
 function command([action, ...args], options, toolkit, projectTexelsPerUnit, openEditor) {
   if (action === 'resize' || action === 'resample')
     return require('./tileset-canvas.js').command(action,args,options,openEditor);
+  if (action === 'link' || action === 'reload')
+    return require('./tileset-source-links.js').command(action,args,options,toolkit,openEditor);
   if (action === 'extract') return extractCommand(args,options,toolkit);
   if (action === 'repack') return require('./tileset-repack.js').command(args,options,toolkit);
   if (action === 'grid') return gridCommand(args,options,toolkit);

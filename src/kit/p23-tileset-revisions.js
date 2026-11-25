@@ -73,9 +73,9 @@
     const tilesets = A.tilesets.prepare(scene.tilesets,scene.tilesetDefaults);
     const ids = id === undefined ? Object.keys(scene.tilesets ?? {}).sort() : [id];
     const assets = ids.map(key=>descriptor(key,tilesets.source(key),tilesets.grid(key).tileSize));
-    const refs = inventory(scene,ids,external);
+    const refs = inventory(scene,ids,external), links = A.tilesetSources.prepare(scene);
     return freeze({format:'ink-studio/tileset-dependencies',version:1,
-      sheets:assets.map(asset=>({...asset,...refs.get(asset.id)}))});
+      sheets:assets.map(asset=>({...asset,...refs.get(asset.id),...(links[asset.id] && {source:links[asset.id]})}))});
   }
 
   function combine(ids, tilesets, axis) {
@@ -161,7 +161,7 @@
     const tilesets = API.prepare(scene.tilesets,scene.tilesetDefaults);
     const sources = ids.map(key=>tilesets.source(key));
     const refs = inventory(scene,ids,external);
-    const blockers = [];
+    const blockers = [], links = A.tilesetSources.prepare(scene);
     let extra = {}, detail = {};
     if (type === 'clone' || type === 'combine') {
       if (!API.validId(newId)) throw new TypeError('Use a lowercase new tileset ID with letters, digits, and dashes');
@@ -194,13 +194,22 @@
         const [from,to] = sources, sameGrid = JSON.stringify(tilesets.grid(id).tileSize) === JSON.stringify(tilesets.grid(keepId).tileSize);
         if (!sameGrid || !sameImage(from,to))
           blockers.push({reason:'different-tilesets',id,keepId});
+        if (links[id] && JSON.stringify(links[id]) !== JSON.stringify(links[keepId]))
+          blockers.push({reason:'different-source-links',id,keepId});
         for (const prefab of prefabs.filter(row=>row.scope === 'library'))
           blockers.push({reason:'shared-prefab-library',id,prefab:prefab.id});
         if (!blockers.length) extra = redirect(scene,id,keepId);
       }
-      if (!blockers.length) delete output[id];
+      if (!blockers.length) {
+        delete output[id];
+        if (links[id]) {
+          const remaining = {...links};
+          delete remaining[id];
+          extra.tilesetSources = remaining;
+        }
+      }
     }
-    const before = ids.map((key,i)=>({...descriptor(key,sources[i],tilesets.grid(key).tileSize),...refs.get(key)}));
+    const before = ids.map((key,i)=>({...descriptor(key,sources[i],tilesets.grid(key).tileSize),...refs.get(key),...(links[key] && {source:links[key]})}));
     const after = [...ids,...(newId !== undefined && !ids.includes(newId) ? [newId] : [])]
       .filter(key=>Object.hasOwn(output,key)).map(key=>descriptor(key,output[key],
         output[key].tileSize ?? tilesets.grid().tileSize));
