@@ -18,7 +18,7 @@ const cacheFlags=['cache','cache-bytes','cache-entries'];
 const executionFlags=['workers',...cacheFlags];
 const flags = {
   validate:['inputs','json'], plan:['inputs','json','memory'], dependencies:['json'], snapshot:['inputs','at','seed','json'],
-  inspect:['inputs','at','seed','out','output','node','port','json',...executionFlags],
+  inspect:['inputs','at','seed','out','output','node','port','map','component','json',...executionFlags],
   run:['inputs','at','seed','out','json',...executionFlags],
   batch:['inputs','at','seed','out','json','resume','progress',...executionFlags],
   session:['protocol','out','workers'],
@@ -26,7 +26,7 @@ const flags = {
 };
 for (const options of Object.values(flags)) options.push('instance','base-context');
 const discoveryFlags = { nodes: ['json'], describe: ['json', 'example'] };
-const analysisFlags = { impact: ['root', 'json'], diff: ['adapters', 'json'], material: ['id', 'out', 'base'],
+const analysisFlags = { impact: ['root', 'json'], diff: ['adapters', 'json'], material: ['id', 'out', 'base', 'output-usages'],
   subgraph: ['out', 'adapters'], 'publish-subgraph': ['out', 'revision', 'adapters'] };
 const commandOptions = { ...flags, ...discoveryFlags, ...analysisFlags, ...host.commands };
 
@@ -62,8 +62,8 @@ async function session(project, directory, inputs) {
         }
         let result;
         if (op==='inspect') {
-          const {output,node,port,...settings}=options;
-          result=project.inspect({output,node,port},settings);
+          const {output,node,port,map,component,...settings}=options;
+          result=project.inspect({output,node,port,map,component},settings);
         } else if (op==='run') result=project.run(options);
         else throw new TypeError('Unknown graph session operation '+op);
         const folder=directory && 'request-'+sequence;
@@ -129,13 +129,14 @@ async function graphCommand(pos,opt,settings) {
   if (mode==='material') {
     if (pos.length!==2 || Object.entries(opt).some(([key,value])=>
       !analysisFlags.material.includes(key) || typeof value!=='string' || !value.trim()))
-      throw new TypeError('Use graph material <project-or-material.json> [--id ID] [--base settings.json] [--out material.json]');
+      throw new TypeError('Use graph material <project-or-material.json> [--id ID] [--base settings.json] [--output-usages maps.json] [--out material.json]');
     let document=readMaterialGraph(file,{id:opt.id});
-    if (opt.base!==undefined) {
-      if (opt.out!==undefined && path.resolve(opt.base)===path.resolve(opt.out))
-        throw new TypeError('Choose a material output separate from the base settings file');
-      const base=JSON.parse(fs.readFileSync(path.resolve(opt.base),'utf8'));
-      document=openMaterialGraph({...document,settings:{...document.settings,base}});
+    for (const [flag,key] of [['base','base'],['output-usages','outputUsages']]) {
+      if (opt[flag]===undefined) continue;
+      if (opt.out!==undefined && path.resolve(opt[flag])===path.resolve(opt.out))
+        throw new TypeError('Choose a material output separate from the '+flag+' settings file');
+      const value=JSON.parse(fs.readFileSync(path.resolve(opt[flag]),'utf8'));
+      document=openMaterialGraph({...document,settings:{...document.settings,[key]:value}});
     }
     if (opt.out===undefined) return send(document);
     const result=writeMaterialGraph(opt.out,document,{baseDir:path.dirname(path.resolve(file))});
@@ -193,7 +194,7 @@ async function graphCommand(pos,opt,settings) {
       Object.entries(opt).some(([key,value])=>key!=='adapters' && !flags[mode].includes(key) ||
         (['json','resume','memory'].includes(key) ? value!==true : key==='progress' ? value!=='ndjson' :
           typeof value!=='string' || !value.trim())) ||
-      opt.port!==undefined && opt.node===undefined || opt.protocol!==undefined && opt.protocol!=='ndjson')
+      opt.port!==undefined && opt.node===undefined || opt.component!==undefined && opt.map===undefined || opt.protocol!==undefined && opt.protocol!=='ndjson')
     throw new TypeError('Use graph validate|plan|dependencies|snapshot|inspect|run|batch|session|clip <project.json> [cases-or-sweep.json]. See ink-studio help');
   if (opt.cache===undefined && cacheFlags.slice(1).some(flag=>opt[flag]!==undefined))
     throw new TypeError('Graph cache limits need --cache directory');
@@ -236,7 +237,7 @@ async function projectCommand(mode,file,caseFile,opt,settings) {
     const options={...run,...clipOptions(opt,sources,project.takeClock)};
     result=execute(options,()=>project.clip(options));
   } else if (mode==='inspect') {
-    const target={output:opt.output,node:opt.node,port:opt.port ?? 'value'};
+    const target={output:opt.output,node:opt.node,port:opt.port,map:opt.map,component:opt.component};
     result=execute([target,run],()=>project.inspect(target,run));
   } else if (mode==='batch') {
     const cases=path.resolve(caseFile);

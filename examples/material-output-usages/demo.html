@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lantern enamel · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--ink:#f3e6ce;--muted:#aab8b1;--line:#324348;--paper:#15282c;--accent:#e5b579;--aqua:#a4c7bb}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 30% 0,#253a3b,transparent 650px),#101b20;color:var(--ink);font:15px/1.45 system-ui,sans-serif}
+main{width:min(100% - 54px,1110px);margin:auto;padding:32px 0 23px}header{display:flex;align-items:end;justify-content:space-between;gap:18px;margin-bottom:22px}
+header small{color:var(--accent);font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.15em}
+h1{font:500 clamp(42px,6vw,70px)/1 Georgia,serif;margin:5px 0 0;letter-spacing:-.05em}
+header p{margin:0 0 2px;color:var(--muted);max-width:310px}
+.workbench{display:grid;grid-template-columns:minmax(0,1fr) 335px;gap:16px;align-items:start}
+.frames{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+figure,aside,.packing{margin:0;border:1px solid var(--line);background:var(--paper);border-radius:9px}
+figure{padding:10px}figure img{display:block;width:min(100%,288px);aspect-ratio:1;object-fit:contain;image-rendering:pixelated;margin:auto;background:#102025}
+figcaption{display:flex;justify-content:space-between;align-items:baseline;gap:7px;padding:8px 3px 0}figcaption small{color:var(--muted)}
+aside{padding:12px}.heading{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+h2{font-size:15px;margin:0;font-weight:650}h3{margin:0;font-size:13px}
+code{font-size:12px;color:var(--aqua);overflow-wrap:anywhere}a{color:var(--accent);text-underline-offset:3px}
+.map-buttons{display:grid;margin-top:7px}
+button{font:inherit;color:inherit;cursor:pointer}button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.map-buttons button,.packing button{display:flex;justify-content:space-between;align-items:center;text-align:left;gap:6px;background:transparent;border:1px solid transparent;border-radius:4px;min-width:0}
+.map-buttons button{padding:6px 8px}.map-buttons button small{color:var(--muted);white-space:nowrap}
+button[aria-pressed=true],.map-buttons button[aria-pressed=true]{background:#263e41;border-color:#6d8173;color:var(--ink)}
+.map-buttons button:hover,.packing button:hover{border-color:#a68763}
+.delivery{margin-top:10px;padding:8px 6px 2px;border-top:1px solid var(--line);font-size:13px}
+.delivery p{margin:3px 0;color:var(--muted)}.delivery a:not([hidden]){display:inline-block;margin-top:4px}
+.packing{padding:11px;margin-top:12px}.packing .heading{margin-bottom:7px}.packing small{color:var(--muted)}
+.channels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.packing button{padding:7px 8px;background:#142328;border-color:var(--line);font-size:12px;justify-content:start}
+.packing button[aria-pressed=true]{background:#263e41;border-color:#8ea597}
+.packing button b{color:var(--accent);width:13px}
+footer{margin-top:14px;color:var(--muted);font-size:13px}footer a{margin-right:12px}
+@media(max-width:850px){.workbench{grid-template-columns:minmax(0,1fr) 252px;gap:10px}.channels{grid-template-columns:repeat(2,minmax(0,1fr))}figcaption{display:block}figcaption small{display:block}}
+@media(max-width:630px){main{width:calc(100% - 28px);padding-top:22px}header{display:block}header p{margin-top:8px}.workbench{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+<header><div><small>Ink Studio · Material output usages</small><h1>Lantern enamel</h1></div><p>Review the maps in delivery order. Select a packed channel to inspect the samples behind it.</p></header>
+<div class="workbench">
+<div>
+<section class="frames" aria-label="Material previews">
+<figure><img id="reference" alt="Pixel-art brass lantern inlaid on a teal ceramic tile"><figcaption><b>Base color</b><small>72 × 72</small></figcaption></figure>
+<figure><img id="preview" alt=""><figcaption><b id="preview-label"></b><small id="preview-mode"></small></figcaption></figure>
+</section>
+<section class="packing" aria-label="Packed channel assignment">
+<div class="heading"><h3>RGBA assignments</h3><small>16-bit data</small></div>
+<div class="channels" id="channels"></div>
+</section>
+</div>
+<aside aria-label="Material map catalog">
+<div class="heading"><h2>Output maps</h2><small id="map-count"></small></div>
+<div class="map-buttons" id="maps"></div>
+<div class="delivery" aria-live="polite"><code id="usage-id"></code><p id="binding"></p><a id="download"></a></div>
+</aside>
+</div>
+<footer><a href="lantern.material.json">Editable material</a><a href="maps.json">Usage settings</a><a href="report.json">Delivery report</a> Previews rendered by Ink</footer>
+</main>
+<script src="data.js"></script>
+<script>
+const get = id => document.getElementById(id);
+const packed = maps.find(row => row.usage === 'packed');
+const byId = new Map(maps.map(row => [row.id, row]));
+const format = row => row.format.format === 'png' ? 'PNG ' + row.format.bitDepth : 'JSON';
+const mode = {
+  color: 'sRGB preview', scalar: 'Grayscale preview', normal: 'XYZ preview',
+  packed: 'RGB data view', height: 'Signed height preview'
+};
+get('reference').src = byId.get('enamel').preview.image;
+get('map-count').textContent = maps.length + ' maps';
+let selected = packed.id, component;
+function button(container, label, note, action) {
+  const item = document.createElement('button');
+  item.type = 'button';
+  const name = document.createElement('b'), detail = document.createElement('small');
+  name.textContent = label;
+  detail.textContent = note;
+  item.append(name, detail);
+  item.addEventListener('click', action);
+  container.append(item);
+  return item;
+}
+const mapButtons = maps.map(row => button(get('maps'), row.label, row.export ? format(row) : 'Preview only', () => {
+  selected = row.id;
+  component = undefined;
+  show();
+}));
+const channelButtons = Object.entries(packed.packing).map(([key, { map }]) =>
+  [key, button(get('channels'), key.toUpperCase(), byId.get(map).label, () => {
+    selected = packed.id;
+    component = key;
+    show();
+  })]);
+function show() {
+  const row = byId.get(selected), image = component ? row.components[component] : row.preview;
+  const label = component ? component.toUpperCase() + ' · ' + byId.get(row.packing[component].map).label : row.label;
+  get('preview').src = image.image;
+  get('preview').alt = label + ' for the lantern tile';
+  get('preview-label').textContent = label;
+  get('preview-mode').textContent = image.mode === 'height' ? image.range.map(value => +value.toFixed(2)).join(' to ') + ' ' + image.units :
+    component ? 'Scalar data' : mode[image.mode];
+  get('usage-id').textContent = row.id + ' · ' + row.usage;
+  get('binding').textContent = row.source ? row.source.output + (row.source.channel ? ' → ' + row.source.channel : '') :
+    component ? 'Packed ' + component.toUpperCase() + ' ← ' + row.packing[component].map : 'Packed RGB preview · A carries glass data';
+  const download = get('download');
+  download.hidden = !row.artifact;
+  if (row.artifact) {
+    download.href = row.artifact.file;
+    download.download = row.artifact.file.split('/').at(-1);
+    download.textContent = 'Download ' + format(row);
+  }
+  mapButtons.forEach((item, index) => item.setAttribute('aria-pressed', String(maps[index].id === selected)));
+  channelButtons.forEach(([key, item]) => item.setAttribute('aria-pressed', String(key === component)));
+}
+show();
+</script>
+</body>
+</html>

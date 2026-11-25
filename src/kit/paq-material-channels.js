@@ -116,5 +116,5 @@
     }
   });
 
-  P.materialChannels = Object.freeze({ format, version, valid, pack, channel, replace, operations });
+  P.materialChannels = Object.freeze({ format, version, valid, validMap, pack, channel, replace, operations });
 })(KIT);

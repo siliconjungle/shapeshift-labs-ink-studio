@@ -574,7 +574,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   patch choices <journal.ndjson> <recording|run-bundle> [--out report.json] [--track input.json]
   graph nodes [--json]   list registered graph operations and their ports
   graph describe <op> [--json | --example]   show schema, units, limits and a runnable example
-  graph material <project-or-material.json> [--id ID] [--base settings.json] [--out material.json]   open or save an editable material graph
+  graph material <project-or-material.json> [--id ID] [--base settings.json] [--output-usages maps.json] [--out material.json]   open or save an editable material graph
   graph subgraph <material.json> <request.json> [--out material.json]   inspect or edit reusable material instances
   graph publish-subgraph <material.json> --out group.json [--revision N]   publish a reusable definition
     graph execution commands accept --instance ID for material graph files
@@ -585,7 +585,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   graph impact <group.json> [--root folder] [--json]   find consumers of a shared group
   graph snapshot <project.json> [--inputs values.json] [--seed N] [--at T]   capture graph bindings and asset hashes
   graph diff <before.json> <after.json> [--json]   explain node, port and named output changes
-  graph inspect <project.json> [--output NAME | --node PATH --port NAME] [--out directory]
+  graph inspect <project.json> [--output NAME | --node PATH --port NAME | --map ID [--component r|g|b|a]] [--out directory]
   graph run <project.json> [--inputs values.json --at seconds --seed N --out directory]
     run, inspect, batch, clip, session: --workers N   schedule eligible branches on 1–8 workers
     run, inspect, batch, clip: --cache DIR [--cache-bytes N --cache-entries N]   reuse graph artifacts on disk
@@ -738,9 +738,9 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio graph diff` · `--adapters`, `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio graph impact` · `--root`, `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio graph import-pxc` · `--out`, `--adapters`, `--using`, `--translate`, `--json` · [source](../../cli/graph-cli.js)
-- `ink-studio graph inspect` · `--inputs`, `--at`, `--seed`, `--out`, `--output`, `--node`, `--port`, `--json`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
+- `ink-studio graph inspect` · `--inputs`, `--at`, `--seed`, `--out`, `--output`, `--node`, `--port`, `--map`, `--component`, `--json`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph inspect-pxc` · `--out`, `--json` · [source](../../cli/graph-cli.js)
-- `ink-studio graph material` · `--id`, `--out`, `--base` · [source](../../cli/graph-cli.js)
+- `ink-studio graph material` · `--id`, `--out`, `--base`, `--output-usages` · [source](../../cli/graph-cli.js)
 - `ink-studio graph nodes` · `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio graph plan` · `--inputs`, `--json`, `--memory`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph publish-subgraph` · `--out`, `--revision`, `--adapters` · [source](../../cli/graph-cli.js)
