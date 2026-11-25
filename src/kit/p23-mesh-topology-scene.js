@@ -161,17 +161,18 @@
     return result;
   }
 
-  function geometricRecord(row, kind) {
+  function geometricRecord(row, kind, uvSet = 0) {
     if (!row) return row;
     if (kind === 'edges') {
-      const { smooth, crease, uvSeam, ...geometry } = row;
+      const { smooth, crease, uvSeam, uvSeams, ...geometry } = row;
       return geometry;
     }
     if (kind === 'corners') {
-      const { normal, uvPinned, ...geometry } = row;
-      return geometry;
+      const { normal, uvPinned, uvPins, attributes, ...geometry } = row;
+      const retained=attributes && Object.fromEntries(Object.entries(attributes).filter(([key])=>!MaterialUV.isKey(key)));
+      return {...geometry,uv:MaterialUV.uv(row,uvSet),...(retained && Object.keys(retained).length && {attributes:retained})};
     }
-    return kind === 'faces' ? { ...row, corners: row.corners.map(corner => geometricRecord(corner, 'corners')) } : row;
+    return kind === 'faces' ? { ...row, corners: row.corners.map(corner => geometricRecord(corner,'corners',uvSet)) } : row;
   }
 
   function bakeState(bake) {
@@ -216,9 +217,13 @@
     const updated = { ...row, document };
     if (row.bindings) updated.bindings = remapBindings(row.bindings, correspondence);
     if (row.bakes) {
-      const dirty = new Map();
-      for (const { id, before: old, after: next } of recordsChanged(elements(before).faces, elements(document).faces)) {
-        if (same(geometricRecord(old, 'faces'), geometricRecord(next, 'faces'))) continue;
+      const dirty = new Map(), oldSet=MaterialUV.resolve(before.uvBindings,'pigment'),
+        newSet=MaterialUV.resolve(document.uvBindings,'pigment');
+      const left=elements(before).faces, right=elements(document).faces;
+      const changes=oldSet===newSet ? recordsChanged(left,right) : sorted([...left.keys(),...right.keys()])
+        .map(id=>({id,before:left.get(id),after:right.get(id)}));
+      for (const { id, before: old, after: next } of changes) {
+        if (oldSet===newSet && same(geometricRecord(old,'faces',oldSet),geometricRecord(next,'faces',newSet))) continue;
         for (const material of new Set([old?.material, next?.material])) {
           if (!dirty.has(material)) dirty.set(material, []);
           dirty.get(material).push(id);

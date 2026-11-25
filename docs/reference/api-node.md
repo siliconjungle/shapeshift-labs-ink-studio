@@ -107,7 +107,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.readGltfAsset` | function | `(file, { onFile } = {})` | [source](../../cli/gltf-asset.js) |
 | `node.readGraphProject` | function | `(file, options={})` | [guide](../graph-clips.md#node-api), [guide](../headless-authoring.md#persistent-sessions), [source](../../cli/graph-project.js) |
 | `node.readHorizonBands` | function | `(file, dependency)` | [guide](../layered-horizon.md), [source](../../cli/horizon-bands.js) |
-| `node.readMesh` | function | `(file, { attributes = false, uvSet = 0 } = {})` | [guide](../../README.md#importing-meshes), [source](../../index.js) |
+| `node.readMesh` | function | `(file, { attributes = false, uvSet = 0, allUVSets = false } = {})` | [guide](../../README.md#importing-meshes), [source](../../index.js) |
 | `node.readProjectBundle` | function | `(file)` | [source](../../cli/project-bundle.js) |
 | `node.readRasterAsset` | function | `(file)` | [guide](../headless-authoring.md#materials-artwork-and-animation-signals), [source](../../index.js) |
 | `node.readReferencePalette` | function | `(file, options)` | [guide](../palette-recipes.md#extract-a-reference-palette), [source](../../index.js) |

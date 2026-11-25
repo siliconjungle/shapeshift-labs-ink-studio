@@ -27,7 +27,7 @@ function opaquePigment(texture) {
   };
 }
 
-function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = false, projection, chartBake, sourceFaces } = {}) {
+function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = false, projection, chartBake, sourceFaces, pigmentUVs } = {}) {
   const count = size * size, covered = new Uint8Array(count);
   if(projection && count*projection.views>64000000)throw new RangeError('Paint views exceed the projected texel budget');
   const { previous, state, dirty, reproject, geometry, layout, rebuild, release, transfer, cage } = chartBake || {};
@@ -153,7 +153,10 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
           masks.get(name)[i]=byte(value);
         }
         if (projected) for (const [name,value] of Object.entries(projected.diagnostic)) masks.get(name)[i]=byte(value);
-        if(!high?.color && pigment[slot])color=pigment[slot](a.map((n,k)=>clamp((n+u*(b[k]-n)+v*(c[k]-n))/size)),color);
+        if(!high?.color && pigment[slot]) {
+          const [ua,ub,uc]=pigmentUVs?.[f] ?? uvs[f];
+          color=pigment[slot](ua.map((n,k)=>clamp(n+u*(ub[k]-n)+v*(uc[k]-n))),color);
+        }
         if(!high?.color && tint)color=color.map((value,k)=>value*(tint[0][k]*(1-u-v)+tint[1][k]*u+tint[2][k]*v));
         if(project){
           const weights=Object.create(null);

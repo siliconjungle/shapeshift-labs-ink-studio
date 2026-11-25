@@ -6,6 +6,7 @@ const charts = require('./material-chart-rebake.js');
 const {writeMips} = require('./registered-material-mips.js');
 const Geometry = require('./geometry-masks.js');
 const Cage = require('./material-cage.js');
+const UV = require('../src/material-uv.js');
 
 function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometryMasks,cageBake}) {
   if ([bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,cageBake].every(value=>value===undefined) &&
@@ -15,7 +16,7 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
     throw new TypeError('Geometry masks need a registered bake directory');
   if(typeof bakeDir!=='string'||!bakeDir || paintViews!==undefined && capturePaint!==undefined)
     throw new TypeError('Registered baking needs a bake directory and one paint or capture plan at a time');
-  const directory=path.resolve(bakeDir), meshes=[], output=new Map(), captures=[];
+  const directory=path.resolve(bakeDir), meshes=[], atlases=new Map(), output=new Map(), captures=[];
   const baseline=charts.readBaseline(rebakeFrom), edits=charts.readPlan(chartEdits);
   const geometrySettings=Geometry.settings(geometryMasks === undefined ? baseline?.document.geometryMasks : geometryMasks);
   const sameDirectory=baseline && fs.existsSync(directory) && fs.realpathSync(directory)===baseline.directory;
@@ -30,8 +31,8 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
     if(baseline && baseline.document.meshes.length!==count)throw new Error('Chart rebake needs the baseline mesh count');
   }
 
-  function record(index, mesh, faces, uvs, size, padding, baked, chartBake, plan, source, kit) {
-    const folder='mesh-'+String(index).padStart(3,'0'), {textures,registeredMaps,strength,coverage}=baked;
+  function record(index, mesh, faces, uvs, size, padding, baked, chartBake, plan, source, kit, set, primary) {
+    const folder='mesh-'+String(index).padStart(3,'0')+(set===primary?'':'/uv-'+set), {textures,registeredMaps,strength,coverage}=baked;
     function sidecar(name,extension,bytes) {
       const sha256=projection.digest(bytes);
       const file=folder+'/'+name+(sameDirectory?'-'+sha256:'')+'.'+extension;
@@ -69,7 +70,7 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
     };
     const mipmaps=writeMips(baked,size,dirty,source?.row.mipmaps,baseline?.read,map,sidecar);
     const row={index,name:mesh.name,geometry:projection.geometryHash(mesh.points,faces),
-      uvLayout:projection.digest(JSON.stringify([faces,uvs])),texCoord:0,width:size,height:size,padding,
+      uvLayout:projection.digest(JSON.stringify([faces,uvs])),texCoord:set,width:size,height:size,padding,
       coverage,emissionStrength:strength,maps,masks,mipmaps,paintViews:[...paintReceipts.values()],
       ...(baked.geometryMasks && {geometryMasks:baked.geometryMasks}),
       ...(baked.cageBake && {cageBake:baked.cageBake}),
@@ -78,8 +79,9 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
       rebakeState:{owners:sidecar('chart-owners','deflate',(!baked.layoutRevised && previous?.packedOwners) || charts.pack(baked.owners)),
         ...(baked.stamp && {paint:sidecar('uv-paint','deflate',(!baked.layoutRevised && !reproject.size && previous?.packedPaint) || charts.pack(baked.stamp))})},
       chartReport};
-    meshes.push(row);
-    const authored=projection.cameraCapture(mesh,faces,capture.filter(v=>v.mesh===index),kit);
+    if(!atlases.has(index)) atlases.set(index,new Map());
+    atlases.get(index).set(set,row);
+    const authored=projection.cameraCapture(mesh,faces,set===primary ? capture.filter(v=>v.mesh===index) : [],kit);
     for(const {id,guide,blank,...view} of authored) {
       output.set('paint-views/'+id+'-guide.png',guide);
       output.set('paint-views/'+id+'-paint.png',blank);
@@ -90,6 +92,35 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
       mipmaps:mipmaps.levels.map(({level,width,height,filteredTexels,changedOwners,clearedTexels})=>
         ({level,width,height,filteredTexels,...(changedOwners !== undefined && {changedOwners,clearedTexels})})),
       paintViews:row.paintViews.map(({id,texels})=>({id,texels}))};
+  }
+
+  function compose(index,bindings,primary,report) {
+    const layouts=atlases.get(index), main=layouts.get(primary);
+    if(edits.some(row=>row.mesh===index&&row.uvSet!==undefined&&!layouts.has(row.uvSet)))
+      throw new RangeError('A chart edit references an unbaked UV set');
+    if(!bindings || !Object.keys(bindings).length) {
+      meshes.push(main);
+      return report;
+    }
+    const setFor=name=>UV.resolve(bindings,name==='roughness' ? 'metallicRoughness' :
+      ['opacity','coverage'].includes(name) ? 'pigment' : name);
+    const paintMasks=new Set(main.paintViews.flatMap(({id})=>['projected-paint','paint-'+id]));
+    function selected(base, mask, level) {
+      return Object.fromEntries(Object.keys(base).map(name=>{
+        const texCoord=mask ? paintMasks.has(name) ? primary : UV.resolve(bindings,'mask/'+name) : setFor(name);
+        const row=layouts.get(texCoord), source=level===undefined ? row : row.mipmaps.levels[level];
+        const descriptor=source[mask?'masks':'maps'][name];
+        if(!descriptor) throw new Error('Missing registered channel '+name+' on UV set '+texCoord);
+        return [name,{...descriptor,texCoord}];
+      }));
+    }
+    const row={...main,uvBindings:bindings,uvAtlases:Object.fromEntries(layouts),
+      maps:selected(main.maps,false),masks:selected(main.masks,true),
+      mipmaps:{...main.mipmaps,levels:main.mipmaps.levels.map((level,i)=>({...level,
+        maps:selected(level.maps,false,i),masks:selected(level.masks,true,i)}))}};
+    meshes.push(row);
+    return {...report,uvBindings:bindings,uvAtlases:[...layouts].map(([texCoord,row])=>
+      ({texCoord,uvLayout:row.uvLayout,chartReport:row.chartReport}))};
   }
 
   function write(glb) {
@@ -109,12 +140,24 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
   }
 
   function plan(index, input, kit) {
-    const views=paint.filter(view=>view.mesh===index);
+    const {set=0,primary=0}=input;
+    const views=set===primary ? paint.filter(view=>view.mesh===index) : [];
+    const baseMesh=baseline?.document.meshes[index];
+    const changedPrimary=set===primary && baseMesh && baseMesh.texCoord!==primary;
+    if (changedPrimary && baseMesh.paintViews?.length && !views.length)
+      throw new RangeError('Supply approved paint views after changing the pigment UV binding');
     const spec=cages.get(index), prior=input.source?.row;
     if (!spec && prior?.cageBake) throw new RangeError('Resupply the cage plan when rebaking a cage receiver');
     const cage=spec && Cage.prepare(spec,input.mesh,require('../index.js'),kit);
     const mesh=cage ? {...input.mesh,maskNames:[...(input.mesh.maskNames ?? []),...cage.maskNames]} : input.mesh;
-    const chartBake=charts.planMesh({...input,mesh,baseline,views,edits:edits.filter(edit=>edit.mesh===index)});
+    const chartBake=charts.planMesh({...input,mesh,baseline,views,forcePaint:changedPrimary && views.length>0,edits:edits.filter(edit=>edit.mesh===index &&
+      (edit.uvSet===undefined ? !edit.charts || set===primary : edit.uvSet===set))});
+    if (set!==primary && mesh.materials.some(row=>row.texture)) {
+      const key=projection.digest(JSON.stringify(input.pigmentUVs));
+      if (key!==input.source?.state.pigmentLayout)
+        for (const {id} of chartBake.state.charts) chartBake.dirty.add(id);
+      chartBake.state.pigmentLayout=key;
+    }
     if (cage) {
       chartBake.cage=cage;
       for (const {id} of chartBake.state.charts) chartBake.dirty.add(id);
@@ -138,8 +181,8 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
     return {chartBake,projection:projected};
   }
 
-  return {validate,record,write,plan,name:index=>baseline?.document.meshes[index]?.name,
-    layout:(index,mesh)=>charts.baselineLayout(baseline,index,mesh)};
+  return {validate,record,compose,write,plan,name:index=>baseline?.document.meshes[index]?.name,
+    layout:(index,mesh,set)=>charts.baselineLayout(baseline,index,mesh,set)};
 }
 
 module.exports = {prepare};

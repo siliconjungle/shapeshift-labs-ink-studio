@@ -236,6 +236,11 @@
     const points = doc.vertices.map(row => row.position);
     const faces = derived.triangleSources.map(row => row.corners.map(id => ids.get(corners.get(id).vertex)));
     const uvs = derived.triangleSources.map(row => row.corners.map(id => corners.get(id).uv));
+    const uvSets=derived.uvSets && Object.fromEntries(Object.keys(derived.uvSets).map(set=>
+      [set,derived.triangleSources.map(row=>row.corners.map(id=>MaterialUV.uv(corners.get(id),+set)))]));
+    const uvCutsBySet=uvSets && Object.fromEntries(Object.keys(uvSets).map(set=>[set,topology.inspect(doc).edges
+      .filter(edge=>MaterialUV.seam(edge,+set) || new Set(edge.uses.map(use=>byFace.get(use.face).material)).size>1)
+      .map(row=>row.vertices.map(id=>ids.get(id)))]));
     const uvCuts = topology.inspect(doc).edges.filter(row => row.uvSeam ||
       new Set(row.uses.map(use => byFace.get(use.face).material)).size > 1).map(row => row.vertices.map(id => ids.get(id)));
     if (!faces.length) throw new RangeError('Topology export needs at least one face');
@@ -246,7 +251,8 @@
         return V.len(normal) ? normal : fallback;
       });
     });
-    return { ...settings, name: name ?? doc.id, points, faces, uvs, uvCuts, bakeUVs: true,
+    return { ...settings, name: name ?? doc.id, points, faces, uvs, uvCuts, ...(uvSets && {uvSets,uvCutsBySet}),
+      ...(doc.uvBindings && {uvBindings:doc.uvBindings}), bakeUVs: true,
       vertexIds: doc.vertices.map(row => row.id), faceIds: derived.triangleSources.map(row => row.face),
       faceMaterials: derived.triangleSources.map(row => slots.get(byFace.get(row.face).material)),
       materials: derived.materials.map(id => ({ name: id, ...authored.get(id) })),

@@ -228,9 +228,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology modifiers inspect|set|update|apply <mesh-or-scene.json> [stack-or-edit.json] [--object id] [--through id] [--targets file] [--view file] [--preview dir] [--out file] [--report file]   inspect or edit a retained mesh modifier stack
   mesh-topology correspond <before.json> <after.json> [--lineage links.json] [--projection settings.json] [--match-ids on|off] [--out map.json]   map stable and projected elements
   mesh-topology transfer-materials <before.json> <replacement.json> <map.json> [--materials file] [--settings file] [--out mesh.json] [--out-materials file] [--report file] [--partial on]   transfer registered paint and corner data
-  mesh-uv inspect|simplify <mesh> --out <directory|mesh.json>   inspect UV maps or reduce with seam locks
+  mesh-uv inspect|simplify <mesh> [--uv-set n | --channel id] --out <directory|mesh.json>   inspect UV maps or reduce with seam locks
   mesh-uv import <mesh> --out topology.json [--id id] [--uv-set n] [--join-coincident on|off]   retain triangle corner UVs for editing
-  mesh-uv layout <mesh-or-scene.json> [--object id] [--out file]   inspect stable faces, seam sides, pins and islands
+  mesh-uv layout <mesh-or-scene.json> [--object id] [--uv-set n | --channel id] [--out file]   inspect stable faces, seam sides, pins and islands
   mesh-uv select <mesh-or-scene.json> <query.json> [--object id] [--view file] [--preview dir] [--out file]   select UV elements by atlas or model position
   mesh-uv edit <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file] [--preview dir] [--out file] [--report file]   plan UV seam edits, local unwraps, relax and texel budgets
   scenery pack <scene.js> --out asset.inkscenery   pack indexed meshes and textures from a scenery hook
@@ -931,7 +931,6 @@ These options are read by CLI code. Follow each source link for the accepted val
 - `--buildup-threshold` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--camera-impulse-time` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--case` · [cli/music-instrument-benchmark.js](../../cli/music-instrument-benchmark.js)
-- `--channel` · [cli/depth.js](../../cli/depth.js)
 - `--closest` · [cli/curve.js](../../cli/curve.js)
 - `--cloud` · [cli/scan-mesh.js](../../cli/scan-mesh.js)
 - `--coalesce` · [cli/ink-studio.js](../../cli/ink-studio.js)

@@ -1,5 +1,6 @@
 /* Indexed, UV-mapped triangle assets for the shared cutout surface renderer. */
 const SceneMeshes = (() => {
+  const UV = typeof MaterialUV==='undefined' ? require('./material-uv.js') : MaterialUV;
   const Sprite = typeof SpriteSurface === 'undefined' ? require('./sprite-surface.js') : SpriteSurface;
   const Mips = typeof SemanticTextureMipmaps === 'undefined' ? require('./semantic-texture-mipmaps.js') : SemanticTextureMipmaps;
   const simulationAPI=()=>typeof SimulationMaterialLayers==='undefined'?require('./simulation-material-layers.js'):SimulationMaterialLayers;
@@ -130,7 +131,7 @@ const SceneMeshes = (() => {
     return width;
   }
 
-  function create({ id, objectId = id, partId, positions: authored, uvs: uvInput, normals: normalInput, indices, materials, faceMaterials } = {}) {
+  function create({ id, objectId = id, partId, positions: authored, uvs: uvInput, uvSets, uvBindings, normals: normalInput, indices, materials, faceMaterials } = {}) {
     if (!name(id) || !name(objectId) || partId !== undefined && !name(partId))
       throw new TypeError('An indexed scene mesh needs nonempty mesh, object and optional part IDs');
     const positions = positionsOf(authored), vertices = positions.length / 3;
@@ -149,6 +150,15 @@ const SceneMeshes = (() => {
         authoredNormals.set(unitNormal(row), i);
       }
     }
+    const bindings=UV.bindings(uvBindings), layouts=new Map([[0,Float32Array.from(uvInput)]]);
+    for (const [key,rows] of Object.entries(uvSets ?? {})) {
+      const set=+key;
+      if (!UV.isKey('uv/'+key) || !array(rows) || rows.length!==vertices*2 || !every(rows,unit))
+        throw new RangeError('Alternate scene UV sets need one normalized pair per vertex');
+      layouts.set(set,Float32Array.from(rows));
+    }
+    if (Object.values(bindings ?? {}).some(set=>!layouts.has(set)))
+      throw new RangeError('A scene material channel references a missing UV set');
     const triangles = indices.length / 3;
     if (!Array.isArray(materials) || !materials.length || materials.length > 64 ||
         faceMaterials === undefined && materials.length !== 1 ||
@@ -175,7 +185,7 @@ const SceneMeshes = (() => {
       throw new RangeError('Mesh textures exceed the 2048 × 2048 atlas budget');
     const atlas = Sprite.make(atlasWidth(tiles),maxEdge), regions = [];
     for (const tile of tiles) regions[tile.index] = atlas.reserve(tile.width,tile.height,tile.paint,{normal:tile.normal});
-    const uvs = Float32Array.from(uvInput), source = Uint32Array.from(indices);
+    const uvs = layouts.get(UV.resolve(bindings,'pigment')), source = Uint32Array.from(indices);
     const drawIndices = new Uint32Array(source.length), drawTriangles = new Uint32Array(triangles), semantic=[], blocks=[];
     if(tiles.reduce((sum,tile)=>sum+(tile.chain?tile.width*tile.height:0),0)>2**20)
       throw new RangeError('Mesh semantic mipmaps exceed the texel budget');
@@ -209,7 +219,7 @@ const SceneMeshes = (() => {
     }
     layer.sceneMeshId = id;
     const restBounds=bounds(positions);
-    const data = { positions, rest:positions, restBounds, uvs, indices:source, drawIndices, drawTriangles, layer, regions, revision:0,
+    const data = { positions, rest:positions, restBounds, uvs, layouts, bindings, indices:source, drawIndices, drawTriangles, layer, regions, revision:0,
       materials:rows.map(row => row.id), faceMaterials:faceMaterials && Uint8Array.from(faceMaterials), bounds:restBounds,
       ...(authoredNormals && { authoredNormals, sourceToDraw }),
       ...(scanSources && {scanSources,scanInfo:new Map()}) };
@@ -288,8 +298,8 @@ const SceneMeshes = (() => {
     return mesh[state];
   }
 
-  function inspectUV(mesh, {material, size, ...options} = {}) {
-    const {rest,uvs,indices,materials,faceMaterials,regions}=read(mesh);
+  function inspectUV(mesh, {material, size, uvSet = 'pigment', ...options} = {}) {
+    const data=read(mesh), {rest,indices,materials,faceMaterials,regions}=data, uvs=coordinates(data,uvSet);
     const name=material??(mesh.materials.length===1 ? mesh.materials[0] : undefined);
     const slot=materials.indexOf(name), region=regions[slot];
     if (!region) throw new RangeError('Choose a textured mesh material to inspect its UV atlas');
@@ -328,9 +338,27 @@ const SceneMeshes = (() => {
     return pose(copy, positions);
   }
 
-  function uvAnchors(mesh, {V, procedural:{spatial}}) {
-    if (charts.has(mesh)) return charts.get(mesh);
-    const data = read(mesh), {indices,uvs} = data;
+  function coordinates(data, selector) {
+    const set=UV.resolve(data.bindings,selector), rows=data.layouts.get(set);
+    if (!rows) throw new RangeError('Unknown scene UV set '+set);
+    return rows;
+  }
+
+  function channelUV(mesh, triangle, weights, selector = 'pigment') {
+    const data=read(mesh), set=UV.resolve(data.bindings,selector), rows=coordinates(data,set);
+    if (!Number.isSafeInteger(triangle) || triangle<0 || triangle>=mesh.triangles ||
+        !array(weights) || weights.length!==3 || !every(weights,Number.isFinite) ||
+        Math.abs(weights[0]+weights[1]+weights[2]-1)>1e-6)
+      throw new RangeError('Choose a mesh triangle and barycentric weights');
+    const ids=data.indices.subarray(triangle*3,triangle*3+3);
+    return {uvSet:set,uv:[0,1].map(k=>ids.reduce((sum,id,i)=>sum+rows[id*2+k]*weights[i],0))};
+  }
+
+  function uvAnchors(mesh, {V, procedural:{spatial}}, selector = 'pigment') {
+    const data=read(mesh), set=UV.resolve(data.bindings,selector), {indices}=data, uvs=coordinates(data,set);
+    if (!charts.has(mesh)) charts.set(mesh,new Map());
+    const cache=charts.get(mesh);
+    if (cache.has(set)) return cache.get(set);
     let lookup;
     function uvAt(i) { return [uvs[i*2],uvs[i*2+1],0]; }
     function triangleAt(triangle) {
@@ -378,7 +406,7 @@ const SceneMeshes = (() => {
         triangle,weights:weights.slice()};
     }
     const chart=Object.freeze({bind,sample,revision:()=>data.revision});
-    charts.set(mesh,chart);
+    cache.set(set,chart);
     return chart;
   }
 
@@ -682,12 +710,12 @@ const SceneMeshes = (() => {
     return {p:[0,1,2].map(k=>a[k]*weights[0]+b[k]*weights[1]+c[k]*weights[2]),n:V.norm(area)};
   }
 
-  function clipUV(mesh, {min,max,material,clip:limit}) {
+  function clipUV(mesh, {min,max,material,clip:limit,uvSet='pigment'}) {
     const valid=(min,max)=>[min,max].every(point=>Array.isArray(point)&&point.length===2&&Array.from(point).every(Number.isFinite)) &&
         max.every((value,k)=>value-min[k]>=1e-8);
     if (!valid(min,max) || limit!==undefined&&!valid(limit?.min,limit?.max))
       throw new RangeError('Mesh UV clipping needs a finite ordered rectangle');
-    const {indices,uvs,rest,materials,faceMaterials}=read(mesh), slot=materials.indexOf(material);
+    const data=read(mesh), {indices,rest,materials,faceMaterials}=data, uvs=coordinates(data,uvSet), slot=materials.indexOf(material);
     if (material!==undefined && slot<0) throw new RangeError('Unknown mesh material '+material);
     const points=[], texture=[], triangles=[], anchors=[];
     const lo=limit ? min.map((n,k)=>Math.max(n,limit.min[k])) : min;
@@ -733,7 +761,7 @@ const SceneMeshes = (() => {
     return {anchors, points:Float32Array.from(points), uvs:Float32Array.from(texture), triangles:Uint32Array.from(triangles)};
   }
 
-  return Object.freeze({create,fromObjectTexels,updateObjectTexels,objectTexelFrame,scanFrame:Mips.scanFrame,scanMaterial,paintMeshes,pose,withPose,geometry,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
+  return Object.freeze({create,fromObjectTexels,updateObjectTexels,objectTexelFrame,scanFrame:Mips.scanFrame,scanMaterial,paintMeshes,pose,withPose,geometry,inspectUV,channelUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
     simulationFrame:(...args)=>simulationAPI().frame(...args),depthProxy,proxyPlan,sourceTriangle,trianglePigment,intersect,rayQuery,projector,sampleProjection,clipUV,revision:mesh=>read(mesh).revision});
 })();
 if (typeof module !== 'undefined') module.exports = SceneMeshes;

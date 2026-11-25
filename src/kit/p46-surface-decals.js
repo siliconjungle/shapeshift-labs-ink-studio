@@ -69,12 +69,13 @@
   }
 
   function uvAnchor(a) {
-    need(fields(a,['object','part','uv','material','bias','chart']) && fields(a.uv,['min','max']),
+    need(fields(a,['object','part','uv','material','bias','chart','uvSet']) && fields(a.uv,['min','max']),
       'a mesh UV anchor needs a receiver and a UV rectangle');
-    const {uv:{min,max},material,bias=.002,chart}=a;
+    const {uv:{min,max},material,bias=.002,chart,uvSet}=a;
     need([min,max].every(point=>vector(point,2,n=>range(n,-256,257))) &&
       max.every((n,k)=>n-min[k]>=1e-8) && min.every((n,k)=>n<1&&max[k]>0) &&
-      (material===undefined||label(material)) && range(bias,0,1),'invalid UV extent, material or bias');
+      (material===undefined||label(material)) && (uvSet===undefined||MaterialUV.layout(uvSet)||MaterialUV.channel(uvSet)) &&
+      range(bias,0,1),'invalid UV extent, layout, material or bias');
     let bounds;
     if (chart!==undefined) {
       need(fields(chart,['min','max','padding']) && [chart.min,chart.max].every(p=>vector(p,2,k=>range(k,0,1))),
@@ -85,6 +86,7 @@
       bounds={min:min.slice(),max:max.slice(),padding:padding.slice()};
     }
     return {...target(a),uv:{min:min.slice(),max:max.slice()},...(material!==undefined&&{material}),bias,
+      ...(uvSet!==undefined && {uvSet}),
       ...(bounds&&{chart:bounds})};
   }
 
@@ -201,7 +203,7 @@
       const mesh=group.sources.get('mesh')?.mesh;
       need(mesh,'a UV decal needs an indexed mesh receiver');
       const chart=a.chart, clip=chart&&{min:chart.min.map((n,k)=>n+chart.padding[k]),max:chart.max.map((n,k)=>n-chart.padding[k])};
-      const geometry=meshes.clipUV(mesh,{...a.uv,material:a.material,clip});
+      const geometry=meshes.clipUV(mesh,{...a.uv,material:a.material,clip,uvSet:a.uvSet ?? 'decal'});
       uvTriangles+=geometry.triangles.length/3;
       need(uvTriangles<=32768,'the UV decal bundle exceeds 32768 clipped triangles');
       return {spec,group,geometry,triangles:0,

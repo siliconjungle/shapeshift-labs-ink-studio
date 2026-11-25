@@ -27,12 +27,20 @@
     } };
   }
 
-  function graph(source) {
-    const doc = topology.create(source);
-    if (graphCache.has(doc)) return graphCache.get(doc);
-    const vertices = index(doc.vertices), faces = index(doc.faces), corners = new Map(), edges = new Map();
+  function graph(source, selector = 0) {
+    const doc = topology.create(source), set=MaterialUV.resolve(doc.uvBindings,selector);
+    if (!graphCache.has(doc)) graphCache.set(doc,new Map());
+    const cached=graphCache.get(doc);
+    if (cached.has(set)) return cached.get(set);
+    const byFace=index(doc.faces);
+    const vertices=index(doc.vertices), faces=set ? index(doc.faces.map(face=>({...face,
+      corners:face.corners.map(row=>{
+        const uv=MaterialUV.uv(row,set);
+        if (!uv) throw new RangeError('UV set '+set+' is missing on corner '+row.id);
+        return {...row,uv,uvPinned:MaterialUV.pinned(row,set)};
+      })}))) : byFace, corners=new Map(), edges=new Map();
     const faceEdges = new Map(doc.faces.map(face => [face.id, []]));
-    for (const face of doc.faces) for (const corner of face.corners)
+    for (const face of faces.values()) for (const corner of face.corners)
       corners.set(corner.id, { ...corner, face: face.id, position: vertices.get(corner.vertex).position });
     const islandsSet = sets(faces.keys()), weldSet = sets(corners.keys());
     for (const edge of topology.inspect(doc).edges) {
@@ -41,15 +49,15 @@
         faceEdges.get(face).push(edge.id);
         return { face, corners: ordered, uv: ordered.map(id => corners.get(id).uv) };
       }).sort((a, b) => a.face < b.face ? -1 : 1);
-      const [a, b] = sides, manifold = sides.length === 2;
+      const [a, b] = sides, manifold = sides.length === 2, authored=MaterialUV.seam(edge,set);
       const kind = sides.length === 1 ? 'boundary' : !manifold ? 'non-manifold' :
         faces.get(a.face).material !== faces.get(b.face).material ? 'material-boundary' :
-        edge.uvSeam || !a.uv.every((uv, j) => sameUV(uv, b.uv[j])) ? 'seam' : 'continuous';
+        authored || !a.uv.every((uv, j) => sameUV(uv, b.uv[j])) ? 'seam' : 'continuous';
       if (kind === 'continuous') {
         islandsSet.join(a.face, b.face);
         a.corners.forEach((id, i) => weldSet.join(id, b.corners[i]));
       }
-      edges.set(edge.id, { id: edge.id, kind, authored: Boolean(edge.uvSeam), vertices: edge.vertices, sides });
+      edges.set(edge.id, { id: edge.id, kind, authored, vertices: edge.vertices, sides });
     }
     const islands = new Map(), atIsland = new Map(), welds = new Map(), atWeld = new Map();
     for (const id of order(faces.keys())) {
@@ -74,8 +82,8 @@
       row.bounds = bounds;
     }
     const triangles = () => topology.triangulate(doc).triangleSources;
-    const data = { doc, faces, corners, edges, islands, atIsland, faceEdges, welds, atWeld, triangles };
-    graphCache.set(doc, data);
+    const data = { doc,set,byFace,faces, corners, edges, islands, atIsland, faceEdges, welds, atWeld, triangles };
+    cached.set(set, data);
     return data;
   }
 
@@ -83,10 +91,11 @@
     return { format, version: 1, mesh: doc.id, revision: topology.revision(doc) };
   }
 
-  function inspect(source) {
-    const g = graph(source);
+  function inspect(source, uvSet = 0) {
+    const g = graph(source,uvSet);
     return {
       ...sourceInfo(g.doc, 'ink-studio/uv-layout'),
+      ...(g.set && {uvSet:g.set}), ...(g.doc.uvBindings && {uvBindings:g.doc.uvBindings}),
       islands: Array.from(g.islands.values(), row => ({ ...row, faces: row.faces.slice(), bounds: row.bounds.slice() })),
       faces: Array.from(g.faces.values(), face => ({ id: face.id, material: face.material, island: g.atIsland.get(face.id),
         corners: face.corners.map(row => row.id), edges: g.faceEdges.get(face.id).slice() })),
@@ -108,7 +117,7 @@
       domain === 'corners' ? ids.map(id => g.corners.get(id).face) :
       domain === 'edges' ? ids.flatMap(id => g.edges.get(id).sides.map(side => side.face)) : ids;
     const faces = order(selectedFaces);
-    return { ...sourceInfo(g.doc, selectionFormat), domain, ids, faces,
+    return { ...sourceInfo(g.doc, selectionFormat), ...(g.set && {uvSet:g.set}), domain, ids, faces,
       islands: order(faces.map(face => g.atIsland.get(face))),
       corners: domain === 'corners' ? ids : order(domain === 'edges' ?
         ids.flatMap(id => g.edges.get(id).sides.flatMap(side => side.corners)) :
@@ -161,16 +170,16 @@
   }
 
   function select(source, query = {}) {
-    if (!fields(query, ['domain', 'ids', 'atlas', 'from']) || !domains.includes(query.domain) ||
+    if (!fields(query, ['domain', 'ids', 'atlas', 'from', 'uvSet']) || !domains.includes(query.domain) ||
         [query.ids, query.atlas, query.from].filter(n => n !== undefined).length !== 1)
       throw new TypeError('Choose a UV selection domain and IDs, an atlas location, or a saved selection');
-    const g = graph(source), { domain, ids, atlas, from } = query;
+    const g = graph(source,query.uvSet ?? query.from?.uvSet ?? 0), { domain, ids, atlas, from } = query;
     if (atlas !== undefined) {
       if (!fields(atlas, ['at', 'radius', 'face', 'material'])) throw new TypeError('Invalid UV atlas pick');
       return atlasSelection(g, domain, atlas);
     }
     if (from !== undefined && (from?.format !== selectionFormat || from.version !== 1 || from.mesh !== g.doc.id ||
-        from.revision !== topology.revision(g.doc) || from.domain !== domain))
+        from.revision !== topology.revision(g.doc) || from.domain !== domain || (from.uvSet ?? 0)!==g.set))
       throw new RangeError('Use a UV selection from this mesh revision and domain');
     return selection(g, domain, known(g, domain, from === undefined ? ids : from.ids), from?.hit);
   }
@@ -186,14 +195,14 @@
     return { ...source, triangle, weights: Array.from(passes.sourceCoordinates.subarray(p * 3, p * 3 + 3)) };
   }
 
-  function pickModel(mesh, frame, pixel, domain = 'faces') {
+  function pickModel(mesh, frame, pixel, domain = 'faces', uvSet = 0) {
     const source = topology.sourceDocument(mesh), { w, h, passes } = frame ?? {};
     if (!source || !domains.includes(domain) || !Number.isSafeInteger(w) || !Number.isSafeInteger(h) ||
         !tuple(pixel, 2, Number.isSafeInteger) || pixel[0] < 0 || pixel[0] >= w || pixel[1] < 0 || pixel[1] >= h ||
         passes?.sourceSurface?.length !== w * h || passes.sourceTriangle?.length !== w * h ||
         passes.sourceCoordinates?.length !== w * h * 3 || !Array.isArray(passes.surfaceSources))
       throw new TypeError('Model selection needs a retained mesh and an in-bounds pixel in native source passes');
-    const g = graph(source), hit = modelHit(mesh, frame, ...pixel);
+    const g = graph(source,uvSet), hit = modelHit(mesh, frame, ...pixel);
     if (!hit) return selection(g, domain, [], { space: 'model', pixel: pixel.slice(), status: 'miss' });
     const { face, triangle, weights } = hit;
     const blend = (key, length) => Array.from({ length }, (_, k) =>
@@ -319,7 +328,7 @@
 
   function targets(g, domain, { ids, selection: saved }) {
     const result = saved === undefined ? known(g, domain, ids) :
-      ids === undefined ? select(g.doc, { domain, from: saved }).ids : [];
+      ids === undefined ? select(g.doc, { domain, from: saved, uvSet:g.set }).ids : [];
     if (!result.length) throw new RangeError('Choose at least one UV ' + domain + ' target');
     return result;
   }
@@ -475,31 +484,37 @@
     if (count) return { document: g.doc, report };
     const affectedFaces = new Set([...points.keys(), ...pins.keys()].map(id => g.corners.get(id).face));
     const faces = [...affectedFaces].map(id => {
-      const face = g.faces.get(id);
-      return { ...face, corners: face.corners.map(corner => ({
-        ...corner, ...(points.has(corner.id) && { uv: points.get(corner.id) }),
-        ...(pins.has(corner.id) && { uvPinned: pins.get(corner.id) })
-      })) };
+      const face = g.byFace.get(id);
+      return { ...face, corners: face.corners.map(corner => {
+        const uv=points.get(corner.id), pin=pins.get(corner.id);
+        if (!g.set) return {...corner,...(uv && {uv}),...(pin!==undefined && {uvPinned:pin})};
+        return {...corner,...(uv && {attributes:{...corner.attributes,[MaterialUV.key(g.set)]:uv}}),
+          ...(pin!==undefined && {uvPins:{...corner.uvPins,[g.set]:pin}})};
+      }) };
     });
-    const seams = [...edges].map(([id, uvSeam]) => ({ id, uvSeam }));
+    const original=index(g.doc.edges);
+    const seams = [...edges].map(([id, uvSeam]) => g.set ?
+      {id,uvSeams:{...original.get(id).uvSeams,[g.set]:uvSeam}} : {id,uvSeam});
     const document = topology.edit(g.doc, { faces, edges: seams });
     return { document, report };
   }
 
   function plan(source, request) {
-    const base = graph(source), revision = topology.revision(base.doc);
-    if (!fields(request, ['revision', 'operations', 'protect']) || !Array.isArray(request.operations) ||
-        request.operations.length < 1 || request.operations.length > 32)
-      throw new TypeError('Use a UV edit with 1–32 operations');
+    if (!fields(request, ['revision', 'operations', 'protect','uvSet','bindings']) ||
+        !Array.isArray(request.operations ?? []) || (request.operations?.length ?? 0)>32 ||
+        (!request.operations?.length && request.bindings===undefined))
+      throw new TypeError('Use a UV edit with up to 32 operations or material channel bindings');
+    const base = graph(source,request.uvSet ?? 0), revision = topology.revision(base.doc);
+    const bindings=MaterialUV.bindings(request.bindings);
     if (request.revision !== undefined && request.revision !== revision)
       throw new RangeError('UV edit was authored against a different topology revision');
     let document = base.doc;
     const operations = [];
-    for (const operation of request.operations) {
+    for (const operation of request.operations ?? []) {
       const local = ['unwrap', 'relax', 'texel-budget'].includes(operation?.op);
       if (local && request.protect !== undefined && operation.protect !== undefined)
         throw new TypeError('Choose transaction-wide or per-operation UV protection');
-      const next = draft(graph(document), local && request.protect !== undefined ?
+      const next = draft(graph(document,base.set), local && request.protect !== undefined ?
         { ...operation, protect: request.protect } : operation);
       operations.push(next.report);
       if (next.report.conflictCount) break;
@@ -507,11 +522,12 @@
     }
     const canCommit = operations.every(row => !row.conflictCount);
     if (!canCommit) document = base.doc;
-    const next = graph(document), cornerChanges = [], faceChanges = [];
+    else if (bindings) document=topology.edit(document,{uvBindings:bindings});
+    const next = graph(document,base.set), cornerChanges = [], faceChanges = [];
     for (const face of document.faces) {
-      const before = base.faces.get(face.id);
+      const before = base.faces.get(face.id), after = next.faces.get(face.id);
       let changed = false;
-      for (const [i, corner] of face.corners.entries()) {
+      for (const [i, corner] of after.corners.entries()) {
         const prior = before.corners[i];
         if (prior.uv.every((n, axis) => corner.uv[axis] === n) && prior.uvPinned === corner.uvPinned) continue;
         changed = true;
@@ -521,16 +537,21 @@
       if (changed) faceChanges.push(face);
     }
     const seamChanges = document.edges.flatMap(edge => {
-      const before = base.edges.get(edge.id).authored, after = Boolean(edge.uvSeam);
+      const before = base.edges.get(edge.id).authored, after = MaterialUV.seam(edge,base.set);
       return before === after ? [] : [{ id: edge.id, uvSeam: after }];
     });
-    const patch = { ...(faceChanges.length && { faces: faceChanges }), ...(seamChanges.length && { edges: seamChanges }) };
+    const seamPatch=base.set ? seamChanges.map(({id,uvSeam})=>
+      ({id,uvSeams:{...next.doc.edges.find(row=>row.id===id).uvSeams,[base.set]:uvSeam}})) : seamChanges;
+    const bindingsChanged=JSON.stringify(document.uvBindings)!==JSON.stringify(base.doc.uvBindings);
+    const patch = { ...(faceChanges.length && { faces: faceChanges }), ...(seamPatch.length && { edges: seamPatch }),
+      ...(bindingsChanged && {uvBindings:document.uvBindings}) };
     return { document, patch, report: { canCommit, mesh: document.id, revision, outputRevision: topology.revision(document),
+      ...(base.set && {uvSet:base.set}), ...(bindingsChanged && {bindingsBefore:base.doc.uvBindings ?? {},bindingsAfter:document.uvBindings}),
       operations, corners: cornerChanges, seams: seamChanges, islandsBefore: base.islands.size, islandsAfter: next.islands.size } };
   }
 
   function fromTriangles(source, { id, joinCoincident = false } = {}) {
-    const { points, triangles, uvs, groupsByFace, cutSeams = [] } = source ?? {};
+    const { points, triangles, uvs, uvSets, uvBindings, groupsByFace, cutSeams = [], uvCuts } = source ?? {};
     if (typeof id !== 'string' || !id.trim() || typeof joinCoincident !== 'boolean')
       throw new TypeError('UV import needs a mesh ID and an optional coincident vertex policy');
     MeshUV.validate(points, triangles, uvs, true);
@@ -549,16 +570,23 @@
       return aliases.get(key);
     });
     const faces = triangles.map((row, i) => ({ id: 'f/' + i, material: groupsByFace?.[i]?.material ?? 'default',
-      corners: row.map((vertex, j) => ({ id: 'c/' + i + '/' + j, vertex: ids[vertex], uv: uvs[i][j] })) }));
+      corners: row.map((vertex, j) => ({ id: 'c/' + i + '/' + j, vertex: ids[vertex], uv: uvs[i][j],
+        ...(uvSets && {attributes:Object.fromEntries(Object.entries(uvSets).filter(([set,rows])=>Number(set)>0&&rows[i])
+          .map(([set,rows])=>[MaterialUV.key(set),rows[i][j]]))}) })) }));
     const cuts = new Map();
-    if (!Array.isArray(cutSeams)) throw new TypeError('Imported UV cuts need triangle edge pairs');
-    for (const pair of cutSeams) {
-      if (!tuple(pair, 2, i => Number.isSafeInteger(i) && i >= 0 && i < ids.length) || ids[pair[0]] === ids[pair[1]])
-        throw new RangeError('Imported UV seams need distinct physical endpoints');
-      const vertices = order(pair.map(i => ids[i])), key = 'edge/' + JSON.stringify(vertices);
-      cuts.set(key, { id: key, vertices, uvSeam: true });
+    for (const [set, pairs] of [[0, cutSeams], ...Object.entries(uvCuts ?? {})]) {
+      if (!MaterialUV.layout(+set) || !Array.isArray(pairs)) throw new TypeError('Imported UV cuts need triangle edge pairs');
+      for (const pair of pairs) {
+        if (!tuple(pair, 2, i => Number.isSafeInteger(i) && i >= 0 && i < ids.length) || ids[pair[0]] === ids[pair[1]])
+          throw new RangeError('Imported UV seams need distinct physical endpoints');
+        const vertices = order(pair.map(i => ids[i])), key = 'edge/' + JSON.stringify(vertices);
+        const edge = cuts.get(key) ?? { id: key, vertices };
+        if (+set === 0) edge.uvSeam = true;
+        else edge.uvSeams = { ...edge.uvSeams, [set]: true };
+        cuts.set(key, edge);
+      }
     }
-    return topology.create({ id, vertices, faces, edges: [...cuts.values()] });
+    return topology.create({ id, vertices, faces, uvBindings, edges: [...cuts.values()] });
   }
 
   K.meshTopology = Object.freeze({ ...topology, uv: Object.freeze({ fromTriangles, inspect, select, pickModel, modelFaces, readability, plan }) });

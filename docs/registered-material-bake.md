@@ -46,6 +46,24 @@ Use [material channel painting](pixel-art-authoring.md#paint-individual-material
 to apply indexed pigment, roughness, emission, normal, opacity, or named
 mask edits to a diorama solid before baking.
 
+## Bake channels into separate layouts
+
+A retained mesh can [bind material channels to distinct UV sets](mesh-uv.md#bind-separate-material-layouts).
+The registered manifest records the selected `texCoord` on each map,
+mask, and mip descriptor. Its `uvAtlases` section gives each baked set
+its own chart IDs, ownership, and mip chain. The top-level layout and
+ownership describe pigment. Approved camera paint and its coverage
+masks also use the pigment layout. A decal-only set travels in the
+GLB geometry and binding metadata, and can drive native decals without
+allocating a material bake for that set.
+
+Rebakes compare and update each registered layout independently. Use
+`{ "mesh": 0, "uvSet": 3, "charts": [12] }` in a chart-edit plan to
+target chart 12 in set 3. An unqualified chart ID targets pigment.
+Rest-space bounds can mark charts across the registered sets. If a
+revision changes the pigment binding of existing approved paint,
+supply the approved camera paint plan to project it into the new layout.
+
 ## Bake a detailed source through a cage
 
 Use an authored receiver with a non-overlapping UV layout. Put the high

@@ -4,12 +4,13 @@ const files = require('./asset-files.js');
 const PNG = require('./png.js');
 const R = require('./render.js');
 const Compose = require('../src/frame-composite.js');
+const MaterialUV = require('../src/material-uv.js');
 const { viewSettings, worldFor } = require('./mesh-native-view.js');
 
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const options = {
-  layout: ['object', 'out'], select: ['object', 'out', 'view', 'preview'],
-  edit: ['object', 'out', 'view', 'preview', 'report', 'selection']
+  layout: ['object','out','uv-set','channel'], select: ['object','out','view','preview','uv-set','channel'],
+  edit: ['object','out','view','preview','report','selection','uv-set','channel']
 };
 const imageNames = ['atlas-before.png', 'model-before.png', 'atlas-after.png', 'model-after.png', 'comparison.png'];
 const ink = { seam: '#f391a6', pin: '#ffcb78', selected: '#75e2c8', boundary: '#7393ac',
@@ -139,7 +140,7 @@ function model(layout, { frame, mesh, camera }, selection, kit) {
 function review(before, after, nativeBefore, nativeAfter, selected, settings, kit, paths, readability) {
   if (settings.h < 32) throw new RangeError('UV review needs at least 32 native rows');
   const UV = kit.KIT.meshTopology.uv;
-  const layouts = [UV.inspect(before), UV.inspect(after)];
+  const layouts = [UV.inspect(before,selected?.uvSet ?? 0), UV.inspect(after,selected?.uvSet ?? 0)];
   const material = settings.material ?? layouts[0].faces.find(face => selected?.faces.includes(face.id))?.material ??
     layouts[0].faces[0]?.material;
   if (!layouts[0].faces.some(row => row.material === material)) throw new RangeError('Choose an authored UV material');
@@ -185,17 +186,26 @@ function command([action, file, input, ...rest], opt, kit, openEditor) {
   if (source.topologyMeshes && !object) throw new TypeError('Choose a scene mesh with --object');
   const editor = object && openEditor(file);
   const document = topology.create(editor ? editor.meshTopology(object).document : source);
+  const numeric=opt['uv-set'];
+  if (numeric!==undefined && (!/^\d+$/.test(numeric)||!MaterialUV.layout(+numeric)) ||
+      opt.channel!==undefined && (!MaterialUV.channel(opt.channel)||numeric!==undefined))
+    throw new RangeError('Choose --channel or --uv-set');
+  const selector=opt.channel ?? (numeric!==undefined ? +numeric : undefined);
   let result, value;
-  if (action === 'layout') result = value = UV.inspect(document);
+  if (action === 'layout') result = value = UV.inspect(document,selector);
   else {
-    const request = read(input), settings = view(opt.view ? read(opt.view) : {}, !editor);
+    const authored=read(input);
+    if (selector!==undefined && authored?.uvSet!==undefined)
+      throw new TypeError('Choose a UV layout in the request or on the command line');
+    const request=selector===undefined ? authored : {...authored,uvSet:selector};
+    const settings = view(opt.view ? read(opt.view) : {}, !editor);
     const old = (preview || action === 'select' && request?.model !== undefined) && capture(document, settings, kit, editor, object);
     if (action === 'select') {
       if (request?.model !== undefined) {
-        if (!request.model || Object.keys(request).some(key => !['domain', 'model'].includes(key)) ||
+        if (!request.model || Object.keys(request).some(key => !['domain', 'model','uvSet'].includes(key)) ||
             Object.keys(request.model).some(key => key !== 'pixel'))
           throw new TypeError('Use a UV model query with a domain and native pixel');
-        result = UV.pickModel(old.mesh, old.frame, request.model.pixel, request.domain);
+        result = UV.pickModel(old.mesh, old.frame, request.model.pixel, request.domain,request.uvSet);
       } else result = UV.select(document, request);
       value = result;
       if (preview) result.preview = review(document, document, old, old, result, settings, kit, paths, settings.readability);
@@ -205,8 +215,8 @@ function command([action, file, input, ...rest], opt, kit, openEditor) {
       if (preview) {
         const selected = opt.selection ? (() => {
           const saved = read(opt.selection);
-          return UV.select(document, { domain: saved.domain, from: saved });
-        })() : UV.select(document, { domain: 'faces', ids: [...new Set(plan.report.corners.map(row => row.face))] });
+          return UV.select(document,{domain:saved.domain,from:saved,uvSet:plan.report.uvSet ?? 0});
+        })() : UV.select(document,{domain:'faces',uvSet:plan.report.uvSet ?? 0,ids:[...new Set(plan.report.corners.map(row=>row.face))]});
         const draft = editor && Object.keys(plan.patch).length ? editor.fork() : editor;
         if (draft && draft !== editor) draft.editMeshTopology(object, plan.patch);
         const revised = plan.report.canCommit && settings.afterMaterials ? { ...settings, materials: settings.afterMaterials } : settings;

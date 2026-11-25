@@ -18,8 +18,8 @@ function readPlan(input) {
   if (plan?.format !== editFormat || plan.version !== 1 || !Array.isArray(plan.edits))
     throw new TypeError('Expected a version 1 ' + editFormat + ' plan');
   for (const row of plan.edits) {
-    const {mesh, charts, bounds} = row ?? {};
-    if (!index(mesh) || charts === undefined && bounds === undefined ||
+    const {mesh, charts, bounds, uvSet} = row ?? {};
+    if (!index(mesh) || uvSet!==undefined && (!index(uvSet) || uvSet>31) || charts === undefined && bounds === undefined ||
         charts !== undefined && (!Array.isArray(charts) || charts.length === 0 || !charts.every(index)) ||
         bounds !== undefined && (!vector(bounds?.min) || !vector(bounds?.max) || bounds.min.some((n, i) => n > bounds.max[i])))
       throw new TypeError('A chart edit needs a mesh index and chart IDs or three-dimensional bounds');
@@ -53,11 +53,13 @@ const uvKey = mesh => mesh.uvs ? hash(mesh.uvs.map(face => face.map(uv => uv.map
 const paintKey = views => hash(views.map(({image,approval,...view}) => [view,image.hash,approval?.hash]));
 const overlaps = (a, b) => a.min.every((x, k) => x <= b.max[k] && a.max[k] >= b.min[k]);
 
-function baselineLayout(baseline, meshIndex, mesh) {
+function baselineLayout(baseline, meshIndex, mesh, set = 0) {
   if (!baseline) return undefined;
-  const row = baseline.document.meshes[meshIndex];
-  if (row?.index !== meshIndex || row.name !== mesh.name)
+  const main = baseline.document.meshes[meshIndex];
+  if (main?.index !== meshIndex || main.name !== mesh.name)
     throw new Error('Chart rebake needs the baseline mesh order and names');
+  const row=main.uvAtlases?.[set] ?? (!main.uvAtlases && (main.texCoord ?? 0)===set ? main : undefined);
+  if (!row) return undefined;
   const state = JSON.parse(baseline.read(row.chartLayout));
   if (state.version !== 1 || hash([state.faces,state.uvs]) !== row.uvLayout)
     throw new Error('Chart rebake UV layout does not match the baseline manifest');
@@ -121,7 +123,7 @@ function layoutError(report, conflicts) {
     (detail === undefined ? '' : ' on chart ' + detail) + ')'), { report: { ...report, conflicts } });
 }
 
-function planMesh({mesh, faces, uvs, normals, atlas, splits, sourceFaces, size, source, edits, views, baseline}) {
+function planMesh({mesh, faces, uvs, normals, atlas, splits, sourceFaces, size, source, edits, views, baseline, forcePaint}) {
   const prior = source?.state, revised = source?.revised;
   const identity = topology.identify(mesh, faces, sourceFaces);
   const groups = !revised && prior ? prior.faceCharts :
@@ -190,7 +192,7 @@ function planMesh({mesh, faces, uvs, normals, atlas, splits, sourceFaces, size, 
     if (conflicts.length) throw layoutError({ mesh: mesh.name, layout }, conflicts);
   }
 
-  const dirty = new Set();
+  const dirty = new Set(forcePaint ? state.charts.map(({id})=>id) : []);
   for (const edit of edits) {
     for (const id of edit.charts ?? []) {
       if (!next.has(id)) throw new RangeError('Chart edit references a missing chart on ' + mesh.name + ': ' + id);
@@ -209,7 +211,7 @@ function planMesh({mesh, faces, uvs, normals, atlas, splits, sourceFaces, size, 
     throw new Error('Chart rebake needs the saved texture size and padding on ' + mesh.name);
   const reproject = new Set();
   for (const chart of state.charts) {
-    if (views.length && (!prior || dirty.has(chart.id) && (chart.paintKey !== state.paintKey || rebuild.has(chart.id)))) {
+    if (views.length && (forcePaint || !prior || dirty.has(chart.id) && (chart.paintKey !== state.paintKey || rebuild.has(chart.id)))) {
       reproject.add(chart.id);
       chart.paintKey = state.paintKey;
     }

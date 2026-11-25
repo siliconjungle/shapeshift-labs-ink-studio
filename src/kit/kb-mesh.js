@@ -191,7 +191,7 @@
     },
     WIDTH = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
   M.gltfTransforms = Object.freeze(mat4);
-  M.gltf = (json, bins, { visitNode, visitPrimitive, attributes = false, uvSet = 0 } = {}) => {
+  M.gltf = (json, bins, { visitNode, visitPrimitive, attributes = false, uvSet = 0, allUVSets = false } = {}) => {
     if (attributes && (!Number.isSafeInteger(uvSet) || uvSet<0 || uvSet>31))
       throw new RangeError('glTF UV set must be an integer from 0 to 31');
     const g = typeof json === 'string' ? JSON.parse(json) : json,
@@ -229,6 +229,40 @@
       matOf = new Map();
     let anyCol = false,
       skipped = 0;
+    const coordinates=new Map(), bindingValues=new Map(), hasMetadata=new Set();
+    function registerUVs(part,mesh,firstFace,base,count) {
+      const ink=mesh.extras?.inkStudioMaterialUV;
+      if (ink && ink.version!==1) throw new TypeError('Unsupported Ink material UV version');
+      const padding=ink?.paddingSets ?? [];
+      if (!Array.isArray(padding) || padding.some(set=>!set || !MaterialUV.layout(set) ||
+          part.attributes['TEXCOORD_'+set]!==part.attributes.TEXCOORD_0))
+        throw new TypeError('Invalid GLB UV padding sets');
+      for (const [key,index] of Object.entries(part.attributes)) {
+        const match=/^TEXCOORD_(0|[1-9]\d*)$/.exec(key), set=match && +match[1];
+        if (!match || !MaterialUV.layout(set) || padding.includes(set)) continue;
+        const attribute=acc(index);
+        if (attribute.n!==count || attribute.w!==2) throw new TypeError('glTF UVs must match the primitive vertex count');
+        if (!coordinates.has(set)) coordinates.set(set,[]);
+        const faces=coordinates.get(set);
+        for (let i=firstFace;i<TM.length;i++) faces[i]=T.slice(3*i,3*i+3).map(v=>[attribute.get(v-base,0),attribute.get(v-base,1)]);
+      }
+      const material=g.materials?.[part.material], pbr=material?.pbrMetallicRoughness;
+      const explicit=MaterialUV.bindings(ink?.bindings);
+      for(const name of Object.keys(explicit ?? {})) hasMetadata.add(name);
+      const textures={pigment:pbr?.baseColorTexture,normal:material?.normalTexture,
+        metallicRoughness:pbr?.metallicRoughnessTexture,emission:material?.emissiveTexture};
+      const primitive={...explicit};
+      for(const [name,ref] of Object.entries(textures)) if (ref) {
+        const set=ref.extensions?.KHR_texture_transform?.texCoord ?? ref.texCoord ?? 0;
+        if (ink && MaterialUV.resolve(explicit,name)!==set)
+          throw new RangeError('GLB texture conflicts with its Ink material UV binding');
+        if (!ink) primitive[name]=set;
+      }
+      for(const [name,set] of Object.entries(primitive)) {
+        if(!bindingValues.has(name)) bindingValues.set(name,new Set());
+        bindingValues.get(name).add(set);
+      }
+    }
     const useMat = i => {
       if (i === undefined) return 0;
       if (!matOf.has(i)) {
@@ -288,6 +322,7 @@
             }
           if (visitPrimitive) visitPrimitive(pr, { firstVertex:base, vertexCount:pa.n,
             firstFace, faceCount:TM.length-firstFace, accessor:acc, matrix:m.slice() });
+          if (allUVSets) registerUVs(pr,g.meshes[n.mesh],firstFace,base,pa.n);
           if (attributes) {
             const ref=pr.attributes['TEXCOORD_'+uvSet], uv=ref===undefined?null:acc(ref);
             if (uv && (uv.n!==pa.n || uv.w!==2)) throw new TypeError('glTF UVs must match the primitive vertex count');
@@ -308,6 +343,17 @@
     if (attributes && uvFaces.some(Boolean)) {
       if (uvFaces.every(Boolean)) mesh.uvs=uvFaces;
       else mesh.uvFaces=uvFaces;
+    }
+    if (allUVSets) {
+      mesh.uvSets=Object.fromEntries([...coordinates].map(([set,rows])=>[set,Array.from({length:TM.length},(_,i)=>rows[i] ?? null)]));
+      const assignments=[], conflicts=[];
+      for (const [name,sets] of bindingValues) {
+        const values=[...sets];
+        if(values.length!==1) conflicts.push({channel:name,uvSets:values.sort((a,b)=>a-b)});
+        else if(values[0] || hasMetadata.has(name)) assignments.push([name,values[0]]);
+      }
+      if (assignments.length) mesh.uvBindings=MaterialUV.bindings(Object.fromEntries(assignments));
+      if (conflicts.length) mesh.uvBindingConflicts=conflicts;
     }
     mesh.skipped = skipped;
     return mesh;

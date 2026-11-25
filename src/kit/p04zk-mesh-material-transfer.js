@@ -262,7 +262,8 @@
     const edges = incoming.filter(row => row.uses.every(use => accepted.has(use.face)) &&
       links.edges.result.get(row.id)?.some(link => strong(link) && left.edges.get(link.from).uvSeam))
       .map(row => ({ id: row.id, uvSeam: true }));
-    const patch = { faces, edges };
+    const patch = { faces, edges,
+      ...(!issues.length && source.uvBindings && {uvBindings:source.uvBindings}) };
     const document = topology.edit(target, patch);
     const used = ordered(slots).filter(id => declarations.has(id)).map(id => declarations.get(id));
     const report = { format: 'ink-studio/mesh-material-transfer', version: 1, beforeRevision, afterRevision,

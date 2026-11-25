@@ -108,6 +108,54 @@ resulting layout. For a retained scene mesh, add `--object ID` and write the
 revised scene beside the source. The scene editor journals the change in
 one undo step and invalidates material bakes for faces whose UVs moved.
 
+## Bind separate material layouts
+
+A retained mesh part can use a different UV set for each material channel.
+Set `uvBindings` on the mesh topology document. Keep UV 0 on each face
+corner as `uv` and add alternate pairs under `attributes`.
+
+```js
+const bindings = { pigment: 0, bake: 1, decal: 2, 'mask/wear': 3 };
+const corner = {
+  id: 'panel/lower-left',
+  vertex: 'lower-left',
+  uv: [.15, .3],
+  attributes: { 'uv/1': [.35, .25], 'uv/2': [.65, .2], 'uv/3': [.1, .85] }
+};
+```
+
+Every face corner needs coordinates for each bound set. `normal`,
+`metallicRoughness`, and `emission` may override `bake`. A named mask such
+as `mask/wear` inherits `masks`, then `bake`, if it has no override.
+The default layout is UV 0. Native pigment uses `pigment`, and UV-anchored
+decals use `decal` unless the anchor specifies its own `uvSet`. Coverage
+and opacity share the pigment layout.
+
+```sh
+node cli/ink-studio.js mesh-uv layout case-topology.json --channel decal
+node cli/ink-studio.js mesh-uv inspect case-topology.json --uv-set 3 --out wear
+node cli/ink-studio.js mesh-uv edit case-topology.json move-decal.json --out case-edited.json
+```
+
+An edit request with `"uvSet": "decal"` scopes its selections, seam cuts,
+pins, and transforms to the decal layout. Use a numeric set to address one
+directly. To replace assignments in the same transaction, include a
+`bindings` object in the request. For scripts, use
+`KIT.meshTopology.uv.inspect(document, 'decal')` or sample a mesh hit with
+`KIT.sceneMeshes.channelUV(mesh, triangle, barycentricWeights, 'decal')`.
+
+GLB exports carry each authored UV set. Standard material textures reference
+their set through glTF texture selectors. Ink keeps decal and named-mask
+assignments in the mesh's versioned extras. `mesh-uv import` retains all sets
+and their assignments by default. When source parts disagree on a channel,
+import each part into its own retained document. Supply `--channel` or
+`--uv-set` to import or reduce a single layout intentionally. The JavaScript
+reader exposes the source arrays with `readMesh(file, { allUVSets: true })`.
+
+Run `node examples/material-channel-uvs.cjs <new-directory>` for the field
+case demo. Moving the decal island shifts the badge in the native render
+while the pigment, normal, and wear bakes keep their original bytes.
+
 ## Select in the atlas or on the model
 
 Use `mesh-uv select` with a JSON query. Choose `islands`, `faces`, `edges`,
