@@ -212,6 +212,42 @@ for automatic picking. Save the returned plane with
 Run `node examples/tileset-pick/camera-plane-demo.cjs orbit-demo`
 to compare automatic and locked placement through the same orbit.
 
+### Tilt a plane from an existing edge
+
+Hinge the construction plane on an authored mesh edge. The preview
+includes the mesh and edge IDs, directed endpoint IDs, fraction along
+the edge, tilt in degrees, and the reference up vector. The plane uses
+the edge direction as right and keeps the working grid interval.
+
+```sh
+ink-studio mesh-topology plane wall.json --edge-object wall --edge eave --edge-from left-top --tilt 30 --reference-up 0,0,-1 --out roof-guide.json
+ink-studio tileset stamp --scene roof-guide.json --selection roof-tile.json --object roof --face first-panel --plane 0,0 --out roof.json
+ink-studio mesh-topology plane roof-guide.json --tilt 45 --out steep-roof-guide.json
+```
+
+Positive angles follow the right-hand rule around the directed edge.
+`--edge-from` chooses its starting vertex and defaults to the first
+retained endpoint. `--edge-at` chooses a fraction from 0 at that vertex
+to 1 at the far end. Without `--reference-up`, a new hinge starts from the
+working plane's up direction projected perpendicular to the edge. Its
+normal supplies the fallback for a parallel edge. A later `--tilt`
+measures from that retained reference.
+
+Subsequent stamps, plane pivots, and alignment follow the live authored
+edge. Previously placed geometry keeps its own positions. If the edge
+is removed or its endpoint IDs change, the next plane-dependent edit
+reports the missing or changed anchor. Re-select an edge, or use
+`--detach-edge` to keep the current frame as a free plane. If the edge
+is unavailable, detaching keeps the last saved frame. A camera pick or
+an explicit origin or orientation edit requires detaching the hinge.
+Selecting a hinge replaces an axis lock.
+
+In Node, use `KIT.authoring.constructionPlane.tilt(scene, options)` and
+save the returned `plane` with `editor.setConstructionPlane(plane)`.
+Use `editor.constructionPlane()` to resolve it after an edge edit.
+Run `node examples/tileset-pick/edge-plane-demo.cjs roof-demo` to compare
+two roof pitches and stamp again after moving a hinge endpoint.
+
 ## Move one vertex
 
 Run `mesh-topology move` with an existing vertex ID and an XYZ offset in

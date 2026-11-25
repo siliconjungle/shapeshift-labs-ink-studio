@@ -38,7 +38,7 @@
     if (planeAt !== undefined && [origin,right,up].some(value=>value !== undefined))
       throw new TypeError('Choose plane grid coordinates or an explicit tile frame');
     const plane = A.constructionPlane;
-    const frame = plane.resolve(planeAt === undefined ? {origin,right,up} : scene.constructionPlane);
+    const frame = planeAt === undefined ? plane.resolve({origin,right,up}) : plane.forScene(scene);
     const anchor = planeAt === undefined ? frame.plane.origin : plane.point(frame,planeAt);
     const [x,y] = frame.axes, [w,h] = size;
     const positions = [anchor,K.V.mad(anchor,x,w),K.V.mad(K.V.mad(anchor,x,w),y,h),K.V.mad(anchor,y,h)];

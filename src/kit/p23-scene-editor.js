@@ -454,13 +454,25 @@
     }
 
     function constructionPlane() {
-      return A.constructionPlane.resolve(snapshot().constructionPlane).plane;
+      return A.constructionPlane.forScene(snapshot()).plane;
     }
 
     function setConstructionPlane(changes) {
       if (!changes || Object.getPrototypeOf(changes) !== Object.prototype)
         throw new TypeError('Construction plane changes need a record');
-      const next = A.constructionPlane.resolve({...constructionPlane(),...changes}).plane;
+      const scene = snapshot(), plane = A.constructionPlane;
+      let before;
+      try {
+        before = plane.forScene(scene).plane;
+      } catch (error) {
+        if (error.code !== 'construction-edge-unavailable' || changes.edgeAnchor === undefined) throw error;
+        before = plane.resolve(scene.constructionPlane).plane;
+      }
+      if (before.edgeAnchor && changes.edgeAnchor === undefined &&
+          ['origin','right','up'].some(key=>changes[key] !== undefined))
+        throw new RangeError('Detach the edge anchor before editing the explicit frame');
+      const requested = {...before,...(changes.edgeAnchor && {lock:null}),...changes};
+      const next = plane.forScene({...scene,constructionPlane:requested}).plane;
       const write = () => document.batchSession(() => {
         // A complete plane replacement also removes an explicitly cleared lock.
         document.setEnvironment({constructionPlane:null});
@@ -570,7 +582,8 @@
       const row = meshTopology(object, part), scene = current().preview;
       requireMeshShapeOwner(object, row.part, scene, 'Transform');
       return K.meshTopology.planTransform(row.document, request, {
-        constructionPlane:scene.constructionPlane,
+        ...(request?.space === 'plane' || request?.snap?.kind === 'construction-plane' ?
+          {constructionPlane:A.constructionPlane.forScene(scene).plane} : {}),
         mesh(id) {
           return { document: meshTopology(id).document };
         },

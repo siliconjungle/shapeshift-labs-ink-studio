@@ -182,3 +182,107 @@ test('locks survive saved camera picks and stamp one frame through an orbit on t
   editor.undo();
   assert.equal(editor.constructionPlane().lock,'x');
 });
+
+function edgeScene() {
+  const vertices = [], faces = [];
+  for (const [face,x] of [['beam',0],['spare',4]]) {
+    const ids = ['bl','br','tr','tl'].map(id=>face+'-'+id);
+    const corners = [[x,0,0],[x+2,0,0],[x+2,1,0],[x,1,0]].map((position,i)=>{
+      const vertex=ids[i];
+      vertices.push({id:vertex,position});
+      return {id:vertex+'-c',vertex};
+    });
+    faces.push({id:face,corners});
+  }
+  return {...scene,topologyMeshes:{wall:{document:{id:'wall',vertices,faces,edges:[
+    {id:'eave',vertices:['beam-tl','beam-tr']},{id:'upright',vertices:['beam-bl','beam-tl']}]}}}};
+}
+
+test('edge tilt stores its directed hinge and measures each angle from the retained reference',()=>{
+  const base = edgeScene(), kit = ink.load().KIT;
+  const editor = ink.createSceneEditor(base), guides = kit.authoring.constructionPlane;
+  const frame = guides.tilt(base,{object:'wall',edge:'eave',from:'beam-tl',degrees:45,at:.25});
+  assert.deepEqual(frame.plane.edgeAnchor,{object:'wall',edge:'eave',vertices:['beam-tl','beam-tr'],
+    at:.25,degrees:45,referenceUp:[0,1,0]});
+  assert.deepEqual(frame.plane.origin,[.5,1,0]);
+  assert.deepEqual(frame.axes[0],[1,0,0]);
+  close(frame.axes[1],[0,Math.SQRT1_2,Math.SQRT1_2]);
+  editor.setConstructionPlane(frame.plane);
+  const first = editor.placeTilesetFace({...stamp,face:'roof',planeAt:[0,0]});
+  close(first.vertices[0].position,[.5,1,0]);
+  close(first.vertices[3].position,[.5,1+.75*Math.SQRT1_2,.75*Math.SQRT1_2]);
+
+  const next = guides.tilt(editor.snapshot(),{degrees:30});
+  close(next.axes[1],[0,Math.sqrt(3)/2,.5]);
+  assert.deepEqual(next.plane.edgeAnchor.referenceUp,[0,1,0]);
+  const reversed = guides.tilt(editor.snapshot(),{from:'beam-tr',degrees:45,at:0});
+  close(reversed.axes[1],[0,Math.SQRT1_2,-Math.SQRT1_2]);
+  assert.deepEqual(reversed.plane.origin,[2,1,0]);
+  const vertical = guides.tilt(base,{object:'wall',edge:'upright',degrees:0});
+  close(vertical.axes[1],[0,0,1]);
+  assert.throws(()=>guides.tilt(base,{object:'wall',edge:'upright',degrees:0,referenceUp:[0,1,0]}),/parallel/);
+  assert.throws(()=>guides.tilt(base,{object:'wall',edge:'eave',degrees:0,at:1.1}),/fraction/);
+});
+
+test('stamps and pivots follow a moved hinge and a deleted hinge stays repairable',()=>{
+  const editor = ink.createSceneEditor(edgeScene()), guides = ink.load().KIT.authoring.constructionPlane;
+  editor.setConstructionPlane(guides.tilt(editor.snapshot(),{object:'wall',edge:'eave',from:'beam-tl',degrees:30,at:.25}).plane);
+  editor.placeTilesetFace({...stamp,face:'roof',planeAt:[0,0]});
+  const before=editor.snapshot(), oldOrigin=editor.constructionPlane().origin;
+  editor.editMeshTopology('wall',{vertices:[{id:'beam-tr',position:[2,1,.5]}]});
+  const live = editor.constructionPlane();
+  assert.deepEqual(live.origin,[.5,1,.125]);
+  assert.deepEqual(editor.snapshot().constructionPlane,before.constructionPlane);
+  assert.deepEqual(editor.snapshot().topologyMeshes.jig,before.topologyMeshes.jig);
+  assert.deepEqual(editor.planTilesetFace({...stamp,face:'next',planeAt:[0,0]}).vertices[0].position,live.origin);
+  const pick = editor.selectMeshTopology('jig',{domain:'vertices',ids:['roof/v2']});
+  const move = editor.planMeshTransform('jig',{selection:pick,space:'plane',operation:{kind:'move',offset:[.1,0,0]}});
+  assert.deepEqual(move.report.worldPivot,live.origin);
+  editor.undo();
+  assert.deepEqual(editor.constructionPlane().origin,oldOrigin);
+  editor.editMeshTopology('wall',{removeFaces:['beam']});
+  assert.throws(()=>editor.planTilesetFace({...stamp,face:'unresolved'}),/edge eave is unavailable/);
+  assert.doesNotThrow(()=>editor.build());
+  editor.setConstructionPlane({edgeAnchor:null});
+  assert.equal(editor.constructionPlane().edgeAnchor,undefined);
+  assert.deepEqual(editor.constructionPlane().origin,oldOrigin);
+  editor.undo();
+  assert.throws(()=>editor.constructionPlane(),/edge eave is unavailable/);
+
+  const stale = JSON.parse(JSON.stringify(before));
+  stale.topologyMeshes.wall.document.edges = [{id:'eave',vertices:['beam-bl','beam-br']}];
+  assert.throws(()=>ink.createSceneEditor(stale).constructionPlane(),/different endpoints/);
+});
+
+test('CLI previews an edge tilt and repeats it from the saved hinge and angle',t=>{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-edge-plane-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const file = name=>path.join(dir,name), read = name=>JSON.parse(fs.readFileSync(file(name),'utf8'));
+  fs.writeFileSync(file('draft.json'),JSON.stringify(edgeScene()));
+  const cli = path.resolve(__dirname,'../cli/ink-studio.js');
+  const run = (...args)=>spawnSync(process.execPath,[cli,...args],{cwd:dir,encoding:'utf8'});
+  const json = (...args)=>{
+    const result=run(...args);
+    assert.equal(result.status,0,result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  const hinge = ['mesh-topology','plane','draft.json','--edge-object','wall','--edge','eave',
+    '--edge-from','beam-tl','--edge-at','.5','--tilt','30'];
+  const preview=json(...hinge);
+  assert(!fs.existsSync(file('roof.json')));
+  assert.deepEqual(json(...hinge,'--out','roof.json'),preview);
+  assert.deepEqual(read('roof.json').constructionPlane,preview.after);
+  assert.deepEqual(preview.after.origin,[1,1,0]);
+  const updated=json('mesh-topology','plane','roof.json','--tilt','45','--out','steep-roof.json');
+  assert.deepEqual(updated.after.edgeAnchor,{...preview.after.edgeAnchor,degrees:45});
+  close(updated.axes[1],[0,Math.SQRT1_2,Math.SQRT1_2]);
+  const placed=json('tileset','stamp','--scene','steep-roof.json','--object','roof','--face','board','--id','paint',
+    '--x','0','--y','0','--width','4','--height','3','--plane','0,0');
+  assert.deepEqual(placed.vertices[0].position,updated.after.origin);
+  const waiting=run('mesh-topology','plane','steep-roof.json','--from-camera','--out','blocked.json');
+  assert.equal(waiting.status,1);
+  assert.match(waiting.stderr,/Detach the edge anchor/);
+  assert(!fs.existsSync(file('blocked.json')));
+  assert.equal(json('mesh-topology','plane','steep-roof.json','--detach-edge','--from-camera','--yaw','0','--pitch','0',
+    '--out','detached.json').after.edgeAnchor,undefined);
+});
