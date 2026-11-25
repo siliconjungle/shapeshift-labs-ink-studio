@@ -84,6 +84,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().registerTileset` | function | `(id,source)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().repairMeshTopology` | function | `(object, request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().retopologizeMeshTopology` | function | `(object,request,options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().reviewMeshOverlaps` | function | `(object, settings, { part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().revision` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().select` | function | `(requested, { mode = 'replace' } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().selectMeshTopology` | function | `(object, request, { part, visibility } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
