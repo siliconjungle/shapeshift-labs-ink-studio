@@ -481,6 +481,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.graphImages` | namespace |  |  |
+| `KIT.procedural.graphImages.advancedHeight` | namespace |  |  |
+| `KIT.procedural.graphImages.advancedHeight.bevel` | function | `(source, options = {})` | [source](../../src/kit/paq-advanced-height-images.js) |
+| `KIT.procedural.graphImages.advancedHeight.edgeWear` | function | `(source, options = {}, mask = null)` | [source](../../src/kit/paq-advanced-height-images.js) |
+| `KIT.procedural.graphImages.advancedHeight.emboss` | function | `(source, options = {})` | [source](../../src/kit/paq-advanced-height-images.js) |
+| `KIT.procedural.graphImages.advancedHeight.heightFrequency` | function | `(source, options = {})` | [source](../../src/kit/paq-advanced-height-images.js) |
+| `KIT.procedural.graphImages.advancedHeight.heightShadow` | function | `(source, options = {})` | [source](../../src/kit/paq-advanced-height-images.js) |
+| `KIT.procedural.graphImages.advancedTexture` | namespace |  |  |
+| `KIT.procedural.graphImages.advancedTexture.scanCleanup` | function | `(source, options = {}, mask = null, illumination = null)` | [source](../../src/kit/paq-advanced-texture-images.js) |
+| `KIT.procedural.graphImages.advancedTexture.seamRepair` | function | `(source, options = {})` | [source](../../src/kit/paq-advanced-texture-images.js) |
+| `KIT.procedural.graphImages.advancedTexture.slopeBlur` | function | `(source, slopeSource, options = {})` | [source](../../src/kit/paq-advanced-texture-images.js) |
 | `KIT.procedural.graphImages.blend` | function | `(background, foreground, { mode = 'copy', opacity = 1, mask = null, crop = {}, alpha = 'source', clamp = 'auto' } = {})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.channelMath` | function | `(a, b, operation, { precision = 'float64', outOfRange = 'error' } = {})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.convert` | function | `(source, target, { outOfRange = 'error', dropAlpha = false } = {})` | [source](../../src/kit/paq-graph-images.js) |
@@ -562,6 +572,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.autoLevels"].outputs.report` | value | `string = "record"` |  |
 | `KIT.procedural.graphImages.operations["image.autoLevels"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
 | `KIT.procedural.graphImages.operations["image.autoLevels"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.bevel"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.bevel"].description` | value | `string = "Build a typed bevel height with editable distance profile and inner or outer reach."` |  |
+| `KIT.procedural.graphImages.operations["image.bevel"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.bevel"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.bevel"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.bevel"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.bevel"].outputs.value` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.bevel"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.blend"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.blend"].description` | value | `string = "Blend typed images at native precision with a grayscale opacity mask, crop, alpha policy and explicit clamping."` |  |
 | `KIT.procedural.graphImages.operations["image.blend"].inputs` | namespace |  |  |
@@ -701,6 +719,26 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.edgeDetect"].outputs.magnitude` | value | `string = "typedImage"` |  |
 | `KIT.procedural.graphImages.operations["image.edgeDetect"].outputs.value` | value | `string = "typedImage"` |  |
 | `KIT.procedural.graphImages.operations["image.edgeDetect"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.edgeWear"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.edgeWear"].description` | value | `string = "Select convex or concave height features and optionally cut the selected surface."` |  |
+| `KIT.procedural.graphImages.operations["image.edgeWear"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask.default` | value | `null` |  |
+| `KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask.type` | value | `string = "any"` |  |
+| `KIT.procedural.graphImages.operations["image.edgeWear"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.edgeWear"].inputs.source` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.edgeWear"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.edgeWear"].outputs.height` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.edgeWear"].outputs.value` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.edgeWear"].run` | function | `({ source, mask, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.emboss"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.emboss"].description` | value | `string = "Shade height as a neutral-centered emboss mask using an editable light direction."` |  |
+| `KIT.procedural.graphImages.operations["image.emboss"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.emboss"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.emboss"].inputs.source` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.emboss"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.emboss"].outputs.value` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.emboss"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.erode"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.erode"].description` | value | `string = "Shrink a typed mask by an exact Euclidean radius with per-axis border handling."` |  |
 | `KIT.procedural.graphImages.operations["image.erode"].inputs` | namespace |  |  |
@@ -767,14 +805,31 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.heightBlend"].inputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.heightBlend"].inputs.base` | value | `string = "heightImage"` |  |
 | `KIT.procedural.graphImages.operations["image.heightBlend"].inputs.layer` | value | `string = "heightImage"` |  |
-| `KIT.procedural.graphImages.operations["image.heightBlend"].inputs.mask` | namespace |  |  |
-| `KIT.procedural.graphImages.operations["image.heightBlend"].inputs.mask.default` | value | `null` |  |
-| `KIT.procedural.graphImages.operations["image.heightBlend"].inputs.mask.type` | value | `string = "any"` |  |
+| `KIT.procedural.graphImages.operations["image.heightBlend"].inputs.mask` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
 | `KIT.procedural.graphImages.operations["image.heightBlend"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
 | `KIT.procedural.graphImages.operations["image.heightBlend"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.heightBlend"].outputs.value` | value | `string = "heightImage"` |  |
 | `KIT.procedural.graphImages.operations["image.heightBlend"].outputs.weight` | value | `string = "typedImage"` |  |
 | `KIT.procedural.graphImages.operations["image.heightBlend"].run` | function | `({ base, layer, mask, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.heightFrequency"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.heightFrequency"].description` | value | `string = "Separate relief into fine, middle and coarse bands and recombine them with independent gains."` |  |
+| `KIT.procedural.graphImages.operations["image.heightFrequency"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.heightFrequency"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.heightFrequency"].inputs.source` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.heightFrequency"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.heightFrequency"].outputs.coarse` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.heightFrequency"].outputs.fine` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.heightFrequency"].outputs.mid` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.heightFrequency"].outputs.value` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.heightFrequency"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.heightShadow"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.heightShadow"].description` | value | `string = "Trace a directional heightfield horizon and return hard or softened cast-shadow coverage."` |  |
+| `KIT.procedural.graphImages.operations["image.heightShadow"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.heightShadow"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.heightShadow"].inputs.source` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.heightShadow"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.heightShadow"].outputs.value` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.heightShadow"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.heightToNormal"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.heightToNormal"].description` | value | `string = "Differentiate typed height into a tangent normal using physical spacing."` |  |
 | `KIT.procedural.graphImages.operations["image.heightToNormal"].inputs` | namespace |  |  |
@@ -876,7 +931,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.normalCombine"].inputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.normalCombine"].inputs.base` | value | `string = "normalImage"` |  |
 | `KIT.procedural.graphImages.operations["image.normalCombine"].inputs.detail` | value | `string = "normalImage"` |  |
-| `KIT.procedural.graphImages.operations["image.normalCombine"].inputs.mask` | alias | `Alias of KIT.procedural.graphImages.operations["image.heightBlend"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.normalCombine"].inputs.mask` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
 | `KIT.procedural.graphImages.operations["image.normalCombine"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
 | `KIT.procedural.graphImages.operations["image.normalCombine"].outputs` | alias | `Alias of KIT.procedural.graphImages.operations["image.heightToNormal"].outputs` |  |
 | `KIT.procedural.graphImages.operations["image.normalCombine"].run` | function | `({ base, detail, mask, options })` | [source](../../src/kit/paq-graph-images.js) |
@@ -918,11 +973,11 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.normalSpace"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.normalSpace"].description` | value | `string = "Convert world and tangent normals through a uniform or per-texel tangent frame with handedness."` |  |
 | `KIT.procedural.graphImages.operations["image.normalSpace"].inputs` | namespace |  |  |
-| `KIT.procedural.graphImages.operations["image.normalSpace"].inputs.handedness` | alias | `Alias of KIT.procedural.graphImages.operations["image.heightBlend"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.normalSpace"].inputs.handedness` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
 | `KIT.procedural.graphImages.operations["image.normalSpace"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
 | `KIT.procedural.graphImages.operations["image.normalSpace"].inputs.source` | value | `string = "normalImage"` |  |
-| `KIT.procedural.graphImages.operations["image.normalSpace"].inputs.surface` | alias | `Alias of KIT.procedural.graphImages.operations["image.heightBlend"].inputs.mask` |  |
-| `KIT.procedural.graphImages.operations["image.normalSpace"].inputs.tangent` | alias | `Alias of KIT.procedural.graphImages.operations["image.heightBlend"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.normalSpace"].inputs.surface` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.normalSpace"].inputs.tangent` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
 | `KIT.procedural.graphImages.operations["image.normalSpace"].outputs` | alias | `Alias of KIT.procedural.graphImages.operations["image.heightToNormal"].outputs` |  |
 | `KIT.procedural.graphImages.operations["image.normalSpace"].run` | function | `({ source, surface, tangent, handedness, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.outline"]` | namespace |  |  |
@@ -1007,6 +1062,25 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.resize"].outputs.value.type` | value | `string = "typedImage"` |  |
 | `KIT.procedural.graphImages.operations["image.resize"].outputs.value.typeFrom` | value | `string = "source"` |  |
 | `KIT.procedural.graphImages.operations["image.resize"].run` | function | `({ source, width, height })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.scanCleanup"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scanCleanup"].description` | value | `string = "Remove locally unsupported scan specks and optionally divide out a measured illumination map."` |  |
+| `KIT.procedural.graphImages.operations["image.scanCleanup"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scanCleanup"].inputs.illumination` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.scanCleanup"].inputs.mask` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.scanCleanup"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.scanCleanup"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.scanCleanup"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.scanCleanup"].outputs.repaired` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.scanCleanup"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.scanCleanup"].run` | function | `({ source, mask, illumination, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.seamRepair"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.seamRepair"].description` | value | `string = "Join opposite tile edges with a scoped, alpha-safe crossfade that preserves the interior."` |  |
+| `KIT.procedural.graphImages.operations["image.seamRepair"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.seamRepair"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.seamRepair"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.seamRepair"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.seamRepair"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.seamRepair"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.sharpen"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.sharpen"].description` | value | `string = "Sharpen with a four-neighbor cross while retaining original coverage."` |  |
 | `KIT.procedural.graphImages.operations["image.sharpen"].inputs` | namespace |  |  |
@@ -1026,6 +1100,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.signedDistance"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.signedDistance"].outputs.value` | value | `string = "heightImage"` |  |
 | `KIT.procedural.graphImages.operations["image.signedDistance"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.slopeBlur"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.slopeBlur"].description` | value | `string = "Follow a height gradient and accumulate a directional trail using average, minimum or maximum samples."` |  |
+| `KIT.procedural.graphImages.operations["image.slopeBlur"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.slopeBlur"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.slopeBlur"].inputs.slope` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.slopeBlur"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.slopeBlur"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.slopeBlur"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.slopeBlur"].run` | function | `({ source, slope, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.slopeWarp"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.slopeWarp"].description` | value | `string = "Displace uphill or downhill along the gradient of a scalar height or data map."` |  |
 | `KIT.procedural.graphImages.operations["image.slopeWarp"].inputs` | namespace |  |  |
