@@ -50,9 +50,9 @@ const NamedNoiseIntegerPeriods = (family, carrier) =>
     return [key(from), key((from + 1) % 3), weight];
   }
 
-  function evolvingKernel(make, seed, phase) {
+  function evolvingKernel(make, seed, {phase,animationSpeed}) {
     const [from,to,weight] = phaseKeys(seed,phase), a = make(from);
-    if (!weight) return a;
+    if (!weight) return animationSpeed ? {...a,cost:a.cost*2} : a;
     const b = make(to), norm = Math.hypot(1-weight,weight), low = (1-weight)/norm, high = weight/norm;
     return { ...a, cost:a.cost+b.cost, run:p=>signed(low*a.run(p) + high*b.run(p)) };
   }
@@ -103,7 +103,7 @@ const NamedNoiseIntegerPeriods = (family, carrier) =>
     return { run: p => signed(periodic.run(p)), cost: periodic.cost * (dimension+1), tiling: periodic.tiling };
   }
 
-  function cells(family, dimension, seed, periods, options, phase) {
+  function cells(family, dimension, seed, periods, options, {phase,animationSpeed}) {
     const { metric = 'euclidean', jitter = 1 } = options;
     if (!['euclidean','manhattan','chebyshev'].includes(metric) || !range(jitter,0,1))
       throw new RangeError('Cell noise needs a distance metric and jitter from zero to one');
@@ -117,7 +117,7 @@ const NamedNoiseIntegerPeriods = (family, carrier) =>
       const [from,to,weight] = motion[axis], a = random(from,coords);
       return a + weight * (random(to,coords) - a);
     };
-    return { cost: (d3 ? 512 : 64) * (phase === 0 ? 1 : 2), tiling: 'cell-lattice', defaults:{ metric,jitter }, run(p) {
+    return { cost: (d3 ? 512 : 64) * (phase || animationSpeed ? 2 : 1), tiling: 'cell-lattice', defaults:{ metric,jitter }, run(p) {
       const [u,v,w = 0] = p, a = Math.floor(u), b = Math.floor(v), c = Math.floor(w);
       const side = u - a < .5 ? a - 1 : a + 1, coords = new Array(dimension);
       let first = Infinity, second = Infinity, id = Infinity;
@@ -149,7 +149,7 @@ const NamedNoiseIntegerPeriods = (family, carrier) =>
     } };
   }
 
-  function octaveNoise(family, dimension, seed, periods, options, phase) {
+  function octaveNoise(family, dimension, seed, periods, options, animation) {
     const { carrier = 'perlin', octaves = 4, gain = .5, lacunarity = 2 } = options;
     if (!['perlin','simplex'].includes(carrier) || !integer(octaves) || !range(octaves,1,8) ||
         !range(gain,0,1) || !range(lacunarity,1,4))
@@ -165,7 +165,7 @@ const NamedNoiseIntegerPeriods = (family, carrier) =>
     for (let i = first, weight = 1; i <= last && weight; i++, weight *= gain) {
       const frequency = lacunarity ** i;
       const octavePeriods = periods.map(n => n === null ? null : n*frequency);
-      const kernel = evolvingKernel(key=>gradient(carrier,dimension,key,octavePeriods),NoiseLatticeHash(seed,[i,0x235]),phase);
+      const kernel = evolvingKernel(key=>gradient(carrier,dimension,key,octavePeriods),NoiseLatticeHash(seed,[i,0x235]),animation);
       bands.push({ ...kernel,frequency,weight });
       sum += weight;
       cost += kernel.cost;
@@ -214,15 +214,15 @@ const NamedNoiseIntegerPeriods = (family, carrier) =>
   function create(family, options = {}, time = 0) {
     const { dimension,seed,periods,output } = settings(family,options);
     const salt = seed32(seed,'noise lattice');
-    const animation = canEvolve(family) ? phaseAt(options,time) : undefined, phase = animation?.phase ?? 0;
+    const animation = canEvolve(family) ? phaseAt(options,time) : undefined;
     let kernel, normalize = unit, nativeUnits = 'unitless';
     if (canEvolve(family) && !isCells(family)) {
-      kernel = isStack(family) ? octaveNoise(family,dimension,salt,periods,options,phase) : evolvingKernel(
+      kernel = isStack(family) ? octaveNoise(family,dimension,salt,periods,options,animation) : evolvingKernel(
         key=>['anisotropic','directional'].includes(family) ? oriented(family,key,periods,options) :
-          gradient(family,dimension,key,periods),salt,phase);
+          gradient(family,dimension,key,periods),salt,animation);
       if (family !== 'ridged') normalize = n => unit(.5+.5*n);
     } else if (isCells(family)) {
-      kernel = cells(family,dimension,salt,periods,options,phase);
+      kernel = cells(family,dimension,salt,periods,options,animation);
       if (family !== 'voronoi') nativeUnits = 'noise-cells';
     } else if (family === 'blue') {
       const { rankSize = [32,32],sigma = 1.4,density = .13 } = options;

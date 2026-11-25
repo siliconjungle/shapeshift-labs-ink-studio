@@ -79,6 +79,7 @@ test('structural disorder preserves spatial periods and produces a reversible te
     assert.notDeepEqual(points.map(p=>base.value(...p)),points.map(p=>next.value(...p)),family);
     assert.equal(next.spec.loopSeconds,4);
     assert.equal(next.spec.phase,.28125);
+    assert.equal(base.cost,next.cost,family+' playback budget');
     for (const [x,y] of points) {
       close(next.value(x,y),next.value(x+7,y-5));
       close(next.value(x,y),loop.value(x,y));
@@ -131,4 +132,7 @@ test('inapplicable or ambiguous controls fail explicitly', () => {
   assert.throws(()=>graphImages.noise('perlin',12,12,{scale:0}),/scale/);
   assert.throws(()=>graphImages.noise('perlin',12,12,{tileOffset:[0,0,0]}),/tile offset/);
   assert.throws(()=>graphImages.noise('perlin',12,12,{nonSquareExpansion:1}),/non-square/);
+  for (const time of [0,.5]) {
+    assert.throws(()=>graphImages.noise('cellular',420,420,{dimension:3,animationSpeed:.5},0,time),/work budget/);
+  }
 });
