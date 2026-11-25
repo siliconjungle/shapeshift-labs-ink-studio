@@ -396,6 +396,43 @@ destination object and face. Eyedrop leaves the edit journal untouched.
 Run `node examples/tileset-pick/face-eyedrop-demo.cjs eyedrop-demo`
 to recover an oriented sign and place it on a second frame.
 
+### Reskin a face in place
+
+Pick one authored face by mesh and face ID. Reskin uses the selected
+mode to change its pigment mapping and material assignment.
+
+| Mode | Result |
+| --- | --- |
+| `crop` | Apply the picked atlas rectangle, paint orientation, and insets to the face's corners. |
+| `tileset` | Use the brush's atlas or the named sheet with the existing pigment UVs. A sheet of a different size changes which native texels those UVs address. |
+| `relative` | Apply the brush's crop and paint orientation through the face's current UV turn and reflection. |
+
+```sh
+ink-studio tileset reskin --scene facade.json --object wall --face panel --mode crop --selection trim.json
+ink-studio tileset reskin --scene facade.json --object wall --face panel --mode relative --selection trim.json --out trim-applied.json
+ink-studio tileset reskin --scene facade.json --object wall --face panel --mode tileset --id dusk --out dusk.json
+```
+
+`--selection` accepts an exact crop, an eyedropped face, or a saved
+multi-tile brush. Choose `--column` and `--row` to use one brush cell.
+For a pick with gutters, crop and relative modes need a cell.
+Tileset mode uses the sheet directly and works on polygons with custom
+UVs. Crop and relative modes use a quad. Relative mode reports a
+conflict if its paint orientation cannot be determined.
+
+The preview lists the corner UVs, material, and source binding before
+and after. A sheet change uses a material variant so other faces can
+keep using their original slot. Other authored UV channels keep their
+existing layouts. Pinned pigment corners that would move require review.
+The edit fits the existing face and keeps its vertex and corner IDs.
+
+In Node use `editor.planTilesetReskin(request)` and
+`editor.applyTilesetReskin(request)` with `object`, `face`, `mode`, and
+`selection`. For tileset mode, a `tileset` ID can replace `selection`.
+One undo restores the original mapping and material. Run
+`node examples/tileset-pick/face-reskin-demo.cjs reskin-demo` to compare
+the modes on one authored face.
+
 ### Extract a crop as a reusable tileset
 
 Use an exact texel rectangle or a saved `tileset pick` selection.

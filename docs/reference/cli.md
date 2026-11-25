@@ -287,6 +287,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   tileset remove --scene <scene.json> --id <tileset-id> [--out <new-scene.json>]   remove an unreferenced tileset
   tileset stamp --scene <scene.json> --object <mesh-id> --face <face-id> (--selection <selection.json> | --id <tileset-id> --x N --y N --width N --height N) [--plane U,V [--snap-grid] | --origin X,Y,Z --right X,Y,Z --up X,Y,Z] [--part ID] [--material ID] [--texels-per-unit N] [--brush-scale N] [--paint-rotate 0|90|180|270] [--paint-flip-x] [--paint-flip-y] [--out <new-scene.json>]   stamp one painted tile as a new editable mesh face
   tileset eyedrop --scene <scene.json> --object <mesh-id> --face <face-id> [--part ID] [--brush-size] [--out <pick.json>]   recover a reusable painted face pick for stamp --selection
+  tileset reskin --scene <scene.json> --object <mesh-id> --face <face-id> --mode crop|tileset|relative (--selection <pick.json> | --id <tileset-id>) [--part ID] [--column N --row N] [--out <new-scene.json>]   change the paint on an existing mesh face
   tileset stroke <stroke.json> --scene <scene.json> [--out <new-scene.json>]   draw or erase an interval-sampled run of painted faces
   tileset rectangle <request.json> --scene <scene.json> [--out <new-scene.json>]   fill or erase an inclusive rectangle of construction grid cells
   tileset brush-run <request.json> --scene <scene.json> [--brush-file <brush.json>] [--out <new-scene.json>]   stamp a saved multi-tile brush with edge or anchor alignment and overlap control

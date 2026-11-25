@@ -537,6 +537,10 @@
       return stageTilesetFaceEdit(A.tilesetBrushRuns.plan,request,options).report;
     }
 
+    function planTilesetReskin(request) {
+      return stageTilesetFaceEdit(A.tilesetReskin.plan,request).report;
+    }
+
     function commitTilesetFaceEdit(plan, request, options, name) {
       const {patch,remove,report} = stageTilesetFaceEdit(plan,request,options);
       if (!report.canCommit) throw Object.assign(new RangeError('Tile face '+name+' needs review'),{report});
@@ -546,7 +550,7 @@
         document.setEnvironment(patch);
         return report;
       });
-      const label = report.mode[0].toUpperCase()+report.mode.slice(1)+' '+report.id;
+      const label = (name === 'reskin' ? 'Reskin' : report.mode[0].toUpperCase()+report.mode.slice(1))+' '+report.id;
       return document.pending() ? write() : document.transact(label,write);
     }
 
@@ -560,6 +564,10 @@
 
     function applyTilesetBrushRun(request, options) {
       return commitTilesetFaceEdit(A.tilesetBrushRuns.plan,request,options,'brush run');
+    }
+
+    function applyTilesetReskin(request) {
+      return commitTilesetFaceEdit(A.tilesetReskin.plan,request,undefined,'reskin');
     }
 
     function meshTopology(object, part) {
@@ -1006,6 +1014,7 @@
       constructionPlane, setConstructionPlane, planConstructionOrigin, snapConstructionOrigin,
       planTilesetFace, placeTilesetFace, eyedropTilesetFace, planTilesetStroke, applyTilesetStroke,
       planTilesetRectangle, applyTilesetRectangle, planTilesetBrushRun, applyTilesetBrushRun,
+      planTilesetReskin, applyTilesetReskin,
       planTilesetCanvas,
       transformTilesetCanvas,
       tilesetDependencies, planTilesetRevision, editTilesetRevision,

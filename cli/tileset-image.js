@@ -365,6 +365,23 @@ function eyedropCommand(args, options, openEditor) {
   process.stdout.write(JSON.stringify(result,null,2)+'\n');
 }
 
+function reskinCommand(args, options, openEditor) {
+  const {scene,object,part,face,mode,selection,id,column,row,out} = options;
+  const name = value=>typeof value === 'string' && value.trim();
+  const hasCell = column !== undefined || row !== undefined;
+  if (args.length || ![scene,object,face,mode].every(name) ||
+      [part,out,selection,id].some(value=>value !== undefined && !name(value)) ||
+      Object.keys(options).some(key=>!['scene','object','part','face','mode','selection','id','column','row','out'].includes(key)) ||
+      (id ? mode !== 'tileset' || selection !== undefined : !selection) ||
+      hasCell && (!selection || ![column,row].every(integerText)))
+    throw new TypeError('Use tileset reskin --scene <scene.json> --object <mesh-id> --face <face-id> --mode crop|tileset|relative with --selection <pick.json> or --id <tileset-id> for tileset mode');
+  const input = path.resolve(scene), output = out && sceneOutput(input,out,selection);
+  const request = {object,part,face,mode,...(id && {tileset:id}),
+    ...(selection && {selection:JSON.parse(fs.readFileSync(path.resolve(selection),'utf8'))}),
+    ...(hasCell && {cell:{column:Number(column),row:Number(row)}})};
+  return publishFaceEdit(openEditor(input),request,undefined,output,'planTilesetReskin','applyTilesetReskin');
+}
+
 const faceEdits = {
   stroke:['planTilesetStroke','applyTilesetStroke'],
   rectangle:['planTilesetRectangle','applyTilesetRectangle'],
@@ -406,6 +423,7 @@ function publishFaceEdit(editor, request, settings, output, plan, apply) {
 }
 
 function command([action, ...args], options, toolkit, projectTexelsPerUnit, openEditor) {
+  if (action === 'reskin') return reskinCommand(args,options,openEditor);
   if (action === 'eyedrop') return eyedropCommand(args,options,openEditor);
   if (Object.hasOwn(faceEdits,action)) return faceEditCommand(action,args,options,projectTexelsPerUnit,openEditor);
   if (action === 'stamp' || action === 'place') return stampCommand(action,args,options,toolkit,projectTexelsPerUnit,openEditor);

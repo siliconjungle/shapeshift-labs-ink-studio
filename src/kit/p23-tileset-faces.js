@@ -144,5 +144,5 @@
     return conflicts.length ? {report} : {report,row:append(brush,[placement])};
   }
 
-  A.tilesetFaces = Object.freeze({plan,prepare,stamp,append,cropSource,sourceBindings,isSourceBinding});
+  A.tilesetFaces = Object.freeze({plan,prepare,stamp,append,cropSource,sourceBindings,isSourceBinding,sameMaterial});
 })(KIT);

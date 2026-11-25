@@ -24,6 +24,23 @@
     [left-x,top-y,x+width-1-right,y+height-1-bottom].every(n=>n>=-tolerance);
   const centerIndex = n=>same(n,Math.round(n)) ? Math.round(n) : n;
 
+  function orientationOf(points, hint) {
+    if (points.length !== 4) return {};
+    const [left,top] = [0,1].map(axis=>Math.min(...points.map(point=>point[axis])));
+    const [right,bottom] = [0,1].map(axis=>Math.max(...points.map(point=>point[axis])));
+    const reference = [[left,bottom],[right,bottom],[right,top],[left,top]];
+    const fits = paint=>TilesetSelection.paintCorners(reference,paint).every((point,i)=>
+      point.every((n,axis)=>same(n,points[i][axis])));
+    if (hint && fits(hint)) return {paint:hint,orientationStatus:'retained'};
+    const matches = orientations.filter(fits);
+    return matches.length ? {paint:matches[0],orientationStatus:matches.length>1 ? 'ambiguous' : 'uv-inferred'} : {};
+  }
+
+  function sourceBinding(row, face) {
+    const candidates = (row.bindings ?? []).filter(binding=>A.tilesetFaces.isSourceBinding(binding) && binding.element === face);
+    return candidates.find(item=>item.id === 'tileset/'+face) ?? (candidates.length === 1 ? candidates[0] : undefined);
+  }
+
   function recover(asset, tileset, texels, binding) {
     const [left,top] = [0,1].map(axis=>Math.min(...texels.map(point=>point[axis])));
     const [right,bottom] = [0,1].map(axis=>Math.max(...texels.map(point=>point[axis])));
@@ -37,22 +54,17 @@
     const x = Math.floor(centerIndex(left)), y = Math.floor(centerIndex(top));
     const selection = TilesetSelection.pick(tileset,asset,usable ? prior :
       {x,y,width:Math.ceil(centerIndex(right))-x+1,height:Math.ceil(centerIndex(bottom))-y+1});
-    const reference = [[left,bottom],[right,bottom],[right,top],[left,top]];
-    const fits = paint=>TilesetSelection.paintCorners(reference,paint).every((point,i)=>
-      point.every((n,axis)=>same(n,texels[i][axis])));
     let hint;
     if (usable) {
       try { hint = TilesetSelection.paintOrientation(data.paint ?? {}); }
       catch (error) { if (!(error instanceof TypeError || error instanceof RangeError)) throw error; }
     }
-    const matches = orientations.filter(fits);
-    const paint = hint && fits(hint) ? hint : matches[0];
+    const orientation = orientationOf(texels,hint);
     const uvInset = {left:Math.max(0,left-selection.x),top:Math.max(0,top-selection.y),
       right:Math.max(0,selection.x+selection.width-1-right),bottom:Math.max(0,selection.y+selection.height-1-bottom)};
     for (const edge of Object.keys(uvInset)) if (same(uvInset[edge],0)) uvInset[edge] = 0;
-    return {selection,paint,uvInset,sourceStatus:usable ? 'retained' : 'uv-inferred',
-      ...(binding && !usable && {sourceNotice:'retained-source-needs-review'}),
-      ...(paint && {orientationStatus:paint === hint ? 'retained' : matches.length>1 ? 'ambiguous' : 'uv-inferred'})};
+    return {selection,...orientation,uvInset,sourceStatus:usable ? 'retained' : 'uv-inferred',
+      ...(binding && !usable && {sourceNotice:'retained-source-needs-review'})};
   }
 
   function inspect(scene, row, {object,face,brushSize=false} = {}) {
@@ -78,8 +90,7 @@
 
     const asset = A.tilesets.prepare(scene.tilesets,scene.tilesetDefaults).source(tileset);
     const texels = uv.map(({uv})=>[uv[0]*(asset.width-1),uv[1]*(asset.height-1)]);
-    const candidates = (row.bindings ?? []).filter(binding=>A.tilesetFaces.isSourceBinding(binding) && binding.element === face);
-    const binding = candidates.find(item=>item.id === 'tileset/'+face) ?? (candidates.length === 1 ? candidates[0] : undefined);
+    const binding = sourceBinding(row,face);
     const recovered = recover(asset,tileset,texels,binding);
     if (!recovered.paint) return blocked('pigment-uv-is-not-a-rectangular-stamp');
     const {selection,paint,uvInset} = recovered;
@@ -89,5 +100,5 @@
     return freeze({...report,...recovered,canStamp:true,...(binding && {binding:binding.id}),stamp});
   }
 
-  A.tilesetEyedrop = Object.freeze({inspect});
+  A.tilesetEyedrop = Object.freeze({inspect,recover,orientationOf,sourceBinding});
 })(KIT);

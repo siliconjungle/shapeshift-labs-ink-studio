@@ -86,6 +86,10 @@ Use `eyedropTilesetFace(request)` to inspect a painted face and recover
 a reusable stamp without opening an edit transaction.
 [Face eyedrop workflow](mesh-uv.md#eyedrop-a-painted-mesh-face)
 
+Use `planTilesetReskin(request)` and `applyTilesetReskin(request)`
+to replace a face's tileset or crop with a reviewed pigment UV change.
+[Face reskin modes](mesh-uv.md#reskin-a-face-in-place)
+
 ## Brushes and local rebuilds
 
 Use `paintShadowBand(stroke, { pbrMaterial })` to append a stroke to a [named PBR diffuse ramp](pbr-materials.md#paint-a-pbr-shadow-band).
