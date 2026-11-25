@@ -67,10 +67,21 @@ function face(id, x, {brush,worldSize:{width,height}}) {
     materials:[{id:'paint',texture:{tileset:brush.tileset}}]};
 }
 scene.topologyMeshes = {inset:face('inset',-.9,inset),panel:face('panel',.12,panel)};
+const K = ink.load().KIT;
+const world = ink.createSceneEditor(scene).build();
+for (const [index,{worldSize:{width,height}}] of [inset,panel].entries()) {
+  const ray = K.sceneMeshes.rayQuery(world.meshes[index],K), x0 = index === 0 ? -.9 : .12;
+  const hit = (u,v)=>ray({origin:[x0+u*width,v*height,1],direction:[0,0,-1],maxDistance:2});
+  for (const [y,row] of emblem.entries()) for (const [x,swatch] of Array.from(row).entries()) {
+    const [r,g,b] = palette[swatch];
+    assert.equal(hit((x+.5)/16,1-(y+.5)/16).pigment,r*65536+g*256+b);
+  }
+  assert.equal(hit(1.01,.5),null);
+}
 json('mounted-faces.json',scene);
 json('world-size-report.json',{inset,panel});
 studio('render','mounted-faces.json','--w','192','--h','120','--px','1','--target','0.68,1,0',
-  '--dist','1.55','--yaw','0','--pitch','0','--ortho','--raw','--out','mounted-faces-1x.png');
+  '--zoom','3','--yaw','0','--pitch','0','--ortho','--raw','--out','mounted-faces-1x.png');
 write('COMMANDS.sh','#!/bin/sh\nset -eu\n'+commands.join('\n')+'\n');
 
 const drawing = ink.load().KIT.procedural.drawing2d;
