@@ -23,7 +23,7 @@ const flags = {
   session:['protocol','out','workers'],
   clip:['inputs','seed','out','output','from','to','fps','warmup','cuts','clock','format','render-options','capture-options','json',...executionFlags]
 };
-for (const options of Object.values(flags)) options.push('instance');
+for (const options of Object.values(flags)) options.push('instance','base-context');
 const discoveryFlags = { nodes: ['json'], describe: ['json', 'example'] };
 const analysisFlags = { impact: ['root', 'json'], diff: ['adapters', 'json'], material: ['id', 'out', 'base'] };
 const commandOptions = { ...flags, ...discoveryFlags, ...analysisFlags, ...host.commands };
@@ -177,7 +177,11 @@ async function graphCommand(pos,opt,settings) {
 }
 
 async function projectCommand(mode,file,caseFile,opt,settings) {
-  const project=readGraphProject(file,{...settings,planAssets:opt.memory===true,instance:opt.instance}), sources=project.sourceFiles();
+  const contextFile=opt['base-context']===undefined ? undefined : path.resolve(opt['base-context']);
+  const baseContext=contextFile===undefined ? undefined : JSON.parse(fs.readFileSync(contextFile,'utf8'));
+  const project=readGraphProject(file,{...settings,planAssets:opt.memory===true,instance:opt.instance,baseContext});
+  const sources=project.sourceFiles();
+  if (contextFile) sources.push(contextFile);
   if (settings.adapterFile) sources.push(settings.adapterFile);
   let inputs, result;
   if (opt.inputs!==undefined) {

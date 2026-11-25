@@ -220,6 +220,8 @@ const materialSource = { op: 'material.pack', inputs: {
   metadata: { baseColor: { colorSpace: 'srgb', texCoord: 0 }, 'mask.wear': { texCoord: 1 } }
 } };
 const specifications = {
+  'material.inherit': { inputs: { rules: { size: { mode: 'parent', scale: [0.5, 1] } },
+    context: { parent: { id: 'sheet', settings: { size: { width: 32, height: 16 } } } } } },
   'material.base': { inputs: { settings: { size: { width: 8, height: 6 }, seed: 4 } } },
   'material.imageOutput': { nodes: { data: declareData },
     inputs: { source: link('data'), settings: { size: { width: 8, height: 6 } } } },

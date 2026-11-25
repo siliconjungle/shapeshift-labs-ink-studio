@@ -574,6 +574,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   graph describe <op> [--json | --example]   show schema, units, limits and a runnable example
   graph material <project-or-material.json> [--id ID] [--base settings.json] [--out material.json]   open or save an editable material graph
     graph execution commands accept --instance ID for material graph files
+    use --base-context context.json to supply material inheritance providers
   graph validate|plan <project.json> [--inputs values.json]   validate and describe a headless graph
     graph plan --memory   estimate peak raster buffers before execution
   graph dependencies <project.json> [--json]   list direct and nested group files and pins
@@ -725,23 +726,23 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio effect-recipe open` · `--out` · [source](../../cli/effect-recipes.js)
 - `ink-studio effect-recipe render` · `--inputs`, `--sample`, `--out` · [source](../../cli/effect-recipes.js)
 - `ink-studio effect-recipe search` · `--input`, `--renderer`, `--json` · [source](../../cli/effect-recipes.js)
-- `ink-studio graph batch` · `--inputs`, `--at`, `--seed`, `--out`, `--json`, `--resume`, `--progress`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries`, `--instance` · [source](../../cli/graph-cli.js)
+- `ink-studio graph batch` · `--inputs`, `--at`, `--seed`, `--out`, `--json`, `--resume`, `--progress`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph capture` · `--out`, `--adapters`, `--json` · [source](../../cli/graph-cli.js)
-- `ink-studio graph clip` · `--inputs`, `--seed`, `--out`, `--output`, `--from`, `--to`, `--fps`, `--warmup`, `--cuts`, `--clock`, `--format`, `--render-options`, `--capture-options`, `--json`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries`, `--instance` · [source](../../cli/graph-cli.js)
-- `ink-studio graph dependencies` · `--json`, `--instance` · [source](../../cli/graph-cli.js)
+- `ink-studio graph clip` · `--inputs`, `--seed`, `--out`, `--output`, `--from`, `--to`, `--fps`, `--warmup`, `--cuts`, `--clock`, `--format`, `--render-options`, `--capture-options`, `--json`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
+- `ink-studio graph dependencies` · `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph describe` · `--json`, `--example` · [source](../../cli/graph-cli.js)
 - `ink-studio graph diff` · `--adapters`, `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio graph impact` · `--root`, `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio graph import-pxc` · `--out`, `--adapters`, `--using`, `--translate`, `--json` · [source](../../cli/graph-cli.js)
-- `ink-studio graph inspect` · `--inputs`, `--at`, `--seed`, `--out`, `--output`, `--node`, `--port`, `--json`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries`, `--instance` · [source](../../cli/graph-cli.js)
+- `ink-studio graph inspect` · `--inputs`, `--at`, `--seed`, `--out`, `--output`, `--node`, `--port`, `--json`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph inspect-pxc` · `--out`, `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio graph material` · `--id`, `--out`, `--base` · [source](../../cli/graph-cli.js)
 - `ink-studio graph nodes` · `--json` · [source](../../cli/graph-cli.js)
-- `ink-studio graph plan` · `--inputs`, `--json`, `--memory`, `--instance` · [source](../../cli/graph-cli.js)
-- `ink-studio graph run` · `--inputs`, `--at`, `--seed`, `--out`, `--json`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries`, `--instance` · [source](../../cli/graph-cli.js)
-- `ink-studio graph session` · `--protocol`, `--out`, `--workers`, `--instance` · [source](../../cli/graph-cli.js)
-- `ink-studio graph snapshot` · `--inputs`, `--at`, `--seed`, `--json`, `--instance` · [source](../../cli/graph-cli.js)
-- `ink-studio graph validate` · `--inputs`, `--json`, `--instance` · [source](../../cli/graph-cli.js)
+- `ink-studio graph plan` · `--inputs`, `--json`, `--memory`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
+- `ink-studio graph run` · `--inputs`, `--at`, `--seed`, `--out`, `--json`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
+- `ink-studio graph session` · `--protocol`, `--out`, `--workers`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
+- `ink-studio graph snapshot` · `--inputs`, `--at`, `--seed`, `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
+- `ink-studio graph validate` · `--inputs`, `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph verify-pxc` · `--out`, `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio music analyze` · [source](../../cli/music-composer.js)
 - `ink-studio music arrange` · [source](../../cli/music-composer.js)

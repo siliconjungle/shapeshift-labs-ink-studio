@@ -112,7 +112,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.materialBase` | namespace |  |  |
+| `KIT.procedural.materialBase.checkContext` | function | `(context = {})` | [guide](../material-base-settings.md), [source](../../src/material-base-settings.js) |
+| `KIT.procedural.materialBase.checkRules` | function | `(rules = {})` | [guide](../material-base-settings.md), [source](../../src/material-base-settings.js) |
 | `KIT.procedural.materialBase.fit` | function | `(source, settings)` | [source](../../src/kit/paq-material-base.js) |
+| `KIT.procedural.materialBase.inherit` | function | `(source = {}, rules = {}, context = {}, { seed, seedOverride } = {})` | [guide](../material-base-settings.md#inherit-individual-settings), [guide](../material-base-settings.md), [source](../../src/material-base-settings.js) |
 | `KIT.procedural.materialBase.measure` | function | `({ size, pixelSizeMm, pixelRatio })` | [guide](../material-base-settings.md), [source](../../src/material-base-settings.js) |
 | `KIT.procedural.materialBase.operations` | namespace |  |  |
 | `KIT.procedural.materialBase.operations["material.base"]` | namespace |  |  |
@@ -139,6 +142,28 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.materialBase.operations["material.imageOutput"].outputs.value.type` | value | `string = "typedImage"` |  |
 | `KIT.procedural.materialBase.operations["material.imageOutput"].outputs.value.typeFrom` | value | `string = "source"` |  |
 | `KIT.procedural.materialBase.operations["material.imageOutput"].run` | function | `({ source, settings })` | [source](../../src/kit/paq-material-base.js) |
+| `KIT.procedural.materialBase.operations["material.inherit"]` | namespace |  |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].description` | value | `string = "Resolve local material settings from a parent or primary input and report their sources."` |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].inputs` | namespace |  |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].inputs.context` | namespace |  |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].inputs.context.default` | namespace |  |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].inputs.context.type` | value | `string = "record"` |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].inputs.primary` | namespace |  |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].inputs.primary.default` | value | `null` |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].inputs.primary.type` | value | `string = "any"` |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].inputs.primaryId` | namespace |  |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].inputs.primaryId.default` | value | `string = "primary-input"` |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].inputs.primaryId.type` | value | `string = "string"` |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].inputs.rules` | value | `string = "record"` |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].inputs.settings` | namespace |  |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].inputs.settings.default` | namespace |  |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].inputs.settings.type` | value | `string = "record"` |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].outputs` | namespace |  |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].outputs.provenance` | value | `string = "record"` |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].outputs.value` | value | `string = "record"` |  |
+| `KIT.procedural.materialBase.operations["material.inherit"].run` | function | `({ settings, rules, context, primary, primaryId })` | [source](../../src/kit/paq-material-base.js) |
+| `KIT.procedural.materialBase.primaryImage` | function | `(id, image)` | [source](../../src/kit/paq-material-base.js) |
+| `KIT.procedural.materialBase.ratioFromPitch` | function | `([x, y])` | [guide](../material-base-settings.md), [source](../../src/material-base-settings.js) |
 | `KIT.procedural.materialBase.resolve` | function | `(source = {}, { seed: defaultSeed = 0 } = {})` | [guide](../material-base-settings.md#ferry-glaze-demo), [guide](../material-base-settings.md), [source](../../src/material-base-settings.js) |
 
 ## KIT.procedural.materialChannels

@@ -8,7 +8,7 @@ const Base = require('../src/material-base-settings.js');
 const format = 'ink-studio/material-graph';
 const version = 1;
 const projectFormat = 'ink-studio/graph-project';
-const settingsKeys = ['assetRegistry', 'exports', 'assertions', 'time', 'seed', 'base'];
+const settingsKeys = ['assetRegistry', 'exports', 'assertions', 'time', 'seed', 'base', 'inheritance', 'primaryInput'];
 const record = value => value && [Object.prototype, null].includes(Object.getPrototypeOf(value));
 const isId = value => typeof value === 'string' && /^[a-z][\w.-]{0,99}$/i.test(value) &&
   !['__proto__', 'constructor', 'prototype'].includes(value);
@@ -175,7 +175,13 @@ function lower(document, { requireOutputs, instance } = {}) {
   fields(settings, settingsKeys, 'material graph execution settings');
   const materialBase = Object.hasOwn(settings, 'base');
   if (materialBase) Base.resolve(settings.base, { seed: settings.seed });
+  if (!materialBase && (Object.hasOwn(settings, 'inheritance') || Object.hasOwn(settings, 'primaryInput')))
+    throw new TypeError('Material inheritance needs shared settings.base');
+  if (Object.hasOwn(settings, 'inheritance')) Base.checkRules(settings.inheritance);
   const native = lowerGraph(graph, { requireOutputs, materialBase });
+  if (Object.hasOwn(settings, 'primaryInput') &&
+      (!isId(settings.primaryInput) || !Object.hasOwn(native.inputs ?? {}, settings.primaryInput)))
+    throw new RangeError('Material primaryInput must name a declared graph input');
   const assets = Object.fromEntries(entries(resources, 'resources').map(([id, resource]) => {
     entity(resource, ['definition'], 'resource ' + id);
     if (!record(resource.definition) || !Object.hasOwn(resource.definition, 'file'))
