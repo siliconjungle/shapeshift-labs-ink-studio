@@ -1,7 +1,9 @@
 const types = {
   number: { finite: true },
+  integer: { integer: true, safe: true, signed: true },
   vec2: { dimensions: 2, finite: true },
   vec3: { dimensions: 3, finite: true },
+  vec4: { dimensions: 4, finite: true },
   pixels: { dimensions: 2, finite: true, origin: 'top-left edge' },
   uv: { dimensions: 2, finite: true, origin: 'top-left edge', nominalRange: [0, 1] },
   worldPosition: { dimensions: 3, finite: true, axes: 'XYZ' },
@@ -71,6 +73,7 @@ const namedNoise = oneOf('perlin','simplex','gaussian','white','blue','worley','
 const evolvingNoise = ['perlin','simplex','worley','voronoi','cellular','fractal','ridged','anisotropic','directional'];
 
 const ports = {
+  'fn.toInteger': { rounding: oneOf('exact','floor','ceil','round','trunc') },
   'image.shapeSplatter': { columns:limit(1,128,true),rows:limit(1,128,true),
     shapes:{constraints:{maxItems:32}},volumes:{constraints:{maxItems:32,bounds:'Finite local XYZ AABB'}},
     background:{constraints:{intent:'height',channels:[1]}},
@@ -716,6 +719,13 @@ const simulationClock = { dt: property('number', { ...seconds, ...limit(.001, .1
   maxTicks: property('number', limit(1, 12000, true), 2400) };
 
 const specialization = {
+  'fn.math': { field: 'operation', description: 'A literal operation selects operands. Node type is number or integer.' },
+  'fn.compare': { field: 'type', description: 'The declared value type selects both operands. Ordered comparisons require scalar numbers or strings.' },
+  'fn.logic': { field: 'operation', description: 'A literal operation selects one or two Boolean operands.' },
+  'fn.select': { field: 'type', description: 'The declared value type selects both value inputs and the output.' },
+  'fn.vector': { field: 'type', description: 'The vector dimension and literal operation determine the inputs and result.' },
+  'fn.color': { field: 'type', description: 'Declare srgb or srgb-linear. A literal operation selects the color inputs and result.' },
+  'fn.text': { field: 'operation', description: 'A literal operation selects the string inputs and result type.' },
   'image.uniform': { field: 'descriptor', description: 'A literal image intent and layout select the value port and typed output.' },
   'image.convert': { field: 'descriptor', description: 'A literal target intent selects the output type. Optional fields change how samples are represented.' },
   'image.split': { field: 'channels', description: 'The literal selector keys become typed scalar output ports.' },
@@ -732,6 +742,13 @@ const specialization = {
   'anim.retime': { field: 'group', description: 'Uses the group’s inputs and outputs and adds a timing record. The group cannot declare timing.' }
 };
 const notes = {
+  'fn.math': ['Integer division truncates toward zero. Modulo returns a signed remainder.',
+    'Trigonometry uses radians. Division and remainder reject a zero divisor. Invalid domains and overflows fail.'],
+  'fn.select': ['Both value branches are evaluated by the graph. The condition selects the returned value.'],
+  'fn.vector': ['Component indices start at zero. Cross product is available for vec3. Normalize rejects the zero vector.'],
+  'fn.color': ['Mix interpolates associated color in linear light and returns straight RGB(A) in the declared color space.',
+    'Alpha defaults to one when composing RGBA. Components and luminance return numbers.'],
+  'fn.text': ['Length counts UTF-16 code units. Contains performs a case-sensitive substring search.'],
   'image.shapeSplatter': ['Planar definitions become rounded extrusions. Volumetric fields need local XYZ bounds and use local Y as their height axis.',
     'Projection keeps the top visible hit. Height, normal, IDs and stamp UVs refer to that hit; coverage measures subpixel visibility.',
     'Density and mask gate placements; clip gates individual surface samples. Background height also drives slope alignment and occlusion.',

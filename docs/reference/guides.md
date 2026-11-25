@@ -346,6 +346,7 @@ All checked-in guides, indexed by title and section headings.
 - [Editable resampling jams](../resampling-jam.md)
 - [Resonant modes as assets](../resonant-modes.md)
 - [Weather that leaves a trace](../retained-weather.md)
+- [Reusable function graphs](../reusable-function-graphs.md)
 - [Room impulse capture](../room-impulse-capture.md)
 - [Position-dependent room impulse responses](../room-response.md)
 - [Route followers and events](../route-followers.md)

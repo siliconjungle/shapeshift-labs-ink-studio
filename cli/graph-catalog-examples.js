@@ -193,6 +193,13 @@ const declareHeight = { op: 'image.toHeight', inputs: { source: link('data'), sc
 const uniformNormal = { op: 'image.uniform', inputs: {
   value: [.6, 0, .8], width: mask.width, height: mask.height, descriptor: { intent: 'normal' } } };
 const dynamic = {
+  'fn.math': { type:'integer',inputs:{operation:'multiply',a:6,b:7} },
+  'fn.compare': { type:'string',inputs:{operation:'eq',a:'satin',b:'gloss'} },
+  'fn.logic': { inputs:{operation:'xor',a:true,b:false} },
+  'fn.select': { type:'vec4',inputs:{condition:true,whenTrue:[1,2,3,4],whenFalse:[4,3,2,1]} },
+  'fn.vector': { type:'vec3',inputs:{operation:'cross',a:[1,0,0],b:[0,1,0]} },
+  'fn.color': { type:'srgb',inputs:{operation:'mix',a:[.11,.25,.5],b:[.92,.58,.29],t:.3} },
+  'fn.text': { inputs:{operation:'concat',a:'Harbor ',b:'glaze'} },
   'image.declare': { inputs: declareColor.inputs },
   'image.uniform': { inputs: { value: .375, width: 8, height: 6,
     descriptor: { intent: 'mask', precision: 'unorm16' } } },
