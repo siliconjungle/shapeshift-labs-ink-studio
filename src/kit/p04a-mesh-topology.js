@@ -57,6 +57,16 @@ const meshQuadDiagonal = Object.freeze({
     return frozen(pair(...raw));
   }
 
+  function quadSource(raw) {
+    if (raw === undefined) return;
+    const keys = ['mesh','face','revision','corners'];
+    if (!raw || Object.getPrototypeOf(raw) !== Object.prototype || Object.keys(raw).some(key=>!keys.includes(key)) ||
+        ![raw.mesh,raw.face,raw.revision].every(name) || !Array.isArray(raw.corners) || raw.corners.length !== 3 ||
+        !Array.from(raw.corners).every(name) || new Set(raw.corners).size !== 3)
+      throw new TypeError('A quad split source needs a mesh, face, revision and three distinct source corners');
+    return frozen({mesh:raw.mesh,face:raw.face,revision:raw.revision,corners:frozen(raw.corners.slice())});
+  }
+
   function tessellate(face, vertices) {
     const points = face.corners.map(({ vertex }) => vertices.get(vertex).position.map(Math.fround));
     const relative = points.map(point => K.V.sub(point, points[0]));
@@ -204,7 +214,8 @@ const meshQuadDiagonal = Object.freeze({
           ...(normal && { normal }), ...(uvPinned && { uvPinned }), ...(uvPins && {uvPins}) });
       }));
       const diagonal = quadDiagonal(key,row.diagonal,ring);
-      const face = frozen({ id: key, material, corners:ring, ...(diagonal && {diagonal}) });
+      const sourceQuad = quadSource(row.sourceQuad);
+      const face = frozen({ id: key, material, corners:ring, ...(diagonal && {diagonal}), ...(sourceQuad && {sourceQuad}) });
       for (const [i, corner] of face.corners.entries()) {
         const next = face.corners[(i + 1) % face.corners.length];
         const endpoints = edgeKey(corner.vertex, next.vertex);

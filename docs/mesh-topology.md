@@ -841,6 +841,7 @@ report and lists ordered `operations`. Choose IDs from that report or
 | `dissolve` | Supply an `edge` shared by two faces and optionally the face ID to `keep`. The faces must share a plane, material, affine UV mapping and, where present, affine weight interpolation. Optional `tolerance` sets the plane distance threshold. |
 | `winding` | Supply an `anchor` to orient its manifold neighbors, or choose faces explicitly with a `faces` list or revision-checked face `selection`. |
 | `flip-diagonal` | Choose quads with a `faces` list or revision-checked face `selection`. Swap to the other interior diagonal and retain the authored quad. |
+| `split-quad` | Choose quads with a `faces` list or revision-checked face `selection`. Turn the current two render triangles into editable faces with a shared authored edge. |
 
 Each winding step shows the face normals and corner orders before and
 after, plus any inconsistent edges incident to the reversed faces. Supply
@@ -871,6 +872,34 @@ concave boundary or collapses a triangle rejects the edit. Leaving the
 ink-studio mesh-topology repair roof.json flip.json --object cover
 ink-studio mesh-topology repair roof.json flip.json --object cover --out revised.json --report diagonal-receipt.json
 node examples/tileset-pick/quad-diagonal-demo.cjs quad-diagonal-review
+```
+
+### Split a quad into editable triangles
+
+Add `{ "kind": "split-quad", "faces": ["tile"] }` to a repair request.
+The split follows the quad's current triangulation, including a
+diagonal authored with `flip-diagonal`. Put both operations in one request
+to choose the other diagonal and split in the same undoable edit.
+The triangle containing the quad's first corner keeps the face ID. If
+both contain it, the first render triangle keeps that ID. The other face
+and the two copied corners get stable new IDs.
+
+The preview records the new shared edge, both face IDs, and the source
+and result corner IDs. Both faces keep the material, corner UVs, authored
+normals, UV pins, and named attributes. Each stores a `sourceQuad` record
+with the source mesh, face, revision, and original triangle corners.
+The result retains the same vertices and their weights.
+
+When both triangles inherit a tileset crop exactly, each gets a source
+binding for its own UV slots. Either triangle can be eyedropped or
+reskinned. Other face bindings that need a choice between triangles
+enter the existing correspondence review. The repair preview flags
+a split that would make the shared edge non-manifold.
+
+```sh
+ink-studio mesh-topology repair roof.json split.json --object cover
+ink-studio mesh-topology repair roof.json split.json --object cover --out triangles.json --report split-receipt.json
+node examples/tileset-pick/quad-split-demo.cjs editable-triangles-review
 ```
 
 ### Repair weights and review changes

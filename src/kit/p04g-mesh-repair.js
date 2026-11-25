@@ -53,8 +53,9 @@
         else compact.push(corner);
       }
       if (compact[0].vertex === compact.at(-1).vertex) retain(compact[0], compact.pop());
-      faces.push({ id:face.id, material:face.material, corners:compact,
-        ...(compact.length===face.corners.length && face.diagonal && {diagonal:face.diagonal}) });
+      const revised = {...face,corners:compact};
+      if (compact.length !== face.corners.length) delete revised.diagonal;
+      faces.push(revised);
     }
     const next = topology.edit(doc, { vertices: verticesToUpdate, removeVertices: removed, faces, removeFaces });
     const nextEdge = new Map(next.edges.map(edge => [JSON.stringify(edge.vertices), edge.id]));
@@ -180,21 +181,26 @@
       windingConflicts:meshWinding.conflicts(document,new Set(ids)) } };
   }
 
-  function flipDiagonal(doc, op) {
+  function quadSelection(doc, op, label) {
     if (!record(op,['kind','faces','selection']) || (op.faces === undefined) === (op.selection === undefined) ||
         op.faces !== undefined && (!Array.isArray(op.faces) || !op.faces.length))
-      throw new TypeError('Flip diagonal needs face IDs or a saved face selection');
+      throw new TypeError(label + ' needs face IDs or a saved face selection');
     const {ids} = K.meshTopology.select(doc,op.selection === undefined ?
       {domain:'faces',ids:op.faces} : {domain:'faces',from:op.selection});
-    if (!ids.length) throw new RangeError('Choose at least one quad to flip its diagonal');
-    const g = incidence(doc), selected = new Set(ids);
-    function triangles(source) {
-      const rows = new Map(ids.map(id=>[id,[]]));
-      for (const row of topology.triangulate(source).triangleSources)
-        if (selected.has(row.face)) rows.get(row.face).push(row.corners);
-      return rows;
-    }
-    const before = triangles(doc);
+    if (!ids.length) throw new RangeError(label + ' needs at least one selected quad');
+    return ids;
+  }
+
+  function faceTriangles(source, ids) {
+    const rows = new Map(ids.map(id=>[id,[]]));
+    for (const row of topology.triangulate(source).triangleSources)
+      if (rows.has(row.face)) rows.get(row.face).push(row.corners);
+    return rows;
+  }
+
+  function flipDiagonal(doc, op) {
+    const ids = quadSelection(doc,op,'Flip diagonal'), g = incidence(doc);
+    const before = faceTriangles(doc,ids);
     const patch = ids.map(id=>{
       const face = g.faces.get(id);
       if (face.corners.length !== 4) throw new RangeError('Flip diagonal needs a four-corner face: ' + id);
@@ -203,7 +209,7 @@
       return {...face,diagonal:face.corners.map(row=>row.id).filter(corner=>!ends.has(corner))};
     });
     const document = topology.edit(doc,{faces:patch});
-    const after = triangles(document), uvSet = MaterialUV.resolve(doc.uvBindings,'pigment');
+    const after = faceTriangles(document,ids), uvSet = MaterialUV.resolve(doc.uvBindings,'pigment');
     function describe(rows) {
       const [a,b] = rows;
       const diagonal = a.filter(id=>b.includes(id)).sort();
@@ -225,6 +231,47 @@
     }))}};
   }
 
+  function splitQuad(doc, op) {
+    const ids = quadSelection(doc,op,'Split quad'), g = incidence(doc);
+    const triangles = faceTriangles(doc,ids), revision = topology.revision(doc);
+    const used = new Set([...doc.vertices,...doc.edges,...doc.faces,...g.corners.values()].map(row=>row.id));
+    const edgeKey = ids => JSON.stringify(ids.slice().sort());
+    function fresh(base) {
+      let id = base;
+      for (let n=2;used.has(id);n++) id = base+'/'+n;
+      used.add(id);
+      return id;
+    }
+    const faces = [], links = {faces:[],corners:[]};
+    const splits = ids.map(id=>{
+      const face = g.faces.get(id);
+      if (face.corners.length !== 4) throw new RangeError('Split quad needs a four-corner face: ' + id);
+      const rings = triangles.get(id).slice();
+      if (!rings[0].includes(face.corners[0].id)) rings.reverse();
+      const added = fresh(id+'/triangle'), retained = new Set(rings[0]);
+      const diagonal = rings[1].filter(corner=>retained.has(corner)).map(corner=>g.corners.get(corner).vertex);
+      links.faces.push({from:id,to:added});
+      const children = rings.map((ring,i)=>{
+        const child = i===0 ? id : added;
+        const corners = ring.map((from,j)=>{
+          let to = from;
+          if (i && retained.has(from)) {
+            to = fresh(child+'/c'+j);
+            links.corners.push({from,to});
+          }
+          return {from,to};
+        });
+        const polygon = {id:child,material:face.material,corners:corners.map(({from,to})=>({...g.corners.get(from),id:to})),
+          sourceQuad:{mesh:doc.id,face:id,revision,corners:ring}};
+        faces.push(polygon);
+        return {face:child,corners};
+      });
+      return {sourceFace:id,material:face.material,vertices:diagonal.slice().sort(),triangles:children};
+    });
+    const document = topology.edit(doc,{faces}), edges = new Map(document.edges.map(row=>[edgeKey(row.vertices),row.id]));
+    return {document,links,effect:{kind:'split-quad',faces:splits.map(row=>({...row,edge:edges.get(edgeKey(row.vertices))}))}};
+  }
+
   function patchFor(before, after, transfers) {
     const { vertices, faces, corners, edges } = K.authoring.meshTopologyScene.diff({ document: before }, { document: after });
     const beforeIncidence = incidence(before), afterIncidence = incidence(after);
@@ -243,8 +290,11 @@
         return name === 'vertices' && row.before?.weights !== undefined && value.weights === undefined ?
           { ...value, weights: null } : value;
       });
+      // New records must append in the order produced by the planned steps.
+      const appended = new Set(changes.filter(row=>!row.before && row.after).map(row=>row.id));
       const removed = changes.filter(row => row.after === null).map(row => row.id);
-      if (added.length) patches[name] = added;
+      if (added.length) patches[name] = added.filter(row=>!appended.has(row.id))
+        .concat(after[name].filter(row=>appended.has(row.id)));
       if (removed.length) patches['remove' + name[0].toUpperCase() + name.slice(1)] = removed;
     }
     const idsFor = g => ({ faces: g.faces, corners: g.corners, edges: index(g.edges) });
@@ -267,7 +317,7 @@
         !request.operations.length || request.operations.length > 128)
       throw new TypeError('Repair needs a topology revision and 1 to 128 explicit operations');
     if (request.revision !== topology.revision(before)) throw new RangeError('Stale mesh repair revision');
-    const commands = { weld, dissolve, winding, 'flip-diagonal': flipDiagonal };
+    const commands = { weld, dissolve, winding, 'flip-diagonal': flipDiagonal, 'split-quad': splitQuad };
     const steps = [], transfers = { faces: new Map(), corners: new Map(), edges: new Map() };
     let after = before;
     for (const [i, op] of request.operations.entries()) {
