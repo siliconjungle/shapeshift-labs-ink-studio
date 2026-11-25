@@ -54,6 +54,12 @@ const freezeProceduralContainer = (function (K) {
     for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
     return h >>> 0;
   }
-  A.data = Object.freeze({ clone: json, freeze, merge, hash, isImmutable: value => frozenNodes.has(value) });
+  function hash01(text, seed) {
+    let h = hash(text, seed);
+    h = Math.imul(h ^ (h >>> 16), 0x7feb352d);
+    h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  }
+  A.data = Object.freeze({ clone: json, freeze, merge, hash, hash01, isImmutable: value => frozenNodes.has(value) });
   return freezeContainer;
 })(KIT);

@@ -447,6 +447,7 @@ function publishFaceEdit(editor, request, settings, output, plan, apply) {
 }
 
 function command([action, ...args], options, toolkit, projectTexelsPerUnit, openEditor) {
+  if (action === 'collection') return require('./tileset-collection.js').command(args,options,toolkit);
   if (action === 'reskin') return reskinCommand(args,options,openEditor);
   if (action === 'eyedrop') return eyedropCommand(args,options,openEditor);
   if (Object.hasOwn(faceEdits,action)) return faceEditCommand(action,args,options,projectTexelsPerUnit,openEditor);

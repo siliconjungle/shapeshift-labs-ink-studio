@@ -46,6 +46,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSurfaceHistory` | function | `()` | [guide](../surface-history.md#playback-cuts-and-inspection), [guide](../surface-history.md), [source](../../src/surface-history.js) |
 | `node.createSurfaceMotionHistory` | function | `()` | [guide](../art-passes.md#shared-opaque-surfaces), [source](../../cli/part-motion.js) |
 | `node.createTake` | function | `({ clock: definition = {}, world, graph, simulation } = {}, { kit = require('../index.js').load(), checkpoint, maxSeekTicks = 36000, evaluateGraph = true } = {})` | [guide](../take-clock.md#library-and-shared-domains), [source](../../cli/take.js) |
+| `node.createTilesetCollection` | function | `(scene, request)` | [source](../../index.js) |
 | `node.decodeWav` | function | `(source, { metadata = false, preserveFloatRange = false } = {})` | [guide](../graph-media.md#wav-and-frame-analysis), [source](../../cli/wav.js) |
 | `node.demoFiles` | function | `()` | [source](../../index.js) |
 | `node.demos` | function | `()` | [guide](../../README.md#embedding-and-custom-scene-collections), [source](../../index.js) |
@@ -84,6 +85,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.inspectMaterialVisibility` | function | `(source, { inputs = {}, instance, scope = [], kit = require('../index.js').load() } = {})` | [guide](../editable-material-graph.md#show-controls-and-ports-conditionally), [source](../../cli/material-visibility.js) |
 | `node.inspectPalettePixel` | function | `(world, { at, ...view } = {})` | [guide](../palette-recipes.md#inspect-the-palette-at-a-pixel), [source](../../cli/palette-pixel.js) |
 | `node.inspectPxc` | function | `(source, { image = false, tolerateArt = false } = {})` | [source](../../cli/pxc.js) |
+| `node.inspectTilesetCollection` | function | `(scene, collection)` | [source](../../index.js) |
 | `node.instantiateStoryTemplate` | function | `(template, instance)` | [source](../../index.js) |
 | `node.lint` | function | `(files)` | [source](../../scripts/lint.js) |
 | `node.lint.CODEY` | value | `array` |  |
@@ -181,6 +183,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.runReferenceExperiments` | function | `({ kit = module.exports.load(), ...options } = {})` | [guide](../reference-experiments.md), [source](../../index.js) |
 | `node.sampleReframe` | function | `(delivery, time)` | [guide](../subject-reframe.md), [source](../../cli/subject-reframe.js) |
 | `node.sampleSceneReplay` | function | `(document, seconds = 0, { loop = false } = {})` | [source](../../cli/scene-replay.js) |
+| `node.sampleTilesetCollection` | function | `(scene, collection, options)` | [source](../../index.js) |
 | `node.scanFusion` | function | `(inputs,options={})` | [source](../../cli/scan-fusion.js) |
 | `node.scanToMesh` | function | `(capture, { toolkit=require('../index.js').load(), cloud, meshStride=capture?.stride, sampleStride, materials, paintRadius=2, rgbThreshold=16, tolerance, residualLimit=30000, name='Captured surface' }={})` | [guide](../relightable-scans.md#node-api), [guide](../scan-to-mesh.md#node-api), [source](../../cli/scan-mesh.js) |
 | `node.scoreModelingBenchmarkReview` | function | `(...args)` | [source](../../index.js) |

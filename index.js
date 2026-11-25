@@ -313,6 +313,15 @@ module.exports = {
   readTilesetImage: require('./cli/tileset-image.js').readTilesetImage,
   pickTilesetRectangle: require('./cli/tileset-image.js').pickTilesetRectangle,
   pickTilesetBlock: require('./cli/tileset-image.js').pickTilesetBlock,
+  createTilesetCollection(scene, request) {
+    return module.exports.load().KIT.authoring.tilesetCollections.create(scene,request);
+  },
+  inspectTilesetCollection(scene, collection) {
+    return module.exports.load().KIT.authoring.tilesetCollections.inspect(scene,collection);
+  },
+  sampleTilesetCollection(scene, collection, options) {
+    return module.exports.load().KIT.authoring.tilesetCollections.sample(scene,collection,options);
+  },
   sizeTilesetBrush: require('./cli/tileset-image.js').sizeTilesetBrush,
   tilesetBrushUV: require('./cli/tileset-image.js').tilesetBrushUV,
   tilesetBrushCellUV: require('./cli/tileset-image.js').tilesetBrushCellUV,

@@ -2,6 +2,7 @@
 (function (K) {
   const P = K.procedural,
     { compile, solve } = P.tiles,
+    { hash01 } = P.data,
     learned = new WeakMap(),
     limit = (n, min, max) => Number.isSafeInteger(n) && n >= min && n <= max,
     scalar = s => s === null || typeof s === 'string' && s.length <= 120 || typeof s === 'boolean' || Number.isFinite(s),
@@ -111,12 +112,6 @@
     });
   }
 
-  function hash01(key, seed) {
-    let h = P.data.hash(key, seed);
-    h = Math.imul(h ^ (h >>> 16), 0x7feb352d);
-    h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
-    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-  }
   function wang(model, { width, height, origin = [0, 0], labels, seed = 0, maxCells = 16000 } = {}) {
     if (
       !Array.isArray(model?.tiles) || !limit(width, 1, 65536) || !limit(height, 1, 65536) ||

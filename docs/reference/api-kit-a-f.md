@@ -876,6 +876,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetBrushRuns.plan` | function | `(scene, request, options)` | [source](../../src/kit/p23-tileset-brush-runs.js) |
 | `KIT.authoring.tilesetCanvas` | namespace |  |  |
 | `KIT.authoring.tilesetCanvas.plan` | function | `(scene, id, operation)` | [source](../../src/kit/p23-tileset-canvas.js) |
+| `KIT.authoring.tilesetCollections` | namespace |  |  |
+| `KIT.authoring.tilesetCollections.create` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-collections.js) |
+| `KIT.authoring.tilesetCollections.inspect` | function | `(scene, document)` | [source](../../src/kit/p23-tileset-collections.js) |
+| `KIT.authoring.tilesetCollections.sample` | function | `(scene, document, {seed,key} = {})` | [source](../../src/kit/p23-tileset-collections.js) |
 | `KIT.authoring.tilesetEyedrop` | namespace |  |  |
 | `KIT.authoring.tilesetEyedrop.inspect` | function | `(scene, row, {object,face,brushSize=false} = {})` | [source](../../src/kit/p23-tileset-eyedrop.js) |
 | `KIT.authoring.tilesetEyedrop.orientationOf` | function | `(points, hint)` | [source](../../src/kit/p23-tileset-eyedrop.js) |

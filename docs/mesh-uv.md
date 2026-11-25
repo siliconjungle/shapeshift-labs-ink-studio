@@ -155,6 +155,48 @@ and `brushScale`. One undo removes the placement and its source binding.
 Run `node examples/tileset-pick/place-face-demo.cjs tile-placement-demo` to
 place painted masonry and trim and inspect their retained source references.
 
+### Create weighted tile collections
+
+Save interchangeable tiles as a version 1 collection. Give each entry
+a stable `id`, a `weight`, and the exact `selection` JSON from `tileset
+pick`. Selections can use different registered sheets. This draft gives
+the common brick three times the weight of the worn one.
+
+```json
+{
+  "id": "brickwork",
+  "entries": [
+    {"id":"common","weight":3,"selection":{"format":"ink-studio/tileset-selection","version":1,"tileset":"masonry","x":0,"y":0,"width":16,"height":16}},
+    {"id":"worn","weight":1,"selection":{"format":"ink-studio/tileset-selection","version":1,"tileset":"masonry","x":16,"y":0,"width":16,"height":16}}
+  ]
+}
+```
+
+Use finite, nonnegative weights. A zero weight keeps an entry in the
+collection while disabling it. At least one weight must be positive.
+`inspect` shows the probability for every entry and validates the
+rectangles against the current scene sheets. Collections reference exact
+coordinates, so update their selections when you move the source art.
+
+```sh
+ink-studio tileset collection create draft.json --scene wall.json --out bricks.json
+ink-studio tileset collection inspect bricks.json --scene wall.json
+ink-studio tileset collection sample bricks.json --scene wall.json --seed 42 --key course-2-brick-3 --out pick.json
+ink-studio tileset stamp --scene wall.json --object wall --face brick-2-3 --selection pick.json --out painted.json
+```
+
+Sampling uses the collection ID, integer seed, and caller-supplied key.
+Stable keys such as grid addresses reproduce the choice regardless of
+entry order or where you start sampling. The receipt on stdout records
+the chosen entry, weight, probability, and pick. `--out` saves only the
+pick for existing stamp and primitive commands.
+
+Use `createTilesetCollection(scene, draft)`,
+`inspectTilesetCollection(scene, collection)`, or
+`sampleTilesetCollection(scene, collection, {seed, key})` in the SDK.
+Run `node examples/tileset-pick/weighted-collection-demo.cjs brick-demo`
+to assemble a wall with common, worn, and mossy brick variants.
+
 ### Draw and erase a run of painted faces
 
 Give a stroke a path of construction-plane `[u,v]` addresses and an

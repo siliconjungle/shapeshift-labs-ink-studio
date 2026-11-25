@@ -289,6 +289,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   tileset grow --scene <scene.json> --object <mesh-id> --edge <edge-id> --face <new-id> (--selection <pick.json> | --id <tileset-id> --x N --y N --width N --height N) [--angle degrees] [--sizing proportional|brush | --depth N] [--part ID] [--material ID] [--out <new-scene.json>]   extend a painted quad from a retained boundary edge
   tileset block <request.json> --scene <scene.json> [--selection <pick.json>] [--out <new-scene.json>]   add or subtract a tiled volume from the grid or a face
   tileset primitive <request.json> --scene <scene.json> [--selection <pick.json>] [--out <new-scene.json>]   stamp or revise a painted box, wedge, cylinder, cone, or sphere
+  tileset collection create <request.json> --scene <scene.json> [--out <collection.json>]   save weighted tile variants
+  tileset collection inspect <collection.json> --scene <scene.json>   validate picks and show relative probabilities
+  tileset collection sample <collection.json> --scene <scene.json> --seed N --key <key> [--out <pick.json>]   select a reproducible tile variant
   tileset eyedrop --scene <scene.json> --object <mesh-id> --face <face-id> [--part ID] [--brush-size] [--out <pick.json>]   recover a reusable painted face pick for stamp --selection
   tileset reskin --scene <scene.json> --object <mesh-id> --face <face-id> --mode crop|tileset|relative (--selection <pick.json> | --id <tileset-id>) [--part ID] [--column N --row N] [--out <new-scene.json>]   change the paint on an existing mesh face
   tileset stroke <stroke.json> --scene <scene.json> [--out <new-scene.json>]   draw or erase an interval-sampled run of painted faces

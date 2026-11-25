@@ -623,6 +623,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.data.clone` | function | `(value, path)` | [source](../../src/kit/p00-procedural.js) |
 | `KIT.procedural.data.freeze` | function | `(value)` | [source](../../src/kit/p00-procedural.js) |
 | `KIT.procedural.data.hash` | function | `(text, seed)` | [guide](../hyperbolic-mosaics.md#poincaré-tiling), [source](../../src/kit/p00-procedural.js) |
+| `KIT.procedural.data.hash01` | function | `(text, seed)` | [source](../../src/kit/p00-procedural.js) |
 | `KIT.procedural.data.isImmutable` | function | `(value)` | [source](../../src/kit/p00-procedural.js) |
 | `KIT.procedural.data.merge` | function | `(a, b)` | [source](../../src/kit/p00-procedural.js) |
 
