@@ -1186,6 +1186,99 @@ node cli/ink-studio.js render examples/route-fields.js --seed 0 --ortho --colore
 node cli/ink-studio.js render examples/route-fields.js --seed 1 --ortho --colored
 ```
 
+### Socket cable routes
+
+`P.cableRoutes.plan(document, { graph })` routes a retained cable between
+named scene sockets. Pass a live [scene hierarchy](live-scene-hierarchy.md)
+or its JSON definition. The result includes the revised world-space
+route and a diagnostic report. Socket positions and exit directions
+are resolved each time the cable is planned.
+
+```js
+const cable = {
+  format: 'ink-studio/socket-cable', version: 1, id: 'signal',
+  from: { node: 'feed', socket: 'out', axis: [1,0,0], lead: .25 },
+  to: { node: 'drain', socket: 'in', axis: [-1,0,0], lead: .25 },
+  radius: .06, clearance: .08, bendRadius: .22, slack: .04,
+  waypoints: [{ id: 'service-loop', point: [0,2.2,.65] }],
+  obstacles: [{ id: 'relay', min: [-.6,.3,.1], max: [.6,1.6,.9] }]
+};
+const { route, report } = P.cableRoutes.plan(cable, { graph });
+if (route) K.curveSplats.draw(builder, route.points, {
+  object: 'signal', radius: cable.radius, edge: 'hard'
+});
+```
+
+Socket `axis` and `offset` are local to the resolved socket. Axis
+defaults to local +Z and points away from both sockets. A positive
+`lead` reserves a straight world-space exit. Ordered `waypoints` are
+hard pins. Set a pin's optional `direction` in world space, along the
+route from source to destination, to control its tangent.
+
+`obstacles` are world-space box proxies with stable IDs. A contact
+waypoint replaces its `point` with
+`contact: { obstacle, face: 'y+', uv: [.5,.5], reach: .8 }`.
+Choose one of `x-`, `x+`, `y-`, `y+`, `z-`, or `z+`. Its UV
+coordinates use the two remaining world axes in XYZ order, measured
+from the minimum bounds. The centerline rests one radius away from the
+face and follows a tangent in the face plane. Extra clearance from
+that named surface tapers within `reach` of the contact along the route.
+The cable keeps its full physical radius there.
+
+The search reuses 3D prism visibility between pins. It fits a smooth
+centerline and samples the bend radius before accepting the route. The
+final sampled chords are checked against the original boxes for
+penetration. Contact clearance and bend radius are checked at bounded
+sample densities. Change `spacing` for finer inspection and use named
+guide pins to control routes through tight spaces. The solver reports
+`blocked`, `budget`, or `unresolved` when it cannot certify a candidate.
+
+`slack` adds world-space length to the fitted zero-sag centerline.
+Use `length` for a fixed installed length. The solver adds sag along
+`gravity` while respecting endpoint tangents and keeping the declared
+pins in place. The receipt includes measured length, the tightest bend,
+nearby obstacle gaps, resolved pins, and named contacts.
+
+A curve-splat scene can use a strand source of
+`{ kind: 'socket-cable', document: cable, graph }`. It can also use
+that source as a strand-bundle guide. For a bundle, account for its
+outer width when setting the cable radius.
+
+#### Approved native-grid cable gaps
+
+`cable-route review` renders the supplied approvals at one art pixel
+per output pixel. Each check names two rendered objects, a minimum
+gap, and optionally a rectangle `[x,y,width,height]` and a coverage
+threshold. The gap is the nearest visible pixel-center distance minus
+one pixel, clamped to zero. The report names the two closest pixels
+and flags a tight gap or a missing visible footprint.
+
+```json
+{
+  "format": "ink-studio/cable-gap-views",
+  "version": 1,
+  "views": [{
+    "id": "front",
+    "w": 240,
+    "h": 146,
+    "camera": { "yaw": 0, "pitch": 0.04, "dist": 7.5, "ortho": true },
+    "checks": [
+      { "id": "relay-air", "between": ["signal", "relay"], "minPixels": 2 }
+    ]
+  }]
+}
+```
+
+```sh
+node cli/ink-studio.js cable-route plan cable.json --graph graph.json --out route.json
+node cli/ink-studio.js cable-route review scene.js views.json --out cable-review --strict on
+node examples/socket-cables.cjs relay-bypass-demo
+```
+
+The demo compares an automatic bypass with an overhead route pinned
+in three places. The return braid touches a named saddle. The two
+approved views capture the relay gap for both routes.
+
 ### Triangulation and branching networks
 
 `P.geometry.delaunay(points, {constraints})` takes distinct planar points.

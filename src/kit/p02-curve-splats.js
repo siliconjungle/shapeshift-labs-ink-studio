@@ -32,7 +32,7 @@
   function bundle(spec) {
     check(spec && typeof spec === 'object' && !Array.isArray(spec), 'expected bundle settings');
     const input = spec.guide;
-    check(Array.isArray(input) || input && ['path', 'spline', 'family', 'surface', 'retained-spline'].includes(input.kind ?? 'path'),
+    check(Array.isArray(input) || input && ['path', 'spline', 'family', 'surface', 'retained-spline', 'socket-cable'].includes(input.kind ?? 'path'),
       'a strand bundle needs one guide path, spline, family or surface stroke');
     const guide = input.kind === 'family' ? K.curve.create(input.definition) : input;
     const compiled = typeof guide.frame === 'function' && typeof guide.at === 'function';
@@ -70,6 +70,12 @@
       }
       case 'family': return [pathSpec(K.curve.create(source.definition))];
       case 'retained-spline': return [pathSpec(source.points ? source : K.curve.retained.compile(source.document,source.spline))];
+      case 'socket-cable': {
+        const planned=K.procedural.cableRoutes.plan(source.document,{graph:source.graph});
+        check(planned.route,'cable '+planned.source.id+' is '+planned.report.status+
+          (planned.report.failure ? ' ('+planned.report.failure+')' : ''));
+        return [{id:planned.source.id,points:planned.route.points,radius:planned.source.radius,closed:false}];
+      }
       case 'surface': return [surfacePath(source)];
       case 'bundle': return bundlePaths(bundle(source));
       case 'bundle-plan':

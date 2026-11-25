@@ -264,6 +264,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.brickMeshes.layers` | function | `(snapshots)` | [guide](../brick-meshes.md), [source](../../src/kit/pcw-brick-meshes.js) |
 | `KIT.procedural.brickMeshes.splatWorld` | function | `(snapshot,options)` | [guide](../brick-meshes.md), [source](../../src/kit/pcw-brick-meshes.js) |
 
+## KIT.procedural.cableRoutes
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.cableRoutes` | namespace |  |  |
+| `KIT.procedural.cableRoutes.create` | function | `(raw)` | [source](../../src/kit/p46a-cable-routes.js) |
+| `KIT.procedural.cableRoutes.format` | value | `string = "ink-studio/socket-cable"` |  |
+| `KIT.procedural.cableRoutes.measureView` | function | `(frame,checks)` | [source](../../src/kit/p46a-cable-routes.js) |
+| `KIT.procedural.cableRoutes.plan` | function | `(input,{graph}={})` | [source](../../src/kit/p46a-cable-routes.js) |
+
 ## KIT.procedural.cameraPivots
 
 | Member | Kind | Signature or value | Guides and source |

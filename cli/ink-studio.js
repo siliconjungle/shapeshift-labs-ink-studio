@@ -1201,6 +1201,8 @@ const CMD = {
         '  paint mix|ramp|table|swatches <file.json> [--out file.json]   mix pigments or bake colors',
         '  hierarchy <graph.json> [--node id] [--parent id|world] [--out file.json]   inspect or reparent live scene nodes',
         '  curve <family-or-splines.json> [--spline ID] [--station n] [--distance n] [--text INK] [--out file.json]   sample a curve',
+        '  cable-route plan <cable.json> --graph <scene-graph.json> [--out route.json] [--strict on]   fit and check a socket cable',
+        '  cable-route review <scene> <views.json> --out directory [--strict on]   measure visible cable gaps on approved native grids',
         '  curve topology inspect <splines.json> [--out file.json]   describe retained control points, segments and attachments',
         '  curve topology edit <splines.json> <operations.json> [--out file.json] [--report file.json]   preview and commit spline edits',
         '  ornament <pattern.json> [--format pigment|relief|tiles] [--out file]   export a wallpaper or frieze pattern',
@@ -1860,6 +1862,9 @@ const CMD = {
   },
   hierarchy() {
     return require('./hierarchy.js')(pos,opt,lib());
+  },
+  'cable-route'() {
+    return require('./cable-route.js').command(pos,opt,lib(),build);
   },
   curve() {
     return require('./curve.js')(pos, opt, lib());
@@ -5212,6 +5217,7 @@ async function run() {
     });
   }
   const sceneFiles = cmd === 'snap' ? pos : cmd === 'pixel-art' ? pixelInputs :
+    cmd === 'cable-route' && pos[0] === 'review' ? pos.slice(1, 2) :
     cmd === 'mesh-uv' && ['layout', 'select', 'edit'].includes(pos[0]) && typeof opt.object === 'string' ? pos.slice(1, 2) :
     cmd === 'mesh-topology' && pos[0] === 'modifiers' && typeof opt.object === 'string' ? pos.slice(2, 3) :
     cmd === 'mesh-topology' && (pos[0] === 'select' && typeof opt.view === 'string' ||

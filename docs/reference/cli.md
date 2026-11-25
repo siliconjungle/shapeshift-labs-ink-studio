@@ -13,6 +13,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   paint mix|ramp|table|swatches <file.json> [--out file.json]   mix pigments or bake colors
   hierarchy <graph.json> [--node id] [--parent id|world] [--out file.json]   inspect or reparent live scene nodes
   curve <family-or-splines.json> [--spline ID] [--station n] [--distance n] [--text INK] [--out file.json]   sample a curve
+  cable-route plan <cable.json> --graph <scene-graph.json> [--out route.json] [--strict on]   fit and check a socket cable
+  cable-route review <scene> <views.json> --out directory [--strict on]   measure visible cable gaps on approved native grids
   curve topology inspect <splines.json> [--out file.json]   describe retained control points, segments and attachments
   curve topology edit <splines.json> <operations.json> [--out file.json] [--report file.json]   preview and commit spline edits
   ornament <pattern.json> [--format pigment|relief|tiles] [--out file]   export a wallpaper or frieze pattern
