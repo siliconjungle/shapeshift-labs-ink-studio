@@ -49,7 +49,7 @@ function linked(binding) {
 }
 
 function migrateGraph(source) {
-  fields(source, ['inputs', 'nodes', 'outputs', 'groups'], 'legacy graph scope');
+  fields(source, ['inputs', 'nodes', 'outputs', 'groups', 'result'], 'legacy graph scope');
   const links = {};
   function separate(binding, to) {
     if (!linked(binding)) return true;
@@ -60,6 +60,7 @@ function migrateGraph(source) {
   }
   const { inputs = {}, nodes, outputs, groups = {} } = source;
   return {
+    ...(Object.hasOwn(source,'result') && {result:source.result}),
     inputs: Object.fromEntries(entries(inputs, 'legacy inputs').map(([id, definition]) => [id, { definition }])),
     nodes: Object.fromEntries(entries(nodes, 'legacy nodes').map(([id, node]) => {
       fields(node, ['op', 'group', 'type', 'inputs', 'params'], 'legacy node ' + id);
@@ -96,12 +97,16 @@ function migrate(source, id) {
 }
 
 function lowerGraph(scope, { requireOutputs, materialBase = false } = {}) {
-  entity(scope, ['inputs', 'nodes', 'links', 'outputs', 'groups'], 'material graph scope');
+  entity(scope, ['inputs', 'nodes', 'links', 'outputs', 'groups', 'result'], 'material graph scope');
   const { nodes, links, outputs, inputs = {}, groups = {} } = scope;
   const declaredInputs = entries(inputs, 'inputs');
   if (materialBase && Object.hasOwn(inputs, 'materialBase'))
     throw new TypeError('The materialBase graph input is reserved by shared base settings');
+  if (Object.hasOwn(scope,'result') && (typeof scope.result !== 'string' ||
+      !record(outputs) || Object.keys(outputs).length !== 1 || !Object.hasOwn(outputs,'result')))
+    throw new TypeError('A material function scope needs a declared result type and result output');
   const native = {
+    ...(Object.hasOwn(scope,'result') && {result:scope.result}),
     nodes: Object.fromEntries(entries(nodes, 'nodes').map(([id, node]) => {
       entity(node, ['op', 'group', 'type', 'inputs', 'params'], 'node ' + id);
       if (!isId(node.op) || Object.hasOwn(node, 'group') && !isId(node.group))

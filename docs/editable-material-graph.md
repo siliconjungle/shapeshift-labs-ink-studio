@@ -48,7 +48,7 @@ Opening checks document structure and references. Executing additionally checks 
 
 ## Publish and edit reusable subgraphs
 
-A subgraph publishes its graph inputs as typed sockets, with optional defaults, and its bound graph outputs as named sockets. The compiler derives each output type and physical quantity from the connected source. Publish an inline editable scope or reference a shared graph group file from multiple materials. An external publication can be pinned by revision and SHA-256.
+A subgraph publishes its graph inputs as typed sockets, with optional defaults, and its bound graph outputs as named sockets. A [reusable function graph](reusable-function-graphs.md) adds a single declared value result to that interface. The compiler derives each output type and physical quantity from the connected source. Publish an inline editable scope or reference a shared graph group file from multiple materials. An external publication can be pinned by revision and SHA-256.
 
 Use `ink.editMaterialSubgraph(document, request, options)` to get a new document and the inspected subgraph. Pass `baseDir` for relative graph group files and `sourceFile` to include the editable file in navigation results. The original document remains available if an edit fails validation.
 

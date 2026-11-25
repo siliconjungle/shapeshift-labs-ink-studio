@@ -72,7 +72,7 @@ The declared graph type becomes the type of the value input and output.
 | Input | `value` | `number` | Required | {"finite":true} |
 | Output | `value` | `number` | — | {"finite":true} |
 
-Guides: [guide](../headless-authoring.md#legacy-and-shared-port-shapes), [guide](../physical-audio.md#build-an-audio-graph)
+Guides: [guide](../headless-authoring.md#legacy-and-shared-port-shapes), [guide](../physical-audio.md#build-an-audio-graph), [guide](../reusable-function-graphs.md#value-nodes)
 
 Get the runnable example with `ink-studio graph describe data.typed --example > example.json`.
 Run it with `ink-studio graph run example.json`.

@@ -118,8 +118,8 @@ function describe(value, depth = 0) {
   return Object.fromEntries(keys.map(key=>[key,describe(value[key],depth+1)]));
 }
 
-function graphSpec(value, label, groupOperators) {
-  fields(value,['inputs','nodes','outputs'],label);
+function graphSpec(value, label, groupOperators, typedOperations) {
+  fields(value,['inputs','nodes','outputs','result'],label);
   const {inputs={},nodes,outputs}=value;
   function binding(value) {
     if (!record(value)) return;
@@ -134,14 +134,14 @@ function graphSpec(value, label, groupOperators) {
   }
   for (const [name,node] of named(nodes,label+' nodes')) {
     fields(node,['op','params','inputs',...(groupOperators.includes(node?.op) ? ['group'] :
-      node?.op==='data.typed' ? ['type'] : [])],'node '+name);
+      typedOperations.includes(node?.op) ? ['type'] : [])],'node '+name);
     if (!id(node.op)) throw new TypeError('Invalid operation for node '+name);
     if (node.group!==undefined && !id(node.group)) throw new TypeError('Invalid group for node '+name);
     for (const [,value] of [...named(node.inputs??{},'node inputs'),...named(node.params??{},'node parameters')]) binding(value);
   }
   named(inputs,label+' parameters');
   for (const [,value] of named(outputs,label+' outputs')) binding(value);
-  return {inputs,nodes,outputs};
+  return {inputs,nodes,outputs,...(Object.hasOwn(value,'result') && {result:value.result})};
 }
 
 function select(frame, output, subpath) {
@@ -294,11 +294,12 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const host=createGraphHost(adapters,{kit});
   const {broadcast}=graph.arrays;
   const groupOperators=[...graph.arrays.groupOperators,...kit.KIT.procedural.animationGraph.groupOperators];
+  const typedOperations=['data.typed',...procedural.graphFunctions.typedOperations];
   const project=data.freeze(data.clone(source));
   materialMetadata=materialMetadata && data.freeze(structuredClone(materialMetadata));
   const {format:kind,version:revision,groups:definitions={},assets:assetDefinitions={},assetRegistry,exports:exportsSpec={},
     assertions:assertionSpecs=[],time=0,seed:authoredSeed,base:baseSpec,inheritance,primaryInput,outputUsages,...root}=fields(project,
-    ['format','version','inputs','nodes','outputs','groups','assets','assetRegistry','exports','assertions','time','seed','base','inheritance','primaryInput','outputUsages'],'graph project');
+    ['format','version','inputs','nodes','outputs','result','groups','assets','assetRegistry','exports','assertions','time','seed','base','inheritance','primaryInput','outputUsages'],'graph project');
   if (kind!==format || revision!==version) throw new TypeError('Expected ink-studio/graph-project version 1');
   const base=baseSpec===undefined ? undefined : data.freeze(Base.resolve(baseSpec,{seed:authoredSeed}));
   const seed=base?.seed ?? (authoredSeed===undefined ? 0 : authoredSeed);
@@ -312,7 +313,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   if (base && Object.hasOwn(root.inputs ?? {}, 'materialBase'))
     throw new TypeError('The materialBase graph input is reserved by shared base settings');
   const spec=graphSpec(base ? {...root,inputs:{...root.inputs,materialBase:{type:'record',default:base}}} : root,
-    'project graph',groupOperators);
+    'project graph',groupOperators,typedOperations);
   if (primaryInput!==undefined) {
     const socket=id(primaryInput) && Object.hasOwn(spec.inputs,primaryInput) ? spec.inputs[primaryInput] : undefined;
     const type=typeof socket==='string' ? socket : socket?.type;
@@ -323,7 +324,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const api=kit.KIT.authoring.assetReferences;
   const resolveAsset=Assets.scope(api,path.join(baseDir,'graph.json'),assetRegistry,{onFile:file=>paths.add(file)});
   const groupTree=loadGraphGroups(definitions,baseDir,{onFile:file=>paths.add(file),inspectors:groupInspectors});
-  const groupSpecs=new Map(groupTree.entries.map(group=>[group,graphSpec(group.spec,'group '+group.alias,groupOperators)]));
+  const groupSpecs=new Map(groupTree.entries.map(group=>[group,graphSpec(group.spec,'group '+group.alias,groupOperators,typedOperations)]));
   const assets=new Map(named(assetDefinitions,'assets').map(([name,definition])=>{
     const {format,file,type,codec,options,precision}=fields(definition,
       definition?.format==='codec' ? ['format','file','type','codec','options'] :
@@ -494,9 +495,9 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   }
 
   function describeScope(compiled,scope,overrides={}) {
-    const {inputs,nodes,outputs}=compiled.plan({bindings:true});
+    const {inputs,nodes,outputs,result}=compiled.plan({bindings:true});
     for (const [name,value] of Object.entries(overrides)) inputs[name].default=value;
-    return {inputs,nodes:Object.fromEntries(nodes.map(({id,...node})=>{
+    return {inputs,...(result!==undefined && {result}),nodes:Object.fromEntries(nodes.map(({id,...node})=>{
       const group=groupFor(scope,node);
       return [id,{...node,...(group && {groupPath:group.alias}),
         ...(node.seed===undefined && Object.hasOwn(operations,node.op) && {seed:true})}];
@@ -528,7 +529,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       groups:segments.slice(start), ...(selected.document && {revision:selected.document.revision,sha256:selected.document.sha256})};
     const outputs=Object.fromEntries(Object.entries(plan.outputs).map(([key,{type,quantity}])=>
       [key,{type,...(quantity && {quantity})}]));
-    const result={alias:selected.alias,source,inputs:data.clone(plan.inputs),outputs};
+    const result={alias:selected.alias,source,inputs:data.clone(plan.inputs),outputs,...(plan.result!==undefined && {result:plan.result})};
     const runner=owner ? preparedGroups.get(owner.alias).compiled : compiled;
     if (node!==undefined) {
       const call=describeScope(runner,local).nodes[node], given={...body.nodes[node].params,...body.nodes[node].inputs};

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kiln Formula · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--ink:#f4efe4;--dim:#b8b9bc;--border:#3e404a;--panel:#22232b;--bg:#14151c;--copper:#efbd8a;--jade:#9adfca}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:var(--ink);background:radial-gradient(ellipse at 78% -10%,#343040,transparent 52%),var(--bg);font:14px system-ui,sans-serif}
+main{max-width:1420px;margin:auto;padding:36px clamp(16px,4vw,56px) 34px}
+header{margin:0 0 24px}
+h1{font:400 clamp(45px,6vw,78px)/.98 Georgia,serif;letter-spacing:-.065em;margin:3px 0 10px}
+h2,h3,p{margin:0}
+h2{font:400 25px/1.08 Georgia,serif;letter-spacing:-.026em}
+p{line-height:1.5;color:var(--dim)}
+.brand,.label,.chip,.hint,.typed,output{font:10px ui-monospace,monospace;letter-spacing:.09em;text-transform:uppercase}
+.brand,.label{color:var(--copper)}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(292px,340px);gap:17px;align-items:start}
+#plates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;min-width:0}
+.plate,aside{min-width:0;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--panel);box-shadow:0 14px 32px #0d0e1561}
+.plate-header{padding:12px 13px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.chip{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.chip i{width:13px;height:13px;display:inline-block;border-radius:3px;box-shadow:0 0 0 1px #f6efdf3b}
+figure{margin:0;background:#14151b}
+.swatch{display:block;width:100%;aspect-ratio:1;object-fit:contain;image-rendering:pixelated}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;padding:12px 13px}
+.field{display:grid;grid-template-columns:1fr auto;gap:4px 6px;align-items:center;min-width:0}
+.field label,.toggle{font-size:12px;color:var(--dim)}
+.field output{color:var(--copper)}
+.field input,.field select{grid-column:1/-1;width:100%;min-width:0;margin:0}
+input,select,button{font:inherit;accent-color:var(--copper)}
+button,select{border:1px solid #52505b;background:#2b2c35;color:var(--ink);border-radius:6px;padding:4px 7px;cursor:pointer}
+button:hover,select:hover{border-color:var(--copper)}
+button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--jade);outline-offset:3px}
+.field select{min-height:25px;font-size:12px}
+.toggle input{width:auto;margin:0 6px 0 0;vertical-align:middle}
+.stats{border-top:1px solid var(--border);display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;padding:10px 13px;margin:0}
+.stats dt{font-size:11px;color:var(--dim)}
+.stats dd{font-variant-numeric:tabular-nums;margin:2px 0 0;color:var(--ink);font-size:12px}
+aside{padding:15px 15px 13px}
+aside h2{margin:5px 0 6px}
+aside p{font-size:12px}
+.curve-wrap{margin:13px 0 10px}
+#curve{display:block;width:100%;height:auto;border:1px solid var(--border);border-radius:6px;background:#181921}
+.chart-axes{display:flex;justify-content:space-between;color:var(--dim);margin-top:4px}
+ol{list-style:none;padding:0;margin:14px 0 12px;display:grid;gap:0}
+li{display:grid;grid-template-columns:1fr auto;align-items:center;gap:6px;border-top:1px solid var(--border);padding:7px 0;font-size:12px}
+.typed{color:var(--jade);text-transform:none}
+aside a{color:var(--copper);font-size:12px}
+.actions{display:flex;gap:7px;justify-content:space-between;flex-wrap:wrap;margin-top:12px}
+.actions button{padding:6px 8px;font-size:12px}
+#save{background:var(--copper);color:#31201e;border-color:var(--copper);font-weight:650}
+footer{display:flex;justify-content:space-between;gap:10px;margin-top:11px;flex-wrap:wrap}
+#error{color:#ffb4a5;font-size:12px;margin-top:12px}
+#error:empty{display:none}
+@media(max-width:950px){.layout{grid-template-columns:1fr}aside{max-width:none}.curve-wrap{max-width:440px}}
+@media(max-width:530px){main{padding-top:23px}header{margin-bottom:15px}#plates{grid-template-columns:1fr}.plate-header{padding:11px;}.swatch{aspect-ratio:1.2}}
+</style>
+</head>
+<body>
+<main>
+  <header><span class="brand">Ink Studio</span><h1>Kiln Formula</h1><p>Two ceramic glazes share one typed function. Change a kiln’s inputs or move the firing knee for both.</p></header>
+  <div class="layout">
+    <section id="plates" aria-label="Glaze materials"></section>
+    <aside aria-label="Shared function">
+      <span class="label">Shared function</span>
+      <h2>Firing response</h2>
+      <p>Blends each raw pigment with its selected fired glaze in linear light.</p>
+      <div class="curve-wrap"><canvas id="curve" width="620" height="270" aria-label="Firing response curve with both kiln samples"></canvas>
+        <div class="chart-axes hint"><span>Low energy</span><span>High energy</span></div></div>
+      <div class="field"><label for="knee">Firing knee</label><output for="knee" id="knee-readout"></output><input type="range" id="knee"></div>
+      <ol aria-label="Function stages">
+        <li>Heat and oxygen <span class="typed">vec2</span></li>
+        <li>Firing amount <span class="typed">number</span></li>
+        <li>Reduction gate <span class="typed">boolean</span></li>
+        <li>Glaze result <span class="typed">sRGB</span></li>
+      </ol>
+      <div class="actions"><button id="reset" type="button">Reset</button><button id="save" type="button">Save edited material</button></div>
+      <footer><a href="kiln-formula.material.json" download>Material graph</a><a href="kiln-glaze.group.json" download>Reusable function</a></footer>
+      <p id="error" role="alert"></p>
+    </aside>
+  </div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="kiln-data.js"></script>
+<script src="kiln-gallery.js"></script>
+</body>
+</html>
