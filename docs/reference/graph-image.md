@@ -1304,6 +1304,45 @@ Guides: [guide](../material-tile-generator.md)
 Get the runnable example with `ink-studio graph describe image.tileGenerator --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.tileSampler
+
+Drive signed tile selection, transforms, tint, density, visibility and overlap priority with independent typed maps.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `width` | `pixelCount` | `128` | pixels · {"integer":true,"min":1} |
+| Input | `height` | `pixelCount` | `128` | pixels · {"integer":true,"min":1} |
+| Input | `columns` | `number` | `4` | {"finite":true,"min":1,"max":128,"integer":true} |
+| Input | `rows` | `number` | `6` | {"finite":true,"min":1,"max":128,"integer":true} |
+| Input | `stamps` | `array<shape2d>` | `[{"type":"rectangle","size":[1,1]}]` | {"items":"shape2d","minItems":1,"maxItems":32} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"pattern":{"type":"string","constraints":{"choices":["grid","brick","column-stagger","checker"]},"default":"grid"},"size":{"type":"vec2","unit":"cell widths and heights","constraints":{"min":0.025,"max":3},"default":[1,1]},"gutter":{"type":"vec2","unit":"cell fractions","constraints":{"min":0,"max":0.98},"default":[0.08,0.08]},"rotation":{"type":"number","unit":"degrees clockwise","default":0},"rowOffset":{"type":"number","unit":"cell widths per course","constraints":{"min":-4,"max":4}},"columnOffset":{"type":"number","unit":"cell heights per column","constraints":{"min":-4,"max":4}},"wrap":{"type":"array<boolean>","constraints":{"length":2},"default":[true,true]},"crop":{"type":"array<number>","unit":"texture coordinates","constraints":{"length":4,"order":"left, top, right, bottom"},"default":[0,0,1,1]},"aspect":{"type":"number","constraints":{"min":0.125,"max":8},"default":1},"color":{"type":"string\|number\|array<number>","default":"#b97853"},"palette":{"type":"array<any>","constraints":{"minItems":1,"maxItems":64,"entries":"Hex, packed RGB, or normalized RGB/RGBA"}},"colorMode":{"type":"string","constraints":{"choices":["tile","course","column","cycle"]},"default":"tile"},"background":{"type":"string\|number\|array<number>","default":[0,0,0,0]},"jitter":{"type":"record","properties":{"position":{"type":"vec2","unit":"cell fractions","constraints":{"min":0,"max":0.95},"default":[0,0]},"size":{"type":"vec2","unit":"stamp size fractions","constraints":{"min":0,"max":0.95},"default":[0,0]},"rotation":{"type":"number","unit":"degrees","constraints":{"min":0,"max":180},"default":0},"color":{"type":"number","constraints":{"min":0,"max":1},"default":0}}},"samples":{"type":"number","unit":"samples per axis","constraints":{"choices":[1,2,4]},"default":1},"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]},"default":"unorm8"},"seed":{"type":"number","constraints":{"integer":true,"safe":true}}} |
+| Input | `controls` | `record` | `{}` | {"layout":"Plain named object"} · {"positionAmount":{"type":"vec2","unit":"cell fractions","constraints":{"min":0,"max":4},"default":[1,1]},"scaleRange":{"type":"vec2","unit":"stamp size multiplier","constraints":{"min":0.025,"max":4},"default":[0.25,1.75]},"rotationAmount":{"type":"number","unit":"degrees","constraints":{"min":0,"max":360},"default":180},"density":{"type":"number","constraints":{"min":0,"max":1},"default":1},"visibilityThreshold":{"type":"number","constraints":{"min":0,"max":1},"default":0.5},"mapFilter":{"type":"string","constraints":{"choices":["image","nearest","linear"]},"default":"image"},"seeds":{"type":"record","properties":{"selection":{"type":"number","constraints":{"integer":true,"safe":true}},"position":{"type":"number","constraints":{"integer":true,"safe":true}},"scale":{"type":"number","constraints":{"integer":true,"safe":true}},"rotation":{"type":"number","constraints":{"integer":true,"safe":true}},"color":{"type":"number","constraints":{"integer":true,"safe":true}},"density":{"type":"number","constraints":{"integer":true,"safe":true}}}}} |
+| Input | `selection` | `any` | `null` | {"intent":["data","mask"],"channels":[1],"units":"unitless"} |
+| Input | `position` | `any` | `null` | {"intent":["data"],"channels":[2],"units":"unitless"} |
+| Input | `rotation` | `any` | `null` | {"intent":["data","mask"],"channels":[1],"units":"unitless"} |
+| Input | `scale` | `any` | `null` | {"intent":["data","mask"],"channels":[1,2],"units":"unitless"} |
+| Input | `color` | `any` | `null` | {"intent":["color","data","mask"]} |
+| Input | `density` | `any` | `null` | {"intent":["data","mask"],"channels":[1],"units":"unitless"} |
+| Input | `visibility` | `any` | `null` | {"intent":["data","mask"],"channels":[1],"units":"unitless"} |
+| Input | `priority` | `any` | `null` | {"intent":["data","mask"],"channels":[1],"units":"unitless"} |
+| Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
+| Output | `coverage` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `tileId` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `course` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `stampId` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `layout` | `record` | — | {"layout":"Plain named object"} |
+
+- Connect optional unitless typed maps. Every map samples the same unjittered cell anchor, independent of crop and bake resolution.
+- Normalized scalar selection chooses a one-based stamp. Higher priority paints on top, then higher tile ID breaks ties.
+- Controls exposes independent safe-integer seed overrides. Density uses a stable per-tile draw and visibility applies a deterministic threshold.
+
+Guides: [guide](../material-tile-sampler.md)
+
+Get the runnable example with `ink-studio graph describe image.tileSampler --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.toDisplay
 
 Convert typed color to straight-alpha sRGB8 for legacy compositing and PNG exports.

@@ -71,6 +71,15 @@ const evolvingNoise = ['perlin','simplex','worley','voronoi','cellular','fractal
 
 const ports = {
   'image.tileGenerator': { columns:limit(1,128,true),rows:limit(1,128,true) },
+  'image.tileSampler': { columns:limit(1,128,true),rows:limit(1,128,true),stamps:{constraints:{minItems:1,maxItems:32}},
+    selection:{constraints:{intent:['data','mask'],channels:[1],units:'unitless'}},
+    position:{constraints:{intent:['data'],channels:[2],units:'unitless'}},
+    rotation:{constraints:{intent:['data','mask'],channels:[1],units:'unitless'}},
+    scale:{constraints:{intent:['data','mask'],channels:[1,2],units:'unitless'}},
+    color:{constraints:{intent:['color','data','mask']}},
+    density:{constraints:{intent:['data','mask'],channels:[1],units:'unitless'}},
+    visibility:{constraints:{intent:['data','mask'],channels:[1],units:'unitless'}},
+    priority:{constraints:{intent:['data','mask'],channels:[1],units:'unitless'}} },
   'shape.define': { definition:{constraints:{types:['rectangle','disc','polygon','star','linear','radial','spot','stroke','gradient','symbol','bevel']}} },
   'image.noise': { family:namedNoise },
   'proc.noiseFamily': { family:namedNoise },
@@ -248,8 +257,7 @@ const noiseOptions = {
   aspect:property('number',{families:['anisotropic'],...limit(1,128)},4),
   wander:property('number',{families:['directional'],...limit(0,4)},.26)
 };
-const options = {
-  'image.tileGenerator': {
+const tileLayout = {
     pattern:property('string',oneOf('grid','brick','column-stagger','checker'),'grid'),
     size:property('vec2',{unit:'cell widths and heights',...limit(.025,3)},[1,1]),
     gutter:property('vec2',{unit:'cell fractions',...limit(0,.98)},[.08,.08]),
@@ -271,7 +279,19 @@ const options = {
     }}),
     samples:property('number',{unit:'samples per axis',...oneOf(1,2,4)},1),
     precision:{...imagePrecision,default:'unorm8'},seed:property('number',{constraints:{integer:true,safe:true}})
-  },
+};
+const tileControls = {
+  positionAmount:property('vec2',{unit:'cell fractions',...limit(0,4)},[1,1]),
+  scaleRange:property('vec2',{unit:'stamp size multiplier',...limit(.025,4)},[.25,1.75]),
+  rotationAmount:property('number',{unit:'degrees',...limit(0,360)},180),
+  density:property('number',limit(0,1),1),visibilityThreshold:property('number',limit(0,1),.5),
+  mapFilter:property('string',oneOf('image','nearest','linear'),'image'),
+  seeds:property('record',{properties:Object.fromEntries(['selection','position','scale','rotation','color','density'].map(
+    name=>[name,property('number',{constraints:{integer:true,safe:true}})]))})
+};
+const options = {
+  'image.tileGenerator':tileLayout,
+  'image.tileSampler':tileLayout,
   'image.shape': { bounds:property('array<number>',{unit:'shape units',constraints:{length:4,order:'left, top, right, bottom'}},[0,0,1,1]),
     samples:property('number',{unit:'samples per axis',...oneOf(1,2,4)},1),
     precision:property('string',oneOf('float32','float64'),'float32') },
@@ -665,6 +685,9 @@ const notes = {
   'image.tileGenerator': ['Tile and course IDs are one-based. Zero marks the background.',
     'Wrapped rows and columns quantize stagger to a closed cycle. Layout reports authored and effective offsets.',
     'Crops change the sampled window while keeping the same placements and IDs. Connect a shape definition to stamp for custom coverage.'],
+  'image.tileSampler': ['Connect optional unitless typed maps. Every map samples the same unjittered cell anchor, independent of crop and bake resolution.',
+    'Normalized scalar selection chooses a one-based stamp. Higher priority paints on top, then higher tile ID breaks ties.',
+    'Controls exposes independent safe-integer seed overrides. Density uses a stable per-tile draw and visibility applies a deterministic threshold.'],
   'image.shape': ['All outputs use one sampling window. Match bounds across resolutions to preserve geometry.',
     'Distance and bevel height are center samples in shape units. Coverage and scalar profiles can use 1, 4 or 16 subpixel tests.',
     'Use info.spacing as the derivative spacing for a height-to-normal conversion.'],
@@ -741,6 +764,7 @@ function socketDetails(id, name, type, input) {
   const dimension = input && type === 'number' && (name === 'width' || name === 'height') ? positivePixels : {};
   const details = Object.hasOwn(ports, id) && Object.hasOwn(ports[id], name) ? ports[id][name] : {};
   const properties = !input ? undefined : id === 'sim.define' && name === 'clock' ? simulationClock :
+    id === 'image.tileSampler' && name === 'controls' ? tileControls :
     (name === 'options' || name === 'timing') && Object.hasOwn(options, id) ? options[id] : undefined;
   return { unit: details.unit ?? dimension.unit ?? semanticUnits[type] ?? null,
     constraints: { ...base, ...dimension.constraints, ...details.constraints }, ...(properties && { properties }) };

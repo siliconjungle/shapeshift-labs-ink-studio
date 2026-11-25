@@ -1,0 +1,17 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs'), path=require('node:path');
+const Ink=require('../..'), PNG=require('../../cli/png.js'), files=require('../../cli/asset-files.js');
+const {inlayMaps,inlayGraph,inlayPreview,inlayMapPreview}=require('./inlay.js');
+const out=path.resolve(process.argv[2]??'studio/out/material-tile-sampler'), at=name=>path.join(out,name);
+const maps=inlayMaps(Ink.load().KIT.procedural.graphImages), material=at('current-inlay.material.json');
+Ink.writeMaterialGraph(material,Ink.openMaterialGraph(inlayGraph(maps,true),{id:'current-inlay',label:'Current Inlay'}));
+const {outputs,artifacts}=Ink.readGraphProject(material).run();
+assert(outputs.layout.rejected.visibility>0&&outputs.layout.rejected.density>0);
+assert.equal(new Set(outputs.layout.placements.map(n=>n.stampId)).size,4);
+for(const artifact of artifacts) files.write(at(artifact.file),artifact.bytes);
+const write=(name,{width,height,data})=>files.write(at(name),PNG.encode(width,height,data,4));
+for(const mode of ['relief','stamps','priority']) write(mode+'.png',inlayPreview(outputs,mode));
+for(const [name,map] of Object.entries(maps)) write('maps/'+name+'.png',inlayMapPreview(map));
+for(const file of ['index.html','inlay.js']) files.write(at(file),fs.readFileSync(path.join(__dirname,file)));
+files.write(at('ink-studio.browser.js'),Buffer.from(Ink.bundle()));
+console.log('Wrote Current Inlay, eight source maps and the editable material graph to '+out);
