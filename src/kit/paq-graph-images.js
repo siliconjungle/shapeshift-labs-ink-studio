@@ -592,6 +592,9 @@
     requireImage, descriptor, wrap, storage, pack, alphaAt, integerMax, convertColor, luminance, sampler, dimensions, fields
   });
   const filters = TypedImageFilters({ requireImage, descriptor, wrap, storage, pack, integerMax, convertColor, fields });
+  const morphology = TypedImageMorphology({
+    requireImage, descriptor, wrap, storage, alphaAt, integerMax, convertColor, luminance, fields, geometry: P.geometry
+  });
   const correctionOptions = { type: 'record', default: {} };
   const sameImage = { type: 'typedImage', typeFrom: 'source' };
   function filter(name, description, output = sameImage) {
@@ -668,6 +671,44 @@
     'image.unsharpMask': filter('unsharpMask', 'Add back Gaussian detail with independent intensity and contrast threshold.'),
     'image.sharpen': filter('sharpen', 'Sharpen with a four-neighbor cross while retaining original coverage.'),
     'image.antialias': filter('antialias', 'Apply edge-adaptive subpixel reconstruction to diagonal raster edges.'),
+    'image.distance': {
+      description: 'Measure exact nearest-seed distance and return original seed coordinates and a validity mask.',
+      inputs: { source: 'typedImage', options: correctionOptions }, outputs: {
+        value: 'heightImage', nearest: 'typedImage', valid: 'typedImage'
+      },
+      run({ source, options }) { return morphology.distance(source, options); }
+    },
+    'image.signedDistance': {
+      description: 'Measure positive distance outside and negative distance inside a thresholded selection.',
+      inputs: { source: 'typedImage', options: correctionOptions }, outputs: { value: 'heightImage' },
+      run({ source, options }) { return { value: morphology.signedDistance(source, options) }; }
+    },
+    'image.propagate': {
+      description: 'Copy original typed source samples through a nearest-seed coordinate image.',
+      inputs: { source: 'typedImage', nearest: 'typedImage' }, outputs: { value: sameImage },
+      run({ source, nearest }) { return { value: morphology.propagate(source, nearest) }; }
+    },
+    'image.dilate': {
+      description: 'Grow a typed mask by an exact Euclidean radius with per-axis border handling.',
+      inputs: { source: 'typedImage', options: correctionOptions }, outputs: { value: 'typedImage' },
+      run({ source, options }) { return { value: morphology.dilate(source, options) }; }
+    },
+    'image.erode': {
+      description: 'Shrink a typed mask by an exact Euclidean radius with per-axis border handling.',
+      inputs: { source: 'typedImage', options: correctionOptions }, outputs: { value: 'typedImage' },
+      run({ source, options }) { return { value: morphology.erode(source, options) }; }
+    },
+    'image.outline': {
+      description: 'Return combined, inner and outer distance outlines with optional coverage feathering.',
+      inputs: { source: 'typedImage', options: correctionOptions },
+      outputs: { value: 'typedImage', inner: 'typedImage', outer: 'typedImage' },
+      run({ source, options }) { return morphology.outline(source, options); }
+    },
+    'image.edgeDetect': {
+      description: 'Measure Sobel or Scharr gradient magnitude and return a thresholded typed mask.',
+      inputs: { source: 'typedImage', options: correctionOptions }, outputs: { value: 'typedImage', magnitude: 'typedImage' },
+      run({ source, options }) { return morphology.edgeDetect(source, options); }
+    },
     'image.curve': {
       description: 'Apply an editable channel curve with named stops, cubic handles and clamp or repeat addressing.',
       inputs: { source: 'typedImage', curve: 'record', options: correctionOptions }, outputs: { value: sameImage },
@@ -745,5 +786,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);

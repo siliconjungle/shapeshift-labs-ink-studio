@@ -201,6 +201,7 @@ All checked-in guides, indexed by title and section headings.
 - [Material image blend modes](../material-image-blend.md)
 - [Split, shuffle, and pack typed image channels](../material-image-channels.md)
 - [Typed material blur, sharpen, and antialias](../material-image-filters.md)
+- [Typed material distance, edges, and morphology](../material-image-morphology.md)
 - [Material-point passes and impacts](../material-point-impacts.md)
 - [Portable material response recipes](../material-response.md)
 - [Surface materialisation](../materialisation.md)

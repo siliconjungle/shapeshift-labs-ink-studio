@@ -189,6 +189,14 @@ const filterRadius = (max, fallback, integer = false) => property('number',pixel
 const filterSigma = property('number',{unit:'pixels',constraints:{exclusiveMin:0}});
 const filterAngle = property('number',unit('degrees'),0);
 const filterSamples = property('number',limit(2,65,true),17);
+const imageGeometry = { channel:property('string',oneOf('value','luminance','r','g','b','alpha')),
+  border:imageFilterOutput.border };
+const imageSelection = { ...imageGeometry, threshold:property('number',{},.5),
+  invert:property('boolean',{},false), units:property('string',oneOf('pixels','normalized'),'pixels') };
+const distanceOptions = { ...imageSelection,
+  precision:property('string',oneOf('float32','float64'),'float64'), maxDistance:property('number',positive) };
+const morphologyOptions = { ...imageSelection,
+  precision:{...imagePrecision,default:'float64'}, radius:property('number',positive,1) };
 const options = {
   'textile.pattern': {
     size: property('vec2', {unit:'world units'}, [4,3]),
@@ -224,6 +232,15 @@ const options = {
     threshold:property('number',positive,0) },
   'image.antialias': { ...imageFilterOutput, intensity:blendIntensity, radius:filterRadius(2,.85),
     threshold:property('number',positive,.08) },
+  'image.distance': distanceOptions,
+  'image.signedDistance': distanceOptions,
+  'image.dilate': morphologyOptions,
+  'image.erode': morphologyOptions,
+  'image.outline': { ...imageSelection, precision:{...imagePrecision,default:'float64'},
+    inner:property('number',positive,0), outer:property('number',positive,1), feather:property('number',positive,0) },
+  'image.edgeDetect': { ...imageGeometry, precision:{...imagePrecision,default:'float64'},
+    method:property('string',oneOf('sobel','scharr'),'sobel'), threshold:property('number',positive,.08),
+    softness:property('number',positive,0) },
   'image.curve': { ...correctionOutput, channel:property('string',oneOf('all','r','g','b','value'),'all') },
   'image.gradient': { precision:{...imagePrecision,default:'float64'}, outOfRange:{...imageRangePolicy,default:'error'},
     from:property('vec2',limit(0,1),[0,.5]), to:property('vec2',limit(0,1),[1,.5]) },

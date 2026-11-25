@@ -208,6 +208,23 @@ Guides: [guide](../graph-image-types.md)
 Get the runnable example with `ink-studio graph describe image.declare --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.dilate
+
+Grow a typed mask by an exact Euclidean radius with per-axis border handling.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"channel":{"type":"string","constraints":{"choices":["value","luminance","r","g","b","alpha"]}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"threshold":{"type":"number","default":0.5},"invert":{"type":"boolean","default":false},"units":{"type":"string","constraints":{"choices":["pixels","normalized"]},"default":"pixels"},"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]},"default":"float64"},"radius":{"type":"number","constraints":{"min":0},"default":1}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-morphology.md)
+
+Get the runnable example with `ink-studio graph describe image.dilate --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.directionalBlur
 
 Average along a centered line with subpixel samples and a clockwise angle.
@@ -223,6 +240,60 @@ Origin: toolkit.
 Guides: [guide](../material-image-filters.md)
 
 Get the runnable example with `ink-studio graph describe image.directionalBlur --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.distance
+
+Measure exact nearest-seed distance and return original seed coordinates and a validity mask.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"channel":{"type":"string","constraints":{"choices":["value","luminance","r","g","b","alpha"]}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"threshold":{"type":"number","default":0.5},"invert":{"type":"boolean","default":false},"units":{"type":"string","constraints":{"choices":["pixels","normalized"]},"default":"pixels"},"precision":{"type":"string","constraints":{"choices":["float32","float64"]},"default":"float64"},"maxDistance":{"type":"number","constraints":{"min":0}}} |
+| Output | `value` | `heightImage` | — | {"layout":"Typed floating-point height with units"} |
+| Output | `nearest` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `valid` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-morphology.md)
+
+Get the runnable example with `ink-studio graph describe image.distance --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.edgeDetect
+
+Measure Sobel or Scharr gradient magnitude and return a thresholded typed mask.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"channel":{"type":"string","constraints":{"choices":["value","luminance","r","g","b","alpha"]}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]},"default":"float64"},"method":{"type":"string","constraints":{"choices":["sobel","scharr"]},"default":"sobel"},"threshold":{"type":"number","constraints":{"min":0},"default":0.08},"softness":{"type":"number","constraints":{"min":0},"default":0}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `magnitude` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-morphology.md)
+
+Get the runnable example with `ink-studio graph describe image.edgeDetect --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.erode
+
+Shrink a typed mask by an exact Euclidean radius with per-axis border handling.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"channel":{"type":"string","constraints":{"choices":["value","luminance","r","g","b","alpha"]}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"threshold":{"type":"number","default":0.5},"invert":{"type":"boolean","default":false},"units":{"type":"string","constraints":{"choices":["pixels","normalized"]},"default":"pixels"},"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]},"default":"float64"},"radius":{"type":"number","constraints":{"min":0},"default":1}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-morphology.md)
+
+Get the runnable example with `ink-studio graph describe image.erode --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.exposure
@@ -448,6 +519,25 @@ Guides: [guide](../material-color-corrections.md)
 Get the runnable example with `ink-studio graph describe image.levels --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.outline
+
+Return combined, inner and outer distance outlines with optional coverage feathering.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"channel":{"type":"string","constraints":{"choices":["value","luminance","r","g","b","alpha"]}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"threshold":{"type":"number","default":0.5},"invert":{"type":"boolean","default":false},"units":{"type":"string","constraints":{"choices":["pixels","normalized"]},"default":"pixels"},"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]},"default":"float64"},"inner":{"type":"number","constraints":{"min":0},"default":0},"outer":{"type":"number","constraints":{"min":0},"default":1},"feather":{"type":"number","constraints":{"min":0},"default":0}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `inner` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `outer` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-morphology.md)
+
+Get the runnable example with `ink-studio graph describe image.outline --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.pack
 
 Pack selected typed image channels and numeric constants into one image.
@@ -482,6 +572,23 @@ Origin: toolkit.
 Guides: [guide](../material-color-corrections.md)
 
 Get the runnable example with `ink-studio graph describe image.posterize --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.propagate
+
+Copy original typed source samples through a nearest-seed coordinate image.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `nearest` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-morphology.md)
+
+Get the runnable example with `ink-studio graph describe image.propagate --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.radialBlur
@@ -553,6 +660,23 @@ The optional literal descriptor selects the output image type.
 Guides: [guide](../material-image-channels.md)
 
 Get the runnable example with `ink-studio graph describe image.shuffle --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.signedDistance
+
+Measure positive distance outside and negative distance inside a thresholded selection.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"channel":{"type":"string","constraints":{"choices":["value","luminance","r","g","b","alpha"]}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"threshold":{"type":"number","default":0.5},"invert":{"type":"boolean","default":false},"units":{"type":"string","constraints":{"choices":["pixels","normalized"]},"default":"pixels"},"precision":{"type":"string","constraints":{"choices":["float32","float64"]},"default":"float64"},"maxDistance":{"type":"number","constraints":{"min":0}}} |
+| Output | `value` | `heightImage` | — | {"layout":"Typed floating-point height with units"} |
+
+Guides: [guide](../material-image-morphology.md)
+
+Get the runnable example with `ink-studio graph describe image.signedDistance --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.split
