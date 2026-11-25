@@ -816,7 +816,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.meshTopologyScene.diff` | function | `(before, after)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.evaluator` | function | `(rows)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.mount` | function | `(world, prepared)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
-| `KIT.authoring.meshTopologyScene.prepare` | function | `(rows)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
+| `KIT.authoring.meshTopologyScene.prepare` | function | `(rows, tilesets = A.tilesets.prepare())` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.revise` | function | `(row, patch, { projection } = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.transferAttachments` | function | `(row, patch, settings, projection)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.physicalMaterials` | namespace |  |  |
@@ -856,6 +856,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.storyExchange.validate` | function | `(manifest)` | [source](../../src/kit/p23zz-story-exchange.js) |
 | `KIT.authoring.styles` | namespace |  |  |
 | `KIT.authoring.styles.resolve` | function | `(source, id)` | [source](../../src/kit/p25-authoring-bindings.js) |
+| `KIT.authoring.tilesets` | namespace |  |  |
+| `KIT.authoring.tilesets.dimensions` | function | `(width, height)` | [source](../../src/kit/p23-tilesets.js) |
+| `KIT.authoring.tilesets.prepare` | function | `(sources = {})` | [source](../../src/kit/p23-tilesets.js) |
+| `KIT.authoring.tilesets.register` | function | `(scene, key, source)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.worldFrame` | function | `(source, id, { resolveAnchor } = {})` | [guide](../procedural.md#optional-retained-authoring), [source](../../src/kit/p25-authoring-bindings.js) |
 
 ## KIT.bones

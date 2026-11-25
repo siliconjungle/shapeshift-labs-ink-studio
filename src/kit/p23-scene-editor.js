@@ -341,6 +341,17 @@
       else document.transact('Edit prefab instance ' + id, write);
     }
 
+    function registerTileset(id, source) {
+      const before = snapshot(), next = A.tilesets.register(before,id,source);
+      const result = next.tilesets[id];
+      if (next === before) return result;
+      const write = () => {
+        document.setEnvironment({tilesets:{[id]:result}});
+        return result;
+      };
+      return document.pending() ? write() : document.transact('Register tileset '+id,write);
+    }
+
     function meshTopology(object, part) {
       const meshes = snapshot().topologyMeshes ?? {};
       const mesh = Object.hasOwn(meshes, object) ? meshes[object] : null;
@@ -766,6 +777,7 @@
       updateModifier,
       setPrefabInstance,
       planPrefabRefresh, refreshPrefabs,
+      registerTileset,
       meshTopology,
       selectMeshTopology: (object, request, { part, visibility } = {}) =>
         K.meshTopology.select(meshTopology(object, part).document, request, { visibility }),

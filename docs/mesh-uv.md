@@ -42,6 +42,36 @@ the checks completed so far. Large previews sample faces and edges.
 The JSON retains all face metrics and records up to 4,096 example pairs
 per diagnostic.
 
+## Register a tileset image
+
+Import a PNG into an editable scene and give it a stable ID.
+
+```sh
+ink-studio tileset import masonry.png --scene gatehouse.json --id masonry --out gatehouse-tiles.json
+```
+
+The output scene includes the image in its `tilesets` library. Several mesh
+materials can refer to it. On an existing `topologyMeshes` material, set
+`texture` to a tileset reference and keep the face's existing UVs.
+
+```json
+{"id":"painted-stone","texture":{"tileset":"masonry"}}
+```
+
+The reference uses the same top-down UV coordinates and alpha cutoff as an
+inline mesh texture. PNGs up to 2048 texels on each side are accepted.
+Indexed PNGs retain their palette order, texel indices, and transparency.
+Other PNGs are stored as RGBA8. A version 1 entry contains its dimensions,
+an encoding, and base64 data in top-down order. An indexed entry also
+stores an RGB24 palette and any per-slot alpha bytes. Each mesh's existing
+atlas budget applies.
+
+In Node, call `ink.readTilesetImage(file)` and pass the result to
+`editor.registerTileset("masonry", image)`. The reader also accepts PNG
+bytes. Registration can be undone in the scene editor. Registering the same
+image under the same ID is idempotent. A different image under that ID
+requires a new ID.
+
 ## Edit an authored layout
 
 A [polygon topology document](mesh-topology.md) keeps stable face, edge and

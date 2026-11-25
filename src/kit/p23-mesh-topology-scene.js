@@ -38,9 +38,11 @@
     return Uint8Array.from(value);
   }
 
-  function material(input) {
+  function material(input, tilesets) {
     const value = { ...input };
-    if (value.texture !== undefined) {
+    const shared = tilesets.resolve(value.texture);
+    if (shared) value.texture = shared;
+    else if (value.texture !== undefined) {
       if (!record(value.texture)) throw new TypeError('A mesh texture needs a JSON descriptor');
       value.texture = { ...value.texture };
       for (const channel of ['pixels', 'indices', 'coverage']) if (value.texture[channel] !== undefined)
@@ -53,7 +55,7 @@
     return value;
   }
 
-  function prepareRow(object, row, evaluation) {
+  function prepareRow(object, row, evaluation, tilesets) {
     if (!TargetSelectors.name(object) || !fields(row, ['document', 'part', 'label', 'materials', 'bindings', 'bakes', 'modifiers', 'attachments', 'shapeKeys']) ||
         (row.part !== undefined && !TargetSelectors.name(row.part)) || (row.label !== undefined && !name(row.label)))
       throw new TypeError('An editable scene mesh needs an object ID, document, and optional named part');
@@ -86,7 +88,7 @@
       }
     }
     const mesh = topology.toSceneMesh(document, { objectId: object, partId: row.part, meshId: 'topology/' + object,
-      materials: [...active.values()].map(material) });
+      materials: [...active.values()].map(input => material(input, tilesets)) });
     const moved = document !== cage && bindings.size ?
       remapBindings([...bindings.values()], topology.correspond(cage, document, { lineage: evaluation.lineage })) : [...bindings.values()];
     const visible = document !== cage && bindings.size ? elements(document) : records;
@@ -150,12 +152,12 @@
     return plan;
   }
 
-  function prepare(rows) {
+  function prepare(rows, tilesets = A.tilesets.prepare()) {
     if (rows === undefined) return [];
     if (!record(rows) || Object.keys(rows).length > 32) throw new TypeError('Scene topologyMeshes needs a map of up to 32 editable meshes');
     const evaluate = evaluator(rows);
     return Object.entries(rows).map(([object, row]) => [object,
-      prepareRow(object, row, row?.modifiers === undefined ? undefined : requireComplete(evaluate(object)))]);
+      prepareRow(object, row, row?.modifiers === undefined ? undefined : requireComplete(evaluate(object)), tilesets)]);
   }
 
   function mount(world, prepared) {

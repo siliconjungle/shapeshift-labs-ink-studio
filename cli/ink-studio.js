@@ -1458,6 +1458,7 @@ const CMD = {
         '  hybrid-ownership route <scene.json> <object> <part> <channel>   resolve the authored edit destination',
         '  hybrid-ownership plan <scene.json> <revisions.json> [--previous report.json] [--out report.json]   plan dependent rebuilds',
         '  asset-part manifest <asset.gltf|.glb> [--out revision.json]   show stable asset IDs',
+        '  tileset import <image.png> --scene <scene.json> --id <tileset-id> --out <new-scene.json>   register a shared tileset image',
         '  asset-part preview <scene.json> <instance> <asset.gltf|.glb> [--expect N] [--out report.json]   check a replacement',
         '  asset-part replace <scene.json> <instance> <asset.gltf|.glb> [--expect N] --out <next-scene.json>   save one part revision',
         '                              [--res 0.08 --texture-size 1024 --triangles 16000 --duration 4 --fps 30]',
@@ -2685,6 +2686,9 @@ const CMD = {
   },
   'hybrid-ownership'() {
     return require('./hybrid-ownership.js').command(pos,opt,lib());
+  },
+  tileset() {
+    return require('./tileset-image.js').command(pos,opt,lib());
   },
   'asset-part'() {
     return require('./asset-part.js').command(pos, opt, lib());

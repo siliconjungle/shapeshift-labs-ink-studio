@@ -126,6 +126,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.readSpriteAtlas` | function | `(file, { cels } = {})` | [guide](../curve-bake.md#use-the-ribbon-as-native-geometry), [guide](../impostor-atlases.md), [guide](../impostor-atlases.md#bake-a-set-of-moves-from-one-rig), [guide](../sprite-reconstruction.md#bind-a-reusable-asset), [source](../../cli/sprite-atlas.js) |
 | `node.readStoryDocument` | function | `(file)` | [source](../../cli/story-document.js) |
 | `node.readTake` | function | `(file, { kit = require('../index.js').load(), checkpoint, ...options } = {})` | [guide](../take-clock.md#library-and-shared-domains), [source](../../cli/take.js) |
+| `node.readTilesetImage` | function | `(source, toolkit = require('..').load())` | [guide](../mesh-uv.md#register-a-tileset-image), [source](../../cli/tileset-image.js) |
 | `node.readWav` | function | `(file, options)` | [guide](../graph-media.md#wav-and-frame-analysis), [source](../../cli/wav.js) |
 | `node.rebindPixelFeature` | function | `(design,request,{render,graph,decals,replacementScene}={})` | [source](../../cli/feature-rebind.js) |
 | `node.recordInputEvents` | function | `(source, { initial, signal, kit = require('../index.js').load() } = {})` | [guide](../graph-media.md#recorded-control-events), [source](../../cli/graph-host.js) |

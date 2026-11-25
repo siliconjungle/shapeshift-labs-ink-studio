@@ -33,8 +33,8 @@ const PNGRaster = (() => {
     const entries = table?.length / 3;
     if (color === 3 && (!Number.isInteger(entries) || entries < 1 || entries > 2 ** bits || transparency?.length > entries))
       throw new Error('Invalid indexed PNG palette');
-    const paint = capturePalette === 'paint', sheet = capturePalette === 'sheet';
-    const readIndices = color === 3 && (paint || sheet || capturePalette === 'indices');
+    const paint = capturePalette === 'paint', sheet = capturePalette === 'sheet', tileset = capturePalette === 'tileset';
+    const readIndices = color === 3 && (paint || sheet || tileset || capturePalette === 'indices');
     if (capturePalette === 'indices' && color !== 3) throw new Error('Indexed PNG asset needs a palette-indexed PNG');
     if (layoutOnly) return { w, h };
     if (paint && (w > 512 || h > 512 || bits > 8))
@@ -103,11 +103,13 @@ const PNGRaster = (() => {
       }
     }
     if (slots) {
+      const palette = Array.from({length:entries},(_,index)=>table[index*3]*65536 + table[index*3+1]*256 + table[index*3+2]);
+      if (tileset) return {w,h,slots,palette,transparency};
       const dimensions = {width:w,height:h,channels:1};
       return {
         value: {...dimensions,data:slots},
         alpha: {...dimensions,data:Uint8Array.from(slots,index=>transparency?.[index] ?? 255)},
-        palette: Array.from({length:entries},(_,index)=>table[index*3]*65536 + table[index*3+1]*256 + table[index*3+2]),
+        palette,
         ...(paint && { transparency,ink })
       };
     }
