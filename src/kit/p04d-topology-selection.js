@@ -4,8 +4,10 @@
   const format = 'ink-studio/mesh-selection';
   const visibilityFormat = 'ink-studio/mesh-component-visibility';
   const domains = ['vertices', 'edges', 'faces'];
-  const modes = ['loop', 'ring', 'boundary', 'island'];
-  const filterKeys = ['materials', 'seam', 'crease', 'visibility', 'backfaces'];
+  const modes = ['loop', 'ring', 'boundary', 'island', 'open-edges', 'normal-patch'];
+  const filterKeys = ['materials', 'seam', 'crease', 'visibility', 'backfaces', 'facing'];
+  const degreeRange = n => Number.isFinite(n) && n >= 0 && n <= 180;
+  const withinAngle = (a, b, cosine) => V.dot(a, b) >= cosine - 16 * Number.EPSILON;
   const graphs = new WeakMap();
   const record = (value, keys) => !!value && Object.getPrototypeOf(value) === Object.prototype &&
     Object.keys(value).every(key => keys.includes(key));
@@ -43,7 +45,7 @@
       const element = domain === 'vertices' ? atVertex.get(id) : domain === 'faces' ? atFace.get(id) : atEdge.get(id);
       return element[into];
     }
-    const result = { components: { vertices, edges, faces }, related, corners, atFace, edgeByPair };
+    const result = { components: { vertices, edges, faces }, related, corners, atFace, edgeByPair, normals: new Map() };
     graphs.set(doc, result);
     return result;
   }
@@ -142,19 +144,56 @@
   }
 
   function normal(g, id) {
+    if (g.normals.has(id)) return g.normals.get(id);
     const points = g.atFace.get(id).vertices.map(vertex => g.components.vertices.get(vertex).position);
     const relative = points.map(point => V.sub(point, points[0]));
     const scale = Math.max(...relative.flat().map(Math.abs));
     const local = relative.map(point => point.map(n => n / scale));
     const direction = local.reduce((sum, point, i) => V.add(sum, V.cross(point, local[(i + 1) % points.length])), [0, 0, 0]);
     const length = V.len(direction);
-    return direction.map(n => n / length);
+    const result = direction.map(n => n / length);
+    g.normals.set(id, result);
+    return result;
+  }
+
+  function openEdges(g, seeds) {
+    const open = id => g.components.edges.get(id).uses.length === 1;
+    return layers(g, 'edges', [...seeds].filter(open), Infinity, open);
+  }
+
+  function normalPatch(g, seeds, degrees) {
+    if (seeds.size === g.components.faces.size) return seeds;
+    const result = new Set(seeds), groups = new Map(), cosine = Math.cos(degrees * Math.PI / 180);
+    for (const seed of seeds) {
+      const axis = normal(g, seed), key = axis.join(',');
+      if (!groups.has(key)) groups.set(key, { axis, ids: [] });
+      groups.get(key).ids.push(seed);
+    }
+    for (const { axis, ids } of groups.values()) {
+      if (result.size === g.components.faces.size) break;
+      const patch = layers(g, 'faces', ids, Infinity, id => withinAngle(axis, normal(g, id), cosine));
+      for (const id of patch) result.add(id);
+    }
+    return result;
+  }
+
+  function facingTest(domain, facing) {
+    if (facing === undefined) return;
+    const { direction, tolerance = 0 } = facing ?? {};
+    if (domain !== 'faces' || !record(facing, ['direction', 'tolerance']) ||
+        typeof direction !== 'string' || !/^[+-][xyz]$/.test(direction) || !degreeRange(tolerance))
+      throw new TypeError('A facing filter needs faces, a signed axis, and a tolerance from 0 to 180 degrees');
+    const axis = [0, 0, 0];
+    axis['xyz'.indexOf(direction[1])] = direction[0] === '+' ? 1 : -1;
+    const cosine = Math.cos(tolerance * Math.PI / 180);
+    return (g, id) => withinAngle(axis, normal(g, id), cosine);
   }
 
   function filtered(doc, g, domain, selection, filter, { visibility, object, part }) {
     if (filter === undefined) return selection;
     if (!record(filter, filterKeys)) throw new TypeError('Invalid mesh selection filter');
-    const { materials, seam: uv, crease, visibility: view, backfaces } = filter;
+    const { materials, seam: uv, crease, visibility: view, backfaces, facing } = filter;
+    const facesDirection = facingTest(domain, facing);
     if (materials !== undefined && (!Array.isArray(materials) || !materials.length ||
         !Array.from(materials).every(id => typeof id === 'string' && id.trim())))
       throw new TypeError('Material filters need one or more material IDs');
@@ -182,16 +221,13 @@
       eligible = ids((needsParticipation ? participation[lane] : visibility.visible)?.[domain], g.components[domain]);
     }
 
-    const materialIds = materials && new Set(materials), normals = new Map(), matches = new Map();
+    const materialIds = materials && new Set(materials), matches = new Map();
     function edgeMatches(id) {
       if (matches.has(id)) return matches.get(id);
       const edge = g.components.edges.get(id);
       let accepted = uv === undefined || uv === seam(g, edge);
       if (accepted && crease) {
-        const directions = edge.uses.length === 2 && edge.uses.map(({ face }) => {
-          if (!normals.has(face)) normals.set(face, normal(g, face));
-          return normals.get(face);
-        });
+        const directions = edge.uses.length === 2 && edge.uses.map(({ face }) => normal(g, face));
         const angle = directions && Math.acos(Math.min(1, Math.max(-1, V.dot(...directions)))) * 180 / Math.PI;
         accepted = angle !== false && angle + 1e-8 >= min && angle - 1e-8 <= max;
       }
@@ -200,6 +236,7 @@
     }
     return new Set([...selection].filter(id => {
       if (eligible && eligible.has(id) !== (view !== 'hidden')) return false;
+      if (facesDirection && !facesDirection(g, id)) return false;
       if (materialIds) {
         const faces = domain === 'faces' ? [id] : g.related(domain, id, 'faces');
         if (!faces.some(face => materialIds.has(g.components.faces.get(face).material))) return false;
@@ -241,10 +278,10 @@
   }
 
   function select(source, request, { visibility, object, part } = {}) {
-    if (!record(request, ['domain', 'ids', 'from', 'traverse', 'grow', 'shrink', 'convert', 'match', 'filter', 'region', 'operation']))
+    if (!record(request, ['domain', 'ids', 'from', 'traverse', 'normalAngle', 'grow', 'shrink', 'convert', 'match', 'filter', 'region', 'operation']))
       throw new TypeError('Use a mesh component selection query');
     const doc = topology.create(source), revision = topology.revision(doc), g = graph(doc);
-    const { from, traverse, grow = 0, shrink = 0, convert: into, match = 'any', filter } = request;
+    const { from, traverse, normalAngle, grow = 0, shrink = 0, convert: into, match = 'any', filter } = request;
     const combining = request.region !== undefined || request.operation !== undefined;
     const context = { visibility, object, part };
     let domain = request.domain === undefined ? from?.domain : request.domain;
@@ -252,6 +289,12 @@
         !['any', 'all'].includes(match) || request.match !== undefined && into === undefined)
       throw new TypeError('Choose vertices, edges or faces and an optional conversion match');
     if (traverse !== undefined && !modes.includes(traverse)) throw new TypeError('Unknown mesh selection traversal');
+    if (traverse === 'open-edges' && domain !== 'edges') throw new TypeError('Connected open edges need the edge domain');
+    if (traverse === 'normal-patch') {
+      if (domain !== 'faces' || !degreeRange(normalAngle) ||
+          (from === undefined && request.ids === undefined && request.region === undefined))
+        throw new TypeError('A normal patch needs face seeds and normalAngle from 0 to 180 degrees');
+    } else if (normalAngle !== undefined) throw new TypeError('normalAngle needs normal-patch traversal');
     if (![grow, shrink].every(n => Number.isSafeInteger(n) && n >= 0 && n <= 128))
       throw new RangeError('Grow and shrink need 0 to 128 steps');
     if (from !== undefined && (!combining && request.ids !== undefined || from?.format !== format || from.version !== 1 ||
@@ -260,11 +303,13 @@
     const seeds = from === undefined ? request.ids : from.ids;
     let selection = combining ? combine(doc, g, domain, request, context) :
       seeds === undefined ? new Set(g.components[domain].keys()) : ids(seeds, g.components[domain]);
-    if (traverse === 'island') selection = layers(g, domain, selection, Infinity);
-    if (traverse === 'boundary' && domain === 'faces') {
+    if (traverse === 'open-edges') selection = openEdges(g, selection);
+    else if (traverse === 'normal-patch') selection = normalPatch(g, selection, normalAngle);
+    else if (traverse === 'island') selection = layers(g, domain, selection, Infinity);
+    else if (traverse === 'boundary' && domain === 'faces') {
       selection = boundary(g, selection);
       domain = 'edges';
-    } else if (traverse !== undefined && traverse !== 'island') {
+    } else if (traverse !== undefined) {
       if (domain !== 'edges' || traverse !== 'boundary' && seeds === undefined && request.region === undefined)
         throw new TypeError('Loop and ring traversal need edge seeds, and boundaries need an edge or face domain');
       if (traverse === 'ring') selection = flood(selection, id => acrossFace(g, id));
@@ -283,11 +328,13 @@
         g.related(domain, id, via).some(mid => outside.has(mid))));
       for (const id of layers(g, domain, border, shrink - 1, other => selection.has(other))) selection.delete(id);
     }
+    const facingSource = filter?.facing !== undefined && domain === 'faces';
+    if (!combining && facingSource) selection = filtered(doc, g, domain, selection, filter, context);
     if (into !== undefined) {
       selection = convert(g, selection, domain, into, match);
       domain = into;
     }
-    if (!combining) selection = filtered(doc, g, domain, selection, filter, context);
+    if (!combining && !facingSource) selection = filtered(doc, g, domain, selection, filter, context);
     return Object.freeze({ format, version: 1, mesh: doc.id, revision, domain, ids: Object.freeze([...selection].sort()) });
   }
 

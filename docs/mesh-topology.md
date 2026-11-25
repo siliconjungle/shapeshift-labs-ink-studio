@@ -150,6 +150,42 @@ node examples/mesh-component-selection.cjs component-selection-review
 ink-studio mesh-topology select component-selection-review/mesh.json component-selection-review/rim-query.json --visibility component-selection-review/visible.json
 ```
 
+### Select by geometric relationship
+
+Use `"traverse":"open-edges"` in the edge domain to follow connected
+open edges from a seed. An open edge has exactly one incident face.
+The query follows every open branch at a shared vertex. Omit `ids` and
+`from` to select all open edges on the mesh.
+
+```json
+{"domain":"edges","ids":["lead"],"traverse":"open-edges"}
+```
+
+Use `filter.facing` on faces to test a signed axis from `+x` through
+`-z`. The tolerance is in degrees and defaults to zero. This compares
+the geometric normal from authored winding in mesh coordinates.
+
+```json
+{"domain":"faces","filter":{"facing":{"direction":"+z","tolerance":15}}}
+```
+
+Use `"traverse":"normal-patch"` with a face seed and `normalAngle`
+from 0 to 180 degrees. The patch crosses shared edges while the face
+normals stay within the angle from the seed's normal. Each seed supplies
+its own reference direction and the output combines the patches.
+
+```json
+{"domain":"faces","ids":["flat"],"traverse":"normal-patch","normalAngle":20}
+```
+
+Pass these queries to `mesh-topology select` or place the settings
+under `query` in `tileset select`, with `domain` set to `edges` or
+`tiles` as appropriate. A saved face selection can supply the seeds
+with `--from`. Use `convert` to reuse the result in a different domain.
+
+Run `node examples/tileset-pick/geometric-selection-demo.cjs geometry-demo`
+to compare all three queries and grow a normal patch from an atlas pick.
+
 ## Set a construction plane
 
 The construction plane is a scene guide with an origin, perpendicular
