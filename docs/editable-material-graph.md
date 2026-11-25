@@ -101,3 +101,42 @@ ink-studio graph material-library /tmp/ink-station/registry.json --out /tmp/ink-
 ```
 
 Use `graph material ... --metadata metadata.json --out material.json` to replace the authored metadata record. Thumbnail paths in that record resolve relative to the input material and are rebased when saving to another folder. Open `demo.html` in the demo directory to compare the catalog views and open their records.
+
+## Show controls and ports conditionally
+
+Set `visibleWhen` on a root control, graph input, or graph output. Inline subgraphs can use it on their declared inputs and outputs. These rules filter inspector presentation. Graph wiring, input values, exports and evaluation remain available.
+
+```json
+{
+  "input": "glow",
+  "label": "Glow strength",
+  "visibleWhen": {
+    "op": "and",
+    "args": [
+      { "op": "eq", "args": [{ "source": "input", "name": "finish" }, "enamel"] },
+      { "source": "control", "name": "lamp-enabled" }
+    ]
+  }
+}
+```
+
+Use `{ "source": "input", "name": "portId" }` for a declared graph input and `{ "source": "control", "name": "controlId" }` for a control's underlying input. References use their declared boolean, string, or numeric type, including supported numeric socket aliases. Use a primitive literal or `{ "literal": value }`. All rules return a boolean.
+
+| Operators | Operand types |
+| --- | --- |
+| `and`, `or`, `not` | Booleans. The first two short-circuit runtime reads. |
+| `eq`, `ne` | Two operands of the same scalar type. |
+| `lt`, `lte`, `gt`, `gte` | Two numbers. |
+| `add`, `subtract`, `multiply`, `divide` | Two numbers. Arithmetic rejects nonfinite results. |
+
+Use `ink.inspectMaterialVisibility(document, { inputs, instance, scope })` for an editable graph, including drafts with offline resources. Supply values by graph input ID. Explicit values take precedence over instance overrides and declared defaults. An inline group `scope` is an array of group IDs. The result includes one visibility status per control or port. An error keeps its field visible, and the diagnostic gives the rule's JSON Pointer, failing subexpression path, code, and message.
+
+Subgraph publication carries the port rules. Use `project.describeSubgraph({ node, inputs })` or `ink.describeMaterialSubgraph(document, target, options)` to inspect an instance. The inspector reads literals, defaults, and directly linked input defaults. Pass effective values by the instance's port IDs when bindings depend on evaluated nodes or keyframes. An unavailable value produces a diagnostic only for rules that read it.
+
+```sh
+node examples/material-conditional-visibility/demo.cjs /tmp/ink-signal
+ink-studio graph material-visibility /tmp/ink-signal/signal-lens.material.json
+ink-studio graph material-visibility /tmp/ink-signal/signal-lens.material.json --inputs values.json
+```
+
+Open `demo.html` to switch the finish and lamp, select visible output maps, and repair the example rule. The demo evaluates conditions in the browser with `KIT.procedural.graphVisibility.inspect`.

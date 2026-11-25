@@ -6,6 +6,7 @@ const { save, graphOutputs } = require('./graph-outputs.js');
 const { readGraphProject } = require('./graph-project.js');
 const { openMaterialGraph, readMaterialGraph, writeMaterialGraph } = require('./material-graph.js');
 const { describeMaterialMetadata } = require('./material-metadata.js');
+const { inspectMaterialVisibility } = require('./material-visibility.js');
 const { searchMaterialLibrary, publishMaterialLibrary } = require('./material-library.js');
 const { describeMaterialSubgraph, editMaterialSubgraph, publishMaterialSubgraph } = require('./material-subgraphs.js');
 const { findGraphGroupUsers } = require('./graph-groups.js');
@@ -30,7 +31,7 @@ for (const options of Object.values(flags)) options.push('instance','base-contex
 const discoveryFlags = { nodes: ['json'], describe: ['json', 'example'] };
 const analysisFlags = { impact: ['root', 'json'], diff: ['adapters', 'json'], material: ['id', 'out', 'base', 'output-usages', 'metadata'],
   subgraph: ['out', 'adapters'], 'publish-subgraph': ['out', 'revision', 'adapters'],
-  'material-info': ['audience'], 'material-library': ['audience', 'query', 'tag', 'offset', 'limit', 'out'] };
+  'material-visibility': ['inputs', 'instance', 'scope'], 'material-info': ['audience'], 'material-library': ['audience', 'query', 'tag', 'offset', 'limit', 'out'] };
 const commandOptions = { ...flags, ...discoveryFlags, ...analysisFlags, ...host.commands };
 
 async function sendText(text) {
@@ -145,6 +146,14 @@ async function graphCommand(pos,opt,settings) {
     if (opt.out===undefined) return send(document);
     const result=writeMaterialGraph(opt.out,document,{baseDir:path.dirname(path.resolve(file))});
     return send({file:path.resolve(opt.out),format:result.format,version:result.version,id:result.id});
+  }
+  if (mode==='material-visibility') {
+    if (pos.length!==2 || Object.entries(opt).some(([key,value])=>
+      !analysisFlags[mode].includes(key) || typeof value!=='string' || !value.trim()))
+      throw new TypeError('Use graph material-visibility <material.json> [--inputs values.json] [--instance ID] [--scope GROUP/PATH]');
+    const inputs=opt.inputs===undefined ? undefined : JSON.parse(fs.readFileSync(path.resolve(opt.inputs),'utf8'));
+    return send(inspectMaterialVisibility(readMaterialGraph(file),{kit:settings.kit,inputs,
+      instance:opt.instance,scope:opt.scope?.split('/')}));
   }
   if (mode==='material-info' || mode==='material-library') {
     if (pos.length!==2 || Object.entries(opt).some(([key,value])=>

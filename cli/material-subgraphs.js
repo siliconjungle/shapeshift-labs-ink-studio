@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assets = require('./asset-files.js');
 const { groupDocument } = require('./graph-groups.js');
-const { openMaterialGraph, toGraphProject } = require('./material-graph.js');
+const { openMaterialGraph, toGraphProject, editableScope, portVisibility } = require('./material-graph.js');
 const { createGraphProject } = require('./graph-project.js');
 
 const own = Object.hasOwn;
@@ -12,22 +12,11 @@ const id = value => typeof value === 'string' && /^[a-z][\w.-]{0,99}$/i.test(val
 const graphFormat = 'ink-studio/graph-group';
 
 function compiled(document, { sourceFile, baseDir = sourceFile && path.dirname(path.resolve(sourceFile)), ...options } = {}) {
-  return createGraphProject(toGraphProject(document, { requireOutputs: false }), { ...options, sourceFile, baseDir });
+  return createGraphProject(document, { ...options, sourceFile, baseDir, requireOutputs: false });
 }
 
 function describeMaterialSubgraph(source, target, options) {
   return compiled(source, options).describeSubgraph(target);
-}
-
-function editableScope(document, scope) {
-  if (!Array.isArray(scope) || !Array.from(scope).every(id)) throw new TypeError('Subgraph scope needs an array of group IDs');
-  let graph = document.graph;
-  for (const name of scope) {
-    const group = own(graph.groups ?? {}, name) && graph.groups[name];
-    if (!group?.graph) throw new RangeError('Open the source to edit subgraph scope ' + scope.join('/'));
-    graph = group.graph;
-  }
-  return graph;
 }
 
 const actions = {
@@ -153,7 +142,8 @@ function publishMaterialSubgraph(file, source, { revision = 1, baseDir = path.di
     }));
   }
   const body = { ...(inputs && { inputs }), nodes, outputs, ...(groups && { groups: relocate(groups) }) };
-  const definition = { format: graphFormat, version: 1, revision, ...body };
+  const inspector = portVisibility(document.graph, document.controls);
+  const definition = { format: graphFormat, version: 1, revision, ...body, ...(inspector && { inspector }) };
   // Register the body as a group to compile the same public interface its consumers will receive.
   const project = createGraphProject({ format: 'ink-studio/graph-project', version: 1,
     groups: { [document.id]: body }, nodes: {}, outputs: {} }, { ...options, baseDir: folder });

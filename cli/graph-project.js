@@ -280,11 +280,12 @@ function cacheReport(frame) {
 }
 
 function createGraphProject(source, { kit=require('../index.js').load(), baseDir=process.cwd(), operations={}, adapters={},
-  sourceFile, workerPool, planAssets=false, instance, baseContext }={}) {
-  let materialMetadata;
+  sourceFile, workerPool, planAssets=false, instance, baseContext, requireOutputs=true }={}) {
+  let materialMetadata, groupInspectors;
   if (source?.format===materialGraph.format) {
     const authored=source;
-    source=materialGraph.toGraphProject(source,{instance});
+    source=materialGraph.toGraphProject(source,{instance,requireOutputs});
+    groupInspectors=structuredClone(materialGraph.portVisibility(authored.graph)?.groups);
     if (Object.hasOwn(authored,'metadata')) materialMetadata=MaterialMetadata.summary(authored);
   }
   else if (instance!==undefined) throw new TypeError('Graph instances require a material graph');
@@ -321,7 +322,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const paths=new Set(sourceFile ? [path.resolve(sourceFile)] : []);
   const api=kit.KIT.authoring.assetReferences;
   const resolveAsset=Assets.scope(api,path.join(baseDir,'graph.json'),assetRegistry,{onFile:file=>paths.add(file)});
-  const groupTree=loadGraphGroups(definitions,baseDir,{onFile:file=>paths.add(file)});
+  const groupTree=loadGraphGroups(definitions,baseDir,{onFile:file=>paths.add(file),inspectors:groupInspectors});
   const groupSpecs=new Map(groupTree.entries.map(group=>[group,graphSpec(group.spec,'group '+group.alias,groupOperators)]));
   const assets=new Map(named(assetDefinitions,'assets').map(([name,definition])=>{
     const {format,file,type,codec,options,precision}=fields(definition,
@@ -505,7 +506,8 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const groupDetails=()=>Object.fromEntries([...preparedGroups].map(([name,{compiled,scope}])=>[name,describeScope(compiled,scope)]));
 
   function describeSubgraph(target) {
-    const {scope=[],group:name,node}=fields(target,['scope','group','node'],'subgraph target');
+    const {scope=[],group:name,node,inputs={}}=fields(target,['scope','group','node','inputs'],'subgraph target');
+    named(inputs,'subgraph inspection values');
     if (!Array.isArray(scope) || !Array.from(scope).every(id) || (name===undefined)===(node===undefined) ||
         !id(name ?? node))
       throw new TypeError('Choose a group or an instance node within a subgraph scope');
@@ -527,11 +529,25 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     const outputs=Object.fromEntries(Object.entries(plan.outputs).map(([key,{type,quantity}])=>
       [key,{type,...(quantity && {quantity})}]));
     const result={alias:selected.alias,source,inputs:data.clone(plan.inputs),outputs};
+    const runner=owner ? preparedGroups.get(owner.alias).compiled : compiled;
     if (node!==undefined) {
-      const runner=owner ? preparedGroups.get(owner.alias).compiled : compiled;
       const call=describeScope(runner,local).nodes[node], given={...body.nodes[node].params,...body.nodes[node].inputs};
       result.instance={node,op:call.op,inputs:Object.fromEntries(Object.entries(call.inputs).map(([key,{source}])=>
         [key,{...source,authored:Object.hasOwn(given,key)}]))};
+    }
+    if (selected.inspector) {
+      const { inputs:portRules, outputs:outputRules, controls }=selected.inspector;
+      const portInputs=Object.fromEntries(Object.entries(result.inputs).map(([key,definition])=>
+        [key,{...portRules?.[key],definition}]));
+      const portOutputs=Object.fromEntries(Object.keys(result.outputs).map(key=>[key,{...outputRules?.[key]}]));
+      const parentInputs=owner ? preparedGroups.get(owner.alias).plan.inputs : rootPlan.inputs;
+      const values=Object.fromEntries(Object.entries(result.instance?.inputs ?? {}).map(([key,binding])=>[
+        key, binding.kind==='value' ? binding.value : binding.kind==='input' ? parentInputs[binding.id].default : undefined
+      ]));
+      const rulePath=start ? '/inspector'+segments.slice(start).map(id=>'/groups/'+id).join('') :
+        '/graph'+segments.map(id=>'/groups/'+id+'/graph').join('');
+      result.visibility=structuredClone(procedural.graphVisibility.inspect({inputs:portInputs,outputs:portOutputs,controls},
+        {values:{...values,...inputs},path:rulePath}));
     }
     return result;
   }

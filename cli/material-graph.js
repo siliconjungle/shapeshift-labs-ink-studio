@@ -116,13 +116,13 @@ function lowerGraph(scope, { requireOutputs, materialBase = false } = {}) {
     })),
     outputs: {},
     ...(declaredInputs.length && { inputs: Object.fromEntries(declaredInputs.map(([id, value]) => {
-      entity(value, ['definition'], 'input ' + id);
+      entity(value, ['definition', 'visibleWhen'], 'input ' + id);
       if (!Object.hasOwn(value, 'definition')) throw new TypeError('Missing definition on input ' + id);
       return [id, value.definition];
     })) })
   };
   for (const [id, output] of entries(outputs, 'outputs')) {
-    entity(output, ['binding'], 'output ' + id);
+    entity(output, ['binding', 'visibleWhen'], 'output ' + id);
     if (!Object.hasOwn(output, 'binding')) continue;
     if (linked(output.binding)) throw new TypeError('Connection on output ' + id + ' requires a link ID');
     native.outputs[id] = output.binding;
@@ -194,7 +194,7 @@ function lower(document, { requireOutputs, instance } = {}) {
   }));
   const exposed = new Set();
   for (const [id, control] of entries(controls, 'controls')) {
-    entity(control, ['input'], 'control ' + id);
+    entity(control, ['input', 'visibleWhen'], 'control ' + id);
     if (!isId(control.input) || !Object.hasOwn(native.inputs ?? {}, control.input) || exposed.has(control.input))
       throw new RangeError('Control ' + id + ' needs a distinct graph input');
     exposed.add(control.input);
@@ -266,8 +266,35 @@ function writeMaterialGraph(file, source, { baseDir = path.dirname(path.resolve(
   return document;
 }
 
+function editableScope(document, scope) {
+  if (!Array.isArray(scope) || !Array.from(scope).every(isId)) throw new TypeError('Subgraph scope needs an array of group IDs');
+  let graph = document.graph;
+  for (const name of scope) {
+    const group = Object.hasOwn(graph.groups ?? {}, name) && graph.groups[name];
+    if (!group?.graph) throw new RangeError('Unknown inline material subgraph scope ' + scope.join('/'));
+    graph = group.graph;
+  }
+  return graph;
+}
+
+function portVisibility(graph, controls) {
+  const visible = entries => entries && Object.fromEntries(Object.entries(entries).filter(([, row]) =>
+    Object.hasOwn(row, 'visibleWhen')).map(([id, { visibleWhen, label }]) =>
+    [id, { visibleWhen, ...(label !== undefined && { label }) }]));
+  const inputs = visible(graph.inputs), outputs = visible(graph.outputs);
+  const groups = Object.fromEntries(Object.entries(graph.groups ?? {}).flatMap(([id, { graph }]) => {
+    const nested = graph && portVisibility(graph);
+    return nested ? [[id, nested]] : [];
+  }));
+  if (!Object.keys(inputs ?? {}).length && !Object.keys(outputs ?? {}).length && !Object.keys(groups).length)
+    return;
+  const aliases = controls && Object.fromEntries(Object.entries(controls).map(([id, { input }]) => [id, { input }]));
+  return { ...(Object.keys(inputs ?? {}).length && { inputs }), ...(Object.keys(outputs ?? {}).length && { outputs }),
+    ...(Object.keys(groups).length && { groups }), ...(Object.keys(aliases ?? {}).length && { controls: aliases }) };
+}
+
 function toGraphProject(source, { instance, requireOutputs = true } = {}) {
   return lower(normalize(source), { requireOutputs, instance });
 }
 
-module.exports = { format, openMaterialGraph, readMaterialGraph, writeMaterialGraph, toGraphProject };
+module.exports = { format, openMaterialGraph, readMaterialGraph, writeMaterialGraph, toGraphProject, editableScope, portVisibility };
