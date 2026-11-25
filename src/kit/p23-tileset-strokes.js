@@ -1,8 +1,10 @@
-/* Fixed-distance tile brush strokes on the retained construction plane. */
+/* Tile brush edits on the retained construction plane. */
 (function (K) {
   const A = K.authoring, topology = K.meshTopology, {V} = K, {freeze} = K.procedural.data;
   const brushFields = ['selection','material','texelsPerUnit','brushScale'];
-  const fields = ['mode','id','object','part','path','interval','snapGrid'];
+  const fields = ['mode','id','object','part','snapGrid'];
+  const strokeFields = ['path','interval'];
+  const rectangleFields = ['from','to'];
   const maxSamples = 4096;
   const name = value=>TargetSelectors.name(value) && !['__proto__','prototype','constructor'].includes(value);
   const pair = value=>Array.isArray(value) && value.length === 2 && Array.from(value).every(Number.isFinite);
@@ -38,14 +40,17 @@
     return {length,samples};
   }
 
-  function draw(scene, request, samples, options) {
+  function prepareBrush(scene, request, at, options, cellSize) {
+    const {id,object,part,selection,material,texelsPerUnit,brushScale} = request;
+    return A.tilesetFaces.prepare(scene,{object,part,face:id,selection,material,texelsPerUnit,brushScale,planeAt:at},options,cellSize);
+  }
+
+  function draw(brush, id, samples) {
     const api = A.tilesetFaces;
-    const {id,path,object,part,snapGrid,selection,material:slot,texelsPerUnit,brushScale:scale} = request;
-    const brush = api.prepare(scene,{object,part,face:id,selection,material:slot,texelsPerUnit,brushScale:scale,
-      planeAt:path[0],snapGrid},options);
     const {source,material,density,brushScale,size,conflicts} = brush;
     const stamps = [], visited = new Set();
     for (const sample of samples) {
+      if (sample.status) continue;
       const key = JSON.stringify(sample.point);
       if (visited.has(key)) {
         sample.status = 'repeated-position';
@@ -59,7 +64,7 @@
       stamps.push(stamp);
     }
     return {brush:{source,material,texelsPerUnit:density,brushScale,size},conflicts,
-      ...(!conflicts.length && {row:api.append(brush,stamps)})};
+      ...(!conflicts.length && stamps.length>0 && {row:api.append(brush,stamps)})};
   }
 
   function tileBinding(binding) {
@@ -74,7 +79,7 @@
       return [V.dot(delta,right),V.dot(delta,up),V.dot(delta,normal)];
     };
     const vertices = new Map(doc.vertices.map(({id,position})=>[id,position]));
-    return {project,regions:doc.faces.filter(face=>bound.has(face.id)).flatMap(face=>{
+    return {project,regions:doc.faces.filter(face=>!bound || bound.has(face.id)).flatMap(face=>{
       const points = face.corners.map(({vertex})=>vertices.get(vertex));
       const ring = points.map(project);
       const epsilon = 64*Number.EPSILON*Math.max(1,...points.flat().map(Math.abs),...frame.plane.origin.map(Math.abs));
@@ -118,46 +123,156 @@
       } else if (hits.length) Object.assign(sample,{status:'ambiguous',candidates:hits});
       else sample.status = 'miss';
     }
-    if (!removed.size) return {conflicts};
-    if (removed.size === doc.faces.length) return {conflicts,remove:true};
+    return {conflicts,...removeFaces(existing,doc,removed,bindings)};
+  }
 
+  function removeFaces(existing, doc, removed, bindings) {
+    if (!removed.size) return {};
+    if (removed.size === doc.faces.length) return {remove:true};
     const used = new Set(), retired = new Set();
     for (const face of doc.faces) for (const {vertex} of face.corners)
       (removed.has(face.id) ? retired : used).add(vertex);
     const patch = {removeFaces:[...removed],removeVertices:[...retired].filter(id=>!used.has(id))};
-    const next = A.meshTopologyScene.revise(existing,patch).row;
+    const row = A.meshTopologyScene.revise(existing,patch).row;
     const retiredBindings = new Set(bindings.filter(binding=>removed.has(binding.element)).map(binding=>binding.id));
-    next.bindings = next.bindings.filter(binding=>!retiredBindings.has(binding.id));
-    return {conflicts,row:next};
+    row.bindings = row.bindings.filter(binding=>!retiredBindings.has(binding.id));
+    return {row};
+  }
+
+  function validRequest(request, extra, allowedBrush) {
+    const {id,object,part,snapGrid=false} = request ?? {};
+    return request && Object.getPrototypeOf(request) === Object.prototype &&
+      Object.keys(request).every(key=>fields.includes(key) || extra.includes(key) || allowedBrush.includes(key)) &&
+      [id,object].every(name) && (part === undefined || name(part)) && typeof snapGrid === 'boolean';
   }
 
   function plan(scene, request, options) {
     const {mode,id,object,part,path,interval,snapGrid=false} = request ?? {};
     const drawing = mode === 'draw';
-    if (!request || Object.getPrototypeOf(request) !== Object.prototype || !['draw','erase'].includes(mode) ||
-        Object.keys(request).some(key=>!fields.includes(key) && !(drawing && brushFields.includes(key))) ||
-        ![id,object].every(name) || part !== undefined && !name(part) || typeof snapGrid !== 'boolean' ||
+    if (!validRequest(request,strokeFields,drawing ? brushFields : []) || !['draw','erase'].includes(mode) ||
         !Array.isArray(path) || !path.length || path.length>maxSamples || !Array.from(path).every(pair) ||
         !Number.isFinite(interval) || interval<=0)
       throw new TypeError('A tile stroke needs draw or erase mode, stroke and mesh IDs, a finite grid path, and a positive scene-unit interval');
     const frame = A.constructionPlane.forScene(scene);
     const {length,samples} = samplePath(frame,path,interval,snapGrid);
-    const existing = Object.hasOwn(scene.topologyMeshes ?? {},object) ? scene.topologyMeshes[object] : undefined;
-    const doc = existing && topology.create(existing.document);
-    const {row,remove,conflicts,brush} = drawing ? draw(scene,request,samples,options) : erase(existing,doc,frame,samples,part);
-    if (mode === 'erase' && frame.plane.edgeAnchor?.object === object && (remove ||
-        row && !row.document.edges.some(edge=>edge.id === frame.plane.edgeAnchor.edge)))
-      conflicts.push({reason:'construction-plane-edge',edge:frame.plane.edgeAnchor.edge});
+    const {existing,doc} = meshSource(scene,object);
+    const result = drawing ? draw(prepareBrush(scene,request,path[0],options),id,samples) : erase(existing,doc,frame,samples,part);
+    return finish(frame,existing,doc,result,{format:'ink-studio/tileset-face-stroke',version:1,id,object,mode,
+      ...((existing?.part ?? part) && {part:existing?.part ?? part}),constructionPlane:frame.plane,
+      path:path.map(point=>point.slice()),interval,length,snapGrid,samples,...(result.brush && {brush:result.brush})});
+  }
+
+  function meshSource(scene, object) {
+    const meshes = scene.topologyMeshes ?? {};
+    const existing = Object.hasOwn(meshes,object) ? meshes[object] : undefined;
+    return {existing,doc:existing && topology.create(existing.document)};
+  }
+
+  function finish(frame, existing, doc, {row,remove,conflicts}, info) {
+    const anchor = frame.plane.edgeAnchor;
+    if (info.mode === 'erase' && anchor?.object === info.object && (remove ||
+        row && !row.document.edges.some(edge=>edge.id === anchor.edge)))
+      conflicts.push({reason:'construction-plane-edge',edge:anchor.edge});
     const changed = Boolean(row || remove) && !conflicts.length;
     const after = changed ? row?.document : doc;
-    const report = freeze({format:'ink-studio/tileset-face-stroke',version:1,id,object,mode,
-      ...((existing?.part ?? part) && {part:existing?.part ?? part}),constructionPlane:frame.plane,path:path.map(point=>point.slice()),interval,length,snapGrid,
-      ...(brush && {brush}),samples,conflicts,canCommit:!conflicts.length,
-      beforeRevision:doc ? topology.revision(doc) : null,
-      afterRevision:after ? topology.revision(after) : null,
+    const report = freeze({...info,conflicts,canCommit:!conflicts.length,
+      beforeRevision:doc ? topology.revision(doc) : null,afterRevision:after ? topology.revision(after) : null,
       removedMesh:Boolean(changed && remove),...(changed && {changes:A.meshTopologyScene.diff(existing,row)})});
     return changed ? {row,remove,report} : {report};
   }
 
-  A.tilesetStrokes = Object.freeze({plan});
+  function rectangle(frame, from, to, snapGrid) {
+    const plane = A.constructionPlane;
+    const corners = [from,to].map(at=>snapGrid ? plane.quantize(frame,at) : at);
+    if (!corners.every(at=>at.every(Number.isSafeInteger)))
+      throw new RangeError('Rectangle corners need integer cells or snapGrid');
+    const [a,b] = corners;
+    const min = a.map((value,i)=>Math.min(value,b[i]));
+    const max = a.map((value,i)=>Math.max(value,b[i])+1);
+    const size = max.map((value,i)=>value-min[i]);
+    if (!max.every(Number.isSafeInteger) || size[0]*size[1]>maxSamples)
+      throw new RangeError('A tile rectangle supports up to '+maxSamples+' cells with safe integer bounds');
+    const [columns,rows] = size;
+    const {grid} = frame.plane, cellSize = Array.isArray(grid) ? grid : [grid,grid];
+    const outline = [min,[max[0],min[1]],max,[min[0],max[1]]].map(at=>plane.point(frame,at));
+    const cells = [];
+    for (let v=0;v<rows;v++) for (let u=0;u<columns;u++) {
+      const at = [min[0]+u,min[1]+v];
+      cells.push({index:cells.length,at,point:plane.point(frame,at),placements:[],otherFaces:[]});
+    }
+    return {min,max,size,cellSize,outline,cells};
+  }
+
+  const cellPlanes = [
+    {normal:[-1,0,0],offset:0},{normal:[1,0,0],offset:1},
+    {normal:[0,-1,0],offset:0},{normal:[0,1,0],offset:1}
+  ];
+
+  function coversCell(ring, at) {
+    const points = ring.map(([u,v])=>[u-at[0],v-at[1],0]);
+    const [clipped] = K.procedural.geometry.clipPlanarFaces([{points}],cellPlanes);
+    if (!clipped) return false;
+    // A shared edge alone contributes zero area, even if the clipped ring has three points.
+    const polygon = clipped.points, [x,y] = polygon[0];
+    const twiceArea = polygon.slice(2).reduce((area,[u,v],i)=>{
+      const [s,t] = polygon[i+1];
+      return area+(s-x)*(v-y)-(t-y)*(u-x);
+    },0);
+    return Math.abs(twiceArea)>1e-12;
+  }
+
+  function rectangleHits(doc, frame, footprint, bound, filling) {
+    const {min,max,cellSize,cells,size:[columns]} = footprint, affected = [];
+    if (!doc) return affected;
+    for (const region of hitRegions(doc,null,frame).regions) {
+      const {id,ring,epsilon} = region;
+      const tiled = bound.has(id);
+      const units = ring.map(point=>point.slice(0,2).map((value,i)=>value/cellSize[i]));
+      const low = region.bounds.map(([value],i)=>Math.max(min[i],Math.floor(value/cellSize[i])));
+      const high = region.bounds.map(([,value],i)=>Math.min(max[i],Math.ceil(value/cellSize[i])));
+      let hit = false;
+      for (let v=low[1];v<high[1];v++) for (let u=low[0];u<high[0];u++) {
+        const cell = cells[(v-min[1])*columns+u-min[0]];
+        if (!coversCell(units,cell.at)) continue;
+        (tiled ? cell.placements : cell.otherFaces).push(id);
+        hit = true;
+      }
+      if (hit) affected.push({face:id,tile:tiled,action:!filling && tiled ? 'erase' : 'keep',
+        extendsOutside:units.some(point=>point.some((value,i)=>value<min[i]-epsilon/cellSize[i] ||
+          value>max[i]+epsilon/cellSize[i]))});
+    }
+    return affected;
+  }
+
+  function planRectangle(scene, request, options) {
+    const {mode,id,object,part,from,to,snapGrid=false} = request ?? {}, filling = mode === 'fill';
+    if (!validRequest(request,rectangleFields,filling ? ['selection','material'] : []) ||
+        !['fill','erase'].includes(mode) || !pair(from) || !pair(to))
+      throw new TypeError('A tile rectangle needs fill or erase mode, edit and mesh IDs, and two grid cell addresses');
+    const frame = A.constructionPlane.forScene(scene), footprint = rectangle(frame,from,to,snapGrid);
+    const {existing,doc} = meshSource(scene,object);
+    const bindings = (existing?.bindings ?? []).filter(tileBinding);
+    const affected = rectangleHits(doc,frame,footprint,new Set(bindings.map(binding=>binding.element)),filling);
+    const {cells,...bounds} = footprint;
+    for (const cell of cells) {
+      if (filling && (cell.placements.length || cell.otherFaces.length)) cell.status = 'occupied';
+      if (!filling) cell.status = cell.placements.length ? 'erase' : cell.otherFaces.length ? 'other-face' : 'empty';
+    }
+    let result;
+    if (filling) {
+      const brush = prepareBrush(scene,request,bounds.min,options,bounds.cellSize);
+      const draws = draw(brush,id,cells);
+      result = {...draws,brush:{source:brush.source,material:brush.material,size:bounds.cellSize}};
+      for (const cell of cells) if (cell.status === 'draw') cell.status = 'fill';
+    } else {
+      const conflicts = existing && part !== undefined && part !== existing.part ? [{reason:'different-mesh-part'}] : [];
+      const removed = new Set(affected.filter(row=>row.action === 'erase').map(row=>row.face));
+      result = {conflicts,...(!conflicts.length && removeFaces(existing,doc,removed,bindings))};
+    }
+    return finish(frame,existing,doc,result,{format:'ink-studio/tileset-face-rectangle',version:1,id,object,mode,
+      ...((existing?.part ?? part) && {part:existing?.part ?? part}),constructionPlane:frame.plane,
+      from:from.slice(),to:to.slice(),snapGrid,footprint:bounds,cells,affected,...(result.brush && {brush:result.brush})});
+  }
+
+  A.tilesetStrokes = Object.freeze({plan,planRectangle});
 })(KIT);

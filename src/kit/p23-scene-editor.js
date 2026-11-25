@@ -514,8 +514,8 @@
       return document.pending() ? write() : document.transact('Place tile '+report.face,write);
     }
 
-    function stageTilesetStroke(request, options) {
-      const before = snapshot(), {row,remove,report} = A.tilesetStrokes.plan(before,request,options);
+    function stageTilesetFaceEdit(plan, request, options) {
+      const before = snapshot(), {row,remove,report} = plan(before,request,options);
       if (!row && !remove) return {report};
       const topologyMeshes = {...before.topologyMeshes};
       if (remove) delete topologyMeshes[report.object];
@@ -526,19 +526,32 @@
     }
 
     function planTilesetStroke(request, options) {
-      return stageTilesetStroke(request,options).report;
+      return stageTilesetFaceEdit(A.tilesetStrokes.plan,request,options).report;
     }
 
-    function applyTilesetStroke(request, options) {
-      const {patch,remove,report} = stageTilesetStroke(request,options);
-      if (!report.canCommit) throw Object.assign(new RangeError('Tile face stroke needs review'),{report});
+    function planTilesetRectangle(request, options) {
+      return stageTilesetFaceEdit(A.tilesetStrokes.planRectangle,request,options).report;
+    }
+
+    function commitTilesetFaceEdit(plan, request, options, name) {
+      const {patch,remove,report} = stageTilesetFaceEdit(plan,request,options);
+      if (!report.canCommit) throw Object.assign(new RangeError('Tile face '+name+' needs review'),{report});
       if (!patch) return report;
       const write = () => document.batchSession(() => {
         if (remove) document.setEnvironment({topologyMeshes:null});
         document.setEnvironment(patch);
         return report;
       });
-      return document.pending() ? write() : document.transact((report.mode === 'draw' ? 'Draw ' : 'Erase ')+report.id,write);
+      const label = report.mode[0].toUpperCase()+report.mode.slice(1)+' '+report.id;
+      return document.pending() ? write() : document.transact(label,write);
+    }
+
+    function applyTilesetStroke(request, options) {
+      return commitTilesetFaceEdit(A.tilesetStrokes.plan,request,options,'stroke');
+    }
+
+    function applyTilesetRectangle(request, options) {
+      return commitTilesetFaceEdit(A.tilesetStrokes.planRectangle,request,options,'rectangle');
     }
 
     function meshTopology(object, part) {
@@ -975,6 +988,7 @@
       setTilesetTexelsPerUnit,
       constructionPlane, setConstructionPlane, planConstructionOrigin, snapConstructionOrigin,
       planTilesetFace, placeTilesetFace, planTilesetStroke, applyTilesetStroke,
+      planTilesetRectangle, applyTilesetRectangle,
       planTilesetCanvas,
       transformTilesetCanvas,
       tilesetDependencies, planTilesetRevision, editTilesetRevision,

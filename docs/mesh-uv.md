@@ -214,6 +214,58 @@ One call to `editor.undo()` reverses the full stroke and its dependent
 changes. Run `node examples/tileset-pick/face-stroke-demo.cjs stroke-demo`
 to replay a draw, an erase, and a one-step undo.
 
+### Fill or erase a rectangle of faces
+
+Give `tileset rectangle` two inclusive construction grid cell addresses.
+The addresses may be reversed or equal. A request with equal addresses
+edits one cell. Set `snapGrid:true` to round fractional addresses using
+the saved construction-plane rounding mode.
+
+```json
+{
+  "mode": "fill",
+  "id": "wall-course",
+  "object": "entrance",
+  "from": [-1, 0],
+  "to": [4, 3],
+  "selection": {
+    "format": "ink-studio/tileset-selection",
+    "version": 1,
+    "tileset": "masonry",
+    "x": 0, "y": 0, "width": 16, "height": 8
+  }
+}
+```
+
+Fill fits the selected texel crop to each empty cell. The saved grid
+increments determine each face's width and height in scene units.
+Existing coplanar surfaces in the named mesh occupy any cells they
+overlap and keep their original geometry and paint. The request can
+include a `material` slot or a `part` to check the destination.
+
+For erase, set `"mode":"erase"` and omit `selection` and `material`.
+Any positive area overlap with the footprint qualifies a coplanar tile
+placement, including a placement that crosses the boundary. Erase
+removes the whole face. The preview flags these faces with
+`extendsOutside`. Shared edges and corner contacts count as zero area.
+The preview also lists coplanar faces without a tile binding.
+Each rectangle can cover up to 4,096 cells.
+
+```sh
+ink-studio tileset rectangle fill.json --scene wall.json
+ink-studio tileset rectangle fill.json --scene wall.json --out filled.json
+ink-studio tileset rectangle erase.json --scene filled.json --out window.json
+```
+
+The report includes the world-space outline, the cell addresses, the
+existing faces in each cell, and their planned actions. `footprint.min`
+is the inclusive lower corner and `footprint.max` is the exclusive upper
+corner. In Node, use `editor.planTilesetRectangle(request)` or
+`editor.applyTilesetRectangle(request)`. An applied rectangle is one
+undo entry. Run `node examples/tileset-pick/face-rectangle-demo.cjs rectangle-demo`
+to review a fill that preserves existing accent tiles and an erase that
+opens a window.
+
 ### Extract a crop as a reusable tileset
 
 Use an exact texel rectangle or a saved `tileset pick` selection.

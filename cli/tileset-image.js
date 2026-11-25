@@ -335,15 +335,17 @@ function stampCommand(action, args, options, toolkit, projectTexelsPerUnit, open
   return publishFaceEdit(editor,request,{projectTexelsPerUnit},output,'planTilesetFace','placeTilesetFace');
 }
 
-function strokeCommand([file,...rest], options, projectTexelsPerUnit, openEditor) {
+function faceEditCommand(action, [file,...rest], options, projectTexelsPerUnit, openEditor) {
   const {scene,out} = options;
   const name = value=>typeof value === 'string' && value.trim();
   if (rest.length || ![file,scene].every(name) || out !== undefined && !name(out) ||
       Object.keys(options).some(key=>!['scene','out'].includes(key)))
-    throw new TypeError('Use tileset stroke <stroke.json> --scene <scene.json> [--out <new-scene.json>]');
+    throw new TypeError('Use tileset '+action+' <request.json> --scene <scene.json> [--out <new-scene.json>]');
   const input = path.resolve(scene), output = out && sceneOutput(input,out,file);
   const editor = openEditor(input), request = JSON.parse(fs.readFileSync(path.resolve(file),'utf8'));
-  return publishFaceEdit(editor,request,{projectTexelsPerUnit},output,'planTilesetStroke','applyTilesetStroke');
+  const rectangle = action === 'rectangle';
+  return publishFaceEdit(editor,request,{projectTexelsPerUnit},output,
+    rectangle ? 'planTilesetRectangle' : 'planTilesetStroke',rectangle ? 'applyTilesetRectangle' : 'applyTilesetStroke');
 }
 
 function publishFaceEdit(editor, request, settings, output, plan, apply) {
@@ -362,7 +364,7 @@ function publishFaceEdit(editor, request, settings, output, plan, apply) {
 }
 
 function command([action, ...args], options, toolkit, projectTexelsPerUnit, openEditor) {
-  if (action === 'stroke') return strokeCommand(args,options,projectTexelsPerUnit,openEditor);
+  if (action === 'stroke' || action === 'rectangle') return faceEditCommand(action,args,options,projectTexelsPerUnit,openEditor);
   if (action === 'stamp' || action === 'place') return stampCommand(action,args,options,toolkit,projectTexelsPerUnit,openEditor);
   if (['resize','resample','swap'].includes(action))
     return require('./tileset-canvas.js').command(action,args,options,openEditor);

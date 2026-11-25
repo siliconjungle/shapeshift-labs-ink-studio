@@ -73,6 +73,10 @@ Use `planTilesetStroke(request, options)` to preview a run of painted
 faces and `applyTilesetStroke(request, options)` to draw or erase the
 run in one journal entry. [Tile stroke requests and CLI](mesh-uv.md#draw-and-erase-a-run-of-painted-faces)
 
+Use `planTilesetRectangle(request, options)` to inspect occupied cells and
+`applyTilesetRectangle(request, options)` to fill or erase them in one
+journal entry. [Rectangle requests and CLI](mesh-uv.md#fill-or-erase-a-rectangle-of-faces)
+
 ## Brushes and local rebuilds
 
 Use `paintShadowBand(stroke, { pbrMaterial })` to append a stroke to a [named PBR diffuse ramp](pbr-materials.md#paint-a-pbr-shadow-band).

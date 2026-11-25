@@ -872,7 +872,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetFaces` | namespace |  |  |
 | `KIT.authoring.tilesetFaces.append` | function | `(brush, stamps)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.plan` | function | `(scene, request, options)` | [source](../../src/kit/p23-tileset-faces.js) |
-| `KIT.authoring.tilesetFaces.prepare` | function | `(scene, request, {projectTexelsPerUnit} = {})` | [source](../../src/kit/p23-tileset-faces.js) |
+| `KIT.authoring.tilesetFaces.prepare` | function | `(scene, request, {projectTexelsPerUnit} = {}, cellSize)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.sourceBindings` | function | `(row, id, update)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.stamp` | function | `(brush, face, anchor)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetRevisions` | namespace |  |  |
@@ -882,6 +882,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetSources.prepare` | function | `(scene)` | [source](../../src/kit/p23-tileset-sources.js) |
 | `KIT.authoring.tilesetStrokes` | namespace |  |  |
 | `KIT.authoring.tilesetStrokes.plan` | function | `(scene, request, options)` | [source](../../src/kit/p23-tileset-strokes.js) |
+| `KIT.authoring.tilesetStrokes.planRectangle` | function | `(scene, request, options)` | [source](../../src/kit/p23-tileset-strokes.js) |
 | `KIT.authoring.tilesetSwap` | namespace |  |  |
 | `KIT.authoring.tilesetSwap.plan` | function | `(scene, id, operation)` | [source](../../src/kit/p23-tileset-swap.js) |
 | `KIT.authoring.tilesets` | namespace |  |  |

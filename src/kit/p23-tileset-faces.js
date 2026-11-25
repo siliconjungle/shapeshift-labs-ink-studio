@@ -20,7 +20,7 @@
     return {bindings,changes};
   }
 
-  function prepare(scene, request, {projectTexelsPerUnit} = {}) {
+  function prepare(scene, request, {projectTexelsPerUnit} = {}, cellSize) {
     const {object,part,face,selection,origin,right,up,planeAt,snapGrid=false,
       texelsPerUnit,brushScale=1,material:requestedMaterial} = request ?? {};
     if (!request || Object.getPrototypeOf(request) !== Object.prototype || Object.keys(request).some(key=>!fields.includes(key)) ||
@@ -34,7 +34,7 @@
     const {positiveScale} = A.tilesets;
     const density = positiveScale(texelsPerUnit ?? tilesets.texelsPerUnit ?? projectTexelsPerUnit ?? 16,'Texels per unit');
     positiveScale(brushScale,'Brush scale');
-    const size = [crop.width,crop.height].map(pixels=>positiveScale(pixels*brushScale/density,'World tile extent'));
+    const size = cellSize ?? [crop.width,crop.height].map(pixels=>positiveScale(pixels*brushScale/density,'World tile extent'));
     if (planeAt !== undefined && [origin,right,up].some(value=>value !== undefined))
       throw new TypeError('Choose plane grid coordinates or an explicit tile frame');
     if (typeof snapGrid !== 'boolean' || snapGrid && planeAt === undefined)
