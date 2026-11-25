@@ -140,3 +140,81 @@ test('native PNG precision survives decoding, graph declaration, and JSON delive
   const memory = Ink.createGraphProject(spec, { kit, baseDir: folder, planAssets: true }).plan(undefined, { memory: true }).memory;
   assert.equal(memory.initialBytes, 2 * 4 * (1 + 2));
 });
+
+test('uniform images promote an exposed scalar and encode grayscale, RGB, RGBA and HDR at the chosen extent', () => {
+  const make = (value, descriptor) => op('image.uniform', { value, width: 3, height: 2, descriptor });
+  const spec = project({
+    signed: make({ input: 'relief' }, { intent: 'height', units: 'art-px' }),
+    grayscale: make(.375, { intent: 'data', precision: 'unorm16' }),
+    rgb: make([1, .5, .25], { intent: 'color', precision: 'unorm8' }),
+    rgba: make([.5, .25, .125, .5], { intent: 'color', layout: 'rgba', alpha: 'premultiplied', precision: 'unorm8' }),
+    hdr: make([4, .375, -.25, .625], { intent: 'color', layout: 'rgba', precision: 'float32', colorSpace: 'srgb-linear' })
+  }, Object.fromEntries(['signed', 'grayscale', 'rgb', 'rgba', 'hdr'].map(name => [name, link(name)])));
+  spec.inputs = { relief: 'number' };
+  spec.exports = { hdr: { output: 'hdr', format: 'json' } };
+  const material = Ink.openMaterialGraph(spec, { id: 'uniform-fixture' }), graph = compile(material);
+  const first = graph.run({ inputs: { relief: -2.75 } });
+  assert.equal(graph.plan({ relief: -2.75 }).outputs.signed.type, 'heightImage');
+  assert.equal(graph.plan({ relief: -2.75 }).outputs.hdr.type, 'colorImage');
+  for (const [name, pixel] of Object.entries({
+    signed: [-2.75], grayscale: [24576], rgb: [255, 128, 64], rgba: [128, 64, 32, 128], hdr: [4, .375, -.25, .625]
+  })) {
+    const { width, height, channels, data } = first.outputs[name].raster;
+    assert.deepEqual([width, height, channels], [3, 2, pixel.length]);
+    assert.deepEqual([...data], Array.from({ length: 6 }, () => pixel).flat());
+  }
+  assert(I.valid(JSON.parse(first.artifacts[0].bytes), 'color'));
+  const changed = graph.run({ inputs: { relief: 7.25 } });
+  assert.equal(changed.outputs.signed.raster.data[0], 7.25);
+  assert.equal(first.outputs.signed.raster.data[0], -2.75);
+  assert.throws(() => I.uniform(255, 1, 1, { intent: 'mask', precision: 'unorm8' }), /outside/);
+  assert.throws(() => I.uniform(1e40, 1, 1, { intent: 'data', precision: 'float32' }), /float32 range/);
+  assert.throws(() => I.uniform(.5, 8192, 8192, { intent: 'mask' }), /raster budget/);
+  assert.throws(() => I.uniform([1, 0, 0], 1, 1, { intent: 'color', layout: 'rgba' }), /4 finite/);
+  spec.nodes.invalid = op('image.convert', { source: { input: 'relief' }, descriptor: { intent: 'data' } });
+  spec.outputs.badLink = link('invalid');
+  assert.throws(() => compile(spec), /invalid.source.*image\.uniform/);
+});
+
+test('typed representation conversion preserves range and image metadata or requires an explicit lossy policy', () => {
+  const source = I.declare({ ...raster(2, 1, 4, [2, -.125, .25, .5, .25, .125, .0625, .25]), pivot: [1.5, .25] }, {
+    intent: 'color', colorSpace: 'srgb-linear', alpha: 'premultiplied', tiling: { u: 'wrap' },
+    sampling: 'linear', pixelPitchMm: [.4, .8], materialSeed: 53
+  });
+  const straight = I.convert(source, { intent: 'color', alpha: 'straight', precision: 'float32' });
+  assert.deepEqual([...straight.raster.data], [4, -.25, .5, .5, 1, .5, .25, .25]);
+  assert.deepEqual(straight.raster.pivot, source.raster.pivot);
+  for (const key of ['tiling', 'sampling', 'pixelPitchMm', 'materialSeed'])
+    assert.deepEqual(straight.descriptor[key], source.descriptor[key]);
+  const unorm = { intent: 'color', precision: 'unorm8', colorSpace: 'srgb-linear' };
+  assert.throws(() => I.convert(straight, unorm), /outside/);
+  const clipped = I.convert(straight, unorm, { outOfRange: 'clamp' });
+  assert.deepEqual([...clipped.raster.data], [255, 0, 128, 128, 255, 128, 64, 64]);
+  assert.throws(() => I.convert(straight, { intent: 'color', layout: 'rgb' }), /dropAlpha/);
+  const luma = I.convert(straight, { intent: 'data' }, { dropAlpha: true });
+  assert(Math.abs(luma.raster.data[0] - (4 * .2126 - .25 * .7152 + .5 * .0722)) < 1e-7);
+  const decode = I.convert(I.uniform([1, .5, 0], 1, 1, { intent: 'color' }), { intent: 'data' });
+  assert(Math.abs(decode.raster.data[0] - (.2126 + .7152 * .21404114048223255)) < 1e-12);
+  const gray = I.uniform(.25, 2, 1, { intent: 'data', precision: 'unorm16' });
+  const rounded = 16384 / 65535, toColor = { intent: 'color', layout: 'rgba', precision: 'float64' };
+  const opaque = I.convert(gray, toColor);
+  assert.deepEqual([...opaque.raster.data], [rounded, rounded, rounded, 1, rounded, rounded, rounded, 1]);
+  assert.equal(opaque.descriptor.colorSpace, 'srgb-linear');
+  assert.throws(() => I.convert(gray, { intent: 'height' }), /image\.toHeight/);
+  assert.throws(() => I.convert(gray, { intent: 'data', units: 'mm' }), /conversion target/);
+
+  const nearTransparent = I.uniform([8e-40, -.25, 0, Number.MIN_VALUE], 1, 1, {
+    intent: 'color', layout: 'rgba', colorSpace: 'srgb-linear', alpha: 'premultiplied'
+  });
+  const attenuated = I.convert(nearTransparent, { intent: 'color', precision: 'float32' });
+  assert(I.valid(attenuated));
+  assert.deepEqual([...attenuated.raster.data], [0, 0, 0, 0]);
+
+  const ready = compile(project({
+    gray: op('image.uniform', { value: .25, width: 2, height: 1, descriptor: { intent: 'data' } }),
+    rgb: op('image.convert', { source: link('gray'), descriptor: { intent: 'color', layout: 'rgb', colorSpace: 'srgb' } }),
+    display: op('image.toDisplay', { source: link('rgb') })
+  }, { rgb: link('rgb'), display: link('display') }));
+  assert.equal(ready.plan().outputs.rgb.type, 'colorImage');
+  assert.deepEqual([...ready.run().outputs.display.data], [137, 137, 137, 137, 137, 137]);
+});

@@ -481,14 +481,18 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.graphImages` | namespace |  |  |
+| `KIT.procedural.graphImages.convert` | function | `(source, target, { outOfRange = 'error', dropAlpha = false } = {})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.declare` | function | `(source, settings)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.displaySamples` | function | `(source, bitDepth, outOfRange = 'clamp')` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.format` | value | `string = "ink-studio/graph-image"` |  |
 | `KIT.procedural.graphImages.inspect` | function | `(source)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.convert"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.convert"].description` | value | `string = "Convert the channel layout, precision, color space or alpha convention of a typed image."` |  |
+| `KIT.procedural.graphImages.operations["image.convert"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.declare"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.declare"].description` | value | `string = "Attach a verified image contract to a legacy raster using a literal descriptor."` |  |
-| `KIT.procedural.graphImages.operations["image.declare"].specialize` | function | `({ params, inputs })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.declare"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.inspect"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.inspect"].description` | value | `string = "Report image extent and the full sampling and sample encoding contract."` |  |
 | `KIT.procedural.graphImages.operations["image.inspect"].inputs` | namespace |  |  |
@@ -541,10 +545,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.toRaster"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.toRaster"].outputs.value` | value | `string = "raster"` |  |
 | `KIT.procedural.graphImages.operations["image.toRaster"].run` | function | `({ source })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.uniform"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.uniform"].description` | value | `string = "Promote a scalar or a tuple to a typed constant image. UNORM inputs use normalized values, linear float color can be HDR."` |  |
+| `KIT.procedural.graphImages.operations["image.uniform"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.resize` | function | `(source, width, height)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.toDisplay` | function | `(source, outOfRange = 'clamp')` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.toHeight` | function | `(source, { scale, offset = 0, units = 'art-px', channel = 'luminance' } = {})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.toRaster` | function | `(source)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.uniform` | function | `(value, width, height, settings)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.valid` | function | `(value, intent)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.version` | value | `number = 1` |  |
 

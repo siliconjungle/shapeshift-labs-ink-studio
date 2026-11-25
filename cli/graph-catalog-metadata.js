@@ -386,6 +386,8 @@ const simulationClock = { dt: property('number', { ...seconds, ...limit(.001, .1
   maxTicks: property('number', limit(1, 12000, true), 2400) };
 
 const specialization = {
+  'image.uniform': { field: 'descriptor', description: 'A literal image intent and layout select the value port and typed output.' },
+  'image.convert': { field: 'descriptor', description: 'A literal target intent selects the output type. Optional fields change how samples are represented.' },
   'image.declare': { field: 'descriptor', description: 'A literal image intent selects the output type and the source raster contract.' },
   'array.map': { field: 'group', description: 'The group declares item, optional numeric index and value. Extra group inputs become ports.' },
   'array.mapById': {field: 'group', description: 'The group takes a record item and optional numeric index. Each result carries the source ID and optional split ancestry.'},
