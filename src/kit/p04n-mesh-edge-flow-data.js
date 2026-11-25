@@ -59,13 +59,24 @@ const meshEdgeFlowData = (function (K) {
       throw new RangeError('Edge edit requires manifold, consistently wound edges at ' + edge.id);
   }
 
+  function openUse(g, edge) {
+    const {from,to,face} = edge.uses[0];
+    // New faces run in the reverse direction along the old boundary.
+    return {edge:edge.id,face:g.faces.get(face),a:g.corners.get(to),b:g.corners.get(from)};
+  }
+
+  function openEdgeFrame(g, {a,b,face}) {
+    const along = V.sub(position(g,b.vertex),position(g,a.vertex));
+    const normal = meshFaceRegionGeometry.area(face.corners.map(corner=>position(g,corner.vertex)));
+    return {along,width:Math.hypot(...along),normal,outward:V.cross(normal,along)};
+  }
+
   function boundary(g, saved, start) {
     const edges = selection(g, saved, 3);
     if (edges.some(edge => edge.uses.length !== 1)) throw new RangeError('Use edges on an open mesh boundary');
     const directed = edges.map(edge => {
-      const { from, to } = edge.uses[0];
-      // New faces run in the reverse direction along the old boundary.
-      return [g.corners.get(to).vertex, g.corners.get(from).vertex];
+      const {a,b} = openUse(g,edge);
+      return [a.vertex,b.vertex];
     });
     const { paths, branched } = boundaryPaths(directed);
     if (branched || paths.length !== 1 || !paths[0].closed)
@@ -75,8 +86,8 @@ const meshEdgeFlowData = (function (K) {
     if (!vertices.includes(first)) throw new RangeError('Boundary start must be a selected vertex');
     const loop = rotate(vertices, vertices.indexOf(first));
     return loop.map((id, i) => {
-      const next = cyclic(loop, i + 1), edge = edgeOf(g, id, next), use = edge.uses[0];
-      return { id, edge: edge.id, face: g.faces.get(use.face), a: g.corners.get(use.to), b: g.corners.get(use.from) };
+      const next = cyclic(loop, i + 1), edge = edgeOf(g, id, next);
+      return {id,...openUse(g,edge)};
     });
   }
 
@@ -147,5 +158,5 @@ const meshEdgeFlowData = (function (K) {
   }
 
   return { index, name, pair, edgeOf, front, position, around, cyclic, rotate, context, selection,
-    requireWinding, boundary, point, cornerData, corners, edgeCorner, retainUVPins, inheritEdgeSettings };
+    requireWinding, openUse, openEdgeFrame, boundary, point, cornerData, corners, edgeCorner, retainUVPins, inheritEdgeSettings };
 })(KIT);

@@ -1564,6 +1564,8 @@ ink-studio mesh-topology edge-edit workshop.json bridge.json --object coupling -
   start or an open chain's endpoint. A movable vertex needs one
   unambiguous rail on the chosen side. The slide keeps all face and
   corner IDs, corner paint coordinates and vertex weights.
+- **Extrude an open edge or chain** with `kind: "extrude-edge"`.
+  See [Extrude an open edge](#extrude-an-open-edge).
 - **Bridge rims** with `kind: "bridge"` and `first` and `second` saved
   selections. Each selection must describe an entire exposed loop, and
   both loops must have the same edge count. The default alignment
@@ -1605,6 +1607,45 @@ bake invalidations in the same undo and replay history.
 
 Run `node examples/mesh-edge-edit/render.cjs <directory>` for playable
 CLI requests and native-grid comparisons.
+
+### Extrude an open edge
+
+Use a boundary edge ID or a saved edge `selection` containing one
+open chain. A revision-pinned request may use this operation.
+
+```json
+{ "kind": "extrude-edge", "edge": "panel/top", "distance": 0.3, "direction": [0, 1, 0], "strict": true, "material": "trim" }
+```
+
+Each selected edge must have one incident face. The existing edge and
+its vertices stay fixed. Every edge adds one quad, and a chain shares
+new vertices at its junctions. Choose the direction in mesh coordinates.
+
+| Direction | Result |
+| --- | --- |
+| `"edge"` | Grow outward perpendicular to the edge in its incident face's plane. This is the default. |
+| `"face"` | Grow along the incident face's geometric normal. |
+| `[x,y,z]` | Apply one normalized XYZ direction to every new vertex. Use a signed distance to choose its sense. |
+
+With either inferred direction, adjoining edges blend their axes at a
+junction. Set `"strict": true` to require agreement and use one common
+axis for the whole chain. An explicit XYZ direction always stays
+locked. A direction parallel to a source edge blocks the edit. The
+preview reports the incident directions, new positions, and source and
+outer edge IDs. The usual mesh health checks run on the candidate strip.
+
+The strip inherits the incident material unless `material` supplies
+another slot. The default `"uv": "strip"` runs U by distance along the
+chain. `"uv": "per-edge"` gives each quad a full UV rectangle. These
+rules apply to the base UVs and any bound layouts. Use `uvSets` to
+choose which alternate layouts receive the mapping. New vertices
+inherit the base weights.
+
+```sh
+ink-studio mesh-topology edge-edit panel.json trim.json --object panel
+ink-studio mesh-topology edge-edit panel.json trim.json --object panel --out grown.json --report trim-receipt.json
+node examples/tileset-pick/extrude-open-edge-demo.cjs extrude-edge-review
+```
 
 ### Split a tile at a picked position
 

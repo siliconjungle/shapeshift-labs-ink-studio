@@ -5,7 +5,7 @@
   const { area } = meshFaceRegionGeometry;
   const operations = { 'insert-loop': meshEdgeLoops.insert, 'split-face': meshPickedSplit.split,
     'subdivide-face': meshFaceGrid.subdivide, 'subdivide-texels': meshTexelGrid.subdivide, slide: meshEdgeLoops.slide,
-    bridge: meshEdgeSurfaces.bridge, 'grid-fill': meshEdgeSurfaces.grid };
+    'extrude-edge': meshOpenEdge.extrude, bridge: meshEdgeSurfaces.bridge, 'grid-fill': meshEdgeSurfaces.grid };
 
   function flipped(doc, document, affected) {
     const before = index(doc.vertices), after = index(document.vertices), faces = index(doc.faces);
@@ -18,7 +18,7 @@
 
   function planEdgeEdit(source, request, settings) {
     const doc = topology.create(source), g = context(doc, request), kind = request.operation?.kind;
-    if (!Object.hasOwn(operations, kind)) throw new TypeError('Choose insert-loop, split-face, subdivide-face, subdivide-texels, slide, bridge, or grid-fill');
+    if (!Object.hasOwn(operations, kind)) throw new TypeError('Choose insert-loop, split-face, subdivide-face, subdivide-texels, extrude-edge, slide, bridge, or grid-fill');
     const { patch, affected, detail, cuts, lineage, issues = [] } = operations[kind](g, request.operation, settings);
     let document = doc;
     if (Object.keys(patch).length) {
