@@ -35,6 +35,26 @@ test('PNG import preserves indexed slots and palette transparency, including dup
   assert.throws(() => ink.readTilesetImage(oversize),/2048 texels/);
 });
 
+test('a blank tileset fills the declared rectangle with exact background bytes',() => {
+  const width = 3, height = 2;
+  for (const [background,rgba] of [
+    [undefined,[0,0,0,0]],
+    ['transparent',[0,0,0,0]],
+    ['#317285',[49,114,133,255]],
+    ['#31728580',[49,114,133,128]],
+    ['#31728500',[49,114,133,0]]
+  ]) {
+    const image = ink.createBlankTileset({width,height,background});
+    assert.deepEqual([image.version,image.width,image.height,image.encoding],[1,width,height,'rgba8']);
+    const decoded = Buffer.from(image.data,'base64');
+    assert.equal(decoded.length,width*height*4);
+    for (let i=0;i<decoded.length;i+=4) assert.deepEqual([...decoded.subarray(i,i+4)],rgba);
+  }
+  for (const width of [0,2.5,2049])
+    assert.throws(() => ink.createBlankTileset({width,height}),/2048 texels/);
+  assert.throws(() => ink.createBlankTileset({width,height,background:'red'}),/#rrggbb or #rrggbbaa/);
+});
+
 test('scene editor registration is transactional and renders one source on separate meshes',() => {
   const editor = ink.createSceneEditor(scene);
   const image = ink.readTilesetImage(PNG.encode(2,2,rgba,4));
@@ -86,4 +106,24 @@ test('the CLI scene embeds the registered image and renders like inline pigment 
   cli('render',file('moved/registered.json'),...settings,'--out',file('registered.png'));
   cli('render',file('inline.json'),...settings,'--out',file('inline.png'));
   assert.deepEqual(fs.readFileSync(file('registered.png')),fs.readFileSync(file('inline.png')));
+});
+
+test('the CLI creates and binds a blank tileset without an image file',t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(),'ink-blank-tileset-'));
+  t.after(() => fs.rmSync(directory,{recursive:true,force:true}));
+  const original = path.join(directory,'scene.json'), output = path.join(directory,'painted.json');
+  const texture = {tileset:'window'};
+  fs.writeFileSync(original,JSON.stringify({...scene,topologyMeshes:{panel:quad('panel',0,texture)}}));
+  const cli = (...args) => execFileSync(process.execPath,[path.resolve(__dirname,'../cli/ink-studio.js'),
+    'tileset','create','--scene',original,'--id','window','--out',output,...args],{encoding:'utf8',stdio:'pipe'});
+  assert.throws(() => cli('--width','1.5','--height','3'),/--width/);
+  assert.throws(() => cli('--width','2','--height','3','--background','red'),/#rrggbb/);
+  assert(!fs.existsSync(output));
+
+  const receipt = JSON.parse(cli('--width','2','--height','3','--background','#31728580'));
+  assert.deepEqual(receipt,{scene:output,id:'window',width:2,height:3,encoding:'rgba8'});
+  const editor = ink.createSceneEditor(fs.readFileSync(output,'utf8'));
+  const [mesh] = editor.build().meshes;
+  const hit = K.sceneMeshes.rayQuery(mesh,K)({origin:[.5,.5,1],direction:[0,0,-1],maxDistance:2});
+  assert.equal(hit.pigment,0x317285);
 });

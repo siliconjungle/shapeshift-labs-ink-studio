@@ -11,6 +11,14 @@
       throw new RangeError('Tileset images need dimensions from 1 to '+maxEdge+' texels per side');
   }
 
+  function blank({ width, height, background = 'transparent' } = {}) {
+    dimensions(width,height);
+    const color = background === 'transparent' ? [0,0,0,0] : DrawingPrimitives.color(background);
+    const pixel = String.fromCharCode(...color);
+    const data = btoa(pixel.repeat(width*height));
+    return freeze({version:1,width,height,encoding:'rgba8',data});
+  }
+
   function packed(value, length) {
     const padding = (3-length%3)%3;
     return typeof value === 'string' && value.length === 4*Math.ceil(length/3) &&
@@ -90,5 +98,5 @@
     return {...scene,tilesets:{...current,[key]:asset}};
   }
 
-  A.tilesets = Object.freeze({ dimensions, prepare, register });
+  A.tilesets = Object.freeze({ dimensions, blank, prepare, register });
 })(KIT);

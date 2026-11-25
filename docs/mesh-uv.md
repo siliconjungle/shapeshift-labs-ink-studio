@@ -72,6 +72,21 @@ bytes. Registration can be undone in the scene editor. Registering the same
 image under the same ID is idempotent. A different image under that ID
 requires a new ID.
 
+### Create a blank tileset
+
+```sh
+ink-studio tileset create --width 48 --height 32 --background '#31728580' \
+  --scene gatehouse.json --id window-glass --out gatehouse-tiles.json
+```
+
+Set each edge from 1 to 2048 texels. Use `transparent` (the default),
+`#rrggbb` for an opaque color, or `#rrggbbaa` for exact RGBA bytes.
+The same color covers the whole image. The resulting RGBA8 entry can
+serve as a mesh material's texture just like an imported image.
+
+In Node, pass `ink.createBlankTileset({ width:48, height:32, background:'#31728580' })`
+to `editor.registerTileset(id, image)` as the image argument.
+
 ## Edit an authored layout
 
 A [polygon topology document](mesh-topology.md) keeps stable face, edge and

@@ -17,19 +17,27 @@ function readTilesetImage(source, toolkit = require('..').load()) {
 }
 
 function command([action, source, ...rest], options, toolkit) {
-  const {id,scene,out} = options;
-  if (action !== 'import' || !source || rest.length || Object.keys(options).some(key => !['id','scene','out'].includes(key)) ||
+  const {id,scene,out,width,height,background} = options;
+  const create = action === 'create';
+  const allowed = ['id','scene','out',...(create ? ['width','height','background'] : [])];
+  if (!['import','create'].includes(action) || rest.length || Object.keys(options).some(key => !allowed.includes(key)) ||
       ![id,scene,out].every(value => typeof value === 'string' && value.trim()))
-    throw new TypeError('Use tileset import <image.png> --scene <scene.json> --id <tileset-id> --out <new-scene.json>');
+    throw new TypeError('Use tileset import or tileset create with --scene, --id and --out');
+  if (create) {
+    if (source !== undefined || ![width,height].every(value => typeof value === 'string' && /^\d+$/.test(value)))
+      throw new TypeError('Use tileset create --width <texels> --height <texels> [--background <color>]');
+  } else if (!source) {
+    throw new TypeError('Use tileset import <image.png>');
+  }
   const output = path.resolve(out), input = path.resolve(scene);
   if (!/\.json$/i.test(output) || path.dirname(input) !== path.dirname(output) ||
-      output === input || output === path.resolve(source))
+      output === input || !create && output === path.resolve(source))
     throw new RangeError('Write a new scene JSON beside the original to preserve relative scene assets');
-  const asset = readTilesetImage(source,toolkit);
-  const registered = toolkit.KIT.authoring.tilesets.register(JSON.parse(fs.readFileSync(input,'utf8')),id,asset);
+  const tilesets = toolkit.KIT.authoring.tilesets;
+  const asset = create ? tilesets.blank({width:Number(width),height:Number(height),background}) : readTilesetImage(source,toolkit);
+  const registered = tilesets.register(JSON.parse(fs.readFileSync(input,'utf8')),id,asset);
   files.publishJson(output,registered,'A different scene already exists at '+output);
-  const {width,height,encoding} = asset;
-  process.stdout.write(JSON.stringify({scene:output,id,width,height,encoding},null,2)+'\n');
+  process.stdout.write(JSON.stringify({scene:output,id,width:asset.width,height:asset.height,encoding:asset.encoding},null,2)+'\n');
 }
 
 module.exports = {readTilesetImage,command};

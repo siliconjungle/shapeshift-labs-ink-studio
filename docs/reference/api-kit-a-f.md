@@ -857,6 +857,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.styles` | namespace |  |  |
 | `KIT.authoring.styles.resolve` | function | `(source, id)` | [source](../../src/kit/p25-authoring-bindings.js) |
 | `KIT.authoring.tilesets` | namespace |  |  |
+| `KIT.authoring.tilesets.blank` | function | `({ width, height, background = 'transparent' } = {})` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.dimensions` | function | `(width, height)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.prepare` | function | `(sources = {})` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.register` | function | `(scene, key, source)` | [source](../../src/kit/p23-tilesets.js) |

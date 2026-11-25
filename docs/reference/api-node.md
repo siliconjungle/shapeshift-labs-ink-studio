@@ -25,6 +25,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.compareModelingBenchmarks` | function | `(...args)` | [source](../../index.js) |
 | `node.comparePaletteDistributions` | function | `(reference, studio, options)` | [guide](../palette-recipes.md#compare-colour-distributions-with-a-reference), [source](../../cli/palette-distributions.js) |
 | `node.compareShotPalettes` | function | `(world,{palettes,threshold,heatmapMax,regionLimit,columns=3,...view} = {})` | [guide](../palette-recipes.md#compare-candidate-palettes-on-one-shot), [source](../../cli/palette-compare.js) |
+| `node.createBlankTileset` | function | `(options)` | [guide](../mesh-uv.md#create-a-blank-tileset), [source](../../index.js) |
 | `node.createBounceProbeSampler` | function | `(world, { bounceProbes, sky, sun, shotLighting, time=0 } = {})` | [guide](../bounce-probes.md#use-bounce-in-a-palette-or-shot), [guide](../bounce-probes.md), [source](../../cli/bounce-probes.js) |
 | `node.createCameraAtlas` | function | `(options)` | [guide](../camera-atlas.md#capture-and-schedule-feeds), [guide](../render-outputs.md#schedule-a-miniature-renderer-as-a-camera-feed), [source](../../index.js) |
 | `node.createEffectClip` | function | `(source, {kit=require('..').load(),baseDir=process.cwd(),sourceFile,operations,adapters} = {})` | [guide](../effect-clips.md#run-headlessly-and-reuse-a-group), [source](../../cli/effect-clip.js) |
