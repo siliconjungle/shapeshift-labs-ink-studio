@@ -1,4 +1,10 @@
 /* Editable bevel, lighting, frequency and wear operations on material height. */
+function ShapeBevelProfile(width, height, profile, side) {
+  const inside = side === 'outside' ? 0 : width, outside = side === 'inside' ? 0 : width;
+  const curve = profile === 'round' ? t => Math.sqrt(t * (2 - t)) : profile === 'smooth' ? t => t * t * (3 - 2 * t) : t => t;
+  return distance => height * curve(Math.max(0, Math.min(1, (outside - distance) / (inside + outside))));
+}
+
 const AdvancedHeightReader = ({ width, height, data }, tiling, sampler, filter) => {
   const values = new Float64Array(2), axis = [tiling.u, tiling.v].map(TextureAddress.axis);
   const read = sampler({ width, height, accumulate(i, out, weight) {
@@ -60,11 +66,10 @@ const TypedAdvancedHeight = ({ requireImage, descriptor, wrap, pack, storage, in
       throw new RangeError('Invalid bevel width, height, profile or side');
     const distance = morphology.signedDistance(source, { ...selection, border, maxDistance: width + 1 });
     const input = frame(distance, border);
-    const curve = profile === 'round' ? t => Math.sqrt(t * (2 - t)) : profile === 'smooth' ? smooth : t => t;
-    const insideWidth = side === 'outside' ? 0 : width, outsideWidth = side === 'inside' ? 0 : width;
+    const sample = ShapeBevelProfile(width,height,profile,side);
     return outputHeight(input, 'float32', p => {
       const n = input.grid.data[p], d = Math.sign(n) * Math.max(0, Math.abs(n) - .5);
-      return height * curve(unit((outsideWidth - d) / (insideWidth + outsideWidth)));
+      return sample(d);
     });
   }
 

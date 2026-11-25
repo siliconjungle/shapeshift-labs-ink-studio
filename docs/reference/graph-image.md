@@ -487,7 +487,7 @@ Origin: toolkit.
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]},"default":"float64"},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"error"},"channel":{"type":"string","constraints":{"choices":["value","luminance","r","g","b","alpha"]}},"range":{"type":"vec2","constraints":{"increasing":true},"default":[0,1]}} |
 | Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
 
-Guides: [guide](../material-curves-gradients.md)
+Guides: [guide](../material-curves-gradients.md), [guide](../material-shape-library.md#shape-definitions)
 
 Get the runnable example with `ink-studio graph describe image.gradientMap --example > example.json`.
 Run it with `ink-studio graph run example.json`.
@@ -1103,6 +1103,33 @@ Origin: toolkit.
 Guides: [guide](../material-advanced-texture-filters.md)
 
 Get the runnable example with `ink-studio graph describe image.seamRepair --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.shape
+
+Bake a signed planar shape to aligned coverage, scalar profile, distance and bevel height at a chosen resolution.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `shape2d` | Required | {"layout":"Serializable planar geometry, profile, symbol or bevel definition"} |
+| Input | `width` | `pixelCount` | `64` | pixels · {"integer":true,"min":1} |
+| Input | `height` | `pixelCount` | `64` | pixels · {"integer":true,"min":1} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"bounds":{"type":"array<number>","unit":"shape units","constraints":{"length":4,"order":"left, top, right, bottom"},"default":[0,0,1,1]},"samples":{"type":"number","unit":"samples per axis","constraints":{"choices":[1,2,4]},"default":1},"precision":{"type":"string","constraints":{"choices":["float32","float64"]},"default":"float32"}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `mask` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `distance` | `heightImage` | — | {"layout":"Typed floating-point height with units"} |
+| Output | `height` | `heightImage` | — | {"layout":"Typed floating-point height with units"} |
+| Output | `info` | `record` | — | {"layout":"Plain named object"} |
+
+- All outputs use one sampling window. Match bounds across resolutions to preserve geometry.
+- Distance and bevel height are center samples in shape units. Coverage and scalar profiles can use 1, 4 or 16 subpixel tests.
+- Use info.spacing as the derivative spacing for a height-to-normal conversion.
+
+Guides: [guide](../material-shape-library.md), [guide](../material-shape-library.md#share-shapes-across-bakes)
+
+Get the runnable example with `ink-studio graph describe image.shape --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.sharpen

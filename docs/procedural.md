@@ -149,6 +149,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `fields.potential(options)` | [Boundary-driven potential fields](boundary-potential-fields.md) with masked Laplace solves, fixed pins, gradients, and contours |
 | `fields.simplex(options)`, `fields.periodic(options)`, `fields.compile(expression, options)` | Seeded analytic noise and serializable field composition for SDFs, materials and placement |
 | `namedNoise.create(family, options)` | [Twelve named noise families](material-named-noise.md) with deterministic seeds, independent periods and native sample ranges |
+| `shapeLibrary.open(source)`, `shapeLibrary.pick(source, id)`, `shapeLibrary.compile(definition)` | [Editable planar shapes](material-shape-library.md) shared by analytic fields and material bakes |
 | `grammar.expand(scope, rules, options)`, `grammar.children(layout)` | Bounded shape grammar with named partitions, fitted repeats, pinned spans, sockets and retained child specs |
 | `grammar.rewriteGrid(rows, rules)`, `grammar.rewriteGraph(graph, rules)` | Seeded weighted pattern replacement on scalar grids and directed graphs |
 | `KIT.cellular.create(options)`, `KIT.cellular.rules` | [Seeded cellular automata](cellular-lattices.md) on line, square, hex, and voxel lattices, including reversible block rules |

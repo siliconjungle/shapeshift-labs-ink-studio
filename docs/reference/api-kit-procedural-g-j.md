@@ -1118,6 +1118,24 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.seamRepair"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.seamRepair"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
 | `KIT.procedural.graphImages.operations["image.seamRepair"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.shape"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.shape"].description` | value | `string = "Bake a signed planar shape to aligned coverage, scalar profile, distance and bevel height at a chosen resolution."` |  |
+| `KIT.procedural.graphImages.operations["image.shape"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.shape"].inputs.height` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.shape"].inputs.height.default` | value | `number = 64` |  |
+| `KIT.procedural.graphImages.operations["image.shape"].inputs.height.type` | value | `string = "pixelCount"` |  |
+| `KIT.procedural.graphImages.operations["image.shape"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.shape"].inputs.source` | value | `string = "shape2d"` |  |
+| `KIT.procedural.graphImages.operations["image.shape"].inputs.width` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.shape"].inputs.width.default` | value | `number = 64` |  |
+| `KIT.procedural.graphImages.operations["image.shape"].inputs.width.type` | value | `string = "pixelCount"` |  |
+| `KIT.procedural.graphImages.operations["image.shape"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.shape"].outputs.distance` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.shape"].outputs.height` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.shape"].outputs.info` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.shape"].outputs.mask` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.shape"].outputs.value` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.shape"].run` | function | `({source,width,height,options})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.sharpen"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.sharpen"].description` | value | `string = "Sharpen with a four-neighbor cross while retaining original coverage."` |  |
 | `KIT.procedural.graphImages.operations["image.sharpen"].inputs` | namespace |  |  |
@@ -1267,6 +1285,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.regions.regionMap` | function | `(source, kind, options = {})` | [source](../../src/kit/paq-flood-region-images.js) |
 | `KIT.procedural.graphImages.regions.valid` | function | `(value)` | [source](../../src/kit/paq-flood-region-images.js) |
 | `KIT.procedural.graphImages.resize` | function | `(source, width, height)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.shape` | function | `(source,width,height,options={})` | [guide](../material-shape-library.md#share-shapes-across-bakes), [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.shuffle` | function | `(source, routes, target)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.spatial` | namespace |  |  |
 | `KIT.procedural.graphImages.spatial.crop` | function | `(source, options = {})` | [source](../../src/kit/paq-coordinate-sampling.js) |

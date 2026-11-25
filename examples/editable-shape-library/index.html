@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mark &amp; Die · Ink Studio</title>
+<style>
+  :root{color-scheme:dark;--paper:#ebe5d6;--muted:#b9b3a6;--gold:#ffcb88;--line:#464852;--panel:#21232b;--well:#1a1c24}
+  *{box-sizing:border-box}
+  body{margin:0;background:#181b24;color:var(--paper);font:14px/1.4 system-ui,sans-serif}
+  main{max-width:1320px;margin:auto;padding:23px 30px 28px}
+  header{display:flex;align-items:end;justify-content:space-between;gap:17px;padding-bottom:19px;border-bottom:1px solid var(--line);margin-bottom:16px}
+  h1,h2,p,figure{margin:0}
+  h1{font:400 clamp(44px,6vw,80px)/.98 Georgia,serif;letter-spacing:-.06em;margin-top:4px}
+  h2{font-size:15px;font-weight:650}
+  .mono{font:11px/1.45 ui-monospace,Menlo,monospace}
+  .eyebrow{color:var(--gold);letter-spacing:.16em;text-transform:uppercase}
+  .actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  button,a,select{color:inherit;font:inherit;border:1px solid var(--line);border-radius:4px;background:var(--well);padding:7px 10px}
+  a{text-decoration:none;color:var(--gold)}
+  button,select{cursor:pointer}
+  a:hover,button:hover,select:hover{color:var(--gold);border-color:#a4937b}
+  :focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+  .stage{display:grid;grid-template-columns:minmax(0,1fr) 342px;gap:15px;align-items:stretch}
+  .comparison,.editor{min-width:0;border:1px solid var(--line);background:var(--panel);border-radius:6px;overflow:hidden}
+  .bar{min-height:51px;padding:8px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:9px}
+  .bar label{font-size:12px;white-space:nowrap}
+  .bar select{padding:4px 6px;font-size:12px;margin-left:3px}
+  .pairs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:10px}
+  .pairs figure{background:var(--well);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  figcaption{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px;color:var(--muted)}
+  figcaption span:first-child{color:var(--paper);font-weight:650}
+  canvas{display:block;width:100%;aspect-ratio:1;image-rendering:pixelated;background:#161923}
+  .editor{display:flex;flex-direction:column}
+  .editor label{font-size:13px;font-weight:650}
+  .editor #shape-id{color:var(--gold)}
+  textarea{display:block;width:100%;box-sizing:border-box;resize:vertical;min-height:212px;flex:1;border:0;border-radius:0;background:#151720;color:#f1ddb7;padding:12px 13px;white-space:pre;tab-size:2;font:12px/1.55 ui-monospace,Menlo,monospace}
+  textarea:focus-visible{outline-offset:-2px}
+  .edit-actions{padding:10px 11px 0;display:flex;gap:7px;flex-wrap:wrap}
+  #apply{background:var(--gold);border-color:var(--gold);color:#28202b;font-weight:650}
+  #status{min-height:34px;padding:7px 11px 10px;color:var(--muted);font-size:12px}
+  #status[data-error=true]{color:#ffbca4}
+  .library{margin-top:17px}
+  .library h2{margin-bottom:7px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(68px,1fr));gap:6px}
+  .cards button{min-width:0;padding:4px;text-align:left}
+  .cards canvas{border-radius:2px}
+  .cards button span{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;margin:4px 1px 1px;font-size:10px}
+  .cards button[aria-pressed=true]{border-color:var(--gold);color:var(--gold);background:#352b2a}
+  @media(max-width:970px){main{padding-inline:16px}.stage{grid-template-columns:minmax(0,1fr) 285px}.bar{flex-wrap:wrap}}
+  @media(max-width:720px){.stage{grid-template-columns:minmax(0,1fr)}textarea{min-height:230px}}
+  @media(max-width:450px){header{flex-direction:column;align-items:start}.bar{padding-inline:8px}main{padding:13px 9px}.pairs{gap:6px;padding:5px}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><p class="mono eyebrow">Ink Studio / Material graphs</p><h1>Mark &amp; Die</h1></div>
+    <div class="actions"><a href="mark-and-die.material.json" download>Demo graph</a><button id="save" type="button">Download library</button></div>
+  </header>
+  <div class="stage">
+    <section class="comparison" aria-labelledby="selected">
+      <div class="bar">
+        <h2 id="selected">Harbor seal</h2>
+        <div>
+          <label>View <select id="mode"></select></label>
+          <label>Coverage <select id="samples"><option value="1">1×</option><option value="2">2×2</option><option value="4">4×4</option></select></label>
+        </div>
+      </div>
+      <div class="pairs">
+        <figure><canvas id="native" aria-label="Native 40 by 40 shape bake"></canvas>
+          <figcaption class="mono"><span>Native grid</span><span>40 × 40</span></figcaption></figure>
+        <figure><canvas id="inspection" aria-label="Inspection 120 by 120 shape bake"></canvas>
+          <figcaption class="mono"><span>Inspection grid</span><span>120 × 120</span></figcaption></figure>
+      </div>
+    </section>
+    <section class="editor" aria-label="Shape definition editor">
+      <div class="bar"><label for="definition">Signed definition</label><span id="shape-id" class="mono"></span></div>
+      <textarea id="definition" spellcheck="false"></textarea>
+      <div class="edit-actions"><button type="button" id="apply">Apply definition</button><button type="button" id="reset">Reset shape</button></div>
+      <p id="status" role="status"></p>
+    </section>
+  </div>
+  <section class="library" aria-labelledby="library-title">
+    <h2 id="library-title">Shape library</h2>
+    <div class="cards" id="cards"></div>
+  </section>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="press.js"></script>
+<script>
+  const p=KIT.procedural, get=id=>document.getElementById(id);
+  const initial=pressSource(p.shapeLibrary.presets), graph=p.graph.create(pressGraph(initial));
+  const entries=new Map(), bakeSettings=new Map([1,2,4].map(n=>[n,{samples:n}]));
+  const compact={harbor:'Harbor seal',rectangle:'Rectangle',polygon:'Polygon',star:'Star',disc:'Disc',linear:'Linear',
+    radial:'Radial',spot:'Spot',stroke:'Stroke',gradient:'Gradient',crescent:'Crescent',keyhole:'Keyhole',
+    bevel:'Round bevel','bevel-linear':'Linear bevel','bevel-smooth':'Smooth bevel'};
+  let library=initial, id=pressDefault, result;
+  for (const [mode,label] of Object.entries(pressModes)) get('mode').add(new Option(label,mode));
+
+  function paint(canvas,{width,height,data}) {
+    canvas.width=width; canvas.height=height;
+    canvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(data),width,height),0,0);
+  }
+  function thumbnail(key) {
+    const shape=library.entries[key].definition;
+    const baked=p.graphImages.shape(shape,36,36,{samples:2});
+    paint(entries.get(key).canvas,pressPreview(baked));
+  }
+  function render() {
+    for (const size of Object.keys(pressSizes)) paint(get(size),pressImage(result,size,get('mode').value));
+  }
+  function evaluate(source,key) {
+    return graph.evaluate({library:source,shapeId:key,bakeOptions:bakeSettings.get(Number(get('samples').value))}).outputs;
+  }
+  function status(message,error=false) {
+    get('status').textContent=message;
+    get('status').dataset.error=String(error);
+  }
+  function select(key) {
+    result=evaluate(library,key);
+    id=key;
+    get('selected').textContent=library.entries[id].label;
+    get('shape-id').textContent=id;
+    get('definition').value=JSON.stringify(library.entries[id].definition,null,2);
+    get('definition').scrollTop=0;
+    for (const [key,{button}] of entries) button.setAttribute('aria-pressed',String(key===id));
+    render(); status('');
+  }
+  function apply(definition) {
+    const candidate={...library,entries:{...library.entries,[id]:{...library.entries[id],definition}}};
+    const checked=evaluate(candidate,id);
+    library=candidate; result=checked;
+    render(); thumbnail(id);
+    status('Both grids updated.');
+  }
+  for (const [key,row] of Object.entries(library.entries)) {
+    const button=document.createElement('button'), canvas=document.createElement('canvas'), name=document.createElement('span');
+    button.type='button';button.title=row.label;button.dataset.shape=key;
+    name.textContent=compact[key]??row.label;
+    button.append(canvas,name);get('cards').append(button);
+    entries.set(key,{button,canvas});
+    thumbnail(key);
+    button.addEventListener('click',()=>select(key));
+  }
+  get('apply').addEventListener('click',()=>{
+    try { apply(JSON.parse(get('definition').value)); }
+    catch (error) { status(error.message,true); }
+  });
+  get('reset').addEventListener('click',()=>{
+    const definition=initial.entries[id].definition;
+    apply(definition);
+    get('definition').value=JSON.stringify(definition,null,2);
+  });
+  get('samples').addEventListener('input',()=>{
+    try { result=evaluate(library,id); render(); status(''); }
+    catch (error) { status(error.message,true); }
+  });
+  get('mode').addEventListener('input',render);
+  get('save').addEventListener('click',()=>{
+    const url=URL.createObjectURL(new Blob([JSON.stringify(library,null,2)+'\n'],{type:'application/json'}));
+    const anchor=document.createElement('a');
+    anchor.href=url;anchor.download='mark-and-die.shape-library.json';anchor.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  });
+  select(id);
+</script>
+</body>
+</html>
