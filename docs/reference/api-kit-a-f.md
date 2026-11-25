@@ -827,7 +827,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.meshTopologyScene.evaluator` | function | `(rows, placements)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.mount` | function | `(world, prepared)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.prepare` | function | `(rows, tilesets = A.tilesets.prepare(), placements)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
-| `KIT.authoring.meshTopologyScene.revise` | function | `(row, patch, { projection, paintReview } = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
+| `KIT.authoring.meshTopologyScene.revise` | function | `(row, patch, { projection, paintReview, sourceSplit } = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.transferAttachments` | function | `(row, patch, settings, projection)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.physicalMaterials` | namespace |  |  |
 | `KIT.authoring.physicalMaterials.checkContactEffects` | function | `(value)` | [source](../../src/kit/p90-asset-materials.js) |
@@ -916,6 +916,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetFaces.stamp` | function | `(brush, face, anchor, shared)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetGrow` | namespace |  |  |
 | `KIT.authoring.tilesetGrow.plan` | function | `(scene, request, options)` | [source](../../src/kit/p23-tileset-grow.js) |
+| `KIT.authoring.tilesetPickedSplit` | namespace |  |  |
+| `KIT.authoring.tilesetPickedSplit.decorate` | function | `(scene, row, plan)` | [source](../../src/kit/p23-tileset-picked-split.js) |
+| `KIT.authoring.tilesetPickedSplit.install` | function | `(bindings, split)` | [source](../../src/kit/p23-tileset-picked-split.js) |
 | `KIT.authoring.tilesetPrimitiveGeometry` | namespace |  |  |
 | `KIT.authoring.tilesetPrimitiveGeometry.build` | function | `(id, kind, frame, size, segments)` | [source](../../src/kit/p23-tileset-primitive-geometry.js) |
 | `KIT.authoring.tilesetPrimitives` | namespace |  |  |

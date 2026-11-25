@@ -670,9 +670,9 @@
       return writeMeshTopology(object,patch,options);
     }
 
-    function writeMeshTopology(object, patch, { part, projection, label, materials } = {}, paintReview) {
+    function writeMeshTopology(object, patch, { part, projection, label, materials } = {}, transitionOptions) {
       const before = meshTopology(object, part);
-      const { row, ...evidence } = A.meshTopologyScene.revise(before, patch, { projection, paintReview });
+      const { row, ...evidence } = A.meshTopologyScene.revise(before, patch, { projection, ...transitionOptions });
       function write() {
         const next = { topologyMeshes: { ...snapshot().topologyMeshes, [object]: materials===undefined ? row : {...row,materials} } };
         validate({ ...snapshot(), ...next });
@@ -822,7 +822,7 @@
         throw Object.assign(new RangeError(plan.report.blockers[0]?.message ??
           'Repair would create or worsen a non-manifold edge'), { report: plan.report });
       return freeze({ repair: plan.report, ...(Object.keys(plan.patch).length && {
-        topology: writeMeshTopology(object, plan.patch, options, paintReview)
+        topology: writeMeshTopology(object, plan.patch, options, {paintReview})
       }) });
     }
 
@@ -896,18 +896,24 @@
       return freeze({ faceRegion: plan.report, topology: editMeshTopology(object, plan.patch, options) });
     }
 
-    function planMeshEdgeEdit(object, request, { part } = {}) {
+    function meshEdgeEditPlan(object, request, { part } = {}) {
       const row = meshTopology(object, part);
-      requireMeshShapeOwner(object, row.part, snapshot(), 'Edit');
-      return K.meshTopology.planEdgeEdit(row.document, request);
+      const scene = snapshot();
+      requireMeshShapeOwner(object, row.part, scene, 'Edit');
+      const plan = K.meshTopology.planEdgeEdit(row.document, request);
+      return plan.report.kind === 'split-face' ? A.tilesetPickedSplit.decorate(scene,row,plan) : {plan};
+    }
+
+    function planMeshEdgeEdit(object, request, options) {
+      return meshEdgeEditPlan(object,request,options).plan;
     }
 
     function editMeshEdges(object, request, options) {
-      const plan = planMeshEdgeEdit(object, request, options);
+      const {plan,sourceSplit} = meshEdgeEditPlan(object,request,options);
       if (!plan.report.canCommit)
         throw Object.assign(new RangeError('Edge edit failed geometry checks'), { report: plan.report });
       return freeze({ edgeEdit: plan.report, ...(Object.keys(plan.patch).length && {
-        topology: editMeshTopology(object, plan.patch, options)
+        topology: writeMeshTopology(object, plan.patch, options, {sourceSplit})
       }) });
     }
 

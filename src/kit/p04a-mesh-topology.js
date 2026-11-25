@@ -267,9 +267,10 @@ const meshQuadDiagonal = Object.freeze({
       const { id, position, weights = prior.get(row.id)?.weights } = row;
       return { id, position, ...(weights !== undefined && weights !== null && { weights }) };
     });
+    const nextFaces = apply(doc.faces,faces,removeFaces,'faces');
     const byEdge = index(edges, 'Updated edges'), knownEdges = new Set(doc.edges.map(edge => edge.id));
     for (const [id, edge] of byEdge) {
-      if (!knownEdges.has(id) || Object.keys(edge).some(key => !['id', 'smooth', 'crease', 'uvSeam', 'uvSeams'].includes(key)))
+      if (Object.keys(edge).some(key => !['id', 'smooth', 'crease', 'uvSeam', 'uvSeams'].includes(key)))
         throw new RangeError('Update smooth, crease, or UV seam on a retained edge ' + id);
     }
     const edgeRows = doc.edges.map(edge => {
@@ -278,10 +279,21 @@ const meshQuadDiagonal = Object.freeze({
       const { id, vertices, smooth, crease, uvSeam, uvSeams } = { ...edge, ...changes };
       return { id, vertices, ...edgeSettings({ smooth: smooth ?? undefined, crease: crease ?? undefined, uvSeam, uvSeams }) };
     });
+    const pending = new Set([...byEdge.keys()].filter(id=>!knownEdges.has(id)));
+    if (pending.size) {
+      const existing = new Set(doc.edges.map(edge=>edgeKey(...edge.vertices)));
+      for (const face of nextFaces) for (const [i,corner] of (face.corners ?? []).entries()) {
+        const next = face.corners[(i+1)%face.corners.length];
+        const key = edgeKey(corner.vertex,next.vertex), id = 'edge/'+key;
+        if (!existing.has(key) && pending.delete(id))
+          edgeRows.push({id,vertices:pair(corner.vertex,next.vertex),...edgeSettings(byEdge.get(id))});
+      }
+      if (pending.size) throw new RangeError('No retained or newly created edge ' + pending.values().next().value);
+    }
     return build({ ...doc, edges: edgeRows, uvBindings:uvBindings ?? doc.uvBindings, shading: shading === undefined ? doc.shading : shading,
       skin: skin === undefined ? doc.skin : skin,
       vertices: apply(doc.vertices, updates, removeVertices, 'vertices'),
-      faces: apply(doc.faces, faces, removeFaces, 'faces')
+      faces: nextFaces
     }, true);
   }
 

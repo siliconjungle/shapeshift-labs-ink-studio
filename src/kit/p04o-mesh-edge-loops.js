@@ -1,7 +1,7 @@
 /* Quad-strip insertion and rail-constrained edge slides. */
 const meshEdgeLoops = (function (K) {
   const { V } = K, { record } = meshCutGeometry;
-  const { pair, edgeOf, front, position, around, cyclic, selection, requireWinding, point, cornerData, corners } = meshEdgeFlowData;
+  const { pair, edgeOf, front, position, around, cyclic, selection, requireWinding, point, edgeCorner } = meshEdgeFlowData;
 
   function insert(g, op) {
     if (!record(op, ['kind', 'selection', 'start', 'fraction']) ||
@@ -46,12 +46,7 @@ const meshEdgeLoops = (function (K) {
     const touched = new Set(queue.flatMap(row => row.edge.uses.map(use => use.face)));
     function knot(a, b, cut) {
       const f = a.vertex === cut.a ? op.fraction : 1 - op.fraction;
-      const row = corners(g, [cut.vertex.id], [cornerData([[a, 1 - f], [b, f]])], conflicts)[0];
-      if (a.normal || b.normal) {
-        const normal = meshTopologyShading.direction(V.lerp(a.normal ?? b.normal, b.normal ?? a.normal, f));
-        if (V.len(normal)) row.normal = normal;
-      }
-      return row;
+      return edgeCorner(g,cut.vertex.id,a,b,f,conflicts);
     }
     for (const id of touched) {
       const face = g.faces.get(id), ring = [];

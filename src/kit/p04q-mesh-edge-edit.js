@@ -3,7 +3,7 @@
   const { meshTopology: topology, V, procedural: { data: { clone, freeze } } } = K;
   const { pair, context, index } = meshEdgeFlowData;
   const { area } = meshFaceRegionGeometry;
-  const operations = { 'insert-loop': meshEdgeLoops.insert, slide: meshEdgeLoops.slide,
+  const operations = { 'insert-loop': meshEdgeLoops.insert, 'split-face': meshPickedSplit.split, slide: meshEdgeLoops.slide,
     bridge: meshEdgeSurfaces.bridge, 'grid-fill': meshEdgeSurfaces.grid };
 
   function flipped(doc, document, affected) {
@@ -17,10 +17,9 @@
 
   function planEdgeEdit(source, request) {
     const doc = topology.create(source), g = context(doc, request), kind = request.operation?.kind;
-    if (!Object.hasOwn(operations, kind)) throw new TypeError('Choose insert-loop, slide, bridge, or grid-fill');
-    const { patch, affected, detail, cuts, lineage } = operations[kind](g, request.operation);
+    if (!Object.hasOwn(operations, kind)) throw new TypeError('Choose insert-loop, split-face, slide, bridge, or grid-fill');
+    const { patch, affected, detail, cuts, lineage, issues = [] } = operations[kind](g, request.operation);
     let document = doc;
-    const issues = [];
     if (Object.keys(patch).length) {
       try { document = topology.edit(doc, patch); }
       catch (error) {
