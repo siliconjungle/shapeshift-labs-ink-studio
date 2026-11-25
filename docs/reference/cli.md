@@ -242,7 +242,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology plane <scene.json> --snap-origin bounds|average --object ID --selection selection.json [--detach-edge] [--out file.json]   snap the working origin to a selected center
   mesh-topology move <mesh-or-scene.json> [--object id] [--part id] --vertex id --by X,Y,Z [--space local|world|plane|camera] [--view file] [--align plane|grid] [--coincident [--coincident-distance N]] [--expect revision] [--out file.json]   move a vertex and optionally its coincident copies
   mesh-topology pivot <mesh-or-scene.json> [request.json] [--object id] [--part id] [--selection file] [--out file.json]   place an independent transform pivot
-  mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file | --pivot file] [--out file] [--report file]   transform, snap, push or randomize mesh components
+  mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file | --pivot file] [--out file] [--report file]   transform, mirror, snap, push or randomize mesh components
   mesh-topology transform <mesh-or-scene.json> <random-receipt.json> --replay [--object id] [--out file] [--report file]   replay recorded positions on the source revision
   mesh-topology health <mesh-or-scene.json> [settings.json] [--object id] [--out report.json]   locate local topology and geometry problems
   mesh-topology overlaps <mesh-or-scene.json> [settings.json] [--object id] [--part id] [--out report.json | --selection-out faces.json]   review same-facing coincident polygons

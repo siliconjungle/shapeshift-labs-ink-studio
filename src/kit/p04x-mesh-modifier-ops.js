@@ -12,7 +12,8 @@ const meshModifierOps = (function (K) {
   const xyz = value => point(value, 3);
   const kinds = {
     mirror: { origin: n => optional(n, xyz), normal: xyz, weld: n => optional(n, bool),
-      tolerance: n => optional(n, positive), flipU: n => optional(n, bool) },
+      tolerance: n => optional(n, positive), flipU: n => optional(n, bool),
+      winding: n => optional(n, value => value === 'reverse' || value === 'preserve'), viewFrom: n => optional(n,xyz) },
     array: { count: n => count(n, 32), step: xyz },
     bevel: { edges: n => optional(n, memberList), width: positive, segments: n => optional(n, value => count(value, 16)),
       profile: n => optional(n, value => name(value) || record(value, ['points'])), join: n => optional(n, name),
@@ -84,8 +85,9 @@ const meshModifierOps = (function (K) {
 
   function mirror(doc, op, _target, diagnostics) {
     repeatBudget(doc, 2);
-    const { origin = [0, 0, 0], tolerance = .000001, weld = true } = op;
-    const axis = unit(op.normal, 'Mirror normal'), state = copies(doc, op, diagnostics);
+    const { origin = [0, 0, 0], tolerance = .000001, weld = true, winding = 'reverse' } = op;
+    const viewFrom = meshWinding.direction(op.viewFrom);
+    const axis = unit(op.normal, 'Mirror normal'), state = copies(doc, op, diagnostics || viewFrom !== undefined);
     const dist = new Map(doc.vertices.map(row => [row.id, V.dot(V.sub(row.position, origin), axis)]));
     const seam = new Set(weld ? [...dist].filter(([, d]) => Math.abs(d) <= tolerance).map(([id]) => id) : []);
     if (weld && [...dist.values()].some(d => d > tolerance) && [...dist.values()].some(d => d < -tolerance))
@@ -104,14 +106,22 @@ const meshModifierOps = (function (K) {
       const id = state.fresh('vertex');
       state.vertices.push({ ...source, id, position: V.mad(source.position, axis, -2 * dist.get(source.id)) });
       return id;
-    }, n => V.mad(n, axis, -2 * V.dot(n, axis)), true, op.flipU);
+    }, n => V.mul(V.mad(n, axis, -2 * V.dot(n, axis)),winding === 'reverse' ? 1 : -1), winding === 'reverse', op.flipU);
     const document = result(doc, state);
+    const seamWinding = [];
+    const corners = seam.size && winding === 'preserve' &&
+      new Map(document.faces.flatMap(face=>face.corners.map(corner=>[corner.id,corner])));
     if (seam.size) for (const edge of topology.inspect(document).edges) {
-      if (edge.vertices.every(id => seam.has(id)) && edge.uses.length > 2)
+      if (!edge.vertices.every(id => seam.has(id))) continue;
+      if (edge.uses.length > 2)
         throw new RangeError('Welded mirror would create a non-manifold seam at ' + edge.id);
+      if (corners && edge.uses.length === 2 && retainedMeshHealth.crossesWinding(...edge.uses,corners))
+        seamWinding.push({edge:edge.id,faces:edge.uses.map(use=>use.face).sort()});
     }
     return { document, diagnosticLineage:state.lineage,
-      evidence: { weldedVertices: seam.size, removedPlaneFaces: doc.faces.length - faces.length } };
+      evidence: { weldedVertices: seam.size, removedPlaneFaces: doc.faces.length - faces.length,
+        winding, mirroredFaces:faces.length, seamWinding, ...(viewFrom && {viewFrom}),
+        ...(state.lineage && {facing:meshWinding.changes(doc,document,state.lineage.faces.slice(0,128),viewFrom)}) } };
   }
 
   function convexEdges(doc) {

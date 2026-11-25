@@ -675,6 +675,44 @@ ink-studio mesh-topology transform bench.json variant-receipt.json --object plat
 node examples/tileset-pick/mesh-randomize-demo.cjs transform-variants
 ```
 
+### Mirror components and choose their winding
+
+Use `mirror` to reflect the selected vertices across the plane through the
+transform pivot. The plane `normal` uses the requested transform space.
+For the working plane, use `"space": "plane"` with normal `[0, 0, 1]`
+and a pivot on that plane.
+
+```json
+{
+  "space": "local",
+  "pivot": [0, 0, 0],
+  "operation": {
+    "kind": "mirror",
+    "normal": [1, 0, 0],
+    "winding": "reverse",
+    "viewFrom": [0, 0, 1]
+  }
+}
+```
+
+Choose `"winding": "preserve"` to keep the authored corner order through
+the reflection. Choose `"winding": "reverse"` to correct the facing of fully
+reflected faces as part of the edit. Their authored corner normals follow
+the reflection and the chosen winding, and UVs follow their stable corner
+IDs. The report identifies partially reflected faces and shared edges with
+inconsistent winding. A selected pin on the mirror plane can stay fixed
+as part of a fully reflected face.
+
+`viewFrom` is an optional mesh-local direction toward the viewer. The
+report lists each affected face's corner order and geometric normal before
+and after, with `front`, `back`, or `edge-on` relative to that direction
+when supplied.
+
+```sh
+ink-studio mesh-topology transform bench.json mirror.json --object plate --selection faces.json --out reflected.json --report mirror-receipt.json
+node examples/tileset-pick/mesh-winding-demo.cjs winding-review
+```
+
 ## Place a pivot independently
 
 ```sh
@@ -801,7 +839,15 @@ report and lists ordered `operations`. Choose IDs from that report or
 | --- | --- |
 | `weld` | Supply a vertex `keep` ID, a `remove` list, and `maxDistance` from the keeper. Retains the keeper position and the surviving corner UVs. Set `removeCollapsed` to explicitly remove faces the weld collapses. |
 | `dissolve` | Supply an `edge` shared by two faces and optionally the face ID to `keep`. The faces must share a plane, material, affine UV mapping and, where present, affine weight interpolation. Optional `tolerance` sets the plane distance threshold. |
-| `winding` | Supply an `anchor` face to orient its manifold neighbors relative to its winding, or a `faces` list to reverse explicitly. |
+| `winding` | Supply an `anchor` to orient its manifold neighbors, or choose faces explicitly with a `faces` list or revision-checked face `selection`. |
+
+Each winding step shows the face normals and corner orders before and
+after, plus any inconsistent edges incident to the reversed faces. Supply
+`viewFrom` for front, back, and edge-on labels. Use `"normals": "reverse"`
+when the authored corner normals should reverse with the winding. The
+default `"normals": "preserve"` keeps those shading directions. Use a
+winding repair after a geometric mirror that preserved corner order, or
+choose the `reverse` policy directly in the mirror request.
 
 A vertex can retain a `weights` object with named values in [0, 1].
 Ordinary position edits preserve these channels. A weld requires matching
@@ -1582,7 +1628,7 @@ stages by saving the same entries in a new order.
 
 | Kind | Parameters and behavior |
 | --- | --- |
-| `mirror` | Set a plane `normal` and optional `origin`. The default `weld: true` shares seam vertices and removes faces lying on the plane. Use a cage on one side of the plane or explicitly choose `weld: false`. Optional `tolerance` controls the weld and `flipU` flips mirrored UVs. |
+| `mirror` | Set a plane `normal` and optional `origin`. The default `weld: true` shares seam vertices and removes faces lying on the plane. Use a cage on one side of the plane or explicitly choose `weld: false`. Optional `tolerance` controls the weld and `flipU` flips mirrored UVs. Set `winding` to `reverse` (the default) or `preserve` for the copies. The stage reports inconsistent welded seam edges with preserved winding. Watches or an explicit `viewFrom` include facing evidence for up to 128 copied faces. |
 | `array` | Set `count` from 1 to 32 and a translation `step` in mesh units. Copies retain skin weights, materials, and face-corner data. Original IDs remain on the first copy. |
 | `bevel` | Set `width` and optionally `edges` by current stage IDs. It uses convex, non-flat hinges by default and accepts the same profile, weights, join, material, and protection controls as a [checked bevel](#bevel-selected-edges). |
 | `shell` | Set `thickness` and optional `faces`, `rim`, `interior`, or `minWall`. Complete open islands get stitched edges and closed islands get an inner skin, using the same checks as [face-region thickening](#extrude-inset-or-thicken-a-face-region). |

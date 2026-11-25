@@ -253,7 +253,22 @@
 
   function transition(row, before, document, correspondence) {
     const updated = { ...row, document };
-    if (row.bindings) updated.bindings = remapBindings(row.bindings, correspondence);
+    if (row.bindings) {
+      const remapped = remapBindings(row.bindings,correspondence);
+      if (row.bindings.some(binding=>binding.data?.uvCorners)) {
+        const left = new Map(before.faces.map(face=>[face.id,face])), right = new Map(document.faces.map(face=>[face.id,face]));
+        updated.bindings = remapped.map((binding,i)=>{
+          if (binding.review || !binding.data?.uvCorners) return binding;
+          const first = left.get(row.bindings[i].element), last = right.get(binding.element);
+          const slots = first && A.tilesetFaces.sourceCorners(binding,first.corners.length);
+          if (!slots || slots.length !== 3 || last?.corners.length !== slots.length) return binding;
+          const byCorner = new Map(first.corners.map(({id},i)=>[id,slots[i]]));
+          const uvCorners = last.corners.map(({id})=>byCorner.get(id));
+          return uvCorners.every(slot=>slot !== undefined) && uvCorners.some((slot,i)=>slot !== slots[i]) ?
+            {...binding,data:{...binding.data,uvCorners}} : binding;
+        });
+      } else updated.bindings = remapped;
+    }
     if (row.bakes) {
       const dirty = new Map(), oldSet=MaterialUV.resolve(before.uvBindings,'pigment'),
         newSet=MaterialUV.resolve(document.uvBindings,'pigment');
