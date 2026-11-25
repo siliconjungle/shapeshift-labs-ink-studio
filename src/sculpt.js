@@ -7,14 +7,16 @@
    ------------------------------------------------------------------ */
 function bakedShadowMarch(settings = {}) {
   if (settings === null || typeof settings !== 'object' || Array.isArray(settings) ||
-      Object.keys(settings).some(key => key !== 'steps' && key !== 'distance'))
-    throw new TypeError('Shadow march accepts steps and distance');
-  const { steps = 20, distance = 16 } = settings;
+      Object.keys(settings).some(key => key !== 'steps' && key !== 'distance' && key !== 'emptySpace'))
+    throw new TypeError('Shadow march accepts steps, distance and emptySpace');
+  const { steps = 20, distance = 16, emptySpace = 'legacy' } = settings;
   if (!Number.isSafeInteger(steps) || steps < 0 || steps > 4096)
     throw new RangeError('Shadow march steps must be an integer from 0 to 4096');
   if (!Number.isFinite(distance) || distance < 0)
     throw new RangeError('Shadow march distance must be finite and nonnegative');
-  return { steps, distance };
+  if (emptySpace !== 'legacy' && emptySpace !== 'clear')
+    throw new RangeError('Shadow march emptySpace must be legacy or clear');
+  return { steps, distance, emptySpace };
 }
 
 function makeSculpt(B, rest) {
@@ -94,6 +96,7 @@ function makeSculpt(B, rest) {
     shK: 9,
     shLen: shadowMarch.distance,
     shSteps: shadowMarch.steps,
+    shEmptySpace: shadowMarch.emptySpace,
     wob: 0.05,
     fat: 0.46,
     /* inked detail: 0 is off. Set to 1 and every plain dab also carries a 4 by 4 picture of the surface under it (its pattern, the
@@ -1029,9 +1032,10 @@ function makeSculpt(B, rest) {
                 sh = 0;
                 break;
               }
-              // The field's outside distance is capped. It represents empty
-              // space, which should not create a distant penumbra.
-              if (!shadowArt || h < MARG) sh = Math.min(sh, (S.shK * h) / tt);
+              // Capped distances advance the ray through empty space. Keep
+              // their original shading contribution only in unstyled legacy bakes.
+              if (h < MARG || (!shadowArt && shadowMarch.emptySpace === 'legacy'))
+                sh = Math.min(sh, (S.shK * h) / tt);
               tt += h < 0.05 ? 0.05 : h > 0.9 ? 0.9 : h;
             }
           if (!probe) LSH = sh;
@@ -2239,7 +2243,7 @@ function makeSculpt(B, rest) {
     return plan.stats;
   }
   S.bake = () => {
-    shadowMarch = bakedShadowMarch({ steps: S.shSteps, distance: S.shLen });
+    shadowMarch = bakedShadowMarch({ steps: S.shSteps, distance: S.shLen, emptySpace: S.shEmptySpace });
     const override = typeof globalThis !== 'undefined' ? globalThis.INK_ADAPTIVE_SAMPLING : undefined;
     const sampling = !S.capture && SculptSampling.prepare(override ?? S.adaptiveSampling);
     const keepSdf = S.keepRenderSdf || (typeof globalThis !== 'undefined' && globalThis.INK_RETAIN_RENDER_SDF);

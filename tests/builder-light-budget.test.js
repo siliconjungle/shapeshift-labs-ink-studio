@@ -78,21 +78,76 @@ test('authored steps and directional distance independently limit a baked shadow
   for (const settings of [{ distance: 42 }, { steps: 128, distance: 18 }])
     assert.deepEqual(deckColors(legacy), deckColors(bake(settings)));
   const extended = bake({ steps: 128, distance: 42 });
+  assert.deepEqual(extended.data, bake({ steps: 128, distance: 42, emptySpace: 'clear' }).data);
   const colors = deckColors(extended);
   assert.equal(extended.count, legacy.count);
   assert.deepEqual(colors.open, deckColors(legacy).open);
   assert(deckColors(legacy).shadow.every(color => color === packColor(legacy.pal[2])));
   assert(colors.shadow.every(color => color === packColor(extended.pal[1])));
-  for (const shadowMarch of [{ steps: -1 }, { steps: 20.5 }, { steps: 4097 }, { distance: -1 }, { dist: 20 }]) {
+  for (const shadowMarch of [{ steps: -1 }, { steps: 20.5 }, { steps: 4097 }, { distance: -1 }, { dist: 20 },
+    { emptySpace: false }, { emptySpace: 'occluded' }]) {
     const errors = KIT.diorama.check({ ...spec, finish: { shadowMarch } });
     assert(errors.some(error => error.path === 'finish.shadowMarch' && error.level === 'error'));
   }
 });
 
+test('clear empty space preserves direct sunlight and legacy bakes keep their data', () => {
+  const spec = { id: 'open-deck', seed: 3,
+    style: { sun: [0, 1, 0], amb: .08, sky: 0,
+      palette: [0, 0x191919, 0x494949, 0x777777, 0xa0a0a0, 0xd3d3d3, 0xffffff],
+      roles: { stone: [1, 2, 3, 4, 5, 6] } },
+    solids: [{ id: 'deck', kind: 'box', at: [0, -.22, 0], half: [2, .22, 3.9], mat: 'stone', res: .24 }]
+  };
+  const bake = shadowMarch => KIT.diorama.build({ ...spec, finish: { shadowMarch } });
+  const original = bake(undefined);
+  const legacy = bake({ emptySpace: 'legacy' });
+  const clear = bake({ emptySpace: 'clear' });
+  const noMarch = bake({ steps: 0 });
+  assert.deepEqual(original.data, legacy.data);
+  assert.deepEqual(deckColors(clear), deckColors(noMarch));
+  assert(deckColors(clear).open.every(color => color > deckColors(legacy).open[0]));
+});
+
+test('clear directional rays retain a distant umbra and its penumbra', () => {
+  function bake({ emptySpace, distance = 16, blocker = true }) {
+    const b = makeBuilder(1, [0, 0x191919, 0x494949, 0x777777, 0xa0a0a0, 0xd3d3d3, 0xffffff]);
+    const s = makeSculpt(b), capture = KIT.light.capture(b, s);
+    Object.assign(s, { sun: [0, 1, 0], amb: .08, sky: 0, sunK: .8, aoK: 0, wob: 0,
+      shSteps: 64, shLen: distance, shEmptySpace: emptySpace });
+    const material = { r: [1, 2, 3, 4, 5, 6] };
+    s.box([0, -.16, 0], [3, .16, 1.6], material, { res: .12 });
+    if (blocker) s.box([0, 12, 0], [.45, .48, .64], material, { res: .30 });
+    s.bake();
+    const world = b.finish();
+    const zones = [[], [], []];
+    for (let i = 0; i < world.count; i++) {
+      const [x, y, z] = world.data.subarray(i * 16, i * 16 + 3);
+      if (Math.abs(y) > .01 || Math.abs(z) > .45) continue;
+      if (Math.abs(x) < .23) zones[0].push(capture.t[i]);
+      if (x > 1.25 && x < 1.38) zones[1].push(capture.t[i]);
+      if (x > 1.8 && x < 2.4) zones[2].push(capture.t[i]);
+    }
+    return zones.map(samples => {
+      assert(samples.length > 10);
+      return samples.reduce((sum, level) => sum + level, 0) / samples.length;
+    });
+  }
+  const open = bake({ emptySpace: 'clear', blocker: false });
+  const tooShort = bake({ emptySpace: 'clear', distance: 8 });
+  const clear = bake({ emptySpace: 'clear' });
+  const legacy = bake({ emptySpace: 'legacy' });
+  assert.deepEqual(tooShort, open);
+  assert.equal(clear[0], legacy[0]);
+  assert(clear[0] < .09);
+  assert(clear[1] > legacy[1] + .02);
+  assert(clear[1] > clear[0] && clear[1] < clear[2] - .20);
+  assert.equal(clear[2], open[2]);
+});
+
 test('the sculpt API budgets baked point-light rays', () => {
-  const bake = steps => {
+  const bake = (steps, emptySpace = 'legacy') => {
     const b = makeBuilder(1, [0, 0x2b3558, 0x8dacbe, 0xfce8b0]), s = makeSculpt(b);
-    Object.assign(s, { shSteps: steps, amb: .13, sunK: 0, sky: 0, aoK: 0, wob: 0,
+    Object.assign(s, { shSteps: steps, shEmptySpace: emptySpace, amb: .13, sunK: 0, sky: 0, aoK: 0, wob: 0,
       lights: [{ p: [4, 4, 0], r: 16, s: 4, sh: true }] });
     const material = { r: [1, 2, 3] };
     s.box([0, -.22, 0], [2, .22, 4], material, { res: .24 });
@@ -104,5 +159,6 @@ test('the sculpt API budgets baked point-light rays', () => {
   assert(deckColors(off).shadow.every(color => color === packColor(off.pal[3])));
   assert(deckColors(on).shadow.every(color => color === packColor(on.pal[1])));
   assert.deepEqual(deckColors(off).open, deckColors(on).open);
+  assert.deepEqual(on.data, bake(20, 'clear').data);
   assert.throws(() => bake(Infinity), /Shadow march steps/);
 });
