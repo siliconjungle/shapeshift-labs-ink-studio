@@ -628,6 +628,53 @@ ink-studio mesh-topology transform bench.json push.json --object plates --select
 node examples/tileset-pick/mesh-push-demo.cjs push-review
 ```
 
+### Randomize transforms within authored bounds
+
+Use a `randomize` operation with an unsigned 32-bit seed. Author a
+range for any combination of translation, rotation, and scale axes.
+
+```json
+{
+  "space": "world",
+  "operation": {
+    "kind": "randomize",
+    "seed": 246,
+    "mode": "individual",
+    "translation": { "x": { "min": -0.25, "max": 0.25, "step": 0.125 } },
+    "rotation": { "z": { "min": -20, "max": 20, "step": 5 } },
+    "scale": { "y": { "min": 0.85, "max": 1.15, "step": 0.05, "rounding": "floor" } }
+  }
+}
+```
+
+Each axis uses inclusive `min` and `max`. An optional positive `step`
+rounds to an increment measured from zero. Choose `nearest` (the default),
+`floor`, or `ceiling`. Rounding stays within the authored range and a
+range with no valid increment is rejected. Use equal bounds to assign an
+exact value. Omitted axes retain zero translation, zero rotation, and
+unit scale. Scale bounds must be positive.
+
+Translation uses the selected transform space, rotation uses degrees,
+and scale uses factors. Ink applies scale, then rotates about X, Y, and Z
+in that order, then translates. Assembly mode draws one transform for the
+whole selection and supports connected falloff. Individual mode draws
+per vertex or per selected edge or face group with shared vertices.
+Compatible coincident copies can move with a group. The individual
+pivot defaults to the group's center, with an explicit or retained pivot
+taking precedence. Pins hold their specified vertices.
+
+The preview and receipt report the seed, normalized bounds, and the
+realized XYZ values and pivot for each group. Use `--replay` with the
+original mesh revision and the saved receipt. Playback applies the exact
+recorded local positions and verifies the output revision. The SDK
+accepts `report.operation.replay` as a transform request.
+
+```sh
+ink-studio mesh-topology transform bench.json random.json --object plates --selection plates.json --out variant.json --report variant-receipt.json
+ink-studio mesh-topology transform bench.json variant-receipt.json --object plates --replay --out replayed.json
+node examples/tileset-pick/mesh-randomize-demo.cjs transform-variants
+```
+
 ## Place a pivot independently
 
 ```sh

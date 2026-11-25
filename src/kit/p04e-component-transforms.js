@@ -337,12 +337,17 @@ const meshComponentSnap = (function (K) {
       'camera', 'normal', 'tangent', 'pins', 'falloff', 'snap', 'coincident']))
       throw new TypeError('Use a component transform request');
     const doc = topology.create(source), special = constraints.includes(request.operation?.kind);
+    if (request.operation?.kind === 'replay-randomize') return meshRandomTransform.replay(doc,request);
     const pushing = request.operation?.kind === 'push';
-    const run = special || pushing ? undefined : operation(request.operation);
+    const random = request.operation?.kind === 'randomize' && meshRandomTransform.parse(request.operation);
+    const run = special || pushing || random ? undefined : operation(request.operation);
     if (special && request.snap !== undefined)
       throw new TypeError('Align, flatten, and collapse already define their target');
     if (pushing && (request.snap !== undefined || request.falloff !== undefined || !vector(request.operation.direction)))
       throw new TypeError('Push needs a finite XYZ direction and uses rigid contact groups without snap or falloff');
+    if (random && request.snap !== undefined) throw new TypeError('Randomize uses the authored bounds as its transform target');
+    if (random?.mode === 'individual' && request.falloff !== undefined)
+      throw new TypeError('Use assembly mode for randomized transforms with connected falloff');
     const { space = 'local', normal, tangent } = request;
     if (!['local', 'world', 'normal', 'plane', 'camera'].includes(space) ||
         space !== 'normal' && (normal !== undefined || tangent !== undefined) || space !== 'camera' && request.camera !== undefined)
@@ -380,11 +385,14 @@ const meshComponentSnap = (function (K) {
     const pushDirection = pushing && unit(M.app(M.tr(worldAxes.flat()),request.operation.direction),'Push');
     const push = pushing && meshPush.plan(request.operation,pushDirection,doc,world,frame,selection,selected,fixed,coincident,context);
     const localPush = push && M.app(inverse.matrix,pushDirection);
-    function transformed(p, weight) {
-      const delta = V.sub(p, pivot);
-      if (space === 'local') return V.add(p, run(delta, weight));
+    const randomized = random && meshRandomTransform.plan(random,doc,selection,selected,vertices,weights,coincident,pivot,
+      request.pivot !== undefined || request.planePivot !== undefined || retainedPivot !== undefined);
+    function transformed(p, weight, id) {
+      const row = randomized && randomized.byVertex.get(id);
+      const delta = V.sub(p, row ? row.pivot : pivot), apply = row ? row.delta : run;
+      if (space === 'local') return V.add(p, apply(delta, weight));
       const inSpace = M.app(basis, M.app(frame.matrix, delta));
-      const change = run(inSpace, weight);
+      const change = apply(inSpace, weight);
       return V.add(p, M.app(inverse.matrix, M.app(fromBasis, change)));
     }
     const target = request.snap;
@@ -401,7 +409,7 @@ const meshComponentSnap = (function (K) {
     const destination = (id, weight) => {
       if (placed) return placed.apply(vertices.get(id).position,world.get(id),weight);
       if (push) return V.mad(vertices.get(id).position,localPush,push.distances.get(id));
-      const p = transformed(vertices.get(id).position, weight);
+      const p = transformed(vertices.get(id).position, weight, id);
       return localSnap ? V.mad(p, localSnap, weight) : p;
     };
     const displaced = new Map();
@@ -423,15 +431,18 @@ const meshComponentSnap = (function (K) {
     const document = changed.length ? topology.edit(doc, patch) : doc;
     const result = placed && placed.measure(measured.map(id =>
       K.sceneGraph.point(frame,displaced.get(id))));
+    const beforeRevision = topology.revision(doc), afterRevision = topology.revision(document);
     return freeze({ document, patch, report: {
       format: 'ink-studio/mesh-component-transform', version: 1, mesh: doc.id,
-      beforeRevision: topology.revision(doc), afterRevision: topology.revision(document),
+      beforeRevision, afterRevision,
       selection, space, pivot: pivot.slice(), worldPivot: K.sceneGraph.point(frame, pivot), axes, worldAxes, pinned: [...fixed].sort(),
       ...(request.frame !== undefined && { frame }), ...(view && { camera: view.camera }),
       ...(retainedPivot !== undefined && { pivotSource: 'retained' }),
       ...(coincident && { coincident: coincident.report }),
       ...(placed && { operation: { ...placed.evidence, ...result, measured, removedFaces: removeFaces } }),
       ...(push && { operation: push.report }),
+      ...(randomized && { operation: { ...randomized.evidence, replay: { selection,
+        operation: { kind:'replay-randomize',version:1,beforeRevision,afterRevision,vertices:patch.vertices } } } }),
       ...(construction && {constructionPlane:construction.plane}),
       ...(gridPivot && {planePivot:gridPivot.slice()}), ...(snapped && { snap: snapped }), vertices: changed
     } });

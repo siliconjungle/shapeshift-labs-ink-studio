@@ -11,37 +11,6 @@ const meshPush = (function (K) {
     return length ? V.mul(v,1/length) : v;
   };
 
-  function groupComponents(doc, selection, selected, fixed, coincident, mode) {
-    const parents = new Map([...selected].map(id => [id,id]));
-    function root(id) {
-      while (parents.get(id) !== id) {
-        parents.set(id,parents.get(parents.get(id)));
-        id = parents.get(id);
-      }
-      return id;
-    }
-    function join(ids) {
-      for (const id of ids) if (!parents.has(id)) parents.set(id,id);
-      for (let i = 1; i < ids.length; i++) parents.set(root(ids[i]),root(ids[0]));
-    }
-    if (mode === 'assembly') join([...selected]);
-    else if (selection.domain !== 'vertices') {
-      const picked = new Set(selection.ids);
-      for (const row of doc[selection.domain]) if (picked.has(row.id))
-        join(selection.domain === 'edges' ? row.vertices : row.corners.map(({ vertex }) => vertex));
-    }
-    for (const group of coincident?.report.groups ?? []) join(group.vertices);
-    const sets = new Map();
-    for (const id of [...parents.keys()].sort()) {
-      const leader = root(id);
-      if (!sets.has(leader)) sets.set(leader,[]);
-      sets.get(leader).push(id);
-    }
-    return [...sets.values()].map(vertices => ({
-      vertices, held: vertices.some(id => fixed.has(id)), primitives: []
-    }));
-  }
-
   function triangles(doc, world, accept) {
     const faces = new Map(doc.faces.map(face => [face.id,new Map(face.corners.map(row => [row.id,row.vertex]))]));
     const { triangleSources } = T.triangulate(doc);
@@ -149,7 +118,10 @@ const meshPush = (function (K) {
         !Number.isFinite(maxDistance) || maxDistance <= 0 || !Number.isFinite(clearance) || clearance < 0 ||
         clearance > maxDistance || !Number.isSafeInteger(maxPairs) || maxPairs < 1)
       throw new RangeError('Push needs individual or assembly mode, positive reach and pair limit, clearance within reach, and a valid miss policy');
-    const groups = groupComponents(doc,selection,selected,fixed,coincident,mode), owners = new Map();
+    const groups = meshTransformGroups(doc,selection,selected,coincident,mode).map(vertices => ({
+      vertices, held: vertices.some(id => fixed.has(id)), primitives: []
+    }));
+    const owners = new Map();
     for (const group of groups) if (!group.held) for (const id of group.vertices) owners.set(id,group);
     const { tree, evidence } = targetMesh(target,doc,frame,context,world,owners);
     if (owners.size && !evidence.triangles) throw new RangeError('Push needs at least one stationary target triangle');
