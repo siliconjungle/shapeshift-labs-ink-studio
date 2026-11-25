@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ink Studio · Modeling review</title>
+<style>
+  :root { color-scheme: dark; --edge: #40515b; --muted: #adbdc1; --paper: #17242c; --ink: #eff2e9; --mint: #b3e7ce; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #10191f; color: var(--ink); font: 16px/1.5 system-ui, sans-serif; }
+  main { max-width: 71rem; margin: auto; padding: 2.2rem clamp(1rem, 4vw, 3rem) 4rem; }
+  h1, h2, h3, p { margin: 0; }
+  h1 { font-size: clamp(2rem, 6vw, 3.4rem); line-height: 1.1; }
+  header p, .brief, .rubric { color: var(--muted); max-width: 65ch; margin-top: .65rem; }
+  section { margin-top: 2.4rem; border-top: 1px solid var(--edge); padding-top: 1.35rem; }
+  article { margin-top: 1rem; padding: .95rem; border: 1px solid var(--edge); background: var(--paper); border-radius: .4rem; }
+  article h3 { font-size: 1rem; }
+  .frames { display: flex; gap: .8rem; overflow: auto; margin: .65rem 0 .7rem; padding: 1px; }
+  figure { margin: 0; flex: 0 0 auto; }
+  img { display: block; outline: 1px solid var(--edge); image-rendering: pixelated; }
+  figcaption { font-size: .83rem; color: var(--muted); text-transform: capitalize; }
+  .ratings { display: grid; gap: .7rem; grid-template-columns: repeat(auto-fit,minmax(10.5rem,1fr)); }
+  label { display: flex; flex-direction: column; gap: .25rem; font-size: .92rem; }
+  select, textarea, button { font: inherit; }
+  select, textarea { border: 1px solid var(--edge); background: #10191f; padding: .36rem .55rem; border-radius: .25rem; }
+  textarea { min-height: 3rem; margin-bottom: .2rem; resize: vertical; }
+  small { color: var(--muted); }
+  footer { position: sticky; bottom: 0; background: #10191f; border-top: 1px solid var(--edge); margin-top: 2rem;
+    padding: .7rem 0; display: flex; flex-wrap: wrap; align-items: center; gap: .8rem; }
+  button { cursor: pointer; background: var(--mint); color: #102821; border: 0; border-radius: .3rem;
+    padding: .55rem .8rem; font-weight: 650; }
+  :focus-visible { outline: 2px solid var(--mint); outline-offset: 3px; }
+</style>
+<main>
+  <header><h1>Modeling review</h1><p>Read each brief and score the anonymous submissions at 1×. View every angle before downloading your ballot.</p></header>
+  <form><div id="tasks"></div><footer><button type="submit">Download ballot</button><p id="status" role="status"></p></footer></form>
+</main>
+<script>
+'use strict';
+const model = /* MODEL */ {};
+const form = document.querySelector('form'), inputs = [];
+function add(parent, tag, text) {
+  const element = document.createElement(tag);
+  if (text) element.textContent = text;
+  parent.append(element);
+  return element;
+}
+function views(parent, angles, images) {
+  const strip = add(parent,'div');
+  strip.className = 'frames';
+  images.forEach((src,index) => {
+    const figure = add(strip,'figure'), image = add(figure,'img');
+    image.src = src;
+    image.width = model.grid.width;
+    image.height = model.grid.height;
+    image.alt = angles[index]+' view';
+    add(figure,'figcaption',angles[index]);
+  });
+}
+for (const task of model.tasks) {
+  const section = add(document.querySelector('#tasks'),'section');
+  add(section,'h2',task.title);
+  add(section,'p',task.brief).className = 'brief';
+  add(section,'p',task.review).className = 'rubric';
+  const baseline = add(section,'article');
+  add(baseline,'h3','Starting revision');
+  views(baseline,task.views,task.baseline);
+  task.cards.forEach(({code,images},index) => {
+    const card = add(section,'article');
+    add(card,'h3','Submission '+String.fromCharCode(65+index));
+    views(card,task.views,images);
+    const ratings = add(card,'div');
+    ratings.className = 'ratings';
+    const fields = Object.entries(model.criteria).map(([name,criterion]) => {
+      const label = add(ratings,'label',criterion.label);
+      const select = add(label,'select');
+      select.required = true;
+      add(select,'option','Choose a score').value = '';
+      for (let score=1;score<=5;score++) add(select,'option',String(score)).value = String(score);
+      add(label,'small','1 '+criterion.low+' · 5 '+criterion.high);
+      return [name,select];
+    });
+    const note = add(add(card,'label','Notes (optional)'),'textarea');
+    note.maxLength = 1000;
+    inputs.push({code,fields,note});
+  });
+}
+form.addEventListener('submit', event => {
+  event.preventDefault();
+  const ratings = inputs.map(({code,fields,note}) => ({
+    code,values:Object.fromEntries(fields.map(([name,select]) => [name,Number(select.value)])),note:note.value.trim()
+  }));
+  const ballot = {format:model.format,version:model.version,session:model.session,seat:model.seat,ratings};
+  const url = URL.createObjectURL(new Blob([JSON.stringify(ballot,null,2)+'\n'],{type:'application/json'}));
+  const download = document.createElement('a');
+  download.href = url;
+  download.download = 'modeling-ballot-'+model.seat+'.json';
+  download.click();
+  setTimeout(() => URL.revokeObjectURL(url),1000);
+  document.querySelector('#status').textContent = 'Return the downloaded JSON to the review coordinator.';
+});
+</script>
+</html>

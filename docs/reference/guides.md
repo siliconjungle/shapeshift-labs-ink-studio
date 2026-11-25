@@ -201,6 +201,7 @@ All checked-in guides, indexed by title and section headings.
 - [Mixed-resolution compositing](../mixed-resolution.md)
 - [Mixing essentials](../mixing-essentials.md)
 - [Reduced simulation models](../model-reduction.md)
+- [Modeling benchmarks](../modeling-benchmark.md)
 - [Moiré and gratings](../moire-gratings.md)
 - [Irregular mosaics and stained glass](../mosaic-surfaces.md)
 - [Motion-aware afterimages](../motion-afterimages.md)

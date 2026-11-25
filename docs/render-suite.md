@@ -238,3 +238,12 @@ continue to guard approved transitions.
 
 Node callers can use `ink.reviewRelief(buildWorld, plan, { directory })` and
 `ink.approveRelief(report, choices)`.
+
+
+## Measure a modeling edit
+
+The [modeling benchmark](modeling-benchmark.md) uses fixed starting
+revisions and native-grid views for the painted gatehouse, signal coil,
+a captured hatch, and a rigged sleeve. Compare elapsed authoring time,
+manual repair receipts, binding loss, protected paint, and blind visual
+scores across people or agents.

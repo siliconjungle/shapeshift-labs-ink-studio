@@ -79,25 +79,34 @@ function capture(id,yaw,pitch,glitch) {
   return {id,depth,image,pose};
 }
 
-const directory=path.resolve(process.argv[2]??'studio/out/registered-scan-fusion');
-fs.mkdirSync(directory,{recursive:true});
-const views=[
-  capture('front',.04,.06,false),
-  capture('port',-.67,.37,false),
-  capture('starboard',.63,.29,true)
-].map(({id,depth,image,pose})=>{
-  const input=id+'-depth.json', rgb=id+'-capture.png';
-  fs.writeFileSync(path.join(directory,input),JSON.stringify({width,height,camera,maxDepthJump:.10,
-    depth:Array.from(depth,n=>Math.round(n*1e6)/1e6)})+'\n');
-  fs.writeFileSync(path.join(directory,rgb),PNG.encode(width,height,image,4));
-  return {id,depth:input,image:rgb,pose,...(id==='front' && {weight:1.25})};
-});
-const approval={by:'Demo art direction',reason:'Restore the center of the brass lintel from the original construction drawing'};
-const fills=[{id:'lintel-insert',vertices:[[.22,.82,.42],[.70,.82,.42],[.70,.99,.42],[.22,.99,.42]],
-  triangles:[[0,1,2],[0,2,3]],color:[184,124,70],approval}];
-const manifest={format:'ink-studio/scan-fusion',version:1,name:'Harbor hatch',views,
-  bounds:{min:[-1.31,-1.23,-.61],max:[1.31,1.27,.64]},
-  options:{resolution:.045,truncation:.15,supportTolerance:.065,conflictTolerance:.081,
-    maxTriangles:55000,paintRadius:2,rgbThreshold:22,residualLimit:1800},fills};
-for (const [name,plan] of [['hatch',manifest],['hatch-measured',{...manifest,fills:[]}]])
-  fs.writeFileSync(path.join(directory,name+'.json'),JSON.stringify(plan,null,2)+'\n');
+function writeCaptures(directory, {writeManifests=true} = {}) {
+  fs.mkdirSync(directory,{recursive:true});
+  const views=[
+    capture('front',.04,.06,false),
+    capture('port',-.67,.37,false),
+    capture('starboard',.63,.29,true)
+  ].map(({id,depth,image,pose})=>{
+    const input=id+'-depth.json', rgb=id+'-capture.png';
+    fs.writeFileSync(path.join(directory,input),JSON.stringify({width,height,camera,maxDepthJump:.10,
+      depth:Array.from(depth,n=>Math.round(n*1e6)/1e6)})+'\n');
+    fs.writeFileSync(path.join(directory,rgb),PNG.encode(width,height,image,4));
+    return {id,depth:input,image:rgb,pose,...(id==='front' && {weight:1.25})};
+  });
+  const fills=approvedFills();
+  const manifest={format:'ink-studio/scan-fusion',version:1,name:'Harbor hatch',views,
+    bounds:{min:[-1.31,-1.23,-.61],max:[1.31,1.27,.64]},
+    options:{resolution:.045,truncation:.15,supportTolerance:.065,conflictTolerance:.081,
+      maxTriangles:55000,paintRadius:2,rgbThreshold:22,residualLimit:1800},fills};
+  if (writeManifests) for (const [name,plan] of [['hatch',manifest],['hatch-measured',{...manifest,fills:[]}]])
+    fs.writeFileSync(path.join(directory,name+'.json'),JSON.stringify(plan,null,2)+'\n');
+  return {manifest, measured:{...manifest,fills:[]}};
+}
+
+function approvedFills() {
+  const approval={by:'Demo art direction',reason:'Restore the center of the brass lintel from the original construction drawing'};
+  return [{id:'lintel-insert',vertices:[[.22,.82,.42],[.70,.82,.42],[.70,.99,.42],[.22,.99,.42]],
+    triangles:[[0,1,2],[0,2,3]],color:[184,124,70],approval}];
+}
+
+module.exports={writeCaptures,approvedFills};
+if (require.main===module) writeCaptures(path.resolve(process.argv[2]??'studio/out/registered-scan-fusion'));

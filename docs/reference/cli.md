@@ -188,6 +188,13 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   render-suite [--scene gatehouse|signal-coil|night] [--profile file.json] [--out directory]   compare matched art-grid renders
   relief-review <scene> --plan file.json [--out directory]   compare geometry, normal relief and texel paint on matched art grids
   relief-review approve <report.json> --choices file.json --out approval.json   save the reviewed tier per asset and camera range
+  modeling-benchmark prepare --out directory   package four pinned modeling tasks
+  modeling-benchmark start <suite> <task> --participant id --kind person|agent|script --workflow id --tool-revision revision --out directory   start a matched attempt
+  modeling-benchmark repair <run> --target id --note text   record a manual repair
+  modeling-benchmark finish <run> [edited.json] [--repairs-complete]   measure the submitted revision and save native review views
+  modeling-benchmark blind <run...> --out directory [--seats 3]   prepare anonymous 1× review ballots
+  modeling-benchmark score <review-key.json> <ballots-directory> --out scores.json   collect blind scores
+  modeling-benchmark compare <plan.json> [--scores scores.json] --out comparison.json   compare paired attempts on the same starting revisions
   canvas-grid-check [<plan.json>] [--chrome executable] [--hardware] [--out directory] [--fail-on-flags]
     Check pixel widths and slow pans in the browser at several viewport sizes and device pixel ratios.
   fog-reconstruction review <scene> --out directory [--subject object-id --volume-scale 4 --from 0 --to 2.4 --fps 10]

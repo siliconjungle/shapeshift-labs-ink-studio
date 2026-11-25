@@ -13,7 +13,7 @@ module.exports = ({ KIT: K, makeBuilder, makeSculpt }) => {
   const trace = [[-2.26,-.60,.21],[-1.68,-.60,.21],[-1.44,-.80,.21],[-.65,-.80,.21],
     [-.43,-.54,.21],[-.02,-.54,.21],[.27,-.81,.21],[.89,-.81,.21],[1.13,-.64,.21],[2.26,-.64,.21]];
 
-  function build(value) {
+  function build(value, { serviceWinding } = {}) {
     const B = makeBuilder(value, palette), S = K.sculpt(makeSculpt(B)), C = K.curveSplats;
     Object.assign(S, { sun: K.V.norm(sun), sky: .15, amb: .44, sunK: .67 });
     S.box([0,-.02,-.23],[2.52,1.17,.20],steel,{res:.12,rd:.14});
@@ -25,6 +25,10 @@ module.exports = ({ KIT: K, makeBuilder, makeSculpt }) => {
       S.ball([x,.25,.37],[.175,.19,.15],brass,{res:.063});
       S.ball([x,-.63,.16],[.153,.125,.125],jade,{res:.052});
     }
+    if (serviceWinding) {
+      S.box([0,.31,.47],[.16,.52,.058],dark,{res:.034,rd:.039});
+      S.box([0,.31,.53],[.072,.47,.019],jade,{res:.025,rd:.014});
+    }
     S.bake();
 
     const point = (u, offset) => {
@@ -34,9 +38,12 @@ module.exports = ({ KIT: K, makeBuilder, makeSculpt }) => {
     };
     for (const [i, color] of ['#fbd28e', '#c17a56', '#e7a467'].entries()) {
       const points = Array.from({length: 57}, (_, j) => point(j / 56, i * 2 * Math.PI / 3));
-      C.draw(B, { kind: 'path', id: 'winding-' + (i + 1), points }, {
-        width: .137, edge: 'hard', caps: 'blunt', color, lighting: { preset: 'metal-wire', sheen: .34, specular: .57 }
-      });
+      const stroke = { edge: 'hard', caps: 'blunt', color,
+        lighting: { preset: 'metal-wire', sheen: .34, specular: .57 } };
+      if (i === 1 && serviceWinding) {
+        for (const spline of serviceWinding.route.splines) C.draw(B, K.curve.retained.compile(serviceWinding.route, spline.id),
+          { ...stroke, object: spline.id, color: serviceWinding.pigment });
+      } else C.draw(B, { kind: 'path', id: 'winding-' + (i + 1), points }, { ...stroke, width:.137 });
     }
     for (const x of [-1.80,1.80]) {
       C.draw(B, [[x,-.22,.26],[x-.11,.78,.27]], {width:.055,edge:'hard',color:'#76a29d'});

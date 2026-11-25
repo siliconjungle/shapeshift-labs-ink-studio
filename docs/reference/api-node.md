@@ -15,12 +15,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.bakeBounceProbes` | function | `(world, settings)` | [source](../../index.js) |
 | `node.bakeCurves` | function | `(world, { object, part, width = 96, height = 96, directions = 8, yaw = world?.cam?.yaw ?? 0, pitches = [world?.cam?.pitch ?? 0], pivot, padding = 3, time = 0, normals = false, ribbon = true, cutoutMipmaps } = {})` | [guide](../curve-bake.md#use-the-ribbon-as-native-geometry), [guide](../curve-splats.md#group-unresolved-strands-and-hand-off-to-cards), [guide](../curve-bake.md), [source](../../cli/curve-bake.js) |
 | `node.bakeSplatFit` | function | `(world,asset=world.look?.splatFit)` | [source](../../cli/splat-fit-asset.js) |
+| `node.buildModelingBenchmarkReview` | function | `(...args)` | [source](../../index.js) |
 | `node.bundle` | function | `({ format = 'script', profile = 'development' } = {})` | [guide](../../README.md#embedding-and-custom-scene-collections), [guide](../build-profiles.md#bake-and-render-in-the-browser), [guide](../build-profiles.md#play-baked-frames), [guide](../simulation-workers.md#browser-integration), [source](../../index.js) |
 | `node.captureLightGroups` | function | `(world, { groups, view = {} } = {})` | [source](../../cli/light-groups.js) |
 | `node.captureMeshTopologyVisibility` | function | `(world, object, view = {})` | [source](../../cli/mesh-topology-visibility.js) |
 | `node.capturePixelScan` | function | `(world, { at, target, w = 96, h = 64, fov = .72, time = 0, sdfAssist } = {})` | [guide](../pixel-scanner.md), [source](../../cli/pixel-scan.js) |
 | `node.checkPaletteShot` | function | `(world,options={})` | [guide](../palette-recipes.md#run-palette-checks-in-ci), [source](../../cli/palette-checks.js) |
 | `node.compareCurveModes` | function | `(world, options = {}, receive)` | [source](../../cli/curve-compare.js) |
+| `node.compareModelingBenchmarks` | function | `(...args)` | [source](../../index.js) |
 | `node.comparePaletteDistributions` | function | `(reference, studio, options)` | [guide](../palette-recipes.md#compare-colour-distributions-with-a-reference), [source](../../cli/palette-distributions.js) |
 | `node.compareShotPalettes` | function | `(world,{palettes,threshold,heatmapMax,regionLimit,columns=3,...view} = {})` | [guide](../palette-recipes.md#compare-candidate-palettes-on-one-shot), [source](../../cli/palette-compare.js) |
 | `node.createBounceProbeSampler` | function | `(world, { bounceProbes, sky, sun, shotLighting, time=0 } = {})` | [guide](../bounce-probes.md#use-bounce-in-a-palette-or-shot), [guide](../bounce-probes.md), [source](../../cli/bounce-probes.js) |
@@ -59,6 +61,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.files` | function | `()` | [source](../../index.js) |
 | `node.findGraphGroupUsers` | function | `(groupFile, { root = process.cwd() } = {})` | [source](../../cli/graph-groups.js) |
 | `node.findMatchCuts` | function | `(outgoing, incoming, options)` | [guide](../match-cut.md), [source](../../cli/match-cut.js) |
+| `node.finishModelingBenchmark` | function | `(...args)` | [source](../../index.js) |
 | `node.fitNativeLighting` | function | `(world, { plan, rig, view = {}, kit = require('../index.js').load() } = {})` | [guide](../native-lighting-approval.md#read-a-missed-constraint), [guide](../native-lighting-approval.md), [source](../../cli/native-lighting-approval.js) |
 | `node.fitSharedObjectGrade` | function | `(source, reference, options = {})` | [guide](../pixel-look.md#match-a-grade-from-shared-objects), [source](../../cli/shared-object-grade.js) |
 | `node.fitShotLighting` | function | `(world, { plan, view = {}, rig = view.shotLighting, evaluations = 64, kit = require('../index.js').load(), tolerance = .012, onCandidate } = {})` | [guide](../shot-lighting.md#fit-a-rig-from-painted-targets), [source](../../cli/shot-light-fit.js) |
@@ -98,6 +101,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.planSplatRedistribution` | function | `(world, {target, operations, review, base=world.look?.splatFit, edit='redistribution'} = {})` | [source](../../cli/splat-redistribution.js) |
 | `node.planSubjectReframe` | function | `(frames, options)` | [guide](../subject-reframe.md), [source](../../cli/subject-reframe.js) |
 | `node.preflightStoryDocument` | function | `(document, {story} = {})` | [source](../../cli/story-document.js) |
+| `node.prepareModelingBenchmark` | function | `(...args)` | [source](../../index.js) |
 | `node.previewTimeline` | function | `(world, { timeline = world.animationTimeline, width, height, frames, before = false, maps = ['silhouette'], view = {}, yaw, pivot } = {})` | [guide](../animation-timeline.md#library), [guide](../animation-timeline.md), [source](../../cli/animation-timeline.js) |
 | `node.readAsset` | function | `(file, options = {})` | [guide](../headless-authoring.md#glb-cutouts-and-uv-surface-stamps), [guide](../headless-authoring.md#textured-sdf-reconstruction), [source](../../index.js) |
 | `node.readAssetRevisionPart` | function | `(file, instance, placement, { onFile, decodeImage } = {})` | [source](../../cli/gltf-asset.js) |
@@ -123,6 +127,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.readWav` | function | `(file, options)` | [guide](../graph-media.md#wav-and-frame-analysis), [source](../../cli/wav.js) |
 | `node.rebindPixelFeature` | function | `(design,request,{render,graph,decals,replacementScene}={})` | [source](../../cli/feature-rebind.js) |
 | `node.recordInputEvents` | function | `(source, { initial, signal, kit = require('../index.js').load() } = {})` | [guide](../graph-media.md#recorded-control-events), [source](../../cli/graph-host.js) |
+| `node.recordModelingRepair` | function | `(...args)` | [source](../../index.js) |
 | `node.reframeRaster` | function | `(image, delivery, time)` | [guide](../subject-reframe.md), [source](../../cli/subject-reframe.js) |
 | `node.render` | function | `(world, o, preparedPalettes)` | [guide](../aerial-perspective.md), [guide](../art-passes.md#part-motion-and-previous-depth), [guide](../art-passes.md#deep-compositing), [guide](../art-passes.md#shared-opaque-surfaces), [guide](../brick-meshes.md#choose-direct-tracing-for-a-close-up), [source](../../cli/render.js) |
 | `node.renderAudiovisualTake` | function | `(settings,{kit=require('../index.js').load(),graph,world,simulation,checkpoint,audio,signals}={})` | [guide](../audiovisual-takes.md#library), [source](../../cli/audiovisual-take.js) |
@@ -157,8 +162,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.sampleSceneReplay` | function | `(document, seconds = 0, { loop = false } = {})` | [source](../../cli/scene-replay.js) |
 | `node.scanFusion` | function | `(inputs,options={})` | [source](../../cli/scan-fusion.js) |
 | `node.scanToMesh` | function | `(capture, { toolkit=require('../index.js').load(), cloud, meshStride=capture?.stride, sampleStride, materials, paintRadius=2, rgbThreshold=16, tolerance, residualLimit=30000, name='Captured surface' }={})` | [guide](../relightable-scans.md#node-api), [guide](../scan-to-mesh.md#node-api), [source](../../cli/scan-mesh.js) |
+| `node.scoreModelingBenchmarkReview` | function | `(...args)` | [source](../../index.js) |
 | `node.silhouetteReview` | function | `(world,{ width=96, height=96, directions=8, pitches, yaw=world.cam.yaw, pivot=world.cam.target, time=0, view={}, columns=4, scale=1 }={})` | [source](../../cli/silhouette-review.js) |
 | `node.spriteAtlas` | function | `(world, options = {})` | [source](../../cli/sprite-atlas.js) |
+| `node.startModelingBenchmark` | function | `(...args)` | [source](../../index.js) |
 | `node.toolkitBuildHash` | function | `(kit)` | [source](../../index.js) |
 | `node.trackPixelSelection` | function | `({ binding,selection,documentGrid,revision,views,render,review,visit,feature })` | [source](../../cli/pixel-selection-track.js) |
 | `node.transitionReview` | function | `(world, { plan = world.transitionReview, width = 160, height = 90, scale = 1, view = {}, pose } = {})` | [guide](../transition-review.md#read-the-results), [guide](../transition-review.md), [source](../../cli/transition-review.js) |

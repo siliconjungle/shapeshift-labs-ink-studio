@@ -19,7 +19,8 @@ const argv = process.argv.slice(2),
   cmd = argv[0] || 'help',
   pos = [],
   opt = {};
-const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' || cmd === 'effect-recipe' ? ['json'] : [];
+const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' || cmd === 'effect-recipe' ? ['json'] :
+  cmd === 'modeling-benchmark' ? ['repairs-complete'] : [];
 for (let i = 1; i < argv.length; i++) {
   const a = argv[i];
   if (a.startsWith('--')) {
@@ -1378,6 +1379,13 @@ const CMD = {
         '  render-suite [--scene gatehouse|signal-coil|night] [--profile file.json] [--out directory]   compare matched art-grid renders',
         '  relief-review <scene> --plan file.json [--out directory]   compare geometry, normal relief and texel paint on matched art grids',
         '  relief-review approve <report.json> --choices file.json --out approval.json   save the reviewed tier per asset and camera range',
+        '  modeling-benchmark prepare --out directory   package four pinned modeling tasks',
+        '  modeling-benchmark start <suite> <task> --participant id --kind person|agent|script --workflow id --tool-revision revision --out directory   start a matched attempt',
+        '  modeling-benchmark repair <run> --target id --note text   record a manual repair',
+        '  modeling-benchmark finish <run> [edited.json] [--repairs-complete]   measure the submitted revision and save native review views',
+        '  modeling-benchmark blind <run...> --out directory [--seats 3]   prepare anonymous 1× review ballots',
+        '  modeling-benchmark score <review-key.json> <ballots-directory> --out scores.json   collect blind scores',
+        '  modeling-benchmark compare <plan.json> [--scores scores.json] --out comparison.json   compare paired attempts on the same starting revisions',
         '  canvas-grid-check [<plan.json>] [--chrome executable] [--hardware] [--out directory] [--fail-on-flags]',
         '    Check pixel widths and slow pans in the browser at several viewport sizes and device pixel ratios.',
         '  fog-reconstruction review <scene> --out directory [--subject object-id --volume-scale 4 --from 0 --to 2.4 --fps 10]',
@@ -3651,6 +3659,10 @@ const CMD = {
       console.log(id, 'p50', pair('p50'), 'p95', pair('p95'));
     }
     console.log('wrote', directory);
+  },
+  async 'modeling-benchmark'() {
+    const result = await require('./modeling-benchmark-review.js').command(pos,opt);
+    console.log(JSON.stringify(result,null,2));
   },
   'relief-review'() {
     const api=require('./relief-review.js'), read=file=>JSON.parse(fs.readFileSync(path.resolve(file),'utf8'));
