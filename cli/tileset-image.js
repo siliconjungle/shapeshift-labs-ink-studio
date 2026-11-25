@@ -320,13 +320,15 @@ function command([action, ...args], options, toolkit, projectTexelsPerUnit, open
   if (action === 'brush-uv') return brushUVCommand(args,options,toolkit,openEditor);
   if (action === 'brush-size') return brushSizeCommand(args,options,toolkit,projectTexelsPerUnit);
   if (action === 'brush-preview') return previewCommand(args,options,toolkit);
+  const revisions = require('./tileset-revisions.js');
+  if (revisions.supports(action)) return revisions.command(action,args,options,toolkit,openEditor);
   const [source,...rest] = args;
   const {id,scene,out,width,height,background} = options;
   const create = action === 'create';
   const allowed = ['id','scene','out',...tileFields,...(create ? ['width','height','background'] : [])];
   if (!['import','create'].includes(action) || rest.length || Object.keys(options).some(key => !allowed.includes(key)) ||
       ![id,scene,out].every(value => typeof value === 'string' && value.trim()))
-    throw new TypeError('Use tileset import, create, extract, repack, resize, resample, grid, world-scale, pick, brush-uv, brush-size, or brush-preview');
+    throw new TypeError('Use an ink-studio tileset command from the CLI help');
   if (create) {
     if (source !== undefined || ![width,height].every(value => typeof value === 'string' && /^\d+$/.test(value)))
       throw new TypeError('Use tileset create --width <texels> --height <texels> [--background <color>]');

@@ -51,11 +51,16 @@
     const available = new Map();
     for (const [key, def] of [...Object.entries(external ?? {}), ...Object.entries(prefabs)]) {
       check(id(key) && record(def) && !available.has(key) && Number.isSafeInteger(def.revision) && def.revision >= 1 &&
-        Object.keys(def).every(field => field === 'revision' || field === 'generation' || tables.includes(field)) && record(def.solids),
+        Object.keys(def).every(field => field === 'revision' || field === 'generation' || field === 'usesTilesets' || tables.includes(field)) && record(def.solids),
       'Invalid or duplicate visual prefab ' + key);
       for (const field of tables)
         check(def[field] === undefined || record(def[field]) && Object.entries(def[field]).every(([key, row]) => id(key) && record(row)),
           'Expected named records in prefab ' + key + '/' + field);
+      if (def.usesTilesets !== undefined) {
+        const uses = def.usesTilesets;
+        check(Array.isArray(uses) && Array.from(uses).every(A.tilesets.validId) && new Set(uses).size === uses.length,
+          'Expected distinct tileset requirements in prefab ' + key);
+      }
       K.procedural.model.validate(def, 'visual');
       available.set(key, def);
     }
@@ -68,6 +73,8 @@
           Object.keys(instance).every(field => ['prefab', 'transform', 'overrides'].includes(field)) &&
           available.has(instance.prefab), 'Unknown visual prefab or invalid instance');
         const definition = available.get(instance.prefab);
+        for (const sheet of definition.usesTilesets ?? [])
+          check(own(source.tilesets ?? {},sheet), 'Visual prefab ' + instance.prefab + ' requires tileset ' + sheet);
         const edits = instance.overrides ?? [];
         check(Array.isArray(edits), 'Prefab overrides must be an ordered edit list');
         for (const edit of edits) {

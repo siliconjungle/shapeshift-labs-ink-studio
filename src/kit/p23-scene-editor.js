@@ -412,6 +412,32 @@
       return document.pending() ? write() : document.transact('Edit tileset canvas '+id,write);
     }
 
+    function tilesetDependencies(id) {
+      return A.tilesetRevisions.dependencies(snapshot(),id,buildEnv.prefabs);
+    }
+
+    function stageTilesetRevision(request) {
+      const before = snapshot(), {patch,report} = A.tilesetRevisions.plan(before,request,buildEnv.prefabs);
+      if (!patch) return {report};
+      const problems = DIO.check({...before,...patch},buildEnv).filter(problem=>problem.level === 'error');
+      return problems.length ? {report:freeze({...report,canCommit:false,problems})} : {patch,report};
+    }
+
+    function planTilesetRevision(request) {
+      return stageTilesetRevision(request).report;
+    }
+
+    function editTilesetRevision(request) {
+      const {patch,report} = stageTilesetRevision(request);
+      if (!report.canCommit) throw Object.assign(new RangeError('Tileset revision needs review'),{report});
+      const write = () => document.batchSession(() => {
+        document.setEnvironment({tilesets:null});
+        document.setEnvironment(patch);
+        return report;
+      });
+      return document.pending() ? write() : document.transact('Revise tilesets',write);
+    }
+
     function meshTopology(object, part) {
       const meshes = snapshot().topologyMeshes ?? {};
       const mesh = Object.hasOwn(meshes, object) ? meshes[object] : null;
@@ -844,6 +870,7 @@
       setTilesetTexelsPerUnit,
       planTilesetCanvas,
       transformTilesetCanvas,
+      tilesetDependencies, planTilesetRevision, editTilesetRevision,
       meshTopology,
       selectMeshTopology: (object, request, { part, visibility } = {}) =>
         K.meshTopology.select(meshTopology(object, part).document, request, { visibility }),

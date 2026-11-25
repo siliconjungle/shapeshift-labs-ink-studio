@@ -134,6 +134,55 @@ different crop.
 Run `node examples/tileset-pick/extract-demo.cjs tile-extract-demo` to
 copy one brick from the gatehouse atlas and render a wall using it.
 
+### Manage tileset revisions
+
+Run `tileset dependencies --scene scene.json` for the inventory, or add
+`--id brick` to inspect one sheet. The report lists mesh face IDs,
+material and bake bindings, scene timeline clips, and prefab definitions.
+A timeline clip can render any active face in its scene. The report lists
+authored clip definitions and whether their containing sequence is reachable.
+Prefab reports include placement IDs and cover definitions with zero placements.
+
+```sh
+ink-studio tileset clone --scene scene.json --id brick --new-id brick-copy --out cloned.json
+ink-studio tileset replace new-brick.png --scene cloned.json --id brick --out replaced.json
+ink-studio tileset combine --scene replaced.json --ids brick,trim --new-id walls --axis x --out combined.json
+ink-studio tileset deduplicate --scene cloned.json --id brick-copy --keep-id brick --out deduplicated.json
+ink-studio tileset remove --scene combined.json --id brick-copy --out cleaned.json
+```
+
+Omit `--out` to inspect the planned revision and blockers. Commit writes a
+new scene beside its source. Each command reports the affected sheets and
+their before and after revision fingerprints.
+
+- **Clone** copies the authored image and tile grid under a new ID.
+- **Replace** loads a PNG behind the existing ID. Mesh UVs keep their
+  normalized coordinates, and the existing grid must fit the replacement.
+  The report identifies dependent material bakes marked for refresh.
+- **Combine** packs the requested sheets in order along one axis and
+  reports their rectangles in the new atlas. The combined sheet has a
+  full-image tile grid. A gap in a shorter sheet's row or column becomes
+  transparent. Compatible indexed sheets keep their palette slots when
+  they fill the strip. Other combinations use RGBA8. Existing references
+  continue to use their source sheets.
+- **Deduplicate** redirects references from one exact duplicate to the
+  requested retained sheet. Dimensions, encoding, pixels or slots,
+  palette and alpha, and the effective grid must match. Mesh materials,
+  bake textures, and inline prefab requirements follow the redirect.
+  A reference in a shared prefab library needs a library edit first.
+- **Remove** requires a sheet with no material, bake, or prefab references.
+
+In Node, use `editor.tilesetDependencies(id)`,
+`editor.planTilesetRevision(request)`, and
+`editor.editTilesetRevision(request)`. A request has a `type` matching the
+command and the relevant `id`, `newId`, `keepId`, `ids`, or `axis`.
+A replacement takes an image descriptor in `asset`. The editor journals
+the atlas and reference changes together.
+
+Run `node examples/tileset-pick/revisions-demo.cjs tile-revisions-demo`
+to review a wall revision, its combined atlas, and the retained clip and
+prefab dependencies.
+
 ### Pick a brush of neighboring tiles
 
 Give the picker a tile width and height in texels. The default grid starts

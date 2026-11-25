@@ -3,12 +3,6 @@
   const A = K.authoring;
   const {freeze} = K.procedural.data;
 
-  function encode(bytes) {
-    let data = '';
-    for (let i=0;i<bytes.length;i+=8192) data += String.fromCharCode(...bytes.subarray(i,i+8192));
-    return btoa(data);
-  }
-
   function editRaster(asset, map, tileSize) {
     const {before:[oldWidth,oldHeight],size:[width,height],index} = map;
     const grid = tileSize ? {tileSize} : {};
@@ -44,7 +38,7 @@
         }
       }
     }
-    return {version:1,width,height,...grid,encoding:indexed ? 'indexed8' : 'rgba8',data:encode(pixels),
+    return {version:1,width,height,...grid,encoding:indexed ? 'indexed8' : 'rgba8',data:A.tilesets.encodeRaster(pixels),
       ...(indexed && {palette,...((asset.alpha !== undefined || alpha.length) && {alpha})})};
   }
 

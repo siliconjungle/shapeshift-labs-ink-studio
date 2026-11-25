@@ -18,6 +18,12 @@
     return value;
   }
 
+  function encodeRaster(bytes) {
+    let data = '';
+    for (let i=0;i<bytes.length;i+=8192) data += String.fromCharCode(...bytes.subarray(i,i+8192));
+    return btoa(data);
+  }
+
   function blank({ width, height, background = 'transparent' } = {}) {
     dimensions(width,height);
     const color = background === 'transparent' ? [0,0,0,0] : DrawingPrimitives.color(background);
@@ -167,5 +173,5 @@
     return {tilesetDefaults:{...scene.tilesetDefaults,texelsPerUnit:density}};
   }
 
-  A.tilesets = Object.freeze({ maxEdge, dimensions, blank, prepare, register, extract, gridPatch, positiveScale, scalePatch });
+  A.tilesets = Object.freeze({ maxEdge, validId:id, dimensions, encodeRaster, blank, prepare, register, extract, gridPatch, positiveScale, scalePatch });
 })(KIT);

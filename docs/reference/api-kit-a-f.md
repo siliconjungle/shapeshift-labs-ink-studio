@@ -858,9 +858,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.styles.resolve` | function | `(source, id)` | [source](../../src/kit/p25-authoring-bindings.js) |
 | `KIT.authoring.tilesetCanvas` | namespace |  |  |
 | `KIT.authoring.tilesetCanvas.plan` | function | `(scene, id, operation)` | [source](../../src/kit/p23-tileset-canvas.js) |
+| `KIT.authoring.tilesetRevisions` | namespace |  |  |
+| `KIT.authoring.tilesetRevisions.dependencies` | function | `(scene, id, external)` | [source](../../src/kit/p23-tileset-revisions.js) |
+| `KIT.authoring.tilesetRevisions.plan` | function | `(scene, request, external)` | [source](../../src/kit/p23-tileset-revisions.js) |
 | `KIT.authoring.tilesets` | namespace |  |  |
 | `KIT.authoring.tilesets.blank` | function | `({ width, height, background = 'transparent' } = {})` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.dimensions` | function | `(width, height)` | [source](../../src/kit/p23-tilesets.js) |
+| `KIT.authoring.tilesets.encodeRaster` | function | `(bytes)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.extract` | function | `(scene, sourceId, targetId, rectangle)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.gridPatch` | function | `(scene, key, size)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.maxEdge` | value | `number = 2048` |  |
@@ -868,6 +872,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesets.prepare` | function | `(sources = {}, defaults = {})` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.register` | function | `(scene, key, source)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.scalePatch` | function | `(scene, texelsPerUnit)` | [source](../../src/kit/p23-tilesets.js) |
+| `KIT.authoring.tilesets.validId` | function | `(value)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.worldFrame` | function | `(source, id, { resolveAnchor } = {})` | [guide](../procedural.md#optional-retained-authoring), [source](../../src/kit/p25-authoring-bindings.js) |
 
 ## KIT.bones
