@@ -197,6 +197,7 @@ All checked-in guides, indexed by title and section headings.
 - [Two-way material conversion](../material-conversion.md)
 - [Material curves and gradients](../material-curves-gradients.md)
 - [Multi-channel material ports](../material-graph-ports.md)
+- [Typed height and normal filters](../material-height-normal-filters.md)
 - [Seasonal and wear histories](../material-histories.md)
 - [Material image blend modes](../material-image-blend.md)
 - [Split, shuffle, and pack typed image channels](../material-image-channels.md)

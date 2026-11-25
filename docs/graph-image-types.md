@@ -1,6 +1,6 @@
 # Image types in graphs
 
-A typed image carries a versioned contract beside its sample buffer. Declare it at a legacy raster or asset boundary with `image.declare`. Use `image.inspect` or `ink-studio graph inspect` to read the contract. Exposing an input or group port as `typedImage`, `colorImage`, or `heightImage` keeps its contract on subsequent links.
+A typed image carries a versioned contract beside its sample buffer. Declare it at a legacy raster or asset boundary with `image.declare`. Use `image.inspect` or `ink-studio graph inspect` to read the contract. Exposing an input or group port as `typedImage`, `colorImage`, `heightImage`, or `normalImage` keeps its contract on subsequent links.
 
 | Field | Contract |
 | --- | --- |
@@ -55,6 +55,8 @@ For nearest seeds, tile seams and mask shapes, see [Typed material distance, edg
 For matrix placement, crops, perspective and sampler controls, see [Typed material transforms and addressing](material-image-transforms.md).
 
 For map-driven distortion, see [Typed material displacement filters](material-image-displacement.md).
+
+For physical relief, tangent frames, and normal orientation, see [Typed height and normal filters](material-height-normal-filters.md).
 
 ## Convert color to relief
 

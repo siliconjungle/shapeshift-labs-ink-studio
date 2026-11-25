@@ -21,6 +21,7 @@ const types = {
   typedImage: { layout: 'Versioned raster and declared image contract' },
   colorImage: { layout: 'Typed RGB or RGBA image' },
   heightImage: { layout: 'Typed floating-point height with units' },
+  normalImage: { layout: 'Typed XYZ or XYZA normal map with signed float or biased integer samples' },
   reliefHeight: { layout: 'Typed height in art pixels or a legacy numeric scalar raster' },
   materialChannels: { layout: 'Versioned named raster channels with independent grids and metadata', minItems: 1, maxItems: 64 },
   image: { layout: 'Width, height and image data' },
@@ -210,6 +211,8 @@ const displacement = {
   mapFilter:property('string',oneOf('nearest','linear'),'linear')
 };
 const directionalDisplacement = { ...displacement, angle:filterAngle, center:property('number',{},0) };
+const normalSpace = oneOf('tangent','world');
+const normalOrientation = property('string',oneOf('opengl','directx'));
 const options = {
   'textile.pattern': {
     size: property('vec2', {unit:'world units'}, [4,3]),
@@ -275,6 +278,26 @@ const options = {
   'image.slopeWarp': { ...displacement, slope:property('string',oneOf('downhill','uphill'),'downhill') },
   'image.multiDirectionalWarp': { ...directionalDisplacement, axes:property('number',oneOf(1,2,4),2),
     combine:property('string',oneOf('chain','average','min','max'),'chain') },
+  'image.heightToNormal': { precision:{...imagePrecision,default:'float32'},
+    method:property('string',oneOf('central','sobel','scharr'),'sobel'), strength:property('number',limit(-1e6,1e6),1),
+    spacing:property('vec2',{unit:'height units per texel',constraints:{exclusiveMin:0}}),
+    border:imageFilterOutput.border, orientation:{...normalOrientation,default:'opengl'} },
+  'image.normalDecode': { precision:imagePrecision, normalSpace:property('string',normalSpace,'tangent'),
+    orientation:normalOrientation, tiling:property('record',{}), sampling:property('string',oneOf('nearest','linear')),
+    pixelPitchMm:property('vec2',{unit:'mm per texel'}), alpha:property('string',oneOf('none','straight','premultiplied')) },
+  'image.normalNormalize': { precision:imagePrecision, fallback:property('vec3',{},[0,0,1]) },
+  'image.normalInvert': { precision:imagePrecision, axes:property('string',{description:'One or more distinct letters from xyz.'},'xy') },
+  'image.normalRotate': { precision:imagePrecision, axis:property('vec3',{},[0,0,1]), degrees:filterAngle },
+  'image.normalOrientation': { precision:imagePrecision, orientation:{...normalOrientation,default:'opengl'} },
+  'image.normalCombine': { precision:imagePrecision, method:property('string',oneOf('rnm','whiteout','lerp'),'rnm'),
+    amount:property('number',limit(0,1),1) },
+  'image.normalSpace': { precision:imagePrecision, to:property('string',normalSpace), orientation:normalOrientation,
+    frame:property('record',{properties:{ normal:property('vec3',{},[0,0,1]),
+      tangent:property('vec3',{},[1,0,0]), handedness:property('number',oneOf(-1,1),1) }}) },
+  'image.heightBlend': { precision:property('string',oneOf('float32','float64')),
+    mode:property('string',oneOf('height','mix'),'height'), bias:property('number',unit('height units'),0),
+    offset:property('number',unit('height units'),0), softness:property('number',{unit:'height units',...positive},0),
+    opacity:property('number',limit(0,1),1) },
   'image.curve': { ...correctionOutput, channel:property('string',oneOf('all','r','g','b','value'),'all') },
   'image.gradient': { precision:{...imagePrecision,default:'float64'}, outOfRange:{...imageRangePolicy,default:'error'},
     from:property('vec2',limit(0,1),[0,.5]), to:property('vec2',limit(0,1),[1,.5]) },

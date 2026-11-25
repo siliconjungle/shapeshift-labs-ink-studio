@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiln Relief · Ink Studio</title>
+<style>
+  :root{color-scheme:dark;--page:#211b20;--panel:#2e2429;--rule:#64514c;--text:#f8ecde;--muted:#d0bdb2;--copper:#fcc88f;
+    font:15px/1.45 system-ui,sans-serif}
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(ellipse at 18% -20%,#4b3637,var(--page) 62%);color:var(--text)}
+  main{max-width:1140px;margin:auto;padding:29px 29px}
+  header{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:15px}
+  h1{margin:3px 0 6px;font:normal clamp(3rem,7vw,5rem)/.97 Georgia,serif;letter-spacing:-.05em}
+  small{font:600 .71rem ui-monospace,monospace;letter-spacing:.08em;color:var(--copper)}
+  p,label,figcaption{margin:0;color:var(--muted)}
+  a{color:var(--text);text-underline-offset:4px}
+  .layout{display:grid;grid-template-columns:minmax(0,2.35fr) minmax(271px,1fr);gap:12px;align-items:start}
+  figure,aside{margin:0;border:1px solid var(--rule);background:var(--panel);min-width:0}
+  canvas{display:block;width:100%;height:auto;image-rendering:pixelated;background:#1c1b24}
+  figcaption{display:flex;gap:8px;align-items:center;justify-content:space-between;border-top:1px solid var(--rule);
+    padding:8px 10px;font-size:.81rem}
+  figcaption span:first-child{color:var(--text)}
+  aside{padding:11px}
+  .swatches,.controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .swatches{margin-bottom:12px}
+  .swatches figcaption{font-size:.74rem;padding:5px 6px}
+  .wide{grid-column:1/-1}
+  .slider{display:flex;justify-content:space-between;gap:4px}
+  label{font-size:.82rem}
+  output{color:var(--copper);font:.76rem ui-monospace,monospace}
+  input{accent-color:var(--copper)}
+  input[type=range],select{display:block;width:100%;margin:3px 0 0}
+  input[type=range]{height:24px}
+  select{padding:5px 6px;background:var(--page);border:1px solid var(--rule);color:var(--text);border-radius:2px;font:inherit}
+  .checks input{margin-left:0;vertical-align:middle}
+  .note{margin:10px 0;font-size:.87rem}
+  #error{color:#ffb8a8}
+  :focus-visible{outline:2px solid var(--copper);outline-offset:2px}
+  @media(max-width:690px){main{padding:18px 12px}header{display:block}header a{display:inline-block;margin-top:7px}
+    .layout{grid-template-columns:1fr}.swatches canvas{max-height:98px;object-fit:contain}}
+</style>
+<main>
+  <header>
+    <div><small>INK STUDIO · MATERIAL GRAPHS</small><h1>Kiln Relief</h1>
+      <p>Relight a ceramic plaque as you blend heights and layer surface detail.</p></div>
+    <a href="kiln-relief.material.json" download>Editable material graph</a>
+  </header>
+  <div class="layout">
+    <section aria-label="Ceramic relief preview">
+      <figure>
+        <canvas id="lit" width="152" height="106" aria-label="A raised golden moth on a glazed ceramic plaque"></canvas>
+        <figcaption><span>Relit material</span><small>152 × 106 TEXELS</small></figcaption>
+      </figure>
+      <p class="note" id="note">The height blend’s weight also controls where the brass pigment appears.</p>
+    </section>
+    <aside aria-label="Relief controls">
+      <div class="swatches">
+        <figure><canvas id="normal-map" width="152" height="106" aria-label="Normal map channel preview"></canvas>
+          <figcaption><span id="map-label">OpenGL normals</span></figcaption></figure>
+        <figure><canvas id="weight-map" width="152" height="106" aria-label="Brighter areas receive more of the raised layer"></canvas>
+          <figcaption>Blend weight</figcaption></figure>
+      </div>
+      <div class="controls">
+        <label class="wide"><span class="slider">Light azimuth <output id="light-value" for="light"></output></span>
+          <input type="range" id="light" min="0" max="360" step="1" value="226"></label>
+        <label><span class="slider">Height bias <output id="bias-value" for="bias"></output></span>
+          <input type="range" id="bias" min="-3.5" max="2" step=".05" value="-.05"></label>
+        <label><span class="slider">Softness <output id="softness-value" for="softness"></output></span>
+          <input type="range" id="softness" min="0" max="2.5" step=".05" value=".7"></label>
+        <label><span class="slider">Detail amount <output id="amount-value" for="amount"></output></span>
+          <input type="range" id="amount" min="0" max="1" step=".01" value=".68"></label>
+        <label><span class="slider">Detail rotation <output id="rotation-value" for="rotate"></output></span>
+          <input type="range" id="rotate" min="-180" max="180" step="1" value="0"></label>
+        <label>Combine <select id="method"><option value="rnm">Reoriented</option><option value="whiteout">Whiteout</option>
+          <option value="lerp">Interpolated</option></select></label>
+        <label>Inspect normals <select id="space"><option value="gl">OpenGL</option><option value="direct">DirectX</option>
+          <option value="world">World XYZ</option></select></label>
+        <label class="wide checks"><input type="checkbox" id="etched"> Invert detail slopes</label>
+      </div>
+      <p id="error" role="status"></p>
+    </aside>
+  </div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="kiln.js"></script>
+<script>
+  const get = id => document.getElementById(id);
+  const maps = kilnSources(), graphs = new Map();
+  function paint(id, rgba, width = kilnWidth, height = kilnHeight) {
+    get(id).getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(rgba),width,height),0,0);
+  }
+
+  function panels(outputs, space) {
+    const normal = outputs[space], samples = normal.raster.data, weights = outputs.weight.raster.data;
+    const pixels = new Uint8Array(weights.length * 4), mask = new Uint8Array(pixels.length), world = space === 'world';
+    for (let p = 0; p < weights.length; p++) {
+      for (let c = 0; c < 3; c++) {
+        pixels[4 * p + c] = Math.round(world ? 255 * (.5 * samples[3 * p + c] + .5) : samples[3 * p + c] / 257);
+        mask[4 * p + c] = Math.round(255 * weights[p]);
+      }
+      pixels[4 * p + 3] = mask[4 * p + 3] = 255;
+    }
+    paint('normal-map',pixels);
+    paint('weight-map',mask);
+  }
+
+  function render() {
+    try {
+      const angle = Number(get('light').value), bias = Number(get('bias').value), softness = Number(get('softness').value);
+      const amount = Number(get('amount').value), degrees = Number(get('rotate').value);
+      const etched = get('etched').checked, space = get('space').value;
+      if (!graphs.has(etched)) graphs.set(etched,KIT.procedural.graph.create(kilnGraph({etched})));
+      const { outputs } = graphs.get(etched).evaluate({ ...maps, blend:{bias,softness},
+        combine:{method:get('method').value,amount}, rotation:{degrees} });
+      const lit = kilnPreview(outputs,angle);
+      paint('lit',lit.data,lit.width,lit.height);
+      panels(outputs,space);
+      get('map-label').textContent = {gl:'OpenGL normals', direct:'DirectX normals', world:'World XYZ normals'}[space];
+      get('light-value').value = angle + '°';
+      get('bias-value').value = bias.toFixed(2);
+      get('softness-value').value = softness.toFixed(2);
+      get('amount-value').value = Math.round(amount * 100) + '%';
+      get('rotation-value').value = degrees + '°';
+      get('error').textContent = '';
+    } catch (error) { get('error').textContent = error.message; }
+  }
+
+  let pending = false;
+  for (const element of document.querySelectorAll('input,select')) element.addEventListener('input', () => {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => { pending = false; render(); });
+  });
+  render();
+</script>
+</html>

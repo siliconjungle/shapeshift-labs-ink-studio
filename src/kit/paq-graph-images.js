@@ -9,7 +9,7 @@
   const colors = ['srgb', 'srgb-linear', 'display-p3', 'display-p3-linear'];
   const edges = ['clamp', 'transparent', 'wrap', 'mirror'];
   const specKeys = ['intent', 'layout', 'precision', 'units', 'colorSpace', 'alpha', 'tiling', 'sampling', 'domain'];
-  const optionalSpecKeys = [...specKeys, 'pixelPitchMm', 'materialSeed'];
+  const optionalSpecKeys = [...specKeys, 'pixelPitchMm', 'materialSeed', 'normalSpace', 'normalOrientation'];
   const maxPixels = 16777216;
   const own = Object.hasOwn;
   const finite = Number.isFinite;
@@ -34,7 +34,7 @@
       units = intent === 'height' ? undefined : 'unitless',
       colorSpace = intent === 'color' ? source.colorSpace ?? 'srgb' : 'none',
       alpha = intent === 'color' && layout === 'rgba' || intent === 'normal' && layout === 'xyza' ? 'straight' : 'none',
-      sampling = 'nearest', tiling = {}, pixelPitchMm, materialSeed } = settings;
+      sampling = 'nearest', tiling = {}, pixelPitchMm, materialSeed, normalSpace, normalOrientation } = settings;
     if (!intents.includes(intent) || typeof layout !== 'string' || layout.length !== count(source) ||
         !['r', 'rg', 'rgb', 'rgba', 'xyz', 'xyza'].includes(layout) || !own(storage, precision) || !unit(units) ||
         !['none', 'straight', 'premultiplied'].includes(alpha) || alpha !== 'none' && !layout.endsWith('a') ||
@@ -45,6 +45,10 @@
       throw new TypeError('Graph image pixel pitch needs two positive millimeter values');
     if (materialSeed !== undefined && !Number.isSafeInteger(materialSeed))
       throw new TypeError('Graph image material seed must be a safe integer');
+    if (normalSpace !== undefined && (intent !== 'normal' || !['tangent', 'world'].includes(normalSpace)) ||
+        normalOrientation !== undefined && (intent !== 'normal' || normalSpace === 'world' ||
+          !['opengl', 'directx'].includes(normalOrientation)))
+      throw new TypeError('Normal space and orientation must describe a tangent or world normal image');
     const { u = 'clamp', v = 'clamp' } = tiling;
     if (!edges.includes(u) || !edges.includes(v)) throw new TypeError('Invalid graph image tiling');
     const color = intent === 'color', linear = color && typeof colorSpace === 'string' && colorSpace.endsWith('-linear');
@@ -63,7 +67,9 @@
     return Object.freeze({ intent, layout, precision, units, colorSpace, alpha, domain,
       tiling: Object.freeze({ u, v }), sampling,
       ...(pixelPitchMm !== undefined && { pixelPitchMm: Object.freeze(pixelPitchMm.slice()) }),
-      ...(materialSeed !== undefined && { materialSeed }) });
+      ...(materialSeed !== undefined && { materialSeed }),
+      ...(normalSpace !== undefined && { normalSpace }),
+      ...(normalOrientation !== undefined && { normalOrientation }) });
   }
 
   function samples(data, spec, serialized = false) {
@@ -184,17 +190,18 @@
     if (!same && !(wasColor && isColor) && !((wasColor || scalar(from)) && (isColor || scalar({ intent, layout, units: from.units }))))
       throw new TypeError('Image conversion needs compatible layouts and units. Use image.toHeight for relief.');
     const { width, height, data, pivot, channels } = grid, next = layout.length;
-    const { tiling, sampling, pixelPitchMm, materialSeed, units } = from;
+    const { tiling, sampling, pixelPitchMm, materialSeed, units, normalSpace, normalOrientation } = from;
     const keepAlpha = same || wasColor && isColor && layout === 'rgba' && from.alpha !== 'none';
     const { precision = from.precision, alpha = keepAlpha ? from.alpha : undefined,
       colorSpace = isColor ? wasColor ? from.colorSpace : 'srgb-linear' : 'none' } = target;
     const to = descriptor({ width, height, channels: next, data }, {
-      intent, layout, precision, colorSpace, alpha, units, tiling, sampling, pixelPitchMm, materialSeed
+      intent, layout, precision, colorSpace, alpha, units, tiling, sampling, pixelPitchMm, materialSeed, normalSpace, normalOrientation
     });
     if (!wasColor && !isColor && from.alpha !== to.alpha)
       throw new TypeError('Non-color image conversion must keep its alpha convention');
     if (same && from.precision === to.precision && from.colorSpace === to.colorSpace && from.alpha === to.alpha)
       return source;
+    if (intent === 'normal') return normals.reencode(source, precision, outOfRange);
     const output = new storage[to.precision](width * height * next);
     const divisor = integerMax(from.precision) || 1;
     const rgb = [0, 0, 0], hasAlpha = to.alpha !== 'none', last = next - 1;
@@ -245,14 +252,19 @@
       for (let p = 0; p < plane.length; p++) plane[p] = data[p * stride + index];
       return [name, declare({ width, height, pivot, channels: 1, data: plane },
         { ...spec, intent, layout: 'r', colorSpace: 'none', alpha: 'none', domain: undefined,
-          units: coverage ? 'unitless' : spec.units })];
+          units: coverage ? 'unitless' : spec.units, normalSpace: undefined, normalOrientation: undefined })];
     }));
   }
 
-  function alignedChannels(a, b) {
-    const pair = (left, right) => left === right || left && right && left[0] === right[0] && left[1] === right[1];
+  function alignedGrid(a, b, allowMissing = false) {
+    const pair = (left, right) => left === right || (left && right ?
+      left[0] === right[0] && left[1] === right[1] : allowMissing);
     return a.raster.width === b.raster.width && a.raster.height === b.raster.height &&
-      pair(a.raster.pivot, b.raster.pivot) && pair(a.descriptor.pixelPitchMm, b.descriptor.pixelPitchMm) &&
+      pair(a.raster.pivot, b.raster.pivot) && pair(a.descriptor.pixelPitchMm, b.descriptor.pixelPitchMm);
+  }
+
+  function alignedChannels(a, b) {
+    return alignedGrid(a, b) &&
       a.descriptor.sampling === b.descriptor.sampling && a.descriptor.tiling.u === b.descriptor.tiling.u &&
       a.descriptor.tiling.v === b.descriptor.tiling.v;
   }
@@ -551,7 +563,7 @@
     return own(binding ?? {}, 'value') ? binding.value : binding;
   }
 
-  const typedOutput = intent => ({ value: intent === 'color' ? 'colorImage' : intent === 'height' ? 'heightImage' : 'typedImage' });
+  const typedOutput = intent => ({ value: ['color', 'height', 'normal'].includes(intent) ? intent + 'Image' : 'typedImage' });
 
   function specialize(node) {
     const settings = literalDescriptor(node);
@@ -601,8 +613,18 @@
   const warps = TypedImageDisplacement({
     requireImage, descriptor, wrap, integerMax, filters, resample, sampler: spatialSampler, borders
   });
+  const normals = TypedImageNormals({
+    requireImage, declare, descriptor, wrap, pack, storage, integerMax, precisionOf, raster, fields, alignedGrid, borders,
+    V: KIT.V, M: KIT.M
+  });
   const correctionOptions = { type: 'record', default: {} };
   const sameImage = { type: 'typedImage', typeFrom: 'source' };
+  const optional = { type: 'any', default: null };
+  const normalOutput = { value: 'normalImage' };
+  function normalFilter(name, description, source = 'normalImage') {
+    return { description, inputs: { source, options: correctionOptions }, outputs: normalOutput,
+      run({ source, options }) { return { value: normals[name](source, options) }; } };
+  }
   function filter(name, description, output = sameImage) {
     return { description, inputs: { source: 'typedImage', options: correctionOptions }, outputs: { value: output },
       run({ source, options }) { return { value: filters[name](source, options) }; } };
@@ -802,6 +824,30 @@
     'image.vectorWarp': warp('vectorWarp', 'Use a signed or centered RG displacement map with a selectable Y convention.'),
     'image.slopeWarp': warp('slopeWarp', 'Displace uphill or downhill along the gradient of a scalar height or data map.'),
     'image.multiDirectionalWarp': warp('multiDirectionalWarp', 'Chain or blend opposed displacements along one, two or four axes.'),
+    'image.heightToNormal': normalFilter('heightToNormal', 'Differentiate typed height into a tangent normal using physical spacing.', 'heightImage'),
+    'image.normalDecode': normalFilter('normalDecode', 'Declare raw RGB or RGBA normal samples and their coordinate conventions.', 'raster'),
+    'image.normalNormalize': normalFilter('normalNormalize', 'Normalize normal vectors and fill zero vectors with an authored direction.'),
+    'image.normalInvert': normalFilter('normalInvert', 'Reverse selected normal components in the declared coordinate space.'),
+    'image.normalRotate': normalFilter('normalRotate', 'Rotate normal vectors around an authored three-dimensional axis.'),
+    'image.normalOrientation': normalFilter('normalOrientation', 'Convert the Y convention of a tangent normal map between OpenGL and DirectX.'),
+    'image.normalCombine': {
+      description: 'Combine aligned normal maps with reoriented, whiteout or normalized interpolation and an optional mask.',
+      inputs: { base: 'normalImage', detail: 'normalImage', mask: optional, options: correctionOptions }, outputs: normalOutput,
+      run({ base, detail, mask, options }) { return { value: normals.normalCombine(base, detail, options, mask) }; }
+    },
+    'image.normalSpace': {
+      description: 'Convert world and tangent normals through a uniform or per-texel tangent frame with handedness.',
+      inputs: { source: 'normalImage', surface: optional, tangent: optional, handedness: optional, options: correctionOptions }, outputs: normalOutput,
+      run({ source, surface, tangent, handedness, options }) {
+        return { value: normals.normalSpace(source, options, surface, tangent, handedness) };
+      }
+    },
+    'image.heightBlend': {
+      description: 'Blend aligned physical heights and return the shared material transition mask.',
+      inputs: { base: 'heightImage', layer: 'heightImage', mask: optional, options: correctionOptions },
+      outputs: { value: 'heightImage', weight: 'typedImage' },
+      run({ base, layer, mask, options }) { return normals.heightBlend(base, layer, options, mask); }
+    },
     'image.toDisplay': {
       description: 'Convert typed color to straight-alpha sRGB8 for legacy compositing and PNG exports.',
       inputs: { source: 'typedImage', outOfRange: { type: 'string', default: 'clamp' } },
@@ -818,5 +864,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);

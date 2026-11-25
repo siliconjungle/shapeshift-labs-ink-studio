@@ -420,6 +420,43 @@ Guides: [guide](../material-curves-gradients.md)
 Get the runnable example with `ink-studio graph describe image.gradientMap --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.heightBlend
+
+Blend aligned physical heights and return the shared material transition mask.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `base` | `heightImage` | Required | {"layout":"Typed floating-point height with units"} |
+| Input | `layer` | `heightImage` | Required | {"layout":"Typed floating-point height with units"} |
+| Input | `mask` | `any` | `null` |  |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["float32","float64"]}},"mode":{"type":"string","constraints":{"choices":["height","mix"]},"default":"height"},"bias":{"type":"number","unit":"height units","default":0},"offset":{"type":"number","unit":"height units","default":0},"softness":{"type":"number","unit":"height units","constraints":{"min":0},"default":0},"opacity":{"type":"number","constraints":{"min":0,"max":1},"default":1}} |
+| Output | `value` | `heightImage` | — | {"layout":"Typed floating-point height with units"} |
+| Output | `weight` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-height-normal-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.heightBlend --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.heightToNormal
+
+Differentiate typed height into a tangent normal using physical spacing.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `heightImage` | Required | {"layout":"Typed floating-point height with units"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]},"default":"float32"},"method":{"type":"string","constraints":{"choices":["central","sobel","scharr"]},"default":"sobel"},"strength":{"type":"number","constraints":{"min":-1000000,"max":1000000},"default":1},"spacing":{"type":"vec2","unit":"height units per texel","constraints":{"exclusiveMin":0}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"orientation":{"type":"string","constraints":{"choices":["opengl","directx"]},"default":"opengl"}} |
+| Output | `value` | `normalImage` | — | {"layout":"Typed XYZ or XYZA normal map with signed float or biased integer samples"} |
+
+Guides: [guide](../material-height-normal-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.heightToNormal --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.highPass
 
 Extract signed detail by subtracting a Gaussian, optionally adding a display bias.
@@ -592,6 +629,130 @@ Origin: toolkit.
 Guides: [guide](../material-image-displacement.md)
 
 Get the runnable example with `ink-studio graph describe image.nonuniformWarp --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.normalCombine
+
+Combine aligned normal maps with reoriented, whiteout or normalized interpolation and an optional mask.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `base` | `normalImage` | Required | {"layout":"Typed XYZ or XYZA normal map with signed float or biased integer samples"} |
+| Input | `detail` | `normalImage` | Required | {"layout":"Typed XYZ or XYZA normal map with signed float or biased integer samples"} |
+| Input | `mask` | `any` | `null` |  |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"method":{"type":"string","constraints":{"choices":["rnm","whiteout","lerp"]},"default":"rnm"},"amount":{"type":"number","constraints":{"min":0,"max":1},"default":1}} |
+| Output | `value` | `normalImage` | — | {"layout":"Typed XYZ or XYZA normal map with signed float or biased integer samples"} |
+
+Guides: [guide](../material-height-normal-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.normalCombine --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.normalDecode
+
+Declare raw RGB or RGBA normal samples and their coordinate conventions.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `raster` | Required | {"layout":"Interleaved samples on a positive integer grid","channels":[1,4],"finite":true} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"normalSpace":{"type":"string","constraints":{"choices":["tangent","world"]},"default":"tangent"},"orientation":{"type":"string","constraints":{"choices":["opengl","directx"]}},"tiling":{"type":"record"},"sampling":{"type":"string","constraints":{"choices":["nearest","linear"]}},"pixelPitchMm":{"type":"vec2","unit":"mm per texel"},"alpha":{"type":"string","constraints":{"choices":["none","straight","premultiplied"]}}} |
+| Output | `value` | `normalImage` | — | {"layout":"Typed XYZ or XYZA normal map with signed float or biased integer samples"} |
+
+Guides: [guide](../material-height-normal-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.normalDecode --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.normalInvert
+
+Reverse selected normal components in the declared coordinate space.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `normalImage` | Required | {"layout":"Typed XYZ or XYZA normal map with signed float or biased integer samples"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"axes":{"type":"string","description":"One or more distinct letters from xyz.","default":"xy"}} |
+| Output | `value` | `normalImage` | — | {"layout":"Typed XYZ or XYZA normal map with signed float or biased integer samples"} |
+
+Guides: [guide](../material-height-normal-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.normalInvert --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.normalNormalize
+
+Normalize normal vectors and fill zero vectors with an authored direction.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `normalImage` | Required | {"layout":"Typed XYZ or XYZA normal map with signed float or biased integer samples"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"fallback":{"type":"vec3","default":[0,0,1]}} |
+| Output | `value` | `normalImage` | — | {"layout":"Typed XYZ or XYZA normal map with signed float or biased integer samples"} |
+
+Guides: [guide](../material-height-normal-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.normalNormalize --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.normalOrientation
+
+Convert the Y convention of a tangent normal map between OpenGL and DirectX.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `normalImage` | Required | {"layout":"Typed XYZ or XYZA normal map with signed float or biased integer samples"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"orientation":{"type":"string","constraints":{"choices":["opengl","directx"]},"default":"opengl"}} |
+| Output | `value` | `normalImage` | — | {"layout":"Typed XYZ or XYZA normal map with signed float or biased integer samples"} |
+
+Guides: [guide](../material-height-normal-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.normalOrientation --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.normalRotate
+
+Rotate normal vectors around an authored three-dimensional axis.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `normalImage` | Required | {"layout":"Typed XYZ or XYZA normal map with signed float or biased integer samples"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"axis":{"type":"vec3","default":[0,0,1]},"degrees":{"type":"number","unit":"degrees","default":0}} |
+| Output | `value` | `normalImage` | — | {"layout":"Typed XYZ or XYZA normal map with signed float or biased integer samples"} |
+
+Guides: [guide](../material-height-normal-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.normalRotate --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.normalSpace
+
+Convert world and tangent normals through a uniform or per-texel tangent frame with handedness.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `normalImage` | Required | {"layout":"Typed XYZ or XYZA normal map with signed float or biased integer samples"} |
+| Input | `surface` | `any` | `null` |  |
+| Input | `tangent` | `any` | `null` |  |
+| Input | `handedness` | `any` | `null` |  |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"to":{"type":"string","constraints":{"choices":["tangent","world"]}},"orientation":{"type":"string","constraints":{"choices":["opengl","directx"]}},"frame":{"type":"record","properties":{"normal":{"type":"vec3","default":[0,0,1]},"tangent":{"type":"vec3","default":[1,0,0]},"handedness":{"type":"number","constraints":{"choices":[-1,1]},"default":1}}}} |
+| Output | `value` | `normalImage` | — | {"layout":"Typed XYZ or XYZA normal map with signed float or biased integer samples"} |
+
+Guides: [guide](../material-height-normal-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.normalSpace --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.outline

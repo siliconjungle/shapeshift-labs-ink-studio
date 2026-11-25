@@ -429,7 +429,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       throw new TypeError('Material image export '+name+' needs shared base settings and a typed image output');
     if ((format==='png' || format==='codec' && type==='raster') && port==='linearRaster')
       throw new TypeError('Graph image export '+name+' needs display RGB. Use color.rasterToDisplay first.');
-    if ((format==='png' || format==='codec' && type==='raster') && ['typedImage','colorImage','heightImage'].includes(port))
+    if ((format==='png' || format==='codec' && type==='raster') && ['typedImage','colorImage','heightImage','normalImage'].includes(port))
       throw new TypeError('Graph image export '+name+' needs a display raster. Use image.toDisplay for color or export the typed image as JSON.');
     if (format==='png' && !compatible(port,'raster')) throw new TypeError('Graph PNG export '+name+' needs an image output');
     if (format==='atlas' && !compatible(port,'atlas')) throw new TypeError('Graph atlas export '+name+' needs an atlas output');
