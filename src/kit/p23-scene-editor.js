@@ -574,6 +574,20 @@
       return stageTilesetFaceEdit(A.tilesetGrow.plan,request,options).report;
     }
 
+    function planTilesetVertexFaceEdit(scene, request) {
+      const part = scene.topologyMeshes?.[request?.object]?.part ?? request?.part;
+      requireMeshShapeOwner(request?.object,part,scene,'Create a face on');
+      return A.tilesetFaceFromVertices.plan(scene,request);
+    }
+
+    function planTilesetFaceFromVertices(request) {
+      return stageTilesetFaceEdit(planTilesetVertexFaceEdit,request).report;
+    }
+
+    function createTilesetFaceFromVertices(request) {
+      return commitTilesetFaceEdit(planTilesetVertexFaceEdit,request,undefined,'creation');
+    }
+
     function planTilesetBlockEdit(scene, request) {
       const part = scene.topologyMeshes?.[request?.object]?.part ?? request?.part;
       requireMeshShapeOwner(request?.object,part,scene,'Edit');
@@ -1121,6 +1135,7 @@
       planTilesetRectangle, applyTilesetRectangle, planTilesetBrushRun, applyTilesetBrushRun,
       planTilesetReskin, applyTilesetReskin, planTilesetGrow, growTilesetFace, planTilesetBlock, applyTilesetBlock,
       planTilesetPrimitive, applyTilesetPrimitive,
+      planTilesetFaceFromVertices, createTilesetFaceFromVertices,
       selectTilesetComponents: (request, options) => A.tilesetComponentSelection.select(snapshot(),request,options),
       selectTilesetAtlas: (request) => A.tilesetAtlasSelection.select(snapshot(),request),
       planTilesetCanvas,

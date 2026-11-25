@@ -54,12 +54,12 @@
     };
   }
 
-  function sourceForTileOnly(oldAtlas, {asset,atlas}, uvs, prior) {
-    if (uvs.length !== 4) return {};
+  function sourceForTileOnly(oldAtlas, {asset,atlas}, uvs, prior, slots) {
+    if (!slots) return {};
     const sameSize = prior && prior.data.selection?.tileset === oldAtlas &&
       prior.data.atlasSize?.[0] === asset.width && prior.data.atlasSize?.[1] === asset.height;
     const hint = sameSize ? {...prior,data:{...prior.data,selection:{...prior.data.selection,tileset:atlas}}} : undefined;
-    const mapping = A.tilesetEyedrop.recover(asset,atlas,texelsOf(uvs,asset),hint);
+    const mapping = A.tilesetEyedrop.recover(asset,atlas,texelsOf(uvs,asset),hint,slots);
     return mapping.paint ? {source:A.tilesetFaces.cropSource(asset,mapping.selection,undefined,mapping.paint).source,
       sourceStatus:mapping.sourceStatus} : {};
   }
@@ -105,30 +105,32 @@
     const oldMaterial = old.materials?.find(item=>item.id === target.material) ?? {id:target.material};
     const oldAtlas = oldMaterial.texture?.tileset;
     const prior = A.tilesetEyedrop.sourceBinding(old,face);
+    const slots = A.tilesetFaces.sourceCorners(prior,target.corners.length);
     const revision = topology.revision(doc);
     const info = {format:'ink-studio/tileset-face-reskin',version:1,id:face,object,face,mode,...(old.part && {part:old.part}),
       uvSet,tileset:brush.atlas,before:{material:target.material,tileset:oldAtlas ?? null,source:prior?.data ?? null},beforeRevision:revision};
     const blocked = reason=>({report:freeze({...info,conflicts:[{reason}],canCommit:false})});
-    if (mode !== 'tileset' && target.corners.length !== 4) return blocked('crop-needs-a-quad');
+    if (mode !== 'tileset' && !slots) return blocked('crop-needs-a-quad');
 
     let after = before, source, sourceStatus;
     if (mode === 'tileset') {
-      ({source,sourceStatus} = sourceForTileOnly(oldAtlas,brush,before,prior));
+      ({source,sourceStatus} = sourceForTileOnly(oldAtlas,brush,before,prior,slots));
     } else {
       let paint = brush.paint;
       if (mode === 'relative') {
         const eye = A.tilesetEyedrop;
         const asset = oldAtlas && atlases.source(oldAtlas);
-        const orientation = asset ? eye.recover(asset,oldAtlas,texelsOf(before,asset),prior) : eye.orientationOf(before);
+        const orientation = asset ? eye.recover(asset,oldAtlas,texelsOf(before,asset),prior,slots) : eye.orientationOf(before,undefined,slots);
         if (!orientation.paint || orientation.orientationStatus === 'ambiguous')
           return blocked(orientation.paint ? 'ambiguous-current-orientation' : 'unsupported-current-orientation');
         paint = compose(paint,orientation.paint);
       }
       const result = A.tilesetFaces.cropSource(brush.asset,brush.selection,brush.bounds,paint);
       source = result.source;
-      after = result.pigmentUV;
+      after = slots.map(slot=>result.pigmentUV[slot]);
       sourceStatus = 'brush';
     }
+    if (source && slots.length === 3) source = {...source,uvCorners:slots};
 
     const sharedMaterial = doc.faces.some(item=>item.id !== face && item.material === target.material);
     const activeBake = old.bakes?.find(item=>item.material === target.material && !item.invalidated);
