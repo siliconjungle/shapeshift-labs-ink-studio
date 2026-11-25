@@ -1534,6 +1534,8 @@ ink-studio mesh-topology edge-edit workshop.json bridge.json --object coupling -
   [Split a tile at a picked position](#split-a-tile-at-a-picked-position).
 - **Subdivide one face into rows and columns** with `kind: "subdivide-face"`.
   See [Subdivide a tile by rows and columns](#subdivide-a-tile-by-rows-and-columns).
+- **Subdivide at source pixel boundaries** with `kind: "subdivide-texels"`.
+  See [Subdivide a tile by source texels](#subdivide-a-tile-by-source-texels).
 - **Slide an edge chain or loop** with `kind: "slide"`, a `selection`,
   and an `amount` strictly between -1 and 1. Positive amounts follow
   the face winding on the forward side of the ordered chain. Negative
@@ -1650,6 +1652,38 @@ grid in atlas texel centers and the cropped bindings for each cell.
 ink-studio mesh-topology edge-edit sign.json grid.json --object sign
 ink-studio mesh-topology edge-edit sign.json grid.json --object sign --out split.json --report grid-receipt.json
 node examples/tileset-pick/tile-grid-demo.cjs tile-grid-review
+```
+
+### Subdivide a tile by source texels
+
+Use `"operation": { "kind": "subdivide-texels", "face": "panel",
+"x": 8, "y": [12, 15] }` in a revision-pinned edge-edit request.
+A saved face `selection` can supply the target. Each axis accepts a
+positive integer increment or a list of distinct absolute atlas
+boundary indices. An omitted axis stays whole.
+
+The example cuts every eight source texels along atlas X, starting
+from the crop's left edge, and cuts at atlas Y boundaries 12 and 15.
+Coordinates are top-down. Boundary 12 sits between texel centers
+11 and 12, so its position is 11.5 in the atlas preview. Rotated or
+mirrored paint maps those same lines onto the corresponding face axes.
+The scene uses the registered material atlas's actual dimensions. A
+standalone mesh can supply `"atlasSize": [64, 32]` and uses the
+integer bounding crop of its UV footprint as the increment origin.
+
+Increment cuts inside the sampled UV rectangle are kept even when
+they leave a narrow final cell. An explicit boundary outside that
+rectangle is rejected. The operation uses the same geometry and
+registration checks as row-and-column subdivision, with a maximum of
+32 cells per face axis. The receipt's `detail.texels` records the
+exact boundary indices, normalized UVs, and corresponding face
+fractions. The ordinary grid correspondence and reusable crop
+bindings stay available to further modeling edits.
+
+```sh
+ink-studio mesh-topology edge-edit sign.json texel-grid.json --object sign
+ink-studio mesh-topology edge-edit sign.json texel-grid.json --object sign --out split.json --report texel-receipt.json
+node examples/tileset-pick/texel-grid-demo.cjs texel-grid-review
 ```
 
 ## Draw surface-snapped retopology patches
