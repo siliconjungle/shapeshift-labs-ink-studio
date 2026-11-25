@@ -917,7 +917,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetGrow` | namespace |  |  |
 | `KIT.authoring.tilesetGrow.plan` | function | `(scene, request, options)` | [source](../../src/kit/p23-tileset-grow.js) |
 | `KIT.authoring.tilesetPickedSplit` | namespace |  |  |
-| `KIT.authoring.tilesetPickedSplit.decorate` | function | `(scene, row, plan)` | [source](../../src/kit/p23-tileset-picked-split.js) |
+| `KIT.authoring.tilesetPickedSplit.atlasFor` | function | `(scene, row, polygon)` | [source](../../src/kit/p23-tileset-picked-split.js) |
+| `KIT.authoring.tilesetPickedSplit.decorate` | function | `(scene, row, plan, source)` | [source](../../src/kit/p23-tileset-picked-split.js) |
 | `KIT.authoring.tilesetPickedSplit.install` | function | `(bindings, split)` | [source](../../src/kit/p23-tileset-picked-split.js) |
 | `KIT.authoring.tilesetPrimitiveGeometry` | namespace |  |  |
 | `KIT.authoring.tilesetPrimitiveGeometry.build` | function | `(id, kind, frame, size, segments)` | [source](../../src/kit/p23-tileset-primitive-geometry.js) |
