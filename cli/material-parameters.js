@@ -18,9 +18,11 @@ function inspectMaterialParameters(source, { inputs, instance, kit = require('..
   const document = openMaterialGraph(source), instances = document.instances ?? {};
   if (instance !== undefined && (!id(instance) || !own(instances, instance)))
     throw new RangeError('Unknown material instance ' + instance);
-  const overrides = instance === undefined ? undefined : instances[instance].overrides;
+  const entry = instance === undefined ? undefined : instances[instance];
+  const result = prepare(document, kit).inspect({ inputs, overrides: entry?.overrides });
+  const compared = entry && kit.KIT.procedural.materialPresets.compare(result.parameters, entry.preset);
   return { format: 'ink-studio/material-parameters', version: 1, material: document.id,
-    ...(instance !== undefined && { instance }), ...prepare(document, kit).inspect({ inputs, overrides }) };
+    ...(instance !== undefined && { instance }), ...result, ...compared };
 }
 
 function lift(graph, name, target, project) {

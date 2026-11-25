@@ -5,6 +5,7 @@ const files = require('./asset-files.js');
 const { groupReference } = require('./graph-groups.js');
 const Base = require('../src/material-base-settings.js');
 const Parameters = require('../src/material-parameters.js');
+const Presets = require('../src/material-presets.js');
 const OutputUsages = require('./material-output-usages.js');
 const Metadata = require('./material-metadata.js');
 
@@ -172,9 +173,10 @@ function lowerGraph(scope, { requireOutputs, materialBase = false } = {}) {
 }
 
 function lower(document, { requireOutputs, instance } = {}) {
-  entity(document, ['format', 'version', 'id', 'graph', 'resources', 'controls', 'instances', 'settings', 'metadata'], 'material graph');
+  entity(document, ['format', 'version', 'id', 'graph', 'resources', 'controls', 'instances', 'presets', 'settings', 'metadata'], 'material graph');
   if (!isId(document.id)) throw new TypeError('Material graph needs a stable ID');
   if (Object.hasOwn(document, 'metadata')) Metadata.validate(document.metadata);
+  Presets.validatePresets(document.presets);
   const { graph, resources = {}, settings = {}, controls = {}, instances = {} } = document;
   fields(settings, settingsKeys, 'material graph execution settings');
   const materialBase = Object.hasOwn(settings, 'base');
@@ -206,7 +208,8 @@ function lower(document, { requireOutputs, instance } = {}) {
       Parameters.checkValue(control, id, native.inputs[input].default);
   }
   for (const [id, value] of entries(instances, 'instances')) {
-    entity(value, ['overrides'], 'instance ' + id);
+    entity(value, ['overrides', 'preset'], 'instance ' + id);
+    if (Object.hasOwn(value, 'preset')) Presets.validateApplied(value.preset);
     for (const [key, override] of entries(value.overrides ?? {}, 'instance overrides')) {
       if (!Object.hasOwn(controls, key)) throw new RangeError('Unknown control ' + key + ' on instance ' + id);
       Parameters.checkValue(controls[key], key, override);

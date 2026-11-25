@@ -8,6 +8,9 @@ const { openMaterialGraph, readMaterialGraph, writeMaterialGraph } = require('./
 const { describeMaterialMetadata } = require('./material-metadata.js');
 const { inspectMaterialVisibility } = require('./material-visibility.js');
 const { editMaterialParameters, inspectMaterialParameters } = require('./material-parameters.js');
+const { editMaterialPresets, inspectMaterialPresets, exportMaterialPresets } = require('./material-presets.js');
+const MaterialPresets = require('../src/material-presets.js');
+const { publishJson } = require('./asset-files.js');
 const { searchMaterialLibrary, publishMaterialLibrary } = require('./material-library.js');
 const { describeMaterialSubgraph, editMaterialSubgraph, publishMaterialSubgraph } = require('./material-subgraphs.js');
 const { findGraphGroupUsers } = require('./graph-groups.js');
@@ -32,6 +35,7 @@ for (const options of Object.values(flags)) options.push('instance','base-contex
 const discoveryFlags = { nodes: ['json'], describe: ['json', 'example'] };
 const analysisFlags = { impact: ['root', 'json'], diff: ['adapters', 'json'], material: ['id', 'out', 'base', 'output-usages', 'metadata'],
   subgraph: ['out', 'adapters'], 'publish-subgraph': ['out', 'revision', 'adapters'],
+  'material-presets': ['out', 'instance', 'export', 'presets'],
   'material-parameters': ['out', 'instance', 'inputs', 'adapters'],
   'material-visibility': ['inputs', 'instance', 'scope'], 'material-info': ['audience'], 'material-library': ['audience', 'query', 'tag', 'offset', 'limit', 'out'] };
 const commandOptions = { ...flags, ...discoveryFlags, ...analysisFlags, ...host.commands };
@@ -148,6 +152,32 @@ async function graphCommand(pos,opt,settings) {
     if (opt.out===undefined) return send(document);
     const result=writeMaterialGraph(opt.out,document,{baseDir:path.dirname(path.resolve(file))});
     return send({file:path.resolve(opt.out),format:result.format,version:result.version,id:result.id});
+  }
+  if (mode==='material-presets') {
+    const exporting=opt.export!==undefined;
+    if (![2,3].includes(pos.length) || Object.entries(opt).some(([key,value])=>
+      !analysisFlags[mode].includes(key) || typeof value!=='string' || !value.trim()) ||
+      caseFile && (opt.instance!==undefined || exporting) ||
+      !caseFile && opt.out!==undefined || !exporting && opt.presets!==undefined ||
+      exporting && opt.instance!==undefined)
+      throw new TypeError('Use graph material-presets <material.json> [--instance ID], <material.json> <request-or-package.json> [--out material.json], or <material.json> --export presets.json [--presets ID,ID]');
+    const sourceFile=path.resolve(file), document=readMaterialGraph(sourceFile), options={kit:settings.kit};
+    if (exporting) {
+      const ids=opt.presets?.split(',').map(id=>id.trim());
+      const bundle=exportMaterialPresets(document,{...options,ids}), target=path.resolve(opt.export);
+      publishJson(target,bundle,'Choose a separate destination for the preset package');
+      return send({file:target,...bundle});
+    }
+    if (!caseFile) return send(inspectMaterialPresets(document,{...options,instance:opt.instance}));
+    const requestFile=path.resolve(caseFile);
+    if (opt.out && path.resolve(opt.out)===requestFile)
+      throw new TypeError('Choose a material output separate from the preset request or package');
+    const input=JSON.parse(fs.readFileSync(requestFile,'utf8'));
+    const request=input?.format===MaterialPresets.format ? {kind:'import',bundle:input} : input;
+    const result=editMaterialPresets(document,request,options);
+    if (!opt.out) return send(result);
+    const saved=writeMaterialGraph(opt.out,result.document,{baseDir:path.dirname(sourceFile)});
+    return send({file:path.resolve(opt.out),id:saved.id,inspector:result.inspector});
   }
   if (mode==='material-parameters') {
     if (![2,3].includes(pos.length) || Object.entries(opt).some(([key,value])=>

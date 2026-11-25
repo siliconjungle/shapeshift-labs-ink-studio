@@ -4,8 +4,6 @@ const Ink = require('../..');
 const { toGraphProject } = require('../../cli/material-graph.js');
 const files = require('../../cli/asset-files.js');
 
-const directory = path.resolve(process.argv[2] ?? 'outputs/material-exposed-parameters');
-const at = name => path.join(directory, name);
 const width = 80, height = 70;
 const shade = [], glints = [], patina = [], rim = [];
 for (let iy = 0; iy < height; iy++) for (let ix = 0; ix < width; ix++) {
@@ -98,18 +96,24 @@ const expose = { kind: 'expose', parameters: {
 const set = { kind: 'set', instance: 'kiln', values: { colorway: 'kiln', gloss: .7, age: 'aged', patina: 62, coat: 1.4 } };
 const exposed = Ink.editMaterialParameters(before, expose).document;
 const { document, inspector } = Ink.editMaterialParameters(exposed, set);
-Ink.writeMaterialGraph(at('before.material.json'), before);
-Ink.writeMaterialGraph(at('medallion.material.json'), document);
-files.json(at('expose.json'), expose);
-files.json(at('set.json'), set);
-files.json(at('reset.json'), { kind: 'reset', instance: 'kiln' });
-files.json(at('inspector.json'), inspector);
-const ready = Ink.readGraphProject(at('medallion.material.json'), { instance: 'kiln' });
-for (const artifact of ready.run().artifacts) files.write(at(artifact.file), artifact.bytes);
-files.write(at('data.js'), 'const medallion = ' + JSON.stringify({
-  graph: toGraphProject(document), scope: { inputs: document.graph.inputs, outputs: document.graph.outputs, controls: document.controls },
-  overrides: document.instances.kiln.overrides, exposeCount: Object.keys(expose.parameters).length
-}) + ';\n');
-files.write(at('toolkit.js'), Ink.bundle());
-files.write(at('demo.html'), fs.readFileSync(path.join(__dirname, 'demo.html')));
-console.log(at('demo.html'));
+if (require.main === module) {
+  const directory = path.resolve(process.argv[2] ?? 'outputs/material-exposed-parameters');
+  const at = name => path.join(directory, name);
+  Ink.writeMaterialGraph(at('before.material.json'), before);
+  Ink.writeMaterialGraph(at('medallion.material.json'), document);
+  files.json(at('expose.json'), expose);
+  files.json(at('set.json'), set);
+  files.json(at('reset.json'), { kind: 'reset', instance: 'kiln' });
+  files.json(at('inspector.json'), inspector);
+  const ready = Ink.readGraphProject(at('medallion.material.json'), { instance: 'kiln' });
+  for (const artifact of ready.run().artifacts) files.write(at(artifact.file), artifact.bytes);
+  files.write(at('data.js'), 'const medallion = ' + JSON.stringify({
+    graph: toGraphProject(document), scope: { inputs: document.graph.inputs, outputs: document.graph.outputs, controls: document.controls },
+    overrides: document.instances.kiln.overrides, exposeCount: Object.keys(expose.parameters).length
+  }) + ';\n');
+  files.write(at('toolkit.js'), Ink.bundle());
+  files.write(at('demo.html'), fs.readFileSync(path.join(__dirname, 'demo.html')));
+  console.log(at('demo.html'));
+}
+
+module.exports = { exposed };
