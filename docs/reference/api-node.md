@@ -189,6 +189,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.scanToMesh` | function | `(capture, { toolkit=require('../index.js').load(), cloud, meshStride=capture?.stride, sampleStride, materials, paintRadius=2, rgbThreshold=16, tolerance, residualLimit=30000, name='Captured surface' }={})` | [guide](../relightable-scans.md#node-api), [guide](../scan-to-mesh.md#node-api), [source](../../cli/scan-mesh.js) |
 | `node.scoreModelingBenchmarkReview` | function | `(...args)` | [source](../../index.js) |
 | `node.searchMaterialLibrary` | function | `(file, options)` | [guide](../editable-material-graph.md#describe-and-publish-material-metadata), [source](../../cli/material-library.js) |
+| `node.selectTilesetAtlas` | function | `(scene, request)` | [source](../../index.js) |
 | `node.selectTilesetComponents` | function | `(scene, request, options)` | [source](../../index.js) |
 | `node.silhouetteReview` | function | `(world,{ width=96, height=96, directions=8, pitches, yaw=world.cam.yaw, pivot=world.cam.target, time=0, view={}, columns=4, scale=1 }={})` | [source](../../cli/silhouette-review.js) |
 | `node.sizeTilesetBrush` | function | `(scene, brush, {brushScale,projectTexelsPerUnit} = {}, toolkit = require('..').load())` | [guide](../mesh-uv.md#set-brush-size-in-world-units), [source](../../cli/tileset-image.js) |

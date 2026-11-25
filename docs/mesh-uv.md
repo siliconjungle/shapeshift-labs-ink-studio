@@ -293,6 +293,40 @@ Run `node examples/tileset-pick/region-selection-demo.cjs region-demo`
 to replay a marquee, a brush addition and subtraction, inversion,
 and both conversions on the same mesh.
 
+### Select faces from a tileset rectangle
+
+Save an exact rectangle with `tileset pick` and pass it to
+`tileset select-atlas`. The query reads authored face-corner UVs from
+the mesh's pigment layout and checks the sheet assigned by each face's
+material. Faces with the same UV numbers on a different sheet are
+outside the query. A face can qualify with or without a saved stamp binding.
+
+| Mode | Face qualifies when |
+| --- | --- |
+| `match` | Its UV footprint is the picked rectangle. Rotated and reflected paint also matches. |
+| `inside` | All its UV corners lie within or on the rectangle. |
+| `touch` | Any part of its triangulated UV footprint intersects the rectangle. Edge and corner contact count. |
+
+Bounds use the first and last texel centers, like a painted stamp.
+A one-texel strip can select along a line. UV insets are read from
+the actual corners and can make a face qualify for `inside` without
+covering the full rectangle for `match`.
+
+```sh
+ink-studio tileset pick --scene wall.json --id enamel --x 6 --y 4 --width 12 --height 8 --out pick.json
+ink-studio tileset select-atlas pick.json --scene wall.json --object panel --mode touch --out faces.json
+ink-studio mesh-topology select wall.json edges-query.json --object panel --from faces.json --out edges.json
+```
+
+Set `edges-query.json` to `{"convert":"edges"}`. The atlas report
+includes the UV bounds, pigment set, and face IDs. `--out` saves a native
+mesh selection for conversion, transforms, and other topology tools.
+Call `editor.selectTilesetAtlas({object, selection, mode})` or
+`selectTilesetAtlas(scene, {object, selection, mode})` in the SDK.
+
+Run `node examples/tileset-pick/atlas-face-selection-demo.cjs atlas-demo`
+to compare all three modes on one atlas and the faces that use it.
+
 ### Create weighted tile collections
 
 Save interchangeable tiles as a version 1 collection. Give each entry
