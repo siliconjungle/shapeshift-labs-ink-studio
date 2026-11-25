@@ -493,6 +493,38 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
 
   const groupDetails=()=>Object.fromEntries([...preparedGroups].map(([name,{compiled,scope}])=>[name,describeScope(compiled,scope)]));
 
+  function describeSubgraph(target) {
+    const {scope=[],group:name,node}=fields(target,['scope','group','node'],'subgraph target');
+    if (!Array.isArray(scope) || !Array.from(scope).every(id) || (name===undefined)===(node===undefined) ||
+        !id(name ?? node))
+      throw new TypeError('Choose a group or an instance node within a subgraph scope');
+    const byPath = segments => groupTree.entries.find(item=>item.alias===segments.join('/'));
+    const owner=scope.length ? byPath(scope) : undefined;
+    if (scope.length && !owner) throw new RangeError('Unknown subgraph scope '+scope.join('/'));
+    const local=owner?.scope ?? groupTree.scope, body=owner?.spec ?? spec;
+    const selected=node===undefined ? local.get(name) :
+      Object.hasOwn(body.nodes,node) ? groupFor(local,body.nodes[node]) : undefined;
+    if (!selected) throw new RangeError('Unknown subgraph '+(name ?? node));
+    const plan=preparedGroups.get(selected.alias).plan, segments=selected.alias.split('/');
+    let file=sourceFile, start=0;
+    for (let length=1; length<=segments.length; length++) {
+      const ancestor=byPath(segments.slice(0,length));
+      if (ancestor?.file) { file=ancestor.file; start=length; }
+    }
+    const source={kind:selected.file ? 'file' : 'inline', ...(file && {file:path.resolve(file)}),
+      groups:segments.slice(start), ...(selected.document && {revision:selected.document.revision,sha256:selected.document.sha256})};
+    const outputs=Object.fromEntries(Object.entries(plan.outputs).map(([key,{type,quantity}])=>
+      [key,{type,...(quantity && {quantity})}]));
+    const result={alias:selected.alias,source,inputs:data.clone(plan.inputs),outputs};
+    if (node!==undefined) {
+      const runner=owner ? preparedGroups.get(owner.alias).compiled : compiled;
+      const call=describeScope(runner,local).nodes[node], given={...body.nodes[node].params,...body.nodes[node].inputs};
+      result.instance={node,op:call.op,inputs:Object.fromEntries(Object.entries(call.inputs).map(([key,{source}])=>
+        [key,{...source,authored:Object.hasOwn(given,key)}]))};
+    }
+    return result;
+  }
+
   function resolveBase(inputs, seedOverride) {
     const effectiveSeed=seedOverride===undefined ? seed : seedOverride;
     if (!rules) return {seed:effectiveSeed, base:base && (effectiveSeed===base.seed ? base : {...base,seed:effectiveSeed})};
@@ -768,6 +800,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
 
   return Object.freeze({
     sockets: compiled.sockets,
+    describeSubgraph,
     plan(inputs,{memory=false}={}) {
       const plan=data.clone(projectPlan), prepared=inputs===undefined ? undefined : request({inputs});
       const resolved=prepared?.inputs;

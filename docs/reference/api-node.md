@@ -50,8 +50,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.demoFiles` | function | `()` | [source](../../index.js) |
 | `node.demos` | function | `()` | [guide](../../README.md#embedding-and-custom-scene-collections), [source](../../index.js) |
 | `node.describeGraphNode` | function | `(id, settings = {})` | [guide](../headless-authoring.md#discover-registered-nodes), [source](../../cli/graph-catalog.js) |
+| `node.describeMaterialSubgraph` | function | `(source, target, options)` | [guide](../editable-material-graph.md#publish-and-edit-reusable-subgraphs), [source](../../cli/material-subgraphs.js) |
 | `node.describeRenderFrame` | function | `(world, frame)` | [guide](../browser-renderer.md#shared-rendering-contract), [guide](../browser-renderer.md#review-compatibility-before-export), [source](../../index.js) |
 | `node.diffGraphs` | function | `(before, after)` | [source](../../cli/graph-diff.js) |
+| `node.editMaterialSubgraph` | function | `(source, edit, options = {})` | [guide](../editable-material-graph.md#publish-and-edit-reusable-subgraphs), [source](../../cli/material-subgraphs.js) |
 | `node.encodeDeepEXR` | function | `(frame, options)` | [guide](../deep-openexr.md#node-api), [guide](../deep-openexr.md), [source](../../cli/deep-openexr.js) |
 | `node.encodeSceneryPack` | function | `(id, meshes)` | [source](../../cli/scenery-delivery.js) |
 | `node.encodeWav` | function | `(source, { encoding = 'pcm16', bwf } = {})` | [guide](../graph-media.md#wav-and-frame-analysis), [source](../../cli/wav.js) |
@@ -107,6 +109,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.preflightStoryDocument` | function | `(document, {story} = {})` | [source](../../cli/story-document.js) |
 | `node.prepareModelingBenchmark` | function | `(...args)` | [source](../../index.js) |
 | `node.previewTimeline` | function | `(world, { timeline = world.animationTimeline, width, height, frames, before = false, maps = ['silhouette'], view = {}, yaw, pivot } = {})` | [guide](../animation-timeline.md#library), [guide](../animation-timeline.md), [source](../../cli/animation-timeline.js) |
+| `node.publishMaterialSubgraph` | function | `(file, source, { revision = 1, baseDir = path.dirname(path.resolve(file)), ...options } = {})` | [guide](../editable-material-graph.md#publish-and-edit-reusable-subgraphs), [source](../../cli/material-subgraphs.js) |
 | `node.rasterizeTilesetBrush` | function | `(scene, brush, toolkit = require('..').load())` | [guide](../mesh-uv.md#pick-a-brush-of-neighboring-tiles), [source](../../cli/tileset-image.js) |
 | `node.readAsset` | function | `(file, options = {})` | [guide](../headless-authoring.md#glb-cutouts-and-uv-surface-stamps), [guide](../headless-authoring.md#textured-sdf-reconstruction), [source](../../index.js) |
 | `node.readAssetRevisionPart` | function | `(file, instance, placement, { onFile, decodeImage } = {})` | [source](../../cli/gltf-asset.js) |

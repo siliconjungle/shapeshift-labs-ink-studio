@@ -574,6 +574,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   graph nodes [--json]   list registered graph operations and their ports
   graph describe <op> [--json | --example]   show schema, units, limits and a runnable example
   graph material <project-or-material.json> [--id ID] [--base settings.json] [--out material.json]   open or save an editable material graph
+  graph subgraph <material.json> <request.json> [--out material.json]   inspect or edit reusable material instances
+  graph publish-subgraph <material.json> --out group.json [--revision N]   publish a reusable definition
     graph execution commands accept --instance ID for material graph files
     use --base-context context.json to supply material inheritance providers
   graph validate|plan <project.json> [--inputs values.json]   validate and describe a headless graph
@@ -740,9 +742,11 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio graph material` · `--id`, `--out`, `--base` · [source](../../cli/graph-cli.js)
 - `ink-studio graph nodes` · `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio graph plan` · `--inputs`, `--json`, `--memory`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
+- `ink-studio graph publish-subgraph` · `--out`, `--revision`, `--adapters` · [source](../../cli/graph-cli.js)
 - `ink-studio graph run` · `--inputs`, `--at`, `--seed`, `--out`, `--json`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph session` · `--protocol`, `--out`, `--workers`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph snapshot` · `--inputs`, `--at`, `--seed`, `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
+- `ink-studio graph subgraph` · `--out`, `--adapters` · [source](../../cli/graph-cli.js)
 - `ink-studio graph validate` · `--inputs`, `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph verify-pxc` · `--out`, `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio music analyze` · [source](../../cli/music-composer.js)

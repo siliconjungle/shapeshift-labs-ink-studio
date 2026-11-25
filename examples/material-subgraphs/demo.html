@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glaze library · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--ink:#f3e5c8;--muted:#aea99a;--line:#433d35;--paper:#252522;--accent:#e9b975}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#35332a,transparent 720px),#191b19;color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+main{width:min(100% - 64px,1150px);margin:auto;padding:38px 0 24px}
+header{display:flex;align-items:end;justify-content:space-between;gap:24px;margin-bottom:23px}
+header small{color:var(--accent);font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.16em}
+h1{font:500 clamp(44px,6vw,70px)/1 Georgia,serif;margin:4px 0 0;letter-spacing:-.055em}
+header p{margin:0 0 2px;color:var(--muted);max-width:320px}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+.plates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.card{width:100%;padding:11px;text-align:left;min-width:0;background:var(--paper);border:1px solid var(--line);border-radius:10px;font:inherit;color:inherit;cursor:pointer}
+.card[aria-pressed=true]{border-color:#c99b62;background:#302a22}.card:hover{border-color:var(--accent)}
+.card img{display:block;width:100%;aspect-ratio:1;object-fit:contain;image-rendering:pixelated;border:1px solid #1b1e1d}
+.caption{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:9px 4px 0}.caption b{font-size:16px}.caption small{color:var(--muted)}
+aside{padding:16px 17px;background:#20231f;border:1px solid var(--line);border-radius:10px;min-width:0}
+.line,.type-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+h2{margin:0;font:500 29px/1.1 Georgia,serif;letter-spacing:-.035em}
+h3{margin:13px 0 5px;font-size:11px;text-transform:uppercase;letter-spacing:.11em;color:var(--muted)}
+code{font-size:12px;white-space:nowrap;color:#a5c6b1}
+.swatches{display:flex;gap:4px;margin:7px 0}.swatch{flex:1;height:23px;border-radius:3px;border:1px solid #ffffff20}
+.detail{border-top:1px solid var(--line);margin-top:13px;padding-top:3px}.type-row{margin-bottom:3px}
+.source{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}.meta,.hint{color:var(--muted);font-size:12px}.meta{margin-left:5px}
+.actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+.actions button{color:var(--ink);border:1px solid #575941;background:#353b2e;border-radius:5px;padding:5px 8px;font:inherit;font-size:12px;cursor:pointer}
+.actions button:hover:not(:disabled){border-color:var(--accent)}.actions button:disabled{opacity:.42;cursor:default}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.hint{margin:11px 0 0}footer{margin-top:15px;color:var(--muted);font-size:13px}footer a{margin-right:13px}
+@media(max-width:900px){main{width:calc(100% - 36px)}.workspace{grid-template-columns:minmax(0,1fr) 290px;gap:12px}.plates{gap:8px}.caption{display:block}.caption small{display:block}}
+@media(max-width:710px){header{display:block}header p{margin-top:10px}.workspace{grid-template-columns:1fr}.caption{display:flex}.caption small{display:inline}}
+</style>
+</head>
+<body>
+<main>
+<header><div><small>Ink Studio · Material subgraphs</small><h1>Glaze library</h1></div><p>Start with two tiles from one definition. Select either tile to change its pigments or swap its motif.</p></header>
+<div class="workspace">
+<section class="plates" aria-label="Rendered instances">
+<button class="card" data-node="fernA" aria-pressed="false"><img alt=""><span class="caption"><b>Tile A</b><small></small></span></button>
+<button class="card" data-node="fernB" aria-pressed="true"><img alt=""><span class="caption"><b>Tile B</b><small></small></span></button>
+</section>
+<aside aria-label="Selected instance">
+<div class="line"><h2 id="title"></h2><code id="node"></code></div>
+<div class="detail">
+<h3>Published input</h3><div class="type-row"><b>Pigments</b><code id="input-type"></code></div>
+<div class="swatches" id="swatches" role="group" aria-label="Effective pigments"></div>
+<div id="origin" class="hint" role="status"></div>
+</div>
+<div class="detail"><h3>Published outputs</h3><div id="outputs"></div></div>
+<div class="detail"><h3>Definition</h3><a id="source" class="source" target="_blank" rel="noopener"></a><span id="revision" class="meta"></span></div>
+<div class="actions">
+<button id="override" type="button">Use ember pigments</button>
+<button id="reset" type="button">Reset pigments</button>
+<button id="replace" type="button"></button>
+</div>
+</aside>
+</div>
+<footer><a class="source" href="glaze-library.material.json">Open material graph</a> Pre-rendered by Ink</footer>
+</main>
+<script src="frames.js"></script>
+<script>
+const ids = ['fernA', 'fernB'];
+const cards = [...document.querySelectorAll('.card')];
+const get = id => document.getElementById(id);
+const state = [0, 1];
+let selected = 1;
+function show() {
+  const frame = frames[state.join('-')];
+  cards.forEach((card, index) => {
+    const item = frame[ids[index]], image = card.querySelector('img');
+    card.setAttribute('aria-pressed', String(index === selected));
+    image.src = item.image;
+    image.alt = item.alias + ' relief in ' + (item.instance.inputs.pigments.authored ? 'ember' : 'coastal') + ' glaze';
+    card.querySelector('small').textContent = item.alias + ' · ' + (item.instance.inputs.pigments.authored ? 'Override' : 'Default');
+  });
+  const item = frame[ids[selected]], pigments = item.instance.inputs.pigments;
+  get('title').textContent = 'Tile ' + 'AB'[selected];
+  get('node').textContent = item.instance.node;
+  get('input-type').textContent = item.inputs.pigments.type;
+  get('origin').textContent = pigments.authored ? 'Instance override' : 'Definition default';
+  get('swatches').replaceChildren(...pigments.value.map(color => {
+    const swatch = document.createElement('span');
+    swatch.className = 'swatch';
+    swatch.style.background = color;
+    swatch.title = color;
+    return swatch;
+  }));
+  get('outputs').replaceChildren(...Object.entries(item.outputs).map(([name, {type}]) => {
+    const row = document.createElement('div'), label = document.createElement('span'), tag = document.createElement('code');
+    row.className = 'type-row';
+    label.textContent = name;
+    tag.textContent = type;
+    row.append(label, tag);
+    return row;
+  }));
+  get('source').textContent = item.source.file.split('/').at(-1);
+  get('source').href = item.source.file;
+  get('revision').textContent = 'Revision ' + item.source.revision;
+  get('override').disabled = pigments.authored;
+  get('reset').disabled = !pigments.authored;
+  get('replace').textContent = 'Replace with ' + (item.alias === 'Fern' ? 'Sun' : 'Fern');
+}
+cards.forEach((card, index) => card.addEventListener('click', () => { selected = index; show(); }));
+get('override').addEventListener('click', () => { state[selected] |= 1; show(); });
+get('reset').addEventListener('click', () => { state[selected] &= ~1; show(); });
+get('replace').addEventListener('click', () => { state[selected] ^= 2; show(); });
+show();
+</script>
+</body>
+</html>
