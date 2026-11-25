@@ -189,14 +189,84 @@
       windingConflicts:meshWinding.conflicts(document,new Set(ids)) } };
   }
 
-  function quadSelection(doc, op, label) {
-    if (!record(op,['kind','faces','selection']) || (op.faces === undefined) === (op.selection === undefined) ||
+  function quadSelection(doc, op, label, fields = []) {
+    if (!record(op,['kind','faces','selection',...fields]) || (op.faces === undefined) === (op.selection === undefined) ||
         op.faces !== undefined && (!Array.isArray(op.faces) || !op.faces.length))
       throw new TypeError(label + ' needs face IDs or a saved face selection');
     const {ids} = K.meshTopology.select(doc,op.selection === undefined ?
       {domain:'faces',ids:op.faces} : {domain:'faces',from:op.selection});
     if (!ids.length) throw new RangeError(label + ' needs at least one selected quad');
     return ids;
+  }
+
+  function neighboringPlane(g, face, neighborId) {
+    const neighbor = g.faces.get(neighborId);
+    if (!neighbor || neighbor.id === face.id) throw new RangeError('Choose a distinct neighboring face to guide the quad');
+    const shared = g.edges.filter(edge=>[face.id,neighbor.id].every(id=>edge.uses.some(use=>use.face === id)));
+    const guideVertices = new Set(neighbor.corners.map(row=>row.vertex));
+    if (shared.length !== 1 || shared[0].uses.length !== 2 ||
+        face.corners.filter(row=>guideVertices.has(row.vertex)).length !== 2)
+      throw new RangeError('Straighten quad needs exactly one manifold edge with its guiding face');
+    const [edge] = shared;
+    const point = id=>g.vertices.get(id).position;
+    const [origin,end] = edge.vertices.map(point);
+    const along = V.sub(end,origin), axis = V.mul(along,1/V.len(along));
+    const orientation = meshFaceRegionGeometry.area(neighbor.corners.map(row=>point(row.vertex)));
+    // Keep the plane through both edge vertices even when the guide itself is warped.
+    const normal = V.mad(orientation,axis,-V.dot(orientation,axis));
+    if (V.len(normal) <= 1e-8*V.len(orientation))
+      throw new RangeError('The guiding face needs a stable orientation about the shared edge');
+    return {origin,normal,edge:edge.id,vertices:edge.vertices,neighbor:neighbor.id};
+  }
+
+  function straightenQuad(doc, op) {
+    const label = 'Straighten quad';
+    const ids = quadSelection(doc,op,label,['plane','neighbor']);
+    if ((op.plane === undefined) === (op.neighbor === undefined))
+      throw new TypeError('Straighten quad needs a mesh-local plane or a neighboring face ID');
+    if (op.neighbor !== undefined && ids.length !== 1)
+      throw new RangeError('Straighten one quad when using a neighboring face');
+    const g = incidence(doc), faces = ids.map(id=>g.faces.get(id));
+    if (faces.some(face=>face.corners.length !== 4))
+      throw new RangeError('Straighten quad needs four-corner faces');
+    const guide = op.neighbor === undefined ? null : neighboringPlane(g,faces[0],op.neighbor);
+    const input = guide ? {origin:guide.origin,normal:guide.normal} : op.plane;
+    const {origin,normal,distance} = meshComponentSnap.explicitPlane(input,label,'mesh-local');
+    const hinge = new Set(guide?.vertices), positions = new Map(), edits = [];
+    for (const face of faces) for (const {vertex} of face.corners) {
+      if (positions.has(vertex)) continue;
+      const before = g.vertices.get(vertex).position, signed = distance(before);
+      const tolerance = 32*Number.EPSILON*Math.hypot(...V.sub(before,origin));
+      const after = hinge.has(vertex) || Math.abs(signed) <= tolerance ? before : V.mad(before,normal,-signed);
+      if (!Number.isFinite(signed) || after.some(n=>!Number.isFinite(n)))
+        throw new RangeError('Straighten plane projection needs finite coordinates');
+      const moved = after.some((value,i)=>value !== before[i]);
+      positions.set(vertex,{before,after,delta:V.sub(after,before),distanceBefore:signed,distanceAfter:distance(after),moved});
+      if (moved) edits.push({id:vertex,position:after});
+    }
+    const describe = ({id:corner,vertex})=>({corner,vertex,...positions.get(vertex)});
+    const selected = new Set(ids);
+    const effect = {kind:'straighten-quad',
+      plane:{origin,normal,source:guide ? 'neighbor' : 'explicit',
+        ...(guide && {neighbor:guide.neighbor,edge:guide.edge,hinge:guide.vertices})},
+      faces:faces.map(face=>{
+        const corners = face.corners.map(describe);
+        return {face:face.id,corners,
+          maxBefore:Math.max(...corners.map(row=>Math.abs(row.distanceBefore))),
+          maxAfter:Math.max(...corners.map(row=>Math.abs(row.distanceAfter)))};
+      }),
+      adjacent:edits.length ? doc.faces.flatMap(face=>{
+        if (selected.has(face.id)) return [];
+        const corners = face.corners.filter(row=>positions.get(row.vertex)?.moved).map(describe);
+        return corners.length ? [{face:face.id,corners}] : [];
+      }) : []};
+    try {
+      return {document:edits.length ? topology.edit(doc,{vertices:edits}) : doc,links:{},effect};
+    } catch (error) {
+      if (!(error instanceof RangeError)) throw error;
+      return {document:doc,links:{},effect,blockers:[{code:'invalid-straightened-quad',
+        faces:ids,message:'Cannot straighten quad: '+error.message}]};
+    }
   }
 
   function faceTriangles(source, ids) {
@@ -503,7 +573,7 @@
       throw new TypeError('Repair needs a topology revision and 1 to 128 explicit operations');
     if (request.revision !== topology.revision(before)) throw new RangeError('Stale mesh repair revision');
     const commands = { weld, dissolve, winding, 'flip-diagonal': flipDiagonal, 'split-quad': splitQuad,
-      'join-triangles': joinTriangles, 'merge-tiles':mergeTiles };
+      'join-triangles': joinTriangles, 'merge-tiles':mergeTiles, 'straighten-quad':straightenQuad };
     const steps = [], transfers = { faces: new Map(), corners: new Map(), edges: new Map() };
     let after = before, refused = [];
     for (const [i, op] of request.operations.entries()) {
