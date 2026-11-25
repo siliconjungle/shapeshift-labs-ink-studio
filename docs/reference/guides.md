@@ -195,6 +195,7 @@ All checked-in guides, indexed by title and section headings.
 - [Typed material color corrections](../material-color-corrections.md)
 - [Consistent material controls](../material-controls.md)
 - [Two-way material conversion](../material-conversion.md)
+- [Material curves and gradients](../material-curves-gradients.md)
 - [Multi-channel material ports](../material-graph-ports.md)
 - [Seasonal and wear histories](../material-histories.md)
 - [Material image blend modes](../material-image-blend.md)

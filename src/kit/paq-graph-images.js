@@ -588,6 +588,9 @@
   const corrections = TypedImageCorrections({
     requireImage, descriptor, wrap, storage, pack, alphaAt, integerMax, convertColor, luminance
   });
+  const transfers = TypedImageTransfers({
+    requireImage, descriptor, wrap, storage, pack, alphaAt, integerMax, convertColor, luminance, sampler, dimensions, fields
+  });
   const correctionOptions = { type: 'record', default: {} };
   const sameImage = { type: 'typedImage', typeFrom: 'source' };
   function correction(name, description, type = 'typedImage', output = sameImage) {
@@ -646,6 +649,31 @@
       outputs: { value: { type: 'typedImage', typeFrom: 'background' } },
       run({ background, foreground, ...options }) { return { value: blendImage(background, foreground, options) }; }
     },
+    'image.curve': {
+      description: 'Apply an editable channel curve with named stops, cubic handles and clamp or repeat addressing.',
+      inputs: { source: 'typedImage', curve: 'record', options: correctionOptions }, outputs: { value: sameImage },
+      run({ source, curve, options }) { return { value: corrections.curve(source, curve, options) }; }
+    },
+    'image.transferPreset': {
+      description: 'Load a fresh editable curve or gradient ramp preset by stable name.',
+      inputs: { name: 'string' }, outputs: { value: 'record', kind: 'string', label: 'string' },
+      run({ name }) { return transfers.preset(name); }
+    },
+    'image.gradient': {
+      description: 'Sample an authored gradient ramp into a typed RGBA image along a UV segment.',
+      inputs: { ramp: 'record', width: 'pixelCount', height: 'pixelCount', options: correctionOptions }, outputs: { value: 'colorImage' },
+      run({ ramp, width, height, options }) { return { value: transfers.gradient(ramp, width, height, options) }; }
+    },
+    'image.gradientMap': {
+      description: 'Map a typed measurement channel through a gradient ramp while retaining image alignment and coverage.',
+      inputs: { source: 'typedImage', ramp: 'record', options: correctionOptions }, outputs: { value: 'colorImage' },
+      run({ source, ramp, options }) { return { value: transfers.gradientMap(source, ramp, options) }; }
+    },
+    'image.gradientFromImage': {
+      description: 'Sample editable gradient pins along a UV path in an input color image.',
+      inputs: { source: 'colorImage', options: correctionOptions }, outputs: { value: 'record' },
+      run({ source, options }) { return { value: transfers.gradientFromImage(source, options) }; }
+    },
     'image.levels': correction('levels', 'Map input black and white through gamma to an output range.'),
     'image.autoLevels': {
       description: 'Fit linked levels from exact percentiles of visible decoded samples and return the measured bounds.',
@@ -698,5 +726,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);
