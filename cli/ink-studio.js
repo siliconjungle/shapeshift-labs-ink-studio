@@ -1740,7 +1740,7 @@ const CMD = {
         ...require('./patch-cli.js').usage.split('\n').map(line => '  ' + line.replace(/^ink-studio /, '')),
         '  graph nodes [--json]   list registered graph operations and their ports',
         '  graph describe <op> [--json | --example]   show schema, units, limits and a runnable example',
-        '  graph material <project-or-material.json> [--id ID] [--out material.json]   open or save an editable material graph',
+        '  graph material <project-or-material.json> [--id ID] [--base settings.json] [--out material.json]   open or save an editable material graph',
         '    graph execution commands accept --instance ID for material graph files',
         '  graph validate|plan <project.json> [--inputs values.json]   validate and describe a headless graph',
         '    graph plan --memory   estimate peak raster buffers before execution',

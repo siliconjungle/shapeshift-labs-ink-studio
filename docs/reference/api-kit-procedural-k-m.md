@@ -107,6 +107,40 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.procedural.materialBands` | function | `(spec)` | [source](../../src/kit/p16-material-bands.js) |
 
+## KIT.procedural.materialBase
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.materialBase` | namespace |  |  |
+| `KIT.procedural.materialBase.fit` | function | `(source, settings)` | [source](../../src/kit/paq-material-base.js) |
+| `KIT.procedural.materialBase.measure` | function | `({ size, pixelSizeMm, pixelRatio })` | [guide](../material-base-settings.md), [source](../../src/material-base-settings.js) |
+| `KIT.procedural.materialBase.operations` | namespace |  |  |
+| `KIT.procedural.materialBase.operations["material.base"]` | namespace |  |  |
+| `KIT.procedural.materialBase.operations["material.base"].description` | value | `string = "Read the resolved shared material settings and derive pixel and physical sampling extents."` |  |
+| `KIT.procedural.materialBase.operations["material.base"].inputs` | namespace |  |  |
+| `KIT.procedural.materialBase.operations["material.base"].inputs.settings` | value | `string = "record"` |  |
+| `KIT.procedural.materialBase.operations["material.base"].outputs` | namespace |  |  |
+| `KIT.procedural.materialBase.operations["material.base"].outputs.height` | value | `string = "pixelCount"` |  |
+| `KIT.procedural.materialBase.operations["material.base"].outputs.physicalSizeMm` | value | `string = "vec2"` |  |
+| `KIT.procedural.materialBase.operations["material.base"].outputs.pixelPitchMm` | value | `string = "vec2"` |  |
+| `KIT.procedural.materialBase.operations["material.base"].outputs.samples` | value | `string = "record"` |  |
+| `KIT.procedural.materialBase.operations["material.base"].outputs.seed` | value | `string = "number"` |  |
+| `KIT.procedural.materialBase.operations["material.base"].outputs.tiling` | value | `string = "record"` |  |
+| `KIT.procedural.materialBase.operations["material.base"].outputs.value` | value | `string = "record"` |  |
+| `KIT.procedural.materialBase.operations["material.base"].outputs.width` | value | `string = "pixelCount"` |  |
+| `KIT.procedural.materialBase.operations["material.base"].run` | function | `({ settings })` | [source](../../src/kit/paq-material-base.js) |
+| `KIT.procedural.materialBase.operations["material.imageOutput"]` | namespace |  |  |
+| `KIT.procedural.materialBase.operations["material.imageOutput"].description` | value | `string = "Fit a typed image to the shared material extent, tiling and physical pixel pitch."` |  |
+| `KIT.procedural.materialBase.operations["material.imageOutput"].inputs` | namespace |  |  |
+| `KIT.procedural.materialBase.operations["material.imageOutput"].inputs.settings` | value | `string = "record"` |  |
+| `KIT.procedural.materialBase.operations["material.imageOutput"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.materialBase.operations["material.imageOutput"].outputs` | namespace |  |  |
+| `KIT.procedural.materialBase.operations["material.imageOutput"].outputs.value` | namespace |  |  |
+| `KIT.procedural.materialBase.operations["material.imageOutput"].outputs.value.type` | value | `string = "typedImage"` |  |
+| `KIT.procedural.materialBase.operations["material.imageOutput"].outputs.value.typeFrom` | value | `string = "source"` |  |
+| `KIT.procedural.materialBase.operations["material.imageOutput"].run` | function | `({ source, settings })` | [source](../../src/kit/paq-material-base.js) |
+| `KIT.procedural.materialBase.resolve` | function | `(source = {}, { seed: defaultSeed = 0 } = {})` | [guide](../material-base-settings.md#ferry-glaze-demo), [guide](../material-base-settings.md), [source](../../src/material-base-settings.js) |
+
 ## KIT.procedural.materialChannels
 
 | Member | Kind | Signature or value | Guides and source |

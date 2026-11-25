@@ -3,11 +3,12 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const files = require('./asset-files.js');
 const { groupReference } = require('./graph-groups.js');
+const Base = require('../src/material-base-settings.js');
 
 const format = 'ink-studio/material-graph';
 const version = 1;
 const projectFormat = 'ink-studio/graph-project';
-const settingsKeys = ['assetRegistry', 'exports', 'assertions', 'time', 'seed'];
+const settingsKeys = ['assetRegistry', 'exports', 'assertions', 'time', 'seed', 'base'];
 const record = value => value && [Object.prototype, null].includes(Object.getPrototypeOf(value));
 const isId = value => typeof value === 'string' && /^[a-z][\w.-]{0,99}$/i.test(value) &&
   !['__proto__', 'constructor', 'prototype'].includes(value);
@@ -90,10 +91,12 @@ function migrate(source, id) {
   };
 }
 
-function lowerGraph(scope, { requireOutputs } = {}) {
+function lowerGraph(scope, { requireOutputs, materialBase = false } = {}) {
   entity(scope, ['inputs', 'nodes', 'links', 'outputs', 'groups'], 'material graph scope');
   const { nodes, links, outputs, inputs = {}, groups = {} } = scope;
   const declaredInputs = entries(inputs, 'inputs');
+  if (materialBase && Object.hasOwn(inputs, 'materialBase'))
+    throw new TypeError('The materialBase graph input is reserved by shared base settings');
   const native = {
     nodes: Object.fromEntries(entries(nodes, 'nodes').map(([id, node]) => {
       entity(node, ['op', 'group', 'type', 'inputs', 'params'], 'node ' + id);
@@ -138,7 +141,7 @@ function lowerGraph(scope, { requireOutputs } = {}) {
     fields(from, ['input', 'node', 'port'], 'source on ' + label);
     fields(to, ['output', 'node', 'slot', 'port'], 'destination on ' + label);
     if (Object.hasOwn(from, 'input')) {
-      if (Object.keys(from).length !== 1 || !isId(from.input) || !Object.hasOwn(inputs, from.input))
+      if (Object.keys(from).length !== 1 || !isId(from.input) || !Object.hasOwn(inputs, from.input) && !(materialBase && from.input === 'materialBase'))
         throw new RangeError('Unknown or invalid input on ' + label);
     } else if (!isId(from.node) || !Object.hasOwn(nodes, from.node) ||
         Object.hasOwn(from, 'port') && !isId(from.port)) {
@@ -170,7 +173,9 @@ function lower(document, { requireOutputs, instance } = {}) {
   if (!isId(document.id)) throw new TypeError('Material graph needs a stable ID');
   const { graph, resources = {}, settings = {}, controls = {}, instances = {} } = document;
   fields(settings, settingsKeys, 'material graph execution settings');
-  const native = lowerGraph(graph, { requireOutputs });
+  const materialBase = Object.hasOwn(settings, 'base');
+  if (materialBase) Base.resolve(settings.base, { seed: settings.seed });
+  const native = lowerGraph(graph, { requireOutputs, materialBase });
   const assets = Object.fromEntries(entries(resources, 'resources').map(([id, resource]) => {
     entity(resource, ['definition'], 'resource ' + id);
     if (!record(resource.definition) || !Object.hasOwn(resource.definition, 'file'))

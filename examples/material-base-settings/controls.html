@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ferry glaze — shared material settings</title>
+<style>
+:root{color-scheme:dark;background:#121d24;color:#ebeadc;font:16px system-ui,sans-serif;--line:#35444b;--muted:#a6b7b7}
+*{box-sizing:border-box} body{margin:0 auto;padding:32px;max-width:1180px}
+header{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:27px}
+h1{font:normal clamp(36px,6vw,66px)/.95 Georgia,serif;margin:0;letter-spacing:-.065em}
+header p{color:var(--muted);margin:8px 0 0}
+main{display:grid;grid-template-columns:280px minmax(0,1fr);gap:24px}
+form{padding:18px;background:#18262d;border:1px solid var(--line);display:grid;gap:14px;align-content:start}
+label{display:grid;gap:5px;font-size:13px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.lock{display:flex;align-items:center;gap:6px;color:var(--muted)}
+input,select,button{font:inherit;border:1px solid var(--line);padding:6px 8px;border-radius:4px;color:inherit;background:#122029;min-width:0}
+input[type=checkbox]{accent-color:#8cd0b6} button{cursor:pointer} input:disabled{opacity:.5}
+button:hover{border-color:#8cd0b6}
+.previews{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+figure{margin:0;min-width:0}
+.swatch{padding:12px;background:#0b141a;border:1px solid var(--line);height:310px;display:grid;place-items:center;overflow:hidden}
+canvas{image-rendering:pixelated;display:block}
+figcaption{font-size:14px;padding:9px 0;color:var(--muted)}
+output{display:block;border-top:1px solid var(--line);margin-top:11px;padding-top:12px;color:#b9d5c8;font:13px/1.7 ui-monospace,monospace;min-height:46px}
+#error{color:#ffb3a6}
+@media(max-width:790px){main{grid-template-columns:230px minmax(0,1fr)}.previews{grid-template-columns:1fr}.swatch{height:240px}}
+@media(max-width:550px){body{padding:18px}header{align-items:start;flex-direction:column}main{display:flex;flex-direction:column}}
+</style>
+<header><div><h1>Ferry glaze</h1><p>Shared material settings</p></div>
+<label>Preset <select id="preset"><option value="wide">Wide</option><option value="locked">Locked</option><option value="reseeded">Reseeded</option><option value="custom">Custom</option></select></label></header>
+<main>
+<form id="settings">
+  <div class="row"><label>Width <input id="width" type="number" min="1" max="512" step="1"></label>
+    <label>Height <input id="height" type="number" min="1" max="512" step="1"></label></div>
+  <label class="lock"><input id="lock" type="checkbox"> Match height to width</label>
+  <label>Delivery <select id="format"><option value="8">PNG · 8-bit</option><option value="16">PNG · 16-bit</option><option value="json">Image JSON</option></select></label>
+  <label>Pixel width (mm) <input id="pitch" type="number" min=".001" max="100" step="any"></label>
+  <div class="row"><label>Pixel ratio X <input id="ratioX" type="number" min="1" max="64" step="1"></label>
+    <label>Pixel ratio Y <input id="ratioY" type="number" min="1" max="64" step="1"></label></div>
+  <div class="row"><label>U tiling <select id="edgeU"></select></label><label>V tiling <select id="edgeV"></select></label></div>
+  <label>Seed <input id="seed" type="number" step="1"></label>
+  <button id="download" type="button">Download settings</button>
+</form>
+<section aria-label="Material previews">
+  <div class="previews">
+    <figure><div class="swatch"><canvas id="pigment" aria-label="Pigment preview"></canvas></div><figcaption>Pigment</figcaption></figure>
+    <figure><div class="swatch"><canvas id="roughness" aria-label="Roughness preview"></canvas></div><figcaption>Roughness</figcaption></figure>
+  </div>
+  <output id="resolved" aria-live="polite"></output><p id="error" aria-live="polite"></p>
+</section>
+</main>
+<script src="toolkit.js"></script>
+<script src="recipe.js"></script>
+<script>
+const by = id => document.getElementById(id);
+const { materialBase, graph, graphImages } = KIT.procedural;
+const evaluator = graph.create(ferryGlaze.browserSpec);
+const pigment = { ...ferryGlaze.rgba, data: Uint8Array.from(ferryGlaze.rgba.data) };
+for (const id of ['edgeU','edgeV']) {
+  for (const mode of ['wrap','mirror','clamp','transparent']) by(id).add(new Option(mode,mode));
+}
+let independentHeight;
+function settings() {
+  const number = id => by(id).valueAsNumber;
+  return { size: { width:number('width'), height:by('lock').checked ? independentHeight : number('height'), lock:by('lock').checked },
+    output: by('format').value==='json' ? {format:'json'} : {format:'png',bitDepth:Number(by('format').value)},
+    pixelSizeMm:number('pitch'), pixelRatio:[number('ratioX'),number('ratioY')],
+    tiling:{u:by('edgeU').value,v:by('edgeV').value}, seed:number('seed') };
+}
+function setPreset(base) {
+  const {size,output,tiling,pixelRatio} = base;
+  const values = {width:size.width,height:size.height,format:output.bitDepth??'json',pitch:base.pixelSizeMm,
+    ratioX:pixelRatio[0],ratioY:pixelRatio[1],edgeU:tiling.u,edgeV:tiling.v,seed:base.seed};
+  for (const [id,value] of Object.entries(values)) by(id).value=value;
+  independentHeight=size.height;
+  by('lock').checked=size.lock;
+  render();
+}
+function paint(canvas, width, height, bytes, pitch) {
+  canvas.width=width; canvas.height=height;
+  const box=canvas.parentElement, aspect=pitch[0]/pitch[1];
+  const scale=Math.min((box.clientWidth-24)/(width*aspect),(box.clientHeight-24)/height);
+  canvas.style.width=Math.floor(width*aspect*scale)+'px';
+  canvas.style.height=Math.floor(height*scale)+'px';
+  canvas.getContext('2d').putImageData(new ImageData(Uint8ClampedArray.from(bytes),width,height),0,0);
+}
+function render() {
+  const heightField=by('height'), locked=by('lock').checked;
+  if (locked) {
+    if (!heightField.disabled) independentHeight=heightField.valueAsNumber;
+    heightField.value=by('width').value;
+  } else if (heightField.disabled) heightField.value=independentHeight;
+  heightField.disabled=locked;
+  try {
+    const base=materialBase.resolve(settings());
+    const {width,height}=base.size;
+    if (Math.max(width,height)>512) throw new RangeError('Preview supports up to 512 pixels per axis.');
+    const {pixelPitchMm,physicalSizeMm,pixelsPerMeter}=materialBase.measure(base);
+    const {outputs}=evaluator.evaluate({materialBase:base,pigment},{seed:base.seed});
+    paint(by('pigment'),width,height,graphImages.toDisplay(outputs.color).data,pixelPitchMm);
+    const mask=new Uint8Array(width*height*4);
+    outputs.roughness.raster.data.forEach((value,i)=>{
+      const byte=Math.round(255*value); mask.set([byte,byte,byte,255],i*4);
+    });
+    paint(by('roughness'),width,height,mask,pixelPitchMm);
+    const format=base.output.format==='png' ? 'PNG '+base.output.bitDepth+'-bit · '+pixelsPerMeter.join(' × ')+' px/m' : 'Image JSON';
+    by('resolved').textContent=width+' × '+height+' px · '+physicalSizeMm.map(n=>n.toFixed(1)).join(' × ')+' mm · '+format;
+    by('error').textContent='';
+    by('download').disabled=false;
+  } catch(error) {
+    by('error').textContent=error.message;
+    by('download').disabled=true;
+  }
+}
+by('preset').addEventListener('change',()=>{
+  const preset=ferryGlaze.presets[by('preset').value];
+  if(preset) setPreset(preset);
+});
+by('settings').addEventListener('input',()=>{by('preset').value='custom';render()});
+by('settings').addEventListener('submit',event=>event.preventDefault());
+by('download').addEventListener('click',()=>{
+  const url=URL.createObjectURL(new Blob([JSON.stringify(settings(),null,2)+'\n'],{type:'application/json'}));
+  const link=document.createElement('a');link.href=url;link.download='ferry-glaze-settings.json';link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+window.addEventListener('resize',render);
+setPreset(ferryGlaze.presets.wide);
+</script>
+</html>

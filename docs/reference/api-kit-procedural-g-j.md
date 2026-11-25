@@ -482,6 +482,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.procedural.graphImages` | namespace |  |  |
 | `KIT.procedural.graphImages.declare` | function | `(source, settings)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.displaySamples` | function | `(source, bitDepth, outOfRange = 'clamp')` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.format` | value | `string = "ink-studio/graph-image"` |  |
 | `KIT.procedural.graphImages.inspect` | function | `(source)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations` | namespace |  |  |

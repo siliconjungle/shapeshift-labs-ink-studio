@@ -567,7 +567,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   patch choices <journal.ndjson> <recording|run-bundle> [--out report.json] [--track input.json]
   graph nodes [--json]   list registered graph operations and their ports
   graph describe <op> [--json | --example]   show schema, units, limits and a runnable example
-  graph material <project-or-material.json> [--id ID] [--out material.json]   open or save an editable material graph
+  graph material <project-or-material.json> [--id ID] [--base settings.json] [--out material.json]   open or save an editable material graph
     graph execution commands accept --instance ID for material graph files
   graph validate|plan <project.json> [--inputs values.json]   validate and describe a headless graph
     graph plan --memory   estimate peak raster buffers before execution
@@ -730,7 +730,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio graph import-pxc` · `--out`, `--adapters`, `--using`, `--translate`, `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio graph inspect` · `--inputs`, `--at`, `--seed`, `--out`, `--output`, `--node`, `--port`, `--json`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries`, `--instance` · [source](../../cli/graph-cli.js)
 - `ink-studio graph inspect-pxc` · `--out`, `--json` · [source](../../cli/graph-cli.js)
-- `ink-studio graph material` · `--id`, `--out` · [source](../../cli/graph-cli.js)
+- `ink-studio graph material` · `--id`, `--out`, `--base` · [source](../../cli/graph-cli.js)
 - `ink-studio graph nodes` · `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio graph plan` · `--inputs`, `--json`, `--memory`, `--instance` · [source](../../cli/graph-cli.js)
 - `ink-studio graph run` · `--inputs`, `--at`, `--seed`, `--out`, `--json`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries`, `--instance` · [source](../../cli/graph-cli.js)

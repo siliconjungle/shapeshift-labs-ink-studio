@@ -16,6 +16,8 @@ const { estimateGraphMemory } = require('./graph-memory.js');
 const Assets = require('./asset-references.js');
 const { resolveTakeFile } = require('./take-document.js');
 const materialGraph = require('./material-graph.js');
+const Base = require('../src/material-base-settings.js');
+const materialImage = require('./material-image-export.js');
 
 const format = 'ink-studio/graph-project';
 const reportFormat = 'ink-studio/graph-report';
@@ -286,10 +288,16 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const groupOperators=[...graph.arrays.groupOperators,...kit.KIT.procedural.animationGraph.groupOperators];
   const project=data.freeze(data.clone(source));
   const {format:kind,version:revision,groups:definitions={},assets:assetDefinitions={},assetRegistry,exports:exportsSpec={},
-    assertions:assertionSpecs=[],time=0,seed=0,...root}=fields(project,
-    ['format','version','inputs','nodes','outputs','groups','assets','assetRegistry','exports','assertions','time','seed'],'graph project');
+    assertions:assertionSpecs=[],time=0,seed:authoredSeed=0,base:baseSpec,...root}=fields(project,
+    ['format','version','inputs','nodes','outputs','groups','assets','assetRegistry','exports','assertions','time','seed','base'],'graph project');
   if (kind!==format || revision!==version) throw new TypeError('Expected ink-studio/graph-project version 1');
-  const spec=graphSpec(root,'project graph',groupOperators);
+  const base=baseSpec===undefined ? undefined : data.freeze(Base.resolve(baseSpec,{seed:authoredSeed}));
+  const seed=base?.seed ?? authoredSeed;
+  if (base && root.inputs!==undefined) named(root.inputs,'project graph parameters');
+  if (base && Object.hasOwn(root.inputs ?? {}, 'materialBase'))
+    throw new TypeError('The materialBase graph input is reserved by shared base settings');
+  const spec=graphSpec(base ? {...root,inputs:{...root.inputs,materialBase:{type:'record',default:base}}} : root,
+    'project graph',groupOperators);
   const paths=new Set(sourceFile ? [path.resolve(sourceFile)] : []);
   const api=kit.KIT.authoring.assetReferences;
   const resolveAsset=Assets.scope(api,path.join(baseDir,'graph.json'),assetRegistry,{onFile:file=>paths.add(file)});
@@ -393,9 +401,11 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     const {output,format,encoding,type,codec,options}=fields(definition,definition?.format==='wav' ?
       ['output','format','encoding'] : definition?.format==='codec' ? ['output','format','type','codec','options'] :
       ['output','format'],'graph export '+name);
-    if (!id(output) || !Object.hasOwn(rootPlan.outputs,output) || !['png','json','atlas','wav','codec'].includes(format))
-      throw new TypeError('Graph export '+name+' needs a known output and png, json, atlas, wav or codec format');
+    if (!id(output) || !Object.hasOwn(rootPlan.outputs,output) || !['png','json','atlas','wav','codec','material-image'].includes(format))
+      throw new TypeError('Graph export '+name+' needs a known output and png, json, atlas, wav, codec or material-image format');
     const port=rootPlan.outputs[output].type, compatible=kit.KIT.procedural.graphTypes.compatible;
+    if (format==='material-image' && (!base || !['typedImage','colorImage','heightImage'].includes(port)))
+      throw new TypeError('Material image export '+name+' needs shared base settings and a typed image output');
     if ((format==='png' || format==='codec' && type==='raster') && port==='linearRaster')
       throw new TypeError('Graph image export '+name+' needs display RGB. Use color.rasterToDisplay first.');
     if ((format==='png' || format==='codec' && type==='raster') && ['typedImage','colorImage','heightImage'].includes(port))
@@ -432,7 +442,8 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     return {time:t,seed:s};
   }
   clock(time,seed);
-  const projectPlan={...header,kind:'plan',...rootPlan,time,seed,assets:assetInfo,exports,assertions:assertionSpecs,
+  const projectPlan={...header,kind:'plan',...rootPlan,time,seed,...(base && {base, ...Base.measure(base)}),
+    assets:assetInfo,exports,assertions:assertionSpecs,
     groups:Object.fromEntries([...preparedGroups].map(([name,{plan}])=>[name,plan])),
     groupDependencies:dependencyRows,hostOperations:Object.keys(extensions).sort()};
 
@@ -470,17 +481,30 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
 
   const groupDetails=()=>Object.fromEntries([...preparedGroups].map(([name,{compiled,scope}])=>[name,describeScope(compiled,scope)]));
 
+  function baseAt(seed) {
+    return seed===base?.seed ? base : {...base,seed};
+  }
+
+  function checkBaseInput(values) {
+    if (base && Object.hasOwn(values,'materialBase'))
+      throw new TypeError('Change shared material settings in base, or use the seed override');
+  }
+
   function snapshot(options={}) {
     const {inputs={},time:at=time,seed:sampleSeed=seed}=fields(options,['inputs','time','seed'],'graph snapshot options');
     clock(at,sampleSeed);
-    const values=Object.fromEntries(named(inputs,'input values').map(([name,value])=>{
+    const declared=named(inputs,'input values');
+    checkBaseInput(inputs);
+    const values=Object.fromEntries(declared.map(([name,value])=>{
       if (!Object.hasOwn(rootPlan.inputs,name)) throw new RangeError('Unknown graph input '+name);
       const type=rootPlan.inputs[name].type, types=kit.KIT.procedural.graphTypes;
       if (!types.validator(type)(value))
         throw new TypeError('Wrong input value for graph socket '+name+': expected '+types.description(type));
       return [name,value];
     }));
-    return JSON.parse(jsonBytes({format:snapshotFormat,version,projectHash,settings:{seed:sampleSeed,time:at},
+    if (base) values.materialBase=baseAt(sampleSeed);
+    return JSON.parse(jsonBytes({format:snapshotFormat,version,projectHash,
+      settings:{seed:sampleSeed,time:at,...(base && {base:values.materialBase})},
       graph:describeScope(compiled,groupTree.scope,values),
       groups:groupDetails(),
       assets:assetInfo, references:Object.fromEntries(dependencyRows.map(({group,used,...reference})=>[group,reference])),
@@ -496,7 +520,9 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     }
     for (const [name] of named(inputs,'input values'))
       if (!Object.hasOwn(rootPlan.inputs,name)) throw new RangeError('Unknown graph input '+name);
-    return {...resolved,take,inputs:compiled.parameters(snapshotInputs(inputs,data.clone))};
+    checkBaseInput(inputs);
+    const supplied=base ? {...inputs,materialBase:baseAt(s)} : inputs;
+    return {...resolved,take,inputs:compiled.parameters(snapshotInputs(supplied,data.clone))};
   }
 
   function execution() {
@@ -527,7 +553,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
 
     function done(frame,values,{time,seed,take}) {
       previous=new Map(Object.entries(values));
-      return {frame,report:{...header,time,seed,...(take!==undefined && {take}),cache:cacheReport(frame),
+      return {frame,report:{...header,time,seed,...(base && {base:values.materialBase}),...(take!==undefined && {take}),cache:cacheReport(frame),
         inputs:Object.fromEntries(Object.entries(values).map(([name,value])=>[name,describe(value)]))}};
     }
     function failed(error) {
@@ -576,7 +602,13 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     const {frame,report}=evaluate(prepared);
     const {assertions:checks,passed}=prepareFrameChecks(frame);
     const artifacts=exports.flatMap(({name,output,format,...settings})=>{
-      const value=frame.outputs[output], encoded=format==='atlas' ? encodeAtlas(name,value) : [encode(name,value,format,settings)];
+      const value=frame.outputs[output];
+      if (format==='material-image') {
+        const image=kit.KIT.procedural.materialBase.fit(value,base), delivery=base.output.format;
+        const bytes=delivery==='png' ? materialImage.png(kit.KIT.procedural,image,base) : jsonBytes(image);
+        return [{name,output,file:'artifacts/'+name+'.'+delivery,format:delivery,sha256:sha256(bytes),bytes}];
+      }
+      const encoded=format==='atlas' ? encodeAtlas(name,value) : [encode(name,value,format,settings)];
       return encoded.map(artifact=>({name,output,...artifact}));
     });
     return {outputs:frame.outputs,artifacts,report:{...report,kind:'run',passed,assertions:checks,

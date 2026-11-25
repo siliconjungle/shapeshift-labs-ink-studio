@@ -191,6 +191,7 @@ All checked-in guides, indexed by title and section headings.
 - [Lumped effort/flow networks](../lumped-networks.md)
 - [Measure physical properties of assemblies](../mass-properties.md)
 - [Match-cut finder](../match-cut.md)
+- [Shared material base settings](../material-base-settings.md)
 - [Consistent material controls](../material-controls.md)
 - [Two-way material conversion](../material-conversion.md)
 - [Multi-channel material ports](../material-graph-ports.md)
