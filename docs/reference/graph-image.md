@@ -172,6 +172,23 @@ Guides: [guide](../graph-image-types.md#make-and-convert-uniform-images), [guide
 Get the runnable example with `ink-studio graph describe image.convert --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.crop
+
+Extract a pixel or normalized source rectangle with an optional output extent.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"width":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"height":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"filter":{"type":"string","constraints":{"choices":["nearest","linear"]}},"mip":{"type":"string\|number","constraints":{"modes":["none","nearest","linear"],"min":0},"default":"none"},"mipBias":{"type":"number","unit":"mip levels","constraints":{"min":-16,"max":16},"default":0},"units":{"type":"string","constraints":{"choices":["pixels","normalized"]},"default":"pixels"},"rect":{"type":"vec4","description":"Source x, y, width and height from the texture edges."}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-transforms.md)
+
+Get the runnable example with `ink-studio graph describe image.crop --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.curve
 
 Apply an editable channel curve with named stops, cubic handles and clamp or repeat addressing.
@@ -557,6 +574,40 @@ Guides: [guide](../material-image-channels.md)
 Get the runnable example with `ink-studio graph describe image.pack --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.perspective
+
+Project the source onto a convex four-corner destination plane.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"width":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"height":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"filter":{"type":"string","constraints":{"choices":["nearest","linear"]}},"mip":{"type":"string\|number","constraints":{"modes":["none","nearest","linear"],"min":0},"default":"none"},"mipBias":{"type":"number","unit":"mip levels","constraints":{"min":-16,"max":16},"default":0},"units":{"type":"string","constraints":{"choices":["pixels","normalized"]},"default":"normalized"},"corners":{"type":"array<vec2>","constraints":{"minItems":4,"maxItems":4},"default":[[0,0],[1,0],[1,1],[0,1]]},"clip":{"type":"boolean","default":true}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-transforms.md)
+
+Get the runnable example with `ink-studio graph describe image.perspective --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.polar
+
+Convert between Cartesian images and angular strips with aspect-correct radii.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"width":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"height":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"filter":{"type":"string","constraints":{"choices":["nearest","linear"]}},"mip":{"type":"string\|number","constraints":{"modes":["none","nearest","linear"],"min":0},"default":"none"},"mipBias":{"type":"number","unit":"mip levels","constraints":{"min":-16,"max":16},"default":0},"mode":{"type":"string","constraints":{"choices":["toPolar","fromPolar"]},"default":"toPolar"},"center":{"type":"vec2","default":[0.5,0.5]},"radius":{"type":"number","unit":"shorter Cartesian axis","constraints":{"exclusiveMin":0},"default":0.5},"rotation":{"type":"number","unit":"degrees","default":0}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-transforms.md)
+
+Get the runnable example with `ink-studio graph describe image.polar --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.posterize
 
 Quantize decoded samples to tonal steps or an ordered RGB palette.
@@ -698,6 +749,23 @@ Guides: [guide](../material-image-channels.md)
 Get the runnable example with `ink-studio graph describe image.split --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.symmetry
+
+Reflect an authored side across horizontal, vertical or paired axes.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"width":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"height":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"filter":{"type":"string","constraints":{"choices":["nearest","linear"]}},"mip":{"type":"string\|number","constraints":{"modes":["none","nearest","linear"],"min":0},"default":"none"},"mipBias":{"type":"number","unit":"mip levels","constraints":{"min":-16,"max":16},"default":0},"axis":{"type":"string","constraints":{"choices":["x","y","both"]},"default":"x"},"side":{"type":"string","constraints":{"choices":["low","high"]},"default":"low"},"pivot":{"type":"vec2","constraints":{"min":0,"max":1},"default":[0.5,0.5]}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-transforms.md)
+
+Get the runnable example with `ink-studio graph describe image.symmetry --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.threshold
 
 Create a typed coverage mask from a threshold with optional feathering.
@@ -784,6 +852,23 @@ Origin: toolkit.
 Guides: [guide](../material-curves-gradients.md)
 
 Get the runnable example with `ink-studio graph describe image.transferPreset --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.transform
+
+Apply an affine matrix, scale, rotation and translation around an editable pivot.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"width":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"height":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"filter":{"type":"string","constraints":{"choices":["nearest","linear"]}},"mip":{"type":"string\|number","constraints":{"modes":["none","nearest","linear"],"min":0},"default":"none"},"mipBias":{"type":"number","unit":"mip levels","constraints":{"min":-16,"max":16},"default":0},"units":{"type":"string","constraints":{"choices":["pixels","normalized"]},"default":"pixels"},"matrix":{"type":"array<vec3>","constraints":{"minItems":2,"maxItems":2},"default":[[1,0,0],[0,1,0]]},"rotation":{"type":"number","unit":"degrees","default":0},"scale":{"type":"number\|vec2","default":1},"pivot":{"type":"vec2"},"offset":{"type":"vec2","default":[0,0]}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-transforms.md)
+
+Get the runnable example with `ink-studio graph describe image.transform --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.uniform

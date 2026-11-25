@@ -623,6 +623,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.convert"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.convert"].description` | value | `string = "Convert the channel layout, precision, color space or alpha convention of a typed image."` |  |
 | `KIT.procedural.graphImages.operations["image.convert"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.crop"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.crop"].description` | value | `string = "Extract a pixel or normalized source rectangle with an optional output extent."` |  |
+| `KIT.procedural.graphImages.operations["image.crop"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.crop"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.crop"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.crop"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.crop"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.crop"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.curve"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.curve"].description` | value | `string = "Apply an editable channel curve with named stops, cubic handles and clamp or repeat addressing."` |  |
 | `KIT.procedural.graphImages.operations["image.curve"].inputs` | namespace |  |  |
@@ -797,6 +805,22 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.pack"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.pack"].description` | value | `string = "Pack selected typed image channels and numeric constants into one image."` |  |
 | `KIT.procedural.graphImages.operations["image.pack"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.perspective"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.perspective"].description` | value | `string = "Project the source onto a convex four-corner destination plane."` |  |
+| `KIT.procedural.graphImages.operations["image.perspective"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.perspective"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.perspective"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.perspective"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.perspective"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.perspective"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.polar"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.polar"].description` | value | `string = "Convert between Cartesian images and angular strips with aspect-correct radii."` |  |
+| `KIT.procedural.graphImages.operations["image.polar"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.polar"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.polar"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.polar"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.polar"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.polar"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.posterize"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.posterize"].description` | value | `string = "Quantize decoded samples to tonal steps or an ordered RGB palette."` |  |
 | `KIT.procedural.graphImages.operations["image.posterize"].inputs` | namespace |  |  |
@@ -854,6 +878,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.split"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.split"].description` | value | `string = "Split explicitly selected native channels into named scalar images, including alpha coverage."` |  |
 | `KIT.procedural.graphImages.operations["image.split"].specialize` | function | `({ params, inputs })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.symmetry"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.symmetry"].description` | value | `string = "Reflect an authored side across horizontal, vertical or paired axes."` |  |
+| `KIT.procedural.graphImages.operations["image.symmetry"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.symmetry"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.symmetry"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.symmetry"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.symmetry"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.symmetry"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.threshold"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.threshold"].description` | value | `string = "Create a typed coverage mask from a threshold with optional feathering."` |  |
 | `KIT.procedural.graphImages.operations["image.threshold"].inputs` | namespace |  |  |
@@ -905,6 +937,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.transferPreset"].outputs.label` | value | `string = "string"` |  |
 | `KIT.procedural.graphImages.operations["image.transferPreset"].outputs.value` | value | `string = "record"` |  |
 | `KIT.procedural.graphImages.operations["image.transferPreset"].run` | function | `({ name })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.transform"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.transform"].description` | value | `string = "Apply an affine matrix, scale, rotation and translation around an editable pivot."` |  |
+| `KIT.procedural.graphImages.operations["image.transform"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.transform"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.transform"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.transform"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.transform"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.transform"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.uniform"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.uniform"].description` | value | `string = "Promote a scalar or a tuple to a typed constant image. UNORM inputs use normalized values, linear float color can be HDR."` |  |
 | `KIT.procedural.graphImages.operations["image.uniform"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
@@ -928,6 +968,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.pack` | function | `(sources, routes, target = { intent: 'data' })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.resize` | function | `(source, width, height)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.shuffle` | function | `(source, routes, target)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.spatial` | namespace |  |  |
+| `KIT.procedural.graphImages.spatial.crop` | function | `(source, options = {})` | [source](../../src/kit/paq-coordinate-sampling.js) |
+| `KIT.procedural.graphImages.spatial.perspective` | function | `(source, options = {})` | [source](../../src/kit/paq-coordinate-sampling.js) |
+| `KIT.procedural.graphImages.spatial.polar` | function | `(source, options = {})` | [source](../../src/kit/paq-coordinate-sampling.js) |
+| `KIT.procedural.graphImages.spatial.symmetry` | function | `(source, options = {})` | [source](../../src/kit/paq-coordinate-sampling.js) |
+| `KIT.procedural.graphImages.spatial.transform` | function | `(source, options = {})` | [source](../../src/kit/paq-coordinate-sampling.js) |
 | `KIT.procedural.graphImages.split` | function | `(source, channels)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.toDisplay` | function | `(source, outOfRange = 'clamp')` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.toHeight` | function | `(source, { scale, offset = 0, units = 'art-px', channel = 'luminance' } = {})` | [source](../../src/kit/paq-graph-images.js) |
