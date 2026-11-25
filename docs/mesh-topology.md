@@ -123,6 +123,11 @@ the same filter to require front-facing support in visible or through
 mode. The [view selection guide](mesh-uv.md#select-visible-or-through-the-view)
 shows both modes and how to save a reusable capture.
 
+Pass a native-grid `region` for [marquee or brush selection](mesh-uv.md#select-geometry-with-a-marquee-or-brush).
+`operation` can replace, add to, subtract from, or invert a saved
+selection. A region or combination applies its filter in the source
+domain before `convert` maps the result to incident components.
+
 ```sh
 ink-studio mesh-topology select scene.json rim-query.json --object gatehouse-portal --view view.json --out rim-edges.json
 ink-studio mesh-topology select scene.json face-query.json --object gatehouse-portal --from rim-edges.json --view view.json --out rim-faces.json

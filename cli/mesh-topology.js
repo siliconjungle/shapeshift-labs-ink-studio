@@ -25,7 +25,8 @@ function select(file, input, rest, opt, meshTopology, build) {
     query.from = read(from);
   }
   const { captureMeshTopologyVisibility, needsParticipation } = require('./mesh-topology-visibility.js');
-  const evidence = view ? captureMeshTopologyVisibility(build(file), object, read(view), { participation: needsParticipation(query?.filter) }).visibility :
+  const evidence = view ? captureMeshTopologyVisibility(build(file), object, read(view),
+    { participation: needsParticipation(query?.filter), region: query?.region }).visibility :
     visibility && read(visibility);
   return meshTopology.select(document, query, { visibility: evidence, object, part: object && rows[object].part });
 }
