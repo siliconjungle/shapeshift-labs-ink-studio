@@ -170,16 +170,13 @@ const TypedImageMorphology = ({ requireImage, descriptor, wrap, storage, alphaAt
       const u = ax(x, width), v = ay(y, height);
       return u < 0 || v < 0 ? 0 : samples[v * width + u];
     }
-    const [a, b] = method === 'scharr' ? [3 / 32, 10 / 32] : [1 / 8, 2 / 8];
     const samples = new Float64Array(width * height);
     const magnitude = new Float64Array(samples.length), coverage = new Float64Array(samples.length);
+    const gradient = [0, 0], slope = RasterDerivatives(method, read);
     for (let p = 0; p < samples.length; p++) samples[p] = sample(p);
     for (let y = 0, i = 0; y < height; y++) for (let x = 0; x < width; x++, i++) {
-      const tl = read(x - 1, y - 1), tr = read(x + 1, y - 1);
-      const bl = read(x - 1, y + 1), br = read(x + 1, y + 1);
-      const dx = a * tr + b * read(x + 1, y) + a * br - (a * tl + b * read(x - 1, y) + a * bl);
-      const dy = a * bl + b * read(x, y + 1) + a * br - (a * tl + b * read(x, y - 1) + a * tr);
-      const length = Math.hypot(dx, dy);
+      slope(x, y, gradient);
+      const length = Math.hypot(gradient[0], gradient[1]);
       if (!finite(length)) throw new RangeError('Edge derivative exceeds the finite sample range');
       magnitude[i] = length;
       const t = softness ? saturated((length - threshold) / softness) : Number(length >= threshold);

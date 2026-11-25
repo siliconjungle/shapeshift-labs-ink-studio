@@ -1,7 +1,7 @@
 /* Pixel-local layer ordering and straight-alpha compositing. */
 (function (P) {
   const R = P.raster;
-  const {dimensions, view, image, pair, byte, unit, aligned, readColor, readAlpha, coverage, remap} = P.rasterSupport;
+  const {dimensions, view, image, pair, byte, aligned, readColor, readAlpha, coverage, remap} = P.rasterSupport;
   const white = [1, 1, 1], maxLayers = 512, maxVisits = 64e6;
   const { copy, multiply, screen, overlay, hardLight, softLight, add, subtract, min, max,
     difference, exclusion } = RasterBlendModes;
@@ -78,11 +78,7 @@
       for (const hit of hits) {
         const oldAlpha = state[3];
         let front = 1;
-        if (ordering === 'height' && oldAlpha) {
-          const difference = hit.level - level + bias;
-          const t = softness ? unit(.5 + .5 * difference / softness) : +(difference >= 0);
-          front = t * t * (3 - 2 * t);
-        }
+        if (ordering === 'height' && oldAlpha) front = RasterHeightWeight(hit.level - level + bias, softness);
         composite(state, hit, front);
         if (ordering === 'height') {
           const visible = hit.alpha * (1 - oldAlpha + oldAlpha * front) / state[3];

@@ -185,6 +185,9 @@ const assetFixtures = {
 const declareColor = { op: 'image.declare', inputs: { source: rgba,
   descriptor: { intent: 'color', precision: 'unorm8', tiling: { u: 'wrap', v: 'clamp' }, sampling: 'linear' } } };
 const declareData = { op: 'image.declare', inputs: { source: mask, descriptor: { intent: 'data' } } };
+const declareHeight = { op: 'image.toHeight', inputs: { source: link('data'), scale: 2 } };
+const uniformNormal = { op: 'image.uniform', inputs: {
+  value: [.6, 0, .8], width: mask.width, height: mask.height, descriptor: { intent: 'normal' } } };
 const dynamic = {
   'image.declare': { inputs: declareColor.inputs },
   'image.uniform': { inputs: { value: .375, width: 8, height: 6,
@@ -303,6 +306,22 @@ const specifications = {
     options: { amount: 3, slope: 'downhill', filter: 'linear' } } },
   'image.multiDirectionalWarp': { nodes: { data: declareData }, inputs: { source: link('data'), map: link('data'),
     options: { axes: 2, combine: 'average', amount: 2 } } },
+  'image.heightToNormal': { nodes: { data: declareData, height: declareHeight },
+    inputs: { source: link('height'), options: { strength: 1.5, method: 'scharr' } } },
+  'image.normalDecode': { inputs: { source: rgba, options: { precision: 'unorm8', orientation: 'directx' } } },
+  'image.normalNormalize': { nodes: { normal: uniformNormal }, inputs: { source: link('normal') } },
+  'image.normalInvert': { nodes: { normal: uniformNormal }, inputs: { source: link('normal'), options: { axes: 'xy' } } },
+  'image.normalRotate': { nodes: { normal: uniformNormal }, inputs: { source: link('normal'), options: { degrees: 30 } } },
+  'image.normalOrientation': { nodes: { normal: uniformNormal },
+    inputs: { source: link('normal'), options: { orientation: 'directx', precision: 'unorm16' } } },
+  'image.normalCombine': { nodes: { normal: uniformNormal, data: declareData, height: declareHeight,
+    detail: { op: 'image.heightToNormal', inputs: { source: link('height') } } },
+    inputs: { base: link('normal'), detail: link('detail'), options: { amount: .8 } } },
+  'image.normalSpace': { nodes: { normal: uniformNormal },
+    inputs: { source: link('normal'), options: { to: 'world', frame: { normal: [0, 1, 0], tangent: [1, 0, 0] } } } },
+  'image.heightBlend': { nodes: { data: declareData, base: declareHeight,
+    raised: { op: 'image.toHeight', inputs: { source: link('data'), scale: 3 } } },
+    inputs: { base: link('base'), layer: link('raised'), options: { softness: .5 } } },
   'image.toDisplay': { nodes: { color: declareColor }, inputs: { source: link('color') } },
   'image.toRaster': { nodes: { color: declareColor }, inputs: { source: link('color') } },
   'image.inspect': { nodes: { color: declareColor }, inputs: { source: link('color') } },

@@ -521,6 +521,17 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.morphology.outline` | function | `(source, options = {})` | [source](../../src/kit/paq-distance-images.js) |
 | `KIT.procedural.graphImages.morphology.propagate` | function | `(source, nearest)` | [source](../../src/kit/paq-distance-images.js) |
 | `KIT.procedural.graphImages.morphology.signedDistance` | function | `(source, options = {})` | [source](../../src/kit/paq-distance-images.js) |
+| `KIT.procedural.graphImages.normals` | namespace |  |  |
+| `KIT.procedural.graphImages.normals.heightBlend` | function | `(baseSource, layerSource, options = {}, mask = null)` | [source](../../src/kit/paq-geometry-image-filters.js) |
+| `KIT.procedural.graphImages.normals.heightToNormal` | function | `(source, options = {})` | [source](../../src/kit/paq-geometry-image-filters.js) |
+| `KIT.procedural.graphImages.normals.normalCombine` | function | `(baseSource, detailSource, options = {}, mask = null)` | [source](../../src/kit/paq-geometry-image-filters.js) |
+| `KIT.procedural.graphImages.normals.normalDecode` | function | `(source, options = {})` | [source](../../src/kit/paq-geometry-image-filters.js) |
+| `KIT.procedural.graphImages.normals.normalInvert` | function | `(source, options = {})` | [source](../../src/kit/paq-geometry-image-filters.js) |
+| `KIT.procedural.graphImages.normals.normalNormalize` | function | `(source, options = {})` | [source](../../src/kit/paq-geometry-image-filters.js) |
+| `KIT.procedural.graphImages.normals.normalOrientation` | function | `(source, options = {})` | [source](../../src/kit/paq-geometry-image-filters.js) |
+| `KIT.procedural.graphImages.normals.normalRotate` | function | `(source, options = {})` | [source](../../src/kit/paq-geometry-image-filters.js) |
+| `KIT.procedural.graphImages.normals.normalSpace` | function | `(source, options = {}, surface = null, tangentMap = null, handednessMap = null)` | [source](../../src/kit/paq-geometry-image-filters.js) |
+| `KIT.procedural.graphImages.normals.reencode` | function | `(image, precision, policy)` | [source](../../src/kit/paq-geometry-image-filters.js) |
 | `KIT.procedural.graphImages.operations` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.anisotropicBlur"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.anisotropicBlur"].description` | value | `string = "Apply rotated Gaussian kernels with separate along and across radii."` |  |
@@ -741,6 +752,27 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.gradientMap"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.gradientMap"].outputs.value` | value | `string = "colorImage"` |  |
 | `KIT.procedural.graphImages.operations["image.gradientMap"].run` | function | `({ source, ramp, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.heightBlend"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.heightBlend"].description` | value | `string = "Blend aligned physical heights and return the shared material transition mask."` |  |
+| `KIT.procedural.graphImages.operations["image.heightBlend"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.heightBlend"].inputs.base` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.heightBlend"].inputs.layer` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.heightBlend"].inputs.mask` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.heightBlend"].inputs.mask.default` | value | `null` |  |
+| `KIT.procedural.graphImages.operations["image.heightBlend"].inputs.mask.type` | value | `string = "any"` |  |
+| `KIT.procedural.graphImages.operations["image.heightBlend"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.heightBlend"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.heightBlend"].outputs.value` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.heightBlend"].outputs.weight` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.heightBlend"].run` | function | `({ base, layer, mask, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.heightToNormal"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.heightToNormal"].description` | value | `string = "Differentiate typed height into a tangent normal using physical spacing."` |  |
+| `KIT.procedural.graphImages.operations["image.heightToNormal"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.heightToNormal"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.heightToNormal"].inputs.source` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.heightToNormal"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.heightToNormal"].outputs.value` | value | `string = "normalImage"` |  |
+| `KIT.procedural.graphImages.operations["image.heightToNormal"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.highPass"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.highPass"].description` | value | `string = "Extract signed detail by subtracting a Gaussian, optionally adding a display bias."` |  |
 | `KIT.procedural.graphImages.operations["image.highPass"].inputs` | namespace |  |  |
@@ -829,6 +861,60 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.nonuniformWarp"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.nonuniformWarp"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
 | `KIT.procedural.graphImages.operations["image.nonuniformWarp"].run` | function | `({ source, map, direction: angleMap, intensity, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.normalCombine"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.normalCombine"].description` | value | `string = "Combine aligned normal maps with reoriented, whiteout or normalized interpolation and an optional mask."` |  |
+| `KIT.procedural.graphImages.operations["image.normalCombine"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.normalCombine"].inputs.base` | value | `string = "normalImage"` |  |
+| `KIT.procedural.graphImages.operations["image.normalCombine"].inputs.detail` | value | `string = "normalImage"` |  |
+| `KIT.procedural.graphImages.operations["image.normalCombine"].inputs.mask` | alias | `Alias of KIT.procedural.graphImages.operations["image.heightBlend"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.normalCombine"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.normalCombine"].outputs` | alias | `Alias of KIT.procedural.graphImages.operations["image.heightToNormal"].outputs` |  |
+| `KIT.procedural.graphImages.operations["image.normalCombine"].run` | function | `({ base, detail, mask, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.normalDecode"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.normalDecode"].description` | value | `string = "Declare raw RGB or RGBA normal samples and their coordinate conventions."` |  |
+| `KIT.procedural.graphImages.operations["image.normalDecode"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.normalDecode"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.normalDecode"].inputs.source` | value | `string = "raster"` |  |
+| `KIT.procedural.graphImages.operations["image.normalDecode"].outputs` | alias | `Alias of KIT.procedural.graphImages.operations["image.heightToNormal"].outputs` |  |
+| `KIT.procedural.graphImages.operations["image.normalDecode"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.normalInvert"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.normalInvert"].description` | value | `string = "Reverse selected normal components in the declared coordinate space."` |  |
+| `KIT.procedural.graphImages.operations["image.normalInvert"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.normalInvert"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.normalInvert"].inputs.source` | value | `string = "normalImage"` |  |
+| `KIT.procedural.graphImages.operations["image.normalInvert"].outputs` | alias | `Alias of KIT.procedural.graphImages.operations["image.heightToNormal"].outputs` |  |
+| `KIT.procedural.graphImages.operations["image.normalInvert"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.normalNormalize"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.normalNormalize"].description` | value | `string = "Normalize normal vectors and fill zero vectors with an authored direction."` |  |
+| `KIT.procedural.graphImages.operations["image.normalNormalize"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.normalNormalize"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.normalNormalize"].inputs.source` | value | `string = "normalImage"` |  |
+| `KIT.procedural.graphImages.operations["image.normalNormalize"].outputs` | alias | `Alias of KIT.procedural.graphImages.operations["image.heightToNormal"].outputs` |  |
+| `KIT.procedural.graphImages.operations["image.normalNormalize"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.normalOrientation"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.normalOrientation"].description` | value | `string = "Convert the Y convention of a tangent normal map between OpenGL and DirectX."` |  |
+| `KIT.procedural.graphImages.operations["image.normalOrientation"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.normalOrientation"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.normalOrientation"].inputs.source` | value | `string = "normalImage"` |  |
+| `KIT.procedural.graphImages.operations["image.normalOrientation"].outputs` | alias | `Alias of KIT.procedural.graphImages.operations["image.heightToNormal"].outputs` |  |
+| `KIT.procedural.graphImages.operations["image.normalOrientation"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.normalRotate"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.normalRotate"].description` | value | `string = "Rotate normal vectors around an authored three-dimensional axis."` |  |
+| `KIT.procedural.graphImages.operations["image.normalRotate"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.normalRotate"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.normalRotate"].inputs.source` | value | `string = "normalImage"` |  |
+| `KIT.procedural.graphImages.operations["image.normalRotate"].outputs` | alias | `Alias of KIT.procedural.graphImages.operations["image.heightToNormal"].outputs` |  |
+| `KIT.procedural.graphImages.operations["image.normalRotate"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.normalSpace"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.normalSpace"].description` | value | `string = "Convert world and tangent normals through a uniform or per-texel tangent frame with handedness."` |  |
+| `KIT.procedural.graphImages.operations["image.normalSpace"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.normalSpace"].inputs.handedness` | alias | `Alias of KIT.procedural.graphImages.operations["image.heightBlend"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.normalSpace"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.normalSpace"].inputs.source` | value | `string = "normalImage"` |  |
+| `KIT.procedural.graphImages.operations["image.normalSpace"].inputs.surface` | alias | `Alias of KIT.procedural.graphImages.operations["image.heightBlend"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.normalSpace"].inputs.tangent` | alias | `Alias of KIT.procedural.graphImages.operations["image.heightBlend"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.normalSpace"].outputs` | alias | `Alias of KIT.procedural.graphImages.operations["image.heightToNormal"].outputs` |  |
+| `KIT.procedural.graphImages.operations["image.normalSpace"].run` | function | `({ source, surface, tangent, handedness, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.outline"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.outline"].description` | value | `string = "Return combined, inner and outer distance outlines with optional coverage feathering."` |  |
 | `KIT.procedural.graphImages.operations["image.outline"].inputs` | namespace |  |  |
