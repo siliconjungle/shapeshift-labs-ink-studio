@@ -243,6 +243,50 @@ one sheet. Each committed run is one undoable edit.
 Run `node examples/tileset-pick/sequence-collection-demo.cjs facade-demo`
 to render three courses from the same authored pattern at different offsets.
 
+### Randomize permitted brush orientations
+
+Add an `orientations` list to the collection draft to opt in. Include
+every paint transform you want the brush to choose, including `{}` if
+the original orientation should be eligible. The example permits the
+original paint, a quarter turn, and a horizontal reflection. Choices
+are equally likely. Equivalent transforms are rejected.
+
+```json
+"orientations": [{}, {"rotation":90}, {"flipX":true}]
+```
+
+Rotations use 0, 90, 180, or 270 degrees. `flipX` and `flipY` reflect
+the paint before rotation. The geometry keeps its original size,
+orientation, and position. Pick a smaller set for directional art such
+as lettering, bricks, or roof shingles.
+
+`tileset collection sample` uses its existing seed and key to choose a
+tile by weight, then picks its paint orientation independently. Supply
+`--seed` to `tileset collection play` when the authored sequence also
+uses orientations. Both commands save a regular selection with the
+resolved paint and choice provenance. A stamp accepts the saved file
+and includes that information in its edit receipt.
+
+```sh
+ink-studio tileset collection sample leaves.json --scene garden.json --seed 42 --key path-3 --out leaf.json
+ink-studio tileset stamp --scene garden.json --object path --face leaf-3 --selection leaf.json --out stamped.json
+ink-studio tileset collection play shingles.json --scene roof.json --step 6 --seed 42 --out shingle.json
+```
+
+For a stroke or rectangle fill, supply the saved collection and put
+`"seed":42` in the request. Placement uses the sequence when present
+and weighted sampling otherwise. Set `"collectionMode":"weighted"` to
+sample by weight even when the collection has a sequence. Weighted
+placements use their zero-based sample or cell index as the key. The
+receipt records the run seed and each placed variant and orientation.
+Choose either a collection’s orientations or an explicit `paint` in an
+edit request. In the SDK use `sampleTilesetCollection` or
+`playTilesetCollection` with the same settings, or pass `collection`
+and `seed` directly to the existing stroke and rectangle methods.
+
+Run `node examples/tileset-pick/collection-orientation-demo.cjs garden-demo`
+to compare the same tile layout with fixed and seeded paint.
+
 ### Draw and erase a run of painted faces
 
 Give a stroke a path of construction-plane `[u,v]` addresses and an

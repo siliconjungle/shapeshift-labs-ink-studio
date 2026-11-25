@@ -121,7 +121,7 @@ test('validates authored step references, playback offsets, and competing placem
   assert.equal(ink.playTilesetCollection(scene,collection,{step:Number.MAX_SAFE_INTEGER}).id,'moss');
   const editor = ink.createSceneEditor(scene);
   const stroke = {mode:'draw',id:'row',object:'wall',path:[[0,0],[1,0]],interval:1,collection};
-  assert.throws(()=>editor.planTilesetStroke({...stroke,selection:collection.entries[0].selection}),/selection or a sequenced collection/);
+  assert.throws(()=>editor.planTilesetStroke({...stroke,selection:collection.entries[0].selection}),/selection or a tile collection/);
   assert.throws(()=>editor.planTilesetStroke({...stroke,sequenceStart:Number.MAX_SAFE_INTEGER}),/across the placement/);
 });
 
@@ -201,4 +201,100 @@ test('CLI resolves a reusable pick and supplies a saved collection to a stroke a
   assert.deepEqual(preview.cells.map(cell=>cell.variant.id),['worn','moss','spare']);
   assert.equal(read('facade.json').topologyMeshes.wall.bindings.length,6);
   assert.equal(read('course.json').topologyMeshes.wall.bindings.length,3);
+});
+
+const orientations = [{},{rotation:90},{rotation:90,flipX:true},{flipY:true}];
+
+test('samples only permitted paint transforms and leaves weighted tile choice on its own seed stream',()=>{
+  const base = ink.createTilesetCollection(scene,request);
+  const collection = ink.createTilesetCollection(scene,{...request,orientations});
+  const allowed = new Set(collection.orientations.map(paint=>JSON.stringify(paint)));
+  const seen = new Set();
+  for (let index=0;index<64;index++) {
+    const options = {seed:-37,key:'leaf '+index};
+    const ordinary = ink.sampleTilesetCollection(scene,base,options);
+    const choice = ink.sampleTilesetCollection(scene,collection,options);
+    assert.equal(choice.id,ordinary.id);
+    assert.equal(choice.probability,ordinary.probability);
+    assert.deepEqual(choice.selection,{...ordinary.selection,paint:choice.paint,
+      collectionChoice:{collection:collection.id,entry:choice.id,...options}});
+    assert.deepEqual(ink.sampleTilesetCollection(scene,JSON.parse(JSON.stringify(collection)),options),choice);
+    const paint = JSON.stringify(choice.paint);
+    assert(allowed.has(paint));
+    seen.add(paint);
+  }
+  assert.equal(seen.size,allowed.size);
+  for (const bad of [null,[],new Array(1),[{rotation:45}],[{flipX:1}],[{},{rotation:180,flipX:true,flipY:true}]])
+    assert.throws(()=>ink.createTilesetCollection(scene,{...request,orientations:bad}),/paint transform|orientation|Paint rotation/);
+});
+
+test('retains weighted choices and their UV permutations in an undoable rectangle edit',()=>{
+  const collection = ink.createTilesetCollection(scene,{...request,orientations});
+  const editor = ink.createSceneEditor(scene);
+  const before = editor.snapshot();
+  const paint = {mode:'fill',id:'ground',object:'ground',from:[0,0],to:[3,2],collection,seed:-37};
+  const plan = editor.planTilesetRectangle(paint);
+  assert.deepEqual(plan.weighted,{collection:collection.id,seed:paint.seed});
+  assert(plan.canCommit);
+  assert.deepEqual(editor.applyTilesetRectangle(paint),plan);
+  const planted = editor.snapshot(), row = editor.meshTopology('ground');
+  for (const cell of plan.cells) {
+    const choice = ink.sampleTilesetCollection(scene,collection,{seed:paint.seed,key:String(cell.index)});
+    assert.deepEqual(cell.variant,{id:choice.id,key:choice.key,paint:choice.paint});
+    const reference = ink.createSceneEditor(scene).planTilesetFace({object:'ref',face:'ref',selection:
+      collection.entries.find(entry=>entry.id===choice.id).selection,paint:choice.paint});
+    const saved = row.bindings.find(binding=>binding.element===cell.face);
+    assert.deepEqual(saved.data.collectionChoice,choice.selection.collectionChoice);
+    assert.deepEqual(saved.data.paint,choice.paint);
+    assert.deepEqual(row.document.faces.find(face=>face.id===cell.face).corners.map(corner=>corner.uv),
+      reference.corners.map(corner=>corner.uv));
+  }
+  assert.equal(editor.history().undo.at(-1),'Fill ground');
+  editor.undo();
+  assert.deepEqual(editor.snapshot(),before);
+  editor.redo();
+  assert.deepEqual(editor.snapshot(),planted);
+  assert.throws(()=>editor.planTilesetRectangle({...paint,seed:undefined}),/safe integer seed/);
+  assert.throws(()=>editor.planTilesetRectangle({...paint,paint:{}}),/or an explicit paint orientation/);
+});
+
+test('keeps authored sequence steps while independently seeding paint for each stroke position',()=>{
+  const collection = ink.createTilesetCollection(scene,{...request,sequence:authored,orientations});
+  const editor = ink.createSceneEditor(scene);
+  const draw = {mode:'draw',id:'course',object:'course',interval:1,path:[[0,0],[1,0],[0,0],[0,2]],
+    collection,seed:52,sequenceStart:8};
+  assert.throws(()=>editor.planTilesetStroke({...draw,seed:undefined}),/safe integer seed/);
+  const report = editor.planTilesetStroke(draw);
+  assert.deepEqual(report.sequence,{collection:collection.id,start:8,length:authored.length,seed:52});
+  assert.equal(report.samples[2].status,'repeated-position');
+  for (const sample of report.samples.filter(sample=>sample.status==='draw')) {
+    const step = draw.sequenceStart+sample.index;
+    const {id,sequenceIndex,paint} = ink.playTilesetCollection(scene,collection,{step,seed:52});
+    assert.deepEqual(sample.variant,{id,step,sequenceIndex,paint});
+  }
+  assert.deepEqual(editor.applyTilesetStroke(draw),report);
+  assert.deepEqual(editor.meshTopology('course').bindings.map(binding=>binding.data.collectionChoice.step),[8,9,11,12]);
+  const forced = editor.planTilesetStroke({...draw,id:'weighted',collectionMode:'weighted',sequenceStart:undefined});
+  assert.deepEqual(forced.weighted,{collection:collection.id,seed:52});
+  assert(forced.samples.every(row=>row.variant?.id !== 'spare'));
+});
+
+test('CLI plays a seeded step into a saved selection and stamp receipt with its paint and provenance',t=>{
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(),'ink-tile-orientation-'));
+  t.after(()=>fs.rmSync(cwd,{force:true,recursive:true}));
+  const cli = path.resolve(__dirname,'../cli/ink-studio.js');
+  const collection = ink.createTilesetCollection(scene,{...request,sequence:authored,orientations:[{rotation:90,flipX:true}]});
+  for (const [name,doc] of [['scene.json',scene],['collection.json',collection]])
+    fs.writeFileSync(path.join(cwd,name),JSON.stringify(doc));
+  const run = (...args)=>JSON.parse(execFileSync(process.execPath,[cli,'tileset',...args],{cwd,encoding:'utf8'}));
+  const pick = run('collection','play','collection.json','--scene','scene.json','--step','7','--seed','-89','--out','pick.json');
+  assert.equal(pick.id,'spare');
+  const receipt = run('stamp','--scene','scene.json','--object','wall','--face','leaf','--selection','pick.json','--out','wall.json');
+  assert.deepEqual(receipt.source.paint,{rotation:90,flipX:true,flipY:false});
+  assert.deepEqual(receipt.source.collectionChoice,{collection:collection.id,entry:'spare',seed:-89,step:7,sequenceIndex:2});
+  assert.deepEqual(receipt.source.collectionChoice,pick.selection.collectionChoice);
+  const face = JSON.parse(fs.readFileSync(path.join(cwd,'wall.json'),'utf8')).topologyMeshes.wall;
+  assert.deepEqual(face.bindings[0].data,receipt.source);
+  const zero = ['collection','sample','collection.json','--scene','scene.json','--key','tile','--out','zero-pick.json','--seed'];
+  assert.deepEqual(run(...zero,'-0'),run(...zero,'0'));
 });

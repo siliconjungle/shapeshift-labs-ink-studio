@@ -42,6 +42,18 @@
       pigmentUV:paint ? TilesetSelection.paintCorners(uvs,paint) : uvs};
   }
 
+  function readCollectionChoice(choice) {
+    const {collection,entry,seed,key,step,sequenceIndex} = choice ?? {};
+    const index = value=>Number.isSafeInteger(value) && value>=0;
+    const text = value=>typeof value === 'string' && Boolean(value.trim());
+    if (!choice || Object.getPrototypeOf(choice) !== Object.prototype ||
+        ![collection,entry].every(text) || !Number.isSafeInteger(seed) ||
+        (key === undefined ? !index(step) || !index(sequenceIndex) || sequenceIndex>step :
+          !text(key) || step !== undefined || sequenceIndex !== undefined))
+      throw new TypeError('A collection pick needs its entry, seed, and key or sequence step');
+    return {collection,entry,seed,...(key === undefined ? {step,sequenceIndex} : {key})};
+  }
+
   function prepare(scene, request, {projectTexelsPerUnit} = {}, cellSize) {
     const {object,part,face,selection,origin,right,up,planeAt,snapGrid=false,
       texelsPerUnit,brushScale=1,material:requestedMaterial,paint:requestedPaint,uvInset,worldSize,materialDefinition} = request ?? {};
@@ -66,9 +78,14 @@
       throw new TypeError('Grid snapping needs a construction plane placement');
     const plane = A.constructionPlane;
     const frame = planeAt === undefined ? plane.resolve({origin,right,up}) : plane.forScene(scene);
-    const paint = requestedPaint === undefined ? undefined : TilesetSelection.paintOrientation(requestedPaint);
+    const choice = selection.collectionChoice === undefined ? undefined : readCollectionChoice(selection.collectionChoice);
+    if (choice && (selection.paint === undefined || requestedPaint !== undefined))
+      throw new TypeError('Use the recorded paint orientation with a seeded collection pick');
+    const rawPaint = requestedPaint === undefined ? selection.paint : requestedPaint;
+    const paint = rawPaint === undefined ? undefined : TilesetSelection.paintOrientation(rawPaint);
     const texelBounds = uvInset === undefined ? undefined : TilesetSelection.uvMapping(asset,crop,uvInset).texelBounds;
     const {source,pigmentUV} = cropSource(asset,crop,texelBounds,paint);
+    if (choice) source.collectionChoice = choice;
     const material = requestedMaterial ?? 'tileset/'+crop.tileset;
     if (materialDefinition !== undefined && (!materialDefinition || Object.getPrototypeOf(materialDefinition) !== Object.prototype ||
         materialDefinition.id !== material || materialDefinition.texture?.tileset !== crop.tileset))

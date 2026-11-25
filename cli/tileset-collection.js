@@ -7,7 +7,7 @@ const {publishJson} = require('./asset-files.js');
 function command([action,file,...rest], options, toolkit) {
   const {scene,out,seed,key,step} = options;
   const sampling = action === 'sample', playing = action === 'play';
-  const allowed = ['scene',...(action === 'inspect' ? [] : ['out']),...(sampling ? ['seed','key'] : []),...(playing ? ['step'] : [])];
+  const allowed = ['scene',...(action === 'inspect' ? [] : ['out']),...(sampling ? ['seed','key'] : []),...(playing ? ['step','seed'] : [])];
   if (!['create','inspect','sample','play'].includes(action) || rest.length ||
       ![file,scene].every(value => typeof value === 'string' && value.trim()) ||
       Object.keys(options).some(option => !allowed.includes(option)) ||
@@ -17,11 +17,14 @@ function command([action,file,...rest], options, toolkit) {
     throw new RangeError('Write a separate tile collection output file');
   if (sampling && (typeof seed !== 'string' || !/^-?\d+$/.test(seed)))
     throw new TypeError('Use an integer --seed and a nonempty --key');
+  if (playing && seed !== undefined && (typeof seed !== 'string' || !/^-?\d+$/.test(seed)))
+    throw new TypeError('Use an integer --seed');
   if (playing && step !== undefined && (typeof step !== 'string' || !/^\d+$/.test(step)))
     throw new TypeError('Use a nonnegative integer --step');
   const read = input => JSON.parse(fs.readFileSync(input,'utf8'));
   const collections = toolkit.KIT.authoring.tilesetCollections;
-  const settings = sampling ? {seed:Number(seed),key} : playing ? {step:Number(step ?? 0)} : undefined;
+  const numericSeed = seed === undefined ? undefined : Number(seed);
+  const settings = sampling ? {seed:numericSeed,key} : playing ? {step:Number(step ?? 0),seed:numericSeed} : undefined;
   const result = collections[action](read(scene),read(file),settings);
   if (out) publishJson(out,sampling || playing ? result.selection : result,'A different tile collection output already exists at '+out);
   process.stdout.write(JSON.stringify(result,null,2)+'\n');

@@ -879,8 +879,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetCollections` | namespace |  |  |
 | `KIT.authoring.tilesetCollections.create` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-collections.js) |
 | `KIT.authoring.tilesetCollections.inspect` | function | `(scene, document)` | [source](../../src/kit/p23-tileset-collections.js) |
-| `KIT.authoring.tilesetCollections.play` | function | `(scene, document, {step=0} = {})` | [source](../../src/kit/p23-tileset-collections.js) |
-| `KIT.authoring.tilesetCollections.prepareSequence` | function | `(scene, document)` | [source](../../src/kit/p23-tileset-collections.js) |
+| `KIT.authoring.tilesetCollections.play` | function | `(scene, document, {step=0,seed} = {})` | [source](../../src/kit/p23-tileset-collections.js) |
+| `KIT.authoring.tilesetCollections.prepareSequence` | function | `(scene, document, {seed} = {})` | [source](../../src/kit/p23-tileset-collections.js) |
+| `KIT.authoring.tilesetCollections.prepareWeighted` | function | `(scene, document, {seed} = {})` | [source](../../src/kit/p23-tileset-collections.js) |
 | `KIT.authoring.tilesetCollections.sample` | function | `(scene, document, {seed,key} = {})` | [source](../../src/kit/p23-tileset-collections.js) |
 | `KIT.authoring.tilesetEyedrop` | namespace |  |  |
 | `KIT.authoring.tilesetEyedrop.inspect` | function | `(scene, row, {object,face,brushSize=false} = {})` | [source](../../src/kit/p23-tileset-eyedrop.js) |
