@@ -70,7 +70,7 @@ For repeatable stamp grids, brick bonds, crops and course labels, see [Material 
 
 For per-cell map controls, independent seeds and overlap ordering, see [Map-driven Tile Sampler](material-tile-sampler.md).
 
-For projected 2D and 3D signed shapes, terrain alignment and material bake maps, see [SDF Shape Splatter](material-shape-splatter.md).
+For projected 2D and 3D signed shapes, terrain alignment and material bake maps, see [SDF Shape Splatter](material-shape-splatter.md). For stamp selection, inspection and UV mapping, see [Scatter mappers](material-scatter-mappers.md).
 
 ## Convert color to relief
 

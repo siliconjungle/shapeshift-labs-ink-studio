@@ -40,6 +40,8 @@
 
 The bake stores one visible surface per texel. It supports up to one million texels and enforces a trace budget based on overlaps, subpixel samples and the requested step limit. Bounded volumes need a finite signed distance field with an accurate containing box. Use `KIT.procedural.graphImages.shapeSplatter(width, height, columns, rows, shapes, volumes, maps, options, seed, time)` for direct baking.
 
+Use the bundle on the `surface` port with [Scatter mappers](material-scatter-mappers.md) for per-stamp masking, recoloring, inspection, and geometry edits.
+
 ## Silt & Stone demo
 
 ```sh

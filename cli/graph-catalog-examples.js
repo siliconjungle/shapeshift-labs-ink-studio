@@ -185,6 +185,9 @@ const assetFixtures = {
 const declareColor = { op: 'image.declare', inputs: { source: rgba,
   descriptor: { intent: 'color', precision: 'unorm8', tiling: { u: 'wrap', v: 'clamp' }, sampling: 'linear' } } };
 const declareData = { op: 'image.declare', inputs: { source: mask, descriptor: { intent: 'data' } } };
+const scatterExample={op:'image.shapeSplatter',inputs:{width:16,height:12,columns:3,rows:2,
+  options:{scale:.35,seed:40}}};
+const scatterSubset={op:'image.scatterMask',inputs:{source:link('scatter','surface'),options:{instanceIds:[1,3,5]}}};
 const floodExample = { op: 'image.floodRegions', inputs: { source: link('data'), options: { border: 'wrap', seed: 12 } } };
 const declareHeight = { op: 'image.toHeight', inputs: { source: link('data'), scale: 2 } };
 const uniformNormal = { op: 'image.uniform', inputs: {
@@ -214,6 +217,18 @@ const dynamic = {
     volumes:{op:'data.collect',inputs:{source:link('library'),keys:['stone']}}
   },inputs:{width:24,height:18,columns:3,rows:2,volumes:link('volumes'),
     shapes:[{type:'star',tips:4,innerRadius:.2}],options:{seed:39,scale:[.29,.19,.29],rotationJitter:[12,34,16]}}},
+  'image.scatterSurface': {nodes:{scatter:scatterExample},inputs:{
+    ...Object.fromEntries(['instanceId','shapeId','uv','coverage','normal','layout'].map(port=>[port,link('scatter',port)])),
+    height:link('scatter')}},
+  'image.scatterMask': {nodes:{scatter:scatterExample},inputs:scatterSubset.inputs},
+  'image.scatterColor': {nodes:{scatter:scatterExample,subset:scatterSubset},inputs:{
+    source:link('scatter','surface'),selection:link('subset','selection'),options:{value:{mode:'replace',value:'#32b7a1'}}}},
+  'image.scatterGrayscale': {nodes:{scatter:scatterExample},inputs:{
+    source:link('scatter','surface'),selection:{shapeIds:[1]},options:{value:{mode:'replace',value:.6}}}},
+  'image.scatterInspect': {nodes:{scatter:scatterExample},inputs:{
+    source:link('scatter','surface'),options:{instanceId:1}}},
+  'image.scatterEdit': {nodes:{scatter:scatterExample,subset:scatterSubset},
+    inputs:{selection:link('subset','selection'),options:{action:'replace',shapeId:1}}},
   'image.noise': { nodes:{ clock:{op:'anim.clock',inputs:{options:{range:[0,4]}}} },
     inputs: { family:'ridged',width:16,height:12,time:link('clock'),
     options:{ seed:34,scale:1.25,tileOffset:[.25,0],nonSquareExpansion:true,carrier:'simplex',

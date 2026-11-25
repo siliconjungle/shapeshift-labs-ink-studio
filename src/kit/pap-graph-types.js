@@ -163,6 +163,7 @@
     regionField: value => K.procedural.graphImages.regions.valid(value),
     shape2d: value => K.procedural.shapeLibrary.validShape(value),
     shapeLibrary: value => K.procedural.shapeLibrary.valid(value),
+    scatterSurface: value => K.procedural.graphImages.scatterMappers.valid(value),
     reliefHeight: value => value === null || scalarRaster(value) ||
       K.procedural.graphImages.valid(value, 'height') && value.descriptor.units === 'art-px',
     materialChannels: value => K.procedural.materialChannels.valid(value),
@@ -214,6 +215,7 @@
     regionField: ['versioned flood region field'],
     shape2d: ['editable signed planar shape'],
     shapeLibrary: ['versioned signed shape library'],
+    scatterSurface: ['aligned signed scatter surface maps'],
     reliefHeight: ['height in art pixels'],
     materialChannels: ['material channel packet'],
     cameraGrid: ['camera grid with view and viewport', 'record']

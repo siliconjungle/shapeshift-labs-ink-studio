@@ -210,6 +210,7 @@ All checked-in guides, indexed by title and section headings.
 - [Named noise in material graphs](../material-named-noise.md)
 - [Material-point passes and impacts](../material-point-impacts.md)
 - [Portable material response recipes](../material-response.md)
+- [Scatter mappers](../material-scatter-mappers.md)
 - [Editable material shape library](../material-shape-library.md)
 - [SDF Shape Splatter](../material-shape-splatter.md)
 - [Material Tile Generator](../material-tile-generator.md)
