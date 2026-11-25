@@ -25,14 +25,10 @@
     if (edge.uses.length !== 1) return blocked([{reason:'edge-is-not-a-boundary'}]);
 
     // Opposite edge traversal gives the new face compatible winding.
-    const {face:parent,from,to} = edge.uses[0];
-    const shared = [to,from].map(corner=>g.vertices.get(g.corners.get(corner).vertex));
-    const [start,end] = shared;
-    const along = V.sub(end.position,start.position), width = Math.hypot(...along);
+    const use = meshEdgeFlowData.openUse(g,edge), {width,outward} = meshEdgeFlowData.openEdgeFrame(g,use);
+    const shared = [use.a,use.b].map(corner=>g.vertices.get(corner.vertex));
+    const [start] = shared;
     if (!width) return blocked([{reason:'edge-has-no-span'}]);
-    const points = g.faces.get(parent).corners.map(corner=>g.vertices.get(corner.vertex).position);
-    const normal = meshFaceRegionGeometry.area(points);
-    const outward = V.cross(normal,along);
     const length = Math.hypot(...outward);
     if (!length) return blocked([{reason:'edge-has-no-outward-direction'}]);
     const frame = A.constructionPlane.tilt(scene,{object,edge:id,from:start.id,degrees:angle,referenceUp:V.mul(outward,1/length)});
