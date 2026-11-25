@@ -332,22 +332,37 @@ function stampCommand(action, args, options, toolkit, projectTexelsPerUnit, open
   for (const [key,field] of [['texels-per-unit','texelsPerUnit'],['brush-scale','brushScale']]) {
     if (options[key] !== undefined) request[field] = numberOption(options,key);
   }
-  const settings = {projectTexelsPerUnit};
+  return publishFaceEdit(editor,request,{projectTexelsPerUnit},output,'planTilesetFace','placeTilesetFace');
+}
+
+function strokeCommand([file,...rest], options, projectTexelsPerUnit, openEditor) {
+  const {scene,out} = options;
+  const name = value=>typeof value === 'string' && value.trim();
+  if (rest.length || ![file,scene].every(name) || out !== undefined && !name(out) ||
+      Object.keys(options).some(key=>!['scene','out'].includes(key)))
+    throw new TypeError('Use tileset stroke <stroke.json> --scene <scene.json> [--out <new-scene.json>]');
+  const input = path.resolve(scene), output = out && sceneOutput(input,out,file);
+  const editor = openEditor(input), request = JSON.parse(fs.readFileSync(path.resolve(file),'utf8'));
+  return publishFaceEdit(editor,request,{projectTexelsPerUnit},output,'planTilesetStroke','applyTilesetStroke');
+}
+
+function publishFaceEdit(editor, request, settings, output, plan, apply) {
   let report;
   if (output) {
     try {
-      report = editor.placeTilesetFace(request,settings);
+      report = editor[apply](request,settings);
       files.publishJson(output,editor.snapshot(),'A different scene already exists at '+output);
     } catch (error) {
       if (!error.report) throw error;
       report = error.report;
       process.exitCode = 1;
     }
-  } else report = editor.planTilesetFace(request,settings);
+  } else report = editor[plan](request,settings);
   process.stdout.write(JSON.stringify(report,null,2)+'\n');
 }
 
 function command([action, ...args], options, toolkit, projectTexelsPerUnit, openEditor) {
+  if (action === 'stroke') return strokeCommand(args,options,projectTexelsPerUnit,openEditor);
   if (action === 'stamp' || action === 'place') return stampCommand(action,args,options,toolkit,projectTexelsPerUnit,openEditor);
   if (['resize','resample','swap'].includes(action))
     return require('./tileset-canvas.js').command(action,args,options,openEditor);

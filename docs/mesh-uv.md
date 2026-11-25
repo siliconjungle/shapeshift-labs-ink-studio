@@ -155,6 +155,65 @@ and `brushScale`. One undo removes the placement and its source binding.
 Run `node examples/tileset-pick/place-face-demo.cjs tile-placement-demo` to
 place painted masonry and trim and inspect their retained source references.
 
+### Draw and erase a run of painted faces
+
+Give a stroke a path of construction-plane `[u,v]` addresses and an
+`interval` in scene units. Sampling starts at the first address and
+continues at fixed distances around bends. The endpoint is sampled
+when it lands on the interval. The saved grid increments determine
+the physical length of each path segment. Set `snapGrid:true` to
+round the sampled positions using the plane's stored rounding mode.
+A stroke accepts up to 4,096 waypoints and 4,096 samples.
+
+Save a draw request such as the following in `draw.json`. The selection
+is the version 1 JSON from `tileset pick`.
+
+```json
+{
+  "mode": "draw",
+  "id": "course",
+  "object": "entrance",
+  "interval": 1,
+  "path": [[0, 0], [5, 0]],
+  "selection": {
+    "format": "ink-studio/tileset-selection",
+    "version": 1,
+    "tileset": "masonry",
+    "x": 0, "y": 0, "width": 16, "height": 16
+  }
+}
+```
+
+Each draw sample stamps the lower-left corner of an editable polygon
+with its own stable face ID derived from the stroke ID and sample
+index. A repeated position within the stroke is skipped. Draw also
+accepts the stamp's `material`, `texelsPerUnit`, and `brushScale`
+settings. Both modes accept `part` to check the target mesh part.
+
+For erase, use the same path fields with `"mode":"erase"` and omit
+the draw brush fields. Each sample checks the authored polygons of the
+named mesh for a coplanar tile face under the point. On a rectangular
+face the left and lower edges count as hits. Misses, repeated hits, and
+ambiguous overlapping faces are reported and skipped. Erase removes
+hit polygons, their tile bindings, and vertices that cease to be used.
+Erasing the last polygon removes the mesh entry. A stroke that would
+remove the construction plane's anchored edge requires review.
+
+```sh
+ink-studio tileset stroke draw.json --scene gatehouse-tiles.json
+ink-studio tileset stroke draw.json --scene gatehouse-tiles.json --out drawn.json
+ink-studio tileset stroke erase.json --scene drawn.json --out opening.json
+```
+
+Omit `--out` for a dry run. The report lists sample distances and
+positions, chosen faces, conflicts, topology revisions, and the source
+changes. A conflicting draw leaves the input untouched. The CLI
+writes each applied stroke as a new scene revision. In Node, call
+`editor.planTilesetStroke(request)` or `editor.applyTilesetStroke(request)`.
+One call to `editor.undo()` reverses the full stroke and its dependent
+changes. Run `node examples/tileset-pick/face-stroke-demo.cjs stroke-demo`
+to replay a draw, an erase, and a one-step undo.
+
 ### Extract a crop as a reusable tileset
 
 Use an exact texel rectangle or a saved `tileset pick` selection.

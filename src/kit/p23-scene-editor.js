@@ -514,6 +514,33 @@
       return document.pending() ? write() : document.transact('Place tile '+report.face,write);
     }
 
+    function stageTilesetStroke(request, options) {
+      const before = snapshot(), {row,remove,report} = A.tilesetStrokes.plan(before,request,options);
+      if (!row && !remove) return {report};
+      const topologyMeshes = {...before.topologyMeshes};
+      if (remove) delete topologyMeshes[report.object];
+      else topologyMeshes[report.object] = row;
+      const patch = {topologyMeshes};
+      const problems = DIO.check({...before,...patch},buildEnv).filter(problem=>problem.level === 'error');
+      return problems.length ? {report:freeze({...report,canCommit:false,problems})} : {patch,remove,report};
+    }
+
+    function planTilesetStroke(request, options) {
+      return stageTilesetStroke(request,options).report;
+    }
+
+    function applyTilesetStroke(request, options) {
+      const {patch,remove,report} = stageTilesetStroke(request,options);
+      if (!report.canCommit) throw Object.assign(new RangeError('Tile face stroke needs review'),{report});
+      if (!patch) return report;
+      const write = () => document.batchSession(() => {
+        if (remove) document.setEnvironment({topologyMeshes:null});
+        document.setEnvironment(patch);
+        return report;
+      });
+      return document.pending() ? write() : document.transact((report.mode === 'draw' ? 'Draw ' : 'Erase ')+report.id,write);
+    }
+
     function meshTopology(object, part) {
       const meshes = snapshot().topologyMeshes ?? {};
       const mesh = Object.hasOwn(meshes, object) ? meshes[object] : null;
@@ -947,7 +974,7 @@
       setTilesetGrid,
       setTilesetTexelsPerUnit,
       constructionPlane, setConstructionPlane, planConstructionOrigin, snapConstructionOrigin,
-      planTilesetFace, placeTilesetFace,
+      planTilesetFace, placeTilesetFace, planTilesetStroke, applyTilesetStroke,
       planTilesetCanvas,
       transformTilesetCanvas,
       tilesetDependencies, planTilesetRevision, editTilesetRevision,

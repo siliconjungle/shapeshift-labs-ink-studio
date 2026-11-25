@@ -69,6 +69,10 @@ same journal as solid and pixel edits. The edit returns correspondence,
 displaced bindings and invalidated material bakes.
 [Mesh topology transactions](mesh-topology.md#edit-topology-in-a-scene-transaction)
 
+Use `planTilesetStroke(request, options)` to preview a run of painted
+faces and `applyTilesetStroke(request, options)` to draw or erase the
+run in one journal entry. [Tile stroke requests and CLI](mesh-uv.md#draw-and-erase-a-run-of-painted-faces)
+
 ## Brushes and local rebuilds
 
 Use `paintShadowBand(stroke, { pbrMaterial })` to append a stroke to a [named PBR diffuse ramp](pbr-materials.md#paint-a-pbr-shadow-band).
