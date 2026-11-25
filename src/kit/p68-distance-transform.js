@@ -3,18 +3,21 @@
   const P = K.procedural,
     integer = (n, min, max) => Number.isSafeInteger(n) && n >= min && n <= max;
 
-  function sweep(field, owners, size, spacings) {
-    const capacity = Math.max(...size), source = new Float64Array(capacity),
+  function sweep(field, owners, size, spacings, wrapped) {
+    const capacity = Math.max(...size.map((count, axis) => wrapped[axis] ? count * 3 : count)),
+      source = new Float64Array(capacity),
       sourceOwners = owners ? new Int32Array(capacity) : null,
       sites = new Int32Array(capacity), boundaries = new Float64Array(capacity + 1);
     let stride = 1;
     for (const [axis, count] of size.entries()) {
       const step = spacings[axis] ** 2, block = count * stride;
+      // Compute the envelope of three copies and write only the middle period.
+      const offset = wrapped[axis] ? count : 0, span = count + 2 * offset;
       for (let start = 0; start < field.length; start += block) for (let lane = 0; lane < stride; lane++) {
         const base = start + lane;
         let last = -1;
-        for (let p = 0; p < count; p++) {
-          const i = base + p * stride, level = field[i];
+        for (let p = 0; p < span; p++) {
+          const i = base + (offset ? p % count : p) * stride, level = field[i];
           source[p] = level;
           if (sourceOwners) sourceOwners[p] = owners[i];
           if (!Number.isFinite(level)) continue;
@@ -31,9 +34,9 @@
         }
         if (last < 0) continue;
         let selected = 0;
-        for (let p = 0; p < count; p++) {
+        for (let p = offset; p < offset + count; p++) {
           while (boundaries[selected + 1] < p) selected++;
-          const q = sites[selected], i = base + p * stride;
+          const q = sites[selected], i = base + (p - offset) * stride;
           field[i] = source[q] + step * (p - q) ** 2;
           if (sourceOwners) owners[i] = sourceOwners[q];
         }
@@ -43,14 +46,17 @@
   }
 
   function distanceTransform(mask, {
-    size, spacing = 1, signed = false, indices = true, maxCells = 3000000
+    size, spacing = 1, signed = false, indices = true, maxCells = 3000000, wrap = false
   } = {}) {
     const dimensions = size?.length, spacings = typeof spacing === 'number' ? Array(dimensions || 0).fill(spacing) : spacing,
+      wrapped = typeof wrap === 'boolean' ? Array(dimensions || 0).fill(wrap) : wrap,
       cells = Array.isArray(size) ? size.reduce((product, n) => product * n, 1) : Infinity;
     if (
       !Array.isArray(size) || (dimensions !== 2 && dimensions !== 3) || !size.every(n => integer(n, 1, 8192)) ||
       !Array.isArray(spacings) || spacings.length !== dimensions ||
       !spacings.every(v => Number.isFinite(v) && v >= 1e-6 && v <= 1e6) ||
+      !Array.isArray(wrapped) || wrapped.length !== dimensions ||
+      !Array.from(wrapped).every(value => typeof value === 'boolean') ||
       !integer(maxCells, 1, 6000000) || !Number.isSafeInteger(cells) || cells > maxCells ||
       (!Array.isArray(mask) && !ArrayBuffer.isView(mask)) || mask.length !== cells ||
       typeof signed !== 'boolean' || typeof indices !== 'boolean'
@@ -68,8 +74,8 @@
       if (inside) inside[i] = on ? Infinity : 0;
       if (secondary) secondary[i] = on ? -1 : i;
     }
-    sweep(outside, nearest, size, spacings);
-    if (inside) sweep(inside, secondary, size, spacings);
+    sweep(outside, nearest, size, spacings, wrapped);
+    if (inside) sweep(inside, secondary, size, spacings, wrapped);
     const distance = new Float64Array(cells);
     for (let i = 0; i < cells; i++) {
       if (inside && occupied[i]) {

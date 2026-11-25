@@ -50,6 +50,8 @@ For editable handles, ramp pins and image-driven transfers, see [Material curves
 
 For spatial filtering, signed detail and edge reconstruction, see [Typed material blur, sharpen, and antialias](material-image-filters.md).
 
+For nearest seeds, tile seams and mask shapes, see [Typed material distance, edges, and morphology](material-image-morphology.md).
+
 ## Convert color to relief
 
 The `fx.relight` height socket accepts typed height in `art-px` and existing uncolored scalar rasters. A connection from a known RGB source fails graph validation. For dynamically sourced images, the socket validates their value before relighting. Convert deliberately with `image.toHeight`.

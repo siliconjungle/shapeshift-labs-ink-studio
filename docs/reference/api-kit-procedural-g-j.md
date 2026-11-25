@@ -350,7 +350,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.geometry.closestTrianglePoint` | function | `(p, t)` | [source](../../src/kit/p02-procedural-mesh.js) |
 | `KIT.procedural.geometry.convexPerimeter` | function | `(outline, {offset = 0, drift = [0,0], below = 0, above = 0, miterLimit = Infinity} = {})` | [source](../../src/kit/pay-inclined-perimeter.js) |
 | `KIT.procedural.geometry.delaunay` | function | `(input, { constraints = [], maxChecks = 16000000, maxFlips = 30000 } = {})` | [source](../../src/kit/p48-delaunay.js) |
-| `KIT.procedural.geometry.distanceTransform` | function | `(mask, { size, spacing = 1, signed = false, indices = true, maxCells = 3000000 } = {})` | [source](../../src/kit/p68-distance-transform.js) |
+| `KIT.procedural.geometry.distanceTransform` | function | `(mask, { size, spacing = 1, signed = false, indices = true, maxCells = 3000000, wrap = false } = {})` | [source](../../src/kit/p68-distance-transform.js) |
 | `KIT.procedural.geometry.dualContour` | function | `(field,bounds,options)` | [source](../../src/kit/p75-regular-dual-surfaces.js) |
 | `KIT.procedural.geometry.dualGrid` | function | `(field, rawBounds, { method = 'dualContour', cell = 0.12, iso = 0, normal, refine = 2, maxCells = 250000, maxSamples = 3800000, latticeBounds, ownedEdges, topology = true, captureField = false, crossingKeys = false } = {})` | [source](../../src/kit/p75-regular-dual-surfaces.js) |
 | `KIT.procedural.geometry.fitExteriorOutline` | function | `({outline,required=null})` | [source](../../src/kit/paw-recessed-profile.js) |
@@ -513,6 +513,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.filters.variableBlur` | function | `(source, radiusMap, options = {})` | [source](../../src/kit/paq-filter-images.js) |
 | `KIT.procedural.graphImages.format` | value | `string = "ink-studio/graph-image"` |  |
 | `KIT.procedural.graphImages.inspect` | function | `(source)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.morphology` | namespace |  |  |
+| `KIT.procedural.graphImages.morphology.dilate` | function | `(source, options = {})` | [source](../../src/kit/paq-distance-images.js) |
+| `KIT.procedural.graphImages.morphology.distance` | function | `(source, options = {})` | [source](../../src/kit/paq-distance-images.js) |
+| `KIT.procedural.graphImages.morphology.edgeDetect` | function | `(source, options = {})` | [source](../../src/kit/paq-distance-images.js) |
+| `KIT.procedural.graphImages.morphology.erode` | function | `(source, options = {})` | [source](../../src/kit/paq-distance-images.js) |
+| `KIT.procedural.graphImages.morphology.outline` | function | `(source, options = {})` | [source](../../src/kit/paq-distance-images.js) |
+| `KIT.procedural.graphImages.morphology.propagate` | function | `(source, nearest)` | [source](../../src/kit/paq-distance-images.js) |
+| `KIT.procedural.graphImages.morphology.signedDistance` | function | `(source, options = {})` | [source](../../src/kit/paq-distance-images.js) |
 | `KIT.procedural.graphImages.operations` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.anisotropicBlur"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.anisotropicBlur"].description` | value | `string = "Apply rotated Gaussian kernels with separate along and across radii."` |  |
@@ -627,6 +635,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.declare"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.declare"].description` | value | `string = "Attach a verified image contract to a legacy raster using a literal descriptor."` |  |
 | `KIT.procedural.graphImages.operations["image.declare"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.dilate"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.dilate"].description` | value | `string = "Grow a typed mask by an exact Euclidean radius with per-axis border handling."` |  |
+| `KIT.procedural.graphImages.operations["image.dilate"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.dilate"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.dilate"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.dilate"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.dilate"].outputs.value` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.dilate"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.directionalBlur"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.directionalBlur"].description` | value | `string = "Average along a centered line with subpixel samples and a clockwise angle."` |  |
 | `KIT.procedural.graphImages.operations["image.directionalBlur"].inputs` | namespace |  |  |
@@ -635,6 +651,33 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.directionalBlur"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.directionalBlur"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
 | `KIT.procedural.graphImages.operations["image.directionalBlur"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.distance"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.distance"].description` | value | `string = "Measure exact nearest-seed distance and return original seed coordinates and a validity mask."` |  |
+| `KIT.procedural.graphImages.operations["image.distance"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.distance"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.distance"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.distance"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.distance"].outputs.nearest` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.distance"].outputs.valid` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.distance"].outputs.value` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.distance"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.edgeDetect"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.edgeDetect"].description` | value | `string = "Measure Sobel or Scharr gradient magnitude and return a thresholded typed mask."` |  |
+| `KIT.procedural.graphImages.operations["image.edgeDetect"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.edgeDetect"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.edgeDetect"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.edgeDetect"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.edgeDetect"].outputs.magnitude` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.edgeDetect"].outputs.value` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.edgeDetect"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.erode"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.erode"].description` | value | `string = "Shrink a typed mask by an exact Euclidean radius with per-axis border handling."` |  |
+| `KIT.procedural.graphImages.operations["image.erode"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.erode"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.erode"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.erode"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.erode"].outputs.value` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.erode"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.exposure"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.exposure"].description` | value | `string = "Apply exposure stops in linear light, retaining HDR in floating linear images."` |  |
 | `KIT.procedural.graphImages.operations["image.exposure"].inputs` | namespace |  |  |
@@ -741,6 +784,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.levels"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.levels"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
 | `KIT.procedural.graphImages.operations["image.levels"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.outline"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.outline"].description` | value | `string = "Return combined, inner and outer distance outlines with optional coverage feathering."` |  |
+| `KIT.procedural.graphImages.operations["image.outline"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.outline"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.outline"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.outline"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.outline"].outputs.inner` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.outline"].outputs.outer` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.outline"].outputs.value` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.outline"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.pack"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.pack"].description` | value | `string = "Pack selected typed image channels and numeric constants into one image."` |  |
 | `KIT.procedural.graphImages.operations["image.pack"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
@@ -752,6 +805,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.posterize"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.posterize"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
 | `KIT.procedural.graphImages.operations["image.posterize"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.propagate"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.propagate"].description` | value | `string = "Copy original typed source samples through a nearest-seed coordinate image."` |  |
+| `KIT.procedural.graphImages.operations["image.propagate"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.propagate"].inputs.nearest` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.propagate"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.propagate"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.propagate"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.propagate"].run` | function | `({ source, nearest })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.radialBlur"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.radialBlur"].description` | value | `string = "Blur by rotating or zooming around an authored image center."` |  |
 | `KIT.procedural.graphImages.operations["image.radialBlur"].inputs` | namespace |  |  |
@@ -782,6 +843,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.shuffle"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.shuffle"].description` | value | `string = "Reorder, repeat or replace channels of one typed image."` |  |
 | `KIT.procedural.graphImages.operations["image.shuffle"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.signedDistance"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.signedDistance"].description` | value | `string = "Measure positive distance outside and negative distance inside a thresholded selection."` |  |
+| `KIT.procedural.graphImages.operations["image.signedDistance"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.signedDistance"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.signedDistance"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.signedDistance"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.signedDistance"].outputs.value` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.signedDistance"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.split"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.split"].description` | value | `string = "Split explicitly selected native channels into named scalar images, including alpha coverage."` |  |
 | `KIT.procedural.graphImages.operations["image.split"].specialize` | function | `({ params, inputs })` | [source](../../src/kit/paq-graph-images.js) |

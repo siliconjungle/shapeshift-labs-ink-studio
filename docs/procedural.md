@@ -2734,11 +2734,13 @@ OKLab (`lab`) or OKLCh (`lch`) interpolation. It provides normalized
 
 For independent OKLCh channel curves, two-color recipes, role assignment, reference transfer and animated palette paths, see [`KIT.palette`](palette-recipes.md).
 
-`geometry.distanceTransform(mask, {size, spacing, signed, indices})`
+`geometry.distanceTransform(mask, {size, spacing, signed, indices, wrap})`
 finds exact center-to-center Euclidean distances in a 2D or 3D binary
 grid. Store X as the fastest-moving axis. In signed mode occupied
 centers measure a negative distance to the nearest vacant center.
-Use the optional indices to retrieve the corresponding sample. Empty
+Use the optional indices to retrieve the corresponding sample. Set `wrap` to
+`true` for all axes or specify a boolean for each axis. Periodic owners still
+refer to the original lattice. Empty
 feature sets have infinite distance. `materials.outline` uses the same
 calculation to produce separate inset and outer ink coverage.
 

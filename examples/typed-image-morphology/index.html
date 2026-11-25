@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seam Garden · Ink Studio</title>
+<style>
+  :root { color-scheme:dark; --ground:#161e26; --paper:#202e36; --line:#415755; --text:#f3ead7;
+    --muted:#bac9c4; --gold:#edc891; font:16px/1.45 system-ui,sans-serif; }
+  * { box-sizing:border-box; }
+  body { margin:0; color:var(--text); background:radial-gradient(ellipse at 22% -24%,#374f54,var(--ground) 63%); }
+  main { max-width:1190px; margin:auto; padding:35px 34px; }
+  header { display:flex; justify-content:space-between; align-items:end; gap:14px; margin-bottom:17px; }
+  h1 { margin:3px 0 6px; font:normal clamp(3rem,8vw,5rem)/.96 Georgia,serif; letter-spacing:-.045em; }
+  h2 { margin:0 0 12px; font:normal 1.55rem Georgia,serif; }
+  p,figcaption,label,dt { color:var(--muted); margin:0; }
+  .kicker,small { color:var(--gold); font:600 .73rem ui-monospace,monospace; letter-spacing:.10em; text-transform:uppercase; }
+  a { color:var(--text); text-underline-offset:4px; }
+  .layout { display:grid; grid-template-columns:minmax(0,2.2fr) minmax(275px,1fr); gap:15px; align-items:start; }
+  figure,aside { border:1px solid var(--line); background:var(--paper); margin:0; min-width:0; }
+  .view { position:relative; }
+  .view canvas, .source canvas { display:block; width:100%; height:auto; image-rendering:pixelated; background:#15252e; }
+  .view canvas { cursor:crosshair; }
+  .guides { position:absolute; inset:0; pointer-events:none; }
+  .guides::before, .guides::after { content:''; position:absolute; opacity:.72; }
+  .guides::before { left:50%; height:100%; border-left:1px dashed #d9b98e; }
+  .guides::after { top:50%; width:100%; border-top:1px dashed #d9b98e; }
+  #probe { width:9px; height:9px; position:absolute; transform:translate(-50%,-50%); outline:1px solid #262431;
+    border:1px solid white; pointer-events:none; }
+  figcaption { display:flex; justify-content:space-between; gap:8px; border-top:1px solid var(--line);
+    padding:8px 10px; font-size:.8rem; }
+  aside { padding:15px; }
+  label { display:block; font-size:.84rem; margin-bottom:8px; }
+  select,input[type=number] { display:block; width:100%; padding:5px 7px; margin-top:2px; font:inherit; color:var(--text);
+    background:#15252e; border:1px solid var(--line); border-radius:2px; }
+  input { accent-color:var(--gold); }
+  .pair { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .source { margin-top:10px; }
+  .source canvas { max-height:112px; object-fit:contain; }
+  dl { margin:10px 0 0; display:grid; gap:4px; }
+  dl div { display:grid; grid-template-columns:minmax(96px,.85fr) 1fr; gap:6px; align-items:baseline; }
+  dt { font-size:.8rem; }
+  dd { margin:0; font:.82rem/1.45 ui-monospace,monospace; overflow-wrap:anywhere; }
+  [hidden] { display:none!important; }
+  #error { color:#ffba99; font-size:.81rem; }
+  :focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+  @media(max-width:780px) { main { padding:24px 14px; } header { display:block; } header a { display:inline-block; margin-top:6px; }
+    .layout { grid-template-columns:1fr; } }
+</style>
+<main>
+  <header>
+    <div><div class="kicker">Ink Studio · Material graphs</div><h1>Seam Garden</h1>
+      <p>Compare distance, propagation and mask shapes across a repeating inlay.</p></div>
+    <a href="seam-garden.material.json">Editable material graph</a>
+  </header>
+  <div class="layout">
+    <figure>
+      <div class="view"><canvas id="tiled" width="224" height="144" aria-label="Four repeated tiles. Click a texel to inspect its nearest seed."></canvas>
+        <div class="guides" id="guides"></div><div id="probe"></div></div>
+      <figcaption><span id="caption"></span><span>2 × 2 repeat · 112 × 72 texels per tile</span></figcaption>
+    </figure>
+    <aside>
+      <h2>Tile controls</h2>
+      <label>Operation <select id="operation"></select></label>
+      <div class="pair">
+        <label>Horizontal border <select id="border-u"></select></label>
+        <label>Vertical border <select id="border-v"></select></label>
+        <label>Distance units <select id="units"><option value="pixels">Pixels</option><option value="normalized">Normalized</option></select></label>
+        <label id="radius-field" hidden>Radius · px <input id="radius" type="number" value="3" min="0" max="24" step="0.5"></label>
+      </div>
+      <label><input id="seams" type="checkbox" checked> Show seam guides</label>
+      <figure class="source"><canvas id="seeds" width="112" height="72" aria-label="Original color seeds"></canvas><figcaption>Original seeds</figcaption></figure>
+      <dl aria-label="Inspected texel">
+        <div><dt>Selected texel</dt><dd id="texel"></dd></div>
+        <div><dt>Nearest seed</dt><dd id="owner"></dd></div>
+        <div><dt>Distance</dt><dd id="distance"></dd></div>
+        <div><dt>Signed distance</dt><dd id="signed"></dd></div>
+      </dl>
+      <p id="error" role="status"></p>
+    </aside>
+  </div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="garden.js"></script>
+<script>
+  const get = id => document.getElementById(id);
+  const graph = KIT.procedural.graph.create(gardenGraph()), sources = gardenImages();
+  const tiled = get('tiled'), view = tiled.getContext('2d');
+  let probe = [gardenWidth, gardenProbe[1]], latest, options;
+  for (const [name,label] of Object.entries(gardenOps)) get('operation').add(new Option(label,name));
+  for (const control of ['border-u','border-v']) for (const name of ['wrap','clamp','mirror','transparent'])
+    get(control).add(new Option(name,name));
+  const imageData = raster => new ImageData(new Uint8ClampedArray(raster.data),raster.width,raster.height);
+  function inspect() {
+    const [x,y] = probe, u = x % gardenWidth, v = y % gardenHeight, i = v * gardenWidth + u;
+    const coordinate = Array.from(latest.nearest.raster.data.slice(i * 2,i * 2 + 2));
+    const units = options.distanceSettings.units === 'pixels' ? 'px' : 'norm';
+    const format = value => Number(value.toFixed(4)) + ' ' + units;
+    get('texel').textContent = '(' + u + ', ' + v + ')';
+    get('owner').textContent = coordinate[0] < 0 ? '—' : '(' + coordinate.join(', ') + ')';
+    get('distance').textContent = format(latest.distanceField.raster.data[i]);
+    get('signed').textContent = format(latest.signedField.raster.data[i]);
+    get('probe').style.left = (x + .5) / tiled.width * 100 + '%';
+    get('probe').style.top = (y + .5) / tiled.height * 100 + '%';
+  }
+  function render() {
+    try {
+      const operation = get('operation').value;
+      options = gardenOptions({ border:{u:get('border-u').value,v:get('border-v').value},
+        units:get('units').value,radius:Number(get('radius').value) });
+      latest = graph.evaluate({...sources,...options}).outputs;
+      const frame = imageData(latest[operation]);
+      for (const y of [0,gardenHeight]) for (const x of [0,gardenWidth]) view.putImageData(frame,x,y);
+      get('seeds').getContext('2d').putImageData(imageData(latest.seedPreview),0,0);
+      get('caption').textContent = gardenOps[operation];
+      get('radius-field').hidden = !['dilation','erosion','outline'].includes(operation);
+      get('guides').hidden = !get('seams').checked;
+      inspect();
+      get('error').textContent = '';
+    } catch (error) { get('error').textContent = error.message; }
+  }
+  tiled.addEventListener('pointerdown', event => {
+    const rect = tiled.getBoundingClientRect();
+    probe = [event.clientX-rect.left,event.clientY-rect.top].map((n,i) => {
+      const count = i ? tiled.height : tiled.width;
+      return Math.max(0,Math.min(count - 1,Math.floor(n * count / (i ? rect.height : rect.width))));
+    });
+    if (latest) inspect();
+  });
+  for (const id of ['operation','border-u','border-v','units','radius','seams']) get(id).addEventListener('change',render);
+  render();
+</script>
+</html>
