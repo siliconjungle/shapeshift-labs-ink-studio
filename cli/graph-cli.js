@@ -209,9 +209,10 @@ async function graphCommand(pos,opt,settings) {
       instance:opt.instance,scope:opt.scope?.split('/')}));
   }
   if (mode==='material-info' || mode==='material-library') {
-    if (pos.length!==2 || Object.entries(opt).some(([key,value])=>
+    const missingMaterial=mode==='material-info'&&pos.length!==2;
+    if (missingMaterial||pos.length>2 || Object.entries(opt).some(([key,value])=>
       !analysisFlags[mode].includes(key) || typeof value!=='string' || !value.trim()))
-      throw new TypeError('Use graph material-info <material.json> [--audience workspace|publication] or graph material-library <registry.json> [--audience NAME] [--query TEXT] [--tag TAG] [--out directory]');
+      throw new TypeError('Use graph material-info <material.json> [--audience workspace|publication] or graph material-library [registry.json] [--audience NAME] [--query TEXT] [--tag TAG] [--out directory]');
     if (mode==='material-info') return send(describeMaterialMetadata(file,{audience:opt.audience}));
     const {audience,query,tag,out}=opt;
     const options={kit:settings.kit,audience,query,tag,

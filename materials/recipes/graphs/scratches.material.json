@@ -1,0 +1,1090 @@
+{
+  "format": "ink-studio/material-graph",
+  "version": 1,
+  "id": "scratches",
+  "graph": {
+    "inputs": {
+      "resolution": {
+        "definition": {
+          "type": "number",
+          "default": 128
+        }
+      },
+      "seed": {
+        "definition": {
+          "type": "number",
+          "default": 41
+        }
+      },
+      "relief": {
+        "definition": {
+          "type": "number",
+          "default": 1.4
+        }
+      },
+      "density": {
+        "definition": {
+          "type": "number",
+          "default": 0.64
+        }
+      },
+      "angle": {
+        "definition": {
+          "type": "number",
+          "default": -24
+        }
+      },
+      "length": {
+        "definition": {
+          "type": "number",
+          "default": 1.06
+        }
+      }
+    },
+    "nodes": {
+      "scratchStretchParts": {
+        "op": "data.record",
+        "inputs": {
+          "item1": 1
+        }
+      },
+      "scratchStretch": {
+        "op": "data.collect",
+        "inputs": {
+          "keys": [
+            "item0",
+            "item1"
+          ]
+        }
+      },
+      "scoreMarksOptions": {
+        "op": "data.record",
+        "inputs": {
+          "samples": 2,
+          "color": "#ffffff",
+          "gutter": [
+            0,
+            0
+          ],
+          "jitter": {
+            "position": [
+              0.59,
+              0.76
+            ],
+            "size": [
+              0.38,
+              0.38
+            ],
+            "rotation": 12
+          }
+        }
+      },
+      "scoreMarksControls": {
+        "op": "data.record",
+        "inputs": {}
+      },
+      "scoreMarks": {
+        "op": "image.tileSampler",
+        "inputs": {
+          "columns": 5,
+          "rows": 20,
+          "stamps": [
+            {
+              "type": "stroke",
+              "points": [
+                [
+                  0.04,
+                  0.47
+                ],
+                [
+                  0.43,
+                  0.59
+                ],
+                [
+                  0.95,
+                  0.52
+                ]
+              ],
+              "width": 0.036
+            },
+            {
+              "type": "stroke",
+              "points": [
+                [
+                  0.07,
+                  0.55
+                ],
+                [
+                  0.28,
+                  0.48
+                ],
+                [
+                  0.91,
+                  0.41
+                ]
+              ],
+              "width": 0.024
+            },
+            {
+              "type": "polygon",
+              "points": [
+                [
+                  0.028,
+                  0.42
+                ],
+                [
+                  0.42,
+                  0.37
+                ],
+                [
+                  0.82,
+                  0.46
+                ],
+                [
+                  0.99,
+                  0.47
+                ],
+                [
+                  0.81,
+                  0.52
+                ],
+                [
+                  0.45,
+                  0.43
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      "scoreMarksCoverageSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "scoreMarksCoverage": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "mask",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "brushLinesOptions": {
+        "op": "data.record",
+        "inputs": {
+          "tiling": "wrap",
+          "extent": [
+            31,
+            48
+          ],
+          "wander": 0.18
+        }
+      },
+      "brushLines": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "directional"
+        }
+      },
+      "coldSteel": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#2a3546"
+              ],
+              [
+                0.3333333333333333,
+                "#56677c"
+              ],
+              [
+                0.6666666666666666,
+                "#838f9e"
+              ],
+              [
+                1,
+                "#b1b6bf"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "exposedEdges": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#526070"
+              ],
+              [
+                0.3333333333333333,
+                "#9eb3c1"
+              ],
+              [
+                0.6666666666666666,
+                "#d0dfde"
+              ],
+              [
+                1,
+                "#f7e6ce"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "scoredMetal": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "copy"
+        }
+      },
+      "scoredGroovesInput": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "scoredGrooves": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": -1,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "scoredReliefBase": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "scoredReliefField": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "scoredReliefDetail": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": 0.19,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "scoredRelief": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "add",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "metalness": {
+        "op": "image.curve",
+        "inputs": {
+          "curve": {
+            "stops": [
+              [
+                0,
+                0.82
+              ],
+              [
+                1,
+                0.92
+              ]
+            ],
+            "interpolation": "smooth"
+          }
+        }
+      },
+      "materialHeight": {
+        "op": "image.toHeight",
+        "inputs": {
+          "units": "art-px"
+        }
+      },
+      "tangentNormal": {
+        "op": "image.heightToNormal",
+        "inputs": {
+          "options": {
+            "method": "central",
+            "border": "wrap"
+          }
+        }
+      },
+      "roughnessResponse": {
+        "op": "image.curve",
+        "inputs": {
+          "curve": {
+            "stops": [
+              [
+                0,
+                0.34
+              ],
+              [
+                1,
+                0.64
+              ]
+            ],
+            "interpolation": "smooth"
+          }
+        }
+      },
+      "previewLight": {
+        "op": "image.emboss",
+        "inputs": {
+          "options": {
+            "azimuth": -135,
+            "elevation": 37,
+            "strength": 0.86,
+            "bias": 0.68,
+            "border": "wrap"
+          }
+        }
+      },
+      "previewLightRamp": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#382947"
+              ],
+              [
+                0.29,
+                "#776477"
+              ],
+              [
+                0.68,
+                "#e8e2db"
+              ],
+              [
+                1,
+                "#fff8e6"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "preview": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "multiply",
+          "opacity": 0.89
+        }
+      },
+      "displayPreview": {
+        "op": "image.toDisplay",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "baseColor": {},
+      "height": {},
+      "normal": {},
+      "roughness": {},
+      "mask": {},
+      "metalness": {},
+      "preview": {},
+      "previewDisplay": {}
+    },
+    "groups": {},
+    "links": {
+      "link-1f8e3f85d2fd61b0f4489a8a": {
+        "from": {
+          "input": "length"
+        },
+        "to": {
+          "node": "scratchStretchParts",
+          "slot": "inputs",
+          "port": "item0"
+        }
+      },
+      "link-e67e4f7c0ce4c1dcbd7a7edd": {
+        "from": {
+          "node": "scratchStretchParts",
+          "port": "value"
+        },
+        "to": {
+          "node": "scratchStretch",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-957e703ca4e9d37712cd3c03": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "scoreMarksOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-5dd340cdaf532557dd8b49c6": {
+        "from": {
+          "node": "scratchStretch",
+          "port": "value"
+        },
+        "to": {
+          "node": "scoreMarksOptions",
+          "slot": "inputs",
+          "port": "size"
+        }
+      },
+      "link-1ce9ad67c1f8d61cc5844521": {
+        "from": {
+          "input": "angle"
+        },
+        "to": {
+          "node": "scoreMarksOptions",
+          "slot": "inputs",
+          "port": "rotation"
+        }
+      },
+      "link-48e773c4da3b30ec13fa5cd6": {
+        "from": {
+          "input": "density"
+        },
+        "to": {
+          "node": "scoreMarksControls",
+          "slot": "inputs",
+          "port": "density"
+        }
+      },
+      "link-4b84519eecd82eaf8e65ac63": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "scoreMarks",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-ccd2ab72f34da48a4d770857": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "scoreMarks",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-0288d582777d5692c5912168": {
+        "from": {
+          "node": "scoreMarksOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "scoreMarks",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-8d094b51264003eea2628a68": {
+        "from": {
+          "node": "scoreMarksControls",
+          "port": "value"
+        },
+        "to": {
+          "node": "scoreMarks",
+          "slot": "inputs",
+          "port": "controls"
+        }
+      },
+      "link-5aec6718b8cea7533325248c": {
+        "from": {
+          "node": "scoreMarks",
+          "port": "coverage"
+        },
+        "to": {
+          "node": "scoreMarksCoverageSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-6480bfeb2d659628f9bc24ce": {
+        "from": {
+          "node": "scoreMarksCoverageSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "scoreMarksCoverage",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-5b1af5b9b931ef70a4223e3f": {
+        "from": {
+          "input": "angle"
+        },
+        "to": {
+          "node": "brushLinesOptions",
+          "slot": "inputs",
+          "port": "angle"
+        }
+      },
+      "link-acbf0450b29eaabbac0c2b17": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "brushLinesOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-7db7e515c430957db6904352": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "brushLines",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-496ce36793511fed53342a25": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "brushLines",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-f42e23bc3015e39c2644ed19": {
+        "from": {
+          "node": "brushLinesOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "brushLines",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-8d308d199dff4e3be652b3e3": {
+        "from": {
+          "node": "brushLines",
+          "port": "value"
+        },
+        "to": {
+          "node": "coldSteel",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-0faabbf5e42aec824061d7e7": {
+        "from": {
+          "node": "brushLines",
+          "port": "value"
+        },
+        "to": {
+          "node": "exposedEdges",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-9103b4b35a0338638195df82": {
+        "from": {
+          "node": "coldSteel",
+          "port": "value"
+        },
+        "to": {
+          "node": "scoredMetal",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-b9a61123b6107266b5813187": {
+        "from": {
+          "node": "exposedEdges",
+          "port": "value"
+        },
+        "to": {
+          "node": "scoredMetal",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-4e65343944d52cfeebf43d47": {
+        "from": {
+          "node": "scoreMarksCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "scoredMetal",
+          "slot": "inputs",
+          "port": "mask"
+        }
+      },
+      "link-131e5bb208b8d510d16ebd7a": {
+        "from": {
+          "node": "scoreMarksCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "scoredGroovesInput",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-32005f7a56a790e8f4679a6e": {
+        "from": {
+          "node": "scoredGroovesInput",
+          "port": "value"
+        },
+        "to": {
+          "node": "scoredGrooves",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-5c02130caf8d1a9eb20a04d5": {
+        "from": {
+          "node": "scoredGrooves",
+          "port": "value"
+        },
+        "to": {
+          "node": "scoredReliefBase",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-5ec82f45949e2514d8b4e7f7": {
+        "from": {
+          "node": "brushLines",
+          "port": "value"
+        },
+        "to": {
+          "node": "scoredReliefField",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-e5605067ff1cbf9e6af80789": {
+        "from": {
+          "node": "scoredReliefField",
+          "port": "value"
+        },
+        "to": {
+          "node": "scoredReliefDetail",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-f582cfa843974b05d9e4a3be": {
+        "from": {
+          "node": "scoredReliefBase",
+          "port": "value"
+        },
+        "to": {
+          "node": "scoredRelief",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-127a3013615753c184971e5a": {
+        "from": {
+          "node": "scoredReliefDetail",
+          "port": "value"
+        },
+        "to": {
+          "node": "scoredRelief",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-5adb98da5a0a4c8ad413cb63": {
+        "from": {
+          "node": "brushLines",
+          "port": "value"
+        },
+        "to": {
+          "node": "metalness",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-72c81b6fdd71715028a992ce": {
+        "from": {
+          "node": "scoredRelief",
+          "port": "value"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-7932fc3572f9f4c80600b897": {
+        "from": {
+          "input": "relief"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "scale"
+        }
+      },
+      "link-6047479b518d64ed4f844fdf": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "tangentNormal",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-94788797b346010371dc32e1": {
+        "from": {
+          "node": "scoreMarksCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "roughnessResponse",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a21d99f38085fcf38ab84390": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a6c53800b0e43fc877dbee7e": {
+        "from": {
+          "node": "previewLight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLightRamp",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-75e9c7df85e791422d7a6fdb": {
+        "from": {
+          "node": "scoredMetal",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-d29fe1c5884cf934cfbb2a7e": {
+        "from": {
+          "node": "previewLightRamp",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-c352cbbdc72b4c5c4e273fa9": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "node": "displayPreview",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-0f9283946b735cbc9f680bdf": {
+        "from": {
+          "node": "scoredMetal",
+          "port": "value"
+        },
+        "to": {
+          "output": "baseColor"
+        }
+      },
+      "link-148e187fc906e84cde5c5c4c": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "output": "height"
+        }
+      },
+      "link-2beb1315e8b6b4ae6dbbba87": {
+        "from": {
+          "node": "tangentNormal",
+          "port": "value"
+        },
+        "to": {
+          "output": "normal"
+        }
+      },
+      "link-781ad7aba89d261554594672": {
+        "from": {
+          "node": "roughnessResponse",
+          "port": "value"
+        },
+        "to": {
+          "output": "roughness"
+        }
+      },
+      "link-787e0108c4644b99c65a4e1e": {
+        "from": {
+          "node": "scoreMarksCoverage",
+          "port": "value"
+        },
+        "to": {
+          "output": "mask"
+        }
+      },
+      "link-b3044221bbf24260f7c763b0": {
+        "from": {
+          "node": "metalness",
+          "port": "value"
+        },
+        "to": {
+          "output": "metalness"
+        }
+      },
+      "link-aba8cba83ef380fe1e194816": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "output": "preview"
+        }
+      },
+      "link-cc4f68d2b85426cd5c2d2c80": {
+        "from": {
+          "node": "displayPreview",
+          "port": "value"
+        },
+        "to": {
+          "output": "previewDisplay"
+        }
+      }
+    }
+  },
+  "settings": {
+    "exports": {
+      "preview": {
+        "output": "previewDisplay",
+        "format": "png"
+      }
+    },
+    "outputUsages": {
+      "baseColor": {
+        "usage": "baseColor",
+        "label": "Base color",
+        "order": 0,
+        "source": {
+          "output": "baseColor"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "height": {
+        "usage": "height",
+        "label": "Height",
+        "order": 1,
+        "source": {
+          "output": "height"
+        },
+        "format": {
+          "format": "json"
+        }
+      },
+      "normal": {
+        "usage": "normal",
+        "label": "Normal",
+        "order": 2,
+        "source": {
+          "output": "normal"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "roughness": {
+        "usage": "roughness",
+        "label": "Roughness",
+        "order": 3,
+        "source": {
+          "output": "roughness"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      },
+      "mask": {
+        "usage": "mask.feature",
+        "label": "Feature mask",
+        "order": 4,
+        "source": {
+          "output": "mask"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      },
+      "metalness": {
+        "usage": "metalness",
+        "label": "Metalness",
+        "order": 5,
+        "source": {
+          "output": "metalness"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      }
+    }
+  },
+  "resources": {},
+  "controls": {
+    "resolution": {
+      "input": "resolution",
+      "label": "Texture size",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 48,
+      "max": 192,
+      "step": 8,
+      "units": "px",
+      "order": 0
+    },
+    "seed": {
+      "input": "seed",
+      "label": "Seed",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 0,
+      "max": 9999,
+      "step": 1,
+      "order": 1
+    },
+    "relief": {
+      "input": "relief",
+      "label": "Relief depth",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0,
+      "max": 4,
+      "step": 0.05,
+      "units": "art-px",
+      "order": 2
+    },
+    "density": {
+      "input": "density",
+      "label": "Scratch density",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.12,
+      "max": 1,
+      "step": 0.02,
+      "order": 3
+    },
+    "angle": {
+      "input": "angle",
+      "label": "Brush direction",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": -90,
+      "max": 90,
+      "step": 1,
+      "units": "°",
+      "order": 4
+    },
+    "length": {
+      "input": "length",
+      "label": "Scratch length",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.58,
+      "max": 1.8,
+      "step": 0.02,
+      "order": 5
+    }
+  },
+  "instances": {},
+  "label": "Scored Steel",
+  "metadata": {
+    "author": "Ink Studio",
+    "description": "Fine brushed marks interrupted by longer, brighter gouges.",
+    "tags": [
+      "Weathering",
+      "Recipe",
+      "scratches"
+    ],
+    "materialModel": "pbr.metallic-roughness",
+    "visibility": {
+      "library": true,
+      "publication": "public"
+    },
+    "thumbnail": {
+      "file": "../previews/scratches.png",
+      "alt": "Scored Steel material swatch"
+    }
+  }
+}

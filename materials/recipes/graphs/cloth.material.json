@@ -1,0 +1,1108 @@
+{
+  "format": "ink-studio/material-graph",
+  "version": 1,
+  "id": "cloth",
+  "graph": {
+    "inputs": {
+      "resolution": {
+        "definition": {
+          "type": "number",
+          "default": 128
+        }
+      },
+      "seed": {
+        "definition": {
+          "type": "number",
+          "default": 41
+        }
+      },
+      "relief": {
+        "definition": {
+          "type": "number",
+          "default": 1.4
+        }
+      },
+      "folds": {
+        "definition": {
+          "type": "number",
+          "default": 1
+        }
+      },
+      "crease": {
+        "definition": {
+          "type": "number",
+          "default": 1.15
+        }
+      },
+      "yarn": {
+        "definition": {
+          "type": "number",
+          "default": 0.26
+        }
+      }
+    },
+    "nodes": {
+      "foldFieldOptions": {
+        "op": "data.record",
+        "inputs": {
+          "tiling": "wrap",
+          "extent": [
+            5,
+            4
+          ],
+          "angle": 78,
+          "wander": 0.53
+        }
+      },
+      "foldField": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "directional"
+        }
+      },
+      "looseFibersOptions": {
+        "op": "data.record",
+        "inputs": {
+          "tiling": "wrap",
+          "extent": [
+            31,
+            32
+          ],
+          "angle": 13,
+          "wander": 0.48
+        }
+      },
+      "looseFibers": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "directional"
+        }
+      },
+      "blueAndGoldSelvageOptions": {
+        "op": "data.record",
+        "inputs": {
+          "samples": 2,
+          "size": [
+            0.34,
+            1
+          ],
+          "gutter": [
+            0,
+            0
+          ]
+        }
+      },
+      "blueAndGoldSelvage": {
+        "op": "image.tileGenerator",
+        "inputs": {
+          "columns": 4,
+          "rows": 1,
+          "stamp": {
+            "type": "symbol",
+            "parts": [
+              {
+                "shape": {
+                  "type": "rectangle",
+                  "size": [
+                    0.44,
+                    1
+                  ],
+                  "radius": 0
+                }
+              },
+              {
+                "shape": {
+                  "type": "rectangle",
+                  "size": [
+                    0.13,
+                    1
+                  ],
+                  "radius": 0,
+                  "center": [
+                    0.16,
+                    0.5
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "blueAndGoldSelvageCoverageSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "blueAndGoldSelvageCoverage": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "mask",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "foldedStripesOptions": {
+        "op": "data.record",
+        "inputs": {
+          "amount": 0.095,
+          "angle": 0,
+          "units": "normalized",
+          "center": 0.5,
+          "border": "wrap",
+          "filter": "linear"
+        }
+      },
+      "foldedStripes": {
+        "op": "image.directionalWarp",
+        "inputs": {}
+      },
+      "dyedFibersBase": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "dyedFibersField": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "dyedFibersDetail": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "dyedFibers": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "add",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "indigo": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#181a3b"
+              ],
+              [
+                0.3333333333333333,
+                "#303c75"
+              ],
+              [
+                0.6666666666666666,
+                "#5671a0"
+              ],
+              [
+                1,
+                "#8692bd"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "selvageThread": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#473438"
+              ],
+              [
+                0.3333333333333333,
+                "#957553"
+              ],
+              [
+                0.6666666666666666,
+                "#dbb981"
+              ],
+              [
+                1,
+                "#ffdfa9"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "dyedCloth": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "copy"
+        }
+      },
+      "foldLift": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "foldAndNapBase": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "foldAndNapField": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "foldAndNapDetail": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": 0.23,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "foldAndNap": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "add",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "materialHeight": {
+        "op": "image.toHeight",
+        "inputs": {
+          "units": "art-px"
+        }
+      },
+      "tangentNormal": {
+        "op": "image.heightToNormal",
+        "inputs": {
+          "options": {
+            "method": "central",
+            "border": "wrap"
+          }
+        }
+      },
+      "roughnessResponse": {
+        "op": "image.curve",
+        "inputs": {
+          "curve": {
+            "stops": [
+              [
+                0,
+                0.86
+              ],
+              [
+                1,
+                0.9
+              ]
+            ],
+            "interpolation": "smooth"
+          }
+        }
+      },
+      "previewLight": {
+        "op": "image.emboss",
+        "inputs": {
+          "options": {
+            "azimuth": -135,
+            "elevation": 37,
+            "strength": 0.86,
+            "bias": 0.68,
+            "border": "wrap"
+          }
+        }
+      },
+      "previewLightRamp": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#382947"
+              ],
+              [
+                0.29,
+                "#776477"
+              ],
+              [
+                0.68,
+                "#e8e2db"
+              ],
+              [
+                1,
+                "#fff8e6"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "preview": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "multiply",
+          "opacity": 0.89
+        }
+      },
+      "displayPreview": {
+        "op": "image.toDisplay",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "baseColor": {},
+      "height": {},
+      "normal": {},
+      "roughness": {},
+      "mask": {},
+      "preview": {},
+      "previewDisplay": {}
+    },
+    "groups": {},
+    "links": {
+      "link-4018401b3b2a3497e15aea58": {
+        "from": {
+          "input": "folds"
+        },
+        "to": {
+          "node": "foldFieldOptions",
+          "slot": "inputs",
+          "port": "scale"
+        }
+      },
+      "link-b9b88c5a4d6c406a17b0a910": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "foldFieldOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-862dbf52b6cbb77cc6a567db": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "foldField",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-0d13619e2844729d8b1b0f7b": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "foldField",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-2c0fad07bc9fb595391aafeb": {
+        "from": {
+          "node": "foldFieldOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "foldField",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-62c82091bdf45f8f1a473ed9": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "looseFibersOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-7a0f8ebe2eb5f392d901efb3": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "looseFibers",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-8667e8ef8e8af9c219cfd0f2": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "looseFibers",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-a6fa4067935efbd1bbfdfa18": {
+        "from": {
+          "node": "looseFibersOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "looseFibers",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-d4f7279a0e894803f6c275c3": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "blueAndGoldSelvageOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-167bb9063f2e80ff12327c0a": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "blueAndGoldSelvage",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-74bd6de1fa4ac5e53ebd3627": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "blueAndGoldSelvage",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-9f161e565956e78f5682bbcd": {
+        "from": {
+          "node": "blueAndGoldSelvageOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "blueAndGoldSelvage",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-704c7e5500839d6fcccfb62f": {
+        "from": {
+          "node": "blueAndGoldSelvage",
+          "port": "coverage"
+        },
+        "to": {
+          "node": "blueAndGoldSelvageCoverageSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-3ed0e5a714433102563abd2b": {
+        "from": {
+          "node": "blueAndGoldSelvageCoverageSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "blueAndGoldSelvageCoverage",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-73f227989e4230a7eb85f8d8": {
+        "from": {
+          "node": "blueAndGoldSelvageCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "foldedStripes",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-ad62de1ee4136ccca5532430": {
+        "from": {
+          "node": "foldField",
+          "port": "value"
+        },
+        "to": {
+          "node": "foldedStripes",
+          "slot": "inputs",
+          "port": "map"
+        }
+      },
+      "link-881bceb0f8682cab31904165": {
+        "from": {
+          "node": "foldedStripesOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "foldedStripes",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-92af6181a7420a664e88ce4a": {
+        "from": {
+          "node": "foldField",
+          "port": "value"
+        },
+        "to": {
+          "node": "dyedFibersBase",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-178d4540d5e0daf02121c102": {
+        "from": {
+          "node": "looseFibers",
+          "port": "value"
+        },
+        "to": {
+          "node": "dyedFibersField",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-bde3157df7450690400c83d3": {
+        "from": {
+          "node": "dyedFibersField",
+          "port": "value"
+        },
+        "to": {
+          "node": "dyedFibersDetail",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-ec75d731d62c5c77e67f22b0": {
+        "from": {
+          "input": "yarn"
+        },
+        "to": {
+          "node": "dyedFibersDetail",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-a65d937abeb5863c263c649d": {
+        "from": {
+          "node": "dyedFibersBase",
+          "port": "value"
+        },
+        "to": {
+          "node": "dyedFibers",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-f3b3b15e9efd21d0e8353100": {
+        "from": {
+          "node": "dyedFibersDetail",
+          "port": "value"
+        },
+        "to": {
+          "node": "dyedFibers",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-a47ce690685baed079fa292b": {
+        "from": {
+          "node": "dyedFibers",
+          "port": "value"
+        },
+        "to": {
+          "node": "indigo",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-04347fcea7ede1d4c83a5ae7": {
+        "from": {
+          "node": "dyedFibers",
+          "port": "value"
+        },
+        "to": {
+          "node": "selvageThread",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-6cc9d7a586b85cb39952586e": {
+        "from": {
+          "node": "indigo",
+          "port": "value"
+        },
+        "to": {
+          "node": "dyedCloth",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-d0493900ce62e792339ba58d": {
+        "from": {
+          "node": "selvageThread",
+          "port": "value"
+        },
+        "to": {
+          "node": "dyedCloth",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-0aee7d871977fdb668a94f52": {
+        "from": {
+          "node": "foldedStripes",
+          "port": "value"
+        },
+        "to": {
+          "node": "dyedCloth",
+          "slot": "inputs",
+          "port": "mask"
+        }
+      },
+      "link-7aa565c3c96dad94c4944ae4": {
+        "from": {
+          "node": "foldField",
+          "port": "value"
+        },
+        "to": {
+          "node": "foldLift",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-2aa9ebe26dcbf868754e163d": {
+        "from": {
+          "input": "crease"
+        },
+        "to": {
+          "node": "foldLift",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-aee941e27c59552784ccd830": {
+        "from": {
+          "node": "foldLift",
+          "port": "value"
+        },
+        "to": {
+          "node": "foldAndNapBase",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-15757516b22bcbf5a7243715": {
+        "from": {
+          "node": "looseFibers",
+          "port": "value"
+        },
+        "to": {
+          "node": "foldAndNapField",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-30c743de3128e11fa5036deb": {
+        "from": {
+          "node": "foldAndNapField",
+          "port": "value"
+        },
+        "to": {
+          "node": "foldAndNapDetail",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-c240e2e8e19d00b67dd5de86": {
+        "from": {
+          "node": "foldAndNapBase",
+          "port": "value"
+        },
+        "to": {
+          "node": "foldAndNap",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-3d4e230d660e2a23cc25e1bc": {
+        "from": {
+          "node": "foldAndNapDetail",
+          "port": "value"
+        },
+        "to": {
+          "node": "foldAndNap",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-72c81b6fdd71715028a992ce": {
+        "from": {
+          "node": "foldAndNap",
+          "port": "value"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-7932fc3572f9f4c80600b897": {
+        "from": {
+          "input": "relief"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "scale"
+        }
+      },
+      "link-6047479b518d64ed4f844fdf": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "tangentNormal",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-94788797b346010371dc32e1": {
+        "from": {
+          "node": "foldedStripes",
+          "port": "value"
+        },
+        "to": {
+          "node": "roughnessResponse",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a21d99f38085fcf38ab84390": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a6c53800b0e43fc877dbee7e": {
+        "from": {
+          "node": "previewLight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLightRamp",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-75e9c7df85e791422d7a6fdb": {
+        "from": {
+          "node": "dyedCloth",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-d29fe1c5884cf934cfbb2a7e": {
+        "from": {
+          "node": "previewLightRamp",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-c352cbbdc72b4c5c4e273fa9": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "node": "displayPreview",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-0f9283946b735cbc9f680bdf": {
+        "from": {
+          "node": "dyedCloth",
+          "port": "value"
+        },
+        "to": {
+          "output": "baseColor"
+        }
+      },
+      "link-148e187fc906e84cde5c5c4c": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "output": "height"
+        }
+      },
+      "link-2beb1315e8b6b4ae6dbbba87": {
+        "from": {
+          "node": "tangentNormal",
+          "port": "value"
+        },
+        "to": {
+          "output": "normal"
+        }
+      },
+      "link-781ad7aba89d261554594672": {
+        "from": {
+          "node": "roughnessResponse",
+          "port": "value"
+        },
+        "to": {
+          "output": "roughness"
+        }
+      },
+      "link-787e0108c4644b99c65a4e1e": {
+        "from": {
+          "node": "foldedStripes",
+          "port": "value"
+        },
+        "to": {
+          "output": "mask"
+        }
+      },
+      "link-aba8cba83ef380fe1e194816": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "output": "preview"
+        }
+      },
+      "link-cc4f68d2b85426cd5c2d2c80": {
+        "from": {
+          "node": "displayPreview",
+          "port": "value"
+        },
+        "to": {
+          "output": "previewDisplay"
+        }
+      }
+    }
+  },
+  "settings": {
+    "exports": {
+      "preview": {
+        "output": "previewDisplay",
+        "format": "png"
+      }
+    },
+    "outputUsages": {
+      "baseColor": {
+        "usage": "baseColor",
+        "label": "Base color",
+        "order": 0,
+        "source": {
+          "output": "baseColor"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "height": {
+        "usage": "height",
+        "label": "Height",
+        "order": 1,
+        "source": {
+          "output": "height"
+        },
+        "format": {
+          "format": "json"
+        }
+      },
+      "normal": {
+        "usage": "normal",
+        "label": "Normal",
+        "order": 2,
+        "source": {
+          "output": "normal"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "roughness": {
+        "usage": "roughness",
+        "label": "Roughness",
+        "order": 3,
+        "source": {
+          "output": "roughness"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      },
+      "mask": {
+        "usage": "mask.feature",
+        "label": "Feature mask",
+        "order": 4,
+        "source": {
+          "output": "mask"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      }
+    }
+  },
+  "resources": {},
+  "controls": {
+    "resolution": {
+      "input": "resolution",
+      "label": "Texture size",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 48,
+      "max": 192,
+      "step": 8,
+      "units": "px",
+      "order": 0
+    },
+    "seed": {
+      "input": "seed",
+      "label": "Seed",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 0,
+      "max": 9999,
+      "step": 1,
+      "order": 1
+    },
+    "relief": {
+      "input": "relief",
+      "label": "Relief depth",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0,
+      "max": 4,
+      "step": 0.05,
+      "units": "art-px",
+      "order": 2
+    },
+    "folds": {
+      "input": "folds",
+      "label": "Fold frequency",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.5,
+      "max": 2,
+      "step": 0.05,
+      "order": 3
+    },
+    "crease": {
+      "input": "crease",
+      "label": "Fold height",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0.15,
+      "max": 2.5,
+      "step": 0.05,
+      "order": 4
+    },
+    "yarn": {
+      "input": "yarn",
+      "label": "Yarn contrast",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0,
+      "max": 0.55,
+      "step": 0.01,
+      "order": 5
+    }
+  },
+  "instances": {},
+  "label": "Indigo Cloth",
+  "metadata": {
+    "author": "Ink Studio",
+    "description": "Folded indigo yardage with a border stripe and fine yarn.",
+    "tags": [
+      "Textiles",
+      "Recipe",
+      "cloth"
+    ],
+    "materialModel": "pbr.metallic-roughness",
+    "visibility": {
+      "library": true,
+      "publication": "public"
+    },
+    "thumbnail": {
+      "file": "../previews/cloth.png",
+      "alt": "Indigo Cloth material swatch"
+    }
+  }
+}

@@ -1,0 +1,1032 @@
+{
+  "format": "ink-studio/material-graph",
+  "version": 1,
+  "id": "tile",
+  "graph": {
+    "inputs": {
+      "resolution": {
+        "definition": {
+          "type": "number",
+          "default": 128
+        }
+      },
+      "seed": {
+        "definition": {
+          "type": "number",
+          "default": 41
+        }
+      },
+      "relief": {
+        "definition": {
+          "type": "number",
+          "default": 1.4
+        }
+      },
+      "count": {
+        "definition": {
+          "type": "number",
+          "default": 3
+        }
+      },
+      "joint": {
+        "definition": {
+          "type": "number",
+          "default": 0.095
+        }
+      },
+      "ornament": {
+        "definition": {
+          "type": "number",
+          "default": 0.92
+        }
+      }
+    },
+    "nodes": {
+      "glazeGapParts": {
+        "op": "data.record",
+        "inputs": {}
+      },
+      "glazeGap": {
+        "op": "data.collect",
+        "inputs": {
+          "keys": [
+            "item0",
+            "item1"
+          ]
+        }
+      },
+      "glazedSquaresOptions": {
+        "op": "data.record",
+        "inputs": {
+          "samples": 2,
+          "palette": [
+            "#23575a",
+            "#326e6b",
+            "#397b73",
+            "#2c6464"
+          ],
+          "background": "#1f2931",
+          "jitter": {
+            "color": 0.12
+          }
+        }
+      },
+      "glazedSquares": {
+        "op": "image.tileGenerator",
+        "inputs": {
+          "stamp": {
+            "type": "rectangle",
+            "size": [
+              1,
+              1
+            ],
+            "radius": 0.14
+          }
+        }
+      },
+      "compassRoseOptions": {
+        "op": "data.record",
+        "inputs": {
+          "samples": 2,
+          "color": "#e9b079"
+        }
+      },
+      "compassRose": {
+        "op": "image.tileGenerator",
+        "inputs": {
+          "stamp": {
+            "type": "symbol",
+            "parts": [
+              {
+                "shape": {
+                  "type": "star",
+                  "tips": 4,
+                  "radius": 0.391,
+                  "innerRadius": 0.114
+                }
+              },
+              {
+                "shape": {
+                  "type": "disc",
+                  "radius": 0.34
+                }
+              },
+              {
+                "op": "subtract",
+                "shape": {
+                  "type": "disc",
+                  "radius": 0.316
+                }
+              },
+              {
+                "shape": {
+                  "type": "star",
+                  "tips": 4,
+                  "radius": 0.306,
+                  "innerRadius": 0.115
+                }
+              },
+              {
+                "op": "subtract",
+                "shape": {
+                  "type": "disc",
+                  "radius": 0.044
+                }
+              }
+            ]
+          }
+        }
+      },
+      "glazedSquaresCoverageSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "glazedSquaresCoverage": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "mask",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "compassRoseCoverageSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "compassRoseCoverage": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "mask",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "glazeAndSlip": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "copy"
+        }
+      },
+      "engravingDepth": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "ceramicBevelOptions": {
+        "op": "data.record",
+        "inputs": {
+          "width": 3.5,
+          "height": 1,
+          "profile": "smooth"
+        }
+      },
+      "ceramicBevel": {
+        "op": "image.bevel",
+        "inputs": {}
+      },
+      "ceramicSurfaceSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "ceramicSurface": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "glazeReliefBase": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "glazeReliefField": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "glazeReliefDetail": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": -0.37,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "glazeRelief": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "add",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "materialHeight": {
+        "op": "image.toHeight",
+        "inputs": {
+          "units": "art-px"
+        }
+      },
+      "tangentNormal": {
+        "op": "image.heightToNormal",
+        "inputs": {
+          "options": {
+            "method": "central",
+            "border": "wrap"
+          }
+        }
+      },
+      "roughnessResponse": {
+        "op": "image.curve",
+        "inputs": {
+          "curve": {
+            "stops": [
+              [
+                0,
+                0.79
+              ],
+              [
+                1,
+                0.22
+              ]
+            ],
+            "interpolation": "smooth"
+          }
+        }
+      },
+      "previewLight": {
+        "op": "image.emboss",
+        "inputs": {
+          "options": {
+            "azimuth": -135,
+            "elevation": 37,
+            "strength": 0.86,
+            "bias": 0.68,
+            "border": "wrap"
+          }
+        }
+      },
+      "previewLightRamp": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#382947"
+              ],
+              [
+                0.29,
+                "#776477"
+              ],
+              [
+                0.68,
+                "#e8e2db"
+              ],
+              [
+                1,
+                "#fff8e6"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "preview": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "multiply",
+          "opacity": 0.89
+        }
+      },
+      "displayPreview": {
+        "op": "image.toDisplay",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "baseColor": {},
+      "height": {},
+      "normal": {},
+      "roughness": {},
+      "mask": {},
+      "preview": {},
+      "previewDisplay": {}
+    },
+    "groups": {},
+    "links": {
+      "link-646ed82cb77860878bf906e5": {
+        "from": {
+          "input": "joint"
+        },
+        "to": {
+          "node": "glazeGapParts",
+          "slot": "inputs",
+          "port": "item0"
+        }
+      },
+      "link-b9adf6ad15352df867a73bd7": {
+        "from": {
+          "input": "joint"
+        },
+        "to": {
+          "node": "glazeGapParts",
+          "slot": "inputs",
+          "port": "item1"
+        }
+      },
+      "link-fbab00f36342a6c1777625a3": {
+        "from": {
+          "node": "glazeGapParts",
+          "port": "value"
+        },
+        "to": {
+          "node": "glazeGap",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-ec3272b57bd05b7e3bd119bd": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "glazedSquaresOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-28a0236d0a3d6614ae7f13ad": {
+        "from": {
+          "node": "glazeGap",
+          "port": "value"
+        },
+        "to": {
+          "node": "glazedSquaresOptions",
+          "slot": "inputs",
+          "port": "gutter"
+        }
+      },
+      "link-4bb6d145e48a29b07e582301": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "glazedSquares",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-515a583b3526588133e88c29": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "glazedSquares",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-3258fb01dcaf9ef490c86069": {
+        "from": {
+          "input": "count"
+        },
+        "to": {
+          "node": "glazedSquares",
+          "slot": "inputs",
+          "port": "columns"
+        }
+      },
+      "link-6cb93087294b78c0c1ff6149": {
+        "from": {
+          "input": "count"
+        },
+        "to": {
+          "node": "glazedSquares",
+          "slot": "inputs",
+          "port": "rows"
+        }
+      },
+      "link-10897bad62b81d92c1718ac3": {
+        "from": {
+          "node": "glazedSquaresOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "glazedSquares",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-3c86e3d3679da25fa2737bad": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "compassRoseOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-5b09e5b289bba112b17278bc": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "compassRose",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-7b88cd971845302b35334c59": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "compassRose",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-6a2766a3fc19c13878a6e5d5": {
+        "from": {
+          "input": "count"
+        },
+        "to": {
+          "node": "compassRose",
+          "slot": "inputs",
+          "port": "columns"
+        }
+      },
+      "link-6547af39e3e17d83fb618fae": {
+        "from": {
+          "input": "count"
+        },
+        "to": {
+          "node": "compassRose",
+          "slot": "inputs",
+          "port": "rows"
+        }
+      },
+      "link-8fd33ebd424dee74ae64d8ec": {
+        "from": {
+          "node": "compassRoseOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "compassRose",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-7bd2c7b49267cf232fc12fe2": {
+        "from": {
+          "node": "glazedSquares",
+          "port": "coverage"
+        },
+        "to": {
+          "node": "glazedSquaresCoverageSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-533f5a561ce75cc939f35b06": {
+        "from": {
+          "node": "glazedSquaresCoverageSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "glazedSquaresCoverage",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-b949fdc5aee537f6199dfbac": {
+        "from": {
+          "node": "compassRose",
+          "port": "coverage"
+        },
+        "to": {
+          "node": "compassRoseCoverageSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a66b900d5063f165f60370ee": {
+        "from": {
+          "node": "compassRoseCoverageSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "compassRoseCoverage",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-cf48e8472f460d0ca6c12407": {
+        "from": {
+          "node": "glazedSquares",
+          "port": "value"
+        },
+        "to": {
+          "node": "glazeAndSlip",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-3a020044bf1ee8018c36c4d4": {
+        "from": {
+          "node": "compassRose",
+          "port": "value"
+        },
+        "to": {
+          "node": "glazeAndSlip",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-8966b5641408a9a25b17873a": {
+        "from": {
+          "input": "ornament"
+        },
+        "to": {
+          "node": "glazeAndSlip",
+          "slot": "inputs",
+          "port": "opacity"
+        }
+      },
+      "link-d3dc4154c06e2886e44ed234": {
+        "from": {
+          "node": "compassRoseCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "engravingDepth",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-653881cf209b0c63e352cdce": {
+        "from": {
+          "input": "ornament"
+        },
+        "to": {
+          "node": "engravingDepth",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-e7ce4abc14466a48a7394096": {
+        "from": {
+          "node": "glazedSquaresCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "ceramicBevel",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-19108a0d76367de18208bbe8": {
+        "from": {
+          "node": "ceramicBevelOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "ceramicBevel",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-10f07f7d0a8701bc0c5a4a5b": {
+        "from": {
+          "node": "ceramicBevel",
+          "port": "value"
+        },
+        "to": {
+          "node": "ceramicSurfaceSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-d579375dc63620bd09d4154f": {
+        "from": {
+          "node": "ceramicSurfaceSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "ceramicSurface",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-825dcfbcb0f22a1cd93150a8": {
+        "from": {
+          "node": "ceramicSurface",
+          "port": "value"
+        },
+        "to": {
+          "node": "glazeReliefBase",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-b0db23b5d60ab2bf77ba850b": {
+        "from": {
+          "node": "engravingDepth",
+          "port": "value"
+        },
+        "to": {
+          "node": "glazeReliefField",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-65f99f83d03bc74e23be639a": {
+        "from": {
+          "node": "glazeReliefField",
+          "port": "value"
+        },
+        "to": {
+          "node": "glazeReliefDetail",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-6052a1a5d99c5e0683df858b": {
+        "from": {
+          "node": "glazeReliefBase",
+          "port": "value"
+        },
+        "to": {
+          "node": "glazeRelief",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-f65040dce276b4e19c896749": {
+        "from": {
+          "node": "glazeReliefDetail",
+          "port": "value"
+        },
+        "to": {
+          "node": "glazeRelief",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-72c81b6fdd71715028a992ce": {
+        "from": {
+          "node": "glazeRelief",
+          "port": "value"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-7932fc3572f9f4c80600b897": {
+        "from": {
+          "input": "relief"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "scale"
+        }
+      },
+      "link-6047479b518d64ed4f844fdf": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "tangentNormal",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-94788797b346010371dc32e1": {
+        "from": {
+          "node": "glazedSquaresCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "roughnessResponse",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a21d99f38085fcf38ab84390": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a6c53800b0e43fc877dbee7e": {
+        "from": {
+          "node": "previewLight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLightRamp",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-75e9c7df85e791422d7a6fdb": {
+        "from": {
+          "node": "glazeAndSlip",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-d29fe1c5884cf934cfbb2a7e": {
+        "from": {
+          "node": "previewLightRamp",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-c352cbbdc72b4c5c4e273fa9": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "node": "displayPreview",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-0f9283946b735cbc9f680bdf": {
+        "from": {
+          "node": "glazeAndSlip",
+          "port": "value"
+        },
+        "to": {
+          "output": "baseColor"
+        }
+      },
+      "link-148e187fc906e84cde5c5c4c": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "output": "height"
+        }
+      },
+      "link-2beb1315e8b6b4ae6dbbba87": {
+        "from": {
+          "node": "tangentNormal",
+          "port": "value"
+        },
+        "to": {
+          "output": "normal"
+        }
+      },
+      "link-781ad7aba89d261554594672": {
+        "from": {
+          "node": "roughnessResponse",
+          "port": "value"
+        },
+        "to": {
+          "output": "roughness"
+        }
+      },
+      "link-787e0108c4644b99c65a4e1e": {
+        "from": {
+          "node": "glazedSquaresCoverage",
+          "port": "value"
+        },
+        "to": {
+          "output": "mask"
+        }
+      },
+      "link-aba8cba83ef380fe1e194816": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "output": "preview"
+        }
+      },
+      "link-cc4f68d2b85426cd5c2d2c80": {
+        "from": {
+          "node": "displayPreview",
+          "port": "value"
+        },
+        "to": {
+          "output": "previewDisplay"
+        }
+      }
+    }
+  },
+  "settings": {
+    "exports": {
+      "preview": {
+        "output": "previewDisplay",
+        "format": "png"
+      }
+    },
+    "outputUsages": {
+      "baseColor": {
+        "usage": "baseColor",
+        "label": "Base color",
+        "order": 0,
+        "source": {
+          "output": "baseColor"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "height": {
+        "usage": "height",
+        "label": "Height",
+        "order": 1,
+        "source": {
+          "output": "height"
+        },
+        "format": {
+          "format": "json"
+        }
+      },
+      "normal": {
+        "usage": "normal",
+        "label": "Normal",
+        "order": 2,
+        "source": {
+          "output": "normal"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "roughness": {
+        "usage": "roughness",
+        "label": "Roughness",
+        "order": 3,
+        "source": {
+          "output": "roughness"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      },
+      "mask": {
+        "usage": "mask.feature",
+        "label": "Feature mask",
+        "order": 4,
+        "source": {
+          "output": "mask"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      }
+    }
+  },
+  "resources": {},
+  "controls": {
+    "resolution": {
+      "input": "resolution",
+      "label": "Texture size",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 48,
+      "max": 192,
+      "step": 8,
+      "units": "px",
+      "order": 0
+    },
+    "seed": {
+      "input": "seed",
+      "label": "Seed",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 0,
+      "max": 9999,
+      "step": 1,
+      "order": 1
+    },
+    "relief": {
+      "input": "relief",
+      "label": "Relief depth",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0,
+      "max": 4,
+      "step": 0.05,
+      "units": "art-px",
+      "order": 2
+    },
+    "count": {
+      "input": "count",
+      "label": "Tiles across",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 2,
+      "max": 5,
+      "step": 1,
+      "order": 3
+    },
+    "joint": {
+      "input": "joint",
+      "label": "Joint width",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.035,
+      "max": 0.19,
+      "step": 0.005,
+      "order": 4
+    },
+    "ornament": {
+      "input": "ornament",
+      "label": "Inlay strength",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0,
+      "max": 1,
+      "step": 0.02,
+      "order": 5
+    }
+  },
+  "instances": {},
+  "label": "Harbor Tile",
+  "metadata": {
+    "author": "Ink Studio",
+    "description": "Sea-green ceramic with a carved compass rose and copper slip.",
+    "tags": [
+      "Masonry",
+      "Recipe",
+      "tile"
+    ],
+    "materialModel": "pbr.metallic-roughness",
+    "visibility": {
+      "library": true,
+      "publication": "public"
+    },
+    "thumbnail": {
+      "file": "../previews/tile.png",
+      "alt": "Harbor Tile material swatch"
+    }
+  }
+}

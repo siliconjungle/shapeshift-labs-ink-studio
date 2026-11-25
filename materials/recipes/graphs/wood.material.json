@@ -1,0 +1,947 @@
+{
+  "format": "ink-studio/material-graph",
+  "version": 1,
+  "id": "wood",
+  "graph": {
+    "inputs": {
+      "resolution": {
+        "definition": {
+          "type": "number",
+          "default": 128
+        }
+      },
+      "seed": {
+        "definition": {
+          "type": "number",
+          "default": 41
+        }
+      },
+      "relief": {
+        "definition": {
+          "type": "number",
+          "default": 1.4
+        }
+      },
+      "grain": {
+        "definition": {
+          "type": "number",
+          "default": 1
+        }
+      },
+      "curl": {
+        "definition": {
+          "type": "number",
+          "default": 0.32
+        }
+      },
+      "cut": {
+        "definition": {
+          "type": "number",
+          "default": 0.38
+        }
+      }
+    },
+    "nodes": {
+      "growthBandsOptions": {
+        "op": "data.record",
+        "inputs": {
+          "tiling": "wrap",
+          "extent": [
+            6,
+            25
+          ],
+          "angle": 3,
+          "wander": 0.6
+        }
+      },
+      "growthBands": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "directional"
+        }
+      },
+      "knottedWoodOptions": {
+        "op": "data.record",
+        "inputs": {
+          "tiling": "wrap",
+          "extent": [
+            3,
+            5
+          ],
+          "octaves": 3,
+          "gain": 0.43
+        }
+      },
+      "knottedWood": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "fractal"
+        }
+      },
+      "bentGrainOptions": {
+        "op": "data.record",
+        "inputs": {
+          "angle": 104,
+          "units": "normalized",
+          "center": 0.5,
+          "border": "wrap",
+          "filter": "linear"
+        }
+      },
+      "bentGrain": {
+        "op": "image.directionalWarp",
+        "inputs": {}
+      },
+      "earlywoodLatewood": {
+        "op": "image.curve",
+        "inputs": {
+          "curve": {
+            "stops": [
+              [
+                0,
+                0.04
+              ],
+              [
+                0.25,
+                0.21
+              ],
+              [
+                0.43,
+                0.74
+              ],
+              [
+                0.58,
+                0.93
+              ],
+              [
+                0.79,
+                0.82
+              ],
+              [
+                1,
+                0.44
+              ]
+            ],
+            "interpolation": "smooth"
+          }
+        }
+      },
+      "fineFibersOptions": {
+        "op": "data.record",
+        "inputs": {
+          "tiling": "wrap",
+          "extent": [
+            52,
+            42
+          ],
+          "angle": 3,
+          "aspect": 13
+        }
+      },
+      "fineFibers": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "anisotropic"
+        }
+      },
+      "grainAndPoresBase": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "grainAndPoresField": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "grainAndPoresDetail": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": 0.26,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "grainAndPores": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "add",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "denseRingsOptions": {
+        "op": "data.record",
+        "inputs": {
+          "level": 0.52,
+          "softness": 0.1
+        }
+      },
+      "denseRings": {
+        "op": "image.threshold",
+        "inputs": {}
+      },
+      "growthRelief": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "heartwood": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#45232b"
+              ],
+              [
+                0.25,
+                "#7a3e31"
+              ],
+              [
+                0.5,
+                "#ad663c"
+              ],
+              [
+                0.75,
+                "#d9995c"
+              ],
+              [
+                1,
+                "#f0c580"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "materialHeight": {
+        "op": "image.toHeight",
+        "inputs": {
+          "units": "art-px"
+        }
+      },
+      "tangentNormal": {
+        "op": "image.heightToNormal",
+        "inputs": {
+          "options": {
+            "method": "central",
+            "border": "wrap"
+          }
+        }
+      },
+      "roughnessResponse": {
+        "op": "image.curve",
+        "inputs": {
+          "curve": {
+            "stops": [
+              [
+                0,
+                0.44
+              ],
+              [
+                1,
+                0.65
+              ]
+            ],
+            "interpolation": "smooth"
+          }
+        }
+      },
+      "previewLight": {
+        "op": "image.emboss",
+        "inputs": {
+          "options": {
+            "azimuth": -135,
+            "elevation": 37,
+            "strength": 0.86,
+            "bias": 0.68,
+            "border": "wrap"
+          }
+        }
+      },
+      "previewLightRamp": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#382947"
+              ],
+              [
+                0.29,
+                "#776477"
+              ],
+              [
+                0.68,
+                "#e8e2db"
+              ],
+              [
+                1,
+                "#fff8e6"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "preview": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "multiply",
+          "opacity": 0.89
+        }
+      },
+      "displayPreview": {
+        "op": "image.toDisplay",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "baseColor": {},
+      "height": {},
+      "normal": {},
+      "roughness": {},
+      "mask": {},
+      "preview": {},
+      "previewDisplay": {}
+    },
+    "groups": {},
+    "links": {
+      "link-b400ed07e6036b863fa1691c": {
+        "from": {
+          "input": "grain"
+        },
+        "to": {
+          "node": "growthBandsOptions",
+          "slot": "inputs",
+          "port": "scale"
+        }
+      },
+      "link-6184bfc82416a749c201006a": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "growthBandsOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-dcfbf1952967d9d71ae03d2d": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "growthBands",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-577de4929ebbc5b679906b1a": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "growthBands",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-c4a19abb107f7bad972a35ba": {
+        "from": {
+          "node": "growthBandsOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "growthBands",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-6dfd8bb20102a8f773dba3fd": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "knottedWoodOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-61aa34028b39ac4b70f574cb": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "knottedWood",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-9bff855dd1883abfda374f5a": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "knottedWood",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-7d66ab8f5b22cf17cc28c0b0": {
+        "from": {
+          "node": "knottedWoodOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "knottedWood",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-cd5cc8a48faaa64a944357d2": {
+        "from": {
+          "input": "curl"
+        },
+        "to": {
+          "node": "bentGrainOptions",
+          "slot": "inputs",
+          "port": "amount"
+        }
+      },
+      "link-250af5e8c1d57f1cd485dd2b": {
+        "from": {
+          "node": "growthBands",
+          "port": "value"
+        },
+        "to": {
+          "node": "bentGrain",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-532a22caecd44ca248bdff1d": {
+        "from": {
+          "node": "knottedWood",
+          "port": "value"
+        },
+        "to": {
+          "node": "bentGrain",
+          "slot": "inputs",
+          "port": "map"
+        }
+      },
+      "link-e5d693e7aa9898e018f9af33": {
+        "from": {
+          "node": "bentGrainOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "bentGrain",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-ab46da66d0f607224f47be00": {
+        "from": {
+          "node": "bentGrain",
+          "port": "value"
+        },
+        "to": {
+          "node": "earlywoodLatewood",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-5e088c61107e96e1badd2555": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "fineFibersOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-28bae31e7f086d114249e0cf": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "fineFibers",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-dff43d5bce593a328d9eb9a4": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "fineFibers",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-443dfe39823d5c223b8dc3a7": {
+        "from": {
+          "node": "fineFibersOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "fineFibers",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-68773b8d7665c19e4bd1ca2b": {
+        "from": {
+          "node": "earlywoodLatewood",
+          "port": "value"
+        },
+        "to": {
+          "node": "grainAndPoresBase",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-c23dd2493b6da5a5bb664608": {
+        "from": {
+          "node": "fineFibers",
+          "port": "value"
+        },
+        "to": {
+          "node": "grainAndPoresField",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-8bf511393ccae493c6b56e5f": {
+        "from": {
+          "node": "grainAndPoresField",
+          "port": "value"
+        },
+        "to": {
+          "node": "grainAndPoresDetail",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-4c7a105e145f51d79166ddae": {
+        "from": {
+          "node": "grainAndPoresBase",
+          "port": "value"
+        },
+        "to": {
+          "node": "grainAndPores",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-c6bf07d1a2d9bb77b9893174": {
+        "from": {
+          "node": "grainAndPoresDetail",
+          "port": "value"
+        },
+        "to": {
+          "node": "grainAndPores",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-e76f948d3d6f61507ad5306b": {
+        "from": {
+          "node": "bentGrain",
+          "port": "value"
+        },
+        "to": {
+          "node": "denseRings",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-d084ecae17b3fdfafd0ec472": {
+        "from": {
+          "node": "denseRingsOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "denseRings",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-6f7beb7c030037c0697fb46d": {
+        "from": {
+          "node": "grainAndPores",
+          "port": "value"
+        },
+        "to": {
+          "node": "growthRelief",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-b2e27542b57e3c07a9be17c9": {
+        "from": {
+          "input": "cut"
+        },
+        "to": {
+          "node": "growthRelief",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-cf34f978917d7123d8595789": {
+        "from": {
+          "node": "grainAndPores",
+          "port": "value"
+        },
+        "to": {
+          "node": "heartwood",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-72c81b6fdd71715028a992ce": {
+        "from": {
+          "node": "growthRelief",
+          "port": "value"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-7932fc3572f9f4c80600b897": {
+        "from": {
+          "input": "relief"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "scale"
+        }
+      },
+      "link-6047479b518d64ed4f844fdf": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "tangentNormal",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-94788797b346010371dc32e1": {
+        "from": {
+          "node": "denseRings",
+          "port": "value"
+        },
+        "to": {
+          "node": "roughnessResponse",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a21d99f38085fcf38ab84390": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a6c53800b0e43fc877dbee7e": {
+        "from": {
+          "node": "previewLight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLightRamp",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-75e9c7df85e791422d7a6fdb": {
+        "from": {
+          "node": "heartwood",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-d29fe1c5884cf934cfbb2a7e": {
+        "from": {
+          "node": "previewLightRamp",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-c352cbbdc72b4c5c4e273fa9": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "node": "displayPreview",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-0f9283946b735cbc9f680bdf": {
+        "from": {
+          "node": "heartwood",
+          "port": "value"
+        },
+        "to": {
+          "output": "baseColor"
+        }
+      },
+      "link-148e187fc906e84cde5c5c4c": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "output": "height"
+        }
+      },
+      "link-2beb1315e8b6b4ae6dbbba87": {
+        "from": {
+          "node": "tangentNormal",
+          "port": "value"
+        },
+        "to": {
+          "output": "normal"
+        }
+      },
+      "link-781ad7aba89d261554594672": {
+        "from": {
+          "node": "roughnessResponse",
+          "port": "value"
+        },
+        "to": {
+          "output": "roughness"
+        }
+      },
+      "link-787e0108c4644b99c65a4e1e": {
+        "from": {
+          "node": "denseRings",
+          "port": "value"
+        },
+        "to": {
+          "output": "mask"
+        }
+      },
+      "link-aba8cba83ef380fe1e194816": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "output": "preview"
+        }
+      },
+      "link-cc4f68d2b85426cd5c2d2c80": {
+        "from": {
+          "node": "displayPreview",
+          "port": "value"
+        },
+        "to": {
+          "output": "previewDisplay"
+        }
+      }
+    }
+  },
+  "settings": {
+    "exports": {
+      "preview": {
+        "output": "previewDisplay",
+        "format": "png"
+      }
+    },
+    "outputUsages": {
+      "baseColor": {
+        "usage": "baseColor",
+        "label": "Base color",
+        "order": 0,
+        "source": {
+          "output": "baseColor"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "height": {
+        "usage": "height",
+        "label": "Height",
+        "order": 1,
+        "source": {
+          "output": "height"
+        },
+        "format": {
+          "format": "json"
+        }
+      },
+      "normal": {
+        "usage": "normal",
+        "label": "Normal",
+        "order": 2,
+        "source": {
+          "output": "normal"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "roughness": {
+        "usage": "roughness",
+        "label": "Roughness",
+        "order": 3,
+        "source": {
+          "output": "roughness"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      },
+      "mask": {
+        "usage": "mask.feature",
+        "label": "Feature mask",
+        "order": 4,
+        "source": {
+          "output": "mask"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      }
+    }
+  },
+  "resources": {},
+  "controls": {
+    "resolution": {
+      "input": "resolution",
+      "label": "Texture size",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 48,
+      "max": 192,
+      "step": 8,
+      "units": "px",
+      "order": 0
+    },
+    "seed": {
+      "input": "seed",
+      "label": "Seed",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 0,
+      "max": 9999,
+      "step": 1,
+      "order": 1
+    },
+    "relief": {
+      "input": "relief",
+      "label": "Relief depth",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0,
+      "max": 4,
+      "step": 0.05,
+      "units": "art-px",
+      "order": 2
+    },
+    "grain": {
+      "input": "grain",
+      "label": "Grain frequency",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.55,
+      "max": 2.2,
+      "step": 0.05,
+      "order": 3
+    },
+    "curl": {
+      "input": "curl",
+      "label": "Knot distortion",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0,
+      "max": 0.6,
+      "step": 0.01,
+      "order": 4
+    },
+    "cut": {
+      "input": "cut",
+      "label": "Grain cut",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0.04,
+      "max": 0.9,
+      "step": 0.02,
+      "order": 5
+    }
+  },
+  "instances": {},
+  "label": "Juniper Grain",
+  "metadata": {
+    "author": "Ink Studio",
+    "description": "Amber growth rings bent around knots, with dark grain cuts.",
+    "tags": [
+      "Natural",
+      "Recipe",
+      "wood"
+    ],
+    "materialModel": "pbr.metallic-roughness",
+    "visibility": {
+      "library": true,
+      "publication": "public"
+    },
+    "thumbnail": {
+      "file": "../previews/wood.png",
+      "alt": "Juniper Grain material swatch"
+    }
+  }
+}

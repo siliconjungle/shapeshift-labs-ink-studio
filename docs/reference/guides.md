@@ -209,6 +209,7 @@ All checked-in guides, indexed by title and section headings.
 - [Typed material transforms and addressing](../material-image-transforms.md)
 - [Named noise in material graphs](../material-named-noise.md)
 - [Material-point passes and impacts](../material-point-impacts.md)
+- [Material recipe library](../material-recipe-library.md)
 - [Portable material response recipes](../material-response.md)
 - [Scatter mappers](../material-scatter-mappers.md)
 - [Editable material shape library](../material-shape-library.md)

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Material Library · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--paper:#14181a;--panel:#202629;--surface:#282f32;--line:#3a4447;--ink:#f2ede3;--quiet:#b8bfbd;--gold:#efc683;--focus:#ffe0ab}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 85% 0%,#293038 0,transparent 48%),var(--paper);color:var(--ink);font:14px system-ui,sans-serif}
+main{max-width:1540px;margin:auto;padding:35px clamp(16px,3.5vw,53px) 36px}
+h1{font:400 clamp(42px,6.5vw,79px)/.95 Georgia,serif;letter-spacing:-.057em;margin:3px 0 13px}
+h2{font:400 28px/1.1 Georgia,serif;letter-spacing:-.025em;margin:0 0 7px}
+p{margin:0;line-height:1.48;color:var(--quiet)}
+header{margin:0 0 27px}
+header p{font-size:15px}
+small,.brand{font:10px ui-monospace,monospace;letter-spacing:.10em;text-transform:uppercase}
+.brand{color:var(--gold);font-size:11px}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(335px,390px);align-items:start;gap:23px}
+.catalog{min-width:0}
+.filters{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:13px}
+button,select,input{font:inherit;accent-color:var(--gold)}
+button,select{color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+button:hover,select:hover{border-color:var(--gold)}
+.filters button,.maps button{padding:6px 10px;font-size:12px}
+.filters button[aria-pressed=true],.maps button[aria-pressed=true]{color:#36271b;background:var(--gold);border-color:var(--gold);font-weight:650}
+#cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.card{width:100%;display:block;text-align:left;padding:0;overflow:hidden;min-width:0}
+.card[aria-pressed=true]{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
+.card img{width:100%;height:auto;aspect-ratio:1.24;object-fit:cover;display:block;image-rendering:pixelated;background:#161b1c}
+.card-name{display:block;padding:10px 9px;font-size:13px;font-weight:620;overflow-wrap:anywhere}
+.card[aria-pressed=true] .card-name{color:var(--gold)}
+.inspector{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel);box-shadow:0 16px 34px #0b101448}
+.inspector header{padding:14px 15px 12px;margin:0}
+.inspector p{font-size:12px}
+.inspector small{display:block;color:var(--gold);margin-bottom:4px}
+.stage{width:100%;aspect-ratio:1.35;background:#13181a;overflow:hidden}
+canvas{display:block;width:100%;height:100%;object-fit:contain;image-rendering:pixelated}
+.inspector-body{padding:12px 14px 13px}
+.maps{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.maps button{padding:4px 7px;font-size:11px}
+.actions{display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
+.actions label{font-size:12px;color:var(--quiet);white-space:nowrap;cursor:pointer}
+#controls{display:grid;grid-template-columns:1fr 1fr;gap:9px 15px;margin:10px 0}
+.field{display:grid;grid-template-columns:1fr auto;gap:3px 4px;align-items:center;min-width:0}
+.field label{font-size:11px;color:var(--quiet)}
+.field output{font:10px ui-monospace,monospace;color:var(--gold);text-align:right}
+.field input,.field select{grid-column:1/-1;width:100%;margin:0;min-width:0}
+.field select{padding:2px 5px;font-size:12px}
+footer{display:flex;justify-content:space-between;align-items:center;gap:5px;flex-wrap:wrap;margin-top:12px}
+footer a{color:var(--gold);font-size:12px;text-underline-offset:3px}
+footer button,#reset{padding:5px 8px;font-size:12px}
+#save{background:#edd1a0;color:#37271c;border-color:#edd1a0;font-weight:640}
+#error{font-size:12px;color:#ffab94;margin-top:9px}
+#error:empty,[hidden]{display:none!important}
+@media(max-width:1180px){#cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:850px){.layout{grid-template-columns:minmax(0,1fr) minmax(293px,340px);gap:13px}#cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){main{padding-top:24px}.layout{grid-template-columns:1fr}.inspector{grid-row:2}#cards{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.card-name{font-size:11px;padding:7px}.filters{margin-bottom:9px}.filters button{padding:5px 8px}header{margin-bottom:17px}.stage{aspect-ratio:1.45}}
+</style>
+</head>
+<body>
+<main>
+  <header><span class="brand">Ink Studio</span><h1>Material Library</h1><p>Twelve procedural materials to edit, tile, and make your own.</p></header>
+  <div class="layout">
+    <section class="catalog" aria-label="Material swatches">
+      <nav class="filters" aria-label="Material categories" id="filters"></nav>
+      <div id="cards"></div>
+    </section>
+    <aside class="inspector" aria-label="Selected material">
+      <header><small id="category"></small><h2 id="title"></h2><p id="description"></p></header>
+      <div class="stage"><canvas id="material" width="128" height="128" aria-label="Material map preview"></canvas></div>
+      <div class="inspector-body">
+        <nav class="maps" aria-label="Material outputs" id="maps"></nav>
+        <div class="actions"><label><input type="checkbox" id="repeat"> 2 × 2 repeat</label><button id="reset" type="button">Reset controls</button></div>
+        <div id="controls"></div>
+        <footer><a id="original" href="#">Original graph</a><button id="save" type="button">Save edited graph</button></footer>
+        <p role="alert" id="error"></p>
+      </div>
+    </aside>
+  </div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="catalog.js"></script>
+<script src="gallery.js"></script>
+</body>
+</html>
