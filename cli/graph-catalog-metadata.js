@@ -164,6 +164,21 @@ const clock = { ...clockControls, range: property('vec2', seconds, [0, 1]) };
 const blurTile = property('number|vec2|boolean', {unit: 'pixels', constraints: {
   integer: true, min: 1, max: 1024, allowedBoolean: false, automaticAbovePixels: 1048576, automaticSize: 256
 }});
+const imagePrecision = property('string', oneOf('unorm8','unorm16','float32','float64'));
+const imageRangePolicy = property('string', oneOf('clamp','error'), 'clamp');
+const correctionOutput = { precision: imagePrecision, outOfRange: imageRangePolicy };
+const toneRange = property('vec2', { constraints: { increasing: true } }, [0, 1]);
+const outputRange = property('vec2', {}, [0, 1]);
+const gamma = property('number', { constraints: { exclusiveMin: 0 } }, 1);
+const positive = { constraints: { min: 0 } };
+const hueControls = { ...correctionOutput, degrees: property('number', unit('degrees'), 0),
+  saturation: property('number', positive, 1), inputRange: property('string', oneOf('clamp','error'), 'error') };
+const measurement = property('string', oneOf('luminance','r','g','b','alpha','value'), 'luminance');
+const histogramBins = property('number', limit(2,4096,true),256);
+const colorDistance = { metric: property('string', oneOf('rgb','perceptual','chroma'),'perceptual'),
+  tolerance: property('number',positive,.04), softness: property('number',positive,0) };
+const maskOutput = { precision: {...imagePrecision, default: 'float64'}, useAlpha: property('boolean',{},true),
+  invert: property('boolean',{},false) };
 const options = {
   'textile.pattern': {
     size: property('vec2', {unit:'world units'}, [4,3]),
@@ -182,6 +197,25 @@ const options = {
   'raster.mix': {amount:property('number',limit(0,1),1),
     maskMode:property('string',oneOf('alpha','mean'),'alpha'),invert:property('boolean',{},false),
     keepTransparentRGB:property('boolean',{},false),channels:property('number',limit(0,15,true),15)},
+  'image.levels': { ...correctionOutput, inputRange:toneRange, outputRange, gamma },
+  'image.autoLevels': { ...correctionOutput, outputRange, gamma,
+    percentiles:property('vec2',{constraints:{min:0,max:1,increasing:true}},[.01,.99]),
+    channel:property('string',oneOf('all','luminance','r','g','b','alpha','value'),'all') },
+  'image.histogram': { channel:property('string',oneOf('all','luminance','r','g','b','alpha','value'),'luminance'),
+    bins:histogramBins, range:toneRange, includeTransparent:property('boolean',{},false) },
+  'image.histogramAdjust': { ...correctionOutput, mode:property('string',oneOf('equalize','range','shift','scan','select'),'equalize'),
+    range:toneRange, bins:histogramBins, position:property('number',{},.5),
+    span:property('number',{constraints:{exclusiveMin:0}},.5), offset:property('number',{},0), softness:property('number',positive,0) },
+  'image.hsl': { ...hueControls, lightness:property('number',limit(-1,1),0) },
+  'image.hsv': { ...hueControls, valueFactor:property('number',positive,1) },
+  'image.exposure': { ...correctionOutput, stops:property('number',unit('stops'),0) },
+  'image.contrast': { ...correctionOutput, factor:property('number',positive,1), pivot:property('number',{},.5) },
+  'image.threshold': { ...maskOutput, channel:measurement, level:property('number',{},.5), softness:property('number',positive,0) },
+  'image.invert': { ...correctionOutput, pivot:property('number',{},.5) },
+  'image.posterize': { ...correctionOutput, steps:property('number',limit(2,65536,true),4), range:toneRange,
+    palette:property('array',{constraints:{minItems:1,maxItems:256}}) },
+  'image.colorSelect': { ...maskOutput, ...colorDistance },
+  'image.colorReplace': { ...correctionOutput, ...colorDistance, amount:property('number',limit(0,1),1) },
   'color.posterize': {alpha:property('boolean',{},false)},
   'raster.crop': { x: property('number', pixelOffset), y: property('number', pixelOffset), ...size },
   'raster.resize': { ...size, filter: property('string', oneOf('nearest', 'bilinear'), 'nearest'),
