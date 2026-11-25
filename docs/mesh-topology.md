@@ -842,6 +842,7 @@ report and lists ordered `operations`. Choose IDs from that report or
 | `winding` | Supply an `anchor` to orient its manifold neighbors, or choose faces explicitly with a `faces` list or revision-checked face `selection`. |
 | `flip-diagonal` | Choose quads with a `faces` list or revision-checked face `selection`. Swap to the other interior diagonal and retain the authored quad. |
 | `split-quad` | Choose quads with a `faces` list or revision-checked face `selection`. Turn the current two render triangles into editable faces with a shared authored edge. |
+| `join-triangles` | Choose two triangles with an `edge`, a two-ID `faces` list, or a revision-checked face `selection`. Retain their shared edge as the quad's render diagonal. |
 
 Each winding step shows the face normals and corner orders before and
 after, plus any inconsistent edges incident to the reversed faces. Supply
@@ -900,6 +901,40 @@ a split that would make the shared edge non-manifold.
 ink-studio mesh-topology repair roof.json split.json --object cover
 ink-studio mesh-topology repair roof.json split.json --object cover --out triangles.json --report split-receipt.json
 node examples/tileset-pick/quad-split-demo.cjs editable-triangles-review
+```
+
+### Join two triangles into a quad
+
+Add `{ "kind": "join-triangles", "faces": ["tile", "tile/triangle"] }`
+to a repair request. The two faces need a single manifold shared edge,
+consistent winding, four distinct vertices, and the same material.
+The shared edge becomes the quad's explicit render diagonal, so the
+same two geometric triangles remain even on a bent surface. Request
+`keep` to choose the face ID and retained corners. The default uses
+the original quad ID when both triangles came from that split and
+otherwise uses the first face ID in sorted order.
+
+The default `"uvs": "match"` requires identical values at both endpoints
+in every authored UV layout and blocks marked seams. A blocked preview
+shows a `join-uv-seam` blocker and the proposed endpoint changes.
+Set `"uvs": "keep"` to keep the chosen face's shared UVs, remove the
+seam, and apply those values to both render triangles. The preview
+records the before and after values, deltas, pin flags, and seam
+markers per layout. A pin from either triangle remains on the joined
+corner at the resulting UV. Hard edges, creases, material boundaries,
+and differing shared corner normals or non-UV attributes still prevent
+the join. The repair receipt maps both input faces and their shared
+corners to the quad and records any split provenance.
+
+A matching tileset crop is consolidated into one quad binding, with its
+orientation adjusted for the retained corner order. Differing crop
+bindings enter review. Undo restores both triangles, their bindings,
+and the pre-join bake state.
+
+```sh
+ink-studio mesh-topology repair triangles.json join.json --object cover
+ink-studio mesh-topology repair triangles.json join.json --object cover --out joined.json --report join-receipt.json
+node examples/tileset-pick/quad-join-demo.cjs quad-join-review
 ```
 
 ### Repair weights and review changes

@@ -807,7 +807,8 @@
     function repairMeshTopology(object, request, options) {
       const plan = planMeshRepair(object, request, options);
       if (!plan.report.canCommit)
-        throw Object.assign(new RangeError('Repair would create or worsen a non-manifold edge'), { report: plan.report });
+        throw Object.assign(new RangeError(plan.report.blockers[0]?.message ??
+          'Repair would create or worsen a non-manifold edge'), { report: plan.report });
       return freeze({ repair: plan.report, ...(Object.keys(plan.patch).length && {
         topology: editMeshTopology(object, plan.patch, options)
       }) });

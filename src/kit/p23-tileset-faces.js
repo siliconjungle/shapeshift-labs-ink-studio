@@ -73,6 +73,66 @@
     return JSON.stringify(a,ordered) === JSON.stringify(b,ordered);
   }
 
+  function matchingJoinSource(sources, faces, quad, uvSet) {
+    if (sources.length !== 2 || new Set(sources.map(binding=>binding.element)).size !== 2 ||
+        sources.some(binding=>binding.review || binding.data.review)) return;
+    const [first,second] = sources.map(({data:{uvCorners,...data}})=>data);
+    if (!sameMaterial(first,second)) return;
+
+    const byVertex = new Map(quad.corners.map(corner=>[corner.vertex,corner]));
+    const slots = new Map();
+    for (const binding of sources) {
+      const face = faces.get(binding.element), order = sourceCorners(binding,face.corners.length);
+      if (!order || face.material !== quad.material) return;
+      for (const [i,corner] of face.corners.entries()) {
+        const target = byVertex.get(corner.vertex);
+        if (!target || !sameMaterial(MaterialUV.uv(corner,uvSet),MaterialUV.uv(target,uvSet)) ||
+            slots.has(corner.vertex) && slots.get(corner.vertex) !== order[i]) return;
+        slots.set(corner.vertex,order[i]);
+      }
+    }
+    const order = quad.corners.map(corner=>slots.get(corner.vertex));
+    if (order.every((slot,i)=>slot === i)) return first;
+
+    // A valid quad ring may begin at a different corner from the original crop.
+    let paint;
+    try { paint = TilesetSelection.paintOrientation(first.paint ?? {}); }
+    catch (error) { if (!(error instanceof TypeError || error instanceof RangeError)) throw error; return; }
+    const prior = TilesetSelection.paintCorners(quadCorners,paint), wanted = order.map(slot=>prior[slot]);
+    for (const rotation of [0,90,180,270]) {
+      const next = {...paint,rotation};
+      if (TilesetSelection.paintCorners(quadCorners,next).every((slot,i)=>slot === wanted[i]))
+        return {...first,paint:next};
+    }
+  }
+
+  function joinSources(original, remapped, before, after, correspondence) {
+    const sources = original.filter(isSourceBinding);
+    const merged = correspondence.domains.faces.groups.filter(row=>row.status === 'merged' &&
+      row.from.length === 2 && row.to.length === 1);
+    if (!sources.length || !merged.length) return remapped;
+    const old = new Map(before.faces.map(face=>[face.id,face])), next = new Map(after.faces.map(face=>[face.id,face]));
+    const byFace = new Map(), changes = new Map();
+    const uvSet = MaterialUV.resolve(before.uvBindings,'pigment');
+    if (uvSet !== MaterialUV.resolve(after.uvBindings,'pigment')) return remapped;
+    for (const binding of sources) {
+      if (!byFace.has(binding.element)) byFace.set(binding.element,[]);
+      byFace.get(binding.element).push(binding);
+    }
+    for (const {from,to:[element]} of merged) {
+      const quad = next.get(element), candidates = from.flatMap(id=>byFace.get(id) ?? []);
+      if (!candidates.length || quad.corners.length !== 4 || from.some(id=>old.get(id).corners.length !== 3)) continue;
+      const source = matchingJoinSource(candidates,old,quad,uvSet);
+      if (source) {
+        const keeper = candidates.find(binding=>binding.element === element) ?? candidates[0];
+        for (const binding of candidates) changes.set(binding.id,binding === keeper ? {...keeper,element,data:source} : null);
+      } else for (const binding of candidates) {
+        changes.set(binding.id,{...binding,element,review:{reason:'joined-tileset-sources-need-review',candidates:[element]}});
+      }
+    }
+    return remapped.map(binding=>changes.has(binding.id) ? changes.get(binding.id) : binding).filter(Boolean);
+  }
+
   // The renderer addresses first and last texel centers at 0 and 1.
   function cropSource(asset, crop, texelBounds = [crop.x,crop.y,crop.x+crop.width,crop.y+crop.height], paint) {
     const centers = (min,max,first,length,count)=>{
@@ -227,5 +287,5 @@
   }
 
   A.tilesetFaces = Object.freeze({plan,prepare,stamp,polygonStamp,append,cornersFor,cropSource,sourceBindings,sourceCorners,
-    splitSources,isSourceBinding,sameMaterial});
+    splitSources,joinSources,isSourceBinding,sameMaterial});
 })(KIT);

@@ -220,7 +220,7 @@ function maintenance(action, file, input, rest, opt, meshTopology, openEditor) {
     throw new RangeError('Write cut pieces separately from the input and other outputs');
   if (plan.report.canCommit === false && out) {
     if (report) write(report, plan.report);
-    throw new RangeError(blocked);
+    throw new RangeError(plan.report.blockers?.[0]?.message ?? blocked);
   }
   const result = out && editor && editor[commitScene](object, settings);
   for (const [i, file] of exports.entries()) write(file, plan.pieces[i].document);
