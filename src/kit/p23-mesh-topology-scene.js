@@ -92,7 +92,8 @@
     const visible = document !== cage && bindings.size ? elements(document) : records;
     const resolvedBindings = Object.fromEntries(moved.filter(binding => !binding.review)
       .map(binding => [binding.id, { ...binding, geometry: visible[binding.domain].get(binding.element) }]));
-    return { mesh, document, bindings: moved, resolvedBindings, bakes: [...bakes.values()],
+    const skin = document.skin && K.meshTopology.skin.bind(mesh);
+    return { mesh, document, bindings: moved, resolvedBindings, bakes: [...bakes.values()], ...(skin && {skin}),
       ...(evaluation && { cage, modifierReport: evaluation.report }) };
   }
 

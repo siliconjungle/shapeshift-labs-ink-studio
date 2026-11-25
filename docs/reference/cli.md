@@ -234,6 +234,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology boolean <mesh-or-scene.json> <request.json> [--object id] [--operand mesh.json] [--view file] [--preview dir] [--out file] [--report file]   solve and compare mesh or SDF Booleans
   mesh-topology bevel <mesh-or-scene.json> <request.json> [--object id] [--view file] [--preview dir] [--out file] [--report file]   preview or apply an edge bevel with native-grid protection
   mesh-topology shading <mesh-or-scene.json> [request.json] [--object id] [--view file] [--preview dir] [--subdivision level] [--out file] [--report file]   inspect or edit corner normals, smooth edges and subdivision creases
+  mesh-topology skin <mesh-or-scene.json> [request.json] [--object id] [--view file] [--preview dir] [--out file] [--report file]   inspect, paint, mirror and preview named joint weights
   mesh-topology modifiers inspect|set|update|apply <mesh-or-scene.json> [stack-or-edit.json] [--object id] [--through id] [--targets file] [--view file] [--preview dir] [--out file] [--report file]   inspect or edit a retained mesh modifier stack
   mesh-topology correspond <before.json> <after.json> [--lineage links.json] [--projection settings.json] [--match-ids on|off] [--out map.json]   map stable and projected elements
   mesh-topology transfer-materials <before.json> <replacement.json> <map.json> [--materials file] [--settings file] [--out mesh.json] [--out-materials file] [--report file] [--partial on]   transfer registered paint and corner data

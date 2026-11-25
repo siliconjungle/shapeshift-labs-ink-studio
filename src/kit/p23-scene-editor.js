@@ -539,6 +539,19 @@
       }) });
     }
 
+    function planMeshSkin(object, request, { part } = {}) {
+      return K.meshTopology.skin.plan(meshTopology(object, part).document, request);
+    }
+
+    function editMeshSkin(object, request, options) {
+      const plan = planMeshSkin(object, request, options);
+      if (!plan.report.canCommit)
+        throw Object.assign(new RangeError('Skin weights exceed the locked influence budget'), { report: plan.report });
+      return freeze({ skin: plan.report, ...(Object.keys(plan.patch).length && {
+        topology: editMeshTopology(object, plan.patch, { label:'Edit skin weights of '+object, ...options })
+      }) });
+    }
+
     function planMeshUV(object, request, { part } = {}) {
       return K.meshTopology.uv.plan(meshTopology(object, part).document, request);
     }
@@ -716,6 +729,8 @@
       bevelMeshTopology,
       planMeshShading,
       editMeshShading,
+      planMeshSkin,
+      editMeshSkin,
       planMeshUV,
       editMeshUV,
       inspectMeshModifiers,

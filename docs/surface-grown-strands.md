@@ -41,7 +41,9 @@ roots, and restoring the triangle reactivates them in the same native rows.
 To bend the host and its retained curves, paint, and residual splats from one
 control lattice, see [shared deformation cages](hybrid-deformation-cages.md).
 
-For linear skinning with Ink's twelve-value bone matrices, prepare a mesh
+[Edit retained mesh skin weights](mesh-topology.md#edit-and-pose-mesh-skin-weights)
+and pose the surface before refreshing its attached strands. For direct linear
+skinning with Ink's twelve-value bone matrices, prepare a mesh
 binding with one bone index or one to four `[bone, weight]` pairs per vertex.
 Register the mesh and curves in Ink's native bone update.
 

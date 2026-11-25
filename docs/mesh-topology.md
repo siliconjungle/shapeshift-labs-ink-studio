@@ -1080,3 +1080,100 @@ and a report. Scene editor methods are `setMeshModifiers`,
 `planApplyMeshModifiers`, and `applyMeshModifiers`.
 Bound pixel transactions accept `operation.modifiers` with
 `action: "set"`, `"update"`, or `"apply"`.
+
+## Edit and pose mesh skin weights
+
+A mesh topology document can carry a `skin` declaration. Use the same
+stable joint IDs for the skin and the vertex `weights` fields.
+
+```json
+{
+  "joints": ["root", "rest", "hinge.L", "hinge.R"],
+  "fallback": "root",
+  "locked": ["root"],
+  "mirrors": [["hinge.L", "hinge.R"]]
+}
+```
+
+The declared joint order is the order of the runtime matrices. Weights for
+channels outside the joint list are retained as vertex data. Every rendered
+copy of an authored vertex, including copies across UV seams or corner
+normal splits, uses its source vertex's weights.
+
+Run the switchyard kite example for a posed before and after comparison.
+
+```sh
+node examples/mesh-skin-weights/demo.cjs skin-review
+```
+
+The example writes the authored topology, the saved selection and brush
+request, the pose, the edited topology, and a report. The PNGs show the
+same camera and pose before and after editing. The weight view interpolates
+the selected joint's effective weight across visible triangles. The
+dark-blue end of the ramp represents zero. Pale gold represents one.
+
+Inspect a topology or preview and optionally commit an edit through the CLI.
+
+```sh
+node cli/ink-studio.js mesh-topology skin skin-review/kite.json
+node cli/ink-studio.js mesh-topology skin skin-review/kite.json skin-review/paint.json \
+  --view skin-review/pose.json --preview preview --report review.json
+```
+
+Use `--out` to write the revision to a separate file. Supply `--object` to
+work on a topology mesh inside a scene. The optional view accepts `w`, `h`,
+`t`, `camera`, `joint`, and `pose`. A standalone view may also supply
+`materials`. A pose is a map from joint ID to a twelve-value Ink matrix,
+or one flat array in joint order. The first nine values are the
+row-major linear transform and the last three are the translation.
+Matrices take points from mesh rest space to the preview pose.
+
+### Request fields
+
+An edit request takes `operations`, with an optional `revision` to reject a
+stale source. For an unbound mesh, include `skin` to attach the declaration.
+An operation's `selection` accepts stable vertex IDs or a saved
+`mesh-topology select` result from this revision. Selected edges and
+faces resolve to their vertices.
+
+- `assign` sets a `joint` to the requested `weight` on the selection.
+- `paint` approaches that weight around `at` within a positive
+  `radius`, in rest-space units. Set `strength` between zero and one
+  and use `smooth`, `linear`, or `hard` falloff. Omit the selection to
+  paint every vertex inside the brush.
+- `mirror` copies the selected source vertices' influences across the
+  rest-space plane. Set `axis`, `origin`, or `tolerance` to override the
+  default X plane through zero with a 0.001-unit tolerance. Ink swaps
+  declared mirror joints, holds destination locks, and reports centerline,
+  unmatched, or ambiguous vertices.
+- `lock` fixes the current influence for the named `joint` with
+  `locked: true`. Use `locked: false` to release it.
+- `normalize` writes the effective weights to the selection or the
+  entire mesh.
+
+Normalization holds the locked values, keeps up to four positive
+influences, and distributes the remaining weight proportionally among
+editable joints. Equal influences use the declared joint order. If no
+editable weight remains, Ink uses the fallback joint or the first eligible
+editable joint. The report shows authored and effective values, totals,
+trimmed influences, clamped edits, skipped operations, and posed
+displacements. Conflicting locks that exceed the available weight or
+influence slots block commit.
+
+### Connect a mesh to the rig
+
+```js
+const { skin } = KIT.meshTopology;
+const review = skin.plan(document, request);
+const mesh = KIT.meshTopology.toSceneMesh(review.document, { materials });
+const binding = skin.bind(mesh);
+binding.pose(namedMatrices);
+```
+
+Inspect with `KIT.meshTopology.skin.inspect(document, selection)`. Scene
+editors expose `planMeshSkin(object, request)` and
+`editMeshSkin(object, request)` through the existing transaction history.
+A built scene exposes the mesh binding as
+`world.topologyMeshes[object].skin`. Include that binding in
+`KIT.bones.bind`'s `meshBindings` array when the rig matrices use its
+declared joint order. Unposed topology meshes still render in rest space.

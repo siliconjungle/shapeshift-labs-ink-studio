@@ -301,7 +301,7 @@
       const ids = new Set(piece.faces.flatMap(face => face.corners.map(corner => corner.vertex)));
       const edges = [...edgeUses(piece.faces).keys()].map(key => edgesByPair.get(key));
       const document = topology.create({ id: piece.id, faces: piece.faces,
-        vertices: [...ids].map(id => points.vertices.get(id)), edges });
+        vertices: [...ids].map(id => points.vertices.get(id)), edges, skin:doc.skin });
       return { id: piece.id, document, boundary: piece.boundary, caps: piece.caps };
     });
     const report = {

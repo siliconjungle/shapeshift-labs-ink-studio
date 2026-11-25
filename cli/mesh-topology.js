@@ -116,6 +116,7 @@ function command([action, file, input, ...rest], opt, toolkit, { build, openEdit
   if (action === 'modifiers')
     return require('./mesh-modifiers.js').command([file, input, ...rest], opt, toolkit, openEditor);
   if (action === 'shading') return require('./mesh-shading-preview.js').command(file, input, rest, opt, toolkit, openEditor);
+  if (action === 'skin') return require('./mesh-skin-preview.js').command(file, input, rest, opt, toolkit, openEditor);
   if (action === 'retopology') return require('./mesh-retopology-preview.js').command(file, input, rest, opt, toolkit, openEditor);
   if (action === 'boolean') return require('./mesh-boolean-preview.js').command(file, input, rest, opt, toolkit, openEditor);
   if (action === 'bevel') return require('./mesh-bevel-preview.js').command(file, input, rest, opt, toolkit, openEditor);

@@ -861,7 +861,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.bones` | namespace |  |  |
-| `KIT.bones.bind` | function | `(W, o)` | [guide](../curve-splats.md#drive-strands-from-rigs-and-simulation), [guide](../surface-grown-strands.md#grow-from-uvs), [source](../../src/kit/k1-stage.js) |
+| `KIT.bones.bind` | function | `(W, o)` | [guide](../curve-splats.md#drive-strands-from-rigs-and-simulation), [guide](../mesh-topology.md#connect-a-mesh-to-the-rig), [guide](../surface-grown-strands.md#grow-from-uvs), [source](../../src/kit/k1-stage.js) |
 | `KIT.bones.posed` | function | `(W)` | [guide](../materialisation.md#ownership-and-rendering), [source](../../src/kit/k1-stage.js) |
 | `KIT.bones.tag` | function | `(W, ids, bid, bid2, w2)` | [source](../../src/kit/k1-stage.js) |
 

@@ -76,6 +76,23 @@
     return { weights: frozen(Object.fromEntries(Object.keys(value).sort().map(channel => [channel, value[channel]]))) };
   }
 
+  function skinSettings(value) {
+    if (value === undefined || value === null) return;
+    const { joints, locked = [], mirrors = [], fallback = joints?.[0] } = value;
+    const jointName = id => TargetSelectors.name(id) && !['__proto__', 'prototype', 'constructor'].includes(id);
+    const roster = Array.isArray(joints) && new Set(joints);
+    if (Object.getPrototypeOf(value) !== Object.prototype ||
+        Object.keys(value).some(key => !['joints', 'locked', 'mirrors', 'fallback'].includes(key)) ||
+        !roster || !roster.size || roster.size > 256 || roster.size !== joints.length ||
+        !Array.from(roster).every(jointName) || !roster.has(fallback) ||
+        !Array.isArray(locked) || new Set(locked).size !== locked.length || !Array.from(locked).every(id => roster.has(id)) ||
+        !Array.isArray(mirrors) || !Array.from(mirrors).every(pair => Array.isArray(pair) && vector(pair, 2, id => roster.has(id))) ||
+        new Set(mirrors.flat()).size !== mirrors.length * 2)
+      throw new TypeError('Mesh skin needs unique joint IDs, a known fallback, valid locks, and disjoint mirror pairs');
+    return frozen({ joints:frozen(joints.slice()), fallback, locked:frozen(joints.filter(id => locked.includes(id))),
+      mirrors:frozen(mirrors.map(pair => frozen(pair.slice()))) });
+  }
+
   function cornerAttributes(value, face) {
     if (value === undefined) return undefined;
     if (!value || Object.getPrototypeOf(value) !== Object.prototype)
@@ -119,10 +136,10 @@
 
   function build(source, keepEdges = false) {
     if (documents.has(source)) return source;
-    const { format: type = format, version = 1, id, shading: authoredShading, vertices: inputVertices, edges: inputEdges = [], faces: inputFaces, uvBindings:inputBindings } = source ?? {};
+    const { format: type = format, version = 1, id, shading: authoredShading, skin: authoredSkin, vertices: inputVertices, edges: inputEdges = [], faces: inputFaces, uvBindings:inputBindings } = source ?? {};
     if (type !== format || version !== 1 || !name(id))
       throw new TypeError('Use a version 1 mesh topology document with a mesh ID');
-    const shading = shadingSettings(authoredShading), vertices = new Map(), uvBindings=MaterialUV.bindings(inputBindings);
+    const shading = shadingSettings(authoredShading), skin = skinSettings(authoredSkin), vertices = new Map(), uvBindings=MaterialUV.bindings(inputBindings);
     for (const [key, { position, weights }] of index(inputVertices, 'Vertices')) {
       if (!vector(position, 3, value => Number.isFinite(value) && Number.isFinite(Math.fround(value))))
         throw new RangeError('Vertex ' + key + ' needs a finite XYZ position');
@@ -188,7 +205,7 @@
       throw new RangeError('A bound UV layout needs authored coordinates on every face');
     const doc = frozen({ format, version, id, vertices: frozen([...vertices.values()]),
       edges: frozen(retainedEdges.map(({ uses, ...edge }) => frozen(edge))), faces: frozen(faces),
-      ...(shading && { shading }), ...(uvBindings && {uvBindings}) });
+      ...(shading && { shading }), ...(skin && { skin }), ...(uvBindings && {uvBindings}) });
     documents.set(doc, { vertices, triangles, edges: retainedEdges });
     return doc;
   }
@@ -208,7 +225,7 @@
     return [...values.values()];
   }
 
-  function edit(source, { vertices = [], faces = [], removeVertices = [], removeFaces = [], edges = [], shading, uvBindings } = {}) {
+  function edit(source, { vertices = [], faces = [], removeVertices = [], removeFaces = [], edges = [], shading, uvBindings, skin } = {}) {
     const doc = create(source), prior = new Map(doc.vertices.map(row => [row.id, row]));
     const updates = [...index(vertices, 'Updated vertices').values()].map(row => {
       const { id, position, weights = prior.get(row.id)?.weights } = row;
@@ -226,6 +243,7 @@
       return { id, vertices, ...edgeSettings({ smooth: smooth ?? undefined, crease: crease ?? undefined, uvSeam, uvSeams }) };
     });
     return build({ ...doc, edges: edgeRows, uvBindings:uvBindings ?? doc.uvBindings, shading: shading === undefined ? doc.shading : shading,
+      skin: skin === undefined ? doc.skin : skin,
       vertices: apply(doc.vertices, updates, removeVertices, 'vertices'),
       faces: apply(doc.faces, faces, removeFaces, 'faces')
     }, true);
@@ -238,18 +256,19 @@
       edges: edges.map(({ uses, ...edge }) => ({ ...edge, uses: uses.slice() })) };
   }
 
-  function fromIndexed({ id, positions, indices, uvs, normals, materials = ['default'], faceMaterials } = {}) {
+  function fromIndexed({ id, positions, indices, uvs, normals, materials = ['default'], faceMaterials, weights, skin } = {}) {
     if (!list(positions) || positions.length % 3 || !list(indices) || indices.length % 3 ||
         indices.length / 3 > maxTriangles || indices.length && !positions.length ||
         normals !== undefined && (!list(normals) || normals.length !== positions.length) ||
         uvs !== undefined && (!list(uvs) || uvs.length !== positions.length / 3 * 2) ||
+        weights !== undefined && (!Array.isArray(weights) || weights.length !== positions.length / 3) ||
         faceMaterials !== undefined && (!list(faceMaterials) || faceMaterials.length !== indices.length / 3) ||
         !Array.isArray(materials) || !materials.length || !Array.from(materials).every(name) ||
         new Set(materials).size !== materials.length ||
         !Array.from(indices).every(i => Number.isSafeInteger(i) && i >= 0 && i < positions.length / 3))
       throw new RangeError('Use indexed triangle positions, indices, optional UVs and face material slots');
     const vertices = Array.from({ length: positions.length / 3 }, (_, i) =>
-      ({ id: 'v/' + i, position: positions.slice(i * 3, i * 3 + 3) }));
+      ({ id: 'v/' + i, position: positions.slice(i * 3, i * 3 + 3), weights:weights?.[i] }));
     const faces = Array.from({ length: indices.length / 3 }, (_, i) => {
       const slot = faceMaterials === undefined ? 0 : faceMaterials[i];
       if (!Number.isSafeInteger(slot) || !materials[slot]) throw new RangeError('Missing material slot for triangle ' + i);
@@ -259,17 +278,17 @@
           normal: normals?.slice(vertex * 3, vertex * 3 + 3) };
       }) };
     });
-    return create({ id, vertices, faces });
+    return create({ id, vertices, faces, skin });
   }
 
-  function triangulate(source) {
+  function renderGeometry(source) {
     const doc = create(source);
     const { vertices, triangles, edges } = documents.get(doc);
     const directions = meshTopologyShading.resolve(doc, edges, vertices);
     const positions = [], uvs = [], normals = [], indices = [], materials = [], faceMaterials = [], triangleSources = [];
     const sets=new Set(doc.faces.flatMap(row=>MaterialUV.setsOf(row.corners[0])));
     const uvSets=Object.fromEntries([...sets].sort((a,b)=>a-b).map(set=>[set,[]]));
-    const renderVertices = new Map(), slots = new Map();
+    const renderVertices = new Map(), vertexSources = [], slots = new Map();
     for (const { face, local } of triangles) {
       if (!slots.has(face.material)) {
         slots.set(face.material, materials.length);
@@ -285,6 +304,7 @@
         const key = JSON.stringify([vertex,...uv,...(normal || []),...alternate]);
         if (!renderVertices.has(key)) {
           renderVertices.set(key, positions.length / 3);
+          vertexSources.push(vertex);
           positions.push(...vertices.get(vertex).position);
           uvs.push(...uv);
           Object.values(uvSets).forEach((rows,i)=>rows.push(...(alternate[i] ?? [0,0])));
@@ -294,12 +314,17 @@
       }
       triangleSources.push(frozen({ face: face.id, corners: frozen(corners.map(corner => corner.id)) }));
     }
-    return { positions, uvs, ...(sets.size && {uvSets}), ...(doc.uvBindings && {uvBindings:doc.uvBindings}), ...(directions && { normals }), indices, materials, faceMaterials, triangleSources };
+    return { positions, uvs, ...(sets.size && {uvSets}), ...(doc.uvBindings && {uvBindings:doc.uvBindings}), ...(directions && { normals }), indices, materials, faceMaterials, triangleSources, vertexSources };
+  }
+
+  function triangulate(source) {
+    const { vertexSources, ...geometry } = renderGeometry(source);
+    return geometry;
   }
 
   function toSceneMesh(source, { materials, objectId, partId, meshId } = {}) {
     const doc = create(source);
-    const { materials: slots, triangleSources, ...geometry } = triangulate(doc);
+    const { materials: slots, triangleSources, vertexSources, ...geometry } = renderGeometry(doc);
     if (!triangleSources.length) throw new RangeError('Add at least one polygon before rendering a mesh topology');
     const options = materials === undefined ? null : index(materials, 'Materials');
     const definitions = slots.map(id => {
@@ -309,7 +334,7 @@
     const mesh = K.sceneMeshes.create({ id: meshId ?? doc.id, objectId, partId, ...geometry, materials: definitions });
     K.sceneMeshes.layer(mesh).featureFaces=Array.from({length:mesh.triangles},(_,i)=>
       triangleSources[K.sceneMeshes.sourceTriangle(mesh,i)].face);
-    renderSources.set(mesh, { document: doc, triangles: triangleSources });
+    renderSources.set(mesh, { document: doc, triangles: triangleSources, vertices: vertexSources });
     return mesh;
   }
 
@@ -326,6 +351,9 @@
     return revisions.get(doc);
   }
 
+  function sourceVertex(mesh, vertex) {
+    return Number.isSafeInteger(vertex) && vertex >= 0 ? renderSources.get(mesh)?.vertices[vertex] ?? null : null;
+  }
   const sourceDocument = mesh => renderSources.get(mesh)?.document ?? null;
-  K.meshTopology = frozen({ create, edit, inspect, fromIndexed, triangulate, toSceneMesh, triangleSource, sourceDocument, revision });
+  K.meshTopology = frozen({ create, edit, inspect, fromIndexed, triangulate, toSceneMesh, triangleSource, sourceVertex, sourceDocument, revision });
 })(KIT);
