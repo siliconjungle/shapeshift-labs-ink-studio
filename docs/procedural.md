@@ -2865,7 +2865,12 @@ count and may contain valid merges. An `ok` result can include unverified
 rows when the verified merges were enough to reach the target.
 
 To protect a screen-space result, pass `guard(splats)`. It receives the
-candidate records and returns a boolean. A failed guard returns status
+frozen candidate records and returns a boolean. `P.data.isImmutable()`
+recognizes the result, its `work` object, and its `splats` array, including
+the array provided to the guard. Use `Object.isFrozen()` to inspect individual
+rows and their numeric arrays. The merger freezes these directly so retained
+cascades need fewer entries in the shared immutability registry.
+A failed guard returns status
 `coverage` and retains the input. For example, render the original and
 candidate using `studio.render(world, { captureCoverage: true, ...camera })`
 and pass their coverage arrays to

@@ -382,7 +382,7 @@
       if (active === before) break;
     }
     function records(selection) {
-      return selection
+      const rows = selection
         .sort((a, b) => a.first - b.first)
         .map(n => {
           const { id, position, normal, covariance, opacity, color, owner, material, surface, binding, locked: protect } = n,
@@ -393,22 +393,26 @@
             if (node.parts) pending.push(node.parts[1], node.parts[0]);
             else members.push(node.id);
           }
-          return { id, position, normal, covariance, opacity, color, owner, material, surface, ...(binding && { target: binding }), protect, members };
+          return Object.freeze({
+            id, position: Object.freeze(position), normal: Object.freeze(normal), covariance: Object.freeze(covariance),
+            opacity, color: Object.freeze(color), owner, material, surface, ...(binding && { target: binding }),
+            protect, members: Object.freeze(members)
+          });
         });
+      return freezeProceduralContainer(rows);
+    }
+    function result(status, splats, work) {
+      return freezeProceduralContainer({ status, splats, work: freezeProceduralContainer(work) });
     }
     const splats = records(nodes.filter(n => n.alive));
     if (guard && work.merged) {
-      const accepted = guard(P.data.freeze(splats));
+      const accepted = guard(splats);
       if (typeof accepted !== 'boolean') throw new TypeError('Splat LOD guard must return a boolean');
       if (!accepted)
-        return P.data.freeze({
-          status: 'coverage',
-          splats: records(nodes.slice(0, input.length)),
-          work: { ...work, attemptedMerges: work.merged, merged: 0 }
-        });
+        return result('coverage', records(nodes.slice(0, input.length)), { ...work, attemptedMerges: work.merged, merged: 0 });
     }
     const limited = mergeLimited || work.seamUnverified > 0;
-    return P.data.freeze({ status: active <= goal ? 'ok' : limited ? 'budget' : 'constrained', splats, work });
+    return result(active <= goal ? 'ok' : limited ? 'budget' : 'constrained', splats, work);
   }
 
   function writeRow(data, i, p, alpha) {
