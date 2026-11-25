@@ -93,13 +93,18 @@
       cornerIds:new Set(doc?.faces.flatMap(row=>row.corners.map(corner=>corner.id)))};
   }
 
-  function stamp(brush, face, anchor) {
+  function stamp(brush, face, anchor, shared) {
     const {frame,source,material,activeSets,uvSet,unitUV,pigmentUV,vertexIds,cornerIds} = brush;
     const [x,y] = frame.axes, [w,h] = brush.size;
-    const positions = [anchor,K.V.mad(anchor,x,w),K.V.mad(K.V.mad(anchor,x,w),y,h),K.V.mad(anchor,y,h)];
+    const end = shared?.[1].position ?? K.V.mad(anchor,x,w);
+    const positions = [anchor,end,K.V.mad(end,y,h),K.V.mad(anchor,y,h)];
     const binding = {id:'tileset/'+face,domain:'faces',element:face,data:source};
-    const vertices = positions.map((position,i)=>({id:face+'/v'+i,position}));
-    const corners = vertices.map(({id},i)=>({id:face+'/c'+i,vertex:id,uv:uvSet ? unitUV[i] : pigmentUV[i],
+    const ring = positions.map((position,i)=>{
+      const weights = shared?.[3-i]?.weights;
+      return shared?.[i] ?? {id:face+'/v'+i,position,...(weights && {weights})};
+    });
+    const vertices = shared ? ring.slice(2) : ring;
+    const corners = ring.map(({id},i)=>({id:face+'/c'+i,vertex:id,uv:uvSet ? unitUV[i] : pigmentUV[i],
       ...(activeSets.length && {attributes:Object.fromEntries(activeSets.map(set=>
         [MaterialUV.key(set),set === uvSet ? pigmentUV[i] : unitUV[i]]))})}));
     const polygon = {id:face,material,corners};
@@ -118,7 +123,7 @@
       {document:topology.create({id:object,...added}),...(part && {part})};
     if (doc && !existing.modifiers?.some(modifier=>modifier.enabled !== false)) {
       const before = topology.revision(doc), after = topology.revision(row.document);
-      // The new disconnected polygon leaves all original anchors and morph deltas valid.
+      // Appending a polygon preserves the original anchors and vertex deltas.
       if (row.attachments?.revision === before) row.attachments = {...row.attachments,revision:after};
       if (row.shapeKeys?.restRevision === before) row.shapeKeys = {...row.shapeKeys,restRevision:after};
     }

@@ -90,6 +90,10 @@ Use `planTilesetReskin(request)` and `applyTilesetReskin(request)`
 to replace a face's tileset or crop with a reviewed pigment UV change.
 [Face reskin modes](mesh-uv.md#reskin-a-face-in-place)
 
+Use `planTilesetGrow(request, options)` and
+`growTilesetFace(request, options)` to attach and fold a painted quad
+along a retained boundary edge. [Edge grow workflow](mesh-uv.md#grow-a-tile-from-a-mesh-edge)
+
 ## Brushes and local rebuilds
 
 Use `paintShadowBand(stroke, { pbrMaterial })` to append a stroke to a [named PBR diffuse ramp](pbr-materials.md#paint-a-pbr-shadow-band).

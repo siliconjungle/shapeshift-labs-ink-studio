@@ -433,6 +433,44 @@ One undo restores the original mapping and material. Run
 `node examples/tileset-pick/face-reskin-demo.cjs reskin-demo` to compare
 the modes on one authored face.
 
+### Grow a tile from a mesh edge
+
+Select a boundary edge by its retained ID and give the new face an ID.
+The new quad shares both endpoints and traverses the edge in the
+opposite direction to its incident face. Its other two vertices grow
+from those endpoints and inherit any endpoint skin weights.
+
+```sh
+ink-studio tileset grow --scene wall.json --object gate --edge eave --face roof --selection roof-tile.json --angle -60
+ink-studio tileset grow --scene wall.json --object gate --edge eave --face roof --selection roof-tile.json --angle -60 --out folded.json
+ink-studio tileset grow --scene wall.json --object gate --edge eave --face trim --selection roof-tile.json --angle -60 --depth .55 --out trim.json
+```
+
+The angle is in degrees around the shared edge. Zero extends the face
+outward in the incident face's plane. Positive angles use the
+right-hand rule along the new face's first edge, as reported in
+`sharedVertices`. The command uses a temporary placement frame.
+
+- The default `--sizing proportional` fits the crop's width to the
+  edge and scales the depth by the same factor.
+- `--sizing brush` uses the brush's world height for depth. This
+  can come from the crop's density and brush scale or a sized eyedrop.
+- `--depth` sets a depth in scene units. The original edge sets width
+  in every mode.
+
+The selection, material, and paint orientation use the same inputs as
+`tileset stamp`. Omit `--out` to preview the shared endpoint IDs, frame,
+size, and new corners. An edge used by more than one face reports its
+incident faces for review. Inspect the source mesh's `document.edges`
+to get a retained edge ID.
+
+In Node, use `editor.planTilesetGrow(request)` and
+`editor.growTilesetFace(request)` with `object`, `edge`, `face`,
+`selection`, and optional `angle`, `sizing`, or `depth`. One undo
+restores the boundary and its source bindings. Run
+`node examples/tileset-pick/face-grow-demo.cjs grow-demo` to compare
+two depths at the same fold angle.
+
 ### Extract a crop as a reusable tileset
 
 Use an exact texel rectangle or a saved `tileset pick` selection.

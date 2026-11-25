@@ -541,6 +541,10 @@
       return stageTilesetFaceEdit(A.tilesetReskin.plan,request).report;
     }
 
+    function planTilesetGrow(request, options) {
+      return stageTilesetFaceEdit(A.tilesetGrow.plan,request,options).report;
+    }
+
     function commitTilesetFaceEdit(plan, request, options, name) {
       const {patch,remove,report} = stageTilesetFaceEdit(plan,request,options);
       if (!report.canCommit) throw Object.assign(new RangeError('Tile face '+name+' needs review'),{report});
@@ -568,6 +572,10 @@
 
     function applyTilesetReskin(request) {
       return commitTilesetFaceEdit(A.tilesetReskin.plan,request,undefined,'reskin');
+    }
+
+    function growTilesetFace(request, options) {
+      return commitTilesetFaceEdit(A.tilesetGrow.plan,request,options,'grow');
     }
 
     function meshTopology(object, part) {
@@ -1014,7 +1022,7 @@
       constructionPlane, setConstructionPlane, planConstructionOrigin, snapConstructionOrigin,
       planTilesetFace, placeTilesetFace, eyedropTilesetFace, planTilesetStroke, applyTilesetStroke,
       planTilesetRectangle, applyTilesetRectangle, planTilesetBrushRun, applyTilesetBrushRun,
-      planTilesetReskin, applyTilesetReskin,
+      planTilesetReskin, applyTilesetReskin, planTilesetGrow, growTilesetFace,
       planTilesetCanvas,
       transformTilesetCanvas,
       tilesetDependencies, planTilesetRevision, editTilesetRevision,

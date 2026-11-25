@@ -884,7 +884,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetFaces.prepare` | function | `(scene, request, {projectTexelsPerUnit} = {}, cellSize)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.sameMaterial` | function | `(a, b)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.sourceBindings` | function | `(row, id, update)` | [source](../../src/kit/p23-tileset-faces.js) |
-| `KIT.authoring.tilesetFaces.stamp` | function | `(brush, face, anchor)` | [source](../../src/kit/p23-tileset-faces.js) |
+| `KIT.authoring.tilesetFaces.stamp` | function | `(brush, face, anchor, shared)` | [source](../../src/kit/p23-tileset-faces.js) |
+| `KIT.authoring.tilesetGrow` | namespace |  |  |
+| `KIT.authoring.tilesetGrow.plan` | function | `(scene, request, options)` | [source](../../src/kit/p23-tileset-grow.js) |
 | `KIT.authoring.tilesetReskin` | namespace |  |  |
 | `KIT.authoring.tilesetReskin.plan` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-reskin.js) |
 | `KIT.authoring.tilesetRevisions` | namespace |  |  |

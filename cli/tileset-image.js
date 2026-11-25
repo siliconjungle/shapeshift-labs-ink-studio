@@ -315,16 +315,19 @@ function brushUVCommand([file,...rest], options, toolkit, openEditor) {
 }
 
 function stampCommand(action, args, options, toolkit, projectTexelsPerUnit, openEditor) {
-  const {scene,id,object,face,part,out,material,selection,plane,'snap-grid':snapGrid} = options;
-  const names = ['scene','id','object','face','part','out','material','selection'];
+  const {scene,id,object,face,part,out,material,selection,plane,'snap-grid':snapGrid,edge,sizing} = options;
+  const growing = action === 'grow';
+  const names = ['scene','id','object','face','part','out','material','selection',...(growing ? ['edge','sizing'] : [])];
   const vectors = ['origin','right','up'];
-  const allowed = [...names,...vectors,...rectangleFields,'brush-scale','texels-per-unit','plane','snap-grid',...paintFlags];
+  const placement = growing ? ['angle','depth'] : [...vectors,'plane','snap-grid'];
+  const allowed = [...names,...placement,...rectangleFields,'brush-scale','texels-per-unit',...paintFlags];
   const saved = selection !== undefined;
-  if (args.length || ![scene,object,face].every(Boolean) || Object.keys(options).some(key=>!allowed.includes(key)) ||
+  if (args.length || ![scene,object,face].every(Boolean) || growing && !edge || Object.keys(options).some(key=>!allowed.includes(key)) ||
       names.some(key=>options[key] !== undefined && !(typeof options[key] === 'string' && options[key].trim())) ||
       (saved ? id !== undefined || rectangleFields.some(key=>options[key] !== undefined) :
         !id || !rectangleFields.every(key=>integerText(options[key]))))
-    throw new TypeError('Use tileset '+action+' --scene <scene.json> --object <mesh-id> --face <face-id> with a saved selection or --id and exact texel bounds');
+    throw new TypeError('Use tileset '+action+' --scene <scene.json> --object <mesh-id> --face <face-id>'+
+      (growing ? ' --edge <edge-id>' : '')+' with a saved selection or --id and exact texel bounds');
   const input = path.resolve(scene), output = out && sceneOutput(input,out,selection);
   const editor = openEditor(input);
   const picked = saved ? JSON.parse(fs.readFileSync(path.resolve(selection),'utf8')) : pickTilesetRectangle(editor.snapshot(),id,
@@ -345,6 +348,10 @@ function stampCommand(action, args, options, toolkit, projectTexelsPerUnit, open
   if (snapGrid !== undefined) request.snapGrid = snapGrid;
   for (const [key,field] of [['texels-per-unit','texelsPerUnit'],['brush-scale','brushScale']]) {
     if (options[key] !== undefined) request[field] = numberOption(options,key);
+  }
+  if (growing) {
+    Object.assign(request,{edge,sizing,angle:numberOption(options,'angle'),depth:numberOption(options,'depth')});
+    return publishFaceEdit(editor,request,{projectTexelsPerUnit},output,'planTilesetGrow','growTilesetFace');
   }
   return publishFaceEdit(editor,request,{projectTexelsPerUnit},output,'planTilesetFace','placeTilesetFace');
 }
@@ -426,7 +433,7 @@ function command([action, ...args], options, toolkit, projectTexelsPerUnit, open
   if (action === 'reskin') return reskinCommand(args,options,openEditor);
   if (action === 'eyedrop') return eyedropCommand(args,options,openEditor);
   if (Object.hasOwn(faceEdits,action)) return faceEditCommand(action,args,options,projectTexelsPerUnit,openEditor);
-  if (action === 'stamp' || action === 'place') return stampCommand(action,args,options,toolkit,projectTexelsPerUnit,openEditor);
+  if (action === 'stamp' || action === 'place' || action === 'grow') return stampCommand(action,args,options,toolkit,projectTexelsPerUnit,openEditor);
   if (['resize','resample','swap'].includes(action))
     return require('./tileset-canvas.js').command(action,args,options,openEditor);
   if (action === 'link' || action === 'reload')
