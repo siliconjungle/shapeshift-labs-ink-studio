@@ -125,13 +125,33 @@ const meshFaceRegionGeometry = (function (K) {
   }
 
   function displacement(region, at, config) {
-    const { kind, distance, direction, tolerance } = config;
+    const { kind, distance, direction, tolerance, normalMode, shading } = config;
     const areas = new Map(region.faces.map(face => [face.id, area(face.corners.map(c => at(c.vertex)))]));
     const normals = new Map([...areas].map(([id, vector]) => [id, unit(vector, 'Face normal ' + id)]));
     if (kind === 'thicken') return { offsets: thicken(region, normals, distance), normals };
+    if (normalMode === 'vertex') {
+      const samples = new Map([...region.vertices.keys()].map(id=>[id,[]]));
+      for (const face of region.faces) for (const corner of face.corners) {
+        const resolved = shading?.get(corner.id);
+        samples.get(corner.vertex).push({face:face.id,corner:corner.id,
+          source:corner.normal ? 'authored' : resolved ? 'smooth' : 'face',
+          normal:corner.normal ?? resolved ?? normals.get(face.id),weight:V.len(areas.get(face.id))});
+      }
+      const directions = new Map(), offsets = new Map();
+      for (const [id,contributors] of samples) {
+        const sum = contributors.reduce((vector,row)=>V.mad(vector,row.normal,row.weight),[0,0,0]);
+        const total = contributors.reduce((n,row)=>n+row.weight,0);
+        if (V.len(sum)<=1e-8*total) throw new RangeError('Vertex normals cancel at '+id);
+        const axis = unit(sum,'Vertex normal '+id);
+        directions.set(id,{axis,contributors});
+        offsets.set(id,V.mul(axis,distance));
+      }
+      return {offsets,normals,directions};
+    }
     const normal = direction ?? unit([...areas.values()].reduce(V.add, [0, 0, 0]), 'Region normal');
     if (kind === 'inset') return { offsets: inset(region, at, normal, distance, tolerance), normals };
-    return { offsets: new Map([...region.vertices.keys()].map(id => [id, V.mul(normal, distance)])), normals };
+    return { offsets: new Map([...region.vertices.keys()].map(id => [id, V.mul(normal, distance)])), normals,
+      ...(normalMode && {directions:new Map([...region.vertices.keys()].map(id=>[id,{axis:normal}]))}) };
   }
 
   function planarUV(points, normal) {
