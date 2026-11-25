@@ -15,7 +15,7 @@ Origin: toolkit.
 | Input | `definition` | `record` | `{"type":"rectangle","radius":0.1}` | {"layout":"Plain named object","types":["rectangle","disc","polygon","star","linear","radial","spot","stroke","gradient","symbol","bevel"]} |
 | Output | `value` | `shape2d` | — | {"layout":"Serializable planar geometry, profile, symbol or bevel definition"} |
 
-Guides: [guide](../material-shape-library.md)
+Guides: [guide](../material-shape-library.md), [guide](../material-tile-generator.md)
 
 Get the runnable example with `ink-studio graph describe shape.define --example > example.json`.
 Run it with `ink-studio graph run example.json`.
@@ -72,7 +72,7 @@ Origin: toolkit.
 | Input | `id` | `string` | `"rectangle"` |  |
 | Output | `value` | `shape2d` | — | {"layout":"Serializable planar geometry, profile, symbol or bevel definition"} |
 
-Guides: [guide](../material-shape-library.md), [guide](../material-shape-library.md#share-shapes-across-bakes)
+Guides: [guide](../material-shape-library.md), [guide](../material-shape-library.md#share-shapes-across-bakes), [guide](../material-tile-generator.md)
 
 Get the runnable example with `ink-studio graph describe shape.pick --example > example.json`.
 Run it with `ink-studio graph run example.json`.

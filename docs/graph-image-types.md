@@ -66,6 +66,8 @@ For seeded scalar image generation, per-axis periods and higher-dimensional slic
 
 For reusable signed geometry, profiles, symbols and bevel bakes, see [Editable material shape library](material-shape-library.md).
 
+For repeatable stamp grids, brick bonds, crops and course labels, see [Material Tile Generator](material-tile-generator.md).
+
 ## Convert color to relief
 
 The `fx.relight` height socket accepts typed height in `art-px` and existing uncolored scalar rasters. A connection from a known RGB source fails graph validation. For dynamically sourced images, the socket validates their value before relighting. Convert deliberately with `image.toHeight`.

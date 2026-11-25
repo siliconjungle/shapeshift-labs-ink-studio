@@ -211,6 +211,7 @@ All checked-in guides, indexed by title and section headings.
 - [Material-point passes and impacts](../material-point-impacts.md)
 - [Portable material response recipes](../material-response.md)
 - [Editable material shape library](../material-shape-library.md)
+- [Material Tile Generator](../material-tile-generator.md)
 - [Surface materialisation](../materialisation.md)
 - [Procedural math fields](../math-fields.md)
 - [Editable mesh topology](../mesh-topology.md)

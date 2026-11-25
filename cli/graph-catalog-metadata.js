@@ -70,6 +70,7 @@ const namedNoise = oneOf('perlin','simplex','gaussian','white','blue','worley','
 const evolvingNoise = ['perlin','simplex','worley','voronoi','cellular','fractal','ridged','anisotropic','directional'];
 
 const ports = {
+  'image.tileGenerator': { columns:limit(1,128,true),rows:limit(1,128,true) },
   'shape.define': { definition:{constraints:{types:['rectangle','disc','polygon','star','linear','radial','spot','stroke','gradient','symbol','bevel']}} },
   'image.noise': { family:namedNoise },
   'proc.noiseFamily': { family:namedNoise },
@@ -248,6 +249,29 @@ const noiseOptions = {
   wander:property('number',{families:['directional'],...limit(0,4)},.26)
 };
 const options = {
+  'image.tileGenerator': {
+    pattern:property('string',oneOf('grid','brick','column-stagger','checker'),'grid'),
+    size:property('vec2',{unit:'cell widths and heights',...limit(.025,3)},[1,1]),
+    gutter:property('vec2',{unit:'cell fractions',...limit(0,.98)},[.08,.08]),
+    rotation:property('number',{unit:'degrees clockwise'},0),
+    rowOffset:property('number',{unit:'cell widths per course',...limit(-4,4)}),
+    columnOffset:property('number',{unit:'cell heights per column',...limit(-4,4)}),
+    wrap:property('array<boolean>',{constraints:{length:2}},[true,true]),
+    crop:property('array<number>',{unit:'texture coordinates',constraints:{length:4,order:'left, top, right, bottom'}},[0,0,1,1]),
+    aspect:property('number',limit(.125,8),1),
+    color:property('string|number|array<number>',{},'#b97853'),
+    palette:property('array<any>',{constraints:{minItems:1,maxItems:64,entries:'Hex, packed RGB, or normalized RGB/RGBA'}}),
+    colorMode:property('string',oneOf('tile','course','column','cycle'),'tile'),
+    background:property('string|number|array<number>',{},[0,0,0,0]),
+    jitter:property('record',{properties:{
+      position:property('vec2',{unit:'cell fractions',...limit(0,.95)},[0,0]),
+      size:property('vec2',{unit:'stamp size fractions',...limit(0,.95)},[0,0]),
+      rotation:property('number',{unit:'degrees',...limit(0,180)},0),
+      color:property('number',limit(0,1),0)
+    }}),
+    samples:property('number',{unit:'samples per axis',...oneOf(1,2,4)},1),
+    precision:{...imagePrecision,default:'unorm8'},seed:property('number',{constraints:{integer:true,safe:true}})
+  },
   'image.shape': { bounds:property('array<number>',{unit:'shape units',constraints:{length:4,order:'left, top, right, bottom'}},[0,0,1,1]),
     samples:property('number',{unit:'samples per axis',...oneOf(1,2,4)},1),
     precision:property('string',oneOf('float32','float64'),'float32') },
@@ -638,6 +662,9 @@ const specialization = {
   'anim.retime': { field: 'group', description: 'Uses the group’s inputs and outputs and adds a timing record. The group cannot declare timing.' }
 };
 const notes = {
+  'image.tileGenerator': ['Tile and course IDs are one-based. Zero marks the background.',
+    'Wrapped rows and columns quantize stagger to a closed cycle. Layout reports authored and effective offsets.',
+    'Crops change the sampled window while keeping the same placements and IDs. Connect a shape definition to stamp for custom coverage.'],
   'image.shape': ['All outputs use one sampling window. Match bounds across resolutions to preserve geometry.',
     'Distance and bevel height are center samples in shape units. Coverage and scalar profiles can use 1, 4 or 16 subpixel tests.',
     'Use info.spacing as the derivative spacing for a height-to-normal conversion.'],
