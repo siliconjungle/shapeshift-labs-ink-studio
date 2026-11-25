@@ -1467,6 +1467,12 @@ Use the mesh's stored units for the operation's `distance`.
   boundary. Use a negative distance for a recess or supply a nonzero
   XYZ `direction`. A fully enclosed region needs a selection boundary
   for extrusion.
+- Set `"normals": "face"` explicitly to use that region normal, or
+  `"normals": "vertex"` to move each vertex along its resolved normal
+  by the signed distance. Vertex mode uses authored corner normals,
+  smooth shading normals, or geometric face normals in that order.
+  At a shared vertex, the selected corners contribute by face area
+  and move together. `direction` is a separate extrusion choice.
 - `{ "kind": "inset", "distance": 0.2 }` creates a planar border of the
   specified width from the outline and any holes. The selected region
   keeps its polygons and authored UVs by default. A large inset can
@@ -1485,6 +1491,19 @@ across the rim. Choose `"per-edge"` to give each wall quad its own full
 UV rectangle. The interior defaults to `uv: "preserve"`, which keeps
 authored paint coordinates. Choose `"planar"` for a per-face planar
 projection. A thickening edit leaves the original skin and paint intact.
+
+For explicit face- or vertex-normal extrusion, the rim mapping also
+applies to the mesh's bound UV layouts. Set `rim.uvSets` to name which
+alternate layouts receive the mapping. Layout 0 always receives it.
+For example, `"rim": { "material": "trim", "uv": "per-edge", "uvSets": [1] }`
+uses the trim material and gives each sidewall a full rectangle in
+layouts 0 and 1. The cap retains its original material and paint UVs
+unless the interior rules override them.
+
+The extrusion receipt lists each source and result vertex, its
+direction, displacement, and the corner normals contributing in vertex
+mode. Sweep checks include stationary points and edges crossed by
+deforming cap triangles.
 
 Set `minWall` to the minimum acceptable distance between opposing
 surfaces. The default is 5% of the edit distance or four times the
@@ -1507,6 +1526,8 @@ undo and replay history.
 
 Run `node examples/mesh-face-region/render.cjs <directory>` for native
 art-grid comparisons and reproducible face selections and requests.
+Run `node examples/tileset-pick/extrude-normals-demo.cjs <directory>`
+for matched face-normal and vertex-normal extrusions of a painted tile.
 
 ## Edit edge loops and fill openings
 
