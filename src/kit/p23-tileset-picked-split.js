@@ -47,10 +47,10 @@
     const {prior,children} = split, used = new Set(bindings.map(binding=>binding.id));
     return bindings.flatMap(binding=>{
       if (binding.id !== prior.id) return [binding];
-      return children.map(({face:element,selection,paint},i)=>{
+      return children.map(({face:element,selection,paint})=>{
         const base = 'tileset/'+element;
-        let id = i === 0 ? prior.id : base;
-        if (i > 0) for (let n=2;used.has(id);n++) id = base+'/'+n;
+        let id = element === prior.element ? prior.id : base;
+        if (element !== prior.element) for (let n=2;used.has(id);n++) id = base+'/'+n;
         used.add(id);
         const data = {format:prior.data.format,version:prior.data.version,atlasSize:prior.data.atlasSize,selection,paint};
         return {id,domain:'faces',element,data};

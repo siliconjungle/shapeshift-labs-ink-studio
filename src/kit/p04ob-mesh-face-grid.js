@@ -14,12 +14,16 @@ const meshFaceGrid = (function (K) {
     });
   }
 
-  function subdivide(g, op) {
-    if (!record(op,['kind','face','selection','rows','columns']) || (op.face === undefined) === (op.selection === undefined) ||
+  function subdivide(g, op, settings) {
+    if (!record(op,['kind','face','selection','rows','columns','basis','uvSet','camera']) || (op.face === undefined) === (op.selection === undefined) ||
         ![op.rows,op.columns].every(n=>Number.isInteger(n) && n>=1 && n<=gridLimit))
       throw new TypeError('Subdivide face needs a quad or saved face selection and 1 to '+gridLimit+' rows and columns');
-    const axis = count=>Array.from({length:count+1},(_,i)=>i/count);
-    return buildGrid(g,selectQuad(g,op),axis(op.columns),axis(op.rows));
+    const face = selectQuad(g,op), orientation = meshSubdivisionBasis.resolve(g,face,op,settings);
+    const sizes = [], counts = [op.columns,op.rows];
+    orientation.axes.forEach(({faceAxis},i)=>{ sizes[faceAxis] = counts[i]; });
+    const [u,v] = sizes.map(count=>Array.from({length:count+1},(_,i)=>i/count));
+    const result = buildGrid(g,face,u,v);
+    return op.basis === undefined ? result : {...result,detail:meshSubdivisionBasis.gridDetail(result.detail,orientation)};
   }
 
   function buildGrid(g, face, uAxis, vAxis, texels) {

@@ -901,8 +901,11 @@
       const scene = snapshot();
       requireMeshShapeOwner(object, row.part, scene, 'Edit');
       let atlas;
-      const settings = request?.operation?.kind === 'subdivide-texels' ?
-        {texelAtlas:face=>(atlas=A.tilesetPickedSplit.atlasFor(scene,row,face))} : undefined;
+      const operation = request?.operation;
+      const settings = {
+        ...(operation?.kind === 'subdivide-texels' && {texelAtlas:face=>(atlas=A.tilesetPickedSplit.atlasFor(scene,row,face))}),
+        ...(operation?.basis === 'camera' && operation.camera === undefined && {camera:authoredTransformCamera})
+      };
       const plan = K.meshTopology.planEdgeEdit(row.document, request, settings);
       return ['split-face','subdivide-face','subdivide-texels'].includes(plan.report.kind) ?
         A.tilesetPickedSplit.decorate(scene,row,plan,atlas) : {plan};

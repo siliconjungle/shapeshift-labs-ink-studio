@@ -5,14 +5,15 @@ const meshPickedSplit = (function (K) {
   const { pair, edgeOf, cyclic, rotate, point, requireWinding, edgeCorner, retainUVPins, inheritEdgeSettings } = meshEdgeFlowData;
   const quad = [[0,0],[1,0],[1,1],[0,1]];
 
-  function read(g, op) {
-    if (!record(op,['kind','face','selection','axis','at']) || (op.face === undefined) === (op.selection === undefined) ||
+  function read(g, op, settings) {
+    if (!record(op,['kind','face','selection','axis','at','basis','uvSet','camera']) || (op.face === undefined) === (op.selection === undefined) ||
         !['u','v'].includes(op.axis) || !coordinates(op.at,2) || op.at.some(n=>n < 0 || n > 1))
       throw new TypeError('Split face needs a quad or saved face selection, axis u or v, and a normalized face pick');
-    const face = selectQuad(g,op), axis = op.axis === 'u' ? 0 : 1;
-    if (op.at[axis] <= epsilon || op.at[axis] >= 1-epsilon)
+    const face = selectQuad(g,op), orientation = meshSubdivisionBasis.resolve(g,face,op,settings);
+    const axis = orientation.axes[op.axis === 'u' ? 0 : 1].faceAxis, at = orientation.native(op.at);
+    if (at[axis] <= epsilon || at[axis] >= 1-epsilon)
       throw new RangeError('Split pick must be inside the quad along the cut axis');
-    return {face,axis,coordinate:op.at[axis]};
+    return {face,axis,at,coordinate:at[axis],orientation};
   }
 
   function selectQuad(g, op) {
@@ -65,14 +66,15 @@ const meshPickedSplit = (function (K) {
     return fraction >= -epsilon && fraction <= 1+epsilon;
   }
 
-  function split(g, op) {
-    const {face,axis,coordinate} = read(g,op);
+  function split(g, op, settings) {
+    const {face,axis,at,coordinate,orientation} = read(g,op,settings);
     const sides = axis === 0 ? [[0,1],[3,2]] : [[0,3],[1,2]];
     const ends = sides.map(side=>side.map(i=>face.corners[i].vertex));
     const edges = ends.map(side=>edgeOf(g,...side));
     const {neighbors,triangles,audit} = subdivisionRegion(g,face,edges);
     const detail = {face:face.id,axis:op.axis,at:op.at.slice(),edges:edges.map(row=>row.id),transitionFaces:neighbors,
-      cut:trace(g,face,triangles.get(face.id),axis,coordinate,op.at,sides)};
+      ...(op.basis !== undefined && {orientation:{...orientation.report,faceAxis:axis===0 ? 'u' : 'v',faceAt:at}}),
+      cut:trace(g,face,triangles.get(face.id),axis,coordinate,at,sides)};
     const issues = audit();
     if (issues[0]?.kind === 'pinned-edges') return {patch:{},affected:[],detail,issues};
     if (!straightTrace(detail.cut.line)) {
