@@ -1053,6 +1053,7 @@
       planTilesetReskin, applyTilesetReskin, planTilesetGrow, growTilesetFace, planTilesetBlock, applyTilesetBlock,
       planTilesetPrimitive, applyTilesetPrimitive,
       selectTilesetComponents: (request, options) => A.tilesetComponentSelection.select(snapshot(),request,options),
+      selectTilesetAtlas: (request) => A.tilesetAtlasSelection.select(snapshot(),request),
       planTilesetCanvas,
       transformTilesetCanvas,
       tilesetDependencies, planTilesetRevision, editTilesetRevision,

@@ -328,6 +328,9 @@ module.exports = {
   selectTilesetComponents(scene, request, options) {
     return module.exports.load().KIT.authoring.tilesetComponentSelection.select(scene,request,options);
   },
+  selectTilesetAtlas(scene, request) {
+    return module.exports.load().KIT.authoring.tilesetAtlasSelection.select(scene,request);
+  },
   sizeTilesetBrush: require('./cli/tileset-image.js').sizeTilesetBrush,
   tilesetBrushUV: require('./cli/tileset-image.js').tilesetBrushUV,
   tilesetBrushCellUV: require('./cli/tileset-image.js').tilesetBrushCellUV,

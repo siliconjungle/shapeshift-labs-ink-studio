@@ -455,6 +455,7 @@ function publishFaceEdit(editor, request, settings, output, plan, apply) {
 function command([action, ...args], options, toolkit, projectTexelsPerUnit, openEditor) {
   if (action === 'collection') return require('./tileset-collection.js').command(args,options,toolkit);
   if (action === 'select') return require('./tileset-component-selection.js').command(args,options,openEditor);
+  if (action === 'select-atlas') return require('./tileset-component-selection.js').atlasCommand(args,options,openEditor);
   if (action === 'reskin') return reskinCommand(args,options,openEditor);
   if (action === 'eyedrop') return eyedropCommand(args,options,openEditor);
   if (Object.hasOwn(faceEdits,action)) return faceEditCommand(action,args,options,projectTexelsPerUnit,openEditor);
