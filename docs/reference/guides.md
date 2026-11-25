@@ -200,6 +200,7 @@ All checked-in guides, indexed by title and section headings.
 - [Seasonal and wear histories](../material-histories.md)
 - [Material image blend modes](../material-image-blend.md)
 - [Split, shuffle, and pack typed image channels](../material-image-channels.md)
+- [Typed material displacement filters](../material-image-displacement.md)
 - [Typed material blur, sharpen, and antialias](../material-image-filters.md)
 - [Typed material distance, edges, and morphology](../material-image-morphology.md)
 - [Typed material transforms and addressing](../material-image-transforms.md)

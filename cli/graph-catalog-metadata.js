@@ -204,6 +204,12 @@ const spatialSampling = {
   mipBias:property('number',{unit:'mip levels',...limit(-16,16)},0)
 };
 const spatialUnits = oneOf('pixels','normalized');
+const displacement = {
+  ...spatialSampling, units:property('string',spatialUnits,'pixels'), amount:property('number',limit(-1e6,1e6),1),
+  smooth:property('number',pixelRange(0,32,true),0), mapBorder:spatialSampling.border,
+  mapFilter:property('string',oneOf('nearest','linear'),'linear')
+};
+const directionalDisplacement = { ...displacement, angle:filterAngle, center:property('number',{},0) };
 const options = {
   'textile.pattern': {
     size: property('vec2', {unit:'world units'}, [4,3]),
@@ -262,6 +268,13 @@ const options = {
   'image.perspective': { ...spatialSampling, units:property('string',spatialUnits,'normalized'),
     corners:property('array<vec2>',{constraints:{minItems:4,maxItems:4}},[[0,0],[1,0],[1,1],[0,1]]),
     clip:property('boolean',{},true) },
+  'image.directionalWarp': directionalDisplacement,
+  'image.nonuniformWarp': { ...directionalDisplacement, directionScale:property('number',unit('turns per map value'),1) },
+  'image.vectorWarp': { ...displacement, encoding:property('string',oneOf('signed','unorm')),
+    center:property('number|vec2',{}), yAxis:property('string',oneOf('down','up'),'down') },
+  'image.slopeWarp': { ...displacement, slope:property('string',oneOf('downhill','uphill'),'downhill') },
+  'image.multiDirectionalWarp': { ...directionalDisplacement, axes:property('number',oneOf(1,2,4),2),
+    combine:property('string',oneOf('chain','average','min','max'),'chain') },
   'image.curve': { ...correctionOutput, channel:property('string',oneOf('all','r','g','b','value'),'all') },
   'image.gradient': { precision:{...imagePrecision,default:'float64'}, outOfRange:{...imageRangePolicy,default:'error'},
     from:property('vec2',limit(0,1),[0,.5]), to:property('vec2',limit(0,1),[1,.5]) },
