@@ -632,6 +632,47 @@
   const makeNoise = TypedNoiseImage({
     named:P.namedNoise, descriptor, wrap, pack, storage, dimensions, fields, borders, freeze:P.data.freeze
   });
+  function bakeShape(source,width,height,options={}) {
+    if (![width,height].every(n=>Number.isSafeInteger(n) && n>0) || !dimensions({width,height}) || width*height>4e6)
+      throw new RangeError('Shape bake exceeds its four-million-texel budget');
+    if (!fields(options,['bounds','samples','precision'])) throw new TypeError('Unknown shape bake option');
+    const {bounds=[0,0,1,1],samples=1,precision='float32'} = options;
+    if (!Array.isArray(bounds) || bounds.length!==4 || !Array.from(bounds).every(n=>finite(n) && Math.abs(n)<=1e6) ||
+        bounds[0]>=bounds[2] || bounds[1]>=bounds[3] || ![1,2,4].includes(samples) || !['float32','float64'].includes(precision))
+      throw new RangeError('Shape bake needs increasing planar bounds, 1, 2 or 4 samples per axis and floating precision');
+    const {distance,profile,relief,cost}=P.shapeLibrary.compile(source), count=width*height;
+    const subpixels=samples*samples, extra=subpixels===1 ? 0 : subpixels;
+    if (count*cost*(1+extra)>160e6) throw new RangeError('Shape bake exceeds its sample budget');
+    const [left,top,right,bottom]=bounds, dx=(right-left)/width, dy=(bottom-top)/height;
+    const Data=storage[precision], coverage=new Data(count), signed=new Data(count), raised=new Data(count);
+    const values=profile ? new Data(count) : coverage, units='shape-units';
+    for (let y=0,i=0;y<height;y++) for (let x=0;x<width;x++,i++) {
+      const u=left+(x+.5)*dx, v=top+(y+.5)*dy, center=distance(u,v);
+      signed[i]=center;
+      if (relief) raised[i]=relief(center);
+      if (!extra) {
+        coverage[i]=Number(center<=0);
+        if (profile && center<=0) values[i]=profile(u,v);
+        continue;
+      }
+      let hits=0, sum=0;
+      for (let j=0;j<samples;j++) for (let k=0;k<samples;k++) {
+        const px=left+(x+(k+.5)/samples)*dx, py=top+(y+(j+.5)/samples)*dy;
+        if (distance(px,py)>0) continue;
+        hits++;
+        if (profile) sum+=profile(px,py);
+      }
+      coverage[i]=hits/subpixels;
+      if (profile) values[i]=sum/subpixels;
+    }
+    const plane=(data,intent,units='unitless')=>{
+      const grid={width,height,channels:1,data};
+      return wrap(grid,descriptor(grid,{intent,units,precision,sampling:intent==='mask' && samples===1 ? 'nearest' : 'linear'}));
+    };
+    const mask=plane(coverage,'mask');
+    return {value:profile ? plane(values,'data') : mask,mask,distance:plane(signed,'height',units),
+      height:plane(raised,'height',units),info:P.data.freeze({type:source.type,bounds:bounds.slice(),spacing:[dx,dy],units,samples})};
+  }
   const correctionOptions = { type: 'record', default: {} };
   const sameImage = { type: 'typedImage', typeFrom: 'source' };
   const optional = { type: 'any', default: null };
@@ -925,6 +966,12 @@
       outputs: { value: 'typedImage', height: 'heightImage' },
       run({ source, mask, options }) { return advancedHeight.edgeWear(source, options, mask); }
     },
+    'image.shape': {
+      description: 'Bake a signed planar shape to aligned coverage, scalar profile, distance and bevel height at a chosen resolution.',
+      inputs:{source:'shape2d',width:{type:'pixelCount',default:64},height:{type:'pixelCount',default:64},options:correctionOptions},
+      outputs:{value:'typedImage',mask:'typedImage',distance:'heightImage',height:'heightImage',info:'record'},
+      run({source,width,height,options}) { return bakeShape(source,width,height,options); }
+    },
     'image.noise': {
       description: 'Bake a named scalar noise family into a typed image with spatial controls and optional looping motion.',
       seed: 'options', inputs: { family: { type:'string', default:'perlin' }, width: { type:'pixelCount', default:128 },
@@ -948,5 +995,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, regions, advancedHeight, advancedTexture, noise:makeNoise, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, regions, advancedHeight, advancedTexture, shape:bakeShape, noise:makeNoise, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);

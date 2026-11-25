@@ -23,6 +23,8 @@ const types = {
   heightImage: { layout: 'Typed floating-point height with units' },
   normalImage: { layout: 'Typed XYZ or XYZA normal map with signed float or biased integer samples' },
   regionField: { layout: 'Versioned stable label image, unwrapped image positions and per-region records', maxRegions: 32768 },
+  shape2d: { layout: 'Serializable planar geometry, profile, symbol or bevel definition' },
+  shapeLibrary: { layout: 'Versioned planar shape definitions by stable ID', maxEntries:128 },
   reliefHeight: { layout: 'Typed height in art pixels or a legacy numeric scalar raster' },
   materialChannels: { layout: 'Versioned named raster channels with independent grids and metadata', minItems: 1, maxItems: 64 },
   image: { layout: 'Width, height and image data' },
@@ -68,6 +70,7 @@ const namedNoise = oneOf('perlin','simplex','gaussian','white','blue','worley','
 const evolvingNoise = ['perlin','simplex','worley','voronoi','cellular','fractal','ridged','anisotropic','directional'];
 
 const ports = {
+  'shape.define': { definition:{constraints:{types:['rectangle','disc','polygon','star','linear','radial','spot','stroke','gradient','symbol','bevel']}} },
   'image.noise': { family:namedNoise },
   'proc.noiseFamily': { family:namedNoise },
   'image.regionMap': { kind: oneOf('id','area','orientation','center','bounds','position','localUV','randomValue','randomColor','gradient') },
@@ -245,6 +248,9 @@ const noiseOptions = {
   wander:property('number',{families:['directional'],...limit(0,4)},.26)
 };
 const options = {
+  'image.shape': { bounds:property('array<number>',{unit:'shape units',constraints:{length:4,order:'left, top, right, bottom'}},[0,0,1,1]),
+    samples:property('number',{unit:'samples per axis',...oneOf(1,2,4)},1),
+    precision:property('string',oneOf('float32','float64'),'float32') },
   'proc.noiseFamily': { ...noiseOptions,periods:noisePeriods,rankSize:{...noiseOptions.rankSize,default:[32,32]} },
   'image.noise': { ...noiseOptions,extent:property('number|vec2',{unit:'noise cells',...limit(.0001,1e6)}),
     scale:property('number',{unit:'domain multiplier',...limit(1/16,64)},1),
@@ -632,6 +638,13 @@ const specialization = {
   'anim.retime': { field: 'group', description: 'Uses the group’s inputs and outputs and adds a timing record. The group cannot declare timing.' }
 };
 const notes = {
+  'image.shape': ['All outputs use one sampling window. Match bounds across resolutions to preserve geometry.',
+    'Distance and bevel height are center samples in shape units. Coverage and scalar profiles can use 1, 4 or 16 subpixel tests.',
+    'Use info.spacing as the derivative spacing for a height-to-normal conversion.'],
+  'shape.library': ['Accepts an ink-studio/shape-library version 1 packet or a record of {label, definition} entries.',
+    'Output labels can change independently of IDs. The default library includes editable primitive, profile and symbol examples.'],
+  'shape.field': ['The primary field is signed distance, with negative values inside. Profile is clipped to the shape.',
+    'Height is zero unless the definition carries a bevel. Coordinates are planar shape units.'],
   'image.noise': ['Samples a scalar field at texel centers. Wrapping axes use the matching extent as the period.',
     'Connect anim.clock to time for timeline playback. Speed zero pins the disorder phase.',
     'Scale and non-square expansion snap wrapped lattice periods to valid steps. Inspect requestedExtent and extent on info.',
