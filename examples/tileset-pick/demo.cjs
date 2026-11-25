@@ -24,11 +24,15 @@ const pick = (id,...args)=>studio('tileset','pick','--scene',file('gatehouse-til
 const sign = ['--x','48','--y','0','--width','48','--height','16'];
 pick('masonry',...sign,'--out',file('pick-masonry.html'));
 pick('masonry',...sign,'--out',file('tide-sign-selection.json'));
+const tileSize = ['--tile-width','16','--tile-height','8'];
+pick('masonry',...sign,...tileSize,'--out',file('tide-sign-brush.json'));
+studio('tileset','brush-preview',file('tide-sign-brush.json'),'--scene',file('gatehouse-tiles.json'),'--out',file('tide-sign-brush-1x.png'));
 pick('window-glass','--out',file('pick-blank.html'));
 studio('render',file('gatehouse-tiles.json'),'--w','160','--h','104','--px','1','--ortho','--out',file('gatehouse-1x.png'));
 fs.writeFileSync(file('README.txt'),[
   'Open pick-masonry.html to select the TIDE sign. Drag on the pixel grid or edit the four numbers, then download the selection.',
   'Compare the downloaded JSON to tide-sign-selection.json, which was generated with numeric CLI entry.',
+  'tide-sign-brush.json selects the same sign as a 3 × 2 brush. tide-sign-brush-1x.png is the native preview rendered from that record.',
   'Open pick-blank.html to inspect the 32 × 24 blank tileset and its translucent background.',
   'gatehouse-tiles.json carries both tilesets. Four mesh materials share the imported masonry image.',
   ''

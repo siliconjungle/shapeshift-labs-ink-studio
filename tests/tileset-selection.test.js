@@ -10,11 +10,12 @@ const {setTimeout:pause} = require('node:timers/promises');
 const {pathToFileURL} = require('node:url');
 const {withChrome} = require('../cli/canvas-grid-chrome.js');
 const ink = require('..');
+const PNG = require('../cli/png.js');
 
 const rectangle = {x:2,y:1,width:3,height:2};
 const selection = {format:'ink-studio/tileset-selection',version:1,tileset:'masonry',...rectangle};
 const scene = {id:'test',style:'slate',solids:[],tilesets:{
-  masonry:ink.createBlankTileset({width:8,height:6,background:'#28665b'}),
+  masonry:ink.readTilesetImage(PNG.encode(8,6,Uint8Array.from({length:192},(_,i)=>i%4===3 ? 255 : i),4)),
   wide:ink.createBlankTileset({width:600,height:1})
 }};
 
@@ -82,3 +83,35 @@ test('offline grid picking and numeric editing download identical JSON',
         Number(document.querySelector('.ink-grid-selection').style.getPropertyValue('--ink-selection-'+key)))`),[2,1,3,2]);
     });
   });
+
+const tile = {width:2,height:2};
+const brushBounds = {x:2,y:2,width:4,height:4};
+const brush = {format:'ink-studio/tileset-brush',version:1,tileset:'masonry',...brushBounds,
+  tileWidth:2,tileHeight:2,columns:2,rows:2};
+
+test('an ordered tile brush preserves the atlas block and excludes partial tiles',t=>{
+  const {cli} = setup(t);
+  const size = ['--tile-width','2','--tile-height','2'];
+  const coords = ['--x','2','--y','2','--width','4','--height','4'];
+  assert.deepEqual(ink.pickTilesetBlock(scene,'masonry',brushBounds,tile),brush);
+  assert.deepEqual(JSON.parse(cli(...coords,...size)),brush);
+  assert.throws(()=>cli(...coords,'--tile-width','3'),/both --tile-width and --tile-height/);
+  assert.throws(()=>ink.pickTilesetBlock(scene,'masonry',{...brushBounds,x:1},tile),/whole tile boundaries/);
+  assert.throws(()=>ink.pickTilesetBlock(scene,'masonry',{...brushBounds,x:0,width:8},{width:3,height:2}),/inside the tileset/);
+  assert.throws(()=>ink.pickTilesetBlock(scene,'masonry',brushBounds,{width:9,height:2}),/fit the tileset/);
+});
+
+test('the CLI reopens a brush and previews the original texels in brush order',t=>{
+  const {dir,filename} = setup(t);
+  const file = path.join(dir,'brush.json'), out = path.join(dir,'preview.png');
+  fs.writeFileSync(file,JSON.stringify(brush));
+  execFileSync(process.execPath,[path.resolve(__dirname,'../cli/ink-studio.js'),
+    'tileset','brush-preview',file,'--scene',filename,'--out',out]);
+  const {w,h,data} = PNG.raster(out);
+  assert.deepEqual([w,h],[4,4]);
+  const source = Buffer.from(scene.tilesets.masonry.data,'base64'), expected = [];
+  for (let row=2;row<6;row++) expected.push(...source.subarray((row*8+2)*4,(row*8+6)*4));
+  assert.deepEqual([...data],expected);
+  assert.deepEqual([...ink.rasterizeTilesetBrush(scene,brush).pixels],expected);
+  assert.throws(()=>ink.rasterizeTilesetBrush(scene,{...brush,columns:1}),/counts do not match/);
+});
