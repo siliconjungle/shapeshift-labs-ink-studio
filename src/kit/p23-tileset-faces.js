@@ -93,8 +93,15 @@
       cornerIds:new Set(doc?.faces.flatMap(row=>row.corners.map(corner=>corner.id)))};
   }
 
+  function cornersFor(brush, face, ids) {
+    const {activeSets,uvSet,unitUV,pigmentUV} = brush;
+    return ids.map((vertex,i)=>({id:face+'/c'+i,vertex,uv:uvSet ? unitUV[i] : pigmentUV[i],
+      ...(activeSets.length && {attributes:Object.fromEntries(activeSets.map(set=>
+        [MaterialUV.key(set),set === uvSet ? pigmentUV[i] : unitUV[i]]))})}));
+  }
+
   function stamp(brush, face, anchor, shared) {
-    const {frame,source,material,activeSets,uvSet,unitUV,pigmentUV,vertexIds,cornerIds} = brush;
+    const {frame,source,material,vertexIds,cornerIds} = brush;
     const [x,y] = frame.axes, [w,h] = brush.size;
     const end = shared?.[1].position ?? K.V.mad(anchor,x,w);
     const positions = [anchor,end,K.V.mad(end,y,h),K.V.mad(anchor,y,h)];
@@ -104,9 +111,7 @@
       return shared?.[i] ?? {id:face+'/v'+i,position,...(weights && {weights})};
     });
     const vertices = shared ? ring.slice(2) : ring;
-    const corners = ring.map(({id},i)=>({id:face+'/c'+i,vertex:id,uv:uvSet ? unitUV[i] : pigmentUV[i],
-      ...(activeSets.length && {attributes:Object.fromEntries(activeSets.map(set=>
-        [MaterialUV.key(set),set === uvSet ? pigmentUV[i] : unitUV[i]]))})}));
+    const corners = cornersFor(brush,face,ring.map(row=>row.id));
     const polygon = {id:face,material,corners};
     const conflicts = [];
     if (brush.faceIds.has(face)) conflicts.push({reason:'face-id-in-use',face});
@@ -149,5 +154,5 @@
     return conflicts.length ? {report} : {report,row:append(brush,[placement])};
   }
 
-  A.tilesetFaces = Object.freeze({plan,prepare,stamp,append,cropSource,sourceBindings,isSourceBinding,sameMaterial});
+  A.tilesetFaces = Object.freeze({plan,prepare,stamp,append,cornersFor,cropSource,sourceBindings,isSourceBinding,sameMaterial});
 })(KIT);

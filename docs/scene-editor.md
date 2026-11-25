@@ -94,6 +94,10 @@ Use `planTilesetGrow(request, options)` and
 `growTilesetFace(request, options)` to attach and fold a painted quad
 along a retained boundary edge. [Edge grow workflow](mesh-uv.md#grow-a-tile-from-a-mesh-edge)
 
+Use `planTilesetBlock(request)` and `applyTilesetBlock(request)` to
+place, extend, or cut a tiled volume in one edit.
+[Tiled block workflow](mesh-uv.md#add-and-subtract-tiled-blocks)
+
 ## Brushes and local rebuilds
 
 Use `paintShadowBand(stroke, { pbrMaterial })` to append a stroke to a [named PBR diffuse ramp](pbr-materials.md#paint-a-pbr-shadow-band).

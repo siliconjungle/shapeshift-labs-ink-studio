@@ -392,15 +392,17 @@ function reskinCommand(args, options, openEditor) {
 const faceEdits = {
   stroke:['planTilesetStroke','applyTilesetStroke'],
   rectangle:['planTilesetRectangle','applyTilesetRectangle'],
-  'brush-run':['planTilesetBrushRun','applyTilesetBrushRun']
+  'brush-run':['planTilesetBrushRun','applyTilesetBrushRun'],
+  block:['planTilesetBlock','applyTilesetBlock']
 };
 
 function faceEditCommand(action, [file,...rest], options, projectTexelsPerUnit, openEditor) {
-  const {scene,out,'brush-file':brush} = options, brushRun = action === 'brush-run';
+  const {scene,out,selection,'brush-file':brush} = options;
+  const extra = action === 'brush-run' ? ['brush-file'] : action === 'block' ? ['selection'] : [];
   const name = value=>typeof value === 'string' && value.trim();
   if (rest.length || ![file,scene].every(name) || out !== undefined && !name(out) ||
-      Object.keys(options).some(key=>!['scene','out',...(brushRun ? ['brush-file'] : [])].includes(key)) ||
-      brush !== undefined && !name(brush))
+      Object.keys(options).some(key=>!['scene','out',...extra].includes(key)) ||
+      [brush,selection].some(value=>value !== undefined && !name(value)))
     throw new TypeError('Use tileset '+action+' <request.json> --scene <scene.json> [--out <new-scene.json>]');
   const input = path.resolve(scene), output = out && sceneOutput(input,out,file);
   const read = filename=>JSON.parse(fs.readFileSync(path.resolve(filename),'utf8'));
@@ -410,6 +412,20 @@ function faceEditCommand(action, [file,...rest], options, projectTexelsPerUnit, 
     if (!request || Object.getPrototypeOf(request) !== Object.prototype || Object.hasOwn(request,'brush'))
       throw new TypeError('Provide the brush in the request or with --brush-file');
     request.brush = read(brush);
+  }
+  if (selection !== undefined) {
+    if (output === path.resolve(selection)) throw new RangeError('Write the scene separately from the selection');
+    if (!request || Object.getPrototypeOf(request) !== Object.prototype || Object.hasOwn(request,'selection'))
+      throw new TypeError('Provide the selection in the block request or with --selection');
+    const picked = read(selection);
+    if (picked?.format === 'ink-studio/tileset-face-pick') {
+      if (picked.version !== 1 || picked.canStamp !== true || !picked.stamp)
+        throw new TypeError('The face pick needs a reusable version 1 stamp');
+      const {selection,paint,uvInset,material,materialDefinition} = picked.stamp;
+      const slot = request.material ?? material;
+      Object.assign(request,{selection,paint:request.paint ?? paint,uvInset:request.uvInset ?? uvInset,material:slot,
+        materialDefinition:request.materialDefinition ?? (slot === material ? materialDefinition : undefined)});
+    } else request.selection = picked;
   }
   return publishFaceEdit(openEditor(input),request,{projectTexelsPerUnit},output,...faceEdits[action]);
 }

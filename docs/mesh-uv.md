@@ -471,6 +471,57 @@ restores the boundary and its source bindings. Run
 `node examples/tileset-pick/face-grow-demo.cjs grow-demo` to compare
 two depths at the same fold angle.
 
+### Add and subtract tiled blocks
+
+Save a block request with an edit `id`, target `object`, and a `mode`
+of `add` or `subtract`. Use `at:[u,v,n]` for grid placement. The first
+two values are construction-plane grid addresses. The third is an
+optional signed distance along the plane normal in scene units.
+Give `size:[width,height,depth]` in scene units. Use `snapGrid:true`
+to round the grid addresses before placing the block.
+
+```json
+{
+  "id": "opening",
+  "object": "wall",
+  "mode": "subtract",
+  "at": [1, 0.5, -0.1],
+  "size": [1, 1, 1.2]
+}
+```
+
+```sh
+ink-studio tileset block opening.json --scene wall.json --selection trim.json
+ink-studio tileset block opening.json --scene wall.json --selection trim.json --out opening-scene.json
+```
+
+Use `fromFace` in place of `at` to center the block on an authored
+face. Set `depth` to fit its footprint or supply `size` for a custom
+footprint. Add extends along the face normal. Subtract starts at the
+face and cuts inward.
+
+- `orientation:"fixed"` is the default. The block follows the
+  construction plane. On a support face, its first usable grid axis
+  is projected onto that face.
+- `orientation:"edge-relative"` uses the winding of an edge on the
+  support face as the block's right axis. Supply `edge` to select the
+  retained edge ID, or use the first edge in topology order.
+
+Each exposed block side uses the selected crop. Pass an exact pick
+or eyedropped face with `--selection`, or put the exact `selection`
+and optional `paint`, `uvInset`, and `material` in the request.
+A matching support footprint welds to the source vertices. A
+standalone quad becomes the back of a closed block. Other overlaps
+and subtractions use the [mesh Boolean solver](mesh-topology.md#combine-closed-mesh-parts)
+and require a closed target. Cut faces get their own atlas bindings.
+
+Omit `--out` to inspect the resolved frame, affected faces, and solver
+issues. Use `editor.planTilesetBlock(request)` and
+`editor.applyTilesetBlock(request)` in Node. One undo restores the
+geometry, materials, and source bindings. Run
+`node examples/tileset-pick/tiled-block-demo.cjs block-demo` to build
+a wall, raise its crown from an edge-oriented face, and cut an opening.
+
 ### Extract a crop as a reusable tileset
 
 Use an exact texel rectangle or a saved `tileset pick` selection.

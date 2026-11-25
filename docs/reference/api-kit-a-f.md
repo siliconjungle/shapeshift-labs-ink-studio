@@ -867,6 +867,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.storyExchange.validate` | function | `(manifest)` | [source](../../src/kit/p23zz-story-exchange.js) |
 | `KIT.authoring.styles` | namespace |  |  |
 | `KIT.authoring.styles.resolve` | function | `(source, id)` | [source](../../src/kit/p25-authoring-bindings.js) |
+| `KIT.authoring.tilesetBlocks` | namespace |  |  |
+| `KIT.authoring.tilesetBlocks.plan` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-blocks.js) |
 | `KIT.authoring.tilesetBrushRuns` | namespace |  |  |
 | `KIT.authoring.tilesetBrushRuns.plan` | function | `(scene, request, options)` | [source](../../src/kit/p23-tileset-brush-runs.js) |
 | `KIT.authoring.tilesetCanvas` | namespace |  |  |
@@ -878,6 +880,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetEyedrop.sourceBinding` | function | `(row, face)` | [source](../../src/kit/p23-tileset-eyedrop.js) |
 | `KIT.authoring.tilesetFaces` | namespace |  |  |
 | `KIT.authoring.tilesetFaces.append` | function | `(brush, stamps)` | [source](../../src/kit/p23-tileset-faces.js) |
+| `KIT.authoring.tilesetFaces.cornersFor` | function | `(brush, face, ids)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.cropSource` | function | `(asset, crop, texelBounds = [crop.x,crop.y,crop.x+crop.width,crop.y+crop.height], paint)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.isSourceBinding` | function | `(binding)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.plan` | function | `(scene, request, options)` | [source](../../src/kit/p23-tileset-faces.js) |
