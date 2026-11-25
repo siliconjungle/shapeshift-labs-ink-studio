@@ -309,7 +309,47 @@ function brushUVCommand([file,...rest], options, toolkit, openEditor) {
   process.stdout.write(JSON.stringify(result,null,2)+'\n');
 }
 
+function placeCommand(args, options, toolkit, projectTexelsPerUnit, openEditor) {
+  const {scene,id,object,face,part,out,material,selection} = options;
+  const names = ['scene','id','object','face','part','out','material','selection'];
+  const vectors = ['origin','right','up'];
+  const allowed = [...names,...vectors,...rectangleFields,'brush-scale','texels-per-unit'];
+  const saved = selection !== undefined;
+  if (args.length || ![scene,object,face].every(Boolean) || Object.keys(options).some(key=>!allowed.includes(key)) ||
+      names.some(key=>options[key] !== undefined && !(typeof options[key] === 'string' && options[key].trim())) ||
+      (saved ? id !== undefined || rectangleFields.some(key=>options[key] !== undefined) :
+        !id || !rectangleFields.every(key=>integerText(options[key]))))
+    throw new TypeError('Use tileset place --scene <scene.json> --object <mesh-id> --face <face-id> with a saved selection or --id and exact texel bounds');
+  const input = path.resolve(scene), output = out && sceneOutput(input,out,selection);
+  const editor = openEditor(input);
+  const crop = saved ? JSON.parse(fs.readFileSync(path.resolve(selection),'utf8')) : pickTilesetRectangle(editor.snapshot(),id,
+    Object.fromEntries(rectangleFields.map(key=>[key,Number(options[key])])),toolkit);
+  const request = {object,face,selection:crop,...(part && {part}),...(material && {material})};
+  for (const key of vectors) if (options[key] !== undefined) {
+    const parts = typeof options[key] === 'string' ? options[key].split(',') : [];
+    if (parts.length !== 3) throw new TypeError('--'+key+' needs three comma-separated numbers');
+    request[key] = parts.map(value=>numberOption({[key]:value.trim()},key));
+  }
+  for (const [key,field] of [['texels-per-unit','texelsPerUnit'],['brush-scale','brushScale']]) {
+    if (options[key] !== undefined) request[field] = numberOption(options,key);
+  }
+  const settings = {projectTexelsPerUnit};
+  let report;
+  if (output) {
+    try {
+      report = editor.placeTilesetFace(request,settings);
+      files.publishJson(output,editor.snapshot(),'A different scene already exists at '+output);
+    } catch (error) {
+      if (!error.report) throw error;
+      report = error.report;
+      process.exitCode = 1;
+    }
+  } else report = editor.planTilesetFace(request,settings);
+  process.stdout.write(JSON.stringify(report,null,2)+'\n');
+}
+
 function command([action, ...args], options, toolkit, projectTexelsPerUnit, openEditor) {
+  if (action === 'place') return placeCommand(args,options,toolkit,projectTexelsPerUnit,openEditor);
   if (['resize','resample','swap'].includes(action))
     return require('./tileset-canvas.js').command(action,args,options,openEditor);
   if (action === 'link' || action === 'reload')

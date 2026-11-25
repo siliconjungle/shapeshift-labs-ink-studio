@@ -858,6 +858,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.styles.resolve` | function | `(source, id)` | [source](../../src/kit/p25-authoring-bindings.js) |
 | `KIT.authoring.tilesetCanvas` | namespace |  |  |
 | `KIT.authoring.tilesetCanvas.plan` | function | `(scene, id, operation)` | [source](../../src/kit/p23-tileset-canvas.js) |
+| `KIT.authoring.tilesetFaces` | namespace |  |  |
+| `KIT.authoring.tilesetFaces.plan` | function | `(scene, request, {projectTexelsPerUnit} = {})` | [source](../../src/kit/p23-tileset-faces.js) |
+| `KIT.authoring.tilesetFaces.sourceBindings` | function | `(row, id, update)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetRevisions` | namespace |  |  |
 | `KIT.authoring.tilesetRevisions.dependencies` | function | `(scene, id, external)` | [source](../../src/kit/p23-tileset-revisions.js) |
 | `KIT.authoring.tilesetRevisions.plan` | function | `(scene, request, external)` | [source](../../src/kit/p23-tileset-revisions.js) |
