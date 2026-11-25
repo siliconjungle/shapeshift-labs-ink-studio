@@ -39,7 +39,8 @@ const graph = {format: 'ink-studio/graph-project', version: 1, seed: 57,
     sections: node('data.record', {solids: ref('batches')}),
     prefab: node('model.prefab', {model: 'mothlight-relay', revision: input('revision'), sections: ref('sections')})
   },
-  outputs: {prefab: ref('prefab'), fasteners: ref('scatter', 'samples')}
+  outputs: {prefab: ref('prefab'), fasteners: ref('scatter', 'samples')},
+  exports: {prefab: {output: 'prefab', format: 'json'}, fasteners: {output: 'fasteners', format: 'json'}}
 };
 save('relay.graph.json', graph);
 const project = ink.createGraphProject(graph);

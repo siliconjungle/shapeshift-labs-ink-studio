@@ -2025,6 +2025,8 @@ node cli/ink-studio.js graph run relay-review/relay.graph.json \
   --inputs relay-review/r2.inputs.json --out relay-graph
 ```
 
+The graph exports the prefab definition to `relay-graph/artifacts/prefab.json`.
+
 ### Progressive samples and surface detail
 
 - `P.sampling.eliminate(points, {count, progressive, weights})` removes
