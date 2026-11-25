@@ -1532,6 +1532,8 @@ ink-studio mesh-topology edge-edit workshop.json bridge.json --object coupling -
 - **Split one face at a pick** with `kind: "split-face"`, a face ID or
   saved face selection, and a normalized face point. See
   [Split a tile at a picked position](#split-a-tile-at-a-picked-position).
+- **Subdivide one face into rows and columns** with `kind: "subdivide-face"`.
+  See [Subdivide a tile by rows and columns](#subdivide-a-tile-by-rows-and-columns).
 - **Slide an edge chain or loop** with `kind: "slide"`, a `selection`,
   and an `amount` strictly between -1 and 1. Positive amounts follow
   the face winding on the forward side of the ordered chain. Negative
@@ -1619,6 +1621,35 @@ existing render triangles.
 ink-studio mesh-topology edge-edit sign.json picked-split.json --object sign
 ink-studio mesh-topology edge-edit sign.json picked-split.json --object sign --out split.json --report split-receipt.json
 node examples/tileset-pick/picked-split-demo.cjs picked-split-review
+```
+
+### Subdivide a tile by rows and columns
+
+Use `"operation": { "kind": "subdivide-face", "face": "panel",
+"rows": 2, "columns": 3 }` in a revision-pinned edge-edit request.
+A saved face `selection` can supply the target instead of `face`.
+Counts range from 1 to 32 per axis. A 1 by 1 grid previews the original
+face without committing an edit.
+
+Grid points are evenly spaced in normalized coordinates from the
+first authored corner. Positions and UVs interpolate from the original
+quad. The grid also carries compatible corner attributes, UV pins, and
+vertex weights. Affected neighbor faces receive the corresponding
+boundary vertices, and crease and seam settings follow each subdivided
+edge. The operation checks that the source quad is convex and that
+geometry and corner interpolation stay registered on all affected faces.
+
+The preview lists row and column indices, stable cell face IDs,
+grid points, and their weighted source vertices. The first cell
+keeps the original face ID. The patch and receipt link every other
+cell back to that face and record which edge segments replace old
+edges. For registered rectangular paint, the preview also reports the
+grid in atlas texel centers and the cropped bindings for each cell.
+
+```sh
+ink-studio mesh-topology edge-edit sign.json grid.json --object sign
+ink-studio mesh-topology edge-edit sign.json grid.json --object sign --out split.json --report grid-receipt.json
+node examples/tileset-pick/tile-grid-demo.cjs tile-grid-review
 ```
 
 ## Draw surface-snapped retopology patches
