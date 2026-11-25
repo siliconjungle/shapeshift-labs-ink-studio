@@ -2,7 +2,7 @@
 (function (K) {
   const A = K.authoring, topology = K.meshTopology, {freeze} = K.procedural.data;
   const sourceFormat = 'ink-studio/tileset-face-source';
-  const fields = ['object','part','face','selection','origin','right','up','planeAt','snapGrid','texelsPerUnit','brushScale','material'];
+  const fields = ['object','part','face','selection','origin','right','up','planeAt','snapGrid','texelsPerUnit','brushScale','material','paint'];
   const name = value=>TargetSelectors.name(value) && !['__proto__','prototype','constructor'].includes(value);
 
   function sourceBindings(row, id, update) {
@@ -21,7 +21,7 @@
   }
 
   // The renderer addresses first and last texel centers at 0 and 1.
-  function cropSource(asset, crop, texelBounds = [crop.x,crop.y,crop.x+crop.width,crop.y+crop.height]) {
+  function cropSource(asset, crop, texelBounds = [crop.x,crop.y,crop.x+crop.width,crop.y+crop.height], paint) {
     const centers = (min,max,first,length,count)=>{
       const middle = (min+max-1)/2;
       const a = Math.min(min,middle), b = Math.max(max-1,middle);
@@ -29,13 +29,14 @@
     };
     const [left,right] = centers(texelBounds[0],texelBounds[2],crop.x,crop.width,asset.width);
     const [top,bottom] = centers(texelBounds[1],texelBounds[3],crop.y,crop.height,asset.height);
-    return {source:{format:sourceFormat,version:1,selection:crop,atlasSize:[asset.width,asset.height]},
-      pigmentUV:[[left,bottom],[right,bottom],[right,top],[left,top]]};
+    const uvs = [[left,bottom],[right,bottom],[right,top],[left,top]];
+    return {source:{format:sourceFormat,version:1,selection:crop,atlasSize:[asset.width,asset.height],...(paint && {paint})},
+      pigmentUV:paint ? TilesetSelection.paintCorners(uvs,paint) : uvs};
   }
 
   function prepare(scene, request, {projectTexelsPerUnit} = {}, cellSize) {
     const {object,part,face,selection,origin,right,up,planeAt,snapGrid=false,
-      texelsPerUnit,brushScale=1,material:requestedMaterial} = request ?? {};
+      texelsPerUnit,brushScale=1,material:requestedMaterial,paint:requestedPaint} = request ?? {};
     if (!request || Object.getPrototypeOf(request) !== Object.prototype || Object.keys(request).some(key=>!fields.includes(key)) ||
         ![object,face].every(name) || part !== undefined && !name(part) ||
         requestedMaterial !== undefined && !name(requestedMaterial) ||
@@ -54,7 +55,8 @@
       throw new TypeError('Grid snapping needs a construction plane placement');
     const plane = A.constructionPlane;
     const frame = planeAt === undefined ? plane.resolve({origin,right,up}) : plane.forScene(scene);
-    const {source,pigmentUV} = cropSource(asset,crop);
+    const paint = requestedPaint === undefined ? undefined : TilesetSelection.paintOrientation(requestedPaint);
+    const {source,pigmentUV} = cropSource(asset,crop,undefined,paint);
     const material = requestedMaterial ?? 'tileset/'+crop.tileset;
     const existing = Object.hasOwn(scene.topologyMeshes ?? {},object) ? scene.topologyMeshes[object] : undefined;
     const doc = existing && topology.create(existing.document);

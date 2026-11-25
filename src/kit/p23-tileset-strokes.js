@@ -1,7 +1,7 @@
 /* Tile brush edits on the retained construction plane. */
 (function (K) {
   const A = K.authoring, topology = K.meshTopology, {V} = K, {freeze} = K.procedural.data;
-  const brushFields = ['selection','material','texelsPerUnit','brushScale'];
+  const brushFields = ['selection','material','texelsPerUnit','brushScale','paint'];
   const fields = ['mode','id','object','part','snapGrid'];
   const strokeFields = ['path','interval'];
   const rectangleFields = ['from','to'];
@@ -41,8 +41,8 @@
   }
 
   function prepareBrush(scene, request, at, options, cellSize) {
-    const {id,object,part,selection,material,texelsPerUnit,brushScale} = request;
-    return A.tilesetFaces.prepare(scene,{object,part,face:id,selection,material,texelsPerUnit,brushScale,planeAt:at},options,cellSize);
+    const {id,object,part,selection,material,texelsPerUnit,brushScale,paint} = request;
+    return A.tilesetFaces.prepare(scene,{object,part,face:id,selection,material,texelsPerUnit,brushScale,paint,planeAt:at},options,cellSize);
   }
 
   function draw(brush, id, samples) {
@@ -246,7 +246,7 @@
 
   function planRectangle(scene, request, options) {
     const {mode,id,object,part,from,to,snapGrid=false} = request ?? {}, filling = mode === 'fill';
-    if (!validRequest(request,rectangleFields,filling ? ['selection','material'] : []) ||
+    if (!validRequest(request,rectangleFields,filling ? ['selection','material','paint'] : []) ||
         !['fill','erase'].includes(mode) || !pair(from) || !pair(to))
       throw new TypeError('A tile rectangle needs fill or erase mode, edit and mesh IDs, and two grid cell addresses');
     const frame = A.constructionPlane.forScene(scene), footprint = rectangle(frame,from,to,snapGrid);

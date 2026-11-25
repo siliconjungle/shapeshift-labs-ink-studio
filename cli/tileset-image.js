@@ -19,6 +19,7 @@ function readTilesetImage(source, toolkit = require('..').load()) {
 
 const rectangleFields = ['x','y','width','height'];
 const insetEdges = ['top','bottom','left','right'];
+const paintFlags = ['paint-rotate','paint-flip-x','paint-flip-y'];
 const layoutFlags = {'padding-x':'paddingX','padding-y':'paddingY','offset-x':'offsetX','offset-y':'offsetY'};
 const tileFields = ['tile-width','tile-height',...Object.keys(layoutFlags)];
 const integerText = value => typeof value === 'string' && /^-?\d+$/.test(value);
@@ -42,6 +43,12 @@ function numberOption(options, name) {
   if (typeof value !== 'string' || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value))
     throw new TypeError('--'+name+' needs a number');
   return Number(value);
+}
+
+function paintOptions(options) {
+  if (!paintFlags.some(key=>options[key] !== undefined)) return;
+  return Selection.paintOrientation({rotation:numberOption(options,'paint-rotate'),
+    flipX:options['paint-flip-x'],flipY:options['paint-flip-y']});
 }
 
 function prepare(scene, toolkit) {
@@ -124,7 +131,8 @@ function rasterizeTilesetBrush(scene, brush, toolkit = require('..').load()) {
   const tilesets = prepare(scene, toolkit);
   const selected = brushSelection(tilesets,brush);
   const {width,pixels} = tilesets.resolve({tileset:selected.tileset});
-  return Selection.pack(selected,width,pixels,4);
+  const raster = Selection.pack(selected,width,pixels,4);
+  return brush.paint === undefined ? raster : Selection.paintRaster(raster,Selection.paintOrientation(brush.paint),4);
 }
 
 function previewCommand([file,...rest], options, toolkit) {
@@ -142,11 +150,12 @@ function previewCommand([file,...rest], options, toolkit) {
 function pickCommand(args, options, toolkit, projectTexelsPerUnit) {
   const {scene,id,out} = options, fields = rectangleFields;
   if (args.length || ![scene,id].every(value => typeof value === 'string' && value.trim()) ||
-      Object.keys(options).some(key => !['scene','id','out','brush','brush-scale',...fields,...tileFields].includes(key)) ||
+      Object.keys(options).some(key => !['scene','id','out','brush','brush-scale',...fields,...tileFields,...paintFlags].includes(key)) ||
       out !== undefined && (typeof out !== 'string' || !/\.(html|json)$/i.test(out)))
     throw new TypeError('Use tileset pick --scene <scene.json> --id <tileset-id> with rectangle bounds and optional --brush');
   const tile = tileOptions(options), block = options.brush === true || tile !== undefined;
-  const scale = numberOption(options,'brush-scale');
+  const scale = numberOption(options,'brush-scale'), paint = paintOptions(options);
+  if (!block && paint) throw new TypeError('Paint orientation on a saved pick requires a tile brush');
   if (!block && scale !== undefined) throw new TypeError('--brush-scale requires a tile brush pick');
   const visual = out !== undefined && /\.html$/i.test(out);
   if (visual && block) throw new TypeError('Save a tile brush as JSON and render it with tileset brush-preview');
@@ -174,8 +183,9 @@ function pickCommand(args, options, toolkit, projectTexelsPerUnit) {
       .replace('/* PICK_DATA */',() => model);
     return files.write(output,page);
   }
-  if (output) return files.publishJson(output,selection,'A different selection already exists at '+output);
-  process.stdout.write(JSON.stringify(selection,null,2)+'\n');
+  const result = paint ? {...selection,paint} : selection;
+  if (output) return files.publishJson(output,result,'A different selection already exists at '+output);
+  process.stdout.write(JSON.stringify(result,null,2)+'\n');
 }
 
 function sceneOutput(input, out, sideInput) {
@@ -308,7 +318,7 @@ function stampCommand(action, args, options, toolkit, projectTexelsPerUnit, open
   const {scene,id,object,face,part,out,material,selection,plane,'snap-grid':snapGrid} = options;
   const names = ['scene','id','object','face','part','out','material','selection'];
   const vectors = ['origin','right','up'];
-  const allowed = [...names,...vectors,...rectangleFields,'brush-scale','texels-per-unit','plane','snap-grid'];
+  const allowed = [...names,...vectors,...rectangleFields,'brush-scale','texels-per-unit','plane','snap-grid',...paintFlags];
   const saved = selection !== undefined;
   if (args.length || ![scene,object,face].every(Boolean) || Object.keys(options).some(key=>!allowed.includes(key)) ||
       names.some(key=>options[key] !== undefined && !(typeof options[key] === 'string' && options[key].trim())) ||
@@ -319,7 +329,8 @@ function stampCommand(action, args, options, toolkit, projectTexelsPerUnit, open
   const editor = openEditor(input);
   const crop = saved ? JSON.parse(fs.readFileSync(path.resolve(selection),'utf8')) : pickTilesetRectangle(editor.snapshot(),id,
     Object.fromEntries(rectangleFields.map(key=>[key,Number(options[key])])),toolkit);
-  const request = {object,face,selection:crop,...(part && {part}),...(material && {material})};
+  const paint = paintOptions(options);
+  const request = {object,face,selection:crop,...(part && {part}),...(material && {material}),...(paint && {paint})};
   const {coordinates} = require('./construction-plane.js');
   for (const key of vectors) if (options[key] !== undefined) request[key] = coordinates(options[key],3,'--'+key);
   if (plane !== undefined) request.planeAt = coordinates(plane,2,'--plane');

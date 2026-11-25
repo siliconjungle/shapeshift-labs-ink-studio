@@ -87,6 +87,49 @@ const TilesetSelection = (() => {
     return {width,height,pixels:packed};
   }
 
+  function paintOrientation(value) {
+    if (!value || Object.getPrototypeOf(value) !== Object.prototype ||
+        Object.keys(value).some(key=>!['rotation','flipX','flipY'].includes(key)))
+      throw new TypeError('Paint orientation needs a rotation and optional flipX and flipY');
+    const {rotation=0,flipX=false,flipY=false} = value;
+    if (![0,90,180,270].includes(rotation) || typeof flipX !== 'boolean' || typeof flipY !== 'boolean')
+      throw new RangeError('Paint rotation must be 0, 90, 180, or 270 degrees and reflections must be boolean');
+    return {rotation,flipX,flipY};
+  }
+
+  // Forward transform in top-down edge coordinates. Reflections precede rotation.
+  function paintTransform({rotation,flipX,flipY}, width, height) {
+    const turn = rotation === 90 || rotation === 270;
+    function point([x,y]) {
+      const u = flipX ? width-x : x, v = flipY ? height-y : y;
+      if (rotation === 90) return [height-v,u];
+      if (rotation === 180) return [width-u,height-v];
+      if (rotation === 270) return [v,width-u];
+      return [u,v];
+    }
+    return {width:turn ? height : width,height:turn ? width : height,point};
+  }
+
+  function paintCorners(uvs, paint) {
+    const {point} = paintTransform(paint,1,1);
+    const result = new Array(4);
+    for (const [i,corner] of [[0,1],[1,1],[1,0],[0,0]].entries()) {
+      const [x,y] = point(corner);
+      result[y ? x : 3-x] = uvs[i];
+    }
+    return result;
+  }
+
+  function paintRaster({width,height,pixels}, paint, channels) {
+    const target = paintTransform(paint,width,height), output = new Uint8Array(pixels.length);
+    for (let y=0;y<height;y++) for (let x=0;x<width;x++) {
+      const [u,v] = target.point([x+.5,y+.5]).map(Math.floor);
+      const offset = (y*width+x)*channels;
+      output.set(pixels.subarray(offset,offset+channels),(v*target.width+u)*channels);
+    }
+    return {width:target.width,height:target.height,pixels:output};
+  }
+
   const edges = ['top','bottom','left','right'];
 
   function uvMapping(grid, brush, changes = {}, sample) {
@@ -108,6 +151,6 @@ const TilesetSelection = (() => {
     return {brush:{...brush,uvInset},...(sample && {cell:sample}),texelBounds,uvBounds,sourceUVBounds:normalize([x,y,x+width,y+height])};
   }
 
-  return Object.freeze({pick,between,tileSize,layoutKeys:Object.freeze(layoutKeys),gridFits,block,readBrush,hasGaps,cell,pack,uvMapping});
+  return Object.freeze({pick,between,tileSize,layoutKeys:Object.freeze(layoutKeys),gridFits,block,readBrush,hasGaps,cell,pack,uvMapping,paintOrientation,paintTransform,paintCorners,paintRaster});
 })();
 if (typeof module !== 'undefined') module.exports = TilesetSelection;

@@ -20,7 +20,7 @@ const argv = process.argv.slice(2),
   pos = [],
   opt = {};
 const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' || cmd === 'effect-recipe' ? ['json'] :
-  cmd === 'modeling-benchmark' ? ['repairs-complete'] : cmd === 'mesh-topology' ? ['from-camera', 'detach-edge'] : cmd === 'tileset' ? ['brush', 'clear', 'accept-external', 'snap-grid'] : [];
+  cmd === 'modeling-benchmark' ? ['repairs-complete'] : cmd === 'mesh-topology' ? ['from-camera', 'detach-edge'] : cmd === 'tileset' ? ['brush', 'clear', 'accept-external', 'snap-grid', 'paint-flip-x', 'paint-flip-y'] : [];
 for (let i = 1; i < argv.length; i++) {
   const a = argv[i];
   if (a.startsWith('--')) {
@@ -1495,11 +1495,11 @@ const CMD = {
         '  tileset combine --scene <scene.json> --ids <id,id,...> --new-id <tileset-id> [--axis x|y] [--out <new-scene.json>]   combine sheets into a new atlas',
         '  tileset deduplicate --scene <scene.json> --id <duplicate-id> --keep-id <retained-id> [--out <new-scene.json>]   consolidate identical tilesets and redirect their references',
         '  tileset remove --scene <scene.json> --id <tileset-id> [--out <new-scene.json>]   remove an unreferenced tileset',
-        '  tileset stamp --scene <scene.json> --object <mesh-id> --face <face-id> (--selection <selection.json> | --id <tileset-id> --x N --y N --width N --height N) [--plane U,V [--snap-grid] | --origin X,Y,Z --right X,Y,Z --up X,Y,Z] [--part ID] [--material ID] [--texels-per-unit N] [--brush-scale N] [--out <new-scene.json>]   stamp one painted tile as a new editable mesh face',
+        '  tileset stamp --scene <scene.json> --object <mesh-id> --face <face-id> (--selection <selection.json> | --id <tileset-id> --x N --y N --width N --height N) [--plane U,V [--snap-grid] | --origin X,Y,Z --right X,Y,Z --up X,Y,Z] [--part ID] [--material ID] [--texels-per-unit N] [--brush-scale N] [--paint-rotate 0|90|180|270] [--paint-flip-x] [--paint-flip-y] [--out <new-scene.json>]   stamp one painted tile as a new editable mesh face',
         '  tileset stroke <stroke.json> --scene <scene.json> [--out <new-scene.json>]   draw or erase an interval-sampled run of painted faces',
         '  tileset rectangle <request.json> --scene <scene.json> [--out <new-scene.json>]   fill or erase an inclusive rectangle of construction grid cells',
         '  tileset brush-run <request.json> --scene <scene.json> [--brush-file <brush.json>] [--out <new-scene.json>]   stamp a saved multi-tile brush with edge or anchor alignment and overlap control',
-        '  tileset place --scene <scene.json> --object <mesh-id> --face <face-id> (--selection <selection.json> | --id <tileset-id> --x N --y N --width N --height N) [--plane U,V [--snap-grid] | --origin X,Y,Z --right X,Y,Z --up X,Y,Z] [--part ID] [--material ID] [--texels-per-unit N] [--brush-scale N] [--out <new-scene.json>]   place one painted tile as an editable mesh face',
+        '  tileset place --scene <scene.json> --object <mesh-id> --face <face-id> (--selection <selection.json> | --id <tileset-id> --x N --y N --width N --height N) [--plane U,V [--snap-grid] | --origin X,Y,Z --right X,Y,Z --up X,Y,Z] [--part ID] [--material ID] [--texels-per-unit N] [--brush-scale N] [--paint-rotate 0|90|180|270] [--paint-flip-x] [--paint-flip-y] [--out <new-scene.json>]   place one painted tile as an editable mesh face',
         '  tileset extract --scene <scene.json> (--selection <selection.json> | --id <tileset-id> --x N --y N --width N --height N) --new-id <tileset-id> --out <new-scene.json>   register an exact crop as a new tileset',
         '  tileset repack <atlas.png> --tile-width N --tile-height N --margin-left N --margin-top N --margin-right N --margin-bottom N --gutter-x N --gutter-y N --out <compact.png> [--report <layout.json>]   remove atlas margins and gutters',
         '  tileset resize --scene <scene.json> --id <tileset-id> --width N --height N [--anchor <anchor>] [--tile-width N --tile-height N] [--out <revised.json>]   change canvas size and preview face references',
@@ -1508,7 +1508,7 @@ const CMD = {
         '  tileset grid --scene <scene.json> [--id <tileset-id>] [--tile-width N --tile-height N | --clear] [--out <new-scene.json>] [--padding-x N --padding-y N] [--offset-x N --offset-y N]   inspect or edit shared or per-sheet tile grids',
         '  tileset world-scale --scene <scene.json> [--texels-per-unit N | --clear] [--out <new-scene.json>]   inspect or set tileset texels per world unit',
         '  tileset pick --scene <scene.json> --id <tileset-id> [--x N --y N --width N --height N] [--out file.html|file.json]   pick an exact texel rectangle',
-        '  tileset pick --scene <scene.json> --id <tileset-id> (--brush | --tile-width N --tile-height N) --x N --y N --width N --height N [--padding-x N --padding-y N] [--offset-x N --offset-y N] [--brush-scale N] [--out brush.json]   pick a tile brush',
+        '  tileset pick --scene <scene.json> --id <tileset-id> (--brush | --tile-width N --tile-height N) --x N --y N --width N --height N [--padding-x N --padding-y N] [--offset-x N --offset-y N] [--brush-scale N] [--paint-rotate 0|90|180|270] [--paint-flip-x] [--paint-flip-y] [--out brush.json]   pick a tile brush',
         '  tileset brush-size <brush.json> --scene <scene.json> [--brush-scale N --out <new-brush.json>]   measure a tile brush in world units or save a new scale',
         '  tileset brush-uv <brush.json> --scene <scene.json> [--inset-top N] [--inset-bottom N] [--inset-left N] [--inset-right N] [--column N --row N] [--object ID --face ID] [--out file.json]   inspect or inset brush sampling and edit a retained face',
         '  tileset brush-preview <brush.json> --scene <scene.json> --out <preview.png>   render a tile brush on its native grid',

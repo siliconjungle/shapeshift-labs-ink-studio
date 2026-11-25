@@ -324,6 +324,46 @@ One undo restores the whole run. Run
 `node examples/tileset-pick/brush-run-demo.cjs brush-run-demo`
 to compare abut, overlap, and anchor alignment with the same pick.
 
+### Rotate or reflect the paint before placement
+
+Use `--paint-rotate 90` for a clockwise quarter turn as viewed from the
+painted side. Valid angles are 0, 90, 180, and 270 degrees. Use
+`--paint-flip-x` to reflect left to right and `--paint-flip-y` to reflect
+top to bottom. Reflections apply in source texture coordinates before
+rotation.
+
+```sh
+ink-studio tileset stamp --scene wall.json --selection sign.json \
+  --object facade --face sign --plane 0,0 --paint-rotate 90 --out turned-paint.json
+ink-studio tileset stamp --scene wall.json --selection sign.json \
+  --object facade --face sign --origin 0,1,0 --right 0,-1,0 --up 1,0,0 --out turned-face.json
+```
+
+A paint transform changes which source texel lands at each pigment corner.
+The world frame, face dimensions, and winding come from the placement.
+A quarter turn on a rectangular face fits the turned paint to that face.
+The source binding keeps the original atlas rectangle and the paint
+transform. Other UV channels keep their own layouts.
+
+Use `paint: { rotation: 90, flipX: true, flipY: false }` in SDK stamp
+requests, draw strokes, rectangle fills, and brush runs. The same paint
+record works in the JSON requests for the headless CLI. A brush run can
+also read `paint` from its saved brush. Its paint transform turns or
+reflects the whole compact block, including its source anchor. A quarter
+turn exchanges the stamp's paint rows and columns and fits them into the
+original world footprint. Abut and overlap use the resulting cell grid.
+
+```sh
+ink-studio tileset pick --scene wall.json --id masonry --brush \
+  --x 0 --y 0 --width 48 --height 16 --paint-flip-x --out mirrored.json
+ink-studio tileset brush-preview mirrored.json --scene wall.json --out mirrored.png
+ink-studio tileset brush-run run.json --scene wall.json --brush-file mirrored.json --out mirrored-run.json
+```
+
+The PNG preview shows the compact oriented brush in native texels.
+Run `node examples/tileset-pick/paint-orientation-demo.cjs paint-demo`
+for a matched comparison of paint rotation, reflection, and face rotation.
+
 ### Extract a crop as a reusable tileset
 
 Use an exact texel rectangle or a saved `tileset pick` selection.

@@ -873,7 +873,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetCanvas.plan` | function | `(scene, id, operation)` | [source](../../src/kit/p23-tileset-canvas.js) |
 | `KIT.authoring.tilesetFaces` | namespace |  |  |
 | `KIT.authoring.tilesetFaces.append` | function | `(brush, stamps)` | [source](../../src/kit/p23-tileset-faces.js) |
-| `KIT.authoring.tilesetFaces.cropSource` | function | `(asset, crop, texelBounds = [crop.x,crop.y,crop.x+crop.width,crop.y+crop.height])` | [source](../../src/kit/p23-tileset-faces.js) |
+| `KIT.authoring.tilesetFaces.cropSource` | function | `(asset, crop, texelBounds = [crop.x,crop.y,crop.x+crop.width,crop.y+crop.height], paint)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.plan` | function | `(scene, request, options)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.prepare` | function | `(scene, request, {projectTexelsPerUnit} = {}, cellSize)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.sourceBindings` | function | `(row, id, update)` | [source](../../src/kit/p23-tileset-faces.js) |
