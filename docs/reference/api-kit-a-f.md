@@ -894,18 +894,22 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetComponentSelection.selectionDomains` | function | `(edit='inspect', requested)` | [source](../../src/kit/p23-tileset-component-selection.js) |
 | `KIT.authoring.tilesetEyedrop` | namespace |  |  |
 | `KIT.authoring.tilesetEyedrop.inspect` | function | `(scene, row, {object,face,brushSize=false} = {})` | [source](../../src/kit/p23-tileset-eyedrop.js) |
-| `KIT.authoring.tilesetEyedrop.orientationOf` | function | `(points, hint)` | [source](../../src/kit/p23-tileset-eyedrop.js) |
-| `KIT.authoring.tilesetEyedrop.recover` | function | `(asset, tileset, texels, binding)` | [source](../../src/kit/p23-tileset-eyedrop.js) |
+| `KIT.authoring.tilesetEyedrop.orientationOf` | function | `(points, hint, slots = [0,1,2,3])` | [source](../../src/kit/p23-tileset-eyedrop.js) |
+| `KIT.authoring.tilesetEyedrop.recover` | function | `(asset, tileset, texels, binding, slots)` | [source](../../src/kit/p23-tileset-eyedrop.js) |
 | `KIT.authoring.tilesetEyedrop.sourceBinding` | function | `(row, face)` | [source](../../src/kit/p23-tileset-eyedrop.js) |
+| `KIT.authoring.tilesetFaceFromVertices` | namespace |  |  |
+| `KIT.authoring.tilesetFaceFromVertices.plan` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-face-from-vertices.js) |
 | `KIT.authoring.tilesetFaces` | namespace |  |  |
 | `KIT.authoring.tilesetFaces.append` | function | `(brush, stamps, brushes = [brush])` | [source](../../src/kit/p23-tileset-faces.js) |
-| `KIT.authoring.tilesetFaces.cornersFor` | function | `(brush, face, ids)` | [source](../../src/kit/p23-tileset-faces.js) |
+| `KIT.authoring.tilesetFaces.cornersFor` | function | `(brush, face, ids, slots = quadCorners)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.cropSource` | function | `(asset, crop, texelBounds = [crop.x,crop.y,crop.x+crop.width,crop.y+crop.height], paint)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.isSourceBinding` | function | `(binding)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.plan` | function | `(scene, request, options)` | [source](../../src/kit/p23-tileset-faces.js) |
+| `KIT.authoring.tilesetFaces.polygonStamp` | function | `(brush, face, ids, vertices, uvCorners)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.prepare` | function | `(scene, request, {projectTexelsPerUnit} = {}, cellSize)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.sameMaterial` | function | `(a, b)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.sourceBindings` | function | `(row, id, update)` | [source](../../src/kit/p23-tileset-faces.js) |
+| `KIT.authoring.tilesetFaces.sourceCorners` | function | `(binding, count)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.stamp` | function | `(brush, face, anchor, shared)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetGrow` | namespace |  |  |
 | `KIT.authoring.tilesetGrow.plan` | function | `(scene, request, options)` | [source](../../src/kit/p23-tileset-grow.js) |

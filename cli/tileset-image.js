@@ -393,21 +393,29 @@ const faceEdits = {
   stroke:['planTilesetStroke','applyTilesetStroke'],
   rectangle:['planTilesetRectangle','applyTilesetRectangle'],
   'brush-run':['planTilesetBrushRun','applyTilesetBrushRun'],
+  face:['planTilesetFaceFromVertices','createTilesetFaceFromVertices'],
   block:['planTilesetBlock','applyTilesetBlock'],
   primitive:['planTilesetPrimitive','applyTilesetPrimitive']
 };
 
 function faceEditCommand(action, [file,...rest], options, projectTexelsPerUnit, openEditor) {
-  const {scene,out,selection,collection,'brush-file':brush} = options;
-  const extras = {'brush-run':['brush-file'],block:['selection'],primitive:['selection'],stroke:['collection'],rectangle:['collection']};
+  const {scene,out,selection,collection,'brush-file':brush,'vertices-file':vertices} = options;
+  const extras = {'brush-run':['brush-file'],face:['selection','vertices-file'],block:['selection'],primitive:['selection'],
+    stroke:['collection'],rectangle:['collection']};
   const name = value=>typeof value === 'string' && value.trim();
   if (rest.length || ![file,scene].every(name) || out !== undefined && !name(out) ||
       Object.keys(options).some(key=>!['scene','out',...extras[action]].includes(key)) ||
-      [brush,selection,collection].some(value=>value !== undefined && !name(value)))
+      [brush,selection,collection,vertices].some(value=>value !== undefined && !name(value)))
     throw new TypeError('Use tileset '+action+' <request.json> --scene <scene.json> [--out <new-scene.json>]');
   const input = path.resolve(scene), output = out && sceneOutput(input,out,file);
   const read = filename=>JSON.parse(fs.readFileSync(path.resolve(filename),'utf8'));
   const request = read(file);
+  if (vertices !== undefined) {
+    if (output === path.resolve(vertices)) throw new RangeError('Write the scene separately from the vertex selection');
+    if (!request || Object.getPrototypeOf(request) !== Object.prototype || Object.hasOwn(request,'vertices'))
+      throw new TypeError('Provide vertices in the request or with --vertices-file');
+    request.vertices = read(vertices);
+  }
   if (collection !== undefined) {
     if (output === path.resolve(collection)) throw new RangeError('Write the scene separately from the collection');
     if (!request || Object.getPrototypeOf(request) !== Object.prototype || Object.hasOwn(request,'collection'))

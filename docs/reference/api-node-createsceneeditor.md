@@ -25,6 +25,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().cancel` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().commit` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().constructionPlane` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().createTilesetFaceFromVertices` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().cutMeshTopology` | function | `(object, request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().editIsolatedPrefab` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().editMeshEdges` | function | `(object, request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
@@ -74,6 +75,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().planTilesetBrushRun` | function | `(request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planTilesetCanvas` | function | `(id,operation)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planTilesetFace` | function | `(request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().planTilesetFaceFromVertices` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planTilesetGrow` | function | `(request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planTilesetPrimitive` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planTilesetRectangle` | function | `(request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
