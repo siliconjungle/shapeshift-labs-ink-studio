@@ -48,6 +48,8 @@ For levels, histograms, tonal edits and alpha-aware swatch masks, see [Typed mat
 
 For editable handles, ramp pins and image-driven transfers, see [Material curves and gradients](material-curves-gradients.md).
 
+For spatial filtering, signed detail and edge reconstruction, see [Typed material blur, sharpen, and antialias](material-image-filters.md).
+
 ## Convert color to relief
 
 The `fx.relight` height socket accepts typed height in `art-px` and existing uncolored scalar rasters. A connection from a known RGB source fails graph validation. For dynamically sourced images, the socket validates their value before relighting. Convert deliberately with `image.toHeight`.

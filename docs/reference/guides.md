@@ -200,6 +200,7 @@ All checked-in guides, indexed by title and section headings.
 - [Seasonal and wear histories](../material-histories.md)
 - [Material image blend modes](../material-image-blend.md)
 - [Split, shuffle, and pack typed image channels](../material-image-channels.md)
+- [Typed material blur, sharpen, and antialias](../material-image-filters.md)
 - [Material-point passes and impacts](../material-point-impacts.md)
 - [Portable material response recipes](../material-response.md)
 - [Surface materialisation](../materialisation.md)
