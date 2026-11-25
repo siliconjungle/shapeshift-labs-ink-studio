@@ -159,6 +159,7 @@
     typedImage: value => K.procedural.graphImages.valid(value),
     colorImage: value => K.procedural.graphImages.valid(value, 'color'),
     heightImage: value => K.procedural.graphImages.valid(value, 'height'),
+    normalImage: value => K.procedural.graphImages.valid(value, 'normal'),
     reliefHeight: value => value === null || scalarRaster(value) ||
       K.procedural.graphImages.valid(value, 'height') && value.descriptor.units === 'art-px',
     materialChannels: value => K.procedural.materialChannels.valid(value),
@@ -206,6 +207,7 @@
     typedImage: ['typed image with a sample contract'],
     colorImage: ['typed color image'],
     heightImage: ['typed height image'],
+    normalImage: ['typed normal image'],
     reliefHeight: ['height in art pixels'],
     materialChannels: ['material channel packet'],
     cameraGrid: ['camera grid with view and viewport', 'record']
@@ -246,7 +248,8 @@
   }
   function compatible(from,to) {
     if (from === to || from === 'any' || to === 'any') return true;
-    if (to === 'typedImage' && ['colorImage', 'heightImage'].includes(from)) return true;
+    if (to === 'typedImage' && ['colorImage', 'heightImage', 'normalImage'].includes(from)) return true;
+    if (from === 'typedImage' && ['normalImage', 'heightImage'].includes(to)) return true;
     if (to === 'reliefHeight') return ['heightImage', 'typedImage', 'scalarRaster', 'raster'].includes(from);
     if (from === 'raster' && to === 'scalarRaster' || from === 'scalarRaster' && to === 'raster') return true;
     const source = Object.hasOwn(semantics, from) ? semantics[from] : null;

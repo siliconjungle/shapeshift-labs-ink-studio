@@ -1,0 +1,21 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const Ink = require('../..');
+const files = require('../../cli/asset-files.js'), PNG = require('../../cli/png.js');
+const { kilnSources, kilnGraph, kilnPreview, kilnLight } = require('./kiln.js');
+const out = path.resolve(process.argv[2] ?? 'studio/out/typed-height-normal');
+const at = file => path.join(out, file);
+const graph = kilnGraph({ lightMaps: true });
+for (const [name, raster] of Object.entries(kilnSources()))
+  graph.inputs[name] = { type: 'raster', default: { ...raster, data: Array.from(raster.data) } };
+const material = at('kiln-relief.material.json');
+Ink.writeMaterialGraph(material, Ink.openMaterialGraph(graph, { id: 'kiln-relief' }));
+const project = Ink.readGraphProject(material), { outputs, artifacts } = project.run();
+const { width, height, data } = kilnPreview(outputs, kilnLight);
+assert.notDeepEqual(outputs.gl.raster.data, outputs.direct.raster.data);
+for (const artifact of artifacts) files.write(at(artifact.file), artifact.bytes);
+files.write(at('relit-ceramic.png'), PNG.encode(width, height, data, 4));
+for (const name of ['index.html', 'kiln.js']) files.write(at(name), fs.readFileSync(path.join(__dirname, name)));
+files.write(at('ink-studio.browser.js'), Buffer.from(Ink.bundle()));
+console.log('Wrote the editable graph, normal PNGs and Kiln Relief demo to ' + out);
