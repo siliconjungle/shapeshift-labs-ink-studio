@@ -207,6 +207,7 @@ All checked-in guides, indexed by title and section headings.
 - [Typed material blur, sharpen, and antialias](../material-image-filters.md)
 - [Typed material distance, edges, and morphology](../material-image-morphology.md)
 - [Typed material transforms and addressing](../material-image-transforms.md)
+- [Named noise in material graphs](../material-named-noise.md)
 - [Material-point passes and impacts](../material-point-impacts.md)
 - [Portable material response recipes](../material-response.md)
 - [Surface materialisation](../materialisation.md)

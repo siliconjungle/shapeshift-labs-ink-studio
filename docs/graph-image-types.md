@@ -62,6 +62,8 @@ For reusable region labels and seam-continuous UVs, see [Typed Flood Fill region
 
 For slope trails, seam repair, scan cleanup and height analysis, see [Advanced typed texture filters](material-advanced-texture-filters.md).
 
+For seeded scalar image generation, per-axis periods and higher-dimensional slices, see [Named noise in material graphs](material-named-noise.md).
+
 ## Convert color to relief
 
 The `fx.relight` height socket accepts typed height in `art-px` and existing uncolored scalar rasters. A connection from a known RGB source fails graph validation. For dynamically sourced images, the socket validates their value before relighting. Convert deliberately with `image.toHeight`.

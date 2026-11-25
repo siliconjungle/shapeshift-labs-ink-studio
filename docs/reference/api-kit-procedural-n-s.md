@@ -10,6 +10,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.procedural` | namespace |  | [guide](../../README.md#procedural-worlds), [guide](../brick-meshes.md), [guide](../brick-meshes.md#freeform-strokes-on-brick-meshes), [guide](../curvature-lines.md), [guide](../curve-raster-map.md) |
 
+## KIT.procedural.namedNoise
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.namedNoise` | namespace |  |  |
+| `KIT.procedural.namedNoise.create` | function | `(family, options = {})` | [guide](../material-named-noise.md), [source](../../src/kit/paq-generator-noise.js) |
+| `KIT.procedural.namedNoise.families` | value | `array` |  |
+
 ## KIT.procedural.offsetRails
 
 | Member | Kind | Signature or value | Guides and source |

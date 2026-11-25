@@ -15,6 +15,15 @@
       inputs: { definition: input('record', { type: 'simplex', axes: ['x', 'y'] }), options },
       ...value('field', ({ definition, options }, context) => G.noise(definition, seeded(options, context)))
     },
+    'proc.noiseFamily': {
+      description: 'Evaluate a named two-, three- or four-coordinate noise field for procedural sampling.',
+      seed: 'options', inputs: { family: input('string','perlin'), options },
+      outputs: { value: 'field', info: 'record' },
+      run({ family,options }, context) {
+        const field = P.namedNoise.create(family, seeded(options,context));
+        return { value:field, info:field.spec };
+      }
+    },
     'proc.pattern': { inputs: { options }, ...value('field', ({ options }) => G.pattern(options)) },
     'proc.sample': {
       inputs: { source: 'field', options }, time: true,
