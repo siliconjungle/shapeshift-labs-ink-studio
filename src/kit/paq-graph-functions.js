@@ -30,12 +30,19 @@
     return { inputs: sockets, outputs: { value: type }, run(values) { return { value: signed(evaluate(values), type) }; } };
   }
 
+  function literal(node, key, fallback) {
+    const definition = Object.hasOwn(node.inputs ?? {}, key) ? node.inputs[key] : node.params?.[key];
+    if (definition === undefined) return fallback;
+    if (definition && typeof definition === 'object' && !Array.isArray(definition))
+      return Object.hasOwn(definition, 'value') ? definition.value : undefined;
+    return definition;
+  }
+
   function selectOperation(node, family, variants, fallback) {
-    const definition = { ...node.params, ...node.inputs }.operation;
-    const name = definition === undefined ? fallback : typeof definition === 'string' ? definition : definition?.value;
+    const name = literal(node, 'operation', fallback);
     if (typeof name !== 'string' || !Object.hasOwn(variants, name))
       throw new RangeError(family + ' needs a literal operation from ' + Object.keys(variants).join(', '));
-    const variant = variants[name];
+    const variant = typeof variants[name] === 'function' ? variants[name]() : variants[name];
     return { ...variant, inputs: { operation: { type: 'string', ...(fallback && { default: fallback }) }, ...variant.inputs } };
   }
 
@@ -98,14 +105,30 @@
     }
   };
 
+  const roundingPort = { type: 'string', default: 'exact' };
+  const rounds = { exact: n => n, floor: Math.floor, ceil: Math.ceil, round: Math.round, trunc: Math.trunc };
+  function toInteger(value, rounding) {
+    if (!Object.hasOwn(rounds, rounding)) throw new RangeError('Unknown function integer rounding policy');
+    return rounds[rounding](value);
+  }
+
   const integer = {
     description: 'Convert a finite number to a signed safe integer with an explicit rounding policy.',
-    inputs: { a: 'number', rounding: { type: 'string', default: 'exact' } },
-    outputs: { value: 'integer' },
-    run({a,rounding}) {
-      const rounds = { exact: n => n, floor: Math.floor, ceil: Math.ceil, round: Math.round, trunc: Math.trunc };
-      if (!Object.hasOwn(rounds,rounding)) throw new RangeError('Unknown function integer rounding policy');
-      return { value: signed(rounds[rounding](a),'integer') };
+    ...typed('integer', { a: 'number', rounding: roundingPort }, ({a,rounding})=>toInteger(a,rounding))
+  };
+
+  const castTypes = [...scalarTypes, 'boolean', 'unitScalar'];
+  const cast = {
+    description: 'Explicitly cast between finite numbers, signed safe integers, normalized scalars, and Booleans.',
+    specialize(node) {
+      const from = literal(node, 'from'), to = node.type;
+      needType(from, castTypes, 'fn.cast source');
+      needType(to, castTypes, 'fn.cast result');
+      const round = to === 'integer' && ['number','unitScalar'].includes(from);
+      return typed(to, { a: from, from: 'string', ...(round && { rounding: roundingPort }) }, ({a,rounding})=>{
+        if (to === 'boolean') return Boolean(a);
+        return round ? toInteger(a,rounding) : Number(a);
+      });
     }
   };
 
@@ -150,28 +173,79 @@
     return value[index];
   }
 
+  const width = type => type === 'number' ? 1 : Number(type.at(-1));
+  const components = ['x','y','z','w'];
+  const dot = (a,b) => a.reduce((sum,v,i)=>sum+v*b[i],0);
+
+  function normalize(a) {
+    const max = Math.max(...a.map(Math.abs));
+    if (!max) throw new RangeError('Function cannot normalize a zero vector');
+    const scaled = a.map(v=>v/max), magnitude = Math.hypot(...scaled);
+    return scaled.map(v=>v/magnitude);
+  }
+
+  function along(a,b,reflect) {
+    const axis = normalize(b);
+    const apply = (value,amount)=>value.map((v,i)=>{
+      const projected = axis[i]*amount;
+      return reflect ? (v-projected)-projected : projected;
+    });
+    const direct = apply(a,dot(a,axis));
+    if (direct.every(Number.isFinite)) return direct;
+    // Scale only when intermediate products overflow, to retain small components on the direct path.
+    const scale = Math.max(...a.map(Math.abs)), scaled = a.map(v=>v/scale);
+    return apply(scaled,dot(scaled,axis)).map(v=>v*scale);
+  }
+
+  function vectorLayout(node,type,append) {
+    const leading = type === 'vec2' ? 'number' : 'vec'+(width(type)-1);
+    const pair = literal(node,'operands',append ? [leading,'number'] : [type,type]);
+    const allowed = append ? ['number',...vectorTypes] : ['number',type];
+    if (!Array.isArray(pair) || pair.length !== 2 || !Array.from(pair).every(lane=>allowed.includes(lane)))
+      throw new TypeError('Function vector operands need two literal socket types');
+    if (append ? width(pair[0])+width(pair[1]) !== width(type) : !pair.includes(type))
+      throw new TypeError('Function vector operands do not produce the declared '+type);
+    const authored = Object.hasOwn(node.inputs ?? {},'operands') || Object.hasOwn(node.params ?? {},'operands');
+    return { a:pair[0], b:pair[1], ...(authored && {operands:'array<string>'}) };
+  }
+
+  function swizzle(node,type) {
+    const pattern = literal(node,'pattern');
+    const alphabet = ['xyzw','rgba','stpq'].find(keys=>typeof pattern === 'string' &&
+      pattern.length >= 1 && pattern.length <= 4 && [...pattern].every(lane=>keys.includes(lane)));
+    if (!alphabet) throw new TypeError('Function swizzle needs one to four literal components from xyzw, rgba, or stpq');
+    const indices = [...pattern].map(lane=>alphabet.indexOf(lane));
+    if (indices.some(index=>index>=width(type))) throw new RangeError('Function swizzle reads a component outside '+type);
+    return typed(indices.length === 1 ? 'number' : 'vec'+indices.length, {a:type,pattern:'string'},
+      ({a})=>indices.length === 1 ? a[indices[0]] : indices.map(index=>a[index]));
+  }
+
   const vector = {
-    description: 'Construct or operate on a declared two-, three-, or four-component vector.',
+    description: 'Construct, swizzle, and operate on a declared two-, three-, or four-component vector.',
     specialize(node) {
       needType(node.type,vectorTypes,'fn.vector');
-      const type = node.type;
-      const labels = ['x','y','z','w'].slice(0,Number(type.at(-1)));
+      const type = node.type, labels = components.slice(0,width(type));
       const variants = {
         compose: typed(type,Object.fromEntries(labels.map(label=>[label,'number'])),values=>labels.map(label=>values[label])),
+        splat: typed(type,unary('number'),({a})=>labels.map(()=>a)),
+        append: ()=>typed(type,vectorLayout(node,type,true),({a,b})=>[].concat(a,b)),
+        swizzle: ()=>swizzle(node,type),
+        component: typed('number',{a:type,index:'integer'},({a,index})=>component(a,index)),
         scale: typed(type,{a:type,factor:'number'},({a,factor})=>a.map(v=>v*factor)),
-        dot: typed('number',binary(type),({a,b})=>a.reduce((sum,v,i)=>sum+v*b[i],0)),
+        dot: typed('number',binary(type),({a,b})=>dot(a,b)),
         length: typed('number',unary(type),({a})=>Math.hypot(...a)),
-        normalize: typed(type,unary(type),({a})=>{
-          const max = Math.max(...a.map(Math.abs));
-          if (!max) throw new RangeError('Function cannot normalize a zero vector');
-          const scaled = a.map(v=>v/max), magnitude = Math.hypot(...scaled);
-          return scaled.map(v=>v/magnitude);
-        }),
-        lerp: typed(type,{...binary(type),t:'unitScalar'},({a,b,t})=>a.map((v,i)=>mix(v,b[i],t))),
-        component: typed('number',{a:type,index:'integer'},({a,index})=>component(a,index))
+        distance: typed('number',binary(type),({a,b})=>Math.hypot(...a.map((v,i)=>v-b[i]))),
+        normalize: typed(type,unary(type),({a})=>normalize(a)),
+        project: typed(type,binary(type),({a,b})=>along(a,b,false)),
+        reflect: typed(type,binary(type),({a,b})=>along(a,b,true)),
+        clamp: typed(type,{a:type,min:'number',max:'number'},({a,min,max})=>a.map(v=>limit(v,min,max))),
+        lerp: typed(type,{...binary(type),t:'unitScalar'},({a,b,t})=>a.map((v,i)=>mix(v,b[i],t)))
       };
-      for (const name of ['add','subtract','multiply','divide'])
-        variants[name] = typed(type,binary(type),({a,b})=>a.map((v,i)=>scalarBinary[name](v,b[i])));
+      for (const [name, evaluate] of Object.entries(scalarUnary))
+        variants[name] = typed(type,unary(type),({a})=>a.map(evaluate));
+      for (const name of ['add','subtract','multiply','divide','min','max','modulo','power'])
+        variants[name] = ()=>typed(type,vectorLayout(node,type,false),({a,b})=>
+          labels.map((_,i)=>scalarBinary[name](Array.isArray(a)?a[i]:a,Array.isArray(b)?b[i]:b)));
       if (type === 'vec3') variants.cross = typed(type,binary(type),({a,b})=>
         [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]);
       return selectOperation(node,'fn.vector',variants,'compose');
@@ -221,9 +295,9 @@
   };
 
   const operations = Object.freeze({
-    'fn.math': math, 'fn.toInteger': integer, 'fn.compare': compare, 'fn.logic': logic,
+    'fn.math': math, 'fn.toInteger': integer, 'fn.cast': cast, 'fn.compare': compare, 'fn.logic': logic,
     'fn.select': select, 'fn.vector': vector, 'fn.color': color, 'fn.text': text
   });
-  const typedOperations = Object.freeze(['fn.math','fn.compare','fn.select','fn.vector','fn.color']);
+  const typedOperations = Object.freeze(['fn.math','fn.cast','fn.compare','fn.select','fn.vector','fn.color']);
   P.graphFunctions = Object.freeze({ types, validType, compatible, operations, typedOperations });
 })(KIT);

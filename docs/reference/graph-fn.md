@@ -4,6 +4,28 @@
 
 Ports, defaults, and constraints come from the registered operations. Use `graph describe <op> --json` for the full structured record.
 
+### fn.cast
+
+Explicitly cast between finite numbers, signed safe integers, normalized scalars, and Booleans.
+
+Origin: toolkit.
+The node type selects the target. A literal from declares the source. Numeric narrowing to integer exposes rounding.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `a` | `number` | Required | {"finite":true} |
+| Input | `from` | `string` | Required | {"choices":["number","integer","boolean","unitScalar"]} |
+| Input | `rounding` | `string` | `"exact"` | {"choices":["exact","floor","ceil","round","trunc"]} |
+| Output | `value` | `integer` | — | {"integer":true,"safe":true,"signed":true} |
+
+- A nonzero numeric value becomes true. Boolean false and true become zero and one.
+- Integer casts default to exact and enforce the signed safe-integer range. unitScalar casts enforce the normalized range.
+
+Guides: [guide](../reusable-function-graphs.md#value-nodes), [guide](../vector-operations.md#explicit-casts)
+
+Get the runnable example with `ink-studio graph describe fn.cast --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### fn.color
 
 Build RGB(A), read components or luminance, and mix colors in linear light.
@@ -141,28 +163,30 @@ Origin: toolkit.
 | Input | `rounding` | `string` | `"exact"` | {"choices":["exact","floor","ceil","round","trunc"]} |
 | Output | `value` | `integer` | — | {"integer":true,"safe":true,"signed":true} |
 
-Guides: [guide](../reusable-function-graphs.md#define-a-function), [guide](../reusable-function-graphs.md#value-nodes)
+Guides: [guide](../reusable-function-graphs.md#define-a-function), [guide](../reusable-function-graphs.md#value-nodes), [guide](../vector-operations.md#explicit-casts)
 
 Get the runnable example with `ink-studio graph describe fn.toInteger --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### fn.vector
 
-Construct or operate on a declared two-, three-, or four-component vector.
+Construct, swizzle, and operate on a declared two-, three-, or four-component vector.
 
 Origin: toolkit.
-The vector dimension and literal operation determine the inputs and result.
+The vector dimension and literal operation determine the ports. Specify operands for mixed arithmetic or append, and a literal pattern for swizzles.
 
 | Direction | Port | Type | Default | Details |
 | --- | --- | --- | --- | --- |
 | Input | `operation` | `string` | `"compose"` |  |
-| Input | `a` | `vec3` | Required | {"dimensions":3,"finite":true} |
-| Input | `b` | `vec3` | Required | {"dimensions":3,"finite":true} |
+| Input | `a` | `vec4` | Required | {"dimensions":4,"finite":true} |
+| Input | `pattern` | `string` | Required | {"minLength":1,"maxLength":4,"literal":true} |
 | Output | `value` | `vec3` | — | {"dimensions":3,"finite":true} |
 
-- Component indices start at zero. Cross product is available for vec3. Normalize rejects the zero vector.
+- Component indices start at zero. Swizzle uses one alphabet from xyzw, rgba, or stpq and returns a scalar or vector by length.
+- Binary component math accepts two vectors of the same dimension or one vector and one scalar. Scalar position determines subtraction and division order.
+- Cross product is available for vec3. Normalize, project and reflect reject a zero direction.
 
-Guides: [guide](../reusable-function-graphs.md#value-nodes)
+Guides: [guide](../reusable-function-graphs.md#value-nodes), [guide](../vector-operations.md)
 
 Get the runnable example with `ink-studio graph describe fn.vector --example > example.json`.
 Run it with `ink-studio graph run example.json`.

@@ -498,6 +498,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphFunctions` | namespace |  |  |
 | `KIT.procedural.graphFunctions.compatible` | function | `(from, to)` | [source](../../src/kit/paq-graph-functions.js) |
 | `KIT.procedural.graphFunctions.operations` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.cast"]` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.cast"].description` | value | `string = "Explicitly cast between finite numbers, signed safe integers, normalized scalars, and Booleans."` |  |
+| `KIT.procedural.graphFunctions.operations["fn.cast"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
 | `KIT.procedural.graphFunctions.operations["fn.color"]` | namespace |  |  |
 | `KIT.procedural.graphFunctions.operations["fn.color"].description` | value | `string = "Build RGB(A), read components or luminance, and mix colors in linear light."` |  |
 | `KIT.procedural.graphFunctions.operations["fn.color"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
@@ -525,9 +528,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphFunctions.operations["fn.toInteger"].inputs.rounding.type` | value | `string = "string"` |  |
 | `KIT.procedural.graphFunctions.operations["fn.toInteger"].outputs` | namespace |  |  |
 | `KIT.procedural.graphFunctions.operations["fn.toInteger"].outputs.value` | value | `string = "integer"` |  |
-| `KIT.procedural.graphFunctions.operations["fn.toInteger"].run` | function | `({a,rounding})` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.operations["fn.toInteger"].run` | function | `(values)` | [source](../../src/kit/paq-graph-functions.js) |
 | `KIT.procedural.graphFunctions.operations["fn.vector"]` | namespace |  |  |
-| `KIT.procedural.graphFunctions.operations["fn.vector"].description` | value | `string = "Construct or operate on a declared two-, three-, or four-component vector."` |  |
+| `KIT.procedural.graphFunctions.operations["fn.vector"].description` | value | `string = "Construct, swizzle, and operate on a declared two-, three-, or four-component vector."` |  |
 | `KIT.procedural.graphFunctions.operations["fn.vector"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
 | `KIT.procedural.graphFunctions.typedOperations` | value | `array` |  |
 | `KIT.procedural.graphFunctions.types` | value | `array` |  |
