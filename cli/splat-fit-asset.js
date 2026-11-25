@@ -398,6 +398,14 @@ function bake(world,asset=world.look?.splatFit) {
   result.look=look;
   const identity=Provenance.identities(sourceWorld(rendered,fit));
   result.splatIds=Object.freeze(Array.from({length:rendered.count},(_,i)=>identity.idAt(i)??null));
+  if (fit.topology) {
+    result.splatLineage=new Map(world.splatLineage);
+    for (const [kind,rows] of [['created',fit.topology.created],['retired',fit.topology.retired]])
+      for (const [row,record] of rows) {
+        const id=result.splatIds[row];
+        result.splatLineage.set(id,{...result.splatLineage.get(id),[kind]:record});
+      }
+  }
   if (frames) {
     const {styles,indices}=rendered.splatFootprints;
     result.splatFootprints=Footprints.layout(rendered.count,styles,indices,frames);
@@ -445,7 +453,8 @@ function editedFootprint(world,row) {
 
 function lifecycle(world,row) {
   const topology=world[sourceTopology];
-  return {created:topology?.created.get(row),retired:topology?.retired.get(row)};
+  const prior=world.splatLineage?.get(world.splatIds?.[row]);
+  return {created:topology?.created.get(row)??prior?.created,retired:topology?.retired.get(row)??prior?.retired};
 }
 
 const editedAttributes = (world,row) => world[rowAttributes]?.get(row);

@@ -3571,6 +3571,87 @@ report the source ID. Undo, redo, and replay use the existing pixel
 editor session. The saved fit renders through `--splat-fit` in the
 software renderer.
 
+### Split and merge splats with coverage review
+
+Redistribute static Gaussian footprints by stable source ID. A split
+retires one source and creates two to eight children. A merge retires
+two to eight sources and creates one replacement. Sources in a merge
+must share their part, material finish, and coverage mode. Captured
+Gaussian coefficients carry to split children and blend on compatible
+merges. The fit records every parent ID, replacement ID, and weight.
+A static world produced by `bakeSplatFit` retains the chain in
+`world.splatLineage`, including entries for retired IDs.
+
+```json
+{
+  "target": { "object": "signal-plate" },
+  "operations": [
+    { "op": "split", "splat": "green-indicator", "children": [
+      { "id": "green-left", "offset": [-0.08, 0, 0], "weight": 1 },
+      { "id": "green-right", "offset": [0.08, 0, 0], "weight": 1 }
+    ] },
+    { "op": "merge", "id": "amber-lens", "from": ["amber-a", "amber-b"] }
+  ],
+  "review": {
+    "width": 160,
+    "height": 112,
+    "views": [
+      { "id": "front", "yaw": 0, "pitch": 0.1, "ortho": true },
+      { "id": "oblique", "yaw": -0.6, "pitch": 0.3, "ortho": true }
+    ],
+    "tolerances": { "opacity": 0.15, "pigment": 0.1, "depth": 0.15, "silhouette": 0.2 }
+  }
+}
+```
+
+Split offsets are relative to the current center in scene units.
+Ink recenters offsets so the weighted mean stays at the source center,
+then subtracts the spread from the child covariance. Reduce offsets
+if the resulting covariance collapses. Weights default to equal
+shares. A merge fits the combined mean and covariance and blends
+pigment in linear RGB. Translucent splats use approximate optical
+mass for opacity. Opaque splats retain the native hard coverage mode.
+
+Each family has to pass at every camera. The native fragment stream
+measures its visible opacity after occlusion. The report compares
+mean absolute opacity error over the affected pixels, mean linear
+pigment error and 95th-percentile depth error where both versions are
+visible, and silhouette disagreement as a fraction of their union.
+Depth is in scene units. Silhouette uses an opacity threshold of
+0.25 by default. Camera angles are in radians. Supply two to eight
+distinct angles on a shared native grid, up to 256 × 256. A view with
+insufficient visible overlap blocks the change.
+
+```sh
+node cli/ink-studio.js splat-redistribute panel.ply --size 4 --up y \
+  --plan redistribution.json --out panel-fit.json --report review.json
+node cli/ink-studio.js render panel.ply --size 4 --up y --splat-fit panel-fit.json \
+  --px 1 --px1 --w 160 --h 112 --out panel.png
+```
+
+Use `--base fit.json` to start from an existing version 2 fit.
+Use the same scan import size and up axis for planning and rendering.
+A failed review writes its report and exits with status 2. The Node API
+`planSplatRedistribution(world, { target, operations, review, base })`
+returns `{ asset, report }` with a null asset on failure.
+
+In a pixel editor session, use `operation: { topology, review }` on a
+`splat-attributes` destination. Preview and apply use the same review.
+The receipt records the verdict and lineage, and undo restores the
+source family. A redistribution batch can chain up to 16 splits or
+merges. Keep add, clone, and retire in separate batches.
+
+The planner uses the current fit's geometry, pigment, and coverage.
+If an input belongs to a retained group, its replacement captures the
+current deformation and the consumed ID leaves that group. Animated
+rows, authored non-Gaussian footprints, pixel marks, and engravings
+require source-specific handling and are rejected by redistribution.
+
+Generate the enamel signal plate and two review plans with
+`node examples/splat-redistribution.cjs <directory>`. The second plan
+merges two separated indicators and shows the resulting silhouette
+and oblique depth errors in its rejected review.
+
 ### Deform a retained splat group
 
 A version 2 splat fit can retain an ordered list of groups on the same

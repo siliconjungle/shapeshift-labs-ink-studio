@@ -169,6 +169,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   traced-lighting <scene> --out asset.json [--plan settings.json --t 0 --samples 32 --bounces 2]
   splat-fit <scene> --plan approvals.json --out asset.json
   splat-groups <scene> --plan groups.json --out fit.json [--base fit.json --report report.json]
+  splat-redistribute <scene> --plan operations.json --out fit.json --report review.json [--base fit.json]
   render/clip --shot-corrections file.json|off   load or bypass native shot corrections
   render or clip --multiprojection plan.json   use local projection for named mesh surfaces
   path-ink <scene> --plan look.json --out frame.png [--t 0 | --from 0 --to 2 --fps 12]

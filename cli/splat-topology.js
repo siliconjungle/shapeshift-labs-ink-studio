@@ -3,9 +3,11 @@
 const Provenance = require('../src/splat-provenance.js');
 const Targets = require('../src/target-selectors.js');
 const RowAttributes = require('./splat-row-attributes.js');
+const Redistribution = require('./splat-redistribution-math.js');
 
 const maxEdits=4096;
-const schema={add:['position','radius','pigment','part'],clone:['from','position'],retire:['reason']};
+const schema={add:['position','radius','pigment','part'],clone:['from','position'],retire:['reason'],
+  split:['children'],merge:['from','weights','result']};
 const newId=id=>Provenance.validId(id) && !id.startsWith('rest:');
 const rgb24=n=>Number.isSafeInteger(n) && n>=0 && n<=0xffffff;
 const fields=(value,keys)=>value && Object.getPrototypeOf(value)===Object.prototype &&
@@ -38,9 +40,11 @@ function catalog(world,records,scope,supports) {
       retired.set(index,{edit,...(record.reason!==undefined && {reason:record.reason})});
       continue;
     }
-    if (!newId(id) || reserved.has(id) || authoredIds.rowOf(id)>=0)
-      throw new RangeError('Splat ID is reserved or already exists: '+id);
-    reserved.add(id);
+    if (op==='split' || op==='merge') {
+      redistribute(record);
+      continue;
+    }
+    reserve(id);
     const position=RowAttributes.prepare('position',record.position);
     const index=world.count+additions.length;
     if (index>=0xffffff) throw new RangeError('Splat additions exceed the native row budget');
@@ -62,6 +66,58 @@ function catalog(world,records,scope,supports) {
     newRows.set(id,index);
     additions.push(addition);
     created.set(index,{op,edit,...(op==='clone' && {from:record.from})});
+  }
+
+  function reserve(id) {
+    if (!newId(id) || reserved.has(id) || authoredIds.rowOf(id)>=0)
+      throw new RangeError('Splat ID is reserved or already exists: '+id);
+    reserved.add(id);
+  }
+
+  function redistribute({op,edit,target,id,children,from,weights,result}) {
+    const sources=op==='split' ? [id] : from;
+    const outputs=op==='split' ? children : [{...result,id}];
+    const family=list=>Array.isArray(list) && list.length>=2 && list.length<=Redistribution.maxFamily;
+    if ((op==='split' ? !family(outputs) : !family(sources)) ||
+        new Set(sources).size!==sources.length || !sources.every(Provenance.validId))
+      throw new RangeError('Invalid splat redistribution family');
+    const shares=op==='split' ? children.map(child=>child?.weight) : weights;
+    if (!Array.isArray(shares) || shares.length!==(op==='split' ? outputs.length : sources.length) ||
+        !Array.from(shares).every(n=>Number.isFinite(n) && n>0 && n<=1) ||
+        Math.abs(shares.reduce((a,b)=>a+b,0)-1)>1e-6)
+      throw new RangeError('Redistribution needs normalized positive weights');
+    const parents=sources.map(source=>resolve(source,target)), anchor=parents[0], label=labelAt(anchor);
+    if (parents.some(row=> {
+      const other=labelAt(row);
+      return ['object','entity','part'].some(key=>label[key]!==other[key]);
+    })) throw new RangeError('A splat merge needs one object and part');
+    const outputIds=outputs.map(out=>out?.id);
+    for (const [i,out] of outputs.entries()) {
+      if (!fields(out,['id','position','covariance','opacity','pigment','scan','weight']) ||
+          op==='merge' && out.weight!==undefined)
+        throw new TypeError('Invalid redistributed splat snapshot');
+      reserve(out.id);
+      const position=RowAttributes.prepare('position',out.position);
+      const index=world.count+additions.length;
+      if (index>=0xffffff) throw new RangeError('Splat additions exceed the native row budget');
+      const scan=checkScan(out.scan);
+      additions.push({id:out.id,from:anchor,position,data:Redistribution.packedRow(out),label,pigment:out.pigment,scan});
+      newRows.set(out.id,index);
+      created.set(index,{op,edit,from:sources.slice(),...(op==='split' ? {weight:shares[i]} : {weights:shares.slice()})});
+    }
+    for (const row of parents) retired.set(row,{op,edit,replacedBy:outputIds.slice()});
+  }
+
+  function checkScan(scan) {
+    if (scan===undefined) return;
+    const finite=(v,count)=>Array.isArray(v) && v.length===count && Array.from(v).every(n=>Number.isFinite(Math.fround(n)));
+    const harmonic=world.gaussianHarmonics;
+    if (!harmonic || !fields(scan,['dc','sh','linear','normal']) || !finite(scan.dc,3) ||
+        !finite(scan.sh,((harmonic.degree+1)**2-1)*3) || typeof scan.linear!=='boolean' ||
+        scan.linear && !harmonic.linear || scan.normal!==undefined &&
+          (!harmonic.normals || !finite(scan.normal,3) || !scan.normal.every(n=>Number.isInteger(n) && Math.abs(n)<=127)))
+      throw new RangeError('Redistributed scan channels differ from their source format');
+    return scan;
   }
 
   function labelAt(index) {

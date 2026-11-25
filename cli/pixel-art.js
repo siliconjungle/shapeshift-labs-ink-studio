@@ -1776,7 +1776,7 @@ function editWithReceipt(design, patch, context, { runner, options, frameId, sho
       onEditTarget: target => { editTarget = target; }
     });
     let target = Preview.sourceTarget(route,patch), shotHits, skippedHits = (editTarget?.brush ?? editTarget?.surfacePaint)?.skippedHits ?? [];
-    if (editTarget) target = editTarget;
+    if (editTarget) target = destination.kind==='splat-attributes' ? {...editTarget,splats} : editTarget;
     else if (destination.kind === 'raster') {
       const layer = patch.cel === undefined ? patch.id : [...frame.cels].find(([,id]) => id === patch.cel)[0];
       target = { destination:destination.id, kind:'raster', frame:command.frame, layer,
@@ -1937,7 +1937,7 @@ function previewEdit(design, patch, context, { frameId,limit,exact,shotHitFrame 
         if (splat.topology) (target.topologyHits ??= []).push(splat);
       },
       onEditTarget: summary => {
-        if (target && (summary.kind==='scan-material' || summary.kind==='mesh-topology' || summary.brush || summary.surfacePaint)) Object.assign(target,summary);
+        if (target && (summary.kind==='scan-material' || summary.kind==='mesh-topology' || summary.redistribution || summary.brush || summary.surfacePaint)) Object.assign(target,summary);
         else targets.push(summary);
       },
       world:binding => context.world(binding),
@@ -2520,7 +2520,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
         const footprintHits = splats.filter(row=>row.footprint);
         const attributeHits = splats.filter(row=>row.attributes);
         const topologyHits = splats.filter(row=>row.topology);
-        const summary={ ...target,...((painted?.kind==='scan-material' || painted?.kind==='mesh-topology' || painted?.brush || painted?.surfacePaint) && painted), sourceRevision:receipt.inputs.sourceRevision,
+        const summary={ ...target,...((painted?.kind==='scan-material' || painted?.kind==='mesh-topology' || painted?.redistribution || painted?.brush || painted?.surfacePaint) && painted), sourceRevision:receipt.inputs.sourceRevision,
           ...(painted?.ownership && { ownership:painted.ownership }),
           sourceChecked:patch.sourceRevision !== undefined || verifiedReplays.has(index),
           ...(paintHits.length && {paintHits}),

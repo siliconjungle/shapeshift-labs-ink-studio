@@ -136,7 +136,7 @@ const destinationDetails = {
     {stamp:{brush:{kind:'rect',min:[.25,.25],max:[.5,.5]},value:.4}}],
   'decal-layer':['decalOperation','scene','Decal ID, anchor object or part, and changed scene fields.',
     {type:'move',delta:[.05,0]}],
-  'splat-attributes':['splatOperation','splat-fit','Stable splat IDs, fitted row revisions, attribute, footprint, group deformation or topology changes as applicable.',
+  'splat-attributes':['splatOperation','splat-fit','Stable splat IDs, fitted row revisions, attribute, footprint, group deformation, topology lineage and multi-view redistribution review as applicable.',
     {splats:[{splat:'latch-1',pigment:'amber',weight:.8}]}],
   'scan-material':['scanMaterialOperation','scan-paint','Mesh and material IDs, registered texels, changed channels and captured appearance evidence.',
     {texels:[{at:[4,6],roughness:.35}]}],

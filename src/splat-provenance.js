@@ -312,13 +312,23 @@ const SplatProvenance = (() => {
       else data.copyWithin(offset,row.from*16,(row.from+1)*16);
       data.set(row.position,offset);
     }
+    if (patch.materialAlbedo) for (const [i,{pigment}] of additions.entries())
+      if (pigment!==undefined) patch.materialAlbedo[world.count+i]=pigment+1;
     if (world.gaussianHarmonics) {
       const input=world.gaussianHarmonics;
       const harm=patch.gaussianHarmonics=harmonicRows({...input,available:input.available??new Uint8Array(world.count).fill(1)},
         count,extend);
-      for (const [i,{from}] of additions.entries()) if (from===undefined) {
-        const row=world.count+i, color=patch.data[row*16+7];
-        for (let k=0;k<3;k++) harm.dc[row*3+k]=((color>>(k*8)&255)/255-.5)/.28209479177387814;
+      for (const [i,{from,scan}] of additions.entries()) {
+        const row=world.count+i;
+        if (scan) {
+          harm.dc.set(scan.dc,row*3);
+          harm.sh.set(scan.sh,row*scan.sh.length);
+          if (harm.linear) harm.linear[row]=Number(scan.linear);
+          if (scan.normal) harm.normals.set(scan.normal,row*3);
+        } else if (from===undefined) {
+          const color=patch.data[row*16+7];
+          for (let k=0;k<3;k++) harm.dc[row*3+k]=((color>>(k*8)&255)/255-.5)/.28209479177387814;
+        }
       }
     }
     const F=typeof SplatFootprints==='undefined' ? require('./splat-footprints.js') : SplatFootprints;

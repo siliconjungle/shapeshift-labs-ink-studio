@@ -7,6 +7,7 @@ const Footprints = require('../src/splat-footprints.js');
 const FootprintEdits = require('./pixel-splat-footprints.js');
 const RowAttributes = require('./splat-row-attributes.js');
 const Topology = require('./splat-topology.js');
+const { planSplatRedistribution } = require('./splat-redistribution.js');
 const ScanPaint = require('./scan-material-paint.js');
 const GridBrush = require('./sdf-grid-brush.js');
 const SdfMaterialPaint = require('./sdf-material-paint.js');
@@ -228,6 +229,25 @@ function editSplatGroups(edit,binding,base,onSplat) {
       }});
     }
   }
+  return asset;
+}
+
+function editRedistribution(route,edit,world,context) {
+  if (!fields(edit.operation,['topology','review']))
+    throw new TypeError('Redistribution needs a topology batch and its camera review');
+  const { asset,report }=planSplatRedistribution(world,{target:sceneTarget(route.binding),
+    operations:edit.operation.topology,review:edit.operation.review,edit:edit.id});
+  if (!asset) throw conflict('splat-redistribution-review','Splat redistribution exceeded the review tolerances',{review:report});
+  const fit=SplatFit.prepare(world,asset), ids=Provenance.identities(SplatFit.sourceWorld(world,fit));
+  for (const record of report.operations) {
+    const parents=record.op==='split' ? [record.id] : record.from;
+    const children=record.op==='split' ? record.children.map(child=>child.id) : [record.id];
+    for (const [names,kind] of [[parents,'retired'],[children,'created']]) for (const id of names) {
+      const row=ids.rowOf(id);
+      context.onSplat?.({requested:id,id,row,topology:{...fit.topology[kind].get(row),status:kind}});
+    }
+  }
+  context.onEditTarget?.({...sourceTarget(route,edit),redistribution:report});
   return asset;
 }
 
@@ -574,6 +594,8 @@ function apply(frame, edit, route, context, readMarks) {
   if (isShot) return shot(frame,edit,binding,source.world,marks,context.onSplat);
   if (destination.kind === 'splat-attributes') {
     if (edit.operation?.groups!==undefined) return editSplatGroups(edit,binding,source.world,context.onSplat);
+    if (Array.isArray(edit.operation?.topology) && edit.operation.topology.some(operation=>
+      operation?.op==='split' || operation?.op==='merge')) return editRedistribution(route,edit,source.world,context);
     const apply=edit.operation?.topology!==undefined ? editTopology : splats;
     return apply(frame,edit,binding,source.world,source.revision,context.onSplat);
   }

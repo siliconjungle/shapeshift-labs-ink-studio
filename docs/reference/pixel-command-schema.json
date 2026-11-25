@@ -4721,6 +4721,116 @@
         {
           "type": "object",
           "properties": {
+            "topology": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "split"
+                      },
+                      "splat": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "children": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "pattern": "\\S"
+                            },
+                            "offset": {
+                              "type": "array",
+                              "prefixItems": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "number"
+                                }
+                              ],
+                              "minItems": 3,
+                              "items": false
+                            },
+                            "weight": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "offset"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 2,
+                        "maxItems": 8
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "splat",
+                      "children"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "merge"
+                      },
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "from": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "pattern": "\\S"
+                        },
+                        "minItems": 2,
+                        "maxItems": 8
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "id",
+                      "from"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "minItems": 1,
+              "maxItems": 16
+            },
+            "review": {
+              "$ref": "#/$defs/splatRedistributionReview"
+            }
+          },
+          "required": [
+            "topology",
+            "review"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
             "groups": {
               "type": "array",
               "items": {
@@ -4747,6 +4857,117 @@
           ]
         }
       ]
+    },
+    "splatRedistributionReview": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 8,
+          "maximum": 256
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 8,
+          "maximum": 256
+        },
+        "threshold": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 0.95
+        },
+        "tolerances": {
+          "type": "object",
+          "properties": {
+            "opacity": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "pigment": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "depth": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "silhouette": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "views": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "yaw": {
+                "type": "number",
+                "minimum": -3.141592653589793,
+                "maximum": 3.141592653589793
+              },
+              "pitch": {
+                "type": "number",
+                "minimum": -1.5707963267948966,
+                "maximum": 1.5707963267948966
+              },
+              "ortho": {
+                "type": "boolean"
+              },
+              "target": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 3,
+                "items": false
+              },
+              "zoom": {
+                "type": "number",
+                "minimum": 0.05,
+                "maximum": 30
+              },
+              "time": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000000
+              }
+            },
+            "required": [
+              "id",
+              "yaw",
+              "pitch"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 2,
+          "maxItems": 8
+        }
+      },
+      "required": [
+        "views"
+      ],
+      "additionalProperties": false
     },
     "splatGroup": {
       "type": "object",
@@ -19216,7 +19437,7 @@
         },
         "scope": "Bound frame and scene. Use targets to pin sourceRevision before editing.",
         "evidence": {
-          "/affectedTargets": "Stable splat IDs, fitted row revisions, attribute, footprint, group deformation or topology changes as applicable.",
+          "/affectedTargets": "Stable splat IDs, fitted row revisions, attribute, footprint, group deformation, topology lineage and multi-view redistribution review as applicable.",
           "/inputs/sourceRevision": "Observed source fingerprint for the same destination and binding."
         }
       },
