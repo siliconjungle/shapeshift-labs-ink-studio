@@ -343,7 +343,7 @@
     }
 
     function preparePrefabIsolation(request) {
-      const before = snapshot(), plan = prefabEditIsolation.plan(before, buildEnv, request, requireMeshShapeOwner);
+      const before = snapshot(), plan = prefabEditIsolation.plan(before, buildEnv, request, requireMeshShapeOwner, authoredTransformCamera);
       if (!plan.report.changed) return plan;
       const problems = DIO.check(plan.draft, buildEnv).filter(row => row.level === 'error');
       if (!problems.length) return plan;
@@ -716,14 +716,21 @@
       return freeze({retopology:plan.report,topology:editMeshTopology(object,plan.patch,options)});
     }
 
+    function authoredTransformCamera() {
+      const world = build({ ...buildEnv.parameterInputs, time: 0 });
+      return CameraLens.frame(world, { cameraTime: 0, lockCamera: true }, 1, 1,
+        { orbit: K.cameraStaging.prepare(world.look?.cameraStaging)?.orbit }).pose;
+    }
+
     function planMeshTransform(object, request, { part } = {}) {
       if (request?.frame !== undefined)
         throw new TypeError('Retained scene mesh coordinates already use scene placement');
       const row = meshTopology(object, part), scene = current().preview;
       requireMeshShapeOwner(object, row.part, scene, 'Transform');
       return K.meshTopology.planTransform(row.document, request, {
-        ...(request?.space === 'plane' || request?.snap?.kind === 'construction-plane' ?
+        ...(request?.constructionPlane === undefined && (request?.space === 'plane' || request?.snap?.kind === 'construction-plane') ?
           {constructionPlane:A.constructionPlane.forScene(scene).plane} : {}),
+        ...(request?.space === 'camera' && request.camera === undefined && { camera: authoredTransformCamera() }),
         mesh(id) {
           return { document: meshTopology(id).document };
         },

@@ -49,7 +49,7 @@ const prefabEditIsolation = (function (K) {
     return A.meshTopologyScene.revise(row, patch);
   }
 
-  function plan(scene, env, request, requireShapeOwner) {
+  function plan(scene, env, request, requireShapeOwner, authoredCamera) {
     if (!fields(request, ['instance', 'revision', 'faces', 'hideSurroundings', 'edits']) ||
         !K.world.data.id(request.instance) ||
         request.revision !== undefined && (!Number.isSafeInteger(request.revision) || request.revision < 1))
@@ -66,6 +66,7 @@ const prefabEditIsolation = (function (K) {
       hideSurroundings, objects: order([...link.solids, ...Array.from(link.meshes.values(), entry => entry.object)]),
       members: Array.from(scope, ([member, entry]) => ({ member, object: entry.object, selection: entry.selection })),
       edits: [], conflicts: [], canCommit: true };
+    let camera;
     for (const [index, edit] of edits.entries()) {
       const kinds = ['patch', 'transform', 'reskin'];
       if (!fields(edit, ['member', ...kinds]) || !K.world.data.id(edit.member) ||
@@ -86,8 +87,9 @@ const prefabEditIsolation = (function (K) {
         requireShapeOwner(target.object, spec.topologyMeshes[target.object].part, scene, 'Transform');
         const selection = raw.selection ?? T.select(doc, { domain: 'faces', ids: doc.faces.filter(face => target.active.has(face.id)).map(face => face.id) });
         const transformed = T.planTransform(doc, { ...raw, selection, frame: link.frame }, {
-          ...(raw.space === 'plane' || raw.snap?.kind === 'construction-plane' ?
+          ...(raw.constructionPlane === undefined && (raw.space === 'plane' || raw.snap?.kind === 'construction-plane') ?
             { constructionPlane: A.constructionPlane.forScene(scene).plane } : {}),
+          ...(raw.space === 'camera' && raw.camera === undefined && { camera: camera ??= authoredCamera() }),
           mesh: object => {
             const staged = [...scope.values()].find(entry => entry.object === object);
             const mesh = staged?.row ?? (Object.hasOwn(spec.topologyMeshes, object) && spec.topologyMeshes[object]);
