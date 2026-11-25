@@ -210,5 +210,5 @@ const TypedImageSpatial = ({ requireImage, descriptor, wrap, storage, pack, inte
   const spatial = Object.freeze(Object.fromEntries(Object.entries(optionsFor).map(([name, keys]) => [name, (source, options = {}) =>
     resample(source, options, name, keys, TypedImageSpatialGeometry[name],
       name === 'crop' ? TypedImageSpatialGeometry.crop : undefined)])));
-  return { spatial, resample, sampler, borders };
+  return { spatial, resample, sampler, borders, workingSamples };
 };

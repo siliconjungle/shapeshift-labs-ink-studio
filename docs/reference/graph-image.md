@@ -56,6 +56,23 @@ Guides: [guide](../material-color-corrections.md)
 Get the runnable example with `ink-studio graph describe image.autoLevels --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.bevel
+
+Build a typed bevel height with editable distance profile and inner or outer reach.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"channel":{"type":"string","constraints":{"choices":["value","luminance","r","g","b","alpha"]}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"threshold":{"type":"number","default":0.5},"invert":{"type":"boolean","default":false},"width":{"type":"number","unit":"pixels","constraints":{"min":0.125,"max":128},"default":3},"height":{"type":"number","unit":"pixels","constraints":{"min":-4096,"max":4096},"default":2},"profile":{"type":"string","constraints":{"choices":["linear","round","smooth"]},"default":"round"},"side":{"type":"string","constraints":{"choices":["inside","outside","both"]},"default":"inside"}} |
+| Output | `value` | `heightImage` | — | {"layout":"Typed floating-point height with units"} |
+
+Guides: [guide](../material-advanced-texture-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.bevel --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.blend
 
 Blend typed images at native precision with a grayscale opacity mask, crop, alpha policy and explicit clamping.
@@ -315,6 +332,42 @@ Guides: [guide](../material-image-morphology.md)
 Get the runnable example with `ink-studio graph describe image.edgeDetect --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.edgeWear
+
+Select convex or concave height features and optionally cut the selected surface.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `heightImage` | Required | {"layout":"Typed floating-point height with units"} |
+| Input | `mask` | `any` | `null` |  |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"radius":{"type":"number","unit":"pixels","constraints":{"min":1,"max":64,"integer":true},"default":3},"threshold":{"type":"number","constraints":{"min":0},"default":0.06},"softness":{"type":"number","constraints":{"min":0},"default":0.24},"amount":{"type":"number","constraints":{"min":0,"max":1},"default":1},"depth":{"type":"number","unit":"height units","constraints":{"min":0},"default":0},"edge":{"type":"string","constraints":{"choices":["convex","concave","both"]},"default":"convex"},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `height` | `heightImage` | — | {"layout":"Typed floating-point height with units"} |
+
+Guides: [guide](../material-advanced-texture-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.edgeWear --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.emboss
+
+Shade height as a neutral-centered emboss mask using an editable light direction.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `heightImage` | Required | {"layout":"Typed floating-point height with units"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"azimuth":{"type":"number","unit":"degrees","default":-135},"elevation":{"type":"number","unit":"degrees","constraints":{"min":0,"max":90},"default":35},"strength":{"type":"number","constraints":{"min":0,"max":8},"default":1},"bias":{"type":"number","constraints":{"min":0,"max":1},"default":0.5},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"method":{"type":"string","constraints":{"choices":["central","sobel","scharr"]},"default":"scharr"},"spacing":{"type":"vec2","unit":"height units per texel"}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-advanced-texture-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.emboss --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.erode
 
 Shrink a typed mask by an exact Euclidean radius with per-axis border handling.
@@ -457,6 +510,43 @@ Origin: toolkit.
 Guides: [guide](../material-height-normal-filters.md)
 
 Get the runnable example with `ink-studio graph describe image.heightBlend --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.heightFrequency
+
+Separate relief into fine, middle and coarse bands and recombine them with independent gains.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `heightImage` | Required | {"layout":"Typed floating-point height with units"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"fineRadius":{"type":"number","unit":"pixels","constraints":{"min":1,"max":63,"integer":true},"default":2},"coarseRadius":{"type":"number","unit":"pixels","constraints":{"min":2,"max":64,"integer":true},"default":12},"fineGain":{"type":"number","constraints":{"min":-16,"max":16},"default":1},"midGain":{"type":"number","constraints":{"min":-16,"max":16},"default":1},"coarseGain":{"type":"number","constraints":{"min":-16,"max":16},"default":1},"precision":{"type":"string","constraints":{"choices":["float32","float64"]},"default":"float64"},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}}} |
+| Output | `value` | `heightImage` | — | {"layout":"Typed floating-point height with units"} |
+| Output | `fine` | `heightImage` | — | {"layout":"Typed floating-point height with units"} |
+| Output | `mid` | `heightImage` | — | {"layout":"Typed floating-point height with units"} |
+| Output | `coarse` | `heightImage` | — | {"layout":"Typed floating-point height with units"} |
+
+Guides: [guide](../material-advanced-texture-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.heightFrequency --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.heightShadow
+
+Trace a directional heightfield horizon and return hard or softened cast-shadow coverage.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `heightImage` | Required | {"layout":"Typed floating-point height with units"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"azimuth":{"type":"number","unit":"degrees","default":-135},"elevation":{"type":"number","unit":"degrees","constraints":{"min":0.1,"max":89.9},"default":25},"softness":{"type":"number","unit":"degrees","constraints":{"min":0,"max":30},"default":0},"reach":{"type":"number","unit":"pixels","constraints":{"min":0,"max":512},"default":32},"step":{"type":"number","unit":"pixels","constraints":{"min":0.25,"max":16},"default":1},"bias":{"type":"number","unit":"height units","constraints":{"min":0},"default":0.01},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"filter":{"type":"string","constraints":{"choices":["nearest","linear"]},"default":"linear"},"spacing":{"type":"vec2","unit":"height units per texel"},"opacity":{"type":"number","constraints":{"min":0,"max":1},"default":1}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-advanced-texture-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.heightShadow --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.heightToNormal
@@ -951,6 +1041,43 @@ Guides: [guide](../graph-image-types.md), [guide](../material-image-blend.md#inp
 Get the runnable example with `ink-studio graph describe image.resize --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.scanCleanup
+
+Remove locally unsupported scan specks and optionally divide out a measured illumination map.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `mask` | `any` | `null` |  |
+| Input | `illumination` | `any` | `null` |  |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"radius":{"type":"number","unit":"pixels","constraints":{"min":1,"max":4,"integer":true},"default":1},"threshold":{"type":"number","constraints":{"min":0},"default":0.15},"support":{"type":"number","constraints":{"min":0.5,"max":1},"default":0.8},"amount":{"type":"number","constraints":{"min":0,"max":1},"default":1},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"illuminationStrength":{"type":"number","constraints":{"min":0,"max":1},"default":1},"reference":{"type":"number","constraints":{"min":0.03125,"max":32},"default":1}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `repaired` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-advanced-texture-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.scanCleanup --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.seamRepair
+
+Join opposite tile edges with a scoped, alpha-safe crossfade that preserves the interior.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"axes":{"type":"string","constraints":{"choices":["u","v","both"]},"default":"both"},"width":{"type":"number\|vec2","unit":"pixels","constraints":{"min":1,"max":256,"integer":true},"default":8},"strength":{"type":"number","constraints":{"min":0,"max":1},"default":1}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-advanced-texture-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.seamRepair --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.sharpen
 
 Sharpen with a four-neighbor cross while retaining original coverage.
@@ -1002,6 +1129,24 @@ Origin: toolkit.
 Guides: [guide](../material-image-morphology.md)
 
 Get the runnable example with `ink-studio graph describe image.signedDistance --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.slopeBlur
+
+Follow a height gradient and accumulate a directional trail using average, minimum or maximum samples.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `slope` | `heightImage` | Required | {"layout":"Typed floating-point height with units"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"distance":{"type":"number","unit":"pixels","constraints":{"min":-128,"max":128},"default":6},"samples":{"type":"number","constraints":{"min":2,"max":32,"integer":true},"default":8},"slopeGain":{"type":"number","constraints":{"min":0,"max":64},"default":1},"mode":{"type":"string","constraints":{"choices":["average","min","max"]},"default":"average"},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"mapBorder":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"filter":{"type":"string","constraints":{"choices":["nearest","linear"]},"default":"linear"}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-advanced-texture-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.slopeBlur --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.slopeWarp
