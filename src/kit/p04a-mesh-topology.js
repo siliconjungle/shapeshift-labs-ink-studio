@@ -1,4 +1,10 @@
 /* Retained polygon topology. Render triangles are derived from authored corners. */
+const meshQuadDiagonal = Object.freeze({
+  remap(face,corners) {
+    return face.diagonal?.map(id=>corners[face.corners.findIndex(corner=>corner.id===id)].id);
+  }
+});
+
 (function (K) {
   const format = 'ink-studio/mesh-topology';
   const maxTriangles = 250000;
@@ -42,6 +48,15 @@
       cd === 0 && contains(c, d, a) || cdb === 0 && contains(c, d, b);
   }
 
+  function quadDiagonal(id, raw, corners) {
+    if (raw === undefined) return;
+    const slots = Array.isArray(raw) && raw.map(value=>corners.findIndex(corner=>corner.id===value));
+    if (corners.length !== 4 || !slots || slots.length !== 2 || !Array.from(slots).every(i=>i>=0) ||
+        Math.abs(slots[0]-slots[1]) !== 2)
+      throw new RangeError('Face ' + id + ' diagonal needs two opposite corner IDs on a quad');
+    return frozen(pair(...raw));
+  }
+
   function tessellate(face, vertices) {
     const points = face.corners.map(({ vertex }) => vertices.get(vertex).position.map(Math.fround));
     const relative = points.map(point => K.V.sub(point, points[0]));
@@ -62,6 +77,14 @@
         const end = (j + 1) % projected.length;
         if (end !== i && segmentsMeet(a, b, projected[j], projected[end])) throw invalid();
       }
+    }
+    if (face.diagonal) {
+      const first = face.corners.findIndex(corner=>corner.id===face.diagonal[0]);
+      const [a,b,c,d] = [0,1,2,3].map(i=>(first+i)%4);
+      const explicit = [[a,b,c],[a,c,d]];
+      if (explicit.some(tri=>turn(...tri.map(i=>projected[i]))*Math.sign(normal[axis]) <= epsilon))
+        throw new RangeError('Face ' + face.id + ' diagonal would leave the quad or collapse a triangle');
+      return explicit;
     }
     const triangles = K.procedural.geometry.triangulate2D(projected, { retainBoundary: true });
     return normal[axis] < 0 ? triangles.map(triangle => triangle.reverse()) : triangles;
@@ -163,7 +186,7 @@
         throw new RangeError('Mesh topology exceeds the render triangle budget');
       const used = new Set();
       let layout;
-      const face = frozen({ id: key, material, corners: frozen(Array.from(row.corners, corner => {
+      const ring = frozen(Array.from(row.corners, corner => {
         const { id: cornerId, vertex, uv = [0, 0], uvPinned } = corner ?? {};
         if (!name(cornerId) || corners.has(cornerId) || !vertices.has(vertex) || used.has(vertex) || !vector(uv, 2, unit) ||
             uvPinned !== undefined && typeof uvPinned !== 'boolean')
@@ -179,7 +202,9 @@
         layout = shape;
         return frozen({ id: cornerId, vertex, uv: frozen(Array.from(uv)), ...(attributes && { attributes }),
           ...(normal && { normal }), ...(uvPinned && { uvPinned }), ...(uvPins && {uvPins}) });
-      })) });
+      }));
+      const diagonal = quadDiagonal(key,row.diagonal,ring);
+      const face = frozen({ id: key, material, corners:ring, ...(diagonal && {diagonal}) });
       for (const [i, corner] of face.corners.entries()) {
         const next = face.corners[(i + 1) % face.corners.length];
         const endpoints = edgeKey(corner.vertex, next.vertex);

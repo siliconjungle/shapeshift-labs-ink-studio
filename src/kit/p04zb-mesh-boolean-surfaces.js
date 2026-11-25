@@ -140,8 +140,13 @@ const meshBooleanSurfaces = (function(K) {
       if (intact) {
         const vertexMap=new Map(group.flatMap(poly=>poly.corners.map((row,i)=>
           [poly.meta.authored[i].id,row.node.vertex.id])));
-        const face=local ? original : {...original,id:fresh('face'),corners:original.corners.map(row=>
-          ({...row,id:fresh('corner'),vertex:vertexMap.get(row.vertex)}))};
+        let face = original;
+        if (!local) {
+          const id = fresh('face'), corners = original.corners.map(row=>
+            ({...row,id:fresh('corner'),vertex:vertexMap.get(row.vertex)}));
+          const diagonal = meshQuadDiagonal.remap(original,corners);
+          face = {...original,id,corners,...(diagonal && {diagonal})};
+        }
         faces.push(face);
         face.corners.forEach(row=>cornersUsed.add(row.id));
         owners.push({face:face.id,operand:side,sourceFace:original.id,material:face.material});

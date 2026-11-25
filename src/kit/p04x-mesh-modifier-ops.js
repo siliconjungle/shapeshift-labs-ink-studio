@@ -63,7 +63,9 @@ const meshModifierOps = (function (K) {
     for (const face of doc.faces) {
       const corners = face.corners.map(row => ({ ...row, id:next('corners','corner',row.id), vertex: names.get(row.vertex),
         ...(row.normal && normal && { normal: normal(row.normal) }), ...(flipU && { uv: [1 - row.uv[0], row.uv[1]] }) }));
-      state.faces.push({ ...face, id:next('faces','face',face.id), corners: flip ? corners.reverse() : corners });
+      const diagonal = meshQuadDiagonal.remap(face,corners);
+      state.faces.push({ ...face, id:next('faces','face',face.id), corners: flip ? corners.reverse() : corners,
+        ...(diagonal && {diagonal}) });
     }
   }
   function result(doc, { vertices, edges, faces }) {

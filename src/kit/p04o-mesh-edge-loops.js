@@ -55,13 +55,14 @@ const meshEdgeLoops = (function (K) {
     }
     for (const id of touched) {
       const face = g.faces.get(id), ring = [];
+      const polygon = {id,material:face.material};
       for (const [i, a] of face.corners.entries()) {
         const b = cyclic(face.corners, i + 1), edge = edgeOf(g, a.vertex, b.vertex), cut = cuts.get(edge.id);
         ring.push(a);
         if (cut) ring.push(knot(a, b, cut));
       }
       if (!faceCuts.has(id)) {
-        faces.push({ ...face, corners: ring });
+        faces.push({ ...polygon, corners: ring });
         transitionFaces.push(id);
         continue;
       }
@@ -71,7 +72,7 @@ const meshEdgeLoops = (function (K) {
       const inside = ring.slice(a, b + 1).map(corner => newIds.has(corner.vertex) ?
         { ...corner, id: g.fresh('corner') } : corner);
       const next = g.fresh('face');
-      faces.push({ ...face, corners: outside }, { ...face, id: next, corners: inside });
+      faces.push({ ...polygon, corners: outside }, { ...polygon, id: next, corners: inside });
       splitFaces.push({ from: id, to: next });
     }
     return { patch: { vertices: queue.map(row => row.vertex), faces },
