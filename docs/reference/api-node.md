@@ -151,6 +151,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.runReferenceExperiments` | function | `({ kit = module.exports.load(), ...options } = {})` | [guide](../reference-experiments.md), [source](../../index.js) |
 | `node.sampleReframe` | function | `(delivery, time)` | [guide](../subject-reframe.md), [source](../../cli/subject-reframe.js) |
 | `node.sampleSceneReplay` | function | `(document, seconds = 0, { loop = false } = {})` | [source](../../cli/scene-replay.js) |
+| `node.scanFusion` | function | `(inputs,options={})` | [source](../../cli/scan-fusion.js) |
 | `node.scanToMesh` | function | `(capture, { toolkit=require('../index.js').load(), cloud, meshStride=capture?.stride, sampleStride, materials, paintRadius=2, rgbThreshold=16, tolerance, residualLimit=30000, name='Captured surface' }={})` | [guide](../relightable-scans.md#node-api), [guide](../scan-to-mesh.md#node-api), [source](../../cli/scan-mesh.js) |
 | `node.silhouetteReview` | function | `(world,{ width=96, height=96, directions=8, pitches, yaw=world.cam.yaw, pivot=world.cam.target, time=0, view={}, columns=4, scale=1 }={})` | [source](../../cli/silhouette-review.js) |
 | `node.spriteAtlas` | function | `(world, options = {})` | [source](../../cli/sprite-atlas.js) |

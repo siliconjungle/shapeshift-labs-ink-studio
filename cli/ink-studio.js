@@ -1446,6 +1446,7 @@ const CMD = {
         '  asset-part replace <scene.json> <instance> <asset.gltf|.glb> [--expect N] --out <next-scene.json>   save one part revision',
         '                              [--res 0.08 --texture-size 1024 --triangles 16000 --duration 4 --fps 30]',
         '  scan-mesh <depth.png|depth.json> --image aligned.png --out prop.glb   recover an opaque mesh with residual splats',
+        '  scan-fuse <manifest.json> --out prop.glb   fuse registered views and export an editable proxy and evidence',
         '             [--diffuse map.png --normal map.png --roughness value|map.png --capture-layer]  export relightable scan maps',
         '  render <scan.glb> [--scan-paint fit.json --scan-appearance 0..1 --scan-daylight off]  paint and relight registered scans',
         '  depth <map.png|map.json> [--image aligned.png --out-dir folder]  import a depth map as splats, a mesh and an SDF',
@@ -4118,6 +4119,10 @@ const CMD = {
     if (opt.json || opt.out) return io.report(report, opt, pos[0]);
     const label = report.scene ? ' (' + report.scene.id + ', "' + report.scene.name + '")' : '';
     console.log(pos[0] + ': sound' + label);
+  },
+  'scan-fuse'() {
+    if (pos.length!==1) die('Use scan-fuse <manifest.json> --out asset.glb');
+    return require('./scan-fusion.js').command(pos[0],opt,lib());
   },
   'scan-mesh'() {
     return require('./scan-mesh.js').command(pos[0],opt,lib());

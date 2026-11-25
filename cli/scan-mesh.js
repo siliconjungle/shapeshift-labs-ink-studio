@@ -314,4 +314,4 @@ async function command(file,opt,kit) {
   console.log('wrote',out,result.report.triangles,'triangles and',result.report.residualSplats,'of',result.report.sourceSplats,'splats');
 }
 
-module.exports={scanToMesh,command};
+module.exports={scanToMesh,command,addGaussians,writeMaterial};

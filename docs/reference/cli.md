@@ -258,6 +258,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   asset-part replace <scene.json> <instance> <asset.gltf|.glb> [--expect N] --out <next-scene.json>   save one part revision
                               [--res 0.08 --texture-size 1024 --triangles 16000 --duration 4 --fps 30]
   scan-mesh <depth.png|depth.json> --image aligned.png --out prop.glb   recover an opaque mesh with residual splats
+  scan-fuse <manifest.json> --out prop.glb   fuse registered views and export an editable proxy and evidence
              [--diffuse map.png --normal map.png --roughness value|map.png --capture-layer]  export relightable scan maps
   render <scan.glb> [--scan-paint fit.json --scan-appearance 0..1 --scan-daylight off]  paint and relight registered scans
   depth <map.png|map.json> [--image aligned.png --out-dir folder]  import a depth map as splats, a mesh and an SDF

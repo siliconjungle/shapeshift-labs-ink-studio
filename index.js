@@ -103,6 +103,7 @@ module.exports = {
   createShowBridge: require('./cli/show-bridge.js').createShowBridge,
   readGaussianSplat: require('./cli/gaussian-splats.js').readGaussianSplat,
   scanToMesh: require('./cli/scan-mesh.js').scanToMesh,
+  scanFusion: require('./cli/scan-fusion.js').scanFusion,
   bakeSplatFit: require('./cli/splat-fit-asset.js').bake,
   planSplatGroups: require('./cli/splat-fit-asset.js').planSplatGroups,
   planSplatRedistribution: require('./cli/splat-redistribution.js').planSplatRedistribution,
