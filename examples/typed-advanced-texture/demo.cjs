@@ -1,0 +1,21 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const Ink = require('../..');
+const files = require('../../cli/asset-files.js'), PNG = require('../../cli/png.js');
+const { foundrySources, foundryGraph, foundryPreview } = require('./foundry.js');
+const out=path.resolve(process.argv[2]??'studio/out/typed-advanced-texture'), at=name=>path.join(out,name);
+const graph=foundryGraph(true);
+for(const [name,raster] of Object.entries(foundrySources()))
+  graph.inputs[name]={type:'raster',default:{...raster,data:Array.from(raster.data)}};
+const material=at('breakwater-foundry.material.json');
+Ink.writeMaterialGraph(material,Ink.openMaterialGraph(graph,{id:'breakwater-foundry'}));
+const { outputs, artifacts }=Ink.readGraphProject(material).run();
+assert.ok(outputs.repaired.raster.data.some(n=>n>0));
+assert.ok(outputs.shadow.raster.data.some(n=>n>.5));
+for(const artifact of artifacts) files.write(at(artifact.file),artifact.bytes);
+const {width,height,data}=foundryPreview(outputs,'finish');
+files.write(at('enamel-tile.png'),PNG.encode(width,height,data,4));
+for(const file of ['index.html','foundry.js']) files.write(at(file),fs.readFileSync(path.join(__dirname,file)));
+files.write(at('ink-studio.browser.js'),Buffer.from(Ink.bundle()));
+console.log('Wrote Breakwater Foundry, its editable graph and the native texture exports to '+out);

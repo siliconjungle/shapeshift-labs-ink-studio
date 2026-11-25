@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Breakwater Foundry · Ink Studio</title>
+<style>
+  :root{color-scheme:dark;--page:#1c202b;--panel:#272b37;--rule:#53576a;--text:#fff0db;--muted:#c6c7ce;--copper:#ffc78a;
+    font:15px/1.45 system-ui,sans-serif}
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--text);background:radial-gradient(ellipse at 14% -28%,#494d60,var(--page) 62%)}
+  main{max-width:1170px;margin:auto;padding:29px 27px}
+  header{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:16px}
+  h1{margin:3px 0 5px;font:normal clamp(2.7rem,7vw,5rem)/.98 Georgia,serif;letter-spacing:-.05em}
+  small,output{font:600 .72rem ui-monospace,monospace;letter-spacing:.08em;color:var(--copper)}
+  p,label,figcaption{margin:0;color:var(--muted)}
+  a{color:var(--text);text-underline-offset:4px}
+  .layout{display:grid;grid-template-columns:minmax(0,2.5fr) minmax(270px,1fr);gap:13px;align-items:start}
+  figure,aside{margin:0;border:1px solid var(--rule);background:var(--panel);min-width:0}
+  aside{padding:12px}
+  canvas{display:block;width:100%;height:auto;image-rendering:pixelated;background:#181c2c}
+  .swatches{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:11px}
+  figcaption{display:flex;gap:8px;align-items:center;justify-content:space-between;border-top:1px solid var(--rule);
+    padding:8px 10px;font-size:.81rem}
+  .swatches figcaption{font-size:.73rem;padding:6px}
+  figcaption span{color:var(--text)}
+  .controls{display:grid;gap:10px}
+  label{font-size:.84rem}
+  select,input[type=range]{display:block;width:100%;margin:3px 0 0}
+  input{accent-color:var(--copper)}
+  input[type=range]{height:25px}
+  select{padding:6px;background:var(--page);border:1px solid var(--rule);border-radius:2px;color:var(--text);font:inherit}
+  .slider{display:flex;justify-content:space-between;gap:6px}
+  .checks{display:flex;gap:13px;flex-wrap:wrap}
+  .checks input{margin-left:0;vertical-align:middle}
+  .note{font-size:.86rem;margin:10px 0}
+  #error{color:#ffb8a8}
+  .view{position:relative}
+  .seam{position:absolute;inset:0;pointer-events:none}
+  .seam::before,.seam::after{content:'';position:absolute;opacity:.7}
+  .seam::before{left:50%;height:100%;border-left:1px dashed var(--copper)}
+  .seam::after{top:50%;width:100%;border-top:1px dashed var(--copper)}
+  [hidden]{display:none!important}
+  :focus-visible{outline:2px solid var(--copper);outline-offset:2px}
+  @media(max-width:690px){main{padding:18px 12px}header{display:block}header a{display:inline-block;margin-top:8px}
+    .layout{grid-template-columns:1fr}.swatches canvas{max-height:105px;object-fit:contain}}
+</style>
+<main>
+  <header>
+    <div><small>INK STUDIO · MATERIAL GRAPHS</small><h1>Breakwater Foundry</h1>
+      <p>Restore, join and relight a cast enamel plate.</p></div>
+    <a href="breakwater-foundry.material.json" download>Editable material graph</a>
+  </header>
+  <div class="layout">
+    <section aria-label="Material preview">
+      <figure>
+        <div class="view"><canvas id="plate" width="144" height="100" aria-label="Filter preview of a lighthouse relief"></canvas>
+          <div class="seam" id="guides" hidden></div></div>
+        <figcaption><span id="caption"></span><small id="extent"></small></figcaption>
+      </figure>
+      <p class="note" id="note"></p>
+    </section>
+    <aside aria-label="Filter controls">
+      <div class="swatches">
+        <figure><canvas id="raw" width="144" height="100" aria-label="Original simulated scan"></canvas><figcaption>Original scan</figcaption></figure>
+        <figure><canvas id="mask" width="144" height="100" aria-label="The filter's wear selection"></canvas><figcaption>Wear mask</figcaption></figure>
+      </div>
+      <div class="controls">
+        <label>Preview <select id="mode"></select></label>
+        <label><span class="slider"><span id="control-label"></span><output id="amount-value" for="amount"></output></span>
+          <input type="range" id="amount"></label>
+        <label id="slope-field" hidden>Trail blend <select id="slope-mode"><option value="max">Maximum</option>
+          <option value="average">Average</option><option value="min">Minimum</option></select></label>
+        <label id="bevel-field" hidden>Bevel profile <select id="profile"><option value="round">Rounded</option>
+          <option value="linear">Linear</option><option value="smooth">Smooth</option></select></label>
+        <div class="checks"><label><input type="checkbox" id="before"> Show input</label>
+          <label id="seam-control" hidden><input type="checkbox" id="seams" checked> Mark seams</label></div>
+      </div>
+      <p id="error" role="status"></p>
+    </aside>
+  </div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="foundry.js"></script>
+<script>
+  const get = id => document.getElementById(id), graph = KIT.procedural.graph.create(foundryGraph()), sources = foundrySources();
+  const settings = Object.fromEntries(Object.entries(foundryViews).map(([id,row])=>[id,row[5]]));
+  const committed = {};
+  const notes = {
+    finish:'The finished plate uses the cleaned pigment, seam-repaired relief, slope trails, cast shadows and exposed edges.',
+    scan:'The filter removes isolated dust and compensates the light measured in the simulated scan. Use Show input to compare.',
+    seam:'Compare the same tile before and after matching the opposite edges. The edge bands leave the center intact.',
+    slope:'The stain trails follow the height gradient. Move travel through zero to reverse their direction.',
+    bevel:'Change the contour profile and the distance it takes the raised shape to reach full height.',
+    emboss:'Sweep the light across the relief to see how the normals respond.',
+    shadow:'Raise the light to shorten the cast shadows. Darker areas are more occluded.',
+    frequency:'Change the smallest height band while keeping the middle and coarse bands.',
+    wear:'Brighter texels have lost more height. The wear mask on the right shows the editable selection.'
+  };
+  for(const [id,[title]] of Object.entries(foundryViews)) get('mode').add(new Option(title,id));
+  function prepare(){
+    const mode=get('mode').value, [,label,min,max,step]=foundryViews[mode], control=get('amount');
+    control.min=min;control.max=max;control.step=step;control.value=settings[mode];
+    get('control-label').textContent=label;
+    get('slope-field').hidden=mode!=='slope'; get('bevel-field').hidden=mode!=='bevel';
+    get('seam-control').hidden=mode!=='seam';
+  }
+  const options = () => {
+    const result=Object.fromEntries(Object.entries(foundryDefaults).map(([id,value])=>[id+'Options',{...value}]));
+    result.cleanOptions.amount=settings.scan;
+    result.seamOptions.width=settings.seam;
+    result.slopeOptions.distance=settings.slope;
+    result.slopeOptions.mode=get('slope-mode').value;
+    result.bevelOptions.width=settings.bevel;
+    result.bevelOptions.profile=get('profile').value;
+    result.embossOptions.azimuth=get('mode').value==='emboss'?settings.emboss:settings.finish;
+    result.shadowOptions.azimuth=settings.finish;
+    result.shadowOptions.elevation=settings.shadow;
+    result.frequencyOptions.fineGain=settings.frequency;
+    result.wearOptions.depth=settings.wear;
+    for(const [name,value] of Object.entries(result))
+      if(!committed[name]||Object.entries(value).some(([key,n])=>committed[name][key]!==n)) committed[name]=value;
+    return committed;
+  };
+  function imageData({width,height,data}) {return new ImageData(new Uint8ClampedArray(data),width,height);}
+  function render(){
+    try{
+      const mode=get('mode').value, before=get('before').checked, repeat=mode==='seam'?2:1;
+      const { outputs }=graph.evaluate({...sources,...options()});
+      const image=foundryPreview(outputs,mode,before), tile=imageData(image), canvas=get('plate');
+      canvas.width=image.width*repeat; canvas.height=image.height*repeat;
+      const ctx=canvas.getContext('2d');
+      for(let y=0;y<repeat;y++) for(let x=0;x<repeat;x++) ctx.putImageData(tile,x*image.width,y*image.height);
+      get('raw').getContext('2d').putImageData(imageData(foundryPreview(outputs,'scan',true)),0,0);
+      const alpha=outputs.wear.raster.data, mask=new Uint8ClampedArray(alpha.length*4);
+      for(let p=0;p<alpha.length;p++){
+        const v=Math.round(210*alpha[p]);
+        mask.set([24+v,24+v,31+v,255],p*4);
+      }
+      get('mask').getContext('2d').putImageData(new ImageData(mask,image.width,image.height),0,0);
+      get('caption').textContent=foundryViews[mode][0]+(before?' · input':'');
+      get('extent').textContent=repeat===2?'2 × 2 REPEAT':'144 × 100 TEXELS';
+      get('amount-value').value=settings[mode]+(['finish','emboss','shadow'].includes(mode)?'°':'');
+      get('note').textContent=notes[mode];
+      get('guides').hidden=mode!=='seam'||!get('seams').checked;
+      get('error').textContent='';
+    }catch(error){get('error').textContent=error.message;}
+  }
+  let pending=false;
+  function schedule(){
+    if(pending)return;
+    pending=true;
+    requestAnimationFrame(()=>{pending=false;render();});
+  }
+  get('mode').addEventListener('input',()=>{prepare();schedule();});
+  get('amount').addEventListener('input',()=>{settings[get('mode').value]=Number(get('amount').value);schedule();});
+  for(const id of ['before','seams','slope-mode','profile']) get(id).addEventListener('input',schedule);
+  prepare();
+  render();
+</script>
+</html>

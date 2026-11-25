@@ -608,7 +608,7 @@
   const morphology = TypedImageMorphology({
     requireImage, descriptor, wrap, storage, integerMax, measure, fields, geometry: P.geometry
   });
-  const { spatial, resample, sampler: spatialSampler, borders } = TypedImageSpatial({
+  const { spatial, resample, sampler: spatialSampler, borders, workingSamples } = TypedImageSpatial({
     requireImage, descriptor, wrap, storage, pack, integerMax, convertColor, dimensions, fields
   });
   const warps = TypedImageDisplacement({
@@ -620,6 +620,14 @@
   });
   const regions = TypedImageRegions({
     measure, validImage: valid, descriptor, wrap, fields, borders, alignedGrid, resample, hash01: P.data.hash01
+  });
+  const advancedHeight = TypedAdvancedHeight({
+    requireImage, descriptor, wrap, pack, storage, integerMax, fields, alignedGrid,
+    borders, sampler: spatialSampler, morphology, filters, normals
+  });
+  const advancedTexture = TypedAdvancedTexture({
+    requireImage, descriptor, wrap, storage, integerMax, measure, fields, alignedGrid, alphaAt,
+    borders, sampler: spatialSampler, workingSamples
   });
   const correctionOptions = { type: 'record', default: {} };
   const sameImage = { type: 'typedImage', typeFrom: 'source' };
@@ -871,6 +879,49 @@
       inputs: { regions: 'regionField', source: 'typedImage', options: correctionOptions }, outputs: { value: sameImage },
       run({ regions: field, source, options }) { return { value: regions.regionLookup(field, source, options) }; }
     },
+    'image.slopeBlur': {
+      description: 'Follow a height gradient and accumulate a directional trail using average, minimum or maximum samples.',
+      inputs: { source: 'typedImage', slope: 'heightImage', options: correctionOptions }, outputs: { value: sameImage },
+      run({ source, slope, options }) { return { value: advancedTexture.slopeBlur(source, slope, options) }; }
+    },
+    'image.bevel': {
+      description: 'Build a typed bevel height with editable distance profile and inner or outer reach.',
+      inputs: { source: 'typedImage', options: correctionOptions }, outputs: { value: 'heightImage' },
+      run({ source, options }) { return { value: advancedHeight.bevel(source, options) }; }
+    },
+    'image.emboss': {
+      description: 'Shade height as a neutral-centered emboss mask using an editable light direction.',
+      inputs: { source: 'heightImage', options: correctionOptions }, outputs: { value: 'typedImage' },
+      run({ source, options }) { return { value: advancedHeight.emboss(source, options) }; }
+    },
+    'image.seamRepair': {
+      description: 'Join opposite tile edges with a scoped, alpha-safe crossfade that preserves the interior.',
+      inputs: { source: 'typedImage', options: correctionOptions }, outputs: { value: sameImage },
+      run({ source, options }) { return { value: advancedTexture.seamRepair(source, options) }; }
+    },
+    'image.heightShadow': {
+      description: 'Trace a directional heightfield horizon and return hard or softened cast-shadow coverage.',
+      inputs: { source: 'heightImage', options: correctionOptions }, outputs: { value: 'typedImage' },
+      run({ source, options }) { return { value: advancedHeight.heightShadow(source, options) }; }
+    },
+    'image.heightFrequency': {
+      description: 'Separate relief into fine, middle and coarse bands and recombine them with independent gains.',
+      inputs: { source: 'heightImage', options: correctionOptions },
+      outputs: { value: 'heightImage', fine: 'heightImage', mid: 'heightImage', coarse: 'heightImage' },
+      run({ source, options }) { return advancedHeight.heightFrequency(source, options); }
+    },
+    'image.scanCleanup': {
+      description: 'Remove locally unsupported scan specks and optionally divide out a measured illumination map.',
+      inputs: { source: 'typedImage', mask: optional, illumination: optional, options: correctionOptions },
+      outputs: { value: sameImage, repaired: 'typedImage' },
+      run({ source, mask, illumination, options }) { return advancedTexture.scanCleanup(source, options, mask, illumination); }
+    },
+    'image.edgeWear': {
+      description: 'Select convex or concave height features and optionally cut the selected surface.',
+      inputs: { source: 'heightImage', mask: optional, options: correctionOptions },
+      outputs: { value: 'typedImage', height: 'heightImage' },
+      run({ source, mask, options }) { return advancedHeight.edgeWear(source, options, mask); }
+    },
     'image.toDisplay': {
       description: 'Convert typed color to straight-alpha sRGB8 for legacy compositing and PNG exports.',
       inputs: { source: 'typedImage', outOfRange: { type: 'string', default: 'clamp' } },
@@ -887,5 +938,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, regions, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, regions, advancedHeight, advancedTexture, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);
