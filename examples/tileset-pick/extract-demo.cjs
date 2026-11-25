@@ -77,7 +77,7 @@ const board = K.procedural.drawing2d.render({width:W,height:H,edges:'hard',comma
   text('INK STUDIO / TILESET EXTRACTION',24,20,2,'#9be1c4'),
   text('One brick. Twelve faces.',24,47,4),
   text('ORIGINAL ATLAS',24,103,2),
-  text('EXTRACTED TILE',234,103,2,'#9be1c4'),
+  text('BRICK TILE',234,103,2,'#9be1c4'),
   text('HEADLESS MESH RENDER',398,103,2),
   rect(397,127,418,234,'#58737d'),
   text('CROP AT 24, 24',24,278,1),
