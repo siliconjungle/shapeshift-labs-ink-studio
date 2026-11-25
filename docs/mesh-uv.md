@@ -266,6 +266,64 @@ undo entry. Run `node examples/tileset-pick/face-rectangle-demo.cjs rectangle-de
 to review a fill that preserves existing accent tiles and an erase that
 opens a window.
 
+### Repeat a multi-tile brush with overlap and alignment
+
+Use `tileset brush-run` to repeat a
+[saved multi-tile pick](#pick-a-brush-of-neighboring-tiles) along the
+working plane. Each landed tile is its own editable face. The source
+cells retain their original order, atlas coordinates, and saved UV
+insets. Atlas gutters contribute no world width or height.
+
+Save a request such as this in `run.json`:
+
+```json
+{
+  "id": "trim-course",
+  "object": "entrance",
+  "at": [0, 2],
+  "count": 3,
+  "direction": "right",
+  "spacing": "overlap",
+  "overlapTiles": 1,
+  "align": "anchor",
+  "anchor": [8, 4]
+}
+```
+
+```sh
+ink-studio tileset brush-run run.json --scene wall.json --brush-file trim-brush.json
+ink-studio tileset brush-run run.json --scene wall.json --brush-file trim-brush.json --out trim-course.json
+```
+
+- `at` addresses the starting point in construction grid steps.
+  `snapGrid:true` rounds that point once using the retained grid. Every
+  repeat uses the resulting origin and the same physical pitch.
+- Set `direction` to `right`, `left`, `up`, or `down` along the plane axes.
+  The default is `right`. The default `count` is one stamp.
+- `spacing:"abut"` advances by the full compact brush extent on the
+  travel axis. `spacing:"overlap"` subtracts `overlapTiles` along that axis,
+  defaulting to one. The overlap must be smaller than the brush extent.
+  When stamps share a cell in a run, the later stamp supplies its tile.
+- `align:"edge"` puts the lower-left corner at `at` for right or up,
+  the lower-right corner for left, and the upper-left corner for down.
+  `align:"anchor"` aligns a point inside the brush. Give `anchor:[x,y]`
+  in compact texels from the top-left of the artwork, or omit it to
+  use the center.
+
+Omit `--out` for a dry run. The report includes each stamp's reference
+point and origin, its replaced cells, and the final face IDs and source
+rectangles. The brush can be supplied inline as `brush` in place of the
+`--brush-file` file. A request accepts optional `part`, `material`,
+`texelsPerUnit`, and `brushScale`. World scale uses the same retained
+brush and scene settings as the stamp tools. A run supports up to
+4,096 sampled cells, including replacements.
+
+Use `editor.planTilesetBrushRun(request)` and
+`editor.applyTilesetBrushRun(request)` in Node with the inline brush.
+One undo restores the whole run. Run
+`node examples/tileset-pick/brush-run-demo.cjs brush-run-demo`
+to compare abut, overlap, and anchor alignment with the same pick.
+
 ### Extract a crop as a reusable tileset
 
 Use an exact texel rectangle or a saved `tileset pick` selection.

@@ -20,6 +20,19 @@
     return {bindings,changes};
   }
 
+  // The renderer addresses first and last texel centers at 0 and 1.
+  function cropSource(asset, crop, texelBounds = [crop.x,crop.y,crop.x+crop.width,crop.y+crop.height]) {
+    const centers = (min,max,first,length,count)=>{
+      const middle = (min+max-1)/2;
+      const a = Math.min(min,middle), b = Math.max(max-1,middle);
+      return [a,b].map(n=>Math.max(first,Math.min(first+length-1,n))/Math.max(1,count-1));
+    };
+    const [left,right] = centers(texelBounds[0],texelBounds[2],crop.x,crop.width,asset.width);
+    const [top,bottom] = centers(texelBounds[1],texelBounds[3],crop.y,crop.height,asset.height);
+    return {source:{format:sourceFormat,version:1,selection:crop,atlasSize:[asset.width,asset.height]},
+      pigmentUV:[[left,bottom],[right,bottom],[right,top],[left,top]]};
+  }
+
   function prepare(scene, request, {projectTexelsPerUnit} = {}, cellSize) {
     const {object,part,face,selection,origin,right,up,planeAt,snapGrid=false,
       texelsPerUnit,brushScale=1,material:requestedMaterial} = request ?? {};
@@ -41,16 +54,13 @@
       throw new TypeError('Grid snapping needs a construction plane placement');
     const plane = A.constructionPlane;
     const frame = planeAt === undefined ? plane.resolve({origin,right,up}) : plane.forScene(scene);
-    const source = {format:sourceFormat,version:1,selection:crop,atlasSize:[asset.width,asset.height]};
+    const {source,pigmentUV} = cropSource(asset,crop);
     const material = requestedMaterial ?? 'tileset/'+crop.tileset;
     const existing = Object.hasOwn(scene.topologyMeshes ?? {},object) ? scene.topologyMeshes[object] : undefined;
     const doc = existing && topology.create(existing.document);
     const uvSet = MaterialUV.resolve(doc?.uvBindings,'pigment');
     const activeSets = [...new Set(Object.values(doc?.uvBindings ?? {}).filter(Boolean))];
-    const u = x=>x/Math.max(1,asset.width-1), v = y=>y/Math.max(1,asset.height-1);
-    const left=u(crop.x), rightUV=u(crop.x+crop.width-1), top=v(crop.y), bottom=v(crop.y+crop.height-1);
     const unitUV = [[0,1],[1,1],[1,0],[0,0]];
-    const pigmentUV = [[left,bottom],[rightUV,bottom],[rightUV,top],[left,top]];
     const conflicts = [];
     if (existing && part !== undefined && part !== existing.part) conflicts.push({reason:'different-mesh-part'});
     const slot = existing?.materials?.find(row=>row.id === material);
@@ -115,5 +125,5 @@
     return conflicts.length ? {report} : {report,row:append(brush,[placement])};
   }
 
-  A.tilesetFaces = Object.freeze({plan,prepare,stamp,append,sourceBindings});
+  A.tilesetFaces = Object.freeze({plan,prepare,stamp,append,cropSource,sourceBindings});
 })(KIT);

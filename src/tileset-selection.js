@@ -49,6 +49,16 @@ const TilesetSelection = (() => {
       columns:(width+paddingX)/strideX,rows:(height+paddingY)/strideY,...layout};
   }
 
+  function readBrush(grid, saved) {
+    if (saved?.format !== 'ink-studio/tileset-brush' || saved.version !== 1)
+      throw new TypeError('Expected a version 1 tileset brush');
+    const layout = Object.fromEntries(layoutKeys.filter(key=>Object.hasOwn(saved,key)).map(key=>[key,saved[key]]));
+    const selected = block(saved.tileset,grid,saved,{width:saved.tileWidth,height:saved.tileHeight,...layout});
+    if (saved.columns !== selected.columns || saved.rows !== selected.rows)
+      throw new RangeError('Tile brush row and column counts do not match its bounds');
+    return selected;
+  }
+
   function hasGaps(brush) {
     return Boolean(brush.columns>1 && brush.paddingX || brush.rows>1 && brush.paddingY);
   }
@@ -98,6 +108,6 @@ const TilesetSelection = (() => {
     return {brush:{...brush,uvInset},...(sample && {cell:sample}),texelBounds,uvBounds,sourceUVBounds:normalize([x,y,x+width,y+height])};
   }
 
-  return Object.freeze({pick,between,tileSize,layoutKeys:Object.freeze(layoutKeys),gridFits,block,hasGaps,cell,pack,uvMapping});
+  return Object.freeze({pick,between,tileSize,layoutKeys:Object.freeze(layoutKeys),gridFits,block,readBrush,hasGaps,cell,pack,uvMapping});
 })();
 if (typeof module !== 'undefined') module.exports = TilesetSelection;

@@ -533,6 +533,10 @@
       return stageTilesetFaceEdit(A.tilesetStrokes.planRectangle,request,options).report;
     }
 
+    function planTilesetBrushRun(request, options) {
+      return stageTilesetFaceEdit(A.tilesetBrushRuns.plan,request,options).report;
+    }
+
     function commitTilesetFaceEdit(plan, request, options, name) {
       const {patch,remove,report} = stageTilesetFaceEdit(plan,request,options);
       if (!report.canCommit) throw Object.assign(new RangeError('Tile face '+name+' needs review'),{report});
@@ -552,6 +556,10 @@
 
     function applyTilesetRectangle(request, options) {
       return commitTilesetFaceEdit(A.tilesetStrokes.planRectangle,request,options,'rectangle');
+    }
+
+    function applyTilesetBrushRun(request, options) {
+      return commitTilesetFaceEdit(A.tilesetBrushRuns.plan,request,options,'brush run');
     }
 
     function meshTopology(object, part) {
@@ -988,7 +996,7 @@
       setTilesetTexelsPerUnit,
       constructionPlane, setConstructionPlane, planConstructionOrigin, snapConstructionOrigin,
       planTilesetFace, placeTilesetFace, planTilesetStroke, applyTilesetStroke,
-      planTilesetRectangle, applyTilesetRectangle,
+      planTilesetRectangle, applyTilesetRectangle, planTilesetBrushRun, applyTilesetBrushRun,
       planTilesetCanvas,
       transformTilesetCanvas,
       tilesetDependencies, planTilesetRevision, editTilesetRevision,

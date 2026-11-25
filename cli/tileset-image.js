@@ -91,12 +91,7 @@ function pickTilesetBlock(scene, id, rectangle, tileSize, toolkit = require('..'
 function brushSelection(tilesets, brush) {
   if (brush?.format !== 'ink-studio/tileset-brush' || brush.version !== 1)
     throw new TypeError('Expected a version 1 tileset brush');
-  const layout = Object.fromEntries(Selection.layoutKeys.filter(key=>Object.hasOwn(brush,key)).map(key=>[key,brush[key]]));
-  const selected = Selection.block(brush.tileset,tilesets.source(brush.tileset),brush,
-    {width:brush.tileWidth,height:brush.tileHeight,...layout});
-  if (brush.columns !== selected.columns || brush.rows !== selected.rows)
-    throw new RangeError('Tile brush row and column counts do not match its bounds');
-  return selected;
+  return Selection.readBrush(tilesets.source(brush.tileset),brush);
 }
 
 function brushMapping(scene, brush, insets, toolkit, cell) {
@@ -335,17 +330,29 @@ function stampCommand(action, args, options, toolkit, projectTexelsPerUnit, open
   return publishFaceEdit(editor,request,{projectTexelsPerUnit},output,'planTilesetFace','placeTilesetFace');
 }
 
+const faceEdits = {
+  stroke:['planTilesetStroke','applyTilesetStroke'],
+  rectangle:['planTilesetRectangle','applyTilesetRectangle'],
+  'brush-run':['planTilesetBrushRun','applyTilesetBrushRun']
+};
+
 function faceEditCommand(action, [file,...rest], options, projectTexelsPerUnit, openEditor) {
-  const {scene,out} = options;
+  const {scene,out,'brush-file':brush} = options, brushRun = action === 'brush-run';
   const name = value=>typeof value === 'string' && value.trim();
   if (rest.length || ![file,scene].every(name) || out !== undefined && !name(out) ||
-      Object.keys(options).some(key=>!['scene','out'].includes(key)))
+      Object.keys(options).some(key=>!['scene','out',...(brushRun ? ['brush-file'] : [])].includes(key)) ||
+      brush !== undefined && !name(brush))
     throw new TypeError('Use tileset '+action+' <request.json> --scene <scene.json> [--out <new-scene.json>]');
   const input = path.resolve(scene), output = out && sceneOutput(input,out,file);
-  const editor = openEditor(input), request = JSON.parse(fs.readFileSync(path.resolve(file),'utf8'));
-  const rectangle = action === 'rectangle';
-  return publishFaceEdit(editor,request,{projectTexelsPerUnit},output,
-    rectangle ? 'planTilesetRectangle' : 'planTilesetStroke',rectangle ? 'applyTilesetRectangle' : 'applyTilesetStroke');
+  const read = filename=>JSON.parse(fs.readFileSync(path.resolve(filename),'utf8'));
+  const request = read(file);
+  if (brush !== undefined) {
+    if (output === path.resolve(brush)) throw new RangeError('Write the scene separately from the brush');
+    if (!request || Object.getPrototypeOf(request) !== Object.prototype || Object.hasOwn(request,'brush'))
+      throw new TypeError('Provide the brush in the request or with --brush-file');
+    request.brush = read(brush);
+  }
+  return publishFaceEdit(openEditor(input),request,{projectTexelsPerUnit},output,...faceEdits[action]);
 }
 
 function publishFaceEdit(editor, request, settings, output, plan, apply) {
@@ -364,7 +371,7 @@ function publishFaceEdit(editor, request, settings, output, plan, apply) {
 }
 
 function command([action, ...args], options, toolkit, projectTexelsPerUnit, openEditor) {
-  if (action === 'stroke' || action === 'rectangle') return faceEditCommand(action,args,options,projectTexelsPerUnit,openEditor);
+  if (Object.hasOwn(faceEdits,action)) return faceEditCommand(action,args,options,projectTexelsPerUnit,openEditor);
   if (action === 'stamp' || action === 'place') return stampCommand(action,args,options,toolkit,projectTexelsPerUnit,openEditor);
   if (['resize','resample','swap'].includes(action))
     return require('./tileset-canvas.js').command(action,args,options,openEditor);

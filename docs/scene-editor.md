@@ -77,6 +77,11 @@ Use `planTilesetRectangle(request, options)` to inspect occupied cells and
 `applyTilesetRectangle(request, options)` to fill or erase them in one
 journal entry. [Rectangle requests and CLI](mesh-uv.md#fill-or-erase-a-rectangle-of-faces)
 
+Use `planTilesetBrushRun(request, options)` and
+`applyTilesetBrushRun(request, options)` to repeat a multi-tile pick
+with a chosen overlap and artwork anchor in one undo entry.
+[Brush run requests and CLI](mesh-uv.md#repeat-a-multi-tile-brush-with-overlap-and-alignment)
+
 ## Brushes and local rebuilds
 
 Use `paintShadowBand(stroke, { pbrMaterial })` to append a stroke to a [named PBR diffuse ramp](pbr-materials.md#paint-a-pbr-shadow-band).
