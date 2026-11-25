@@ -229,6 +229,7 @@
     assetPacks: 'list',
     assetParts: 'obj',
     topologyMeshes: 'obj',
+    constructionPlane: 'obj',
     tilesets: 'obj',
     tilesetSources: 'obj',
     tilesetDefaults: 'obj',
@@ -449,6 +450,13 @@
         presentation.hybridOwnership = K.authoring.hybridOwnership.prepare(spec.hybridOwnership);
       } catch (error) {
         bad('hybridOwnership', error.message);
+      }
+    }
+    if (spec.constructionPlane !== undefined) {
+      try {
+        K.authoring.constructionPlane.resolve(spec.constructionPlane);
+      } catch (error) {
+        bad('constructionPlane',error.message);
       }
     }
     const hasTilesets = spec.tilesets !== undefined || spec.tilesetDefaults !== undefined;
@@ -1621,6 +1629,7 @@
       const { palette, roles, sun } = st0;
       const { timeline: authoredTimeline, cameraRig: authoredCameraRig, dataInputs: authoredData, dataMarks: authoredMarks,
         breakables: authoredBreakables, surfaceDecals: authoredDecals, topologyMeshes: authoredTopology,
+        constructionPlane: authoredConstructionPlane,
         tilesets: authoredTilesets, tilesetSources: authoredTileSources, tilesetDefaults: authoredTileDefaults, ...geometry } = spec;
       let world = (env.brushSession ?? K.authoring.brushRegions.create()).build(geometry, env, { palette, roles, sun });
       let marksSystem;

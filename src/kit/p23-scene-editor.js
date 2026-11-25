@@ -453,6 +453,21 @@
       return commitTilesetRevision(patch,report,'Reload tileset '+id);
     }
 
+    function constructionPlane() {
+      return A.constructionPlane.resolve(snapshot().constructionPlane).plane;
+    }
+
+    function setConstructionPlane(changes) {
+      if (!changes || Object.getPrototypeOf(changes) !== Object.prototype)
+        throw new TypeError('Construction plane changes need a record');
+      const next = A.constructionPlane.resolve({...constructionPlane(),...changes}).plane;
+      const write = () => {
+        document.setEnvironment({constructionPlane:next});
+        return next;
+      };
+      return document.pending() ? write() : document.transact('Set construction plane',write);
+    }
+
     function stageTilesetFace(request, options) {
       const before = snapshot(), {row,report} = A.tilesetFaces.plan(before,request,options);
       if (!row) return {report};
@@ -553,6 +568,7 @@
       const row = meshTopology(object, part), scene = current().preview;
       requireMeshShapeOwner(object, row.part, scene, 'Transform');
       return K.meshTopology.planTransform(row.document, request, {
+        constructionPlane:scene.constructionPlane,
         mesh(id) {
           return { document: meshTopology(id).document };
         },
@@ -905,6 +921,7 @@
       tilesetGrid,
       setTilesetGrid,
       setTilesetTexelsPerUnit,
+      constructionPlane, setConstructionPlane,
       planTilesetFace, placeTilesetFace,
       planTilesetCanvas,
       transformTilesetCanvas,

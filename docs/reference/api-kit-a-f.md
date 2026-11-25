@@ -755,6 +755,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.brushRegions` | namespace |  |  |
 | `KIT.authoring.brushRegions.create` | function | `()` | [source](../../src/kit/p26-brush-regions.js) |
 | `KIT.authoring.brushRegions.prepare` | function | `(spec, roles)` | [source](../../src/kit/p26-brush-regions.js) |
+| `KIT.authoring.constructionPlane` | namespace |  |  |
+| `KIT.authoring.constructionPlane.point` | function | `(frame, at)` | [source](../../src/kit/p23-construction-plane.js) |
+| `KIT.authoring.constructionPlane.project` | function | `(frame, position, mode = 'plane')` | [source](../../src/kit/p23-construction-plane.js) |
+| `KIT.authoring.constructionPlane.resolve` | function | `(raw = {})` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.context` | function | `(doc, options)` | [guide](../../README.md#retained-authoring), [guide](../procedural.md#optional-retained-authoring), [source](../../src/kit/p24-authoring-context.js) |
 | `KIT.authoring.data` | namespace |  |  |
 | `KIT.authoring.data.clone` | function | `(value, path)` | [source](../../src/kit/p00-procedural.js) |

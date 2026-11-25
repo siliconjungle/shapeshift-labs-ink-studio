@@ -310,10 +310,10 @@ function brushUVCommand([file,...rest], options, toolkit, openEditor) {
 }
 
 function stampCommand(action, args, options, toolkit, projectTexelsPerUnit, openEditor) {
-  const {scene,id,object,face,part,out,material,selection} = options;
+  const {scene,id,object,face,part,out,material,selection,plane} = options;
   const names = ['scene','id','object','face','part','out','material','selection'];
   const vectors = ['origin','right','up'];
-  const allowed = [...names,...vectors,...rectangleFields,'brush-scale','texels-per-unit'];
+  const allowed = [...names,...vectors,...rectangleFields,'brush-scale','texels-per-unit','plane'];
   const saved = selection !== undefined;
   if (args.length || ![scene,object,face].every(Boolean) || Object.keys(options).some(key=>!allowed.includes(key)) ||
       names.some(key=>options[key] !== undefined && !(typeof options[key] === 'string' && options[key].trim())) ||
@@ -325,11 +325,9 @@ function stampCommand(action, args, options, toolkit, projectTexelsPerUnit, open
   const crop = saved ? JSON.parse(fs.readFileSync(path.resolve(selection),'utf8')) : pickTilesetRectangle(editor.snapshot(),id,
     Object.fromEntries(rectangleFields.map(key=>[key,Number(options[key])])),toolkit);
   const request = {object,face,selection:crop,...(part && {part}),...(material && {material})};
-  for (const key of vectors) if (options[key] !== undefined) {
-    const parts = typeof options[key] === 'string' ? options[key].split(',') : [];
-    if (parts.length !== 3) throw new TypeError('--'+key+' needs three comma-separated numbers');
-    request[key] = parts.map(value=>numberOption({[key]:value.trim()},key));
-  }
+  const {coordinates} = require('./construction-plane.js');
+  for (const key of vectors) if (options[key] !== undefined) request[key] = coordinates(options[key],3,'--'+key);
+  if (plane !== undefined) request.planeAt = coordinates(plane,2,'--plane');
   for (const [key,field] of [['texels-per-unit','texelsPerUnit'],['brush-scale','brushScale']]) {
     if (options[key] !== undefined) request[field] = numberOption(options,key);
   }

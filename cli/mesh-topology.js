@@ -63,16 +63,15 @@ function transform(file, input, rest, opt, meshTopology, openEditor) {
 }
 
 function moveVertex(file, input, rest, opt, meshTopology, openEditor) {
-  const {object,part,vertex,by,expect,out} = opt;
-  const allowed = ['object','part','vertex','by','expect','out'];
+  const {object,part,vertex,by,expect,out,space,align} = opt;
+  const allowed = ['object','part','vertex','by','expect','out','space','align'];
   const name = value => typeof value === 'string' && value.trim();
-  const components = typeof by === 'string' ? by.split(',').map(value=>value.trim()) : [];
-  const offset = components.map(Number);
-  if (!name(file) || input !== undefined || rest.length || !name(vertex) ||
-      components.length !== 3 || !components.every(value=>/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value)) ||
-      !offset.every(Number.isFinite) || part !== undefined && object === undefined ||
+  if (!name(file) || input !== undefined || rest.length || !name(vertex) || part !== undefined && object === undefined ||
+      space !== undefined && !['local','world','plane'].includes(space) ||
+      align !== undefined && !['plane','grid'].includes(align) ||
       Object.entries(opt).some(([key,value])=>!allowed.includes(key) || !name(value)))
-    throw new TypeError('Use mesh-topology move <mesh-or-scene.json> [--object id] [--part id] --vertex id --by X,Y,Z [--expect revision] [--out file.json]');
+    throw new TypeError('Use mesh-topology move <mesh-or-scene.json> [--object id] [--part id] --vertex id --by X,Y,Z [--space local|world|plane] [--align plane|grid] [--expect revision] [--out file.json]');
+  const offset = require('./construction-plane.js').coordinates(by,3,'--by');
   const source = path.resolve(file), output = out && path.resolve(out);
   if (output && (!/\.json$/i.test(output) || output === source || object && path.dirname(output) !== path.dirname(source)))
     throw new RangeError('Write a separate JSON output beside the input for scene edits');
@@ -85,7 +84,8 @@ function moveVertex(file, input, rest, opt, meshTopology, openEditor) {
     throw new RangeError('Vertex move expected topology revision '+expect+' but found '+revision);
   const selection = meshTopology.select(document,{domain:'vertices',ids:[vertex]});
   const operation = {kind:'move',offset};
-  const request = {selection,operation};
+  const request = {selection,operation,...(space && {space}),
+    ...(align && {snap:{kind:'construction-plane',mode:align,anchor:vertex}})};
   let report;
   if (editor && output) {
     report = editor.transformMeshTopology(object,request,{part,label:'Move vertex '+vertex}).transform;
@@ -159,6 +159,8 @@ function command([action, file, input, ...rest], opt, toolkit, { build, openEdit
   if (action === 'retopology') return require('./mesh-retopology-preview.js').command(file, input, rest, opt, toolkit, openEditor);
   if (action === 'boolean') return require('./mesh-boolean-preview.js').command(file, input, rest, opt, toolkit, openEditor);
   if (action === 'bevel') return require('./mesh-bevel-preview.js').command(file, input, rest, opt, toolkit, openEditor);
+  if (action === 'plane')
+    return require('./construction-plane.js').command(file,input === undefined ? rest : [input,...rest],opt,toolkit,openEditor);
   if (action === 'move') return moveVertex(file,input,rest,opt,meshTopology,openEditor);
   if (opt.preview !== undefined) throw new TypeError('Use --preview with mesh-topology bevel or shading');
   if (opt.subdivision !== undefined) throw new TypeError('Use --subdivision with mesh-topology shading');

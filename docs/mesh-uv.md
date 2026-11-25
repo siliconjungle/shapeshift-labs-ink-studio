@@ -125,6 +125,11 @@ are crop dimensions times `--brush-scale` divided by texels per unit.
 Density comes from `--texels-per-unit`, the scene, the project, or the
 default of 16, in that order.
 
+To use the scene's [construction plane](mesh-topology.md#set-a-construction-plane),
+pass `--plane U,V` in place of an explicit origin and axes. The lower-left
+corner uses that plane grid coordinate and the face follows its right and up
+directions.
+
 The quad has four editable vertices and stable face corners. Its pigment UVs
 address the first and last texel centers in the crop, including when an axis
 has only one texel. The face uses the sheet through a shared material slot.

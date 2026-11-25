@@ -2,9 +2,8 @@
 (function (K) {
   const A = K.authoring, topology = K.meshTopology, {freeze} = K.procedural.data;
   const sourceFormat = 'ink-studio/tileset-face-source';
-  const fields = ['object','part','face','selection','origin','right','up','texelsPerUnit','brushScale','material'];
+  const fields = ['object','part','face','selection','origin','right','up','planeAt','texelsPerUnit','brushScale','material'];
   const name = value=>TargetSelectors.name(value) && !['__proto__','prototype','constructor'].includes(value);
-  const xyz = value=>Array.isArray(value) && value.length === 3 && Array.from(value).every(Number.isFinite);
 
   function sourceBindings(row, id, update) {
     const changes = [];
@@ -21,18 +20,8 @@
     return {bindings,changes};
   }
 
-  function frame(origin, right, up, width, height) {
-    if (![origin,right,up].every(xyz)) throw new TypeError('Tile placement needs finite XYZ vectors');
-    const r = Math.hypot(...right), u = Math.hypot(...up);
-    if (!r || !u || !Number.isFinite(r) || !Number.isFinite(u)) throw new RangeError('Tile axes need nonzero directions');
-    const x = right.map(value=>value/r), y = up.map(value=>value/u);
-    if (Math.abs(K.V.dot(x,y)) > 1e-10) throw new RangeError('Tile right and up must be perpendicular');
-    const place = (s,t)=>origin.map((value,i)=>value+x[i]*s+y[i]*t);
-    return [origin.slice(),place(width,0),place(width,height),place(0,height)];
-  }
-
   function plan(scene, request, {projectTexelsPerUnit} = {}) {
-    const {object,part,face,selection,origin=[0,0,0],right=[1,0,0],up=[0,1,0],
+    const {object,part,face,selection,origin,right,up,planeAt,
       texelsPerUnit,brushScale=1,material:requestedMaterial} = request ?? {};
     if (!request || Object.getPrototypeOf(request) !== Object.prototype || Object.keys(request).some(key=>!fields.includes(key)) ||
         ![object,face].every(name) || part !== undefined && !name(part) ||
@@ -46,7 +35,13 @@
     const density = positiveScale(texelsPerUnit ?? tilesets.texelsPerUnit ?? projectTexelsPerUnit ?? 16,'Texels per unit');
     positiveScale(brushScale,'Brush scale');
     const size = [crop.width,crop.height].map(pixels=>positiveScale(pixels*brushScale/density,'World tile extent'));
-    const positions = frame(origin,right,up,...size);
+    if (planeAt !== undefined && [origin,right,up].some(value=>value !== undefined))
+      throw new TypeError('Choose plane grid coordinates or an explicit tile frame');
+    const plane = A.constructionPlane;
+    const frame = plane.resolve(planeAt === undefined ? {origin,right,up} : scene.constructionPlane);
+    const anchor = planeAt === undefined ? frame.plane.origin : plane.point(frame,planeAt);
+    const [x,y] = frame.axes, [w,h] = size;
+    const positions = [anchor,K.V.mad(anchor,x,w),K.V.mad(K.V.mad(anchor,x,w),y,h),K.V.mad(anchor,y,h)];
     const source = {format:sourceFormat,version:1,selection:crop,atlasSize:[asset.width,asset.height]};
     const material = requestedMaterial ?? 'tileset/'+crop.tileset;
     const binding = {id:'tileset/'+face,domain:'faces',element:face,data:source};
@@ -77,7 +72,8 @@
       conflicts.push({reason:'material-has-bake',material});
     const report = freeze({format:'ink-studio/tileset-face-placement',version:1,object,
       ...((existing?.part ?? part) && {part:existing?.part ?? part}),face,source,material,binding:binding.id,
-      texelsPerUnit:density,brushScale,size,vertices,corners,uvSet,conflicts,canCommit:!conflicts.length});
+      texelsPerUnit:density,brushScale,size,vertices,corners,uvSet,
+      ...(planeAt !== undefined && {constructionPlane:frame.plane,planeAt:planeAt.slice()}),conflicts,canCommit:!conflicts.length});
     if (conflicts.length) return {report};
     const added = {vertices,faces:[polygon]};
     const row = existing ? A.meshTopologyScene.revise(existing,added).row :

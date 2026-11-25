@@ -135,6 +135,51 @@ node examples/mesh-component-selection.cjs component-selection-review
 ink-studio mesh-topology select component-selection-review/mesh.json component-selection-review/rim-query.json --visibility component-selection-review/visible.json
 ```
 
+## Set a construction plane
+
+The construction plane is a scene guide with an origin, perpendicular
+right and up directions, and a positive grid interval in scene units.
+Its normal follows right cross up. The default is the XY plane at the
+origin with a grid interval of one scene unit.
+
+```sh
+ink-studio mesh-topology plane draft.json --origin 1,2,3 --right 0,0,-1 --up 0,1,0 --grid .25 --out jig.json
+ink-studio mesh-topology plane jig.json
+ink-studio tileset stamp --scene jig.json --selection brick.json --object gate --face panel --plane 2,1 --out stamped.json
+ink-studio mesh-topology move stamped.json --object gate --vertex panel/v2 --by .1,.1,.2 --space plane --align grid --out aligned.json
+```
+
+Query the plane with no changes, or omit `--out` to review a proposed change.
+A scene revision can move the origin, turn the axes, or change the interval
+independently. A plane edit affects subsequent commands.
+
+For [tile stamping](mesh-uv.md#place-a-painted-tile-as-a-mesh-face), the
+`--plane U,V` pair places the lower-left corner in grid steps along right
+and up. Fractional steps allow deliberate offsets. Brush density determines
+the face dimensions.
+
+In a component transform request, `"space":"plane"` interprets move,
+rotation, and scale axes as right, up, and normal, with offsets in scene
+units. The pivot defaults to the plane origin. Set `"planePivot":[2,1]`
+to choose a different point in grid steps. The report includes the plane
+and resolved world pivot.
+
+Set `"snap":{"kind":"construction-plane","mode":"plane"}` to project a
+transformed anchor onto the plane, or set `"mode":"grid"` to reach its
+nearest grid intersection. The existing `anchor` and `maxDistance`
+settings apply. With `mesh-topology move`, pass `--align plane` or
+`--align grid` to align the named vertex. A zero offset performs alignment
+alone.
+
+In Node, use `editor.constructionPlane()` and
+`editor.setConstructionPlane(changes)`. Changing the plane uses the scene
+editor's undo journal. Stamp requests take `planeAt:[u,v]`. A standalone
+`KIT.meshTopology.planTransform` can take a plane as
+`context.constructionPlane`.
+
+Run `node examples/tileset-pick/construction-plane-demo.cjs plane-demo`
+to replay a relocated plane, two stamps, a pivot rotation, and grid alignment.
+
 ## Move one vertex
 
 Run `mesh-topology move` with an existing vertex ID and an XYZ offset in
@@ -215,6 +260,7 @@ world units.
 | --- | --- |
 | `vertex`, `edge`, `face` | Stable component `id`. The optional `object` selects another retained mesh. Edges and faces use the closest point on the target. |
 | `plane` | World-space `origin` and `normal` |
+| `construction-plane` | Scene guide and optional `mode` of `plane` or `grid` |
 | `socket` | Placed asset `instance` and bound socket `binding` |
 | `sdf` | Authored SDF solid `object` and positive `maxDistance`. Optional `tolerance` and `iterations` control the bounded surface projection. |
 

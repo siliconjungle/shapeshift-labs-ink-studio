@@ -169,10 +169,10 @@ const meshComponentSnap = (function (K) {
     throw new RangeError('SDF snap did not reach the surface within its tolerance and distance limit');
   }
 
-  function snap(raw, point, doc, frame, context) {
+  function snap(raw, point, doc, frame, context, construction) {
     const keys = {
       vertex: ['id', 'object'], edge: ['id', 'object'], face: ['id', 'object'],
-      plane: ['origin', 'normal'], socket: ['instance', 'binding'], sdf: ['object', 'tolerance', 'iterations']
+      plane: ['origin', 'normal'], 'construction-plane': ['mode'], socket: ['instance', 'binding'], sdf: ['object', 'tolerance', 'iterations']
     };
     if (!raw || !Object.hasOwn(keys, raw.kind) || !record(raw, ['kind', 'anchor', 'maxDistance', ...keys[raw.kind]]) ||
         raw.object !== undefined && !name(raw.object) || raw.anchor !== undefined && !name(raw.anchor) ||
@@ -183,6 +183,8 @@ const meshComponentSnap = (function (K) {
       if (!vector(raw.origin)) throw new TypeError('Construction planes need a world origin');
       const direction = unit(raw.normal, 'Construction plane');
       hit = { point: V.mad(point, direction, -V.dot(V.sub(point, raw.origin), direction)) };
+    } else if (raw.kind === 'construction-plane') {
+      hit = K.authoring.constructionPlane.project(construction,point,raw.mode);
     } else if (raw.kind === 'socket') {
       if (!name(raw.instance) || !name(raw.binding)) throw new TypeError('Socket snap needs an instance and binding ID');
       const socket = context.socket?.(raw.instance, raw.binding);
@@ -204,21 +206,30 @@ const meshComponentSnap = (function (K) {
   }
 
   function planTransform(source, request, context = {}) {
-    if (!record(request, ['selection', 'operation', 'space', 'frame', 'pivot', 'normal', 'tangent', 'pins', 'falloff', 'snap']))
+    if (!record(request, ['selection', 'operation', 'space', 'frame', 'pivot', 'planePivot', 'normal', 'tangent', 'pins', 'falloff', 'snap']))
       throw new TypeError('Use a component transform request');
     const doc = topology.create(source), run = operation(request.operation);
     const { space = 'local', normal, tangent } = request;
-    if (!['local', 'world', 'normal'].includes(space) || space !== 'normal' && (normal !== undefined || tangent !== undefined))
-      throw new TypeError('Use local, world, or normal space, with normal guides only in normal space');
+    if (!['local', 'world', 'normal', 'plane'].includes(space) || space !== 'normal' && (normal !== undefined || tangent !== undefined))
+      throw new TypeError('Use local, world, normal, or plane space, with normal guides only in normal space');
+    if (request.planePivot !== undefined && (space !== 'plane' || request.pivot !== undefined))
+      throw new TypeError('Use planePivot in plane space, or supply a local XYZ pivot');
+    const plane = K.authoring.constructionPlane;
+    const construction = space === 'plane' || request.snap?.kind === 'construction-plane' ?
+      plane.resolve(context.constructionPlane) : undefined;
     const selection = topology.select(doc, { from: request.selection });
     const selected = new Set(topology.select(doc, { from: selection, convert: 'vertices' }).ids);
     if (!selected.size) throw new RangeError('Select at least one component to transform');
     const frame = K.sceneGraph.transform(request.frame), inverse = K.sceneGraph.inverse(frame);
     const vertices = index(doc.vertices), world = new Map(doc.vertices.map(({ id, position }) => [id, K.sceneGraph.point(frame, position)]));
-    const pivot = request.pivot === undefined ? average([...selected].map(id => vertices.get(id).position)) : request.pivot;
+    const gridPivot = space === 'plane' && request.pivot === undefined ?
+      (request.planePivot === undefined ? [0,0] : request.planePivot) : undefined;
+    const pivot = gridPivot !== undefined ? K.sceneGraph.point(inverse,plane.point(construction,gridPivot)) :
+      request.pivot === undefined ? average([...selected].map(id => vertices.get(id).position)) : request.pivot;
     if (!vector(pivot)) throw new TypeError('The transform pivot needs a local XYZ point');
     const fixed = pins(doc, selection, selected, request.pins), weights = influence(doc, world, selected, fixed, request.falloff);
-    const axes = space === 'normal' ? normalFrame(doc, selection, world, normal, tangent) : [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+    const axes = space === 'plane' ? construction.axes : space === 'normal' ? normalFrame(doc, selection, world, normal, tangent) :
+      [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
     const basis = axes.flat(), fromBasis = M.tr(basis);
     function transformed(p, weight) {
       const delta = V.sub(p, pivot);
@@ -235,7 +246,7 @@ const meshComponentSnap = (function (K) {
         throw new RangeError('Snap anchor must be an unpinned selected vertex');
       if (!weights.size) throw new RangeError('Snap needs at least one movable vertex');
       const p = transformed(anchor === undefined ? pivot : vertices.get(anchor).position, 1);
-      snapped = snap(target, K.sceneGraph.point(frame, p), doc, frame, context);
+      snapped = snap(target, K.sceneGraph.point(frame, p), doc, frame, context, construction);
     }
     const localSnap = snapped && M.app(inverse.matrix, snapped.delta);
     const changed = [];
@@ -251,7 +262,8 @@ const meshComponentSnap = (function (K) {
       format: 'ink-studio/mesh-component-transform', version: 1, mesh: doc.id,
       beforeRevision: topology.revision(doc), afterRevision: topology.revision(document),
       selection, space, pivot: pivot.slice(), worldPivot: K.sceneGraph.point(frame, pivot), axes, pinned: [...fixed].sort(),
-      ...(snapped && { snap: snapped }), vertices: changed
+      ...(construction && {constructionPlane:construction.plane}),
+      ...(gridPivot && {planePivot:gridPivot.slice()}), ...(snapped && { snap: snapped }), vertices: changed
     } });
   }
 
