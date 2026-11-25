@@ -31,6 +31,42 @@
     return {bindings,changes};
   }
 
+  function splitSources(original, remapped, before, after) {
+    if (!remapped.some(binding=>binding.review?.reason === 'split' && isSourceBinding(binding)) ||
+        !after.faces.some(face=>face.sourceQuad)) return remapped;
+    const old = new Map(before.faces.map(face=>[face.id,face])), next = new Map(after.faces.map(face=>[face.id,face]));
+    const used = new Set(remapped.map(binding=>binding.id));
+    const uvSet = MaterialUV.resolve(before.uvBindings,'pigment');
+    if (uvSet !== MaterialUV.resolve(after.uvBindings,'pigment')) return remapped;
+    return remapped.flatMap((binding,i)=>{
+      const prior = original[i], parent = old.get(prior.element), candidates = binding.review?.candidates;
+      if (prior.review || !isSourceBinding(prior) || binding.review?.reason !== 'split' ||
+          parent?.corners.length !== 4 || candidates.length !== 2 || !candidates.includes(parent.id)) return [binding];
+      const sourceSlots = new Map(parent.corners.map((corner,slot)=>[corner.vertex,{corner,slot}]));
+      const children = candidates.map(id=>{
+        const face = next.get(id), source = face?.sourceQuad;
+        if (source?.mesh !== before.id || source.face !== parent.id || face.corners.length !== 3 ||
+            face.material !== parent.material) return null;
+        const slots = face.corners.map(corner=>{
+          const parent = sourceSlots.get(corner.vertex), uv = MaterialUV.uv(corner,uvSet);
+          return parent && source.corners.includes(parent.corner.id) &&
+            uv.every((n,i)=>n===MaterialUV.uv(parent.corner,uvSet)[i]) ? parent.slot : undefined;
+        });
+        return slots.every(slot=>slot !== undefined) ? {id,slots} : null;
+      });
+      if (children.some(child=>!child)) return [binding];
+      return children.map(({id:element,slots})=>{
+        const base = 'tileset/'+element;
+        let id = element === parent.id ? prior.id : base;
+        if (element !== parent.id) {
+          for (let n=2;used.has(id);n++) id = base+'/'+n;
+          used.add(id);
+        }
+        return {...prior,id,element,data:{...prior.data,uvCorners:slots}};
+      });
+    });
+  }
+
   function sameMaterial(a, b) {
     const ordered = (_key,value)=>value && Object.getPrototypeOf(value) === Object.prototype ?
       Object.fromEntries(Object.keys(value).sort().map(key=>[key,value[key]])) : value;
@@ -190,5 +226,6 @@
     return conflicts.length ? {report} : {report,row:append(brush,[placement])};
   }
 
-  A.tilesetFaces = Object.freeze({plan,prepare,stamp,polygonStamp,append,cornersFor,cropSource,sourceBindings,sourceCorners,isSourceBinding,sameMaterial});
+  A.tilesetFaces = Object.freeze({plan,prepare,stamp,polygonStamp,append,cornersFor,cropSource,sourceBindings,sourceCorners,
+    splitSources,isSourceBinding,sameMaterial});
 })(KIT);

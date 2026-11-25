@@ -268,6 +268,7 @@
             {...binding,data:{...binding.data,uvCorners}} : binding;
         });
       } else updated.bindings = remapped;
+      updated.bindings = A.tilesetFaces.splitSources(row.bindings,updated.bindings,before,document);
     }
     if (row.bakes) {
       const dirty = new Map(), oldSet=MaterialUV.resolve(before.uvBindings,'pigment'),

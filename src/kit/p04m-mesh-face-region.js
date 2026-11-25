@@ -88,7 +88,8 @@
           corners.reverse();
           lineage.faces.push({ from: face.id, to: id });
         }
-        faceRows.push({ id, material: config.interior.material ?? face.material, corners, ...(diagonal && {diagonal}) });
+        faceRows.push({ id, material: config.interior.material ?? face.material, corners, ...(diagonal && {diagonal}),
+          ...(face.sourceQuad && {sourceQuad:face.sourceQuad}) });
         group.interiorFaces.push(id);
       }
       for (const loop of region.loops) {
