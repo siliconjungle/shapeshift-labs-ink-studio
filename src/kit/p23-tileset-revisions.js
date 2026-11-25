@@ -118,8 +118,10 @@
       const materials = mesh.materials?.map(row=>row.texture?.tileset === from ? {...row,texture:texture(row.texture)} : row);
       const bakes = mesh.bakes?.map(row=>row.maps.texture?.tileset === from ?
         {...row,maps:{...row.maps,texture:texture(row.maps.texture)}} : row);
-      if (materials?.some((item,i)=>item !== mesh.materials[i]) || bakes?.some((item,i)=>item !== mesh.bakes[i]))
-        meshes[object] = {...mesh,...(materials && {materials}),...(bakes && {bakes})};
+      const {bindings,changes} = A.tilesetFaces.sourceBindings(mesh,from,source=>
+        ({...source,selection:{...source.selection,tileset:to}}));
+      if (materials?.some((item,i)=>item !== mesh.materials[i]) || bakes?.some((item,i)=>item !== mesh.bakes[i]) || changes.length)
+        meshes[object] = {...mesh,...(materials && {materials}),...(bakes && {bakes}),...(changes.length && {bindings})};
     }
     for (const [id,prefab] of ordered(scene.prefabs)) {
       if (prefab.usesTilesets?.includes(from))

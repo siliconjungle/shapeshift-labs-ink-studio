@@ -133,6 +133,32 @@
     return {meshes,references,invalidatedBakes};
   }
 
+  function migrateSources(scene, id, map, meshes) {
+    const changes = [];
+    if (map.before.every((size,i)=>size === map.size[i])) return changes;
+    for (const [object,original] of Object.entries(scene.topologyMeshes ?? {})) {
+      const row = Object.hasOwn(meshes,object) ? meshes[object] : original;
+      const moved = A.tilesetFaces.sourceBindings(row,id,source=>{
+        if (source.review) return source;
+        if (!map.before.every((size,i)=>size === source.atlasSize?.[i]))
+          return {...source,review:{reason:'source-atlas-size-changed'}};
+        const {x,y,width,height} = source.selection;
+        // Half-open destination index interval for nearest texel-center remapping.
+        const edge = (value,axis)=>Math.ceil((value-map.offset[axis])/map.scale[axis]-.5) || 0;
+        const left=edge(x,0), top=edge(y,1), right=edge(x+width,0), bottom=edge(y+height,1);
+        if (left<0 || top<0 || right>map.size[0] || bottom>map.size[1] || left>=right || top>=bottom)
+          return {...source,review:{reason:'source-rectangle-cropped'}};
+        return {...source,atlasSize:map.size,
+          selection:{...source.selection,x:left,y:top,width:right-left,height:bottom-top}};
+      });
+      if (moved.changes.length) {
+        meshes[object] = {...row,bindings:moved.bindings};
+        changes.push(...moved.changes.map(change=>({object,...change})));
+      }
+    }
+    return changes;
+  }
+
   function plan(scene, id, operation) {
     if (operation?.type === 'swap') return A.tilesetSwap.plan(scene,id,operation);
     const tilesets = A.tilesets.prepare(scene.tilesets,scene.tilesetDefaults);
@@ -144,10 +170,12 @@
       {type,size,...(type === 'resize' && {anchor:anchor ?? 'top-left'})},undefined,A.tilesets.maxEdge);
     const grid = gridPlan(tilesets.grid(id),map,operation);
     const {meshes,references,invalidatedBakes} = faceEdits(scene,id,map,operation);
+    const sourceBindings = migrateSources(scene,id,map,meshes);
     const canCommit = grid.canCommit && references.every(ref=>!ref.conflicts.length);
     const report = {format:'ink-studio/tileset-canvas-edit',version:1,tileset:id,type,
       ...(type === 'resize' && {anchor:anchor ?? 'top-left'}),before:map.before,size:map.size,
-      sourceOffset:map.offset,sourceScale:map.scale,grid,references,invalidatedBakes,canCommit};
+      sourceOffset:map.offset,sourceScale:map.scale,grid,references,invalidatedBakes,
+      ...(sourceBindings.length && {sourceBindings}),canCommit};
     if (!canCommit) return {report:freeze(report)};
     if (tileSize === undefined && map.size.every((value,i)=>value === map.before[i]))
       return {report:freeze({...report,encoding:{before:asset.encoding,after:asset.encoding}})};

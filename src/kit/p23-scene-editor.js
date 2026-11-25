@@ -453,6 +453,28 @@
       return commitTilesetRevision(patch,report,'Reload tileset '+id);
     }
 
+    function stageTilesetFace(request, options) {
+      const before = snapshot(), {row,report} = A.tilesetFaces.plan(before,request,options);
+      if (!row) return {report};
+      const patch = {topologyMeshes:{...before.topologyMeshes,[report.object]:row}};
+      const problems = DIO.check({...before,...patch},buildEnv).filter(problem=>problem.level === 'error');
+      return problems.length ? {report:freeze({...report,canCommit:false,problems})} : {patch,report};
+    }
+
+    function planTilesetFace(request, options) {
+      return stageTilesetFace(request,options).report;
+    }
+
+    function placeTilesetFace(request, options) {
+      const {patch,report} = stageTilesetFace(request,options);
+      if (!report.canCommit) throw Object.assign(new RangeError('Tile face placement needs review'),{report});
+      const write = () => {
+        document.setEnvironment(patch);
+        return report;
+      };
+      return document.pending() ? write() : document.transact('Place tile '+report.face,write);
+    }
+
     function meshTopology(object, part) {
       const meshes = snapshot().topologyMeshes ?? {};
       const mesh = Object.hasOwn(meshes, object) ? meshes[object] : null;
@@ -883,6 +905,7 @@
       tilesetGrid,
       setTilesetGrid,
       setTilesetTexelsPerUnit,
+      planTilesetFace, placeTilesetFace,
       planTilesetCanvas,
       transformTilesetCanvas,
       tilesetDependencies, planTilesetRevision, editTilesetRevision,

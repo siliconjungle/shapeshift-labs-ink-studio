@@ -127,6 +127,28 @@
     return {meshes:Object.fromEntries(patches),references,blockers};
   }
 
+  function relocateSources(scene, id, asset, regions, meshes) {
+    const patches = [], sourceBindings = [];
+    for (const [object,original] of Object.entries(scene.topologyMeshes ?? {})) {
+      const row = Object.hasOwn(meshes,object) ? meshes[object] : original;
+      const {bindings,changes} = A.tilesetFaces.sourceBindings(row,id,source=>{
+        if (source.review) return source;
+        if (source.atlasSize?.[0] !== asset.width || source.atlasSize?.[1] !== asset.height)
+          return {...source,review:{reason:'source-atlas-size-changed'}};
+        const crop = source.selection, index = regions.findIndex(region=>contains(region,crop));
+        if (index<0) return regions.some(region=>intersects(region,crop)) ?
+          {...source,review:{reason:'partial-atlas-swap'}} : source;
+        const from = regions[index], to = regions[1-index];
+        return {...source,selection:{...crop,x:crop.x+to.x-from.x,y:crop.y+to.y-from.y}};
+      });
+      if (changes.length) {
+        patches.push([object,{...row,bindings}]);
+        sourceBindings.push(...changes.map(change=>({object,...change})));
+      }
+    }
+    return {patches:Object.fromEntries(patches),sourceBindings};
+  }
+
   function plan(scene, id, operation) {
     if (!operation || operation.type !== 'swap' || Object.getPrototypeOf(operation) !== Object.prototype || Object.keys(operation).some(key=>!['type','a','b'].includes(key)))
       throw new TypeError('A tileset swap needs two texel rectangles');
@@ -135,12 +157,13 @@
     if (a.width !== b.width || a.height !== b.height || intersects(a,b))
       throw new RangeError('Swap rectangles must have equal dimensions and no overlap');
     const {meshes,references,blockers} = referencesFor(scene,id,asset,[a,b]);
+    const {patches,sourceBindings} = relocateSources(scene,id,asset,[a,b],meshes);
     const canCommit = !blockers.length && references.every(ref=>!ref.conflicts.length);
     const report = freeze({format:'ink-studio/tileset-swap',version:1,type:'swap',tileset:id,regions:{a,b},
       size:[asset.width,asset.height],encoding:asset.encoding,texelsExchanged:2*a.width*a.height,
       ...(scene.tilesetSources?.[id] && {source:scene.tilesetSources[id]}),
-      references,blockers,canCommit});
-    return canCommit ? {asset:exchange(asset,a,b),meshes,report} : {report};
+      references,...(sourceBindings.length && {sourceBindings}),blockers,canCommit});
+    return canCommit ? {asset:exchange(asset,a,b),meshes:{...meshes,...patches},report} : {report};
   }
 
   A.tilesetSwap = Object.freeze({plan});

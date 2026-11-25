@@ -107,6 +107,40 @@ values with HTML output to set the initial selection.
 In Node, call `ink.pickTilesetRectangle(scene, "masonry", { x:48, y:0, width:48, height:16 })`.
 A selection addresses the source image's texels.
 
+### Place a painted tile as a mesh face
+
+Use a saved exact selection or supply `--id`, `--x`, `--y`, `--width`,
+and `--height` to place a painted rectangle. Give the polygon its own
+face ID and choose an existing or new editable mesh.
+
+```sh
+ink-studio tileset place --scene gatehouse-tiles.json --selection sign-selection.json \
+  --object entrance --face painted-sign --origin 0,2,0 --out gatehouse-sign.json
+```
+
+The origin is the lower-left corner in scene units. The default right
+and up directions are +X and +Y. Pass perpendicular XYZ directions with
+`--right` and `--up` to change the plane and winding. Face dimensions
+are crop dimensions times `--brush-scale` divided by texels per unit.
+Density comes from `--texels-per-unit`, the scene, the project, or the
+default of 16, in that order.
+
+The quad has four editable vertices and stable face corners. Its pigment UVs
+address the first and last texel centers in the crop, including when an axis
+has only one texel. The face uses the sheet through a shared material slot.
+The default slot is `tileset/<sheet-id>`. Use `--material` to select or
+create another compatible slot. The face binding records the exact source
+rectangle and atlas size. Atlas swaps and canvas edits report source
+binding migrations, and exact deduplication redirects the source sheet.
+
+Omit `--out` to preview the face, corners, source binding, and any conflicts.
+In Node, call `editor.planTilesetFace(request)` or `editor.placeTilesetFace(request)`
+with `object`, `face`, and a version 1 `selection` from the picker. Optional
+fields are `origin`, `right`, `up`, `part`, `material`, `texelsPerUnit`,
+and `brushScale`. One undo removes the placement and its source binding.
+Run `node examples/tileset-pick/place-face-demo.cjs tile-placement-demo` to
+place painted masonry and trim and inspect their retained source references.
+
 ### Extract a crop as a reusable tileset
 
 Use an exact texel rectangle or a saved `tileset pick` selection.

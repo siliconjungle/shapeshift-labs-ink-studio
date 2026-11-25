@@ -1487,6 +1487,7 @@ const CMD = {
         '  tileset combine --scene <scene.json> --ids <id,id,...> --new-id <tileset-id> [--axis x|y] [--out <new-scene.json>]   combine sheets into a new atlas',
         '  tileset deduplicate --scene <scene.json> --id <duplicate-id> --keep-id <retained-id> [--out <new-scene.json>]   consolidate identical tilesets and redirect their references',
         '  tileset remove --scene <scene.json> --id <tileset-id> [--out <new-scene.json>]   remove an unreferenced tileset',
+        '  tileset place --scene <scene.json> --object <mesh-id> --face <face-id> (--selection <selection.json> | --id <tileset-id> --x N --y N --width N --height N) [--origin X,Y,Z] [--right X,Y,Z] [--up X,Y,Z] [--part ID] [--material ID] [--texels-per-unit N] [--brush-scale N] [--out <new-scene.json>]   place one painted tile as an editable mesh face',
         '  tileset extract --scene <scene.json> (--selection <selection.json> | --id <tileset-id> --x N --y N --width N --height N) --new-id <tileset-id> --out <new-scene.json>   register an exact crop as a new tileset',
         '  tileset repack <atlas.png> --tile-width N --tile-height N --margin-left N --margin-top N --margin-right N --margin-bottom N --gutter-x N --gutter-y N --out <compact.png> [--report <layout.json>]   remove atlas margins and gutters',
         '  tileset resize --scene <scene.json> --id <tileset-id> --width N --height N [--anchor <anchor>] [--tile-width N --tile-height N] [--out <revised.json>]   change canvas size and preview face references',
