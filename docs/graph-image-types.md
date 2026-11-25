@@ -54,6 +54,8 @@ For nearest seeds, tile seams and mask shapes, see [Typed material distance, edg
 
 For matrix placement, crops, perspective and sampler controls, see [Typed material transforms and addressing](material-image-transforms.md).
 
+For map-driven distortion, see [Typed material displacement filters](material-image-displacement.md).
+
 ## Convert color to relief
 
 The `fx.relight` height socket accepts typed height in `art-px` and existing uncolored scalar rasters. A connection from a known RGB source fails graph validation. For dynamically sourced images, the socket validates their value before relighting. Convert deliberately with `image.toHeight`.

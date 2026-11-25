@@ -259,6 +259,25 @@ Guides: [guide](../material-image-filters.md)
 Get the runnable example with `ink-studio graph describe image.directionalBlur --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.directionalWarp
+
+Displace a typed image along a fixed angle using a scalar map.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `map` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `intensity` | `any` | `null` |  |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"width":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"height":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"filter":{"type":"string","constraints":{"choices":["nearest","linear"]}},"mip":{"type":"string\|number","constraints":{"modes":["none","nearest","linear"],"min":0},"default":"none"},"mipBias":{"type":"number","unit":"mip levels","constraints":{"min":-16,"max":16},"default":0},"units":{"type":"string","constraints":{"choices":["pixels","normalized"]},"default":"pixels"},"amount":{"type":"number","constraints":{"min":-1000000,"max":1000000},"default":1},"smooth":{"type":"number","unit":"pixels","constraints":{"min":0,"max":32,"integer":true},"default":0},"mapBorder":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"mapFilter":{"type":"string","constraints":{"choices":["nearest","linear"]},"default":"linear"},"angle":{"type":"number","unit":"degrees","default":0},"center":{"type":"number","default":0}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-displacement.md)
+
+Get the runnable example with `ink-studio graph describe image.directionalWarp --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.distance
 
 Measure exact nearest-seed distance and return original seed coordinates and a validity mask.
@@ -536,6 +555,45 @@ Guides: [guide](../material-color-corrections.md)
 Get the runnable example with `ink-studio graph describe image.levels --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.multiDirectionalWarp
+
+Chain or blend opposed displacements along one, two or four axes.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `map` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `intensity` | `any` | `null` |  |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"width":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"height":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"filter":{"type":"string","constraints":{"choices":["nearest","linear"]}},"mip":{"type":"string\|number","constraints":{"modes":["none","nearest","linear"],"min":0},"default":"none"},"mipBias":{"type":"number","unit":"mip levels","constraints":{"min":-16,"max":16},"default":0},"units":{"type":"string","constraints":{"choices":["pixels","normalized"]},"default":"pixels"},"amount":{"type":"number","constraints":{"min":-1000000,"max":1000000},"default":1},"smooth":{"type":"number","unit":"pixels","constraints":{"min":0,"max":32,"integer":true},"default":0},"mapBorder":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"mapFilter":{"type":"string","constraints":{"choices":["nearest","linear"]},"default":"linear"},"angle":{"type":"number","unit":"degrees","default":0},"center":{"type":"number","default":0},"axes":{"type":"number","constraints":{"choices":[1,2,4]},"default":2},"combine":{"type":"string","constraints":{"choices":["chain","average","min","max"]},"default":"chain"}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-displacement.md)
+
+Get the runnable example with `ink-studio graph describe image.multiDirectionalWarp --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.nonuniformWarp
+
+Drive displacement strength and local direction with independent scalar maps.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `map` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `direction` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `intensity` | `any` | `null` |  |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"width":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"height":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"filter":{"type":"string","constraints":{"choices":["nearest","linear"]}},"mip":{"type":"string\|number","constraints":{"modes":["none","nearest","linear"],"min":0},"default":"none"},"mipBias":{"type":"number","unit":"mip levels","constraints":{"min":-16,"max":16},"default":0},"units":{"type":"string","constraints":{"choices":["pixels","normalized"]},"default":"pixels"},"amount":{"type":"number","constraints":{"min":-1000000,"max":1000000},"default":1},"smooth":{"type":"number","unit":"pixels","constraints":{"min":0,"max":32,"integer":true},"default":0},"mapBorder":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"mapFilter":{"type":"string","constraints":{"choices":["nearest","linear"]},"default":"linear"},"angle":{"type":"number","unit":"degrees","default":0},"center":{"type":"number","default":0},"directionScale":{"type":"number","unit":"turns per map value","default":1}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-displacement.md)
+
+Get the runnable example with `ink-studio graph describe image.nonuniformWarp --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.outline
 
 Return combined, inner and outer distance outlines with optional coverage feathering.
@@ -728,6 +786,25 @@ Origin: toolkit.
 Guides: [guide](../material-image-morphology.md)
 
 Get the runnable example with `ink-studio graph describe image.signedDistance --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.slopeWarp
+
+Displace uphill or downhill along the gradient of a scalar height or data map.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `map` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `intensity` | `any` | `null` |  |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"width":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"height":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"filter":{"type":"string","constraints":{"choices":["nearest","linear"]}},"mip":{"type":"string\|number","constraints":{"modes":["none","nearest","linear"],"min":0},"default":"none"},"mipBias":{"type":"number","unit":"mip levels","constraints":{"min":-16,"max":16},"default":0},"units":{"type":"string","constraints":{"choices":["pixels","normalized"]},"default":"pixels"},"amount":{"type":"number","constraints":{"min":-1000000,"max":1000000},"default":1},"smooth":{"type":"number","unit":"pixels","constraints":{"min":0,"max":32,"integer":true},"default":0},"mapBorder":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"mapFilter":{"type":"string","constraints":{"choices":["nearest","linear"]},"default":"linear"},"slope":{"type":"string","constraints":{"choices":["downhill","uphill"]},"default":"downhill"}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-displacement.md)
+
+Get the runnable example with `ink-studio graph describe image.slopeWarp --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.split
@@ -924,4 +1001,23 @@ Origin: toolkit.
 Guides: [guide](../material-image-filters.md)
 
 Get the runnable example with `ink-studio graph describe image.variableBlur --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.vectorWarp
+
+Use a signed or centered RG displacement map with a selectable Y convention.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `map` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `intensity` | `any` | `null` |  |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"width":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"height":{"type":"number","unit":"pixels","constraints":{"min":1,"max":8192,"integer":true}},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"filter":{"type":"string","constraints":{"choices":["nearest","linear"]}},"mip":{"type":"string\|number","constraints":{"modes":["none","nearest","linear"],"min":0},"default":"none"},"mipBias":{"type":"number","unit":"mip levels","constraints":{"min":-16,"max":16},"default":0},"units":{"type":"string","constraints":{"choices":["pixels","normalized"]},"default":"pixels"},"amount":{"type":"number","constraints":{"min":-1000000,"max":1000000},"default":1},"smooth":{"type":"number","unit":"pixels","constraints":{"min":0,"max":32,"integer":true},"default":0},"mapBorder":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"mapFilter":{"type":"string","constraints":{"choices":["nearest","linear"]},"default":"linear"},"encoding":{"type":"string","constraints":{"choices":["signed","unorm"]}},"center":{"type":"number\|vec2"},"yAxis":{"type":"string","constraints":{"choices":["down","up"]},"default":"down"}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-displacement.md)
+
+Get the runnable example with `ink-studio graph describe image.vectorWarp --example > example.json`.
 Run it with `ink-studio graph run example.json`.

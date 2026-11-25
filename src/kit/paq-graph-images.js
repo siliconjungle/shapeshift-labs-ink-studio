@@ -595,7 +595,12 @@
   const morphology = TypedImageMorphology({
     requireImage, descriptor, wrap, storage, alphaAt, integerMax, convertColor, luminance, fields, geometry: P.geometry
   });
-  const spatial = TypedImageSpatial({ requireImage, descriptor, wrap, storage, pack, integerMax, convertColor, dimensions, fields });
+  const { spatial, resample, sampler: spatialSampler, borders } = TypedImageSpatial({
+    requireImage, descriptor, wrap, storage, pack, integerMax, convertColor, dimensions, fields
+  });
+  const warps = TypedImageDisplacement({
+    requireImage, descriptor, wrap, integerMax, filters, resample, sampler: spatialSampler, borders
+  });
   const correctionOptions = { type: 'record', default: {} };
   const sameImage = { type: 'typedImage', typeFrom: 'source' };
   function filter(name, description, output = sameImage) {
@@ -606,6 +611,17 @@
   function remap(name, description) {
     return { description, inputs: { source: 'typedImage', options: correctionOptions }, outputs: { value: sameImage },
       run({ source, options }) { return { value: spatial[name](source, options) }; } };
+  }
+
+  function warp(name, description, direction = false) {
+    return {
+      description, inputs: { source: 'typedImage', map: 'typedImage', ...(direction && { direction: 'typedImage' }),
+        intensity: { type: 'any', default: null }, options: correctionOptions }, outputs: { value: sameImage },
+      run({ source, map, direction: angleMap, intensity, options }) {
+        const value = direction ? warps[name](source, map, angleMap, options, intensity) : warps[name](source, map, options, intensity);
+        return { value };
+      }
+    };
   }
 
   function correction(name, description, type = 'typedImage', output = sameImage) {
@@ -781,6 +797,11 @@
     'image.symmetry': remap('symmetry', 'Reflect an authored side across horizontal, vertical or paired axes.'),
     'image.polar': remap('polar', 'Convert between Cartesian images and angular strips with aspect-correct radii.'),
     'image.perspective': remap('perspective', 'Project the source onto a convex four-corner destination plane.'),
+    'image.directionalWarp': warp('directionalWarp', 'Displace a typed image along a fixed angle using a scalar map.'),
+    'image.nonuniformWarp': warp('nonuniformWarp', 'Drive displacement strength and local direction with independent scalar maps.', true),
+    'image.vectorWarp': warp('vectorWarp', 'Use a signed or centered RG displacement map with a selectable Y convention.'),
+    'image.slopeWarp': warp('slopeWarp', 'Displace uphill or downhill along the gradient of a scalar height or data map.'),
+    'image.multiDirectionalWarp': warp('multiDirectionalWarp', 'Chain or blend opposed displacements along one, two or four axes.'),
     'image.toDisplay': {
       description: 'Convert typed color to straight-alpha sRGB8 for legacy compositing and PNG exports.',
       inputs: { source: 'typedImage', outOfRange: { type: 'string', default: 'clamp' } },
@@ -797,5 +818,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);

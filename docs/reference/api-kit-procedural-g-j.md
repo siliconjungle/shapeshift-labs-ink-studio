@@ -659,6 +659,18 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.directionalBlur"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.directionalBlur"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
 | `KIT.procedural.graphImages.operations["image.directionalBlur"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.directionalWarp"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.directionalWarp"].description` | value | `string = "Displace a typed image along a fixed angle using a scalar map."` |  |
+| `KIT.procedural.graphImages.operations["image.directionalWarp"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.directionalWarp"].inputs.intensity` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.directionalWarp"].inputs.intensity.default` | value | `null` |  |
+| `KIT.procedural.graphImages.operations["image.directionalWarp"].inputs.intensity.type` | value | `string = "any"` |  |
+| `KIT.procedural.graphImages.operations["image.directionalWarp"].inputs.map` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.directionalWarp"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.directionalWarp"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.directionalWarp"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.directionalWarp"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.directionalWarp"].run` | function | `({ source, map, direction: angleMap, intensity, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.distance"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.distance"].description` | value | `string = "Measure exact nearest-seed distance and return original seed coordinates and a validity mask."` |  |
 | `KIT.procedural.graphImages.operations["image.distance"].inputs` | namespace |  |  |
@@ -792,6 +804,31 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.levels"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.levels"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
 | `KIT.procedural.graphImages.operations["image.levels"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.multiDirectionalWarp"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.multiDirectionalWarp"].description` | value | `string = "Chain or blend opposed displacements along one, two or four axes."` |  |
+| `KIT.procedural.graphImages.operations["image.multiDirectionalWarp"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.multiDirectionalWarp"].inputs.intensity` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.multiDirectionalWarp"].inputs.intensity.default` | value | `null` |  |
+| `KIT.procedural.graphImages.operations["image.multiDirectionalWarp"].inputs.intensity.type` | value | `string = "any"` |  |
+| `KIT.procedural.graphImages.operations["image.multiDirectionalWarp"].inputs.map` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.multiDirectionalWarp"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.multiDirectionalWarp"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.multiDirectionalWarp"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.multiDirectionalWarp"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.multiDirectionalWarp"].run` | function | `({ source, map, direction: angleMap, intensity, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.nonuniformWarp"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.nonuniformWarp"].description` | value | `string = "Drive displacement strength and local direction with independent scalar maps."` |  |
+| `KIT.procedural.graphImages.operations["image.nonuniformWarp"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.nonuniformWarp"].inputs.direction` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.nonuniformWarp"].inputs.intensity` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.nonuniformWarp"].inputs.intensity.default` | value | `null` |  |
+| `KIT.procedural.graphImages.operations["image.nonuniformWarp"].inputs.intensity.type` | value | `string = "any"` |  |
+| `KIT.procedural.graphImages.operations["image.nonuniformWarp"].inputs.map` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.nonuniformWarp"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.nonuniformWarp"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.nonuniformWarp"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.nonuniformWarp"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.nonuniformWarp"].run` | function | `({ source, map, direction: angleMap, intensity, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.outline"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.outline"].description` | value | `string = "Return combined, inner and outer distance outlines with optional coverage feathering."` |  |
 | `KIT.procedural.graphImages.operations["image.outline"].inputs` | namespace |  |  |
@@ -875,6 +912,18 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.signedDistance"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.signedDistance"].outputs.value` | value | `string = "heightImage"` |  |
 | `KIT.procedural.graphImages.operations["image.signedDistance"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.slopeWarp"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.slopeWarp"].description` | value | `string = "Displace uphill or downhill along the gradient of a scalar height or data map."` |  |
+| `KIT.procedural.graphImages.operations["image.slopeWarp"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.slopeWarp"].inputs.intensity` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.slopeWarp"].inputs.intensity.default` | value | `null` |  |
+| `KIT.procedural.graphImages.operations["image.slopeWarp"].inputs.intensity.type` | value | `string = "any"` |  |
+| `KIT.procedural.graphImages.operations["image.slopeWarp"].inputs.map` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.slopeWarp"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.slopeWarp"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.slopeWarp"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.slopeWarp"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.slopeWarp"].run` | function | `({ source, map, direction: angleMap, intensity, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.split"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.split"].description` | value | `string = "Split explicitly selected native channels into named scalar images, including alpha coverage."` |  |
 | `KIT.procedural.graphImages.operations["image.split"].specialize` | function | `({ params, inputs })` | [source](../../src/kit/paq-graph-images.js) |
@@ -965,6 +1014,18 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.variableBlur"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.variableBlur"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
 | `KIT.procedural.graphImages.operations["image.variableBlur"].run` | function | `({ source, radiusMap, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.vectorWarp"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.vectorWarp"].description` | value | `string = "Use a signed or centered RG displacement map with a selectable Y convention."` |  |
+| `KIT.procedural.graphImages.operations["image.vectorWarp"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.vectorWarp"].inputs.intensity` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.vectorWarp"].inputs.intensity.default` | value | `null` |  |
+| `KIT.procedural.graphImages.operations["image.vectorWarp"].inputs.intensity.type` | value | `string = "any"` |  |
+| `KIT.procedural.graphImages.operations["image.vectorWarp"].inputs.map` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.vectorWarp"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.vectorWarp"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.vectorWarp"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.vectorWarp"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.vectorWarp"].run` | function | `({ source, map, direction: angleMap, intensity, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.pack` | function | `(sources, routes, target = { intent: 'data' })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.resize` | function | `(source, width, height)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.shuffle` | function | `(source, routes, target)` | [source](../../src/kit/paq-graph-images.js) |
@@ -987,6 +1048,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.uniform` | function | `(value, width, height, settings)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.valid` | function | `(value, intent)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.version` | value | `number = 1` |  |
+| `KIT.procedural.graphImages.warps` | namespace |  |  |
+| `KIT.procedural.graphImages.warps.directionalWarp` | function | `(source, map, options = {}, intensity = null)` | [source](../../src/kit/paq-displacement-images.js) |
+| `KIT.procedural.graphImages.warps.multiDirectionalWarp` | function | `(source, map, options = {}, intensity = null)` | [source](../../src/kit/paq-displacement-images.js) |
+| `KIT.procedural.graphImages.warps.nonuniformWarp` | function | `(source, map, direction, options = {}, intensity = null)` | [source](../../src/kit/paq-displacement-images.js) |
+| `KIT.procedural.graphImages.warps.slopeWarp` | function | `(source, map, options = {}, intensity = null)` | [source](../../src/kit/paq-displacement-images.js) |
+| `KIT.procedural.graphImages.warps.vectorWarp` | function | `(source, map, options = {}, intensity = null)` | [source](../../src/kit/paq-displacement-images.js) |
 
 ## KIT.procedural.graphTypes
 

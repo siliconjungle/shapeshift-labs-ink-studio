@@ -85,6 +85,13 @@ const TypedImageSpatial = ({ requireImage, descriptor, wrap, storage, pack, inte
     };
   }
 
+  function borders(border, fallback) {
+    if (typeof border !== 'string' && !fields(border, ['u', 'v'])) throw new RangeError('Invalid image border policy');
+    const { u = fallback.u, v = fallback.v } = typeof border === 'string' ? { u: border, v: border } : border;
+    if (!edges.includes(u) || !edges.includes(v)) throw new RangeError('Unknown image border policy');
+    return { u, v };
+  }
+
   function footprint(map, source, target, unwrapU) {
     const before = new Float64Array(2), after = new Float64Array(2);
     const dx = new Float64Array(2), dy = new Float64Array(2);
@@ -107,12 +114,12 @@ const TypedImageSpatial = ({ requireImage, descriptor, wrap, storage, pack, inte
     };
   }
 
-  function spatial(source, options, name) {
+  function resample(source, options, name, optionKeys, prepare, cropGeometry) {
     const { raster: grid, descriptor: spec } = requireImage(source);
-    if (!fields(options, ['width', 'height', 'border', 'filter', 'mip', 'mipBias', ...optionsFor[name]]))
+    if (!fields(options, ['width', 'height', 'border', 'filter', 'mip', 'mipBias', ...optionKeys]))
       throw new TypeError('Unknown image ' + name + ' option');
     const { channels, data: original } = grid;
-    const crop = name === 'crop' && TypedImageSpatialGeometry.crop(grid, options);
+    const crop = cropGeometry?.(grid, options);
     const span = crop ? crop.span : [1, 1];
     const { width = Math.max(1, Math.round(grid.width * span[0])),
       height = Math.max(1, Math.round(grid.height * span[1])),
@@ -126,17 +133,10 @@ const TypedImageSpatial = ({ requireImage, descriptor, wrap, storage, pack, inte
     if (scale.some(n => !(n > 0)) || pivot && !pivot.every(finite)) throw new RangeError('Image crop grid is degenerate');
     const pixelPitchMm = spec.pixelPitchMm?.map((pitch, index) => pitch * scale[index]);
     const target = descriptor(grid, { ...spec, pixelPitchMm });
-    const geometry = crop || TypedImageSpatialGeometry[name](grid, options, { width, height });
-    const { map, angularU = false } = geometry;
     const auto = mip === 'nearest' || mip === 'linear', fixed = finite(mip) && mip >= 0;
     if (!['nearest', 'linear'].includes(filter) || !auto && mip !== 'none' && !fixed ||
-        !finite(mipBias) || Math.abs(mipBias) > 16 || !auto && mipBias !== 0 ||
-        typeof border !== 'string' && !fields(border, ['u', 'v']))
-      throw new RangeError('Invalid image transform filter, mip or border policy');
-    const { u = angularU ? 'wrap' : spec.tiling.u, v = spec.tiling.v } =
-      typeof border === 'string' ? { u: border, v: border } : border;
-    if (!edges.includes(u) || !edges.includes(v)) throw new RangeError('Unknown image transform border');
-    const ax = TextureAddress.axis(u), ay = TextureAddress.axis(v);
+        !finite(mipBias) || Math.abs(mipBias) > 16 || !auto && mipBias !== 0)
+      throw new RangeError('Invalid image filter or mip policy');
     const maxLevel = Math.floor(Math.log2(Math.max(grid.width, grid.height)));
     const requested = auto ? maxLevel : Math.min(maxLevel, fixed ? mip : 0);
     const extents = [{ width: grid.width, height: grid.height }];
@@ -147,7 +147,11 @@ const TypedImageSpatial = ({ requireImage, descriptor, wrap, storage, pack, inte
       bytes += w * h * channels * Float64Array.BYTES_PER_ELEMENT;
     }
     if (bytes > maxBytes) throw new RangeError('Image transform exceeds its working memory budget');
-    const lodAt = auto && maxLevel ? footprint(map, grid, { width, height }, angularU) : null;
+    const geometry = crop || prepare(grid, options, { width, height });
+    const { maps = [geometry.map], angularU = false, combine = 'average' } = geometry;
+    const { u, v } = borders(border, { ...spec.tiling, ...(angularU && { u: 'wrap' }) });
+    const ax = TextureAddress.axis(u), ay = TextureAddress.axis(v);
+    const lodAt = auto && maxLevel ? maps.map(map => footprint(map, grid, { width, height }, angularU)) : null;
     const { read, write } = workingSamples(spec, original, channels);
     const levels = [{ ...extents[0], accumulate: read }];
     const readers = [];
@@ -162,15 +166,17 @@ const TypedImageSpatial = ({ requireImage, descriptor, wrap, storage, pack, inte
 
     const data = new storage[spec.precision](width * height * channels);
     const uv = new Float64Array(2), sum = new Float64Array(channels);
-    for (let y = 0, i = 0; y < height; y++) for (let x = 0; x < width; x++, i += channels) {
-      const s = (x + .5) / width, t = (y + .5) / height;
-      if (!map(s, t, uv)) continue;
-      let lod = lodAt ? Math.max(0, Math.min(maxLevel, lodAt(s, t, uv) + mipBias)) : requested;
+    function sample(s, t, path, i = -1) {
+      if (!maps[path](s, t, uv)) {
+        if (i < 0) sum.fill(0);
+        return;
+      }
+      let lod = lodAt ? Math.max(0, Math.min(maxLevel, lodAt[path](s, t, uv) + mipBias)) : requested;
       // Cancel round-off in an otherwise exact automatic pixel-to-texel footprint.
       if (lodAt && Math.abs(lod - Math.round(lod)) < 1e-10) lod = Math.round(lod);
       const base = mip === 'nearest' ? Math.round(lod) : Math.floor(lod);
       const mix = mip === 'nearest' ? 0 : lod - base;
-      if (filter === 'nearest' && base === 0 && !mix) {
+      if (i >= 0 && filter === 'nearest' && base === 0 && !mix) {
         const sx = ax(Math.floor(uv[0] * grid.width), grid.width), sy = ay(Math.floor(uv[1] * grid.height), grid.height);
         if (sx >= 0 && sy >= 0) {
           const start = (sy * grid.width + sx) * channels;
@@ -180,12 +186,29 @@ const TypedImageSpatial = ({ requireImage, descriptor, wrap, storage, pack, inte
         sum.fill(0);
         sampleLevel(base, uv, 1 - mix, sum);
         if (mix) sampleLevel(base + 1, uv, mix, sum);
-        write(sum, i, data);
+        if (i >= 0) write(sum, i, data);
+      }
+    }
+    const multi = maps.length > 1, combined = new Float64Array(channels);
+    const merge = combine === 'min' ? Math.min : combine === 'max' ? Math.max : (a, b) => a + b / maps.length;
+    const initial = combine === 'min' ? Infinity : combine === 'max' ? -Infinity : 0;
+    for (let y = 0, i = 0; y < height; y++) for (let x = 0; x < width; x++, i += channels) {
+      const s = (x + .5) / width, t = (y + .5) / height;
+      if (!multi) sample(s, t, 0, i);
+      else {
+        combined.fill(initial);
+        for (let path = 0; path < maps.length; path++) {
+          sample(s, t, path);
+          for (let c = 0; c < channels; c++) combined[c] = merge(combined[c], sum[c]);
+        }
+        write(combined, i, data);
       }
     }
     return wrap({ width, height, channels, data, pivot }, target);
   }
 
-  return Object.freeze(Object.fromEntries(Object.keys(optionsFor).map(name =>
-    [name, (source, options = {}) => spatial(source, options, name)])));
+  const spatial = Object.freeze(Object.fromEntries(Object.entries(optionsFor).map(([name, keys]) => [name, (source, options = {}) =>
+    resample(source, options, name, keys, TypedImageSpatialGeometry[name],
+      name === 'crop' ? TypedImageSpatialGeometry.crop : undefined)])));
+  return { spatial, resample, sampler, borders };
 };

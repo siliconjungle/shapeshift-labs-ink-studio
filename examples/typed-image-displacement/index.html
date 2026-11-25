@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tidal Glass · Ink Studio</title>
+<style>
+  :root{color-scheme:dark;--page:#14212a;--panel:#1d3039;--rule:#446268;--text:#fcf0d9;--muted:#b7c9c8;--gold:#ffd39c;
+    font:15px/1.45 system-ui,sans-serif}
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--text);background:radial-gradient(ellipse at 16% -20%,#375052,var(--page) 62%)}
+  main{max-width:1130px;margin:auto;padding:27px 28px}
+  header{display:flex;justify-content:space-between;align-items:end;gap:16px;margin-bottom:15px}
+  h1{margin:2px 0 5px;font:normal clamp(3rem,7vw,5rem)/.99 Georgia,serif;letter-spacing:-.051em}
+  p,figcaption,label{margin:0;color:var(--muted)}
+  a{color:var(--text);text-underline-offset:4px}
+  small{color:var(--gold);font:600 .72rem ui-monospace,monospace;letter-spacing:.08em}
+  .layout{display:grid;grid-template-columns:minmax(0,2.35fr) minmax(267px,1fr);gap:12px;align-items:start}
+  figure,aside{margin:0;background:var(--panel);border:1px solid var(--rule);min-width:0}
+  aside{padding:11px}
+  .preview{position:relative}
+  canvas{display:block;width:100%;height:auto;image-rendering:pixelated;background:#182c3b}
+  .guides{position:absolute;inset:0;pointer-events:none;opacity:.7}
+  .guides::before,.guides::after{content:'';position:absolute}
+  .guides::before{left:50%;height:100%;border-left:1px dashed var(--gold)}
+  .guides::after{top:50%;width:100%;border-top:1px dashed var(--gold)}
+  figcaption{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:.81rem;
+    padding:8px 10px;border-top:1px solid var(--rule)}
+  figcaption span:first-child{color:var(--text)}
+  .swatches{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:12px}
+  .swatches figcaption{padding:5px 6px;font-size:.73rem}
+  .controls{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  label{font-size:.81rem;min-width:0}
+  select,input[type=range]{display:block;width:100%;margin:3px 0 0}
+  select{padding:5px 6px;background:var(--page);color:var(--text);border:1px solid var(--rule);border-radius:2px;font:inherit}
+  input{accent-color:var(--gold)}
+  input[type=range]{height:25px}
+  .wide{grid-column:1/-1}
+  .slider{display:flex;justify-content:space-between;gap:4px}
+  output{color:var(--gold);font:.75rem ui-monospace,monospace}
+  .toggles{display:flex;flex-wrap:wrap;gap:4px 10px;margin:7px 0 1px}
+  .toggles input{vertical-align:middle;margin-left:0}
+  .note{font-size:.87rem;margin:10px 0}
+  #error{color:#ffb8a3}
+  :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+  [hidden]{display:none!important}
+  @media(max-width:680px){main{padding:18px 12px}header{display:block}header a{display:inline-block;margin-top:7px}
+    .layout{grid-template-columns:1fr}.swatches canvas{max-height:100px;object-fit:contain}}
+</style>
+<main>
+  <header>
+    <div><small>INK STUDIO · MATERIAL GRAPHS</small><h1>Tidal Glass</h1>
+      <p>Warp a painted tide pool and inspect the tile seams.</p></div>
+    <a href="tidal-glass.material.json" download>Editable material graph</a>
+  </header>
+  <div class="layout">
+    <section aria-label="Displaced tile">
+      <figure>
+        <div class="preview"><canvas id="tile" width="256" height="168" aria-label="The warped tile repeated in both directions"></canvas>
+          <div class="guides" id="guides"></div></div>
+        <figcaption><span id="caption">Vector warp</span><small>2 × 2 REPEAT · 128 × 84 TEXELS PER TILE</small></figcaption>
+      </figure>
+      <p class="note" id="note"></p>
+    </section>
+    <aside aria-label="Warp controls">
+      <div class="swatches">
+        <figure><canvas id="original" width="128" height="84" aria-label="The unwarped tide pool"></canvas><figcaption>Source tile</figcaption></figure>
+        <figure><canvas id="mask" width="128" height="84" aria-label="Brightness shows greater displacement intensity"></canvas><figcaption>Intensity map</figcaption></figure>
+      </div>
+      <div class="controls">
+        <label>Warp <select id="mode"></select></label>
+        <label>Source filter <select id="filter"><option value="nearest">Nearest</option><option value="linear">Bilinear</option></select></label>
+        <label class="wide"><span class="slider">Signed offset <output id="amount-value" for="amount"></output></span>
+          <input type="range" id="amount" min="-32" max="32" step="1" value="15"></label>
+        <label class="wide"><span class="slider">Driver smoothing <output id="smooth-value" for="smooth"></output></span>
+          <input type="range" id="smooth" min="0" max="12" step="1" value="2"></label>
+        <label>Source U <select id="u"></select></label>
+        <label>Source V <select id="v"></select></label>
+        <label class="wide">Driver addressing <select id="driver"><option value="inherit">Follow source axes</option></select></label>
+        <label class="wide" id="angle-control" hidden><span class="slider">Base angle <output id="angle-value" for="angle"></output></span>
+          <input type="range" id="angle" min="0" max="359" step="1" value="24"></label>
+        <label id="axes-control" hidden>Axes <select id="axes"><option value="1">1</option><option value="2" selected>2</option><option value="4">4</option></select></label>
+        <label id="combine-control" hidden>Combine <select id="combine"><option value="chain">Chain</option><option value="average">Average</option>
+          <option value="min">Minimum</option><option value="max">Maximum</option></select></label>
+      </div>
+      <div class="toggles">
+        <label><input type="checkbox" id="masked" checked> Use intensity map</label>
+        <label><input type="checkbox" id="seam" checked> Seam guides</label>
+      </div>
+      <p id="error" role="status"></p>
+    </aside>
+  </div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="tidal.js"></script>
+<script>
+  const get = id => document.getElementById(id);
+  const maps = tidalSources(), graphs = new Map(), ctx = get('tile').getContext('2d');
+  const notes = {
+    vectorWarp: 'Two channels steer the paint in X and Y. Reverse the signed offset to send the ripples the other way.',
+    directionalWarp: 'A scalar map controls the distance along one angle. Try Clamp on U to expose the left and right bounds.',
+    nonuniformWarp: 'The offset follows a different angle at every texel. Smoothing respects the join between zero and one full turn.',
+    slopeWarp: 'The height map pushes paint downhill. Reverse the signed offset to move uphill.',
+    multiDirectionalWarp: 'Opposed passes share up to four axes. Chain the coordinates or blend the independently displaced samples.'
+  };
+  for (const [id,label] of Object.entries(tidalModes)) get('mode').add(new Option(label,id));
+  for (const id of ['u','v','driver']) for (const border of ['wrap','clamp','mirror','transparent'])
+    get(id).add(new Option(border[0].toUpperCase() + border.slice(1),border));
+  const imageData = raster => new ImageData(new Uint8ClampedArray(raster.data),raster.width,raster.height);
+
+  function render() {
+    try {
+      const mode = get('mode').value, amount = Number(get('amount').value), smooth = Number(get('smooth').value);
+      const angle = Number(get('angle').value), axes = Number(get('axes').value), combine = get('combine').value;
+      const options = tidalOptions(mode, { amount, smooth, angle, axes, combine, u:get('u').value, v:get('v').value,
+        driver:get('driver').value, filter:get('filter').value });
+      if (!graphs.has(mode)) graphs.set(mode, KIT.procedural.graph.create(tidalGraph([mode])));
+      const result = graphs.get(mode).evaluate({ ...maps, [mode + 'Options']:options, maskGain:Number(get('masked').checked) }).outputs;
+      const frame = imageData(result[mode]);
+      for (const y of [0,tidalHeight]) for (const x of [0,tidalWidth]) ctx.putImageData(frame,x,y);
+      for (const id of ['original','mask']) get(id).getContext('2d').putImageData(imageData(result[id]),0,0);
+      get('caption').textContent = tidalModes[mode] + ' warp';
+      get('amount-value').value = (amount > 0 ? '+' : '') + amount + ' px';
+      get('smooth-value').value = smooth + ' px';
+      get('angle-value').value = angle + '°';
+      get('angle-control').hidden = !['directionalWarp','nonuniformWarp','multiDirectionalWarp'].includes(mode);
+      get('axes-control').hidden = get('combine-control').hidden = mode !== 'multiDirectionalWarp';
+      get('guides').hidden = !get('seam').checked;
+      get('note').textContent = notes[mode];
+      get('error').textContent = '';
+    } catch (error) { get('error').textContent = error.message; }
+  }
+
+  let pending = false;
+  function schedule() {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => { pending = false; render(); });
+  }
+  for (const control of document.querySelectorAll('input,select')) control.addEventListener('input',schedule);
+  render();
+</script>
+</html>
