@@ -1429,6 +1429,48 @@ elements. Use `--preview directory` for linked native views, or add
 The preview shows the authored cage, which keeps selection attached to
 editable corners when a scene uses modifiers.
 
+### Select by island or vertex tint
+
+```json
+{ "domain": "islands", "atlas": { "at": [0.42, 0.4] } }
+```
+
+The query expands the hit to the entire connected UV island. You can also
+use a model pixel or `ids` from the current UV layout. A declared seam
+or a material boundary ends the island.
+
+```json
+{ "domain": "faces", "tint": { "color": [0.82, 0.46, 0.18], "tolerance": 0.02, "match": "all" } }
+```
+
+A tint query reads normalized RGB or RGBA values from
+`face.corners[].attributes.tint`. `mesh-uv import` carries these values
+from glTF `COLOR_0` when present. The query checks the stored channels
+before lighting or texture sampling and lists the matching corner IDs.
+By default it matches any corner with exactly the requested color. Use
+`match: "all"` to require every corner and `tolerance` for the maximum
+difference per channel. RGB queries ignore alpha. RGBA queries treat
+an authored RGB tint as fully opaque. Corners without an RGB or RGBA
+tint do not match.
+
+```sh
+ink-studio mesh-uv select canopy.json tint.json --object canopy --view view.json \
+  --preview tint-review --out uv-selection.json --topology-out faces.json
+ink-studio mesh-topology select canopy.json edges.json --object canopy --from faces.json
+```
+
+`--topology-out` saves the matching face IDs as a revision-checked mesh
+selection, including when the source query selects islands. The preview
+highlights the same faces in the atlas and from the scene camera. It uses
+the rendered pigment sheet behind the UV lines when viewing the pigment
+layout. Matches on additional material sheets get separate atlas images.
+The report records visible scene pixel counts per selected face, so
+occluded matches remain inspectable through the atlas and saved selection.
+
+```sh
+node examples/tileset-pick/island-tint-selection-demo.cjs island-tint-review
+```
+
 Use `KIT.meshTopology.uv.inspect`, `KIT.meshTopology.uv.select`,
 `KIT.meshTopology.uv.pickModel` and `KIT.meshTopology.uv.plan` for SDK access.
 A plan returns a topology patch and its report. The scene editor exposes
