@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lantern Glass · Ink Studio</title>
+<style>
+  :root { color-scheme: dark; --ground: #111819; --paper: #182222; --line: #334343; --text: #f0e8d4;
+    --muted: #b3beb3; --gold: #ffcc78; font: 16px system-ui, sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(ellipse at 35% -30%, #304444, var(--ground) 65%); color: var(--text); }
+  main { max-width: 1160px; margin: auto; padding: 46px 44px; }
+  header { display: flex; align-items: end; justify-content: space-between; gap: 20px; padding-bottom: 26px; }
+  h1 { margin: 5px 0 4px; font: normal clamp(42px, 7vw, 76px)/.95 Georgia, serif; letter-spacing: -.055em; }
+  .eyebrow, .label { color: var(--gold); font: 600 12px ui-monospace, monospace; letter-spacing: .085em; text-transform: uppercase; }
+  header a { color: var(--text); text-underline-offset: 5px; white-space: nowrap; }
+  p { color: var(--muted); margin: 0; line-height: 1.52; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; padding-bottom: 16px; }
+  button { font: inherit; color: var(--muted); min-height: 39px; padding: 8px 17px; background: var(--paper);
+    border: 1px solid var(--line); border-radius: 3px; cursor: pointer; }
+  button[aria-pressed=true] { color: #1a201e; background: var(--gold); border-color: var(--gold); font-weight: 650; }
+  :focus-visible { outline: 2px solid #72dcd6; outline-offset: 3px; }
+  .workspace { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 26px; align-items: stretch; }
+  figure { display: flex; flex-direction: column; margin: 0; background: #0f161e; border: 1px solid var(--line); min-width: 0; }
+  figure img { width: 100%; display: block; image-rendering: pixelated; flex: 1; object-fit: contain; }
+  figcaption { padding: 13px 16px; color: var(--muted); border-top: 1px solid var(--line); font-size: 13px; }
+  article { background: var(--paper); border: 1px solid var(--line); padding: 26px; }
+  h2 { margin: 5px 0 8px; font: normal 32px/1.12 Georgia, serif; }
+  dl { margin: 20px 0 0; }
+  dl div { border-top: 1px solid var(--line); padding: 12px 0; }
+  dt { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  dd, code { font: 14px/1.5 ui-monospace, monospace; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .swatch { height: 26px; border: 1px solid var(--line); margin: 2px 0 5px; position: relative;
+    background: repeating-conic-gradient(#2a3638 0% 25%, #485657 0% 50%) 0 0 / 16px 16px; }
+  .swatch span { display: block; height: 100%; }
+  #rejection { margin-top: 8px; color: #ffcb99; font-size: 13px; }
+  [hidden] { display: none; }
+  @media (max-width: 700px) { main { padding: 27px 20px; } header { align-items: start; flex-direction: column; }
+    .workspace { grid-template-columns: 1fr; gap: 12px; } article { padding: 20px; } }
+</style>
+<main>
+  <header>
+    <div>
+      <div class="eyebrow">Ink Studio · Material graphs</div>
+      <h1>Lantern Glass</h1>
+      <p>Uniform images and representation conversion</p>
+    </div>
+    <a href="lantern-glass.material.json">Editable graph</a>
+  </header>
+  <nav class="tabs" aria-label="Image representations">
+    <button type="button" data-id="scalar">Signed scalar</button>
+    <button type="button" data-id="gray">Grayscale</button>
+    <button type="button" data-id="rgb">RGB</button>
+    <button type="button" data-id="rgba">RGBA</button>
+    <button type="button" data-id="hdr">HDR</button>
+  </nav>
+  <section class="workspace">
+    <figure>
+      <img id="lantern" width="144" height="116" alt="Pixel art lantern with a star-shaped opening">
+      <figcaption id="caption"></figcaption>
+    </figure>
+    <article aria-live="polite">
+      <span class="label" id="contract"></span>
+      <h2 id="title"></h2>
+      <p id="note"></p>
+      <dl>
+        <div><dt>Authored value</dt><dd id="authored"></dd></div>
+        <div><dt>Stored sample</dt><dd id="stored"></dd></div>
+        <div id="delivery" hidden><dt>Clamped delivery codes · linear UNORM8</dt><dd id="delivered"></dd></div>
+        <div id="display"><dt>Display swatch · sRGB8</dt>
+          <dd class="swatch"><span></span></dd><dd id="sample"></dd>
+        </div>
+      </dl>
+      <p id="rejection" hidden></p>
+    </article>
+  </section>
+</main>
+<script>
+  const rows = /* EMBEDDED_RESULTS */;
+  const byId = id => document.getElementById(id);
+  const buttons = Array.from(document.querySelectorAll('button[data-id]'));
+  function select(id) {
+    const row = rows[id], [r, g, b, a = 255] = row.sample;
+    buttons.forEach(button => button.setAttribute('aria-pressed', button.dataset.id === id));
+    byId('contract').textContent = [row.spec.layout, row.spec.precision, row.spec.colorSpace !== 'none' ?
+      row.spec.colorSpace : row.spec.units].join(' · ');
+    byId('title').textContent = row.label;
+    byId('note').textContent = row.note;
+    byId('lantern').src = row.art;
+    byId('caption').textContent = id === 'scalar' ? 'Height field · illustration uses a neutral glass color' :
+      'Lantern glass colored from the graph’s display swatch';
+    byId('authored').textContent = JSON.stringify(row.value);
+    byId('stored').textContent = row.stored.join('  /  ');
+    byId('display').hidden = id === 'scalar';
+    byId('display').querySelector('span').style.backgroundColor = 'rgba(' + [r, g, b, a / 255].join(',') + ')';
+    byId('sample').textContent = row.sample.join('  /  ');
+    byId('delivery').hidden = !row.delivered;
+    byId('delivered').textContent = row.delivered?.join('  /  ') ?? '';
+    byId('rejection').hidden = !row.rejection;
+    byId('rejection').textContent = row.rejection ? 'Strict conversion rejected the HDR sample. ' + row.rejection : '';
+  }
+  buttons.forEach(button => button.addEventListener('click', () => select(button.dataset.id)));
+  select('hdr');
+</script>
+</html>

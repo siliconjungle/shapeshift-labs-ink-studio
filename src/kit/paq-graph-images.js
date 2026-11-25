@@ -127,10 +127,101 @@
     return (data, i, out) => {
       const a = alphaAt(data, i, spec);
       const gain = spec.alpha === 'premultiplied' ? a ? 1 / (scale * a) : 0 : 1 / scale;
-      for (let c = 0; c < 3; c++) rgb[c] = data[i + c] * gain;
+      for (let c = 0; c < 3; c++)
+        rgb[c] = finite(gain) ? data[i + c] * gain : data[i + c] / scale / a;
       convert(rgb, out);
       return a;
     };
+  }
+
+  const luminance = rgb => .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2];
+
+  function pack(value, spec, opacity, outOfRange) {
+    if (!finite(value)) throw new RangeError('Image conversion needs finite samples');
+    const low = !opacity && spec.domain === 'signed-unit' ? -1 : 0;
+    if (opacity || spec.domain !== 'finite') {
+      if (outOfRange === 'error' && (value < low || value > 1))
+        throw new RangeError('Image sample ' + value + ' is outside [' + low + ', 1]');
+      value = Math.max(low, Math.min(1, value));
+    }
+    const max = integerMax(spec.precision);
+    if (max) return Math.round(value * max);
+    if (spec.precision === 'float32' && !finite(Math.fround(value)))
+      throw new RangeError('Image sample exceeds float32 range');
+    return value;
+  }
+
+  function uniform(value, width, height, settings) {
+    if (![width, height].every(n => Number.isSafeInteger(n) && n > 0) || !dimensions({ width, height }))
+      throw new RangeError('Uniform image extent exceeds the raster budget');
+    const { layout } = literalShape(settings, 'image.uniform');
+    const input = typeof value === 'number' ? [value] : value, channels = layout.length;
+    if (!Array.isArray(input) || input.length !== channels || !Array.from(input).every(finite))
+      throw new TypeError('Uniform ' + layout + ' image needs ' + channels + ' finite sample values');
+    const spec = descriptor({ width: 1, height: 1, channels, data: input }, { ...settings, layout });
+    const alpha = spec.alpha !== 'none', last = channels - 1;
+    if (spec.alpha === 'premultiplied' && input.slice(0, last).some(n =>
+      input[last] === 0 && n !== 0 || spec.intent === 'color' && spec.domain === 'unit' && n > input[last]))
+      throw new RangeError('Uniform image samples do not match its premultiplied alpha');
+    const pixel = storage[spec.precision].from(input, (n, c) => pack(n, spec, alpha && c === last, 'error'));
+    if (!samples(pixel, spec)) throw new RangeError('Uniform image samples do not match its alpha encoding');
+    const data = new storage[spec.precision](width * height * channels);
+    data.set(pixel);
+    for (let filled = channels; filled < data.length; filled *= 2)
+      data.set(data.subarray(0, Math.min(filled, data.length - filled)), filled);
+    return wrap({ width, height, channels, data }, spec);
+  }
+
+  function convert(source, target, { outOfRange = 'error', dropAlpha = false } = {}) {
+    const { raster: grid, descriptor: from } = requireImage(source);
+    if (!fields(target, ['intent', 'layout', 'precision', 'colorSpace', 'alpha']) ||
+        !['error', 'clamp'].includes(outOfRange) || typeof dropAlpha !== 'boolean')
+      throw new TypeError('Invalid image conversion target or range policy');
+    const { intent, layout } = literalShape(target, 'image.convert', from);
+    const wasColor = from.intent === 'color', isColor = intent === 'color';
+    const scalar = spec => ['data', 'mask'].includes(spec.intent) && spec.layout === 'r' && spec.units === 'unitless';
+    const same = from.intent === intent && from.layout === layout;
+    if (!same && !(wasColor && isColor) && !((wasColor || scalar(from)) && (isColor || scalar({ intent, layout, units: from.units }))))
+      throw new TypeError('Image conversion needs compatible layouts and units. Use image.toHeight for relief.');
+    const { width, height, data, pivot, channels } = grid, next = layout.length;
+    const { tiling, sampling, pixelPitchMm, materialSeed, units } = from;
+    const keepAlpha = same || wasColor && isColor && layout === 'rgba' && from.alpha !== 'none';
+    const { precision = from.precision, alpha = keepAlpha ? from.alpha : undefined,
+      colorSpace = isColor ? wasColor ? from.colorSpace : 'srgb-linear' : 'none' } = target;
+    const to = descriptor({ width, height, channels: next, data }, {
+      intent, layout, precision, colorSpace, alpha, units, tiling, sampling, pixelPitchMm, materialSeed
+    });
+    if (!wasColor && !isColor && from.alpha !== to.alpha)
+      throw new TypeError('Non-color image conversion must keep its alpha convention');
+    if (same && from.precision === to.precision && from.colorSpace === to.colorSpace && from.alpha === to.alpha)
+      return source;
+    const output = new storage[to.precision](width * height * next);
+    const divisor = integerMax(from.precision) || 1;
+    const rgb = [0, 0, 0], hasAlpha = to.alpha !== 'none', last = next - 1;
+    const reencode = same && from.colorSpace === to.colorSpace && from.alpha === to.alpha && from.domain === to.domain;
+    const toSpace = isColor ? to.colorSpace : 'srgb-linear';
+    const colorTarget = isColor && to.domain === 'unit' ? { space: toSpace, outOfRange } : toSpace;
+    const decode = wasColor && !reencode && convertColor(from, colorTarget);
+    const expand = !wasColor && isColor && ColorSpace.prepare('srgb-linear', colorTarget);
+    for (let i = 0, o = 0; i < data.length; i += channels, o += next) {
+      const a = decode ? decode(data, i, rgb) : alphaAt(data, i, from);
+      if (wasColor && to.alpha === 'none' && a !== 1 && !dropAlpha)
+        throw new RangeError('Image conversion would discard coverage. Set dropAlpha to acknowledge it.');
+      if (hasAlpha) output[o + last] = pack(a, to, true, outOfRange);
+      const zeroCoverage = to.alpha === 'premultiplied' && output[o + last] === 0;
+      if (isColor && !reencode) {
+        if (expand) expand(rgb.fill(data[i] / divisor), rgb);
+        const gain = to.alpha === 'premultiplied' ? a : 1;
+        for (let c = 0; c < 3; c++) output[o + c] = pack(rgb[c] * gain, to, false, outOfRange);
+      } else {
+        for (let c = 0; c < next - Number(hasAlpha); c++) {
+          const value = decode ? luminance(rgb) : data[i + c] / divisor;
+          output[o + c] = pack(value, to, false, outOfRange);
+        }
+      }
+      if (zeroCoverage) output.fill(0, o, o + last);
+    }
+    return wrap({ width, height, channels: next, data: output, pivot }, to);
   }
 
   function toHeight(source, { scale, offset = 0, units = 'art-px', channel = 'luminance' } = {}) {
@@ -148,7 +239,7 @@
     for (let p = 0, i = 0; p < out.length; p++, i += channels) {
       const a = color ? convert(data, i, rgb) : 1;
       const value = color ? channel === 'alpha' ? a : component >= 0 ? rgb[component] :
-        .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2] : data[i] / divisor;
+        luminance(rgb) : data[i] / divisor;
       out[p] = value * scale + offset;
       if (!finite(out[p])) throw new RangeError('Height conversion produced a nonfinite sample');
     }
@@ -238,21 +329,55 @@
     return { extent: { width, height }, ...spec };
   }
 
-  function specialize({ params, inputs }) {
+  function literalShape(settings, name, source) {
+    if (!record(settings) || !intents.includes(settings.intent))
+      throw new TypeError(name + ' needs a literal descriptor with an image intent');
+    const { intent, layout = source?.intent === intent ? source.layout :
+      intent === 'color' ? 'rgb' : intent === 'normal' ? 'xyz' : 'r' } = settings;
+    if (typeof layout !== 'string' || !['r', 'rg', 'rgb', 'rgba', 'xyz', 'xyza'].includes(layout))
+      throw new TypeError(name + ' needs a valid image layout');
+    return { intent, layout };
+  }
+
+  function literalDescriptor({ params, inputs }) {
     const binding = inputs?.descriptor ?? params?.descriptor;
-    const settings = own(binding ?? {}, 'value') ? binding.value : binding;
+    return own(binding ?? {}, 'value') ? binding.value : binding;
+  }
+
+  const typedOutput = intent => ({ value: intent === 'color' ? 'colorImage' : intent === 'height' ? 'heightImage' : 'typedImage' });
+
+  function specialize(node) {
+    const settings = literalDescriptor(node);
     if (!record(settings) || !intents.includes(settings.intent))
       throw new TypeError('image.declare needs a literal descriptor with an image intent');
     const { intent } = settings;
     return {
       inputs: { source: intent === 'height' ? 'scalarRaster' : 'raster', descriptor: 'record' },
-      outputs: { value: intent === 'color' ? 'colorImage' : intent === 'height' ? 'heightImage' : 'typedImage' },
+      outputs: typedOutput(intent),
       run({ source, descriptor }) { return { value: declare(source, descriptor) }; }
     };
   }
 
   const operations = Object.freeze({
     'image.declare': { description: 'Attach a verified image contract to a legacy raster using a literal descriptor.', specialize },
+    'image.uniform': {
+      description: 'Promote a scalar or a tuple to a typed constant image. UNORM inputs use normalized values, linear float color can be HDR.',
+      specialize(node) {
+        const { intent, layout } = literalShape(literalDescriptor(node), 'image.uniform');
+        return { inputs: { value: layout === 'r' ? 'number' : layout.length === 3 ? 'vec3' : 'array<number>',
+          width: 'pixelCount', height: 'pixelCount', descriptor: 'record' }, outputs: typedOutput(intent),
+        run({ value, width, height, descriptor }) { return { value: uniform(value, width, height, descriptor) }; } };
+      }
+    },
+    'image.convert': {
+      description: 'Convert the channel layout, precision, color space or alpha convention of a typed image.',
+      specialize(node) {
+        const { intent } = literalShape(literalDescriptor(node), 'image.convert');
+        return { inputs: { source: 'typedImage', descriptor: 'record', outOfRange: { type: 'string', default: 'error' },
+          dropAlpha: { type: 'boolean', default: false } }, outputs: typedOutput(intent),
+        run({ source, descriptor, ...options }) { return { value: convert(source, descriptor, options) }; } };
+      }
+    },
     'image.toHeight': {
       description: 'Map linear-light color or scalar samples to height using an explicit scale and units.',
       inputs: { source: 'typedImage', scale: 'number', offset: { type: 'number', default: 0 },
@@ -280,5 +405,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);

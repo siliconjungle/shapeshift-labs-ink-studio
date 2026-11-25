@@ -187,6 +187,10 @@ const declareColor = { op: 'image.declare', inputs: { source: rgba,
 const declareData = { op: 'image.declare', inputs: { source: mask, descriptor: { intent: 'data' } } };
 const dynamic = {
   'image.declare': { inputs: declareColor.inputs },
+  'image.uniform': { inputs: { value: .375, width: 8, height: 6,
+    descriptor: { intent: 'mask', precision: 'unorm16' } } },
+  'image.convert': { nodes: { color: declareColor }, inputs: { source: link('color'),
+    descriptor: { intent: 'color', layout: 'rgba', precision: 'float32', colorSpace: 'srgb-linear' } } },
   'quantity.convert': {inputs:{value:12.5,from:{unit:'kPa'},to:{unit:'Pa'}}},
   'array.map': { inputs: { items: [1, 2, 3] }, callback: group({ item: 'number' }, 'multiply', { a: param('item'), b: 2 }) },
   'array.mapById': { inputs: { items: [{id: 'panel', width: 2}, {id: 'trim', width: .15}] },
@@ -850,9 +854,9 @@ function exampleFor(id, operation, kit) {
       { assets: { sample: { format, file: path.join(__dirname, 'graph-catalog-assets', file) } } }) };
   }
   if (Object.hasOwn(dynamic, id)) {
-    const { type, inputs, callback } = dynamic[id];
+    const { type, inputs, callback, nodes } = dynamic[id];
     return { kind: 'graph', project: project({ op: id, inputs, ...(type && { type }), ...(callback && { group: 'Callback' }) }, 'value',
-      callback && { groups: { Callback: callback } }) };
+      { nodes, ...(callback && { groups: { Callback: callback } }) }) };
   }
   if (operation.specialize) return;
   const { inputs: specified = {}, nodes: earlier, output = Object.keys(operation.outputs ?? { value: 'any' })[0] } =

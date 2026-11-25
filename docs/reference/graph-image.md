@@ -4,6 +4,26 @@
 
 Ports, defaults, and constraints come from the registered operations. Use `graph describe <op> --json` for the full structured record.
 
+### image.convert
+
+Convert the channel layout, precision, color space or alpha convention of a typed image.
+
+Origin: toolkit.
+A literal target intent selects the output type. Optional fields change how samples are represented.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `descriptor` | `record` | Required | {"layout":"Plain named object"} |
+| Input | `outOfRange` | `string` | `"error"` |  |
+| Input | `dropAlpha` | `boolean` | `false` |  |
+| Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
+
+Guides: [guide](../graph-image-types.md#make-and-convert-uniform-images)
+
+Get the runnable example with `ink-studio graph describe image.convert --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.declare
 
 Attach a verified image contract to a legacy raster using a literal descriptor.
@@ -88,7 +108,7 @@ Origin: toolkit.
 | Input | `channel` | `string` | `"luminance"` |  |
 | Output | `value` | `heightImage` | — | {"layout":"Typed floating-point height with units"} |
 
-Guides: [guide](../graph-image-types.md#convert-color-to-relief)
+Guides: [guide](../graph-image-types.md#make-and-convert-uniform-images), [guide](../graph-image-types.md#convert-color-to-relief)
 
 Get the runnable example with `ink-studio graph describe image.toHeight --example > example.json`.
 Run it with `ink-studio graph run example.json`.
@@ -107,4 +127,24 @@ Origin: toolkit.
 Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes)
 
 Get the runnable example with `ink-studio graph describe image.toRaster --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.uniform
+
+Promote a scalar or a tuple to a typed constant image. UNORM inputs use normalized values, linear float color can be HDR.
+
+Origin: toolkit.
+A literal image intent and layout select the value port and typed output.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `value` | `number` | Required | {"finite":true} |
+| Input | `width` | `pixelCount` | Required | pixels · {"integer":true,"min":1} |
+| Input | `height` | `pixelCount` | Required | pixels · {"integer":true,"min":1} |
+| Input | `descriptor` | `record` | Required | {"layout":"Plain named object"} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../graph-image-types.md#make-and-convert-uniform-images)
+
+Get the runnable example with `ink-studio graph describe image.uniform --example > example.json`.
 Run it with `ink-studio graph run example.json`.
