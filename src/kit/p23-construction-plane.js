@@ -161,17 +161,6 @@
     return V.mul(points.reduce(V.add,[0,0,0]),1/points.length);
   }
 
-  function instanceTarget(scene, instance, kind) {
-    const candidates = [
-      ['prefab',scene.instances ?? {},transform=>A.scenePrefabs.origin(transform)],
-      ['asset-part',scene.assetParts ?? {},transform=>K.sceneGraph.transform(transform).position]
-    ].filter(([type,rows])=>(kind === undefined || kind === type) && Object.hasOwn(rows,instance));
-    if (!candidates.length) throw new RangeError('Unknown scene instance '+instance);
-    if (candidates.length>1) throw new RangeError('Instance '+instance+' is ambiguous. Choose prefab or asset-part');
-    const [instanceKind,rows,origin] = candidates[0];
-    return {instance,instanceKind,target:origin(rows[instance].transform)};
-  }
-
   function originTarget(scene, request) {
     const {kind,object,vertex,instance,instanceKind,selection} = request ?? {};
     const fields = {vertex:['object','vertex'],instance:['instance','instanceKind'],bounds:['object','selection'],average:['object','selection']};
@@ -181,7 +170,7 @@
         !(kind === 'instance' ? name(instance) && (instanceKind === undefined || ['prefab','asset-part'].includes(instanceKind)) :
           name(object) && (kind === 'vertex' ? name(vertex) : selection)))
       throw new TypeError('Snap the construction origin to a vertex, instance, selection bounds, or selection average');
-    if (kind === 'instance') return {kind,...instanceTarget(scene,instance,instanceKind)};
+    if (kind === 'instance') return {kind,...A.sceneInstances.select(scene,{kind:instanceKind,ids:[instance]})[0]};
 
     const rows = scene.topologyMeshes ?? {};
     if (!Object.hasOwn(rows,object)) throw new RangeError('Unknown editable mesh '+object);
