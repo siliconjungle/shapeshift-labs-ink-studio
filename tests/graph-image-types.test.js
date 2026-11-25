@@ -1,6 +1,10 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const Ink = require('..');
+const PNG = require('../cli/png.js');
 const kit = Ink.load();
 const I = kit.KIT.procedural.graphImages;
 const raster = (width, height, channels, data) => ({ width, height, channels, data });
@@ -109,4 +113,30 @@ test('material ports and JSON exports preserve precision, policy and extent with
   assert.throws(() => compile(spec), /needs a display raster/);
   assert.throws(() => kit.KIT.procedural.materialChannels.pack({ height: result.outputs.material.channels.baseColor.raster }),
     /Invalid material channel.*height/);
+});
+
+test('native PNG precision survives decoding, graph declaration, and JSON delivery', t => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'ink-native-image-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(folder, 'ramp.png'), PNG.encodeGray(2, 1, new Uint16Array([30001, 30002])));
+  const spec = project({
+    native: op('pngAsset', { name: 'native' }),
+    legacy: op('pngAsset', { name: 'legacy' }),
+    sheet: typed(link('native'), { intent: 'color', colorSpace: 'srgb-linear' }),
+    height: op('image.toHeight', { source: link('sheet'), scale: 65535 })
+  }, { height: link('height'), sheet: link('sheet'), legacy: link('legacy') });
+  spec.assets = {
+    native: { format: 'png', file: 'ramp.png', precision: 'native' },
+    legacy: { format: 'png', file: 'ramp.png' }
+  };
+  spec.exports = { height: { output: 'height', format: 'json' } };
+  const runner = Ink.createGraphProject(Ink.openMaterialGraph(spec), { kit, baseDir: folder });
+  const result = runner.run();
+  assert.equal(result.outputs.sheet.descriptor.precision, 'unorm16');
+  assert.deepEqual([...result.outputs.sheet.raster.data], [30001, 30001, 30001, 65535, 30002, 30002, 30002, 65535]);
+  assert.equal(result.outputs.legacy.data[0], result.outputs.legacy.data[4]);
+  const heights = JSON.parse(result.artifacts[0].bytes).raster.data;
+  assert.deepEqual(heights.map(Math.round), [30001, 30002]);
+  const memory = Ink.createGraphProject(spec, { kit, baseDir: folder, planAssets: true }).plan(undefined, { memory: true }).memory;
+  assert.equal(memory.initialBytes, 2 * 4 * (1 + 2));
 });

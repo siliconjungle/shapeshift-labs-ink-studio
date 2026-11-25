@@ -296,8 +296,9 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const groupTree=loadGraphGroups(definitions,baseDir,{onFile:file=>paths.add(file)});
   const groupSpecs=new Map(groupTree.entries.map(group=>[group,graphSpec(group.spec,'group '+group.alias,groupOperators)]));
   const assets=new Map(named(assetDefinitions,'assets').map(([name,definition])=>{
-    const {format,file,type,codec,options}=fields(definition,
-      definition?.format==='codec' ? ['format','file','type','codec','options'] : ['format','file'],'graph asset '+name);
+    const {format,file,type,codec,options,precision}=fields(definition,
+      definition?.format==='codec' ? ['format','file','type','codec','options'] :
+        definition?.format==='png' ? ['format','file','precision'] : ['format','file'],'graph asset '+name);
     if (!['png','indexed-png','json','wav','sound-recipe','inputs','codec'].includes(format) ||
         !(typeof file==='string'&&file||api.isRef(file)))
       throw new TypeError('Graph assets need a PNG, JSON, WAV, sound recipe, input recording or hosted codec file');
@@ -311,9 +312,15 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     const bytes=selected?.bytes??fs.readFileSync(full);
     let value, kind, modelHash;
     if (format==='png') {
-      const {w,h,data,max}=planAssets ? PNG.layout(bytes) : PNG.raster(bytes);
-      value=planAssets ? {width:w,height:h} : {width:w,height:h,
-        data:max===255 ? data : Uint8Array.from(data,n=>Math.round(n*255/max))};
+      if (precision!==undefined && precision!=='native') throw new TypeError('PNG asset precision can be native');
+      if (planAssets) {
+        const {w,h,bitDepth}=precision==='native' ? PNG.nativeLayout(bytes) : PNG.layout(bytes);
+        value={width:w,height:h,...(bitDepth===16 && {sampleBytes:2})};
+      } else {
+        const {w,h,data,max}=PNG.raster(bytes);
+        value={width:w,height:h,data:max===255 || precision==='native' && max===65535 ?
+          data : Uint8Array.from(data,n=>Math.round(n*255/max))};
+      }
       kind='raster';
     } else if (format==='indexed-png') {
       if (planAssets) {

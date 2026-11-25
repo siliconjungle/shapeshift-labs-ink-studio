@@ -96,6 +96,7 @@ function encodePaint(raster,mode) {
 }
 function raster(file) { return decode(file, false); }
 function layout(file, indexed = false) { return decode(file, indexed ? 'indices' : false, true); }
+function nativeLayout(file) { return decode(file, 'native', true); }
 function sheetRaster(file) { return decode(file, 'sheet'); }
 function indexedRaster(file) { return decode(file, 'indices'); }
 function paletteSource(file) { return decode(file, true); }
@@ -156,4 +157,4 @@ function encodeAnimation(frames, fps) {
 function animate(file, frames, fps) {
   fs.writeFileSync(file, encodeAnimation(frames.map(packFrame), fps));
 }
-module.exports = { paintRaster, encodePaint, encode, encodeGray, encodeIndexed, write, writeIndexed, read, raster, layout, sheetRaster, indexedRaster, paletteSource, animate, packFrame, packRGBA, encodeFrame, encodeAnimation, animationDelay };
+module.exports = { paintRaster, encodePaint, encode, encodeGray, encodeIndexed, write, writeIndexed, read, raster, layout, nativeLayout, sheetRaster, indexedRaster, paletteSource, animate, packFrame, packRGBA, encodeFrame, encodeAnimation, animationDelay };

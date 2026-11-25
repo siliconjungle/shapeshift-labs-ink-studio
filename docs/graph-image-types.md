@@ -12,7 +12,7 @@ A typed image carries a versioned contract beside its sample buffer. Declare it 
 | Alpha | `none`, `straight`, or `premultiplied`. Alpha uses the normalized unit domain. |
 | Tiling and sampling | Independent U and V modes of `clamp`, `wrap`, `mirror`, or `transparent`. `image.resize` applies the declared `nearest` or `linear` filter. Linear filtering handles alpha in the declared sample space. |
 
-`image.declare` takes a literal `descriptor` record with `intent` and any applicable settings from the table. Numeric arrays default to float64. Native buffer types infer their precision. Declaring a different color-space tag for a raster that already has one is an error. A JSON array can state an explicit storage precision. The declaration validates samples and packs them into that precision. Export a typed image as graph JSON to preserve its contract and values for reopening.
+`image.declare` takes a literal `descriptor` record with `intent` and any applicable settings from the table. Numeric arrays default to float64. Native buffer types infer their precision. Declaring a different color-space tag for a raster that already has one is an error. A JSON array can state an explicit storage precision. The declaration validates samples and packs them into that precision. Set `precision: "native"` on a PNG asset to retain 16-bit codes through `pngAsset` and declare the decoded channels. Export a typed image as graph JSON to preserve its contract and values for reopening.
 
 ## Convert color to relief
 
