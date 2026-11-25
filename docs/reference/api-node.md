@@ -30,7 +30,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createCameraAtlas` | function | `(options)` | [guide](../camera-atlas.md#capture-and-schedule-feeds), [guide](../render-outputs.md#schedule-a-miniature-renderer-as-a-camera-feed), [source](../../index.js) |
 | `node.createEffectClip` | function | `(source, {kit=require('..').load(),baseDir=process.cwd(),sourceFile,operations,adapters} = {})` | [guide](../effect-clips.md#run-headlessly-and-reuse-a-group), [source](../../cli/effect-clip.js) |
 | `node.createGraphHost` | function | `(config = {}, { kit = require('../index.js').load() } = {})` | [guide](../graph-media.md#optional-host-adapters), [source](../../cli/graph-host.js) |
-| `node.createGraphProject` | function | `(source, { kit=require('../index.js').load(), baseDir=process.cwd(), operations={}, adapters={}, sourceFile, workerPool, planAssets=false, instance, baseContext }={})` | [guide](../editable-material-graph.md#open-edit-and-save), [guide](../headless-authoring.md#persistent-sessions), [guide](../material-base-settings.md#inherit-individual-settings), [source](../../cli/graph-project.js) |
+| `node.createGraphProject` | function | `(source, { kit=require('../index.js').load(), baseDir=process.cwd(), operations={}, adapters={}, sourceFile, workerPool, planAssets=false, instance, baseContext, requireOutputs=true }={})` | [guide](../editable-material-graph.md#open-edit-and-save), [guide](../headless-authoring.md#persistent-sessions), [guide](../material-base-settings.md#inherit-individual-settings), [source](../../cli/graph-project.js) |
 | `node.createGraphWorkers` | function | `(limit, { kit = require('../index.js').load(), timeoutMs = 60000 } = {})` | [source](../../cli/graph-workers.js) |
 | `node.createMotionalCoverageHistory` | function | `()` | [guide](../motional-coverage.md#matched-sequence-review), [guide](../motional-coverage.md), [source](../../src/motional-coverage.js) |
 | `node.createPartMotionHistory` | function | `()` | [guide](../art-passes.md#part-motion-and-previous-depth), [source](../../cli/part-motion.js) |
@@ -51,7 +51,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.demos` | function | `()` | [guide](../../README.md#embedding-and-custom-scene-collections), [source](../../index.js) |
 | `node.describeGraphNode` | function | `(id, settings = {})` | [guide](../headless-authoring.md#discover-registered-nodes), [source](../../cli/graph-catalog.js) |
 | `node.describeMaterialMetadata` | function | `(file, { audience = 'workspace' } = {})` | [guide](../editable-material-graph.md#describe-and-publish-material-metadata), [source](../../cli/material-metadata.js) |
-| `node.describeMaterialSubgraph` | function | `(source, target, options)` | [guide](../editable-material-graph.md#publish-and-edit-reusable-subgraphs), [source](../../cli/material-subgraphs.js) |
+| `node.describeMaterialSubgraph` | function | `(source, target, options)` | [guide](../editable-material-graph.md#publish-and-edit-reusable-subgraphs), [guide](../editable-material-graph.md#show-controls-and-ports-conditionally), [source](../../cli/material-subgraphs.js) |
 | `node.describeRenderFrame` | function | `(world, frame)` | [guide](../browser-renderer.md#shared-rendering-contract), [guide](../browser-renderer.md#review-compatibility-before-export), [source](../../index.js) |
 | `node.diffGraphs` | function | `(before, after)` | [source](../../cli/graph-diff.js) |
 | `node.editMaterialSubgraph` | function | `(source, edit, options = {})` | [guide](../editable-material-graph.md#publish-and-edit-reusable-subgraphs), [source](../../cli/material-subgraphs.js) |
@@ -76,6 +76,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.httpJsonAdapter` | function | `(location, { maxBytes = 1048576, timeout = 5000, headers = {} } = {})` | [guide](../graph-media.md#optional-host-adapters), [source](../../cli/graph-host.js) |
 | `node.inspectEffectPixel` | function | `(world, { at, ...view } = {})` | [guide](../material-response.md#inspect-a-pixel), [source](../../cli/render.js) |
 | `node.inspectEnvironment` | function | `(world, options = {})` | [guide](../environment-inspector.md), [source](../../cli/environment-inspector.js) |
+| `node.inspectMaterialVisibility` | function | `(source, { inputs = {}, instance, scope = [], kit = require('../index.js').load() } = {})` | [guide](../editable-material-graph.md#show-controls-and-ports-conditionally), [source](../../cli/material-visibility.js) |
 | `node.inspectPalettePixel` | function | `(world, { at, ...view } = {})` | [guide](../palette-recipes.md#inspect-the-palette-at-a-pixel), [source](../../cli/palette-pixel.js) |
 | `node.inspectPxc` | function | `(source, { image = false, tolerateArt = false } = {})` | [source](../../cli/pxc.js) |
 | `node.instantiateStoryTemplate` | function | `(template, instance)` | [source](../../index.js) |

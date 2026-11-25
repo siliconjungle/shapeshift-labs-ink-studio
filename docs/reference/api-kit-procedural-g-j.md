@@ -558,6 +558,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphTypes.description` | function | `(type)` | [source](../../src/kit/pap-graph-types.js) |
 | `KIT.procedural.graphTypes.validator` | function | `(type)` | [source](../../src/kit/pap-graph-types.js) |
 
+## KIT.procedural.graphVisibility
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.graphVisibility` | namespace |  |  |
+| `KIT.procedural.graphVisibility.inspect` | function | `({ inputs = {}, controls = {}, outputs = {} }, { values = {}, path = '/graph' } = {})` | [guide](../editable-material-graph.md#show-controls-and-ports-conditionally), [source](../../src/kit/paq-graph-visibility.js) |
+
 ## KIT.procedural.gridSculptBrush
 
 | Member | Kind | Signature or value | Guides and source |

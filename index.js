@@ -195,6 +195,7 @@ module.exports = {
   readMaterialGraph: require('./cli/material-graph.js').readMaterialGraph,
   writeMaterialGraph: require('./cli/material-graph.js').writeMaterialGraph,
   describeMaterialMetadata: require('./cli/material-metadata.js').describeMaterialMetadata,
+  inspectMaterialVisibility: require('./cli/material-visibility.js').inspectMaterialVisibility,
   searchMaterialLibrary: require('./cli/material-library.js').searchMaterialLibrary,
   publishMaterialLibrary: require('./cli/material-library.js').publishMaterialLibrary,
   validateStoryDocument: require('./cli/story-document.js').validateStoryDocument,
