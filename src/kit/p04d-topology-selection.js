@@ -150,10 +150,10 @@
     return direction.map(n => n / length);
   }
 
-  function filtered(doc, g, domain, selection, filter, visibility) {
+  function filtered(doc, g, domain, selection, filter, { visibility, object, part }) {
     if (filter === undefined) return selection;
-    if (!record(filter, ['materials', 'seam', 'crease', 'visibility'])) throw new TypeError('Invalid mesh selection filter');
-    const { materials, seam: uv, crease, visibility: view } = filter;
+    if (!record(filter, ['materials', 'seam', 'crease', 'visibility', 'backfaces'])) throw new TypeError('Invalid mesh selection filter');
+    const { materials, seam: uv, crease, visibility: view, backfaces } = filter;
     if (materials !== undefined && (!Array.isArray(materials) || !materials.length ||
         !Array.from(materials).every(id => typeof id === 'string' && id.trim())))
       throw new TypeError('Material filters need one or more material IDs');
@@ -162,13 +162,23 @@
     const { min = 0, max = 180 } = crease ?? {};
     if (crease && (![min, max].every(Number.isFinite) || min < 0 || max > 180 || min > max))
       throw new RangeError('Crease angles must range from 0 to 180 degrees');
-    let visible;
+    if (backfaces !== undefined && (!['include', 'exclude'].includes(backfaces) || !['visible', 'through'].includes(view)))
+      throw new TypeError('Choose backfaces include or exclude with visible or through selection');
+    let eligible;
     if (view !== undefined) {
-      if (!['visible', 'hidden'].includes(view)) throw new RangeError('Choose visible or hidden components');
+      if (!['visible', 'hidden', 'through'].includes(view)) throw new RangeError('Choose visible, hidden, or through components');
       if (visibility?.format !== visibilityFormat || visibility.version !== 1 ||
           visibility.mesh !== doc.id || visibility.revision !== topology.revision(doc))
         throw new RangeError('Capture mesh visibility for this topology revision before filtering');
-      visible = ids(visibility.visible?.[domain], g.components[domain]);
+      if (object !== undefined && visibility.object !== undefined &&
+          (visibility.object !== object || visibility.part !== part))
+        throw new RangeError('Capture mesh visibility for the selected scene object and part');
+      const participation = visibility.participation;
+      const lane = view === 'through' ? backfaces === 'exclude' ? 'throughFront' : 'through' : 'visibleFront';
+      const needsParticipation = view === 'through' || backfaces === 'exclude';
+      if (needsParticipation && !Array.isArray(participation?.[lane]?.[domain]))
+        throw new RangeError('Capture mesh visibility with through and backface participation before filtering');
+      eligible = ids((needsParticipation ? participation[lane] : visibility.visible)?.[domain], g.components[domain]);
     }
 
     const materialIds = materials && new Set(materials), normals = new Map(), matches = new Map();
@@ -188,7 +198,7 @@
       return accepted;
     }
     return new Set([...selection].filter(id => {
-      if (visible && visible.has(id) !== (view === 'visible')) return false;
+      if (eligible && eligible.has(id) !== (view !== 'hidden')) return false;
       if (materialIds) {
         const faces = domain === 'faces' ? [id] : g.related(domain, id, 'faces');
         if (!faces.some(face => materialIds.has(g.components.faces.get(face).material))) return false;
@@ -199,7 +209,7 @@
     }));
   }
 
-  function select(source, request, { visibility } = {}) {
+  function select(source, request, { visibility, object, part } = {}) {
     if (!record(request, ['domain', 'ids', 'from', 'traverse', 'grow', 'shrink', 'convert', 'match', 'filter']))
       throw new TypeError('Use a mesh component selection query');
     const doc = topology.create(source), revision = topology.revision(doc), g = graph(doc);
@@ -243,7 +253,7 @@
       selection = convert(g, selection, domain, into, match);
       domain = into;
     }
-    selection = filtered(doc, g, domain, selection, filter, visibility);
+    selection = filtered(doc, g, domain, selection, filter, { visibility, object, part });
     return Object.freeze({ format, version: 1, mesh: doc.id, revision, domain, ids: Object.freeze([...selection].sort()) });
   }
 
@@ -271,7 +281,7 @@
       const at = z => a.map((n, i) => n + (b[i] - n) * (z - a[2]) / (b[2] - a[2]));
       return [project(a[2] < clipNear ? at(clipNear) : a), project(b[2] > clipFar ? at(clipFar) : b)];
     }
-    return { viewPoint, point, segment };
+    return { viewPoint, project, point, segment };
   }
 
   function nearSegment([x, y], [[ax, ay], [bx, by]]) {
@@ -280,7 +290,55 @@
     return (x - ax - dx * t) ** 2 + (y - ay - dy * t) ** 2 <= 1;
   }
 
-  function captureVisibility(mesh, frame, camera) {
+  function viewParticipation(raster, camera, w, h) {
+    const { focal, ortho, clipNear, clipFar } = camera;
+    const x = w / (2 * focal), y = h / (2 * focal);
+    const side = (a, b, limit) => ({ normal: [a, b, ortho ? 0 : -limit], offset: ortho ? limit : 0 });
+    const planes = [side(1, 0, x), side(-1, 0, x), side(0, 1, y), side(0, -1, y),
+      { normal: [0, 0, -1], offset: -clipNear }, { normal: [0, 0, 1], offset: clipFar }];
+    const distance = ({ normal, offset }, point) => V.dot(normal, point) - offset;
+    const point = p => planes.every(plane => distance(plane, p) <= 0);
+
+    function segment(a, b) {
+      let start = 0, end = 1;
+      for (const plane of planes) {
+        const da = distance(plane, a), db = distance(plane, b);
+        if (da > 0 && db > 0) return false;
+        if (da > 0) start = Math.max(start, da / (da - db));
+        else if (db > 0) end = Math.min(end, da / (da - db));
+        if (start > end) return false;
+      }
+      return true;
+    }
+
+    function triangle(points) {
+      const inside = points.every(point);
+      if (!inside && planes.some(plane => points.every(p => distance(plane, p) > 0))) return false;
+      const polygon = inside ? points : K.procedural.geometry.clipPlanarFaces([{ points }], planes)[0]?.points;
+      if (!polygon) return false;
+      return projectedArea(polygon.map(raster.project)) > 1e-10;
+    }
+
+    function projectedArea([origin, ...ring]) {
+      const [x, y] = origin;
+      return Math.abs(ring.slice(1).reduce((area, [u, v], i) => {
+        const [a, b] = ring[i];
+        return area + (a - x) * (v - y) - (b - y) * (u - x);
+      }, 0));
+    }
+
+    function front([a, b, c]) {
+      const normal = V.cross(V.sub(b, a), V.sub(c, a));
+      return (ortho ? normal[2] : V.dot(normal, a)) > 0;
+    }
+    return { point, segment, triangle, front };
+  }
+
+  const componentSets = () => Object.fromEntries(domains.map(domain => [domain, new Set()]));
+  const savedSets = sets => Object.freeze(Object.fromEntries(domains.map(domain =>
+    [domain, Object.freeze([...sets[domain]].sort())])));
+
+  function captureVisibility(mesh, frame, camera, { participation = false } = {}) {
     const doc = topology.sourceDocument(mesh);
     const { w, h, passes } = frame ?? {};
     if (!doc || !Number.isSafeInteger(w) || !Number.isSafeInteger(h) || w < 1 || h < 1 ||
@@ -289,11 +347,13 @@
       throw new TypeError('Mesh visibility needs retained topology and native source surface passes');
     const g = graph(doc), raster = projector(camera, w, h), triangles = new Map();
     const drawPoints = K.sceneMeshes.layer(mesh).vertices;
-    const visible = Object.fromEntries(domains.map(domain => [domain, new Set()]));
+    const visible = componentSets();
+    const viewport = participation && viewParticipation(raster, camera, w, h);
+    const visibleFront = viewport && componentSets();
     const slots = passes.surfaceSources.map(row => row?.kind === 'mesh' && row.asset === mesh.id &&
       row.object === mesh.objectId && (row.part ?? undefined) === mesh.partId ? row.primitive : null);
 
-    function sampleTriangle(drawIndex) {
+    function sampleTriangle(drawIndex, cache = true) {
       if (triangles.has(drawIndex)) return triangles.get(drawIndex);
       const source = topology.triangleSource(mesh, K.sceneMeshes.sourceTriangle(mesh, drawIndex));
       if (!source) throw new RangeError('Native triangle is outside the retained mesh');
@@ -304,26 +364,59 @@
         const next = (i + 1) % 3, id = g.edgeByPair.get(edgeKey(vertex, vertices[next]));
         if (!g.components.edges.get(id)?.uses.some(use => use.face === source.face)) continue;
         const line = raster.segment(points[i], points[next]);
-        if (line) edges.push({ id, line });
+        if (line) edges.push({ id, line, from: i, to: next });
       }
-      const sample = { face: source.face, edges, vertices: vertices.map((id, i) => ({ id, point: raster.point(points[i]) })) };
-      triangles.set(drawIndex, sample);
+      const sample = { face: source.face, points, edges, vertices: vertices.map((id, i) => ({ id, point: raster.point(points[i]) })),
+        front: viewport && viewport.front(points) };
+      if (cache) triangles.set(drawIndex, sample);
       return sample;
+    }
+
+    function markVisible(triangle, pixel) {
+      const front = triangle.front ? visibleFront : null;
+      visible.faces.add(triangle.face);
+      front?.faces.add(triangle.face);
+      for (const { id, point } of triangle.vertices)
+        if (point && Math.max(Math.abs(pixel[0] - point[0]), Math.abs(pixel[1] - point[1])) <= 1) {
+          visible.vertices.add(id);
+          front?.vertices.add(id);
+        }
+      for (const { id, line } of triangle.edges) if (nearSegment(pixel, line)) {
+        visible.edges.add(id);
+        front?.edges.add(id);
+      }
     }
 
     for (let i = 0; i < w * h; i++) {
       const first = slots[passes.sourceSurface[i]];
       if (!Number.isSafeInteger(first)) continue;
       const triangle = sampleTriangle(first / 3 + passes.sourceTriangle[i]);
-      visible.faces.add(triangle.face);
       const pixel = [i % w + .5, Math.floor(i / w) + .5];
-      for (const { id, point } of triangle.vertices)
-        if (point && Math.max(Math.abs(pixel[0] - point[0]), Math.abs(pixel[1] - point[1])) <= 1) visible.vertices.add(id);
-      for (const { id, line } of triangle.edges) if (nearSegment(pixel, line)) visible.edges.add(id);
+      markVisible(triangle, pixel);
+    }
+    let projected;
+    if (viewport) {
+      const through = componentSets(), throughFront = componentSets();
+      for (let i = 0; i < mesh.triangles; i++) {
+        const { face, points, vertices, edges, front } = sampleTriangle(i, false);
+        if (viewport.triangle(points)) {
+          through.faces.add(face);
+          if (front) throughFront.faces.add(face);
+        }
+        for (const [index, { id }] of vertices.entries()) if (viewport.point(points[index])) {
+          through.vertices.add(id);
+          if (front) throughFront.vertices.add(id);
+        }
+        for (const { id, from, to } of edges) if (viewport.segment(points[from], points[to])) {
+          through.edges.add(id);
+          if (front) throughFront.edges.add(id);
+        }
+      }
+      projected = Object.freeze({ visibleFront: savedSets(visibleFront), through: savedSets(through), throughFront: savedSets(throughFront) });
     }
     return Object.freeze({ format: visibilityFormat, version: 1, mesh: doc.id, revision: topology.revision(doc),
-      grid: Object.freeze([w, h]), visible: Object.freeze(Object.fromEntries(domains.map(domain =>
-        [domain, Object.freeze([...visible[domain]].sort())]))) });
+      grid: Object.freeze([w, h]), visible: savedSets(visible), ...(projected && { participation: projected,
+        ...(mesh.objectId !== undefined && { object: mesh.objectId }), ...(mesh.partId !== undefined && { part: mesh.partId }) }) });
   }
 
   K.meshTopology = Object.freeze({ ...topology, select, captureVisibility });

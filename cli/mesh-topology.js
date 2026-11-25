@@ -24,9 +24,10 @@ function select(file, input, rest, opt, meshTopology, build) {
       throw new TypeError('Give one saved selection with --from or in the query');
     query.from = read(from);
   }
-  const evidence = view ? require('./mesh-topology-visibility.js').captureMeshTopologyVisibility(build(file), object, read(view)).visibility :
+  const { captureMeshTopologyVisibility, needsParticipation } = require('./mesh-topology-visibility.js');
+  const evidence = view ? captureMeshTopologyVisibility(build(file), object, read(view), { participation: needsParticipation(query?.filter) }).visibility :
     visibility && read(visibility);
-  return meshTopology.select(document, query, { visibility: evidence });
+  return meshTopology.select(document, query, { visibility: evidence, object, part: object && rows[object].part });
 }
 
 function transform(file, input, rest, opt, meshTopology, openEditor) {
