@@ -307,6 +307,7 @@ const { KIT: K } = require('@shapeshift-labs/ink-studio').load();
 const spec = {
   id: 'small-scene', name: 'Stone', seed: 1, style: 'slate',
   camera: { target: [0, 1, 0], dist: 10, pitch: 0.2, yaw: 0.4 },
+  finish: { shadowMarch: { emptySpace: 'clear' } },
   solids: [{ kind: 'ball', at: [0, 1, 0], r: 1, mat: 'stone', res: 0.15 }]
 };
 const problems = K.diorama.check(spec);

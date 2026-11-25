@@ -1689,6 +1689,7 @@
       if (shadowMarch) {
         S.shSteps = shadowMarch.steps;
         S.shLen = shadowMarch.distance;
+        S.shEmptySpace = shadowMarch.emptySpace;
       }
       if (st0.finish.res) S.res = st0.finish.res;
       if(st0.finish.stipple!==undefined)S.stipple=st0.finish.stipple;
