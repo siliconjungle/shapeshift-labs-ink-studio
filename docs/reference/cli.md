@@ -240,7 +240,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology plane <scene.json> --snap-origin vertex --object ID --vertex ID [--detach-edge] [--out file.json]   snap the working origin to a scene vertex
   mesh-topology plane <scene.json> --snap-origin instance --instance ID [--instance-kind prefab|asset-part] [--detach-edge] [--out file.json]   snap the working origin to an instance frame
   mesh-topology plane <scene.json> --snap-origin bounds|average --object ID --selection selection.json [--detach-edge] [--out file.json]   snap the working origin to a selected center
-  mesh-topology move <mesh-or-scene.json> [--object id] [--part id] --vertex id --by X,Y,Z [--space local|world|plane|camera] [--view file] [--align plane|grid] [--expect revision] [--out file.json]   preview or move one existing vertex
+  mesh-topology move <mesh-or-scene.json> [--object id] [--part id] --vertex id --by X,Y,Z [--space local|world|plane|camera] [--view file] [--align plane|grid] [--coincident [--coincident-distance N]] [--expect revision] [--out file.json]   move a vertex and optionally its coincident copies
   mesh-topology pivot <mesh-or-scene.json> [request.json] [--object id] [--part id] [--selection file] [--out file.json]   place an independent transform pivot
   mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file | --pivot file] [--out file] [--report file]   move, rotate, scale and snap authored components in explicit coordinates
   mesh-topology health <mesh-or-scene.json> [settings.json] [--object id] [--out report.json]   locate local topology and geometry problems

@@ -130,14 +130,56 @@ const meshComponentSnap = (function (K) {
     return { source: topology.create(target.document), frame: K.sceneGraph.transform(target.frame) };
   }
 
-  function snapMesh(raw, point, doc, frame, context) {
+  function edgeEnds(edge, from, action) {
+    const ends = edge.vertices.slice();
+    if (from === undefined || from === ends[0]) return ends;
+    if (from === ends[1]) return ends.reverse();
+    throw new RangeError(action + ' must start at one of its endpoints');
+  }
+
+  function sourceAnchor(doc, selected, raw) {
+    if (raw === undefined) return { ids: [] };
+    if (name(raw)) {
+      if (!selected.has(raw)) throw new RangeError('Snap anchor must be an unpinned selected vertex');
+      return { ids: [raw] };
+    }
+    if (!record(raw, ['edge', 'at', 'from']) || !name(raw.edge) ||
+        raw.at !== undefined && (!Number.isFinite(raw.at) || raw.at < 0 || raw.at > 1) ||
+        raw.from !== undefined && !name(raw.from))
+      throw new TypeError('Snap anchor needs a selected vertex or an edge and optional fraction');
+    const edge = doc.edges.find(row => row.id === raw.edge);
+    if (!edge || !edge.vertices.every(id => selected.has(id)))
+      throw new RangeError('Snap edge anchor needs two selected endpoints');
+    return { ids: edgeEnds(edge, raw.from, 'Snap edge anchor'), at: raw.at, edge: raw.edge };
+  }
+
+  function endpointSnap(source, from, target, at, allowReverse) {
+    const directions = allowReverse ? [target, target.slice().reverse()] : [target];
+    let best;
+    for (const ends of directions) {
+      const points = ends.map(at), point = average(points), delta = V.sub(point, from);
+      const pairs = ends.map((id,i) => ({ source: source.ids[i], target: id, from: source.points[i], point: points[i] }));
+      const residual = Math.max(...pairs.map(pair => V.dist(V.add(pair.from,delta),pair.point)));
+      const tolerance = 1e-8 + 16 * Number.EPSILON * Math.max(...[...source.points, ...points].flat().map(Math.abs));
+      const distance = V.len(delta);
+      if (residual <= tolerance && (!best || distance < best.distance)) best = { point, pairs, residual, distance };
+    }
+    if (!best) throw new RangeError('Edge endpoint snapping needs matching length and direction after the transform');
+    return best;
+  }
+
+  function snapMesh(raw, point, doc, frame, context, anchor) {
     const { source, frame: targetFrame } = meshTarget(doc, frame, raw.object, context);
     const domain = { vertex: 'vertices', edge: 'edges', face: 'faces' }[raw.kind];
     const element = source[domain].find(row => row.id === raw.id);
     if (!element) throw new RangeError('Unknown snap ' + raw.kind + ' ' + raw.id);
     const positions = index(source.vertices), at = id => K.sceneGraph.point(targetFrame, positions.get(id).position);
     if (raw.kind === 'vertex') return { point: at(element.id) };
-    if (raw.kind === 'edge') return closestEdge(point, ...element.vertices.map(at));
+    if (raw.kind === 'edge') {
+      const ends = edgeEnds(element, raw.from, 'Snap target edge');
+      if (raw.match === 'endpoints') return endpointSnap(anchor, point, ends, at, raw.from === undefined);
+      return raw.at === undefined ? closestEdge(point, ...ends.map(at)) : { point: V.lerp(...ends.map(at), raw.at), t: raw.at };
+    }
     const g = topology.triangulate(source), corners = index(element.corners);
     let best;
     for (const row of g.triangleSources) if (row.face === element.id) {
@@ -184,15 +226,20 @@ const meshComponentSnap = (function (K) {
     throw new RangeError('SDF snap did not reach the surface within its tolerance and distance limit');
   }
 
-  function snap(raw, point, doc, frame, context, construction) {
+  function snap(raw, point, doc, frame, context, construction, anchor) {
     const keys = {
-      vertex: ['id', 'object'], edge: ['id', 'object'], face: ['id', 'object'],
+      vertex: ['id', 'object'], edge: ['id', 'object', 'at', 'from', 'match'], face: ['id', 'object'],
       plane: ['origin', 'normal'], 'construction-plane': ['mode'], socket: ['instance', 'binding'], sdf: ['object', 'tolerance', 'iterations']
     };
     if (!raw || !Object.hasOwn(keys, raw.kind) || !record(raw, ['kind', 'anchor', 'maxDistance', ...keys[raw.kind]]) ||
-        raw.object !== undefined && !name(raw.object) || raw.anchor !== undefined && !name(raw.anchor) ||
+        raw.object !== undefined && !name(raw.object) ||
         raw.maxDistance !== undefined && (!Number.isFinite(raw.maxDistance) || raw.maxDistance < 0))
       throw new TypeError('Use a snap target with a valid kind, anchor, and distance limit');
+    if (raw.kind === 'edge' && (
+        raw.at !== undefined && (!Number.isFinite(raw.at) || raw.at < 0 || raw.at > 1) ||
+        raw.from !== undefined && !name(raw.from) || raw.match !== undefined && (
+          raw.match !== 'endpoints' || !anchor.edge || anchor.at !== undefined || raw.at !== undefined)))
+      throw new TypeError('Edge snapping needs a valid fraction or a two-endpoint source and target');
     let hit;
     if (raw.kind === 'plane') {
       if (!vector(raw.origin)) throw new TypeError('Construction planes need a world origin');
@@ -210,19 +257,20 @@ const meshComponentSnap = (function (K) {
       hit = snapField(raw, point, context.sdf?.(raw.object));
     } else {
       if (!name(raw.id)) throw new TypeError('Mesh snap needs a component ID');
-      hit = snapMesh(raw, point, doc, frame, context);
+      hit = snapMesh(raw, point, doc, frame, context, anchor);
     }
     const delta = V.sub(hit.point, point), distance = V.len(delta);
     if (!Number.isFinite(distance) || distance > (raw.maxDistance ?? Infinity))
       throw new RangeError('Snap target is beyond the maximum distance');
     const target = Object.fromEntries(Object.entries(raw).filter(([, value]) => value !== undefined)
-      .map(([key, value]) => [key, Array.isArray(value) ? value.slice() : value]));
+      .map(([key, value]) => [key, Array.isArray(value) ? value.slice() :
+        key === 'anchor' && typeof value === 'object' ? { ...value } : value]));
     return { ...hit, target, from: point, delta, distance };
   }
 
   function planTransform(source, request, context = {}) {
     if (!record(request, ['selection', 'operation', 'space', 'frame', 'pivot', 'planePivot', 'constructionPlane',
-      'camera', 'normal', 'tangent', 'pins', 'falloff', 'snap']))
+      'camera', 'normal', 'tangent', 'pins', 'falloff', 'snap', 'coincident']))
       throw new TypeError('Use a component transform request');
     const doc = topology.create(source), run = operation(request.operation);
     const { space = 'local', normal, tangent } = request;
@@ -251,6 +299,8 @@ const meshComponentSnap = (function (K) {
         average([...selected].map(id => vertices.get(id).position));
     if (!vector(pivot)) throw new TypeError('The transform pivot needs a local XYZ point');
     const fixed = pins(doc, selection, selected, request.pins), weights = influence(doc, world, selected, fixed, request.falloff);
+    const anchor = sourceAnchor(doc, selected, request.snap?.anchor);
+    const coincident = meshCoincidentMotion.plan(doc, world, weights, fixed, anchor.ids, request.coincident);
     const axes = view ? view.axes : space === 'plane' ? construction.axes :
       space === 'normal' ? normalFrame(doc, selection, world, normal, tangent) : cardinal;
     const worldAxes = space === 'local' ? axes.map(axis => M.app(frame.matrix, axis)) : axes;
@@ -265,18 +315,26 @@ const meshComponentSnap = (function (K) {
     const target = request.snap;
     let snapped;
     if (target !== undefined) {
-      const anchor = target?.anchor;
-      if (anchor !== undefined && (!selected.has(anchor) || fixed.has(anchor)))
-        throw new RangeError('Snap anchor must be an unpinned selected vertex');
+      if (anchor.ids.some(id => fixed.has(id)))
+        throw new RangeError(anchor.edge ? 'Snap edge anchor needs two unpinned endpoints' : 'Snap anchor must be an unpinned selected vertex');
       if (!weights.size) throw new RangeError('Snap needs at least one movable vertex');
-      const p = transformed(anchor === undefined ? pivot : vertices.get(anchor).position, 1);
-      snapped = snap(target, K.sceneGraph.point(frame, p), doc, frame, context, construction);
+      const points = anchor.ids.map(id => K.sceneGraph.point(frame, transformed(vertices.get(id).position, 1)));
+      const point = anchor.edge ? V.lerp(...points, anchor.at ?? .5) : points[0] ?? K.sceneGraph.point(frame, transformed(pivot,1));
+      snapped = snap(target, point, doc, frame, context, construction, { ...anchor, points });
     }
     const localSnap = snapped && M.app(inverse.matrix, snapped.delta);
+    const destination = (id, weight) => {
+      const p = transformed(vertices.get(id).position, weight);
+      return localSnap ? V.mad(p, localSnap, weight) : p;
+    };
+    const displaced = new Map();
     const changed = [];
     for (const id of [...weights.keys()].sort()) {
       const { position: before } = vertices.get(id), weight = weights.get(id);
-      const p = transformed(before, weight), after = localSnap ? V.mad(p, localSnap, weight) : p;
+      const leader = coincident?.leaders.get(id) ?? id;
+      if (!displaced.has(leader)) displaced.set(leader, destination(leader,weight));
+      const end = displaced.get(leader), start = vertices.get(leader).position;
+      const after = id === leader || before.every((value,i) => value === start[i]) ? end : V.add(before,V.sub(end,start));
       if (!vector(after)) throw new RangeError('Transform produced a nonfinite position at ' + id);
       if (after.some((value, i) => value !== before[i])) changed.push({ id, before, after, weight, selected: selected.has(id) });
     }
@@ -288,11 +346,12 @@ const meshComponentSnap = (function (K) {
       selection, space, pivot: pivot.slice(), worldPivot: K.sceneGraph.point(frame, pivot), axes, worldAxes, pinned: [...fixed].sort(),
       ...(request.frame !== undefined && { frame }), ...(view && { camera: view.camera }),
       ...(retainedPivot !== undefined && { pivotSource: 'retained' }),
+      ...(coincident && { coincident: coincident.report }),
       ...(construction && {constructionPlane:construction.plane}),
       ...(gridPivot && {planePivot:gridPivot.slice()}), ...(snapped && { snap: snapped }), vertices: changed
     } });
   }
 
   K.meshTopology = Object.freeze({ ...topology, planTransform });
-  return Object.freeze({ snapField, meshTarget, average });
+  return Object.freeze({ snapField, meshTarget, edgeEnds, average });
 })(KIT);
