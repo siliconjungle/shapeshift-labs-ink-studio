@@ -337,9 +337,12 @@ const meshComponentSnap = (function (K) {
       'camera', 'normal', 'tangent', 'pins', 'falloff', 'snap', 'coincident']))
       throw new TypeError('Use a component transform request');
     const doc = topology.create(source), special = constraints.includes(request.operation?.kind);
-    const run = special ? undefined : operation(request.operation);
+    const pushing = request.operation?.kind === 'push';
+    const run = special || pushing ? undefined : operation(request.operation);
     if (special && request.snap !== undefined)
       throw new TypeError('Align, flatten, and collapse already define their target');
+    if (pushing && (request.snap !== undefined || request.falloff !== undefined || !vector(request.operation.direction)))
+      throw new TypeError('Push needs a finite XYZ direction and uses rigid contact groups without snap or falloff');
     const { space = 'local', normal, tangent } = request;
     if (!['local', 'world', 'normal', 'plane', 'camera'].includes(space) ||
         space !== 'normal' && (normal !== undefined || tangent !== undefined) || space !== 'camera' && request.camera !== undefined)
@@ -374,6 +377,9 @@ const meshComponentSnap = (function (K) {
       space === 'normal' ? normalFrame(doc, selection, world, normal, tangent) : cardinal;
     const worldAxes = space === 'local' ? axes.map(axis => M.app(frame.matrix, axis)) : axes;
     const basis = axes.flat(), fromBasis = M.tr(basis);
+    const pushDirection = pushing && unit(M.app(M.tr(worldAxes.flat()),request.operation.direction),'Push');
+    const push = pushing && meshPush.plan(request.operation,pushDirection,doc,world,frame,selection,selected,fixed,coincident,context);
+    const localPush = push && M.app(inverse.matrix,pushDirection);
     function transformed(p, weight) {
       const delta = V.sub(p, pivot);
       if (space === 'local') return V.add(p, run(delta, weight));
@@ -394,6 +400,7 @@ const meshComponentSnap = (function (K) {
     const localSnap = snapped && M.app(inverse.matrix, snapped.delta);
     const destination = (id, weight) => {
       if (placed) return placed.apply(vertices.get(id).position,world.get(id),weight);
+      if (push) return V.mad(vertices.get(id).position,localPush,push.distances.get(id));
       const p = transformed(vertices.get(id).position, weight);
       return localSnap ? V.mad(p, localSnap, weight) : p;
     };
@@ -401,7 +408,7 @@ const meshComponentSnap = (function (K) {
     const changed = [];
     for (const id of [...weights.keys()].sort()) {
       const { position: before } = vertices.get(id), weight = weights.get(id);
-      const leader = placed ? id : coincident?.leaders.get(id) ?? id;
+      const leader = placed || push ? id : coincident?.leaders.get(id) ?? id;
       if (!displaced.has(leader)) displaced.set(leader, destination(leader,weight));
       const end = displaced.get(leader), start = vertices.get(leader).position;
       const after = id === leader || before.every((value,i) => value === start[i]) ? end : V.add(before,V.sub(end,start));
@@ -424,6 +431,7 @@ const meshComponentSnap = (function (K) {
       ...(retainedPivot !== undefined && { pivotSource: 'retained' }),
       ...(coincident && { coincident: coincident.report }),
       ...(placed && { operation: { ...placed.evidence, ...result, measured, removedFaces: removeFaces } }),
+      ...(push && { operation: push.report }),
       ...(construction && {constructionPlane:construction.plane}),
       ...(gridPivot && {planePivot:gridPivot.slice()}), ...(snapped && { snap: snapped }), vertices: changed
     } });

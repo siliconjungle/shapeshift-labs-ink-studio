@@ -242,7 +242,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology plane <scene.json> --snap-origin bounds|average --object ID --selection selection.json [--detach-edge] [--out file.json]   snap the working origin to a selected center
   mesh-topology move <mesh-or-scene.json> [--object id] [--part id] --vertex id --by X,Y,Z [--space local|world|plane|camera] [--view file] [--align plane|grid] [--coincident [--coincident-distance N]] [--expect revision] [--out file.json]   move a vertex and optionally its coincident copies
   mesh-topology pivot <mesh-or-scene.json> [request.json] [--object id] [--part id] [--selection file] [--out file.json]   place an independent transform pivot
-  mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file | --pivot file] [--out file] [--report file]   move, rotate, scale, snap, align, flatten or collapse mesh components
+  mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file | --pivot file] [--out file] [--report file]   move, rotate, scale, snap, align, flatten, collapse or push mesh components
   mesh-topology health <mesh-or-scene.json> [settings.json] [--object id] [--out report.json]   locate local topology and geometry problems
   mesh-topology overlaps <mesh-or-scene.json> [settings.json] [--object id] [--part id] [--out report.json | --selection-out faces.json]   review same-facing coincident polygons
   mesh-topology isolate-prefab <scene.json> <request.json> [--preview image.png] [--view settings.json] [--out scene.json]   limit prefab instance edits to active faces

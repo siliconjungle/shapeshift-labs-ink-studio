@@ -765,7 +765,7 @@
       const row = meshTopology(object, part), scene = current().preview;
       requireMeshShapeOwner(object, row.part, scene, 'Transform');
       const plan = K.meshTopology.planTransform(row.document, request, {
-        pivot: row.pivot,
+        object, pivot: row.pivot,
         ...(request?.constructionPlane === undefined && meshComponentSnap.usesConstructionPlane(request) ?
           {constructionPlane:A.constructionPlane.forScene(scene).plane} : {}),
         ...(request?.space === 'camera' && request.camera === undefined && { camera: authoredTransformCamera() }),
