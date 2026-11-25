@@ -231,6 +231,8 @@ module.exports = {
   writeCurveQualityReview: require('./cli/curve-quality-review.js').writeCurveQualityReview,
   checkPaletteShot: require('./cli/palette-checks.js').checkPaletteShot,
   approveShot: require('./cli/shot-approval.js').approveShot,
+  reviewRelief: require('./cli/relief-review.js').run,
+  approveRelief: require('./cli/relief-review.js').approve,
   exportLayers: require('./cli/export-layers.js').exportLayers,
   ...require('./cli/deep-openexr.js'),
   objectMatte: require('./cli/object-mattes.js').objectMatte,

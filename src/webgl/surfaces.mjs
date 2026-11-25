@@ -909,7 +909,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
           if(pbr)shader.set({u_surfacePbr:pbr.surface(chart)*(pbr.shadows?.receivesSurface(chart)===false?-1:1)});
           if(mip){
             const {chain,region:r}=mip;
-            const key=mip.objectTexels && sun;
+            const key=(mip.objectTexels||mip.liveLight) && sun;
             bindSemantic(chain);
             shader.set({u_semanticOn:true,u_semanticRect:[r.x,r.y,r.width,r.height],u_semanticMax:chain.levels.length-1,
               u_semanticStrength:chain.emissionStrength,u_semanticLight:key?.direction??chain.rule.light,

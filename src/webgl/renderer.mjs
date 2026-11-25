@@ -1391,7 +1391,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const withdrawal = sampleCoverage?.amount(frame.sampleWithdrawal ?? world.sampleWithdrawal ?? 0) ?? 0;
       const reliefMeshes=world.reliefLOD!==undefined ? toolkit.KIT.procedural.lod.relief.frame(world,frame,{
         view:camera.view,width,height,focal:camera.projection[5]*height*.5,ortho:camera.ortho,
-        near:camera.clipNear,far:camera.clipFar
+        near:camera.clipNear,far:camera.clipFar,setback:camera.setback
       },!reflectionCapture&&plane===zero?frame.reliefLODFrame:undefined) : [];
       if(!reflectionCapture&&plane===zero){
         if(reliefMeshes.length!==lastReliefMeshes.length || reliefMeshes.some((mesh,index)=>mesh!==lastReliefMeshes[index]))
@@ -1665,7 +1665,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         sceneryBlockTextures:frame.sceneryBlockTextures,
         sceneryDeliveryFrame:reflectionCapture || plane!==zero ? undefined : frame.sceneryDeliveryFrame,
         onModelingWork:frame.onModelingWork,
-        sun:spriteRows?.length || meshLayers.some(layer=>layer.semanticMipmaps?.some(row=>row.objectTexels)) ?
+        sun:spriteRows?.length || meshLayers.some(layer=>layer.semanticMipmaps?.some(row=>row.objectTexels||row.liveLight)) ?
           spriteLOD.light(world.liveSun,frame.liveSun,t) : undefined};
       if(layeredGlass){
         textureUnit(13,null);
@@ -2479,7 +2479,7 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
         const view=makeCamera(world,frame,width,height);
         pickFrame.additionalMeshes=toolkit.KIT.procedural.lod.relief.frame(world,frame,{
           view:view.view,width,height,focal:view.projection[5]*height*.5,ortho:view.ortho,
-          near:view.clipNear,far:view.clipFar
+          near:view.clipNear,far:view.clipFar,setback:view.setback
         });
       }
       if(world.spriteReconstruction&&spriteLOD){

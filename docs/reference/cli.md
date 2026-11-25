@@ -186,6 +186,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   render/clip --volume-stochastic 4 --volume-stochastic-history 12   trial sparse scattering in one static fog field
   protected-lod-review <scene> --plan file.json [--out directory] [--fail-on-hold]   verify protected details at approved distances and poses
   render-suite [--scene gatehouse|signal-coil|night] [--profile file.json] [--out directory]   compare matched art-grid renders
+  relief-review <scene> --plan file.json [--out directory]   compare geometry, normal relief and texel paint on matched art grids
+  relief-review approve <report.json> --choices file.json --out approval.json   save the reviewed tier per asset and camera range
   canvas-grid-check [<plan.json>] [--chrome executable] [--hardware] [--out directory] [--fail-on-flags]
     Check pixel widths and slow pans in the browser at several viewport sizes and device pixel ratios.
   fog-reconstruction review <scene> --out directory [--subject object-id --volume-scale 4 --from 0 --to 2.4 --fps 10]

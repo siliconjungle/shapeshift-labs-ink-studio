@@ -70,8 +70,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.lod.preview.tiling` | function | `({ id = 'tiling', bounds, basis, minPixels, minWorldSize, maxWork, build = layout => layout, depth = 5, maxPieces = 65536, ...definition } = {})` | [source](../../src/kit/p80-scale-previews.js) |
 | `KIT.procedural.lod.reduceWorld` | function | `(world, options)` | [guide](../pixel-art-authoring.md#carry-source-edits-into-distance-tiers), [source](../../src/kit/p79-splat-lod.js) |
 | `KIT.procedural.lod.relief` | namespace |  |  |
-| `KIT.procedural.lod.relief.create` | function | `({id,objectId=id,partId,materialId='relief',origin,right,up,texture,heights,normalMap, featureSize,normalPixels=.75,geometryPixels=3,segments,paintedSize=64, color=0xffffff,light=[-.45,.64,.62],ambient=.42,roughness=.55,geometry,painted}={})` | [guide](../distance-relief.md), [source](../../src/kit/p80z-distance-relief.js) |
+| `KIT.procedural.lod.relief.create` | function | `({id,objectId=id,partId,materialId='relief',origin,right,up,texture,heights,normalMap, featureSize,normalPixels=.75,geometryPixels=3,segments,paintedSize=64, color=0xffffff,light=[-.45,.64,.62],ambient=.42,roughness=.55,geometry,painted,paintedTexels}={})` | [guide](../distance-relief.md), [source](../../src/kit/p80z-distance-relief.js) |
 | `KIT.procedural.lod.relief.frame` | function | `(world,settings,view,report)` | [source](../../src/kit/p80z-distance-relief.js) |
+| `KIT.procedural.lod.reliefApproval` | namespace |  |  |
+| `KIT.procedural.lod.reliefApproval.axes` | value | `array` |  |
+| `KIT.procedural.lod.reliefApproval.format` | value | `string = "ink-studio/relief-approval"` |  |
+| `KIT.procedural.lod.reliefApproval.prepare` | function | `(source)` | [source](../../src/kit/p80y-relief-approval.js) |
+| `KIT.procedural.lod.reliefApproval.tiers` | value | `array` |  |
 
 ## KIT.procedural.logicalParts
 

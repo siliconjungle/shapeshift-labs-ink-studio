@@ -1059,6 +1059,7 @@ const view = extra =>
       spriteAtlases: spriteAtlasOption(),
       scalePreviews: onOffOption('scale-previews'),
       reliefLOD: opt['relief-lod']==='off' ? false : opt['relief-lod'],
+      reliefApproval: renderAssetOption('relief-approval'),
       spriteAtlasMode: opt['sprite-atlas-mode'],
       impostorBlend:require('../src/atlas-sprites.js').viewBlend(opt['impostor-blend']),
       meshes: onOffOption('meshes'),
@@ -1375,6 +1376,8 @@ const CMD = {
         '  render/clip --volume-stochastic 4 --volume-stochastic-history 12   trial sparse scattering in one static fog field',
         '  protected-lod-review <scene> --plan file.json [--out directory] [--fail-on-hold]   verify protected details at approved distances and poses',
         '  render-suite [--scene gatehouse|signal-coil|night] [--profile file.json] [--out directory]   compare matched art-grid renders',
+        '  relief-review <scene> --plan file.json [--out directory]   compare geometry, normal relief and texel paint on matched art grids',
+        '  relief-review approve <report.json> --choices file.json --out approval.json   save the reviewed tier per asset and camera range',
         '  canvas-grid-check [<plan.json>] [--chrome executable] [--hardware] [--out directory] [--fail-on-flags]',
         '    Check pixel widths and slow pans in the browser at several viewport sizes and device pixel ratios.',
         '  fog-reconstruction review <scene> --out directory [--subject object-id --volume-scale 4 --from 0 --to 2.4 --fps 10]',
@@ -3648,6 +3651,24 @@ const CMD = {
       console.log(id, 'p50', pair('p50'), 'p95', pair('p95'));
     }
     console.log('wrote', directory);
+  },
+  'relief-review'() {
+    const api=require('./relief-review.js'), read=file=>JSON.parse(fs.readFileSync(path.resolve(file),'utf8'));
+    if(pos[0]==='approve'){
+      if(pos.length!==2||typeof opt.choices!=='string'||typeof opt.out!=='string')
+        die('Use relief-review approve <report.json> --choices file.json --out approval.json');
+      const output=path.resolve(opt.out);
+      if([pos[1],opt.choices].some(file=>path.resolve(file)===output))die('Write the relief approval to a separate file');
+      const approval=api.approve(read(pos[1]),read(opt.choices),{kit:lib()});
+      require('./asset-files.js').json(output,approval);
+      console.log(approval.choices.length,'approved ranges, wrote',output);
+      return;
+    }
+    if(pos.length!==1||typeof opt.plan!=='string')
+      die('Use relief-review <scene> --plan file.json [--out directory]');
+    const directory=outputFile('relief-review');
+    const report=api.run(()=>buildPreview(),read(opt.plan),{directory,kit:lib(),render:view()});
+    console.log(report.asset.id,report.ranges.length,'camera ranges, wrote',directory);
   },
   'finite-curve-review'() {
     const directory = opt.out ? path.resolve(opt.out) : path.join(OUT,'finite-curve-review');

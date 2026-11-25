@@ -26,8 +26,8 @@
     const sampled = CameraLens.frame(world, frame, width, height, { orbit: staging?.orbit, impulse: CameraImpulses.frame });
     const view = CameraLens.artView(sampled, artHeight, world.look?.stable, frame.stable);
     const focal = artHeight / (2 * sampled.tangent * (sampled.ortho ? sampled.dist : 1));
-    return checkedView({ view, width: artWidth, height: artHeight, focal, ortho: Boolean(sampled.ortho),
-      near: sampled.clipNear, far: sampled.clipFar });
+    return {...checkedView({ view, width: artWidth, height: artHeight, focal, ortho: Boolean(sampled.ortho),
+      near: sampled.clipNear, far: sampled.clipFar }),setback:sampled.setback};
   }
 
   function screen(bounds, basis, { view, width, height, focal, ortho, near, far }) {

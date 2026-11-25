@@ -1,6 +1,7 @@
 /* Select a depth-tested relief representation from the rendered art grid. */
 (function (K) {
   const {V,sceneMeshes:Meshes}=K, preview=K.procedural.lod.preview;
+  const approvals=K.procedural.lod.reliefApproval;
   const {boxOf}=K.procedural.spatial, programs=new WeakSet();
   const tiers=['painted','normal','geometry'], zeroEmission=Object.freeze([0,0,0]);
   const list=value=>Array.isArray(value)||ArrayBuffer.isView(value)&&!(value instanceof DataView);
@@ -21,11 +22,12 @@
 
   function create({id,objectId=id,partId,materialId='relief',origin,right,up,texture,heights,normalMap,
       featureSize,normalPixels=.75,geometryPixels=3,segments,paintedSize=64,
-      color=0xffffff,light=[-.45,.64,.62],ambient=.42,roughness=.55,geometry,painted}={}){
+      color=0xffffff,light=[-.45,.64,.62],ambient=.42,roughness=.55,geometry,painted,paintedTexels}={}){
     need(name(id)&&name(objectId)&&(partId===undefined||name(partId))&&name(materialId),
       'use stable mesh, object, part and material IDs');
     need(vector(origin,3)&&vector(right,3)&&vector(up,3)&&V.len(right)>1e-6&&V.len(up)>1e-6,
       'a chart needs a finite bottom-left origin and nonzero right and up edges');
+    [origin,right,up]=[origin,right,up].map(value=>Array.from(value));
     const size=[V.len(right),V.len(up)], tangent=V.norm(right), vertical=V.norm(up), normal=V.cross(tangent,vertical);
     need(Math.abs(V.dot(tangent,vertical))<1e-7,'the chart edges must be perpendicular');
     const {width,height,pixels}=texture??{};
@@ -34,7 +36,7 @@
       'supply a 2–512 texel chart with world-space heights or custom geometry and normals');
     need(normalMap===undefined||bytes(normalMap)&&normalMap.length===width*height*4,'normals need matching RGBA8 pixels');
     need(pixels===undefined||bytes(pixels)&&pixels.length===width*height*4,'pigment needs matching top-down RGBA8 pixels');
-    const steps=segments??[Math.min(96,width-1),Math.min(96,height-1)];
+    const steps=segments===undefined?[Math.min(96,width-1),Math.min(96,height-1)]:segments;
     const feature=featureSize??Math.min(...size)/8;
     need(vector(steps,2,n=>integer(n,1,192))&&integer(paintedSize,2,256)&&number(feature,1e-6,1e6)&&
       number(normalPixels,.05,4096)&&number(geometryPixels,normalPixels,4096)&&geometryPixels>normalPixels,
@@ -42,6 +44,7 @@
     need(integer(color,0,0xffffff)&&vector(light,3)&&V.len(light)>1e-6&&number(ambient,0,1)&&number(roughness,0,1),
       'invalid pigment tint, light, ambient or roughness');
     const heightData=heights&&Float32Array.from(heights), suppliedNormals=normalMap&&Uint8Array.from(normalMap);
+    const meshSteps=Array.from(steps);
     const pigment=pixels?Uint8Array.from(pixels):new Uint8Array(width*height*4).fill(255);
     need(pigment.some((n,i)=>i%4===3&&n>=128),'the relief chart has no covered texels');
     const materialLight=V.norm(light);
@@ -82,12 +85,38 @@
     }
     const basis=[tangent,vertical];
     const profile=[at(.5,.5,min),at(.5,.5,max)];
+    const center=at(.5,.5,0);
     let authoredPaint;
     if(painted!==undefined){
       need(integer(painted?.width,1,256)&&integer(painted?.height,1,256)&&bytes(painted.pixels)&&
         painted.pixels.length===painted.width*painted.height*4,'painted override needs bounded RGBA8 pixels');
       authoredPaint={width:painted.width,height:painted.height,pixels:Uint8Array.from(painted.pixels)};
     }
+    let texelPaint;
+    if(paintedTexels!==undefined){
+      const {width:w,height:h,rgba,points,uvs,triangles}=paintedTexels??{};
+      need(!authoredPaint&&integer(w,1,512)&&integer(h,1,512)&&bytes(rgba)&&rgba.length===w*h*4&&
+        list(points)&&list(uvs)&&list(triangles)&&triangles.length<=750000,'use a bounded object texel bake as the painted tier');
+      TexturedSurface.validate({points,uvs,triangles});
+      texelPaint={width:w,height:h,pixels:Uint8Array.from(rgba),points:Float32Array.from(points),
+        uvs:Float32Array.from(uvs),triangles:Uint32Array.from(triangles)};
+      for(let i=0;i<texelPaint.points.length;i++){
+        const p=texelPaint.points[i], axis=i%3;
+        bounds.min[axis]=Math.min(bounds.min[axis],p);
+        bounds.max[axis]=Math.max(bounds.max[axis],p);
+      }
+    }
+
+    let revision=K.procedural.data.hash(JSON.stringify([id,objectId,partId,materialId,Array.from(origin),Array.from(right),
+      Array.from(up),width,height,meshSteps,feature,normalPixels,geometryPixels,paintedSize,color,materialLight,
+      ambient,roughness,authoredPaint?.width,authoredPaint?.height,texelPaint?.width,texelPaint?.height]));
+    for(const buffer of [heightData,suppliedNormals,pigment,geometrySource?.positions,geometrySource?.uvs,geometrySource?.indices,
+      authoredPaint?.pixels,texelPaint?.pixels,texelPaint?.points,texelPaint?.uvs,texelPaint?.triangles]){
+      revision=K.procedural.data.hash(String(buffer?.byteLength??-1)+':',revision);
+      if(buffer)for(const byte of new Uint8Array(buffer.buffer,buffer.byteOffset,buffer.byteLength))
+        revision=Math.imul(revision^byte,16777619);
+    }
+    const asset=Object.freeze({id,objectId,partId:partId??null,revision:'r'+(revision>>>0).toString(36)});
 
     function chartNormal(u,v){
       if(suppliedNormals){
@@ -134,14 +163,14 @@
       need(tiers.includes(tier),'a mesh needs a concrete tier');
       if(assets.has(tier))return assets.get(tier);
       const activeGeometry=tier==='geometry';
-      const grid=activeGeometry&&geometrySource?geometrySource:TexturedSurface.grid({
-        segments:activeGeometry?steps:[1,1],flip:true,point:(u,v)=>at(u,v,activeGeometry?heightAt(u,v):0)
+      const grid=tier==='painted'&&texelPaint?texelPaint:activeGeometry&&geometrySource?geometrySource:TexturedSurface.grid({
+        segments:activeGeometry?meshSteps:[1,1],flip:true,point:(u,v)=>at(u,v,activeGeometry?heightAt(u,v):0)
       });
       const material={id:materialId,color,texture:{width,height,pixels:pigment},alphaCutoff:.5};
       if(tier==='painted'){
-        const {tint,...image}=paint();
+        const {width,height,pixels,tint=color}=texelPaint??paint();
         material.color=tint;
-        material.texture=image;
+        material.texture={width,height,pixels};
       } else {
         material.roughness=roughness;
         material.mipmaps=settings;
@@ -150,6 +179,7 @@
       const out=Meshes.create({id,objectId,partId,positions:grid.points??grid.positions,uvs:grid.uvs,
         indices:grid.triangles??grid.indices,materials:[material]});
       const layer=Meshes.layer(out);
+      if(tier!=='painted') layer.semanticMipmaps=layer.semanticMipmaps.map(row=>({...row,liveLight:true}));
       layer.surfaceMotionKey=JSON.stringify(['relief',id,tier]);
       assets.set(tier,out);
       return out;
@@ -158,7 +188,7 @@
     function inspect(view,override){
       override=mode(override);
       const projected=preview.project(bounds,view,basis);
-      const rows={id,objectId,partId,projected};
+      const rows={id,objectId,partId,revision:asset.revision,projected};
       if(override===false||!projected.visible)
         return {...rows,tier:null,reason:override===false?'disabled':'visibility',featurePixels:0,profilePixels:0};
       const {view:m,ortho,focal,near=.4}=view;
@@ -171,22 +201,31 @@
       // displaced edge remains large enough to change the profile.
       const [a,b]=profile.map(screen), profilePixels=Math.hypot(a[0]-b[0],a[1]-b[1]);
       const featurePixels=feature*projected.pixelsPerWorld;
+      const {eye,back}=CameraLens.fromView(m);
+      const observer=V.mad(eye,back,-(view.setback??0));
+      const [x,y]=screen(center);
+      const camera={width:view.width,height:view.height,ortho:Boolean(ortho),distance:V.dist(observer,center),
+        yaw:Math.atan2(V.dot(back,tangent),V.dot(back,normal)),pitch:Math.asin(clamp(V.dot(back,vertical),-1,1)),
+        projectedHeight:projected.height,screenX:view.width*.5+x,screenY:view.height*.5-y};
       const forced=tiers.includes(override);
       const tier=forced?override:Math.max(featurePixels,profilePixels)>=geometryPixels?'geometry':
         featurePixels>=normalPixels?'normal':'painted';
-      return {...rows,tier,reason:forced?'override':'screen-size',featurePixels,profilePixels};
+      return {...rows,tier,reason:forced?'override':'screen-size',featurePixels,profilePixels,camera};
     }
 
-    function select(view,override,protection){
+    function select(view,override,protection,approval){
       const report=inspect(view,override);
+      const choice=report.reason==='screen-size'&&approval?.choose(asset,report.camera);
+      if(choice)Object.assign(report,{tier:choice.tier,reason:'approved-range',approvedRange:choice.range.id});
       const features=report.tier && protection?.features(objectId,partId,'relief-'+report.tier);
       if(features)Object.assign(report,{requestedTier:report.tier,tier:'geometry',reason:'protected-feature',features});
-      const asset=report.tier?mesh(report.tier):null;
-      const layer=asset&&Meshes.layer(asset);
-      return {asset,report:{...report,triangles:asset?.triangles??0,normalTexels:layer?.normalPixels?
-        layer.width*layer.height:0,materialTexels:layer?layer.width*layer.height:0}};
+      const selected=report.tier?mesh(report.tier):null;
+      const layer=selected&&Meshes.layer(selected);
+      return {asset:selected,report:{...report,triangles:selected?.triangles??0,normalTexels:layer?.normalPixels?
+        layer.width*layer.height:0,materialTexels:layer?layer.width*layer.height:0,
+        ...(report.tier==='painted'&&{paintSource:texelPaint?'object-texels':'uv-texels'})}};
     }
-    const plan=Object.freeze({id,inspect,select,mesh});
+    const plan=Object.freeze({id,asset,inspect,select,mesh});
     programs.add(plan);
     return plan;
   }
@@ -198,7 +237,8 @@
       new Set(plans.map(plan=>plan.id)).size===plans.length,'attach up to 16 distinct relief plans');
     const override=mode(settings.reliefLOD??world.look?.reliefLOD);
     const protection=ProtectedLOD.active(world,settings.protectedLOD);
-    const entries=plans.map(plan=>plan.select(view,override,protection));
+    const approval=approvals.prepare(settings.reliefApproval??world.reliefApproval);
+    const entries=plans.map(plan=>plan.select(view,override,protection,approval));
     report?.(entries.map(entry=>entry.report));
     return entries.flatMap(entry=>entry.asset?[entry.asset]:[]);
   }

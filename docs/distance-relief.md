@@ -48,6 +48,12 @@ of the chart. Pigment alpha supplies the cutout mask.
   cutout coverage baked from the same pigment, normals and light. It uses
   no normal map. `paintedSize` caps the longest edge. Use
   `painted: { width, height, pixels }` for a hand-painted alternative.
+  To compare paint on [object-local texels](texel-coverage.md), pass the
+  output of `bakeObjectTexels` on the receiving carrier as `paintedTexels`.
+  Ink uses its fixed color, UVs and clipped triangles for the painted tier.
+
+Geometry and mapped normals respond to a live directional key. Fixed paint
+retains its authored or baked shading.
 
 The shared selector measures `featureSize` in **native art pixels** and
 accounts for foreshortening. At least `normalPixels` makes the normal tier
@@ -76,3 +82,6 @@ and its actual depth. A normal map or painted carrier has plane depth.
 Run `node examples/distance-relief.js <directory> --frames` to render the
 Cataract lockhouse seal. The pullback visits all three tiers. Two fixed
 grazing captures show the modeled fissure beside its normal-mapped version.
+
+Use the [matched relief review](render-suite.md#compare-geometry-relief-and-texel-paint)
+to compare all three tiers at the same poses and store approved camera ranges.

@@ -10,6 +10,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `node.EXPORTS` | value | `string` | [guide](../../README.md#embedding-and-custom-scene-collections) |
 | `node.allocateSequencePalette` | function | `(shots, options = {})` | [guide](../palette-recipes.md#allocate-a-palette-across-a-sequence), [source](../../cli/sequence-palette.js) |
+| `node.approveRelief` | function | `(report,choices,{kit=require('..').load()}={})` | [guide](../render-suite.md#apply-a-reviewed-choice), [source](../../cli/relief-review.js) |
 | `node.approveShot` | function | `(world, { plan = world.shotApproval, view = {}, frame: focus, camera, pose, kit = require('../index.js').load() } = {})` | [guide](../shot-approval.md#reproduce-a-finding), [guide](../shot-approval.md), [source](../../cli/shot-approval.js) |
 | `node.bakeBounceProbes` | function | `(world, settings)` | [source](../../index.js) |
 | `node.bakeCurves` | function | `(world, { object, part, width = 96, height = 96, directions = 8, yaw = world?.cam?.yaw ?? 0, pitches = [world?.cam?.pitch ?? 0], pivot, padding = 3, time = 0, normals = false, ribbon = true, cutoutMipmaps } = {})` | [guide](../curve-bake.md#use-the-ribbon-as-native-geometry), [guide](../curve-splats.md#group-unresolved-strands-and-hand-off-to-cards), [guide](../curve-bake.md), [source](../../cli/curve-bake.js) |
@@ -138,6 +139,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.reviewProtectedLOD` | function | `(build, plan, { directory, kit = require('..').load(), render = {} } = {})` | [guide](../render-suite.md#guard-named-details-during-lod-switches), [source](../../cli/protected-lod-review.js) |
 | `node.reviewQuantizationError` | function | `(world, { threshold, heatmapMax, regionLimit, ...view } = {})` | [guide](../palette-recipes.md#review-quantization-error), [source](../../cli/palette-error.js) |
 | `node.reviewRampShot` | function | `(world, options = {})` | [guide](../palette-recipes.md#review-ramp-spacing), [source](../../cli/ramp-review.js) |
+| `node.reviewRelief` | function | `(build,plan,{directory,kit=require('..').load(),render={}}={})` | [guide](../render-suite.md#apply-a-reviewed-choice), [source](../../cli/relief-review.js) |
 | `node.reviewSdfShape` | function | `(world,directory,options={})` | [guide](../brick-meshes.md#validate-the-shape-from-several-angles), [source](../../cli/sdf-shape-review.js) |
 | `node.reviewShadowReadability` | function | `(world, options={})` | [guide](../palette-recipes.md#review-shadow-readability), [source](../../cli/shadow-readability.js) |
 | `node.reviewSplatEdit` | function | `(world, { width = 160, height = 96, before = false, after = world.look?.splatFit, time = world.lookSnapshot?.time ?? 0, view, ...settings } = {})` | [source](../../cli/splat-edit-diagnostics.js) |

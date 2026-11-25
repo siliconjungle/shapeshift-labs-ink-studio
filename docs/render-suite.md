@@ -183,3 +183,58 @@ representation across the run. This makes the hold independent of small
 camera or distance changes between approved samples. A passing transition
 uses its normal selection thresholds. Review new camera poses, distances,
 art resolutions, or source revisions when their appearance matters.
+
+## Compare geometry, relief and texel paint
+
+```sh
+node examples/relief-review/demo.cjs seal-review
+ink-studio relief-review examples/distance-relief.js --plan seal-review/plan.json --out matched
+ink-studio relief-review approve matched/report.json --choices seal-review/choices.json --out approval.json
+```
+
+Start with a scene that carries a [distance relief asset](distance-relief.md).
+The review fixes the chart, asset identity, native grid, camera, and pose across
+three lanes. Geometry is the reference. Normal relief uses the flat carrier
+and mapped normals. Texel paint uses the painted tier's fixed color.
+
+The version 1 `ink-studio/relief-review` plan names an `asset` ID and
+`width` and `height` in art pixels. Optional `fps` defaults to 12 and
+`raw` defaults to true. Each named `ranges` entry supplies `from` and
+`to` cameras with `target`, `dist`, `yaw`, `pitch`, `fov`, and `ortho`.
+Use 3–16 `frames` per sequence. Optional `time` sets the starting scene time.
+Use a `light` record with `from` and `to` XYZ directions, `ambient`, and
+`intensity` to control the key sweep.
+
+- **Motion** follows the camera path at a fixed key direction and successive
+  scene times. The report measures the change in each tier's RGB error against
+  the geometry reference on pixels occupied by the asset in either frame.
+- **Moving light** holds the midpoint camera and pose. It measures the RGB
+  change on pixels owned by the same asset across both frames and lanes.
+  Compare the response of each lane and its difference from geometry.
+- **Silhouette and work** count added and missing pixels, triangles, normal
+  and material texels, raster passes, composited fragments, and render-time
+  percentiles. Timings come from warmed headless captures that omit the
+  diagnostic buffers. The report checks the timed and diagnostic pictures
+  against each other.
+
+Each numbered PNG is captured at 1×. The animation shows geometry, normal
+relief, texel paint, and the two difference views from left to right.
+
+### Apply a reviewed choice
+
+The choices file maps reviewed names to tiers, for example
+`{"grazing":"geometry","middle":"normal","wide":"painted"}`. Approve any
+tested range with visible evidence and matching timed and diagnostic pictures.
+The saved rule pins the asset revision, grid, projection, and the envelopes
+of its observed distance, view angles, projected height and screen position.
+Inspect the report to judge the samples inside each range.
+
+Pass `--relief-approval approval.json` to a render, set `world.reliefApproval`,
+or pass `reliefApproval` in headless and WebGL frame options. An approved
+tier applies when the current native camera matches. The screen-size selector
+handles views outside the tested ranges and assets with changed revisions.
+An explicit `--relief-lod` tier takes precedence. Protected feature holds
+continue to guard approved transitions.
+
+Node callers can use `ink.reviewRelief(buildWorld, plan, { directory })` and
+`ink.approveRelief(report, choices)`.

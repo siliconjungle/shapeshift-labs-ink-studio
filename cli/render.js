@@ -1199,7 +1199,7 @@ function renderFrame(world, o, preparedPalettes) {
   const proxyDepthPass = passSelection.has('proxyDepth');
   const reliefGrid=o.artGridScale || 1;
   const reliefMeshes=world.reliefLOD!==undefined ? require('../index.js').load().KIT.procedural.lod.relief.frame(world,o,{
-    view:V,width:W/reliefGrid,height:H/reliefGrid,focal:focal/reliefGrid,ortho:Boolean(ortho),near,far:camera.clipFar
+    view:V,width:W/reliefGrid,height:H/reliefGrid,focal:focal/reliefGrid,ortho:Boolean(ortho),near,far:camera.clipFar,setback:camera.setback
   },!reflectionPlane&&!probeView&&(!o.samples||o.worked)?o.reliefLODFrame:undefined) : [];
   const meshLayers = SceneMeshes.layers(world,o.meshes,reliefMeshes,o.scanPaint);
   const brickLayers=brickFrames.length ? brickAPI.layers(brickFrames) : [];
@@ -2223,7 +2223,7 @@ function renderFrame(world, o, preparedPalettes) {
       });
     } else if(sprite.semantic)color=SemanticMipmaps.shade(color,sprite.normal,sprite.semanticView,sprite.semantic,sprite.semanticRule,
       sprite.scan ? {...scanFrame,scan:sprite.scan,position,...scanLight} :
-        sprite.objectTexels ? {sun,...scanLight} : undefined);
+        sprite.objectTexels || sprite.liveLight ? {sun,...scanLight} : undefined);
     const texelEmission=art && sprite.objectTexels && sprite.semantic.emission.some(Boolean) ?
       texelEmissionDisplay(sprite.semantic.emission.map(value=>Math.min(1,value))) : undefined;
     const ink = cutaway?.edge ? Cutaway.edgeWeight(cutaway.edge,sectionAt(position)) : 0;
