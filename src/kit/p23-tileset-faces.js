@@ -6,6 +6,15 @@
   const name = value=>TargetSelectors.name(value) && !['__proto__','prototype','constructor'].includes(value);
 
   const isSourceBinding = binding=>binding.domain === 'faces' && binding.data?.format === sourceFormat && binding.data.version === 1;
+  const quadCorners = [0,1,2,3];
+
+  function sourceCorners(binding, count) {
+    if (count === 4) return quadCorners.slice();
+    const slots = binding?.data?.uvCorners;
+    if (count === 3 && binding && !binding.review && isSourceBinding(binding) && Array.isArray(slots) &&
+        slots.length === count && new Set(slots).size === count && Array.from(slots).every(slot=>quadCorners.includes(slot)))
+      return slots.slice();
+  }
 
   function sourceBindings(row, id, update) {
     const changes = [];
@@ -110,25 +119,33 @@
       cornerIds:new Set(doc?.faces.flatMap(row=>row.corners.map(corner=>corner.id)))};
   }
 
-  function cornersFor(brush, face, ids) {
+  function cornersFor(brush, face, ids, slots = quadCorners) {
     const {activeSets,uvSet,unitUV,pigmentUV} = brush;
-    return ids.map((vertex,i)=>({id:face+'/c'+i,vertex,uv:uvSet ? unitUV[i] : pigmentUV[i],
-      ...(activeSets.length && {attributes:Object.fromEntries(activeSets.map(set=>
-        [MaterialUV.key(set),set === uvSet ? pigmentUV[i] : unitUV[i]]))})}));
+    return ids.map((vertex,i)=>{
+      const slot = slots[i];
+      return {id:face+'/c'+i,vertex,uv:uvSet ? unitUV[slot] : pigmentUV[slot],
+        ...(activeSets.length && {attributes:Object.fromEntries(activeSets.map(set=>
+          [MaterialUV.key(set),set === uvSet ? pigmentUV[slot] : unitUV[slot]]))})};
+    });
   }
 
   function stamp(brush, face, anchor, shared) {
-    const {frame,source,material,vertexIds,cornerIds} = brush;
+    const {frame} = brush;
     const [x,y] = frame.axes, [w,h] = brush.size;
     const end = shared?.[1].position ?? K.V.mad(anchor,x,w);
     const positions = [anchor,end,K.V.mad(end,y,h),K.V.mad(anchor,y,h)];
-    const binding = {id:'tileset/'+face,domain:'faces',element:face,data:source};
     const ring = positions.map((position,i)=>{
       const weights = shared?.[3-i]?.weights;
       return shared?.[i] ?? {id:face+'/v'+i,position,...(weights && {weights})};
     });
-    const vertices = shared ? ring.slice(2) : ring;
-    const corners = cornersFor(brush,face,ring.map(row=>row.id));
+    return polygonStamp(brush,face,ring.map(row=>row.id),shared ? ring.slice(2) : ring);
+  }
+
+  function polygonStamp(brush, face, ids, vertices, uvCorners) {
+    const {source,material,vertexIds,cornerIds} = brush;
+    const data = uvCorners ? {...source,uvCorners} : source;
+    const binding = {id:'tileset/'+face,domain:'faces',element:face,data};
+    const corners = cornersFor(brush,face,ids,uvCorners);
     const polygon = {id:face,material,corners};
     const conflicts = [];
     if (brush.faceIds.has(face)) conflicts.push({reason:'face-id-in-use',face});
@@ -173,5 +190,5 @@
     return conflicts.length ? {report} : {report,row:append(brush,[placement])};
   }
 
-  A.tilesetFaces = Object.freeze({plan,prepare,stamp,append,cornersFor,cropSource,sourceBindings,isSourceBinding,sameMaterial});
+  A.tilesetFaces = Object.freeze({plan,prepare,stamp,polygonStamp,append,cornersFor,cropSource,sourceBindings,sourceCorners,isSourceBinding,sameMaterial});
 })(KIT);

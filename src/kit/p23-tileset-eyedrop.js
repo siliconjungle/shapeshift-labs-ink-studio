@@ -24,13 +24,15 @@
     [left-x,top-y,x+width-1-right,y+height-1-bottom].every(n=>n>=-tolerance);
   const centerIndex = n=>same(n,Math.round(n)) ? Math.round(n) : n;
 
-  function orientationOf(points, hint) {
-    if (points.length !== 4) return {};
+  function orientationOf(points, hint, slots = [0,1,2,3]) {
+    if (points.length !== slots.length) return {};
     const [left,top] = [0,1].map(axis=>Math.min(...points.map(point=>point[axis])));
     const [right,bottom] = [0,1].map(axis=>Math.max(...points.map(point=>point[axis])));
     const reference = [[left,bottom],[right,bottom],[right,top],[left,top]];
-    const fits = paint=>TilesetSelection.paintCorners(reference,paint).every((point,i)=>
-      point.every((n,axis)=>same(n,points[i][axis])));
+    const fits = paint=>{
+      const oriented = TilesetSelection.paintCorners(reference,paint);
+      return slots.every((slot,i)=>oriented[slot].every((n,axis)=>same(n,points[i][axis])));
+    };
     if (hint && fits(hint)) return {paint:hint,orientationStatus:'retained'};
     const matches = orientations.filter(fits);
     return matches.length ? {paint:matches[0],orientationStatus:matches.length>1 ? 'ambiguous' : 'uv-inferred'} : {};
@@ -41,7 +43,7 @@
     return candidates.find(item=>item.id === 'tileset/'+face) ?? (candidates.length === 1 ? candidates[0] : undefined);
   }
 
-  function recover(asset, tileset, texels, binding) {
+  function recover(asset, tileset, texels, binding, slots) {
     const [left,top] = [0,1].map(axis=>Math.min(...texels.map(point=>point[axis])));
     const [right,bottom] = [0,1].map(axis=>Math.max(...texels.map(point=>point[axis])));
     const bounds = [left,top,right,bottom];
@@ -59,7 +61,7 @@
       try { hint = TilesetSelection.paintOrientation(data.paint ?? {}); }
       catch (error) { if (!(error instanceof TypeError || error instanceof RangeError)) throw error; }
     }
-    const orientation = orientationOf(texels,hint);
+    const orientation = orientationOf(texels,hint,slots);
     const uvInset = {left:Math.max(0,left-selection.x),top:Math.max(0,top-selection.y),
       right:Math.max(0,selection.x+selection.width-1-right),bottom:Math.max(0,selection.y+selection.height-1-bottom)};
     for (const edge of Object.keys(uvInset)) if (same(uvInset[edge],0)) uvInset[edge] = 0;
@@ -86,18 +88,20 @@
     if (bake) return blocked('active-material-bake');
     const tileset = definition?.texture?.tileset;
     if (!tileset) return blocked('material-has-no-tileset');
-    if (polygon.corners.length !== 4) return blocked('face-is-not-a-quad');
+    const binding = sourceBinding(row,face);
+    const slots = A.tilesetFaces.sourceCorners(binding,polygon.corners.length);
+    if (!slots) return blocked('face-is-not-a-quad');
 
     const asset = A.tilesets.prepare(scene.tilesets,scene.tilesetDefaults).source(tileset);
     const texels = uv.map(({uv})=>[uv[0]*(asset.width-1),uv[1]*(asset.height-1)]);
-    const binding = sourceBinding(row,face);
-    const recovered = recover(asset,tileset,texels,binding);
+    const recovered = recover(asset,tileset,texels,binding,slots);
     if (!recovered.paint) return blocked('pigment-uv-is-not-a-rectangular-stamp');
     const {selection,paint,uvInset} = recovered;
     const stamp = {selection,paint,material,materialDefinition:definition,
       ...(Object.values(uvInset).some(Boolean) && {uvInset}),
       ...(brushSize && size && {worldSize:size})};
-    return freeze({...report,...recovered,canStamp:true,...(binding && {binding:binding.id}),stamp});
+    return freeze({...report,...recovered,canStamp:true,...(slots.length === 3 && {uvCorners:slots}),
+      ...(binding && {binding:binding.id}),stamp});
   }
 
   A.tilesetEyedrop = Object.freeze({inspect,recover,orientationOf,sourceBinding});

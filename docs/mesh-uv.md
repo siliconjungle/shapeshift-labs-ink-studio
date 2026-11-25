@@ -155,6 +155,49 @@ and `brushScale`. One undo removes the placement and its source binding.
 Run `node examples/tileset-pick/place-face-demo.cjs tile-placement-demo` to
 place painted masonry and trim and inspect their retained source references.
 
+### Create a painted face from existing vertices
+
+Use `tileset face` to fill a gap with a triangle or quad. The selected
+vertices keep their IDs and positions. Give the face a new ID and supply
+the current exact crop or an eyedropped crop with `--selection`.
+
+```json
+{
+  "object": "entrance",
+  "face": "gable",
+  "vertices": ["left-eave", "right-eave", "ridge"]
+}
+```
+
+```sh
+ink-studio tileset face gable.json --scene gatehouse.json --selection paint.json
+ink-studio tileset face gable.json --scene gatehouse.json --selection paint.json --out roofed.json > gable-receipt.json
+ink-studio mesh-topology select roofed.json annex-query.json --object entrance --out annex-vertices.json
+ink-studio tileset face annex.json --scene roofed.json --vertices-file annex-vertices.json --selection trim.json --out finished.json
+```
+
+An array of vertex IDs gives the corner order directly. With a saved
+vertex-domain selection, Ink infers a ring from the dominant projection
+and uses compatible winding where it shares a boundary. Supply
+`order` as an exact permutation of that selection to choose the starting
+corner and winding. A saved selection checks the topology revision. For
+an explicit array, the optional `revision` checks the same revision.
+The preview reports the ordered IDs, the face normal, shared edges,
+pigment UVs, and any conflicts with existing faces.
+
+The quad uses crop corners in lower-left, lower-right, upper-right,
+upper-left order. The triangle uses lower-left, lower-right, and
+upper-left. `paint` can rotate or reflect the crop and `uvInset` can
+adjust its texel edges. The selected vertex positions set the world
+shape. The source binding lets you reuse the crop with eyedrop, reskin,
+and atlas moves.
+
+In Node, use `editor.planTilesetFaceFromVertices(request)` to preview and
+`editor.createTilesetFaceFromVertices(request)` to apply the face and
+source binding in one undoable edit. Run
+`node examples/tileset-pick/face-from-vertices-demo.cjs painted-closures`
+for a triangle and quad built on the same facade.
+
 ### Select tiles, edges, vertices, or instances
 
 `tileset select` queries one domain at a time. A tile is an editable
