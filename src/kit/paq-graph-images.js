@@ -634,6 +634,8 @@
   });
   const tileGenerator=TypedTileGenerator({shapes:P.shapeLibrary,descriptor,wrap,pack,storage,dimensions,fields,
     freeze:P.data.freeze,hash:P.data.hash,hash01:P.data.hash01});
+  const tileSampler=TypedTileSampler({tileGenerator,fields,requireImage,integerMax,convertColor,sampler:spatialSampler,
+    hash:P.data.hash,hash01:P.data.hash01});
   function bakeShape(source,width,height,options={}) {
     if (![width,height].every(n=>Number.isSafeInteger(n) && n>0) || !dimensions({width,height}) || width*height>4e6)
       throw new RangeError('Shape bake exceeds its four-million-texel budget');
@@ -984,6 +986,18 @@
         return tileGenerator.generate(width,height,columns,rows,stamp,options,seed);
       }
     },
+    'image.tileSampler': {
+      description:'Drive signed tile selection, transforms, tint, density, visibility and overlap priority with independent typed maps.',
+      seed:'options',inputs:{width:{type:'pixelCount',default:128},height:{type:'pixelCount',default:128},
+        columns:{type:'number',default:4},rows:{type:'number',default:6},
+        stamps:{type:'array<shape2d>',default:tileSampler.stampDefaults},options:correctionOptions,controls:correctionOptions,
+        ...Object.fromEntries(tileSampler.mapNames.map(name=>[name,optional]))},
+      outputs:{value:'colorImage',coverage:'typedImage',tileId:'typedImage',course:'typedImage',
+        stampId:'typedImage',layout:'record'},
+      run({width,height,columns,rows,stamps,options,controls,...maps},{seed}) {
+        return tileSampler.sample(width,height,columns,rows,stamps,maps,options,controls,seed);
+      }
+    },
     'image.noise': {
       description: 'Bake a named scalar noise family into a typed image with spatial controls and optional looping motion.',
       seed: 'options', inputs: { family: { type:'string', default:'perlin' }, width: { type:'pixelCount', default:128 },
@@ -1007,5 +1021,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, regions, advancedHeight, advancedTexture, shape:bakeShape, tileGenerator:tileGenerator.generate, noise:makeNoise, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, regions, advancedHeight, advancedTexture, shape:bakeShape, tileGenerator:tileGenerator.generate, tileSampler:tileSampler.sample, noise:makeNoise, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);

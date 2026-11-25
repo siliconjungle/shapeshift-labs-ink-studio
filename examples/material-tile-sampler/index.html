@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Current Inlay · Ink Studio</title>
+<style>
+  :root{color-scheme:dark;--ink:#edf1e5;--soft:#b3c5bd;--gold:#efc68b;--line:#405c5c;--panel:#20363a;--well:#172d32}
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  body{margin:0;background:#15272b;color:var(--ink);font:14px/1.4 system-ui,sans-serif}
+  main{max-width:1330px;margin:auto;padding:23px 30px 26px}
+  header{display:flex;align-items:end;justify-content:space-between;gap:14px;border-bottom:1px solid var(--line);padding-bottom:15px;margin-bottom:15px}
+  h1,h2,p,figure{margin:0}
+  h1{font:400 clamp(43px,5.9vw,79px)/.96 Georgia,serif;letter-spacing:-.057em;margin-top:5px}
+  h2{font-size:14px;font-weight:650}
+  .mono{font:11px/1.35 ui-monospace,Menlo,monospace}
+  .eyebrow{color:var(--gold);text-transform:uppercase;letter-spacing:.16em}
+  a,select,button,input[type=number]{font:inherit;color:inherit;border:1px solid var(--line);background:var(--well);padding:5px 8px;border-radius:4px}
+  a{color:var(--gold);text-decoration:none;white-space:nowrap}
+  a:hover,select:hover,button:hover{border-color:#a6a88e;color:var(--gold)}
+  button,select{cursor:pointer}
+  :focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+  .stage{display:grid;grid-template-columns:minmax(0,820px) minmax(305px,1fr);gap:13px}
+  .tide,.inspector{background:var(--panel);border:1px solid var(--line);border-radius:6px;min-width:0;overflow:hidden}
+  .bar{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:8px 11px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .bar label,.repeat{display:inline-flex;gap:5px;align-items:center;font-size:12px;white-space:nowrap}
+  .repeat{cursor:pointer}
+  .bar select{padding:3px 5px;font-size:12px}
+  .plate{aspect-ratio:1.5;background:#14262f}
+  canvas{display:block;width:100%;image-rendering:pixelated}
+  .plate canvas{height:100%}
+  .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line)}
+  .stats div{padding:8px 11px;color:var(--soft);border-right:1px solid var(--line);font-size:11px}
+  .stats div:last-child{border:0}
+  .stats strong{display:block;color:var(--gold);margin-top:2px}
+  .selected{padding:10px 11px 9px}
+  .selected canvas{aspect-ratio:1.5;max-height:215px;object-fit:contain;background:#15272b;border:1px solid var(--line);border-radius:3px}
+  .selected p{color:var(--soft);font-size:12px;min-height:37px;margin-top:7px}
+  .inputs{border-top:1px solid var(--line);padding:9px 11px 11px}
+  .inputs h2{margin-bottom:7px}
+  .row{display:grid;grid-template-columns:85px minmax(0,1fr);align-items:center;gap:8px;min-height:33px}
+  .row label{font-size:12px}
+  .row input,.row select{width:100%;min-width:0}
+  .density{display:grid;grid-template-columns:minmax(38px,1fr) 28px;gap:4px;align-items:center}
+  input[type=checkbox],input[type=range]{accent-color:var(--gold);margin:0}
+  .actions{display:flex;gap:8px;margin-top:8px}
+  #reroll{color:var(--gold)}
+  #status{margin-top:9px;min-height:20px;color:var(--soft);font-size:12px}
+  #error{font-size:12px;color:#ffd1b7}
+  #error:empty{display:none}
+  .stamp-key{padding:9px 11px;border-top:1px solid var(--line)}
+  .stamp-key h2{margin-bottom:6px}
+  #stamps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+  #stamps figure{min-width:0;padding:3px;background:var(--well);border:1px solid var(--line);border-radius:3px;text-align:center}
+  #stamps canvas{width:min(100%,43px);margin:auto}
+  #stamps figcaption{color:var(--soft);font-size:10px;white-space:nowrap}
+  .library{margin-top:15px}
+  .library h2{margin-bottom:7px}
+  .cards{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:7px}
+  .map{border:1px solid var(--line);border-radius:4px;background:var(--panel);min-width:0;padding:4px}
+  .map[data-selected=true]{border-color:var(--gold);background:#334537}
+  .map button{width:100%;display:block;border:0;padding:0;background:none;text-align:left}
+  .map button canvas{aspect-ratio:1.5;border-radius:2px}
+  .map button span{margin:4px 0 1px 3px;display:block;font-size:12px}
+  .map label{display:flex;gap:4px;align-items:center;color:var(--soft);font-size:10px;margin:3px 3px 1px;cursor:pointer}
+  @media(max-width:1000px){main{padding-inline:16px}.stage{grid-template-columns:minmax(0,1fr) 292px}}
+  @media(max-width:750px){.stage{grid-template-columns:minmax(0,1fr)}.cards{grid-template-columns:repeat(4,minmax(0,1fr))}}
+  @media(max-width:440px){main{padding:12px 9px}.bar{gap:6px}.map button span{font-size:11px}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><p class="mono eyebrow">Ink Studio / Material graphs</p><h1>Current Inlay</h1></div>
+    <a href="current-inlay.material.json" download>Download graph</a>
+  </header>
+  <div class="stage">
+    <section class="tide" aria-labelledby="mosaic-title">
+      <div class="bar">
+        <h2 id="mosaic-title">Tide inlay</h2>
+        <label>View <select id="view"><option value="relief">Glazed relief</option><option value="albedo">Base color</option>
+          <option value="stamps">Stamp IDs</option><option value="priority">Priority</option></select></label>
+        <label class="repeat"><input id="repeat" type="checkbox"> 2×2 repeat</label>
+      </div>
+      <figure class="plate"><canvas id="plate" aria-label="Generated mosaic with map-driven tiles"></canvas></figure>
+      <div class="stats">
+        <div>Placed tiles<strong class="mono" id="placed"></strong></div>
+        <div>Removed by density<strong class="mono" id="sparse"></strong></div>
+        <div>Masked by visibility<strong class="mono" id="hidden-count"></strong></div>
+      </div>
+    </section>
+    <section class="inspector" aria-labelledby="map-name">
+      <div class="bar"><h2 id="map-name">Color map</h2><span class="mono" id="map-state"></span></div>
+      <div class="selected">
+        <canvas id="inspector" aria-label="Selected source map"></canvas>
+        <p id="map-description"></p>
+      </div>
+      <div class="inputs">
+        <h2>Independent seeds</h2>
+        <div class="row"><label for="stream">Stream</label><select id="stream"></select></div>
+        <div class="row"><label for="seed">Seed</label><input id="seed" type="number" step="1"></div>
+        <div class="row"><label for="density">Density</label><div class="density">
+          <input id="density" type="range" min="0" max="1" value="1" step=".01"><output id="density-value" class="mono">1</output>
+        </div></div>
+        <div class="actions"><button type="button" id="reroll">Reroll stream</button><button type="button" id="reset">Reset inlay</button></div>
+        <p id="status" role="status"></p>
+        <p id="error" role="alert"></p>
+      </div>
+      <div class="stamp-key"><h2>Stamp order</h2><div id="stamps"></div></div>
+    </section>
+  </div>
+  <section class="library" aria-labelledby="maps-title"><h2 id="maps-title">Driver maps</h2><div class="cards" id="maps"></div></section>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="inlay.js"></script>
+<script>
+  const p=KIT.procedural, get=id=>document.getElementById(id);
+  const maps=inlayMaps(p.graphImages), graph=p.graph.create(inlayGraph(maps)), cards=new Map();
+  let seeds={...inlayControls.seeds}, selected='color', outputs, frame=0;
+  function paint(canvas,{width,height,data},repeat=1) {
+    canvas.width=width*repeat; canvas.height=height*repeat;
+    const image=new ImageData(new Uint8ClampedArray(data),width,height), ctx=canvas.getContext('2d');
+    for(let y=0;y<repeat;y++) for(let x=0;x<repeat;x++) ctx.putImageData(image,x*width,y*height);
+  }
+  const stampNames=['Disc','Shard','Bar','Star'];
+  for (const [index,shape] of inlayStamps.entries()) {
+    const fig=document.createElement('figure'), canvas=document.createElement('canvas'), label=document.createElement('figcaption');
+    const {width,height,data:coverage}=p.graphImages.shape(shape,22,22,{samples:2}).mask.raster;
+    const data=new Uint8Array(width*height*4);
+    for(let i=0;i<coverage.length;i++) data.set([...stampColors[index],Math.round(255*coverage[i])],4*i);
+    paint(canvas,{width,height,data});label.textContent=(index+1)+' · '+stampNames[index];
+    fig.append(canvas,label);get('stamps').append(fig);
+  }
+  for(const [id,source] of Object.entries(maps)) {
+    const card=document.createElement('div'), button=document.createElement('button'), canvas=document.createElement('canvas');
+    const name=document.createElement('span'), flag=document.createElement('input'), label=document.createElement('label');
+    const caption=inlayMapInfo[id][0];
+    card.className='map';
+    button.type='button'; button.dataset.inspect=id; name.textContent=caption;
+    flag.type='checkbox';flag.checked=true;flag.id='map-'+id;flag.setAttribute('aria-label','Enable '+caption+' map');
+    label.append(flag,'Connected');button.append(canvas,name);card.append(button,label);get('maps').append(card);
+    cards.set(id,{card,flag,button});
+    const preview=inlayMapPreview(source);
+    paint(canvas,preview);
+    button.addEventListener('click',()=>inspect(id));
+    flag.addEventListener('input',()=>{get('status').textContent='';inspect(id);schedule();});
+  }
+  for(const id of Object.keys(seeds)) get('stream').add(new Option(inlayMapInfo[id][0],id));
+  function inspect(id) {
+    selected=id;
+    for(const [key,{card,button}] of cards) {
+      card.dataset.selected=String(key===id);
+      button.setAttribute('aria-pressed',String(key===id));
+    }
+    get('map-name').textContent=inlayMapInfo[id][0]+' map';
+    get('map-state').textContent=cards.get(id).flag.checked?'Connected':'Disconnected';
+    get('map-description').textContent=inlayMapInfo[id][1];
+    paint(get('inspector'),inlayMapPreview(maps[id]));
+  }
+  function refreshSeed() {
+    get('seed').value=seeds[get('stream').value];
+    get('status').textContent='';
+  }
+  function preview() {
+    if(outputs) paint(get('plate'),inlayPreview(outputs,get('view').value),get('repeat').checked?2:1);
+  }
+  function render() {
+    frame=0;
+    try {
+      const density=get('density').valueAsNumber;
+      const source=Object.fromEntries(Object.entries(maps).map(([id,map])=>[id,cards.get(id).flag.checked?map:null]));
+      outputs=graph.evaluate({...source,controls:{...inlayControls,density,seeds}}).outputs;
+      const {placements,rejected}=outputs.layout;
+      get('placed').textContent=placements.length+' / '+inlayColumns*inlayRows;
+      get('sparse').textContent=rejected.density;
+      get('hidden-count').textContent=rejected.visibility;
+      get('density-value').value=density;
+      get('error').textContent='';
+      preview();
+    } catch(error) { get('error').textContent=error.message; }
+  }
+  function schedule(){if(!frame) frame=requestAnimationFrame(render);}
+  function seedChange(value) {
+    if(!Number.isSafeInteger(value)) {get('error').textContent='Enter an integer seed.';return;}
+    const id=get('stream').value;
+    seeds={...seeds,[id]:value};
+    get('seed').value=value;
+    get('status').textContent=id==='selection'&&cards.get(id).flag.checked?
+      'Disconnect the selection map to preview this seed.':inlayMapInfo[id][0]+' seed updated.';
+    schedule();
+  }
+  get('stream').addEventListener('input',refreshSeed);
+  get('seed').addEventListener('input',()=>seedChange(get('seed').valueAsNumber));
+  get('reroll').addEventListener('click',()=>{
+    const seed=seeds[get('stream').value];
+    seedChange(seed===Number.MAX_SAFE_INTEGER?0:seed+1);
+  });
+  get('reset').addEventListener('click',()=>{
+    seeds={...inlayControls.seeds}; get('stream').value='density'; get('density').value=1;
+    get('view').value='relief'; get('repeat').checked=false;
+    for(const {flag} of cards.values()) flag.checked=true;
+    refreshSeed();inspect('color');schedule();
+  });
+  get('density').addEventListener('input',schedule);
+  get('view').addEventListener('input',preview);
+  get('repeat').addEventListener('input',preview);
+  get('stream').value='density';
+  refreshSeed();inspect(selected);schedule();
+</script>
+</body>
+</html>

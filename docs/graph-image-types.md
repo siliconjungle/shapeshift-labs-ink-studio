@@ -68,6 +68,8 @@ For reusable signed geometry, profiles, symbols and bevel bakes, see [Editable m
 
 For repeatable stamp grids, brick bonds, crops and course labels, see [Material Tile Generator](material-tile-generator.md).
 
+For per-cell map controls, independent seeds and overlap ordering, see [Map-driven Tile Sampler](material-tile-sampler.md).
+
 ## Convert color to relief
 
 The `fx.relight` height socket accepts typed height in `art-px` and existing uncolored scalar rasters. A connection from a known RGB source fails graph validation. For dynamically sourced images, the socket validates their value before relighting. Convert deliberately with `image.toHeight`.

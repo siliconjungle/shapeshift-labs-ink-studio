@@ -1224,6 +1224,43 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.tileGenerator"].outputs.value` | value | `string = "colorImage"` |  |
 | `KIT.procedural.graphImages.operations["image.tileGenerator"].run` | function | `({width,height,columns,rows,stamp,options},{seed})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.tileGenerator"].seed` | value | `string = "options"` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].description` | value | `string = "Drive signed tile selection, transforms, tint, density, visibility and overlap priority with independent typed maps."` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.color` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.columns` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.columns.default` | value | `number = 4` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.columns.type` | value | `string = "number"` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.controls` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.density` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.height` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.height.default` | value | `number = 128` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.height.type` | value | `string = "pixelCount"` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.position` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.priority` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.rotation` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.rows` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.rows.default` | value | `number = 6` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.rows.type` | value | `string = "number"` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.scale` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.selection` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.stamps` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.stamps.default` | value | `array` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.stamps.type` | value | `string = "array<shape2d>"` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.visibility` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.width` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.width.default` | value | `number = 128` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].inputs.width.type` | value | `string = "pixelCount"` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].outputs.course` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].outputs.coverage` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].outputs.layout` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].outputs.stampId` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].outputs.tileId` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].outputs.value` | value | `string = "colorImage"` |  |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].run` | function | `({width,height,columns,rows,stamps,options,controls,...maps},{seed})` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.tileSampler"].seed` | value | `string = "options"` |  |
 | `KIT.procedural.graphImages.operations["image.toDisplay"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.toDisplay"].description` | value | `string = "Convert typed color to straight-alpha sRGB8 for legacy compositing and PNG exports."` |  |
 | `KIT.procedural.graphImages.operations["image.toDisplay"].inputs` | namespace |  |  |
@@ -1324,6 +1361,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.spatial.transform` | function | `(source, options = {})` | [source](../../src/kit/paq-coordinate-sampling.js) |
 | `KIT.procedural.graphImages.split` | function | `(source, channels)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.tileGenerator` | function | `(width,height,columns=4,rows=6,source=stamp,options={},seed=0)` | [guide](../material-tile-generator.md#outputs), [source](../../src/kit/paq-def-tile-generator.js) |
+| `KIT.procedural.graphImages.tileSampler` | function | `(width,height,columns=4,rows=6,stamps=stampDefaults,maps={},options={},controls={},seed=0)` | [guide](../material-tile-sampler.md#seeds-and-controls), [source](../../src/kit/paq-def-tile-sampler.js) |
 | `KIT.procedural.graphImages.toDisplay` | function | `(source, outOfRange = 'clamp')` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.toHeight` | function | `(source, { scale, offset = 0, units = 'art-px', channel = 'luminance' } = {})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.toRaster` | function | `(source)` | [source](../../src/kit/paq-graph-images.js) |
