@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Station finishes · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--ink:#f0e5ce;--faded:#b5b5a5;--gold:#e4b87e;--line:#46483e;--panel:#252b27;--green:#9dccb8}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 24% 0,#36403a,transparent 730px),#1c231f;color:var(--ink);font:15px/1.45 system-ui,sans-serif}
+main{width:min(100% - 56px,1100px);margin:auto;padding:31px 0 26px}
+header{display:flex;justify-content:space-between;gap:20px;align-items:end;margin-bottom:18px}
+header small{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
+h1{font:500 clamp(42px,7vw,74px)/.98 Georgia,serif;margin:5px 0 0;letter-spacing:-.052em}
+header p{max-width:300px;margin:0 0 2px;color:var(--faded)}
+nav{display:flex;gap:6px;margin-bottom:14px}
+button{font:inherit;color:inherit;cursor:pointer}button:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+nav button{padding:5px 12px;border:1px solid var(--line);border-radius:5px;background:#29312b}
+nav button[aria-pressed=true]{background:#444037;border-color:#b79565;color:#f8ddb1}
+nav span{color:var(--faded);margin-left:5px;font-size:12px}
+.workbench{display:grid;grid-template-columns:minmax(0,1fr) 375px;gap:16px;align-items:start}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;text-align:left;padding:11px;min-width:0}
+.card:hover,.card[aria-pressed=true]{border-color:#b79565}.card[aria-pressed=true]{background:#393a30}
+.card img{display:block;width:min(100%,216px);aspect-ratio:1;margin:auto;object-fit:contain;image-rendering:pixelated}
+.card .caption{display:flex;justify-content:space-between;align-items:baseline;gap:6px;padding:8px 2px 0}
+.card .caption b{font-size:16px}.card small{color:var(--faded)}
+aside{padding:15px 17px;background:#252d28;border:1px solid var(--line);border-radius:8px;min-width:0}
+h2{font:500 33px/1.04 Georgia,serif;letter-spacing:-.035em;margin:0 0 4px}aside p{margin:8px 0}
+.byline{color:var(--faded);font-size:13px}code{color:var(--green);font-size:12px;overflow-wrap:anywhere}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}.tags span{padding:2px 7px;border:1px solid #526056;border-radius:4px;color:#c6dacd;font-size:12px}
+dl{border-top:1px solid var(--line);margin:12px 0 7px;padding-top:5px}
+dl div{display:grid;grid-template-columns:107px minmax(0,1fr);gap:6px;margin:6px 0}dt{color:var(--faded)}dd{margin:0;overflow-wrap:anywhere}
+details{border-top:1px solid var(--line);margin-top:10px;padding-top:8px}
+summary{cursor:pointer;color:var(--gold);font-size:13px}pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:7px 0}
+a{color:var(--gold);text-underline-offset:3px}footer{margin-top:13px;color:var(--faded);font-size:13px}footer a{margin-right:13px}
+[hidden]{display:none!important}
+@media(max-width:830px){.workbench{grid-template-columns:minmax(0,1fr) 310px;gap:11px}.card .caption{display:block}.card small{display:block}}
+@media(max-width:640px){main{width:calc(100% - 28px);padding-top:21px}.workbench{grid-template-columns:1fr}header{display:block}header p{margin-top:8px}.card{padding:8px}}
+</style>
+</head>
+<body>
+<main>
+<header><div><small>Ink Studio · Material graph metadata</small><h1>Station finishes</h1></div><p>Switch between the library, the workshop archive, and the index ready for publication.</p></header>
+<nav aria-label="Catalog visibility">
+<button type="button" data-audience="library">Library <span></span></button>
+<button type="button" data-audience="workspace">Workspace <span></span></button>
+<button type="button" data-audience="publication">Publication <span></span></button>
+</nav>
+<div class="workbench">
+<section id="cards" class="cards" aria-label="Material cards"></section>
+<aside aria-label="Selected material metadata">
+<h2 id="label"></h2><div class="byline" id="author"></div>
+<p id="description"></p>
+<div id="tags" class="tags"></div>
+<dl>
+<div><dt>Identifier</dt><dd><code id="identity"></code></dd></div>
+<div><dt>Intended use</dt><dd id="intended"></dd></div>
+<div><dt>Model</dt><dd><code id="model"></code></dd></div>
+<div><dt>Physical size</dt><dd id="size"></dd></div>
+<div><dt>Thumbnail</dt><dd id="thumbnail"></dd></div>
+<div><dt>Visibility</dt><dd id="visibility"></dd></div>
+</dl>
+<a id="source">Open editable graph</a>
+<details id="userdata"><summary>User data</summary><pre><code id="payload"></code></pre></details>
+</aside>
+</div>
+<footer><a href="publication/index.json">Published index</a><a href="registry.json">Asset registry</a> Thumbnails rendered by Ink</footer>
+</main>
+<script src="data.js"></script>
+<script>
+const get = id => document.getElementById(id);
+const controls = [...document.querySelectorAll('[data-audience]')];
+let audience = 'library', selected = 'verdigris-enamel';
+for (const button of controls) {
+  const view = button.dataset.audience;
+  button.querySelector('span').textContent = library[view].total;
+  button.addEventListener('click', () => { audience = view; show(); });
+}
+function text(tag, value) {
+  const item = document.createElement(tag);
+  item.textContent = value;
+  return item;
+}
+function show() {
+  const items = library[audience].items;
+  const card = items.find(row => row.id === selected) ?? items[0];
+  selected = card.id;
+  controls.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.audience === audience)));
+  get('cards').replaceChildren(...items.map(row => {
+    const button = document.createElement('button'), image = document.createElement('img'), caption = document.createElement('span');
+    button.className = 'card';
+    button.type = 'button';
+    button.dataset.material = row.id;
+    button.setAttribute('aria-pressed', String(row.id === selected));
+    image.src = row.thumbnail.file;
+    image.alt = row.thumbnail.alt;
+    caption.className = 'caption';
+    caption.append(text('b', row.label), text('small', row.visibility.publication));
+    button.append(image, caption);
+    button.addEventListener('click', () => { selected = row.id; show(); get('cards').querySelector('[aria-pressed=true]').focus(); });
+    return button;
+  }));
+  get('label').textContent = card.label;
+  get('author').textContent = card.author;
+  get('description').textContent = card.description;
+  get('tags').replaceChildren(...card.tags.map(tag => text('span', tag)));
+  get('identity').textContent = card.id;
+  get('intended').textContent = card.intendedUse;
+  get('model').textContent = card.materialModel;
+  const { width, height, depth, unit } = card.physicalDimensions;
+  get('size').textContent = [width, height, depth].filter(value => value !== undefined).join(' × ') + ' ' + unit;
+  get('thumbnail').textContent = card.thumbnail.width + ' × ' + card.thumbnail.height + ' px';
+  get('visibility').textContent = (card.visibility.library ? 'Library listed' : 'Library hidden') + ' · ' + card.visibility.publication;
+  const link = get('source');
+  link.hidden = !card.file;
+  if (card.file) link.href = card.file;
+  get('userdata').hidden = card.userData === undefined;
+  get('payload').textContent = card.userData === undefined ? '' : JSON.stringify(card.userData, null, 2);
+}
+show();
+</script>
+</body>
+</html>

@@ -13,13 +13,13 @@ ink-studio graph run /tmp/ink-glaze/review/bellflower.material.json --instance k
 
 `ink.openMaterialGraph(source, { id })` takes a parsed material document or imports a version 1 graph project. It copies the input and, for a legacy project, preserves authored IDs and assigns deterministic IDs to its connections. Omitting `id` on legacy import derives an ID from the source document. `ink.readMaterialGraph(file, options)` does the same from a file.
 
-Edit the returned records and call `ink.writeMaterialGraph(file, document, { baseDir })` to validate and atomically save the JSON. `baseDir` is the original directory of the relative resource, registry, and group paths. It defaults to the destination directory for in-place saves and new documents. Saving to a new directory rebases those paths and returns the saved document. External files remain separate and can be collected with Ink's project bundler.
+Edit the returned records and call `ink.writeMaterialGraph(file, document, { baseDir })` to validate and atomically save the JSON. `baseDir` is the original directory of the relative resource, registry, group, and thumbnail paths. It defaults to the destination directory for in-place saves and new documents. Saving to a new directory rebases those paths and returns the saved document. External files remain separate and can be collected with Ink's project bundler.
 
 To execute from disk use `ink.readGraphProject(file, { instance })`. To execute an edited object use `ink.createGraphProject(document, { baseDir, instance })`. Pass the resulting project to the usual plan, inspect, and run methods. CLI graph execution accepts `--instance ID`. Explicit runtime inputs override defaults from that instance. Use [multi-channel material ports](material-graph-ports.md) to pass a named set of maps through those graphs.
 
 ## Version 1 document
 
-The top-level fields are `format`, `version`, `id`, and `graph`, with optional `resources`, `controls`, `instances`, and `settings`. Each table is keyed by an ID. Display names live in the optional `label` field so renaming a label leaves references and output IDs intact.
+The top-level fields are `format`, `version`, `id`, and `graph`, with optional `resources`, `controls`, `instances`, `settings`, and `metadata`. Each table is keyed by an ID. Display names live in the optional `label` field so renaming a label leaves references and output IDs intact.
 
 | Table | Entry |
 | --- | --- |
@@ -72,3 +72,32 @@ ink-studio graph run /tmp/ink-glaze-library/replaced.material.json --out /tmp/in
 ```
 
 Open `demo.html` in the demo directory to compare the rendered combinations. It previews graph runs from two instances with independent pigment settings and replacements.
+
+## Describe and publish material metadata
+
+Keep the existing `id` as the stable graph identifier and use `label` for its display name. Save the other catalog fields in the optional top-level `metadata` record.
+
+| Field | Authoring value |
+| --- | --- |
+| `author`, `description`, `intendedUse` | Creator credit and text describing the material and its intended placement. |
+| `tags` | Up to 32 distinct labels for search and filtering. |
+| `userData` | Finite JSON for application-specific notes or fields. Workspace and local library cards include it. |
+| `materialModel` | Model identifier such as `pbr.metallic-roughness` or `stylized.palette`. |
+| `physicalDimensions` | Positive `width` and `height`, optional positive `depth`, and a `unit` of `mm`, `cm`, `m`, `in` or `ft`. |
+| `thumbnail` | A relative PNG `file` and optional `alt` text. Library and publication previews support up to 1024 × 1024 and 2 MiB. Take bundles collect the referenced file. |
+| `visibility` | Independent `library` boolean and `publication` state of `private`, `unlisted` or `public`. Workspace-only visibility is the default. |
+
+Physical dimensions describe the intended real-world size of the material. Shared base settings drive texture sampling and delivery. The material's reported metadata is available in graph plans and snapshots, and editorial edits preserve execution and artifact identity.
+
+Register material graphs as `graph` entries in a locked Ink asset registry. `ink.searchMaterialLibrary(registry, options)` uses the exact registered revisions and lets you search by label, author, description, intended use, model or tags. Use `audience: 'workspace'` to view drafts, `audience: 'library'` for library-listed cards, or `audience: 'publication'` for public cards. Use `ink.describeMaterialMetadata(file, { audience: 'publication' })` for an explicitly selected public or unlisted card. These audiences control catalog discovery and the fields included in the publication.
+
+`ink.publishMaterialLibrary(registry, { out, query, tag, offset, limit })` writes one filtered page of the public catalog to a new directory. The portable index contains shareable metadata and relative paths to content-addressed thumbnail copies. The source graphs, local paths, and user data stay in the workspace. Use `limit` up to 128 and `offset` to select a page.
+
+```sh
+node examples/material-graph-metadata/demo.cjs /tmp/ink-station
+ink-studio graph material-info /tmp/ink-station/graphs/verdigris-enamel.material.json
+ink-studio graph material-library /tmp/ink-station/registry.json --audience library --tag Ceramic
+ink-studio graph material-library /tmp/ink-station/registry.json --out /tmp/ink-station/public-cards
+```
+
+Use `graph material ... --metadata metadata.json --out material.json` to replace the authored metadata record. Thumbnail paths in that record resolve relative to the input material and are rebased when saving to another folder. Open `demo.html` in the demo directory to compare the catalog views and open their records.

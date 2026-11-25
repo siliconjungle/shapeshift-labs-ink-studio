@@ -258,6 +258,8 @@ function collectDependencies(bundles, entry, get, attachments = {}) {
     } else if (kind === 'graph') {
       const graph = document.format === MaterialGraph.format ?
         MaterialGraph.toGraphProject(document, { requireOutputs: false }) : document;
+      if (document.format === MaterialGraph.format && document.metadata?.thumbnail)
+        requireFile(resolvePath(file, document.metadata.thumbnail.file));
       const bind = select(file, graph);
       graphGroups(file, graph.groups);
       for (const asset of values(graph.assets)) {

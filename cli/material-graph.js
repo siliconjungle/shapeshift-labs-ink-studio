@@ -5,6 +5,7 @@ const files = require('./asset-files.js');
 const { groupReference } = require('./graph-groups.js');
 const Base = require('../src/material-base-settings.js');
 const OutputUsages = require('./material-output-usages.js');
+const Metadata = require('./material-metadata.js');
 
 const format = 'ink-studio/material-graph';
 const version = 1;
@@ -170,8 +171,9 @@ function lowerGraph(scope, { requireOutputs, materialBase = false } = {}) {
 }
 
 function lower(document, { requireOutputs, instance } = {}) {
-  entity(document, ['format', 'version', 'id', 'graph', 'resources', 'controls', 'instances', 'settings'], 'material graph');
+  entity(document, ['format', 'version', 'id', 'graph', 'resources', 'controls', 'instances', 'settings', 'metadata'], 'material graph');
   if (!isId(document.id)) throw new TypeError('Material graph needs a stable ID');
+  if (Object.hasOwn(document, 'metadata')) Metadata.validate(document.metadata);
   const { graph, resources = {}, settings = {}, controls = {}, instances = {} } = document;
   fields(settings, settingsKeys, 'material graph execution settings');
   const materialBase = Object.hasOwn(settings, 'base');
@@ -255,6 +257,7 @@ function writeMaterialGraph(file, source, { baseDir = path.dirname(path.resolve(
     }
   }
   relocateGroups(document.graph);
+  if (document.metadata?.thumbnail) document.metadata.thumbnail.file = relocate(document.metadata.thumbnail.file);
   if (typeof document.settings?.assetRegistry === 'string')
     document.settings.assetRegistry = relocate(document.settings.assetRegistry);
   for (const { definition } of Object.values(document.resources ?? {}))
