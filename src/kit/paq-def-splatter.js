@@ -73,21 +73,22 @@ const TypedShapeSplatter = ({V,M,planar,volume,scatter,descriptor,wrap,dimension
     }};
   }
 
-  function placements(columns,rows,library,ground,density,mask,config) {
+  function placements(columns,rows,library,ground,density,mask,config,edits) {
     const {span,jitter,periodic,scale,rotation,scaleJitter,rotationJitter,slopeAlignment,epsilon,heightOffset,heightJitter}=config;
     const keys=Object.fromEntries(Object.entries(config.seeds).map(([k,n])=>[k,hash('shape splatter/'+k+'/'+n)]));
     const drawn=(id,name,axis=0)=>hash01(id+'/'+axis,keys[name]);
     const grid=scatter({id:'shape-splatter',bounds:{min:[0,0],max:[1,1]},origin:[.5/columns,.5/rows],
       step:[1/columns,1/rows],jitter,seed:keys.layout});
     const cells=[columns,rows], bins=Array.from({length:columns*rows},()=>[]), items=[];
-    const rejected={mask:0,density:0};
+    const rejected={mask:0,density:0,...(edits.hide.size&&{hidden:0})};
     let visits=0,maxCandidates=0;
     for(const {point,cell:[c,r]} of grid.samples){
       if(c<0||r<0||c>=columns||r>=rows)continue;
       const id=1+r*columns+c, [u,v]=point;
       if(mask&&mask(u,v)<config.maskThreshold) { rejected.mask++;continue; }
       if(drawn(id,'density')>=config.density*(density?.(u,v)??1)) { rejected.density++;continue; }
-      const index=Math.floor(drawn(id,'shape')*library.length), shape=library[index];
+      if(edits.hide.has(id)){rejected.hidden++;continue;}
+      const index=edits.replace.get(id)??Math.floor(drawn(id,'shape')*library.length), shape=library[index];
       const sizes=scale.map((n,i)=>n*(1+scaleJitter[i]*(2*drawn(id,'scale',i)-1)));
       const angles=rotation.map((n,i)=>n%360+rotationJitter[i]*(2*drawn(id,'rotation',i)-1));
       const h=ground.height(u,v)+heightOffset+heightJitter*(2*drawn(id,'height')-1), base=[u*span[0],h,v*span[1]];
@@ -131,7 +132,18 @@ const TypedShapeSplatter = ({V,M,planar,volume,scatter,descriptor,wrap,dimension
     };
   }
 
-  function generate(width,height,columns=8,rows=6,shapes=[],volumes=[],maps={},options={},root=0,time=0) {
+  function geometryEdits(source,count,librarySize) {
+    if(!fields(source,['hide','replace'])) throw new TypeError('Unknown Shape Splatter edit option');
+    const {hide=[],replace=[]}=source;
+    const list=data=>Array.isArray(data)&&data.length<=count;
+    if(!list(hide)||!Array.from(hide).every(id=>integer(id,1,count))||new Set(hide).size!==hide.length||
+      !list(replace)||!Array.from(replace).every(row=>fields(row,['id','shapeId'])&&
+        integer(row.id,1,count)&&integer(row.shapeId,1,librarySize))||new Set(replace.map(row=>row.id)).size!==replace.length)
+      throw new RangeError('Shape Splatter edits need unique instance IDs and valid replacement shape IDs');
+    return {hide:new Set(hide),replace:new Map(replace.map(({id,shapeId})=>[id,shapeId-1]))};
+  }
+
+  function generate(width,height,columns=8,rows=6,shapes=[],volumes=[],maps={},options={},root=0,time=0,edits={}) {
     if(![width,height].every(n=>integer(n,1,8192))||!dimensions({width,height})||width*height>1e6)
       throw new RangeError('Shape Splatter bake exceeds its million-texel budget');
     if(![columns,rows].every(n=>integer(n,1,128))||columns*rows>4096||!Number.isFinite(time))
@@ -142,7 +154,8 @@ const TypedShapeSplatter = ({V,M,planar,volume,scatter,descriptor,wrap,dimension
     const {span,periodic,samples,steps,crop,units,seed:materialSeed,orientation}=config;
     const map=(source,name)=>source==null?null:plane(source,name,undefined,config.mapFilter);
     const ground=terrain(bg,config), shapeLibrary=geometry.library(shapes,volumes,config,time);
-    const {bins,maxCandidates,layout}=placements(columns,rows,shapeLibrary,ground,map(density,'density'),map(mask,'mask'),config);
+    const changes=geometryEdits(edits,columns*rows,shapeLibrary.length);
+    const {bins,maxCandidates,layout}=placements(columns,rows,shapeLibrary,ground,map(density,'density'),map(mask,'mask'),config,changes);
     const cut=map(clip,'clip'), count=width*height, extra=samples===1?0:samples*samples;
     if(count*(1+extra)*maxCandidates*(steps+6)>220e6) throw new RangeError('Shape Splatter bake exceeds its trace budget');
     const [left,top,right,bottom]=crop, extents=[right-left,bottom-top];

@@ -636,10 +636,16 @@
     freeze:P.data.freeze,hash:P.data.hash,hash01:P.data.hash01});
   const tileSampler=TypedTileSampler({tileGenerator,fields,requireImage,integerMax,convertColor,sampler:spatialSampler,
     hash:P.data.hash,hash01:P.data.hash01});
-  const shapeSplatter=TypedShapeSplatter({V:KIT.V,M:KIT.M,planar:P.shapeLibrary.compile,
+  const splatterBake=TypedShapeSplatter({V:KIT.V,M:KIT.M,planar:P.shapeLibrary.compile,
     volume:(source,time)=>({box:P.sceneGraph.sdfExtent(source),read:P.sceneGraph.sdfSampler(source,time)}),
     scatter:options=>P.sampling.grid(options),descriptor,wrap,dimensions,fields,freeze:P.data.freeze,
     requireImage,integerMax,sampler:spatialSampler,hash:P.data.hash,hash01:P.data.hash01});
+  const scatterMappers=TypedScatterMappers({requireImage,alignedGrid,descriptor,wrap,pack,storage,integerMax,convertColor,
+    sampler:spatialSampler,borders,fields,clone:P.data.clone,freeze:P.data.freeze,hash:P.data.hash,hash01:P.data.hash01});
+  function shapeSplatter(...args) {
+    const result=splatterBake(...args);
+    return {...result,surface:scatterMappers.surface({...result,height:result.value})};
+  }
   function bakeShape(source,width,height,options={}) {
     if (![width,height].every(n=>Number.isSafeInteger(n) && n>0) || !dimensions({width,height}) || width*height>4e6)
       throw new RangeError('Shape bake exceeds its four-million-texel budget');
@@ -684,6 +690,13 @@
   const correctionOptions = { type: 'record', default: {} };
   const sameImage = { type: 'typedImage', typeFrom: 'source' };
   const optional = { type: 'any', default: null };
+  const scatterSource='scatterSurface', scatterSelect={type:'record',default:{}};
+  function scatterMapping(kind,value) {
+    return {description:'Apply a solid or UV texture to selected '+kind+' stamp surfaces.',
+      seed:'options',inputs:{source:scatterSource,base:optional,textures:{type:'array<typedImage>',default:[]},
+        selection:scatterSelect,options:correctionOptions},outputs:{value,mask:'typedImage'},
+      run({source,base,textures,selection,options},{seed}){return scatterMappers[kind](source,base,textures,selection,options,seed);} };
+  }
   const normalOutput = { value: 'normalImage' };
   function normalFilter(name, description, source = 'normalImage') {
     return { description, inputs: { source, options: correctionOptions }, outputs: normalOutput,
@@ -1014,12 +1027,34 @@
       seed:'options', inputs:{width:{type:'pixelCount',default:96},height:{type:'pixelCount',default:64},
         columns:{type:'number',default:8},rows:{type:'number',default:6},shapes:{type:'array<shape2d>',default:[]},
         volumes:{type:'array<field>',default:[]},background:optional,density:optional,mask:optional,clip:optional,
-        time:{type:'seconds',default:0},options:correctionOptions},
+        time:{type:'seconds',default:0},options:correctionOptions,edits:correctionOptions},
       outputs:{value:'heightImage',normal:'normalImage',instanceId:'typedImage',shapeId:'typedImage',
-        uv:'typedImage',coverage:'typedImage',layout:'record'},
-      run({width,height,columns,rows,shapes,volumes,options,time,...maps},{seed}) {
-        return shapeSplatter(width,height,columns,rows,shapes,volumes,maps,options,seed,time);
+        uv:'typedImage',coverage:'typedImage',layout:'record',surface:scatterSource},
+      run({width,height,columns,rows,shapes,volumes,options,time,edits,...maps},{seed}) {
+        return shapeSplatter(width,height,columns,rows,shapes,volumes,maps,options,seed,time,edits);
       }
+    },
+    'image.scatterSurface': {
+      description:'Reassemble aligned scatter maps from independent typed images.',
+      inputs:{instanceId:'typedImage',shapeId:'typedImage',uv:'typedImage',coverage:'typedImage',height:optional,normal:optional,layout:optional},
+      outputs:{value:scatterSource},run(inputs){return {value:scatterMappers.surface(inputs)};}
+    },
+    'image.scatterColor': scatterMapping('color','colorImage'),
+    'image.scatterGrayscale': scatterMapping('grayscale','typedImage'),
+    'image.scatterMask': {
+      description:'Select visible stamps by instance or shape ID, range, or stable seeded subset.',
+      seed:'options',inputs:{source:scatterSource,options:correctionOptions},outputs:{value:'typedImage',selection:'record'},
+      run({source,options},{seed}){return scatterMappers.mask(source,options,seed);}
+    },
+    'image.scatterInspect': {
+      description:'Inspect a resolved stamp at a texel or by instance ID.',
+      inputs:{source:scatterSource,options:correctionOptions},outputs:{value:'record',mask:'typedImage'},
+      run({source,options}){return scatterMappers.inspect(source,options);}
+    },
+    'image.scatterEdit': {
+      description:'Turn a scatter selection into a hide or replacement edit for a fresh shape bake.',
+      inputs:{selection:'record',options:correctionOptions},outputs:{value:'record'},
+      run({selection,options}){return {value:scatterMappers.edit(selection,options)};}
     },
     'image.toDisplay': {
       description: 'Convert typed color to straight-alpha sRGB8 for legacy compositing and PNG exports.',
@@ -1037,5 +1072,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, regions, advancedHeight, advancedTexture, shape:bakeShape, tileGenerator:tileGenerator.generate, tileSampler:tileSampler.sample, shapeSplatter, noise:makeNoise, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, regions, advancedHeight, advancedTexture, shape:bakeShape, tileGenerator:tileGenerator.generate, tileSampler:tileSampler.sample, shapeSplatter, scatterMappers, noise:makeNoise, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);

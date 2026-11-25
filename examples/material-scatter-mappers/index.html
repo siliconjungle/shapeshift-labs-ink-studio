@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Riverbed Restorer · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--bg:#121a19;--panel:#1a2421;--line:#34433d;--text:#eee9d9;--muted:#adb9ac;--mint:#9de7ca;--ochre:#edc688}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at 76% -14%,#273631 0,transparent 50%),var(--bg);color:var(--text);font:15px system-ui,sans-serif}
+main{max-width:1376px;margin:auto;padding:44px clamp(17px,4vw,60px) 44px}
+header{display:flex;justify-content:space-between;gap:16px;align-items:end;margin:0 0 27px}
+h1{font:normal clamp(40px,6vw,76px)/.96 Georgia,serif;letter-spacing:-.065em;margin:0 0 12px}
+h2{font:600 14px system-ui;letter-spacing:.035em;margin:0}
+p{margin:0;line-height:1.5}
+header p,.hint{color:var(--muted)}
+.brand,.plate small,.eyebrow,dt,output{font:11px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.095em}
+.brand,.eyebrow{color:var(--ochre)}
+.brand{flex-shrink:0;text-align:right;padding:0 0 4px}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr) 275px;gap:19px;align-items:start}
+.boards{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;min-width:0}
+.plate{min-width:0;margin:0;background:var(--panel);border:1px solid var(--line);border-radius:11px;overflow:hidden;box-shadow:0 14px 36px #0b100f55}
+figcaption{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:49px;padding:0 13px}
+.plate small{color:var(--muted);text-align:right}
+.image{position:relative;background:#253833}
+canvas{display:block;width:100%;height:auto;aspect-ratio:3/2;image-rendering:pixelated}
+#before{cursor:crosshair}
+#pin{position:absolute;width:16px;height:16px;border:2px solid #fff5c4;border-radius:2px;box-shadow:0 0 0 1px #1c2924;
+transform:translate(-50%,-50%);pointer-events:none}
+.tools{margin:19px 0 0;display:flex;gap:7px;flex-wrap:wrap}
+button,select,input{font:inherit;accent-color:var(--mint)}
+button,select{background:#202e28;border:1px solid #3d5147;border-radius:6px;color:var(--text);padding:8px 11px}
+button{cursor:pointer}
+button:hover,select:hover{border-color:var(--mint)}
+button[aria-pressed=true]{background:var(--mint);color:#142922;border-color:var(--mint);font-weight:650}
+button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--ochre);outline-offset:3px}
+.under{font-size:13px;color:var(--muted);margin-top:12px}
+aside{border:1px solid var(--line);border-radius:11px;background:var(--panel);padding:17px}
+aside section+section{border-top:1px solid var(--line);margin-top:16px;padding-top:15px}
+aside h2{margin:5px 0 14px}
+.control{display:grid;grid-template-columns:1fr minmax(100px,1.15fr);align-items:center;gap:10px;font-size:13px;margin:9px 0}
+select{min-width:0;width:100%;padding:6px}
+input[type=color]{width:100%;height:27px;background:transparent;border:1px solid #3d5147;border-radius:5px;padding:3px}
+input[type=range]{width:100%;min-width:0;margin:0}
+output{font-size:10px;color:var(--muted)}
+dl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px 10px;margin:0;font-size:13px}
+dt{color:var(--muted);align-self:center}
+dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+footer{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:18px}
+footer a{font-size:13px;color:var(--mint)}
+#error{color:#ffc2ad;font-size:13px}
+#error:empty{display:none}
+[hidden]{display:none!important}
+@media(max-width:1020px){.workspace{grid-template-columns:1fr}.controls{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+aside section+section{border-top:0;border-left:1px solid var(--line);margin:0;padding:0 0 0 18px}}
+@media(max-width:560px){main{padding-top:26px}header{display:block;margin-bottom:17px}.brand{display:none}
+.boards{grid-template-columns:1fr;gap:10px}figcaption{min-height:40px}.tools{gap:5px;margin-top:12px}
+button{padding:7px}.controls{gap:12px}aside{padding:11px}aside section+section{padding-left:11px}.control{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<main>
+<header><div><h1>Riverbed Restorer</h1><p>Recolor, mask, or reshape the stamps in a baked relief.</p></div><div class="brand">Ink Studio<br>Scatter mappers</div></header>
+<div class="workspace">
+  <section aria-label="Relief comparison">
+    <div class="boards">
+      <figure class="plate"><figcaption><h2>Original</h2><small>Click a stamp</small></figcaption>
+        <div class="image"><canvas id="before" width="180" height="120" aria-label="Original riverbed relief"></canvas><span id="pin" hidden></span></div>
+      </figure>
+      <figure class="plate"><figcaption><h2 id="view-title">Color</h2><small id="view-count"></small></figcaption>
+        <div class="image"><canvas id="after" width="180" height="120" aria-label="Edited riverbed relief"></canvas></div>
+      </figure>
+    </div>
+    <nav class="tools" id="tools" aria-label="Mapper preview"></nav>
+    <p class="under" id="help">Map a glaze into the local UVs of each selected stamp.</p>
+  </section>
+  <aside>
+    <div class="controls">
+      <section aria-label="Mapper controls">
+        <span class="eyebrow">Edit</span><h2>Stamp selection</h2>
+        <label class="control"><span>Apply to</span><select id="scope"><option value="family">Shape family</option><option value="instance">One stamp</option></select></label>
+        <label class="control" id="family-control"><span>Family</span><select id="shape"></select></label>
+        <label class="control" id="instance-control" hidden><span>Stamp</span><select id="instance"></select></label>
+        <label class="control" id="style-control"><span>Texture</span><select id="style"></select></label>
+        <label class="control" id="color-control"><span>Glaze color</span><input id="color" type="color"></label>
+        <label class="control" id="opacity-control"><span>Opacity <output id="strength"></output></span><input id="opacity" type="range" min="0" max="1" step=".01"></label>
+        <label class="control" id="angle-control"><span>UV angle <output id="degrees"></output></span><input id="angle" type="range" min="-180" max="180" step="1"></label>
+        <label class="control" id="replace-control" hidden><span>New shape</span><select id="replacement"></select></label>
+      </section>
+      <section aria-label="Stamp inspection">
+        <span class="eyebrow">Inspect</span><h2 id="focus-title">Stamp</h2>
+        <dl><dt>Family</dt><dd id="focus-shape">—</dd><dt>Texel</dt><dd id="focus-pixel">—</dd>
+          <dt>Local UV</dt><dd id="focus-uv">—</dd><dt>Coverage</dt><dd id="focus-coverage">—</dd>
+          <dt>Visible texels</dt><dd id="focus-area">—</dd><dt>Height</dt><dd id="focus-height">—</dd></dl>
+      </section>
+    </div>
+    <footer><button type="button" id="reset">Reset</button><a href="riverbed-restorer.material.json">Material graph</a></footer>
+  </aside>
+</div>
+<p id="error" role="alert"></p>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="silt.js"></script>
+<script src="mapper.js"></script>
+<script>
+const get=id=>document.getElementById(id), atlas=scatterAtlas, g=KIT.procedural.graphImages;
+const project=KIT.procedural.graph.create(atlas.graph(g)), tiles=new Map(), bindings=new Map();
+const help={color:'Map a glaze into the local UVs of each selected stamp.',gray:'Sample a tonal texture in local UVs. The riverbed sits behind the map as a faint guide.',
+  mask:'White covers the selected stamps. Gray at an edge is partial coverage.',
+  hide:'Remove the selected geometry and rebake to reveal the surface underneath.',
+  replace:'Substitute a library shape at each selected placement and rebake the relief.'};
+let control={...atlas.defaults}, focus, rendered, original, pending=0;
+const buttons=new Map();
+for(const [id,label] of Object.entries(atlas.modes)){
+  const button=document.createElement('button');button.textContent=label;button.type='button';button.dataset.mode=id;
+  button.addEventListener('click',()=>{control.mode=id;schedule();});get('tools').append(button);buttons.set(id,button);
+}
+for(const [id,label] of Object.entries(atlas.styles))get('style').add(new Option(label,id));
+for(const field of ['shape','replacement'])atlas.families.forEach((label,i)=>get(field).add(new Option(label,i+1)));
+function applyControls(){
+  for(const key of ['shape','replacement','scope','color','opacity','angle','style'])get(key).value=control[key];
+  get('instance').value=focus.instanceId||'';
+}
+function paint(id,{width,height,data}){
+  get(id).getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(data),width,height),0,0);
+}
+function initialize(){
+  const first=project.evaluate().outputs;
+  original={width:first.instanceId.raster.width,height:first.instanceId.raster.height,
+    ids:first.instanceId.raster.data,shapes:first.shapeId.raster.data};
+  const ids=[...new Set(original.ids)].filter(Boolean).sort((a,b)=>a-b);
+  get('instance').add(new Option('Select a stamp',''));
+  for(const id of ids)get('instance').add(new Option('#'+id,id));
+  paint('before',atlas.preview(first,'original'));reset();
+}
+function reset(){control={...atlas.defaults};focus=atlas.defaultFocus(project.evaluate().outputs,control.shape);applyControls();schedule();}
+function schedule(){if(!pending)pending=requestAnimationFrame(draw);}
+function draw(){
+  pending=0;
+  try{
+    if(!tiles.has(control.style))tiles.set(control.style,atlas.textures(g,control.style));
+    const inputs=atlas.variedControl(control,focus,tiles.get(control.style));
+    for(const [key,value] of Object.entries(inputs)){
+      if(key.endsWith('Textures'))continue;
+      const signature=JSON.stringify(value), prior=bindings.get(key);
+      if(prior?.signature===signature)inputs[key]=prior.value;
+      else bindings.set(key,{signature,value});
+    }
+    rendered=project.evaluate(inputs).outputs;
+    paint('after',atlas.preview(rendered,control.mode));
+    const {instanceId,shapeId,sample,visiblePixels,status}=rendered.inspect;
+    get('focus-title').textContent=instanceId?'Stamp #'+instanceId:status==='background'?'Riverbed':'Select a stamp';
+    get('focus-shape').textContent=atlas.families[shapeId-1]||'—';
+    get('focus-pixel').textContent=sample?.texel.join(', ')||'—';
+    get('focus-uv').textContent=sample?.uv?.map(n=>n.toFixed(3)).join(', ')||'—';
+    get('focus-coverage').textContent=sample?Math.round(sample.coverage*100)+'%':'—';
+    get('focus-height').textContent=sample?.height?.toFixed(3)??'—';
+    get('focus-area').textContent=visiblePixels;
+    const pin=get('pin');pin.hidden=!sample;
+    if(sample){pin.style.left=(sample.texel[0]+.5)*100/original.width+'%';pin.style.top=(sample.texel[1]+.5)*100/original.height+'%';}
+    for(const [key,button] of buttons)button.setAttribute('aria-pressed',String(control.mode===key));
+    get('view-title').textContent=atlas.modes[control.mode];get('help').textContent=help[control.mode];
+    const count=rendered.selection.ids.length;
+    get('view-count').textContent=count+(count===1?' stamp':' stamps');
+    const material=['color','gray'].includes(control.mode);
+    for(const id of ['style','opacity','angle'])get(id+'-control').hidden=!material;
+    get('color-control').hidden=control.mode!=='color';get('replace-control').hidden=control.mode!=='replace';
+    get('family-control').hidden=control.scope!=='family';get('instance-control').hidden=control.scope!=='instance';
+    get('strength').value=Math.round(control.opacity*100)+'%';get('degrees').value=control.angle+'°';
+    get('error').textContent='';
+  }catch(error){get('error').textContent=error.message;}
+}
+get('before').addEventListener('click',event=>{
+  const r=get('before').getBoundingClientRect(), x=Math.floor((event.clientX-r.left)*original.width/r.width);
+  const y=Math.floor((event.clientY-r.top)*original.height/r.height);
+  if(x<0||y<0||x>=original.width||y>=original.height)return;
+  const p=y*original.width+x;
+  focus={pixel:[x,y],instanceId:original.ids[p]};
+  if(original.shapes[p])control.shape=original.shapes[p];
+  else control.scope='instance';
+  applyControls();schedule();
+});
+for(const key of ['scope','shape','style','color','opacity','angle','replacement','instance']){
+  get(key).addEventListener('input',()=>{
+    if(key==='instance'){
+      focus={instanceId:Number(get(key).value)};
+      if(!focus.instanceId)focus.pixel=[0,0];
+    }else{
+      control[key]=typeof atlas.defaults[key]==='number'?Number(get(key).value):get(key).value;
+      if(key==='shape')focus=atlas.defaultFocus(rendered,control.shape);
+    }
+    applyControls();schedule();
+  });
+}
+get('reset').addEventListener('click',reset);
+try{initialize();}catch(error){get('error').textContent=error.message;}
+</script>
+</body>
+</html>

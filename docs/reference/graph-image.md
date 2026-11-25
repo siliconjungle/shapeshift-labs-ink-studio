@@ -1088,6 +1088,135 @@ Guides: [guide](../material-advanced-texture-filters.md)
 Get the runnable example with `ink-studio graph describe image.scanCleanup --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.scatterColor
+
+Apply a solid or UV texture to selected color stamp surfaces.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `scatterSurface` | Required | {"layout":"Versioned aligned ID, UV, coverage and optional height, normal and placement maps"} |
+| Input | `base` | `any` | `null` |  |
+| Input | `textures` | `array<typedImage>` | `[]` | {"items":"typedImage"} |
+| Input | `selection` | `record` | `{}` | {"layout":"Plain named object"} · {"instanceIds":{"type":"array<number>","constraints":{"min":1,"max":4096,"integer":true,"uniqueItems":true,"maxItems":4096}},"shapeIds":{"type":"array<number>","constraints":{"min":1,"max":4096,"integer":true,"uniqueItems":true,"maxItems":4096}},"instanceRange":{"type":"vec2","constraints":{"min":1,"max":4096,"integer":true}},"shapeRange":{"type":"vec2","constraints":{"min":1,"max":4096,"integer":true}},"fraction":{"type":"number","constraints":{"min":0,"max":1},"default":1},"invert":{"type":"boolean","default":false},"seed":{"type":"number","constraints":{"integer":true,"safe":true}}} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"mode":{"type":"string","constraints":{"choices":["replace","tint"]},"default":"replace"},"opacity":{"type":"number","constraints":{"min":0,"max":1},"default":1},"textureBy":{"type":"string","constraints":{"choices":["shape","instance","random"]},"default":"shape"},"uvScale":{"type":"vec2","constraints":{"min":-64,"max":64},"default":[1,1]},"uvOffset":{"type":"vec2","constraints":{"min":-64,"max":64},"default":[0,0]},"uvAngle":{"type":"number","unit":"degrees","default":0},"filter":{"type":"string","constraints":{"choices":["image","nearest","linear"]},"default":"image"},"border":{"type":"string\|record"},"seed":{"type":"number","constraints":{"integer":true,"safe":true}},"value":{"type":"string\|srgb","default":"#ffffff"}} |
+| Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
+| Output | `mask` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+- Connect a scatterMask selection output or supply selection rules directly.
+- Color composes in linear light with coverage and texture alpha. A base is required for tint mode.
+
+Guides: [guide](../material-scatter-mappers.md)
+
+Get the runnable example with `ink-studio graph describe image.scatterColor --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.scatterEdit
+
+Turn a scatter selection into a hide or replacement edit for a fresh shape bake.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `selection` | `record` | Required | {"layout":"Plain named object"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"action":{"type":"string","constraints":{"choices":["hide","replace"]},"default":"hide"},"shapeId":{"type":"number","constraints":{"min":1,"max":32,"integer":true}}} |
+| Output | `value` | `record` | — | {"layout":"Plain named object"} |
+
+Guides: [guide](../material-scatter-mappers.md)
+
+Get the runnable example with `ink-studio graph describe image.scatterEdit --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.scatterGrayscale
+
+Apply a solid or UV texture to selected grayscale stamp surfaces.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `scatterSurface` | Required | {"layout":"Versioned aligned ID, UV, coverage and optional height, normal and placement maps"} |
+| Input | `base` | `any` | `null` |  |
+| Input | `textures` | `array<typedImage>` | `[]` | {"items":"typedImage"} |
+| Input | `selection` | `record` | `{}` | {"layout":"Plain named object"} · {"instanceIds":{"type":"array<number>","constraints":{"min":1,"max":4096,"integer":true,"uniqueItems":true,"maxItems":4096}},"shapeIds":{"type":"array<number>","constraints":{"min":1,"max":4096,"integer":true,"uniqueItems":true,"maxItems":4096}},"instanceRange":{"type":"vec2","constraints":{"min":1,"max":4096,"integer":true}},"shapeRange":{"type":"vec2","constraints":{"min":1,"max":4096,"integer":true}},"fraction":{"type":"number","constraints":{"min":0,"max":1},"default":1},"invert":{"type":"boolean","default":false},"seed":{"type":"number","constraints":{"integer":true,"safe":true}}} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"mode":{"type":"string","constraints":{"choices":["replace","tint"]},"default":"replace"},"opacity":{"type":"number","constraints":{"min":0,"max":1},"default":1},"textureBy":{"type":"string","constraints":{"choices":["shape","instance","random"]},"default":"shape"},"uvScale":{"type":"vec2","constraints":{"min":-64,"max":64},"default":[1,1]},"uvOffset":{"type":"vec2","constraints":{"min":-64,"max":64},"default":[0,0]},"uvAngle":{"type":"number","unit":"degrees","default":0},"filter":{"type":"string","constraints":{"choices":["image","nearest","linear"]},"default":"image"},"border":{"type":"string\|record"},"seed":{"type":"number","constraints":{"integer":true,"safe":true}},"value":{"type":"number","constraints":{"min":0,"max":1},"default":1}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `mask` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+- Textures and optional base must be single-channel unitless data or masks.
+- A base is required for tint mode. Texture samples are clamped to 0 through 1.
+
+Guides: [guide](../material-scatter-mappers.md)
+
+Get the runnable example with `ink-studio graph describe image.scatterGrayscale --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.scatterInspect
+
+Inspect a resolved stamp at a texel or by instance ID.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `scatterSurface` | Required | {"layout":"Versioned aligned ID, UV, coverage and optional height, normal and placement maps"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"pixel":{"type":"vec2","unit":"pixels","constraints":{"integer":true,"inBounds":true}},"instanceId":{"type":"number","constraints":{"min":1,"max":4096,"integer":true}}} |
+| Output | `value` | `record` | — | {"layout":"Plain named object"} |
+| Output | `mask` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+- Supply one integer texel coordinate or one positive instance ID.
+- Layout can identify a fully occluded stamp. Bounds are left, top, right, bottom with exclusive right and bottom.
+
+Guides: [guide](../material-scatter-mappers.md)
+
+Get the runnable example with `ink-studio graph describe image.scatterInspect --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.scatterMask
+
+Select visible stamps by instance or shape ID, range, or stable seeded subset.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `scatterSurface` | Required | {"layout":"Versioned aligned ID, UV, coverage and optional height, normal and placement maps"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"instanceIds":{"type":"array<number>","constraints":{"min":1,"max":4096,"integer":true,"uniqueItems":true,"maxItems":4096}},"shapeIds":{"type":"array<number>","constraints":{"min":1,"max":4096,"integer":true,"uniqueItems":true,"maxItems":4096}},"instanceRange":{"type":"vec2","constraints":{"min":1,"max":4096,"integer":true}},"shapeRange":{"type":"vec2","constraints":{"min":1,"max":4096,"integer":true}},"fraction":{"type":"number","constraints":{"min":0,"max":1},"default":1},"invert":{"type":"boolean","default":false},"seed":{"type":"number","constraints":{"integer":true,"safe":true}}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `selection` | `record` | — | {"layout":"Plain named object"} |
+
+- Each rule applies per stamp. Zero is background. The mask keeps fractional coverage.
+- Link the selection output to both mappers and scatterEdit to share exactly the same subset.
+
+Guides: [guide](../material-scatter-mappers.md)
+
+Get the runnable example with `ink-studio graph describe image.scatterMask --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.scatterSurface
+
+Reassemble aligned scatter maps from independent typed images.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `instanceId` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `shapeId` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `uv` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `coverage` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `height` | `any` | `null` |  |
+| Input | `normal` | `any` | `null` |  |
+| Input | `layout` | `any` | `null` |  |
+| Output | `value` | `scatterSurface` | — | {"layout":"Versioned aligned ID, UV, coverage and optional height, normal and placement maps"} |
+
+Guides: [guide](../material-scatter-mappers.md)
+
+Get the runnable example with `ink-studio graph describe image.scatterSurface --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.seamRepair
 
 Join opposite tile edges with a scoped, alpha-safe crossfade that preserves the interior.
@@ -1152,6 +1281,7 @@ Origin: toolkit.
 | Input | `clip` | `any` | `null` | {"intent":["data","mask"],"channels":[1],"units":"unitless"} |
 | Input | `time` | `seconds` | `0` | seconds · {"finite":true} |
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"span":{"type":"vec2","unit":"height units","constraints":{"min":0.0001,"max":10000},"default":[1,1]},"crop":{"type":"array<number>","unit":"texture coordinates","constraints":{"length":4,"order":"left, top, right, bottom"},"default":[0,0,1,1]},"wrap":{"type":"array<boolean>","constraints":{"length":2},"default":[true,true]},"mapFilter":{"type":"string","constraints":{"choices":["image","nearest","linear"]},"default":"image"},"units":{"type":"string"},"jitter":{"type":"number","constraints":{"min":0,"max":1},"default":0.88},"density":{"type":"number","constraints":{"min":0,"max":1},"default":1},"scale":{"type":"number\|vec3","unit":"height units","constraints":{"min":0.00001,"max":10000},"default":[0.16,0.16,0.16]},"scaleJitter":{"type":"vec3","constraints":{"min":0,"max":0.95},"default":[0,0,0]},"rotation":{"type":"vec3","unit":"degrees XYZ","default":[0,0,0]},"rotationJitter":{"type":"vec3","unit":"degrees XYZ","constraints":{"min":0,"max":360},"default":[0,0,0]},"slopeAlignment":{"type":"number","constraints":{"min":0,"max":1},"default":1},"heightOffset":{"type":"number","unit":"height units","constraints":{"min":-10000,"max":10000},"default":0},"heightJitter":{"type":"number","unit":"height units","constraints":{"min":0,"max":10000},"default":0},"extrusion":{"type":"number","unit":"local shape units","constraints":{"min":0.01,"max":2},"default":0.25},"rounding":{"type":"number","unit":"local shape units","constraints":{"min":0,"max":1},"default":0.035},"maskThreshold":{"type":"number","constraints":{"min":0,"max":1},"default":0.5},"clipThreshold":{"type":"number","constraints":{"min":0,"max":1},"default":0.5},"samples":{"type":"number","unit":"samples per axis","constraints":{"choices":[1,2,4]},"default":1},"steps":{"type":"number","constraints":{"min":8,"max":128,"integer":true},"default":64},"epsilon":{"type":"number","unit":"local shape units","constraints":{"min":0.000001,"max":0.025},"default":0.0006},"safety":{"type":"number","constraints":{"min":0.1,"max":1},"default":0.78},"orientation":{"type":"string","constraints":{"choices":["opengl","directx"]},"default":"opengl"},"uv":{"type":"record","properties":{"mode":{"type":"string","constraints":{"choices":["planar","cylindrical","spherical"]},"default":"planar"},"scale":{"type":"vec2","constraints":{"min":-64,"max":64},"default":[1,1]},"offset":{"type":"vec2","constraints":{"min":-64,"max":64},"default":[0,0]},"angle":{"type":"number","unit":"degrees clockwise","default":0},"address":{"type":"string","constraints":{"choices":["raw","wrap","clamp"]},"default":"raw"}}},"seed":{"type":"number","constraints":{"integer":true,"safe":true}},"seeds":{"type":"record","properties":{"layout":{"type":"number","constraints":{"integer":true,"safe":true}},"density":{"type":"number","constraints":{"integer":true,"safe":true}},"shape":{"type":"number","constraints":{"integer":true,"safe":true}},"scale":{"type":"number","constraints":{"integer":true,"safe":true}},"rotation":{"type":"number","constraints":{"integer":true,"safe":true}},"height":{"type":"number","constraints":{"integer":true,"safe":true}}}}} |
+| Input | `edits` | `record` | `{}` | {"layout":"Plain named object"} |
 | Output | `value` | `heightImage` | — | {"layout":"Typed floating-point height with units"} |
 | Output | `normal` | `normalImage` | — | {"layout":"Typed XYZ or XYZA normal map with signed float or biased integer samples"} |
 | Output | `instanceId` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
@@ -1159,12 +1289,14 @@ Origin: toolkit.
 | Output | `uv` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
 | Output | `coverage` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
 | Output | `layout` | `record` | — | {"layout":"Plain named object"} |
+| Output | `surface` | `scatterSurface` | — | {"layout":"Versioned aligned ID, UV, coverage and optional height, normal and placement maps"} |
 
 - Planar definitions become rounded extrusions. Volumetric fields need local XYZ bounds and use local Y as their height axis.
 - Projection keeps the top visible hit. Height, normal, IDs and stamp UVs refer to that hit; coverage measures subpixel visibility.
 - Density and mask gate placements; clip gates individual surface samples. Background height also drives slope alignment and occlusion.
+- Connect surface to a scatter mapper. Use edits from image.scatterEdit on a downstream copy of the bake to hide or replace stamps.
 
-Guides: [guide](../material-shape-splatter.md)
+Guides: [guide](../material-scatter-mappers.md), [guide](../material-shape-splatter.md)
 
 Get the runnable example with `ink-studio graph describe image.shapeSplatter --example > example.json`.
 Run it with `ink-studio graph run example.json`.
