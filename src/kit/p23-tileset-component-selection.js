@@ -17,8 +17,11 @@
   }
 
   function selectMesh(row, domain, query, options, enabledDomains) {
-    const tiles = domain === 'tiles' ? new Map((row.bindings ?? []).filter(binding=>
-      !binding.review && A.tilesetFaces.isSourceBinding(binding)).map(binding=>[binding.element,binding])) : null;
+    const tiles = domain === 'tiles' ? new Map() : null;
+    if (tiles) for (const binding of row.bindings ?? []) if (!binding.review && A.tilesetFaces.isSourceBinding(binding)) {
+      if (!tiles.has(binding.element)) tiles.set(binding.element,[]);
+      tiles.get(binding.element).push({binding:binding.id,selection:binding.data.selection});
+    }
     const native = tiles ? 'faces' : domain;
     if (query.domain !== undefined && query.domain !== native)
       throw new TypeError('The topology query must use '+native+' for the '+domain+' domain');
@@ -40,8 +43,8 @@
       return {domain:convert,sourceDomain:'tiles',ids:converted.ids,selection:converted};
     }
     return {ids,selection:{...selection,ids},tiles:ids.map(face=>{
-      const {id,data} = tiles.get(face);
-      return {face,binding:id,selection:data.selection};
+      const sources = tiles.get(face);
+      return {face,...(sources.length === 1 ? sources[0] : {sources})};
     })};
   }
 

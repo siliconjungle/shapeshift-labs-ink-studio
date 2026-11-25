@@ -133,6 +133,41 @@
     return remapped.map(binding=>changes.has(binding.id) ? changes.get(binding.id) : binding).filter(Boolean);
   }
 
+  function previewMerges(row, steps) {
+    const byFace = new Map(), changed = new Set();
+    const uvSet = MaterialUV.resolve(row.document.uvBindings,'pigment');
+    const materials = new Map((row.materials ?? []).map(({id,texture})=>[id,texture?.tileset]));
+    for (const binding of row.bindings ?? []) if (isSourceBinding(binding)) {
+      if (!byFace.has(binding.element)) byFace.set(binding.element,[]);
+      byFace.get(binding.element).push(binding);
+    }
+    const coverage = [];
+    for (const step of steps) {
+      const {kind,keep,removedFace,discarded} = step;
+      if (kind === 'split-quad') {
+        for (const {sourceFace,triangles} of step.faces)
+          for (const child of triangles) byFace.set(child.face,byFace.get(sourceFace) ?? []);
+      }
+      if (!['merge-tiles','join-triangles','dissolve'].includes(kind)) continue;
+      const sources = [...new Map([...(byFace.get(keep) ?? []),...(byFace.get(removedFace) ?? [])]
+        .map(binding=>[binding.id,binding])).values()];
+      if (kind === 'join-triangles' && step.uvSets.some(row=>row.set === uvSet && row.discontinuous))
+        for (const binding of sources) changed.add(binding.id);
+      if (kind === 'merge-tiles') {
+        const paintChanges = discarded.some(({kind,set})=>['material','geometry-interpolation'].includes(kind) ||
+          (kind === 'shared-uv' || kind === 'uv-interpolation') && set === uvSet);
+        const before = step.before.map(({id:face,material})=>({face,material,tileset:materials.get(material) ?? null,
+          bindings:byFace.get(face) ?? []}));
+        if (paintChanges) for (const binding of sources) changed.add(binding.id);
+        coverage.push({step:step.index,face:keep,uvSet,paintChanges,before,bindings:sources.map(({id,review,data})=>({id,
+          status:review || data.review || changed.has(id) ? 'needs-review' : 'retained'}))});
+      }
+      byFace.set(keep,sources);
+      byFace.delete(removedFace);
+    }
+    return {coverage,changed};
+  }
+
   // The renderer addresses first and last texel centers at 0 and 1.
   function cropSource(asset, crop, texelBounds = [crop.x,crop.y,crop.x+crop.width,crop.y+crop.height], paint) {
     const centers = (min,max,first,length,count)=>{
@@ -287,5 +322,5 @@
   }
 
   A.tilesetFaces = Object.freeze({plan,prepare,stamp,polygonStamp,append,cornersFor,cropSource,sourceBindings,sourceCorners,
-    splitSources,joinSources,isSourceBinding,sameMaterial});
+    splitSources,joinSources,previewMerges,isSourceBinding,sameMaterial});
 })(KIT);

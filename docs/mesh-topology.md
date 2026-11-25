@@ -843,6 +843,7 @@ report and lists ordered `operations`. Choose IDs from that report or
 | `flip-diagonal` | Choose quads with a `faces` list or revision-checked face `selection`. Swap to the other interior diagonal and retain the authored quad. |
 | `split-quad` | Choose quads with a `faces` list or revision-checked face `selection`. Turn the current two render triangles into editable faces with a shared authored edge. |
 | `join-triangles` | Choose two triangles with an `edge`, a two-ID `faces` list, or a revision-checked face `selection`. Retain their shared edge as the quad's render diagonal. |
+| `merge-tiles` | Choose two polygonal tiles with an `edge`, a two-ID `faces` list, or a revision-checked face `selection`. Remove the shared edge and retain the outer ring. |
 
 Each winding step shows the face normals and corner orders before and
 after, plus any inconsistent edges incident to the reversed faces. Supply
@@ -935,6 +936,44 @@ and the pre-join bake state.
 ink-studio mesh-topology repair triangles.json join.json --object cover
 ink-studio mesh-topology repair triangles.json join.json --object cover --out joined.json --report join-receipt.json
 node examples/tileset-pick/quad-join-demo.cjs quad-join-review
+```
+
+### Merge adjacent painted tiles
+
+Add `{ "kind": "merge-tiles", "faces": ["left", "right"] }` to a
+revision-pinned repair request. Both polygons must have at least four
+corners and meet along one manifold edge with consistent winding.
+The merge keeps the entire outside boundary,
+including vertices at neighboring junctions. Use `keep` to choose
+the surviving face ID. The default uses the first face ID in sorted
+order.
+
+Safe mode checks that the tiles share a plane, a material, and one affine
+mapping across each UV layout. It also checks shared corner values,
+authored edge settings, and interpolation of corner attributes and skin
+weights. For an atlas sampled at texel centers, crops on either side
+need to agree at the seam. A border texel can be shared by the two
+crops when they map to the same point on the mesh. A gap or a
+change in texel density enters the loss report.
+
+Set `"mode": "force"` to make the keeper's material and shared endpoint
+values apply to the combined face. The outside corners keep their
+values, and the shared corners inherit UV pins from both inputs.
+Inspect `discarded`, `uvSets`, and the before and after corner rings
+and triangles before committing. Interpolation entries compare the
+input values to the keeper's affine mapping. The resulting triangles
+show the exact mapping the override would install. A bend also reports
+which corners lie off the keeper's plane. The preview includes both
+source crops and flags bindings for review if paint mapping changes. Safe
+merges keep both crop references attached to the surviving face.
+Use `tileset select` to see those references and `tileset select-atlas`
+to inspect the merged footprint. The retained polygon can carry
+multiple crops. Affected bakes are invalidated in the same edit.
+
+```sh
+ink-studio mesh-topology repair tiles.json merge.json --object sign
+ink-studio mesh-topology repair tiles.json merge.json --object sign --out merged.json --report merge-receipt.json
+node examples/tileset-pick/tile-merge-demo.cjs tile-merge-review
 ```
 
 ### Repair weights and review changes
