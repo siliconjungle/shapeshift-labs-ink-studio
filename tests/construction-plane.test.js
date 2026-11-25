@@ -286,3 +286,99 @@ test('CLI previews an edge tilt and repeats it from the saved hinge and angle',t
   assert.equal(json('mesh-topology','plane','steep-roof.json','--detach-edge','--from-camera','--yaw','0','--pitch','0',
     '--out','detached.json').after.edgeAnchor,undefined);
 });
+
+function originScene() {
+  return {...edgeScene(),constructionPlane:{origin:[10,10,10],grid:.25,lock:'z'},
+    prefabs:{post:{revision:1,solids:{pole:{kind:'box',at:[0,.3,0],half:[.1,.3,.1],mat:'stone'}}}},
+    instances:{fixture:{prefab:'post',transform:{translation:[1,2,3],pivot:[2,0,1],scale:2}}}};
+}
+
+test('origin snaps distinguish component averages from bounds and retain the locked frame',()=>{
+  const source = originScene(), editor = ink.createSceneEditor(source);
+  const pick = (domain,ids)=>editor.selectMeshTopology('wall',{domain,ids});
+  const snap = (kind,selection)=>editor.planConstructionOrigin({kind,object:'wall',selection});
+  const vertices = pick('vertices',['beam-tl','beam-tr','beam-br']);
+  const bounds = snap('bounds',vertices);
+  assert.deepEqual(bounds.plane.origin,[1,.5,0]);
+  assert.deepEqual(bounds.snap.bounds,{min:[0,0,0],max:[2,1,0]});
+  const average = snap('average',vertices);
+  close(average.plane.origin,[4/3,2/3,0]);
+  assert.equal(average.snap.count,3);
+  assert.deepEqual(snap('average',pick('edges',['eave','upright'])).plane.origin,[.5,.75,0]);
+  assert.deepEqual(snap('average',pick('faces',['beam','spare'])).plane.origin,[3,.5,0]);
+  assert.deepEqual(editor.snapshot(),source);
+
+  const vertex = {kind:'vertex',object:'wall',vertex:'beam-tr'};
+  const placed = editor.snapConstructionOrigin(vertex);
+  assert.deepEqual(placed.snap.target,[2,1,0]);
+  assert.deepEqual(placed.plane,{origin:[2,1,0],right:[1,0,0],up:[0,1,0],grid:.25,lock:'z'});
+  assert.deepEqual(editor.planTilesetFace({...stamp,planeAt:[0,0]}).vertices[0].position,placed.plane.origin);
+  editor.undo();
+  assert.deepEqual(editor.snapshot(),source);
+
+  const instance = editor.planConstructionOrigin({kind:'instance',instance:'fixture'});
+  assert.deepEqual(instance.snap,{kind:'instance',instance:'fixture',instanceKind:'prefab',target:[-1,2,2]});
+  const guides = ink.load().KIT.authoring.constructionPlane;
+  const placements = {...source,assetParts:{fixture:{transform:{position:[5,6,7]}}}};
+  assert.throws(()=>guides.snapOrigin(placements,{kind:'instance',instance:'fixture'}),/ambiguous/);
+  assert.deepEqual(guides.snapOrigin(placements,{kind:'instance',instance:'fixture',instanceKind:'asset-part'}).plane.origin,[5,6,7]);
+
+  assert.throws(()=>snap('bounds',pick('vertices',[])),/Select at least one/);
+  assert.throws(()=>editor.planConstructionOrigin({...vertex,vertex:'missing'}),/Unknown scene vertex/);
+  editor.editMeshTopology('wall',{vertices:[{id:'beam-tr',position:[2,1,.25]}]});
+  assert.throws(()=>snap('average',vertices),/same topology revision/);
+});
+
+test('origin snapping can slide along a hinge or explicitly detach it',()=>{
+  const editor = ink.createSceneEditor(edgeScene()), guides = ink.load().KIT.authoring.constructionPlane;
+  const edge = guides.tilt(editor.snapshot(),{object:'wall',edge:'eave',from:'beam-tl',degrees:35});
+  editor.setConstructionPlane(edge.plane);
+  const end = editor.snapConstructionOrigin({kind:'vertex',object:'wall',vertex:'beam-tr'});
+  assert.equal(end.plane.edgeAnchor.at,1);
+  assert.equal(end.plane.edgeAnchor.degrees,35);
+  assert.deepEqual(end.plane.origin,[2,1,0]);
+  const away = {kind:'vertex',object:'wall',vertex:'beam-br'};
+  assert.throws(()=>editor.snapConstructionOrigin(away),/Detach the edge anchor/);
+  const detached = editor.snapConstructionOrigin(away,{detachEdge:true});
+  assert.equal(detached.plane.edgeAnchor,undefined);
+  assert.deepEqual(detached.plane.origin,[2,0,0]);
+  assert.deepEqual(detached.axes,end.axes);
+  editor.undo();
+  assert.deepEqual(editor.constructionPlane(),end.plane);
+});
+
+test('headless origin snap previews and publishes vertex, instance, bounds, and average targets',t=>{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-origin-snap-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const file = name=>path.join(dir,name), write = (name,value)=>fs.writeFileSync(file(name),JSON.stringify(value));
+  const read = name=>JSON.parse(fs.readFileSync(file(name),'utf8'));
+  const source = originScene();
+  write('draft.json',source);
+  write('query.json',{domain:'vertices',ids:['beam-tl','beam-tr','beam-br']});
+  const cli = path.resolve(__dirname,'../cli/ink-studio.js');
+  const run = (...args)=>spawnSync(process.execPath,[cli,...args],{cwd:dir,encoding:'utf8'});
+  const json = (...args)=>{
+    const result=run(...args);
+    assert.equal(result.status,0,result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  const selected = run('mesh-topology','select','draft.json','query.json','--object','wall','--out','selection.json');
+  assert.equal(selected.status,0,selected.stderr);
+  const prefix = ['mesh-topology','plane','draft.json','--snap-origin'];
+  const targets = [['vertex',['--object','wall','--vertex','beam-tr'],[2,1,0]],
+    ['instance',['--instance','fixture'],[-1,2,2]],
+    ['bounds',['--object','wall','--selection','selection.json'],[1,.5,0]],
+    ['average',['--object','wall','--selection','selection.json'],[4/3,2/3,0]]];
+  for (const [mode,args,point] of targets) {
+    const preview=json(...prefix,mode,...args);
+    close(preview.snap.target,point);
+    assert(!fs.existsSync(file(mode+'.json')));
+    assert.deepEqual(json(...prefix,mode,...args,'--out',mode+'.json'),preview);
+    assert.deepEqual(read(mode+'.json').constructionPlane,preview.after);
+  }
+  const stamped=json('tileset','stamp','--scene','average.json','--object','marker','--face','swatch','--id','paint',
+    '--x','0','--y','0','--width','4','--height','3','--plane','0,0');
+  close(stamped.vertices[0].position,[4/3,2/3,0]);
+  assert.equal(run(...prefix,'bounds','--object','wall','--selection','selection.json','--out','selection.json').status,1);
+  assert.deepEqual(read('draft.json'),source);
+});

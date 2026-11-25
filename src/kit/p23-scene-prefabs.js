@@ -170,5 +170,9 @@
     });
   }
 
-  A.scenePrefabs = Object.freeze({ expand, review });
+  function origin(transform) {
+    return frame(transform).point([0,0,0]);
+  }
+
+  A.scenePrefabs = Object.freeze({ expand, review, origin });
 })(KIT);

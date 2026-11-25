@@ -212,6 +212,44 @@ for automatic picking. Save the returned plane with
 Run `node examples/tileset-pick/camera-plane-demo.cjs orbit-demo`
 to compare automatic and locked placement through the same orbit.
 
+### Snap the construction origin
+
+Preview a new origin from a scene vertex, an instance, or a saved mesh
+selection. The preview gives the resolved scene-space target. Add
+`--out` to publish the new plane with its current axes and grid.
+
+```sh
+ink-studio mesh-topology plane wall.json --snap-origin vertex --object wall --vertex eave-left
+ink-studio mesh-topology plane wall.json --snap-origin instance --instance doorway --out door-guide.json
+ink-studio mesh-topology select wall.json trim-query.json --object wall --out trim-selection.json
+ink-studio mesh-topology plane wall.json --snap-origin bounds --object wall --selection trim-selection.json --out centered.json
+ink-studio mesh-topology plane wall.json --snap-origin average --object wall --selection trim-selection.json --out averaged.json
+```
+
+- `vertex` uses the authored vertex position on a retained scene mesh.
+- `instance` uses the transformed local origin of a prefab or asset-part
+  placement. Use `--instance-kind prefab|asset-part` to disambiguate a
+  shared ID.
+- `bounds` uses the midpoint between the minimum and maximum coordinates
+  of the selected geometry along the scene axes.
+- `average` gives each selected element equal weight. It averages vertex
+  positions, edge midpoints, or face corner averages for the selection's
+  domain.
+
+Selection files must match the current mesh revision. Origin snaps save
+the computed position. An edge-anchored plane can snap along its current
+edge and retain the hinge. Use `--detach-edge` to snap to a point away
+from the edge and keep the resolved orientation.
+
+In Node, use `editor.planConstructionOrigin(request)` to get the target
+and plane, or `editor.snapConstructionOrigin(request)` for an undoable
+edit. A request names `kind` and supplies `object` and `vertex`,
+`instance` and optional `instanceKind`, or `object` and `selection`.
+Pass `{detachEdge:true}` as the second argument to clear a hinge.
+
+Run `node examples/tileset-pick/origin-snap-demo.cjs origin-snap-demo`
+to stamp at each target and compare the four placements.
+
 ### Tilt a plane from an existing edge
 
 Hinge the construction plane on an authored mesh edge. The preview

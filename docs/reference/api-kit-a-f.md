@@ -761,6 +761,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.constructionPlane.point` | function | `(frame, at)` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.project` | function | `(frame, position, mode = 'plane')` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.resolve` | function | `(raw = {})` | [source](../../src/kit/p23-construction-plane.js) |
+| `KIT.authoring.constructionPlane.snapOrigin` | function | `(scene, request, {detachEdge = false} = {})` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.tilt` | function | `(scene, options)` | [guide](../mesh-topology.md#tilt-a-plane-from-an-existing-edge), [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.context` | function | `(doc, options)` | [guide](../../README.md#retained-authoring), [guide](../procedural.md#optional-retained-authoring), [source](../../src/kit/p24-authoring-context.js) |
 | `KIT.authoring.data` | namespace |  |  |
@@ -854,6 +855,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.sceneLibrary.create` | function | `(storage, { key, backups = 8, prepareSnapshot } = {})` | [guide](../procedural.md#named-scene-library), [source](../../src/kit/p88-scene-library.js) |
 | `KIT.authoring.scenePrefabs` | namespace |  |  |
 | `KIT.authoring.scenePrefabs.expand` | function | `(source, { prefabs: external } = {})` | [source](../../src/kit/p23-scene-prefabs.js) |
+| `KIT.authoring.scenePrefabs.origin` | function | `(transform)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.review` | function | `(source, before, after)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.storyExchange` | namespace |  |  |
 | `KIT.authoring.storyExchange.kindOf` | function | `(format)` | [source](../../src/kit/p23zz-story-exchange.js) |

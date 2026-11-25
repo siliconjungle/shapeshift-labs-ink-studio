@@ -236,6 +236,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology plane <scene.json> [--origin X,Y,Z] [--right X,Y,Z] [--up X,Y,Z] [--grid N] [--from-camera] [--yaw R] [--pitch R] [--at seconds] [--camera-shot ID] [--lock x|y|z|off] [--out file.json]   set or camera-pick the shared construction plane
   mesh-topology plane <scene.json> --edge-object ID --edge ID --tilt DEGREES [--edge-from VERTEX] [--edge-at T] [--reference-up X,Y,Z] [--grid N] [--out file.json]   hinge the working plane on an authored edge
   mesh-topology plane <scene.json> (--tilt DEGREES | --detach-edge) [--out file.json]   adjust or detach the retained edge anchor
+  mesh-topology plane <scene.json> --snap-origin vertex --object ID --vertex ID [--detach-edge] [--out file.json]   snap the working origin to a scene vertex
+  mesh-topology plane <scene.json> --snap-origin instance --instance ID [--instance-kind prefab|asset-part] [--detach-edge] [--out file.json]   snap the working origin to an instance frame
+  mesh-topology plane <scene.json> --snap-origin bounds|average --object ID --selection selection.json [--detach-edge] [--out file.json]   snap the working origin to a selected center
   mesh-topology move <mesh-or-scene.json> [--object id] [--part id] --vertex id --by X,Y,Z [--space local|world|plane] [--align plane|grid] [--expect revision] [--out file.json]   preview or move one existing vertex
   mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--out file] [--report file]   move, rotate, scale and snap authored components
   mesh-topology health <mesh-or-scene.json> [settings.json] [--object id] [--out report.json]   locate local topology and geometry problems

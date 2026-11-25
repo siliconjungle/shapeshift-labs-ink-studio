@@ -482,6 +482,16 @@
       return document.pending() ? write() : document.transact('Set construction plane',write);
     }
 
+    function planConstructionOrigin(request, options) {
+      return A.constructionPlane.snapOrigin(snapshot(),request,options);
+    }
+
+    function snapConstructionOrigin(request, options) {
+      const result = planConstructionOrigin(request,options);
+      setConstructionPlane({...result.plane,edgeAnchor:result.plane.edgeAnchor ?? null});
+      return result;
+    }
+
     function stageTilesetFace(request, options) {
       const before = snapshot(), {row,report} = A.tilesetFaces.plan(before,request,options);
       if (!row) return {report};
@@ -936,7 +946,7 @@
       tilesetGrid,
       setTilesetGrid,
       setTilesetTexelsPerUnit,
-      constructionPlane, setConstructionPlane,
+      constructionPlane, setConstructionPlane, planConstructionOrigin, snapConstructionOrigin,
       planTilesetFace, placeTilesetFace,
       planTilesetCanvas,
       transformTilesetCanvas,

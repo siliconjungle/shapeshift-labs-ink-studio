@@ -95,17 +95,22 @@
     return V.len(projected)>1e-10 ? V.norm(projected) : null;
   }
 
-  function edgeFrame(plane, anchor, {mesh,edge}) {
+  function edgeSpan(anchor, {mesh,edge}) {
     if (!anchor.vertices.every(id=>edge.vertices.includes(id)))
       throw edgeError('Construction plane edge '+anchor.edge+' has different endpoints');
     const positions = anchor.vertices.map(id=>mesh.vertices.find(row=>row.id === id).position);
     const along = V.sub(positions[1],positions[0]), length = V.len(along);
     if (!length || !Number.isFinite(length)) throw edgeError('Construction plane edge endpoints need a nonzero span');
+    return {start:positions[0],along,length};
+  }
+
+  function edgeFrame(plane, anchor, source) {
+    const {start,along,length} = edgeSpan(anchor,source);
     const right = along.map(value=>value/length), baseline = projectedUp(right,anchor.referenceUp);
     if (!baseline) throw edgeError('Construction plane edge is parallel to its reference up');
     const radians = (anchor.degrees%360)*Math.PI/180;
     const up = V.mad(V.mul(baseline,Math.cos(radians)),V.cross(right,baseline),Math.sin(radians));
-    const origin = V.mad(positions[0],along,anchor.at);
+    const origin = V.mad(start,along,anchor.at);
     return resolve({...plane,lock:null,edgeAnchor:anchor,origin,right,up});
   }
 
@@ -146,6 +151,85 @@
     return edgeFrame({...base.plane,grid},anchor,source);
   }
 
+  function mean(points) {
+    return V.mul(points.reduce(V.add,[0,0,0]),1/points.length);
+  }
+
+  function instanceTarget(scene, instance, kind) {
+    const candidates = [
+      ['prefab',scene.instances ?? {},transform=>A.scenePrefabs.origin(transform)],
+      ['asset-part',scene.assetParts ?? {},transform=>K.sceneGraph.transform(transform).position]
+    ].filter(([type,rows])=>(kind === undefined || kind === type) && Object.hasOwn(rows,instance));
+    if (!candidates.length) throw new RangeError('Unknown scene instance '+instance);
+    if (candidates.length>1) throw new RangeError('Instance '+instance+' is ambiguous. Choose prefab or asset-part');
+    const [instanceKind,rows,origin] = candidates[0];
+    return {instance,instanceKind,target:origin(rows[instance].transform)};
+  }
+
+  function originTarget(scene, request) {
+    const {kind,object,vertex,instance,instanceKind,selection} = request ?? {};
+    const fields = {vertex:['object','vertex'],instance:['instance','instanceKind'],bounds:['object','selection'],average:['object','selection']};
+    const name = TargetSelectors.name;
+    if (!request || Object.getPrototypeOf(request) !== Object.prototype || !Object.hasOwn(fields,kind) ||
+        Object.keys(request).some(key=>key !== 'kind' && !fields[kind].includes(key)) ||
+        !(kind === 'instance' ? name(instance) && (instanceKind === undefined || ['prefab','asset-part'].includes(instanceKind)) :
+          name(object) && (kind === 'vertex' ? name(vertex) : selection)))
+      throw new TypeError('Snap the construction origin to a vertex, instance, selection bounds, or selection average');
+    if (kind === 'instance') return {kind,...instanceTarget(scene,instance,instanceKind)};
+
+    const rows = scene.topologyMeshes ?? {};
+    if (!Object.hasOwn(rows,object)) throw new RangeError('Unknown editable mesh '+object);
+    const topology = K.meshTopology, mesh = topology.create(rows[object].document);
+    const vertices = new Map(mesh.vertices.map(row=>[row.id,row.position]));
+    if (kind === 'vertex') {
+      if (!vertices.has(vertex)) throw new RangeError('Unknown scene vertex '+vertex+' on '+object);
+      return {kind,object,vertex,target:vertices.get(vertex)};
+    }
+    const picked = topology.select(mesh,{from:selection});
+    if (!picked.ids.length) throw new RangeError('Select at least one element to snap the construction origin');
+    const evidence = {kind,object,selection:picked,count:picked.ids.length};
+    if (kind === 'bounds') {
+      const {ids} = topology.select(mesh,{from:picked,convert:'vertices'});
+      const min = [Infinity,Infinity,Infinity], max = [-Infinity,-Infinity,-Infinity];
+      for (const id of ids) vertices.get(id).forEach((value,i)=>{
+        min[i] = Math.min(min[i],value);
+        max[i] = Math.max(max[i],value);
+      });
+      return {...evidence,bounds:{min,max},target:mean([min,max])};
+    }
+    const ids = new Set(picked.ids);
+    const centers = mesh[picked.domain].filter(row=>ids.has(row.id)).map(row=>{
+      if (picked.domain === 'vertices') return row.position;
+      const members = picked.domain === 'edges' ? row.vertices : row.corners.map(corner=>corner.vertex);
+      return mean(members.map(id=>vertices.get(id)));
+    });
+    return {...evidence,target:mean(centers)};
+  }
+
+  function snapOrigin(scene, request, {detachEdge = false} = {}) {
+    if (typeof detachEdge !== 'boolean') throw new TypeError('Detach edge must be a boolean');
+    const snap = originTarget(scene,request);
+    let frame;
+    try {
+      frame = forScene(scene);
+    } catch (error) {
+      if (error.code !== 'construction-edge-unavailable' || !detachEdge) throw error;
+      frame = resolve(scene.constructionPlane);
+    }
+    const anchor = frame.plane.edgeAnchor;
+    if (!anchor || detachEdge)
+      return freeze({...resolve({...frame.plane,edgeAnchor:null,origin:snap.target}),snap});
+
+    const source = edgeOf(scene,anchor.object,anchor.edge);
+    const {start,along,length} = edgeSpan(anchor,source);
+    const fraction = V.dot(V.sub(snap.target,start),frame.axes[0])/length;
+    const at = Math.max(0,Math.min(1,fraction));
+    const distance = V.dist(snap.target,V.mad(start,along,at));
+    if (distance>1e-8*Math.max(1,length))
+      throw new RangeError('Detach the edge anchor to snap the origin off the anchored edge');
+    return freeze({...edgeFrame(frame.plane,{...anchor,at},source),snap});
+  }
+
   function point(frame, at) {
     if (!vector(at,2)) throw new TypeError('Construction plane grid coordinates need a finite [u, v] pair');
     const {plane:{origin,grid},axes:[right,up]} = frame;
@@ -163,5 +247,5 @@
     return {point:point(frame,gridAt),gridAt};
   }
 
-  A.constructionPlane = Object.freeze({resolve,pick,forScene,tilt,point,project});
+  A.constructionPlane = Object.freeze({resolve,pick,forScene,tilt,snapOrigin,point,project});
 })(KIT);

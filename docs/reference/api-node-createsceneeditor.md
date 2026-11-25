@@ -44,6 +44,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().pick` | function | `(ray, { world, time, reconstruction, sampleWithdrawal } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().placeTilesetFace` | function | `(request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planApplyMeshModifiers` | function | `(object, { through, part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().planConstructionOrigin` | function | `(request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planMeshAttachmentTransfer` | function | `(object, patch, {part,projection, ...settings} = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planMeshBevel` | function | `(object, request, { part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planMeshBoolean` | function | `(object, request, { part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
@@ -88,6 +89,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().setTilesetGrid` | function | `(id, size)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().setTilesetTexelsPerUnit` | function | `(texelsPerUnit)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().setTransform` | function | `(patch, targets = selectedKeys())` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().snapConstructionOrigin` | function | `(request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().snapshot` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().sourceDependencies` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().suggestBreakable` | function | `({ world, ...options } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |

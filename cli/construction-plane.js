@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('node:fs');
 const path = require('node:path');
 const files = require('./asset-files.js');
 const staging = require('../src/camera-staging.js');
@@ -18,9 +19,11 @@ function command(file, extra, options, toolkit, openEditor) {
   const cameraFlags = ['yaw','pitch','at','camera-shot'];
   const edgeFlags = ['edge-object','edge','edge-from','edge-at','tilt','reference-up'];
   const switches = ['from-camera','detach-edge'];
-  const allowed = [...axes,'grid','out','lock',...switches,...cameraFlags,...edgeFlags];
+  const snapFields = {object:'object',vertex:'vertex',instance:'instance','instance-kind':'instanceKind'};
+  const snapFlags = ['snap-origin','selection',...Object.keys(snapFields)];
+  const allowed = [...axes,'grid','out','lock',...switches,...cameraFlags,...edgeFlags,...snapFlags];
   const name = value=>typeof value === 'string' && value.trim();
-  const {grid,out,'from-camera':fromCamera,'detach-edge':detach} = options;
+  const {grid,out,selection,'snap-origin':snapKind,'from-camera':fromCamera,'detach-edge':detach} = options;
   const lock = typeof options.lock === 'string' ? options.lock.toLowerCase() : options.lock;
   const cameraPick = fromCamera === true || lock !== undefined && lock !== 'off' ||
     cameraFlags.some(key=>options[key] !== undefined);
@@ -31,10 +34,13 @@ function command(file, extra, options, toolkit, openEditor) {
       scalarFlags.some(key=>options[key] !== undefined && (!number.test(options[key]) || !Number.isFinite(Number(options[key])))) ||
       lock !== undefined && !['x','y','z','off'].includes(lock) ||
       cameraPick && ['right','up'].some(key=>options[key] !== undefined) ||
-      edgePick && (cameraPick || detach || lock !== undefined || axes.some(key=>options[key] !== undefined)))
-    throw new TypeError('Use mesh-topology plane <scene.json> with an explicit frame, --from-camera, or --edge-object ID --edge ID --tilt DEGREES');
+      snapKind === undefined && snapFlags.some(key=>options[key] !== undefined) ||
+      snapKind !== undefined && (options.origin !== undefined || !['vertex','instance','bounds','average'].includes(snapKind)) ||
+      edgePick && (cameraPick || detach || lock !== undefined || snapKind !== undefined || axes.some(key=>options[key] !== undefined)))
+    throw new TypeError('Use mesh-topology plane <scene.json> with an explicit frame, --from-camera, --edge with --tilt, or --snap-origin vertex|instance|bounds|average');
   const input = path.resolve(file), output = out && path.resolve(out);
-  if (output && (!/\.json$/i.test(output) || output === input || path.dirname(output) !== path.dirname(input)))
+  if (output && (!/\.json$/i.test(output) || output === input || path.dirname(output) !== path.dirname(input) ||
+      selection !== undefined && output === path.resolve(selection)))
     throw new RangeError('Write a separate scene JSON file beside its source');
   const changes = Object.fromEntries(axes.filter(axis=>options[axis] !== undefined)
     .map(axis=>[axis,coordinates(options[axis],3,'--'+axis)]));
@@ -66,14 +72,21 @@ function command(file, extra, options, toolkit, openEditor) {
     const {pose} = toolkit.CameraLens.frame(world,view,1,1,{orbit:staging.prepare(world.look?.cameraStaging)?.orbit});
     picked = plane.pick({...before,...changes},pose,{lock:lock === 'off' ? null : lock});
   }
-  const {plane:after,axes:basis} = picked ?? plane.resolve({...before,...changes});
+  let result = picked ?? plane.resolve({...before,...changes});
+  if (snapKind !== undefined) {
+    const request = {kind:snapKind,...Object.fromEntries(Object.entries(snapFields).flatMap(([flag,key])=>
+      options[flag] === undefined ? [] : [[key,options[flag]]]))};
+    if (selection !== undefined) request.selection = JSON.parse(fs.readFileSync(path.resolve(selection),'utf8'));
+    result = plane.snapOrigin({...scene,constructionPlane:result.plane},request);
+  }
+  const {plane:after,axes:basis,snap} = result;
   if (output) {
     editor.setConstructionPlane({...after,lock:after.lock ?? null,edgeAnchor:after.edgeAnchor ?? null});
     files.publishJson(output,editor.snapshot(),'A different scene already exists at '+output);
   }
   const camera = cameraPick && {axis:picked.axis,kept:picked.kept,pose:picked.camera};
   process.stdout.write(JSON.stringify({format:'ink-studio/construction-plane-edit',version:1,before,after,axes:basis,
-    ...(camera && {camera})},null,2)+'\n');
+    ...(camera && {camera}),...(snap && {snap})},null,2)+'\n');
 }
 
 module.exports = {command,coordinates};
