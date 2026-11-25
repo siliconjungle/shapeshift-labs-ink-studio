@@ -197,6 +197,7 @@ All checked-in guides, indexed by title and section headings.
 - [Multi-channel material ports](../material-graph-ports.md)
 - [Seasonal and wear histories](../material-histories.md)
 - [Material image blend modes](../material-image-blend.md)
+- [Split, shuffle, and pack typed image channels](../material-image-channels.md)
 - [Material-point passes and impacts](../material-point-impacts.md)
 - [Portable material response recipes](../material-response.md)
 - [Surface materialisation](../materialisation.md)

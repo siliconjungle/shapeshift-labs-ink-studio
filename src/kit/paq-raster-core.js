@@ -111,27 +111,13 @@
     return image(width, height, planes.length, data, pivot?.slice());
   }
 
-  const mathOps = {
-    add: (a, b) => a + b,
-    subtract: (a, b) => a - b,
-    multiply: (a, b) => a * b,
-    divide: (a, b) => a / b,
-    min: Math.min,
-    max: Math.max,
-    difference: (a, b) => Math.abs(a - b),
-    power: (a, b) => a ** b,
-    greater: (a, b) => +(a > b),
-    less: (a, b) => +(a < b),
-    equal: (a, b) => +(a === b)
-  };
-
   function math(a, b, op) {
     const left = view(a), {width, height, channels: count, pivot} = left;
-    if (!Object.hasOwn(mathOps, op)) throw new RangeError('Unknown raster math operation ' + op);
+    if (!Object.hasOwn(RasterChannelMath, op)) throw new RangeError('Unknown raster math operation ' + op);
     const scalar = Number.isFinite(b), right = scalar ? null : aligned(b, width, height);
     if (right && right.channels !== count && right.channels !== 1)
       throw new RangeError('Raster math needs matching channel counts or a single-channel right operand');
-    const out = new Float64Array(left.data.length), apply = mathOps[op];
+    const out = new Float64Array(left.data.length), apply = RasterChannelMath[op];
     for (let i = 0; i < out.length; i++) {
       const value = apply(left.data[i], scalar ? b : right.data[right.channels === 1 ? Math.floor(i / count) : i]);
       if (!Number.isFinite(value)) throw new RangeError('Raster math returned a nonfinite sample at index ' + i);
