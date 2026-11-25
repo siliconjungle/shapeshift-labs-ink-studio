@@ -39,6 +39,70 @@ const meshComponentSnap = (function (K) {
     throw new TypeError('Use a move offset, rotation axis and degrees, or positive scale factors');
   }
 
+  const constraints = ['align', 'flatten', 'collapse'];
+  function usesConstructionPlane(request) {
+    const { operation, space, snap } = request ?? {};
+    return space === 'plane' || snap?.kind === 'construction-plane' ||
+      ['align', 'flatten'].includes(operation?.kind) && operation.plane === undefined;
+  }
+
+  function extent(points, distance) {
+    let min = Infinity, max = -Infinity;
+    for (const point of points) {
+      const value = distance(point);
+      if (!Number.isFinite(value)) throw new RangeError('Plane distances must be finite');
+      min = Math.min(min,value);
+      max = Math.max(max,value);
+    }
+    return { near: max, center: min*.5 + max*.5, far: min };
+  }
+
+  function constraint(raw, picked, construction, pivot, frame, inverse) {
+    const { kind, side, plane, point, removeCollapsed = false } = raw;
+    const fields = kind === 'align' ? ['side', 'plane'] :
+      kind === 'flatten' ? ['plane', 'removeCollapsed'] : ['point', 'removeCollapsed'];
+    if (!record(raw, ['kind', ...fields]) || typeof removeCollapsed !== 'boolean')
+      throw new TypeError('Use align, flatten, or collapse with its target settings');
+    if (!picked.length) throw new RangeError('Choose at least one unpinned selected vertex to ' + kind);
+    if (kind === 'collapse') {
+      if (point !== undefined && !vector(point)) throw new TypeError('Collapse needs a finite world XYZ point');
+      const target = point === undefined ? K.sceneGraph.point(frame,pivot) : point.slice();
+      const local = point === undefined ? pivot : K.sceneGraph.point(inverse,target);
+      return { removeCollapsed, evidence: { kind, point: target, source: point === undefined ? 'pivot' : 'explicit' },
+        apply: (p, _, weight) => weight === 1 ? local.slice() : V.lerp(p,local,weight),
+        measure: points => ({ maxError: points.reduce((max,p) => Math.max(max,V.dist(p,target)),0) }) };
+    }
+    if (kind === 'align' && !['near','center','far'].includes(side))
+      throw new TypeError('Plane alignment needs a side of near, center, or far');
+    if (plane !== undefined && (!record(plane, ['origin', 'normal']) || !vector(plane.origin)))
+      throw new TypeError('Use a plane with a world origin and normal');
+    const origin = (plane === undefined ? construction.plane.origin : plane.origin).slice();
+    const normal = plane === undefined ? construction.axes[2] : unit(plane.normal,'Align or flatten plane');
+    const distance = p => V.dot(V.sub(p,origin),normal);
+    const before = extent(picked,distance);
+    const offset = kind === 'align' ? -before[side] : undefined;
+    const localNormal = M.app(inverse.matrix,normal);
+    return { removeCollapsed, evidence: { kind, plane: { origin, normal, source: plane === undefined ? 'construction' : 'explicit' },
+      before, ...(side !== undefined && { side, delta: V.mul(normal,offset) }) },
+      apply: (p, world, weight) => V.mad(p,localNormal,(offset ?? -distance(world))*weight),
+      measure: points => ({ after: extent(points,distance) }) };
+  }
+
+  function collapsedFaces(doc, vertices, edits) {
+    if (!edits.length) return [];
+    const positions = new Map(edits.map(({ id, after }) => [id, after]));
+    // Remove only faces reduced to a line or a point. Other invalid polygons
+    // still fail the normal topology validation.
+    return doc.faces.filter(face => {
+      if (!face.corners.some(({ vertex }) => positions.has(vertex))) return false;
+      const points = face.corners.map(({ vertex }) => positions.get(vertex) ?? vertices.get(vertex).position);
+      const spans = points.map(point => V.sub(point,points[0]));
+      const longest = spans.reduce((a,b) => V.len(a) >= V.len(b) ? a : b);
+      const size = V.len(longest);
+      return !size || spans.every(span => V.len(V.cross(longest,span)) <= size*size*1e-10);
+    }).map(face => face.id).sort();
+  }
+
   function pins(doc, selection, selected, raw = {}) {
     if (!record(raw, ['vertices', 'boundary']) || raw.vertices !== undefined && !Array.isArray(raw.vertices) ||
         raw.boundary !== undefined && !['mesh', 'selection', 'both'].includes(raw.boundary))
@@ -272,7 +336,10 @@ const meshComponentSnap = (function (K) {
     if (!record(request, ['selection', 'operation', 'space', 'frame', 'pivot', 'planePivot', 'constructionPlane',
       'camera', 'normal', 'tangent', 'pins', 'falloff', 'snap', 'coincident']))
       throw new TypeError('Use a component transform request');
-    const doc = topology.create(source), run = operation(request.operation);
+    const doc = topology.create(source), special = constraints.includes(request.operation?.kind);
+    const run = special ? undefined : operation(request.operation);
+    if (special && request.snap !== undefined)
+      throw new TypeError('Align, flatten, and collapse already define their target');
     const { space = 'local', normal, tangent } = request;
     if (!['local', 'world', 'normal', 'plane', 'camera'].includes(space) ||
         space !== 'normal' && (normal !== undefined || tangent !== undefined) || space !== 'camera' && request.camera !== undefined)
@@ -280,9 +347,9 @@ const meshComponentSnap = (function (K) {
     if (request.planePivot !== undefined && (space !== 'plane' || request.pivot !== undefined))
       throw new TypeError('Use planePivot in plane space, or supply a local XYZ pivot');
     const plane = K.authoring.constructionPlane;
-    const needsPlane = space === 'plane' || request.snap?.kind === 'construction-plane';
+    const needsPlane = usesConstructionPlane(request);
     if (!needsPlane && request.constructionPlane !== undefined)
-      throw new TypeError('Supply constructionPlane for plane space or construction-plane snapping');
+      throw new TypeError('Supply constructionPlane when the transform uses the working plane');
     const construction = needsPlane ?
       plane.resolve(request.constructionPlane === undefined ? context.constructionPlane : request.constructionPlane) : undefined;
     const view = space === 'camera' ? cameraBasis(request.camera === undefined ? context.camera : request.camera) : undefined;
@@ -301,6 +368,8 @@ const meshComponentSnap = (function (K) {
     const fixed = pins(doc, selection, selected, request.pins), weights = influence(doc, world, selected, fixed, request.falloff);
     const anchor = sourceAnchor(doc, selected, request.snap?.anchor);
     const coincident = meshCoincidentMotion.plan(doc, world, weights, fixed, anchor.ids, request.coincident);
+    const measured = special ? [...selected].filter(id => weights.has(id)) : [];
+    const placed = special && constraint(request.operation,measured.map(id => world.get(id)),construction,pivot,frame,inverse);
     const axes = view ? view.axes : space === 'plane' ? construction.axes :
       space === 'normal' ? normalFrame(doc, selection, world, normal, tangent) : cardinal;
     const worldAxes = space === 'local' ? axes.map(axis => M.app(frame.matrix, axis)) : axes;
@@ -324,6 +393,7 @@ const meshComponentSnap = (function (K) {
     }
     const localSnap = snapped && M.app(inverse.matrix, snapped.delta);
     const destination = (id, weight) => {
+      if (placed) return placed.apply(vertices.get(id).position,world.get(id),weight);
       const p = transformed(vertices.get(id).position, weight);
       return localSnap ? V.mad(p, localSnap, weight) : p;
     };
@@ -331,15 +401,21 @@ const meshComponentSnap = (function (K) {
     const changed = [];
     for (const id of [...weights.keys()].sort()) {
       const { position: before } = vertices.get(id), weight = weights.get(id);
-      const leader = coincident?.leaders.get(id) ?? id;
+      const leader = placed ? id : coincident?.leaders.get(id) ?? id;
       if (!displaced.has(leader)) displaced.set(leader, destination(leader,weight));
       const end = displaced.get(leader), start = vertices.get(leader).position;
       const after = id === leader || before.every((value,i) => value === start[i]) ? end : V.add(before,V.sub(end,start));
       if (!vector(after)) throw new RangeError('Transform produced a nonfinite position at ' + id);
       if (after.some((value, i) => value !== before[i])) changed.push({ id, before, after, weight, selected: selected.has(id) });
     }
-    const patch = { vertices: changed.map(({ id, after }) => ({ id, position: after })) };
+    const removeFaces = placed && placed.evidence.kind !== 'align' ? collapsedFaces(doc,vertices,changed) : [];
+    if (removeFaces.length && !placed.removeCollapsed)
+      throw new RangeError('Face ' + removeFaces[0] + ' would lose nonzero area. Set removeCollapsed to remove it');
+    const patch = { vertices: changed.map(({ id, after }) => ({ id, position: after })),
+      ...(removeFaces.length && { removeFaces }) };
     const document = changed.length ? topology.edit(doc, patch) : doc;
+    const result = placed && placed.measure(measured.map(id =>
+      K.sceneGraph.point(frame,displaced.get(id))));
     return freeze({ document, patch, report: {
       format: 'ink-studio/mesh-component-transform', version: 1, mesh: doc.id,
       beforeRevision: topology.revision(doc), afterRevision: topology.revision(document),
@@ -347,11 +423,12 @@ const meshComponentSnap = (function (K) {
       ...(request.frame !== undefined && { frame }), ...(view && { camera: view.camera }),
       ...(retainedPivot !== undefined && { pivotSource: 'retained' }),
       ...(coincident && { coincident: coincident.report }),
+      ...(placed && { operation: { ...placed.evidence, ...result, measured, removedFaces: removeFaces } }),
       ...(construction && {constructionPlane:construction.plane}),
       ...(gridPivot && {planePivot:gridPivot.slice()}), ...(snapped && { snap: snapped }), vertices: changed
     } });
   }
 
   K.meshTopology = Object.freeze({ ...topology, planTransform });
-  return Object.freeze({ snapField, meshTarget, edgeEnds, average });
+  return Object.freeze({ snapField, meshTarget, edgeEnds, average, usesConstructionPlane });
 })(KIT);
