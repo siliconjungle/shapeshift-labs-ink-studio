@@ -79,6 +79,10 @@ function estimateGraphMemory({ graph, groups, assets, overrides, kit, hostOperat
       case 'data.typed': return { outputs: { value: args.value } };
       case 'data.record': return { outputs: { value: args } };
       case 'data.get': return { outputs: { value: args.record?.[args.key] } };
+      case 'material.base': {
+        if (!args.settings) return;
+        return { outputs: kit.KIT.procedural.materialBase.operations['material.base'].run(args) };
+      }
       case 'material.pack': case 'material.replace': {
         if (!args.maps || op === 'material.replace' && !source?.channels) return;
         const channels = { ...source?.channels };

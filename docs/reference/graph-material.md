@@ -4,6 +4,27 @@
 
 Ports, defaults, and constraints come from the registered operations. Use `graph describe <op> --json` for the full structured record.
 
+### material.base
+
+Read the resolved shared material settings and derive pixel and physical sampling extents.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `settings` | `record` | Required | {"layout":"Plain named object"} |
+| Output | `value` | `record` | — | {"layout":"Plain named object"} |
+| Output | `width` | `pixelCount` | — | pixels · {"integer":true,"min":1} |
+| Output | `height` | `pixelCount` | — | pixels · {"integer":true,"min":1} |
+| Output | `samples` | `record` | — | {"layout":"Plain named object"} |
+| Output | `pixelPitchMm` | `vec2` | — | {"dimensions":2,"finite":true} |
+| Output | `physicalSizeMm` | `vec2` | — | {"dimensions":2,"finite":true} |
+| Output | `tiling` | `record` | — | {"layout":"Plain named object"} |
+| Output | `seed` | `number` | — | {"finite":true} |
+
+Get the runnable example with `ink-studio graph describe material.base --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### material.channel
 
 Read a named raster and its metadata from a material port.
@@ -38,6 +59,21 @@ Origin: toolkit.
 Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes)
 
 Get the runnable example with `ink-studio graph describe material.image --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### material.imageOutput
+
+Fit a typed image to the shared material extent, tiling and physical pixel pitch.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `settings` | `record` | Required | {"layout":"Plain named object"} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Get the runnable example with `ink-studio graph describe material.imageOutput --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### material.pack

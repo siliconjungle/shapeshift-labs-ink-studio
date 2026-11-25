@@ -373,7 +373,7 @@ Samples the graph clock.
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"width":{"type":"number","unit":"pixels","constraints":{"integer":true,"min":1}},"height":{"type":"number","unit":"pixels","constraints":{"integer":true,"min":1}}} |
 | Output | `value` | `raster` | — | {"layout":"Interleaved samples on a positive integer grid","channels":[1,4],"finite":true} |
 
-Guides: [guide](../headless-authoring.md#procedural-generation-and-recipes)
+Guides: [guide](../headless-authoring.md#procedural-generation-and-recipes), [guide](../material-base-settings.md#use-the-settings-in-a-graph)
 
 Get the runnable example with `ink-studio graph describe proc.sample --example > example.json`.
 Run it with `ink-studio graph run example.json`.

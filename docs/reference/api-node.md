@@ -143,6 +143,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.renderPathInk` | function | `(world,options={},traceSettings={})` | [source](../../cli/path-ink-render.js) |
 | `node.repairColorVisionPalette` | function | `(frame, options = {})` | [guide](../palette-recipes.md#repair-palette-separation-for-color-vision-deficiencies), [source](../../cli/color-vision-repair.js) |
 | `node.replayStoryBundle` | function | `(file, options)` | [source](../../index.js) |
+| `node.resolveMaterialBaseSettings` | function | `(source = {}, { seed: defaultSeed = 0 } = {})` | [guide](../material-base-settings.md#ferry-glaze-demo), [guide](../material-base-settings.md), [source](../../src/material-base-settings.js) |
 | `node.reviewCurveQuality` | function | `(world, { frame = {}, thresholds: overrides = {}, ...options } = {}, receive)` | [source](../../cli/curve-quality-review.js) |
 | `node.reviewPaintLighting` | function | `(world, {view = {}, subject, steps = 5} = {})` | [guide](../pixel-art-authoring.md#preview-paint-under-different-lighting), [source](../../cli/paint-lighting-review.js) |
 | `node.reviewPaletteShimmer` | function | `(world, { from=0,to=3,fps=12,window=3,minDelta=.025,minCoverage=.8,width=160,height=96, view={},camera,pose,onFrame,includeView=false }={})` | [guide](../stable-dithering.md#review-palette-shimmer-across-a-shot), [source](../../cli/palette-shimmer.js) |

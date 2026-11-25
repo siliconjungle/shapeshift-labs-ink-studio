@@ -4,7 +4,7 @@ const { once } = require('node:events');
 const { createInterface } = require('node:readline');
 const { save, graphOutputs } = require('./graph-outputs.js');
 const { readGraphProject } = require('./graph-project.js');
-const { readMaterialGraph, writeMaterialGraph } = require('./material-graph.js');
+const { openMaterialGraph, readMaterialGraph, writeMaterialGraph } = require('./material-graph.js');
 const { findGraphGroupUsers } = require('./graph-groups.js');
 const { snapshotFormat, diffGraphs } = require('./graph-diff.js');
 const { openGraphArtifactCache, engineFingerprint, fingerprint } = require('./graph-artifact-cache.js');
@@ -25,7 +25,7 @@ const flags = {
 };
 for (const options of Object.values(flags)) options.push('instance');
 const discoveryFlags = { nodes: ['json'], describe: ['json', 'example'] };
-const analysisFlags = { impact: ['root', 'json'], diff: ['adapters', 'json'], material: ['id', 'out'] };
+const analysisFlags = { impact: ['root', 'json'], diff: ['adapters', 'json'], material: ['id', 'out', 'base'] };
 const commandOptions = { ...flags, ...discoveryFlags, ...analysisFlags, ...host.commands };
 
 async function sendText(text) {
@@ -127,8 +127,14 @@ async function graphCommand(pos,opt,settings) {
   if (mode==='material') {
     if (pos.length!==2 || Object.entries(opt).some(([key,value])=>
       !analysisFlags.material.includes(key) || typeof value!=='string' || !value.trim()))
-      throw new TypeError('Use graph material <project-or-material.json> [--id ID] [--out material.json]');
-    const document=readMaterialGraph(file,{id:opt.id});
+      throw new TypeError('Use graph material <project-or-material.json> [--id ID] [--base settings.json] [--out material.json]');
+    let document=readMaterialGraph(file,{id:opt.id});
+    if (opt.base!==undefined) {
+      if (opt.out!==undefined && path.resolve(opt.base)===path.resolve(opt.out))
+        throw new TypeError('Choose a material output separate from the base settings file');
+      const base=JSON.parse(fs.readFileSync(path.resolve(opt.base),'utf8'));
+      document=openMaterialGraph({...document,settings:{...document.settings,base}});
+    }
     if (opt.out===undefined) return send(document);
     const result=writeMaterialGraph(opt.out,document,{baseDir:path.dirname(path.resolve(file))});
     return send({file:path.resolve(opt.out),format:result.format,version:result.version,id:result.id});

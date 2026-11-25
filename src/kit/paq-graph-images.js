@@ -9,6 +9,7 @@
   const colors = ['srgb', 'srgb-linear', 'display-p3', 'display-p3-linear'];
   const edges = ['clamp', 'transparent', 'wrap', 'mirror'];
   const specKeys = ['intent', 'layout', 'precision', 'units', 'colorSpace', 'alpha', 'tiling', 'sampling', 'domain'];
+  const optionalSpecKeys = [...specKeys, 'pixelPitchMm'];
   const maxPixels = 16777216;
   const own = Object.hasOwn;
   const finite = Number.isFinite;
@@ -28,17 +29,20 @@
   }
 
   function descriptor(source, settings) {
-    if (!fields(settings, specKeys)) throw new TypeError('Invalid graph image descriptor');
+    if (!fields(settings, optionalSpecKeys)) throw new TypeError('Invalid graph image descriptor');
     const { intent, layout = defaultLayout(intent, count(source)), precision = precisionOf(source.data) ?? 'float64',
       units = intent === 'height' ? undefined : 'unitless',
       colorSpace = intent === 'color' ? source.colorSpace ?? 'srgb' : 'none',
       alpha = intent === 'color' && layout === 'rgba' || intent === 'normal' && layout === 'xyza' ? 'straight' : 'none',
-      sampling = 'nearest', tiling = {} } = settings;
+      sampling = 'nearest', tiling = {}, pixelPitchMm } = settings;
     if (!intents.includes(intent) || typeof layout !== 'string' || layout.length !== count(source) ||
         !['r', 'rg', 'rgb', 'rgba', 'xyz', 'xyza'].includes(layout) || !own(storage, precision) || !unit(units) ||
         !['none', 'straight', 'premultiplied'].includes(alpha) || alpha !== 'none' && !layout.endsWith('a') ||
         !['nearest', 'linear'].includes(sampling) || !fields(tiling, ['u', 'v']))
       throw new TypeError('Invalid graph image intent, layout, precision, units, alpha or sampling');
+    if (pixelPitchMm !== undefined && (!Array.isArray(pixelPitchMm) || pixelPitchMm.length !== 2 ||
+        !finite(pixelPitchMm[0]) || pixelPitchMm[0] <= 0 || !finite(pixelPitchMm[1]) || pixelPitchMm[1] <= 0))
+      throw new TypeError('Graph image pixel pitch needs two positive millimeter values');
     const { u = 'clamp', v = 'clamp' } = tiling;
     if (!edges.includes(u) || !edges.includes(v)) throw new TypeError('Invalid graph image tiling');
     const color = intent === 'color', linear = color && typeof colorSpace === 'string' && colorSpace.endsWith('-linear');
@@ -55,7 +59,8 @@
     if (settings.domain !== undefined && settings.domain !== domain)
       throw new TypeError('Graph image domain does not match its encoding');
     return Object.freeze({ intent, layout, precision, units, colorSpace, alpha, domain,
-      tiling: Object.freeze({ u, v }), sampling });
+      tiling: Object.freeze({ u, v }), sampling,
+      ...(pixelPitchMm !== undefined && { pixelPitchMm: Object.freeze(pixelPitchMm.slice()) }) });
   }
 
   function samples(data, spec, serialized = false) {
@@ -89,7 +94,7 @@
   function valid(value, intent) {
     if (!fields(value, ['format', 'version', 'raster', 'descriptor']) || value.format !== format ||
         value.version !== version || !raster(value.raster) || !dimensions(value.raster) || !validPivot(value.raster.pivot) ||
-        !record(value.descriptor) || Object.keys(value.descriptor).length !== specKeys.length ||
+        !fields(value.descriptor, optionalSpecKeys) || specKeys.some(key => !own(value.descriptor, key)) ||
         !fields(value.descriptor.tiling, ['u', 'v']) || Object.keys(value.descriptor.tiling).length !== 2 ||
         intent !== undefined && value.descriptor.intent !== intent) return false;
     try { return samples(value.raster.data, descriptor(value.raster, value.descriptor), true); }
@@ -145,21 +150,26 @@
       if (!finite(out[p])) throw new RangeError('Height conversion produced a nonfinite sample');
     }
     return declare({ width, height, channels: 1, data: out, pivot },
-      { intent: 'height', units, tiling: spec.tiling, sampling: spec.sampling });
+      { intent: 'height', units, tiling: spec.tiling, sampling: spec.sampling,
+        ...(spec.pixelPitchMm && { pixelPitchMm: spec.pixelPitchMm }) });
   }
 
-  function toDisplay(source, outOfRange = 'clamp') {
+  function displaySamples(source, bitDepth, outOfRange = 'clamp') {
     const { raster: grid, descriptor: spec } = requireImage(source, 'color');
-    if (!['clamp', 'error'].includes(outOfRange)) throw new TypeError('Display output needs clamp or error range handling');
-    const { data, channels } = grid, out = new Uint8Array(data.length), rgb = [0, 0, 0];
-    const convert = convertColor(spec, { space: 'srgb', range: [0, 255], outOfRange });
+    if (![8, 16].includes(bitDepth) || !['clamp', 'error'].includes(outOfRange))
+      throw new TypeError('Display output needs 8 or 16 bits and clamp or error range handling');
+    const { data, channels } = grid, maximum = 2 ** bitDepth - 1;
+    const out = bitDepth === 8 ? new Uint8Array(data.length) : new Uint16Array(data.length), rgb = [0, 0, 0];
+    const convert = convertColor(spec, { space: 'srgb', range: [0, maximum], outOfRange });
     for (let i = 0; i < data.length; i += channels) {
       const opacity = convert(data, i, rgb);
       for (let c = 0; c < 3; c++) out[i + c] = Math.round(rgb[c]);
-      if (channels === 4) out[i + 3] = Math.round(opacity * 255);
+      if (channels === 4) out[i + 3] = Math.round(opacity * maximum);
     }
     return { ...grid, data: out, colorSpace: 'srgb' };
   }
+
+  const toDisplay = (source, outOfRange = 'clamp') => displaySamples(source, 8, outOfRange);
 
   function sampler(grid, spec) {
     const { width, height, channels, data } = grid;
@@ -266,5 +276,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, toHeight, resize, toDisplay, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);

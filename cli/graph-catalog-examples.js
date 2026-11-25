@@ -220,6 +220,9 @@ const materialSource = { op: 'material.pack', inputs: {
   metadata: { baseColor: { colorSpace: 'srgb', texCoord: 0 }, 'mask.wear': { texCoord: 1 } }
 } };
 const specifications = {
+  'material.base': { inputs: { settings: { size: { width: 8, height: 6 }, seed: 4 } } },
+  'material.imageOutput': { nodes: { data: declareData },
+    inputs: { source: link('data'), settings: { size: { width: 8, height: 6 } } } },
   'image.toHeight': { nodes: { color: declareColor }, inputs: { source: link('color'), scale: 2 } },
   'image.resize': { nodes: { data: declareData }, inputs: { source: link('data'), width: 8, height: 6 } },
   'image.toDisplay': { nodes: { color: declareColor }, inputs: { source: link('color') } },

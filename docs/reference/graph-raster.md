@@ -37,7 +37,7 @@ Origin: toolkit.
 
 - Width × height may not exceed 16,777,216 pixels.
 
-Guides: [guide](../headless-authoring.md#standalone-raster-composition)
+Guides: [guide](../headless-authoring.md#standalone-raster-composition), [guide](../material-base-settings.md#use-the-settings-in-a-graph)
 
 Get the runnable example with `ink-studio graph describe raster.canvas --example > example.json`.
 Run it with `ink-studio graph run example.json`.

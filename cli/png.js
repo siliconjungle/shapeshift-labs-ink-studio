@@ -27,8 +27,9 @@ function header(w, h, bits, color) {
   return hd;
 }
 const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-function image(hd, compressed) {
-  return Buffer.concat([signature, chunk('IHDR', hd), chunk('IDAT', compressed), chunk('IEND', Buffer.alloc(0))]);
+function image(hd, compressed, density) {
+  return Buffer.concat([signature, chunk('IHDR', hd), ...(density ? [chunk('pHYs', density)] : []),
+    chunk('IDAT', compressed), chunk('IEND', Buffer.alloc(0))]);
 }
 function encode(w, h, pixels, channels = 3) {
   if (![3,4].includes(channels)) throw new Error('PNG pixel count does not match its shape');
@@ -42,6 +43,25 @@ function encodeGray(w, h, values) {
   }
   return image(header(w, h, 8, 0), scanlines(w, h, values, 1));
 }
+function encodeMaterial(width, height, pixels, channels, pixelsPerMeter) {
+  const color = { 1: 0, 3: 2, 4: 6 }[channels];
+  if (color === undefined || !(pixels instanceof Uint8Array || pixels instanceof Uint16Array))
+    throw new TypeError('Material PNG needs an 8- or 16-bit scalar, RGB or RGBA raster');
+  const density = Buffer.alloc(9);
+  density.writeUInt32BE(pixelsPerMeter[0], 0);
+  density.writeUInt32BE(pixelsPerMeter[1], 4);
+  density[8] = 1;
+
+  const bytesPerSample = pixels.BYTES_PER_ELEMENT;
+  let samples = pixels;
+  if (bytesPerSample === 2) {
+    samples = Buffer.alloc(pixels.length * 2);
+    for (let i = 0; i < pixels.length; i++) samples.writeUInt16BE(pixels[i], i * 2);
+  }
+  return image(header(width, height, 8 * bytesPerSample, color),
+    scanlines(width, height, samples, channels * bytesPerSample), density);
+}
+
 function write(file, w, h, rgb, alpha) {
   fs.writeFileSync(file, alpha ? encode(w, h, withAlpha(rgb, alpha), 4) : encode(w, h, rgb));
 }
@@ -158,4 +178,6 @@ function encodeAnimation(frames, fps) {
 function animate(file, frames, fps) {
   fs.writeFileSync(file, encodeAnimation(frames.map(packFrame), fps));
 }
-module.exports = { paintRaster, encodePaint, encode, encodeGray, encodeIndexed, write, writeIndexed, read, raster, layout, nativeLayout, sheetRaster, tilesetRaster, indexedRaster, paletteSource, animate, packFrame, packRGBA, encodeFrame, encodeAnimation, animationDelay };
+module.exports = { paintRaster, encodePaint, encode, encodeGray, encodeMaterial, encodeIndexed, write, writeIndexed,
+  read, raster, layout, nativeLayout, sheetRaster, tilesetRaster, indexedRaster, paletteSource,
+  animate, packFrame, packRGBA, encodeFrame, encodeAnimation, animationDelay };
