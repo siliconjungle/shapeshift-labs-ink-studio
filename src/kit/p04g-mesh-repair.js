@@ -108,6 +108,11 @@
     }
   }
 
+  function outside(face, use) {
+    const start = face.corners.findIndex(corner => corner.id === use.to);
+    return [...face.corners.slice(start), ...face.corners.slice(0, start)];
+  }
+
   function dissolve(doc, op) {
     const { tolerance = .000001 } = op;
     if (!record(op, ['kind', 'edge', 'keep', 'tolerance']) || !Number.isFinite(tolerance) || tolerance < 0)
@@ -126,10 +131,6 @@
     if (crossesWinding(...uses, g.corners)) throw new RangeError('Repair face winding before dissolving this edge');
     if (edgeSeam(edge, g.corners).seam) throw new RangeError('Dissolve would remove a UV seam');
     dissolveMapping(doc, g, a, [...a.corners, ...b.corners], tolerance);
-    function outside(face, use) {
-      const start = face.corners.findIndex(corner => corner.id === use.to);
-      return [...face.corners.slice(start), ...face.corners.slice(0, start)];
-    }
     const first = outside(a, uses[0]), second = outside(b, uses[1]);
     const corners = [...first, ...second.slice(1, -1)];
     const next = topology.edit(doc, { faces: [{ id:a.id, material:a.material, corners }], removeFaces: [b.id] });
@@ -272,6 +273,96 @@
     return {document,links,effect:{kind:'split-quad',faces:splits.map(row=>({...row,edge:edges.get(edgeKey(row.vertices))}))}};
   }
 
+  function joinEdge(doc, g, op) {
+    if (op.edge !== undefined) {
+      const edge = g.edges.find(row=>row.id === op.edge);
+      if (edge?.uses.length !== 2) throw new RangeError('Join triangles needs a manifold edge between two faces');
+      return edge;
+    }
+    const {ids} = K.meshTopology.select(doc,op.selection === undefined ?
+      {domain:'faces',ids:op.faces} : {domain:'faces',from:op.selection});
+    if (ids.length !== 2) throw new RangeError('Select exactly two triangles to join');
+    const shared = g.edges.filter(row=>ids.every(id=>row.uses.some(use=>use.face === id)));
+    if (shared.length !== 1 || shared[0].uses.length !== 2)
+      throw new RangeError('Join triangles needs exactly one manifold shared edge');
+    return shared[0];
+  }
+
+  function joinUVs(edge, keep, remove, shared) {
+    return [0,...MaterialUV.setsOf(keep.corners[0])].map(set=>{
+      const endpoints = shared.map(({kept,lost})=>{
+        const after = MaterialUV.uv(kept,set), prior = MaterialUV.uv(lost,set);
+        const pinned = {keep:MaterialUV.pinned(kept,set),remove:MaterialUV.pinned(lost,set)};
+        return {vertex:kept.vertex,keepCorner:kept.id,removeCorner:lost.id,
+          before:[{face:keep.id,uv:after,pinned:pinned.keep},{face:remove.id,uv:prior,pinned:pinned.remove}],
+          after,delta:after.map((n,i)=>n-prior[i]),pinnedAfter:pinned.keep || pinned.remove};
+      });
+      return {set,authored:MaterialUV.seam(edge,set),
+        discontinuous:endpoints.some(({delta})=>delta.some(n=>n !== 0)),endpoints};
+    });
+  }
+
+  function joinTriangles(doc, op) {
+    const {uvs = 'match'} = op;
+    if (!record(op,['kind','edge','faces','selection','keep','uvs']) ||
+        ['edge','faces','selection'].filter(key=>op[key] !== undefined).length !== 1 ||
+        op.faces !== undefined && (!Array.isArray(op.faces) || op.faces.length !== 2) ||
+        !['match','keep'].includes(uvs))
+      throw new TypeError('Join triangles needs an edge, two face IDs, or a saved face selection, and a match or keep UV policy');
+    const g = incidence(doc), edge = joinEdge(doc,g,op);
+    const uses = [...edge.uses].sort((a,b)=>a.face < b.face ? -1 : 1);
+    const faces = uses.map(use=>g.faces.get(use.face));
+    if (faces.some(face=>face.corners.length !== 3) ||
+        new Set(faces.flatMap(face=>face.corners.map(corner=>corner.vertex))).size !== 4)
+      throw new RangeError('Join triangles needs two triangular faces with four distinct vertices');
+    if (crossesWinding(...uses,g.corners)) throw new RangeError('Repair face winding before joining triangles');
+    if (faces[0].material !== faces[1].material) throw new RangeError('Join triangles would remove a material boundary');
+    if (edge.smooth === false || edge.crease > 0)
+      throw new RangeError('Join triangles would remove an authored hard edge or subdivision crease');
+    const layout = face=>Object.entries(face.corners[0].attributes ?? {}).map(([key,value])=>
+      [key,Array.isArray(value) ? value.length : 0]);
+    if (!equal(layout(faces[0]),layout(faces[1])))
+      throw new RangeError('Join triangles needs matching corner attribute layouts');
+
+    const [a,b] = faces.map(face=>face.sourceQuad ?? {});
+    const sourceFace = a.mesh === doc.id && a.mesh === b.mesh && a.face === b.face && a.revision === b.revision ? a.face : undefined;
+    const keeper = op.keep ?? (faces.some(face=>face.id === sourceFace) ? sourceFace : faces[0].id);
+    if (!faces.some(face=>face.id === keeper)) throw new RangeError('Join keeper must be one of the incident triangles');
+    if (keeper === faces[1].id) { faces.reverse(); uses.reverse(); }
+    const [keep,remove] = faces;
+    const [first,second] = faces.map((face,i)=>outside(face,uses[i]));
+    const shared = [{kept:first[0],lost:second[2]},{kept:first[2],lost:second[0]}];
+    const nonUV = corner=>Object.entries(corner.attributes ?? {}).filter(([key])=>!MaterialUV.isKey(key));
+    if (shared.some(({kept,lost})=>!equal(kept.normal,lost.normal) || !equal(nonUV(kept),nonUV(lost))))
+      throw new RangeError('Join triangles would discard differing shared corner normals or non-UV attributes');
+
+    const uvSets = joinUVs(edge,keep,remove,shared);
+    // A marked seam on an unused layout is still an authored constraint.
+    for (const set of Object.keys(edge.uvSeams ?? {}).map(Number))
+      if (!uvSets.some(row=>row.set === set)) uvSets.push({set,authored:true,discontinuous:false,endpoints:[]});
+    const seams = uvSets.filter(row=>row.authored || row.discontinuous).map(row=>row.set).sort((a,b)=>a-b);
+    const corners = [...first,second[1]].map(corner=>{
+      const lost = shared.find(row=>row.kept === corner)?.lost;
+      return lost ? {...corner,uvPinned:corner.uvPinned || lost.uvPinned,
+        uvPins:{...corner.uvPins,...lost.uvPins}} : corner;
+    });
+    const start = corners.findIndex(corner=>corner.id === keep.corners[0].id);
+    const ring = [...corners.slice(start),...corners.slice(0,start)];
+    const diagonal = shared.map(({kept})=>kept.id).sort();
+    const quad = {id:keep.id,material:keep.material,corners:ring,diagonal};
+    const joined = topology.edit(doc,{faces:[quad],removeFaces:[remove.id]});
+    const links = {faces:[{from:remove.id,to:keep.id}],
+      corners:shared.map(({kept,lost})=>({from:lost.id,to:kept.id}))};
+    const effect = {kind:'join-triangles',edge:edge.id,vertices:edge.vertices,keep:keep.id,removedFace:remove.id,
+      material:keep.material,cornerOrder:ring.map(corner=>corner.id),diagonal,uvs,uvSets,seams,links,
+      triangles:faces.map(({id,corners,sourceQuad})=>({face:id,corners:corners.map(row=>row.id),...(sourceQuad && {sourceQuad})}))};
+    if (uvs === 'match' && seams.length) {
+      const message = 'Join triangles would remove a UV seam. Set uvs to keep to accept the previewed change';
+      return {document:doc,links:{},effect,blockers:[{code:'join-uv-seam',edge:edge.id,sets:seams,message}]};
+    }
+    return {document:joined,links,effect};
+  }
+
   function patchFor(before, after, transfers) {
     const { vertices, faces, corners, edges } = K.authoring.meshTopologyScene.diff({ document: before }, { document: after });
     const beforeIncidence = incidence(before), afterIncidence = incidence(after);
@@ -317,9 +408,10 @@
         !request.operations.length || request.operations.length > 128)
       throw new TypeError('Repair needs a topology revision and 1 to 128 explicit operations');
     if (request.revision !== topology.revision(before)) throw new RangeError('Stale mesh repair revision');
-    const commands = { weld, dissolve, winding, 'flip-diagonal': flipDiagonal, 'split-quad': splitQuad };
+    const commands = { weld, dissolve, winding, 'flip-diagonal': flipDiagonal, 'split-quad': splitQuad,
+      'join-triangles': joinTriangles };
     const steps = [], transfers = { faces: new Map(), corners: new Map(), edges: new Map() };
-    let after = before;
+    let after = before, refused = [];
     for (const [i, op] of request.operations.entries()) {
       if (!op || !Object.hasOwn(commands, op.kind)) throw new TypeError('Unknown mesh repair operation at ' + i);
       const result = commands[op.kind](after, op);
@@ -330,6 +422,11 @@
         for (const row of links) if (!map.has(row.from)) map.set(row.from, row.to);
       }
       steps.push({ index: i, ...result.effect });
+      if (result.blockers?.length) {
+        refused = result.blockers;
+        after = before;
+        break;
+      }
     }
     const { patch, changes, blockers } = patchFor(before, after, transfers);
     // A persisted patch must resolve temporary edges exactly as the planned sequence did.
@@ -337,7 +434,8 @@
       throw new RangeError('Repair sequence cannot be represented as one stable topology patch');
     return freeze({ document: after, patch, report: { format, version: 1, mesh: before.id,
       beforeRevision: topology.revision(before), afterRevision: topology.revision(after),
-      canCommit: !blockers.length, blockers, operations: clone(request.operations), steps, changes } });
+      canCommit: !(refused.length || blockers.length), blockers: [...refused,...blockers],
+      operations: clone(request.operations), steps, changes } });
   }
 
   K.meshTopology = Object.freeze({ ...topology, planRepair });

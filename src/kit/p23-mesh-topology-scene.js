@@ -269,6 +269,7 @@
         });
       } else updated.bindings = remapped;
       updated.bindings = A.tilesetFaces.splitSources(row.bindings,updated.bindings,before,document);
+      updated.bindings = A.tilesetFaces.joinSources(row.bindings,updated.bindings,before,document,correspondence);
     }
     if (row.bakes) {
       const dirty = new Map(), oldSet=MaterialUV.resolve(before.uvBindings,'pigment'),
