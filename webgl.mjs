@@ -36,5 +36,5 @@ export {
 } from './show-control.mjs';
 export { compileGaussianPartProxies } from './src/webgl/gaussian-part-proxies.mjs';
 export { encodeGaussianTurntablePNG, encodeGaussianTurntableNormalPNG } from './src/webgl/gaussian-turntable.mjs';
-export { bakeObjectTexels, editObjectTexels } from './src/object-texels.mjs';
+export { bakeObjectTexels, editObjectTexels, createObjectTexelEditor } from './src/object-texels.mjs';
 export { decodeSceneryPack } from './src/scenery-delivery.mjs';

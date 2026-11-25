@@ -242,7 +242,7 @@ const SceneMeshes = (() => {
     const previous=binding?.bake;
     if (!previous || !bake?.normal || !bake.roughness || !bake.emission ||
         bake.cells!==previous.cells || bake.points!==previous.points ||
-        bake.triangles!==previous.triangles || bake.uvs!==previous.uvs ||
+        bake.triangles!==previous.triangles || bake.uvs!==previous.uvs || bake.triangleCells!==previous.triangleCells ||
         bake.width!==previous.width || bake.height!==previous.height)
       throw new TypeError('Object texel edits must retain the bound cells and geometry');
     if (previous===bake) return mesh;
@@ -255,6 +255,32 @@ const SceneMeshes = (() => {
     layer.semanticMipmaps=[{...row,chain}];
     binding.bake=bake;
     return mesh;
+  }
+
+  function objectTexelFrame(mesh, frame, expected) {
+    const binding=read(mesh).objectTexels, bake=binding?.bake, {w,h,passes}=frame ?? {};
+    const {sourceSurface,sourceTriangle:triangles,surfaceSources}=passes ?? {};
+    if (!bake || expected && (bake.cells!==expected.cells || bake.triangles!==expected.triangles))
+      throw new TypeError('Watch a mesh bound to the same object texel bake');
+    if (![w,h].every(n=>Number.isSafeInteger(n)&&n>0) || w*h>4000000 ||
+        sourceSurface?.length!==w*h || triangles?.length!==w*h || !Array.isArray(surfaceSources))
+      throw new TypeError('Object texel watching needs native-grid source surface passes');
+    const ranges=surfaceSources.map(row=>row?.kind==='mesh' && row.asset===mesh.id && row.object===mesh.objectId &&
+      (row.part ?? undefined)===mesh.partId ? row.primitive/3 : undefined);
+    const cellAt=new Int32Array(w*h).fill(-1);
+    for (let p=0;p<cellAt.length;p++) {
+      const start=ranges[sourceSurface[p]];
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(triangles[p]) || triangles[p]<0) continue;
+      const triangle=sourceTriangle(mesh,start+triangles[p]);
+      if (triangle===undefined) continue;
+      let cell=bake.triangleCells?.[triangle];
+      if (cell===undefined) {
+        const i=bake.triangles[triangle*3]*2;
+        cell=Math.round(bake.uvs[i]*(bake.width-1))+Math.round(bake.uvs[i+1]*(bake.height-1))*bake.width;
+      }
+      if (bake.cells[cell]) cellAt[p]=cell;
+    }
+    return {w,h,cellAt};
   }
 
   function read(mesh) {
@@ -707,7 +733,7 @@ const SceneMeshes = (() => {
     return {anchors, points:Float32Array.from(points), uvs:Float32Array.from(texture), triangles:Uint32Array.from(triangles)};
   }
 
-  return Object.freeze({create,fromObjectTexels,updateObjectTexels,scanFrame:Mips.scanFrame,scanMaterial,paintMeshes,pose,withPose,geometry,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
+  return Object.freeze({create,fromObjectTexels,updateObjectTexels,objectTexelFrame,scanFrame:Mips.scanFrame,scanMaterial,paintMeshes,pose,withPose,geometry,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
     simulationFrame:(...args)=>simulationAPI().frame(...args),depthProxy,proxyPlan,sourceTriangle,trianglePigment,intersect,rayQuery,projector,sampleProjection,clipUV,revision:mesh=>read(mesh).revision});
 })();
 if (typeof module !== 'undefined') module.exports = SceneMeshes;

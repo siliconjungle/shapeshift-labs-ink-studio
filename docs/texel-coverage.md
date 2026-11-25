@@ -108,6 +108,102 @@ posed parts while the camera orbits.
 node examples/relightable-object-texels.cjs vesper-guard
 ```
 
+## Select, protect, paint and watch an object texel cluster
+
+Open a transaction editor on the relightable bake. A cluster follows
+shared edges between clipped surface pieces, including cubemap seams
+and fallback material pieces that actually touch. The default
+`pigment` mode follows the seed's exact current RGB value. The
+`surface` mode follows all connected cells. An empty capture cell
+cannot be selected. Cell IDs stay bound to the bake during camera
+and rigid pose changes.
+
+```js
+import { createObjectTexelEditor } from './webgl.mjs';
+
+const editor = createObjectTexelEditor(bake, { KIT });
+const { selection } = editor.execute({ op: 'select', at: [4, 7, 9] });
+editor.execute({ op: 'protect', ids: [selection[0]] });
+
+const stroke = {
+  face: 4, points: [[6, 9], [10, 9]],
+  values: { pigment: 0x4caa99, roughness: 0.32, emission: 0x174a3d }
+};
+const preview = editor.execute({ op: 'preview', ...stroke });
+editor.execute({ op: 'brush', revision: preview.revision, ...stroke });
+editor.apply(helmet);
+
+// Capture this pass at px: 1 for each camera or pose.
+const capture = editor.watch(helmet, frameWithSourceSurface);
+const visibleCell = capture.cellAt[y * capture.w + x];
+
+editor.execute({ op: 'undo' });
+editor.apply(helmet);
+```
+
+Pass a known `seed` cell ID or `at: [face,x,y]` to select. Face order
+is +X, −X, +Y, −Y, +Z, −Z. A brush can set any object-texel material
+channel. Add an existing `ink-studio/pixel-brush` tip to a face stroke
+to stamp its palette or tint, with explicit `values` taking precedence.
+Supply `ids` for specific addressed cells or omit the path and IDs to
+paint the whole selection. Use `scope: 'all'` to allow a stroke outside
+the selection. A preview returns exact changed channel values and skipped
+cells. Protected cells are skipped during a brush operation and rejected
+by the per-cell API on the protected bake. Undo and redo restore the
+material and protection state through the same authoring transaction
+history. Export a journal with `editor.exportSession()` and pass it
+as the `session` option to reopen against the original bake.
+
+The watch reads the visible, native-grid `sourceSurface` evidence.
+`cellAt` gives the cell ID at each pixel and uses `-1` for pixels
+outside the object or covered by another surface. The watch includes
+pixel counts per visible cell, selected cells missing from the view,
+and a mask for selected and protected pixels. A cell can occupy more
+than one art pixel.
+
+### Run an object texel session from the CLI
+
+Create a version 1 `ink-studio/object-texel-source` JSON document. It
+contains an `id`, a `mesh` with flat `points` and `triangles` arrays,
+and optional `origin`, `resolution`, `material`, and `fallback`.
+An optional `cells` array sets initial material values by ID, in the
+same format as `editObjectTexels`. The session retains the source and
+transaction journal in its checkpoint directory.
+
+```sh
+ink-studio pixel-art texels init lantern-session lantern.json
+ink-studio pixel-art texels run lantern-session select.json
+ink-studio pixel-art texels run lantern-session brush.json --out receipt.json
+ink-studio pixel-art texels watch lantern-session views.json --out review
+ink-studio pixel-art texels run lantern-session undo.json
+```
+
+Commands are the same JSON objects used by `editor.execute`.
+An undo request is `{"op":"undo"}`. A watch request names its output
+grid and views.
+
+```json
+{
+  "format": "ink-studio/object-texel-watch",
+  "version": 1,
+  "w": 192,
+  "h": 144,
+  "views": [
+    { "id": "front", "camera": { "yaw": 0.12, "pitch": 0.18 } },
+    { "id": "turned", "poseYaw": 1.2, "camera": { "yaw": 0.24 } }
+  ]
+}
+```
+
+Each view writes a native PNG and a selection overlay. Read source cell
+IDs and visibility counts from `watch.json`. The [Kite 07 example](../examples/object-texel-clusters.cjs)
+shows the same cluster from three angles, protects small brass accents,
+and verifies that undo restores every original render.
+
+```sh
+node examples/object-texel-clusters.cjs kite-07-review
+```
+
 ## Filter coverage before palette lookup
 
 Enable `look.coverageFilter` in a scene or pass `coverageFilter` in the

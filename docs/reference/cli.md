@@ -327,6 +327,10 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art replay <design.json> <receipt.json> --out result.json   verify and reproduce an edit with the same options
             --scene <bound scene> for native edits; --shot-hit-frame <index> to sample skipped shot hits
   pixel-art session init <directory> <design.json> [--scene scene.json]   start a persistent edit session
+  pixel-art texels init <directory> <source.json>   open a persistent object texel edit session
+  pixel-art texels run <directory> <command.json> [--out file]   select, protect, brush, preview, undo or redo object texels
+  pixel-art texels watch <directory> <views.json> [--out directory]   track a cluster across native views
+  pixel-art texels status <directory> [--out file]   inspect the saved object texel edits
   pixel-art schema [--out schema.json]   publish command schemas, examples, destination inputs and evidence
   pixel-art session run <directory> <command.json> [--scene scene.json | --source-view view.json] [--out result.json]   run SDK commands, batches, recipes and review exports
   pixel-art session <apply|draw|mask|recolor|transform> <directory> <patch.json>   stage or apply a guarded edit

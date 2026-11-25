@@ -1,3 +1,5 @@
+import { createEditor } from './object-texel-editor.mjs';
+
 // The capture faces use local right and down axes, in atlas row order.
 const faces = [
   [[1,0,0],[0,0,-1],[0,-1,0]], [[-1,0,0],[0,0,1],[0,-1,0]],
@@ -11,6 +13,7 @@ const dot = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 const cross = (a,b) => [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 const rgbColor = x => Number.isInteger(x) && x >= 0 && x <= 0xffffff;
 const materialBakes = new WeakSet();
+const protectedBakes = new WeakMap();
 
 function prepareMaterial(sample, fallback) {
   if (rgbColor(sample)) sample = { pigment:sample };
@@ -41,6 +44,10 @@ function writeMaterial(bake, id, {pigment, normal, roughness, metalness, emissio
 
 /** Edit addressed cells atomically while retaining the original clipped mesh and IDs. */
 export function editObjectTexels(bake, edits) {
+  return edit(bake,edits,protectedBakes.get(bake));
+}
+
+function edit(bake, edits, locks) {
   if (!materialBakes.has(bake) || !Array.isArray(edits) || edits.length>bake.cells.length)
     throw new TypeError('Edit a relightable object texel bake with a bounded list of cell edits');
   if (!edits.length) return bake;
@@ -50,11 +57,30 @@ export function editObjectTexels(bake, edits) {
   for (const {id,...sample} of edits) {
     if (!Number.isSafeInteger(id) || !bake.cells[id] || ids.has(id))
       throw new RangeError('Each texel edit needs a distinct occupied cell ID');
+    if (locks?.has(id)) throw new RangeError('Texel cell '+id+' is protected');
     ids.add(id);
     writeMaterial(result,id,prepareMaterial(sample));
   }
   materialBakes.add(result);
+  if (locks) protectedBakes.set(result,locks);
   return result;
+}
+
+/** Open a pixel transaction session bound to a relightable bake. */
+export function createObjectTexelEditor(bake, options) {
+  if (!materialBakes.has(bake)) throw new TypeError('Open a relightable object texel bake');
+  return createEditor(bake,options,{
+    edit:(edits,locks)=> {
+      const next=edit(bake,edits);
+      if (!locks.length && !protectedBakes.has(next)) return next;
+      const result={...next};
+      materialBakes.add(result);
+      protectedBakes.set(result,new Set(locks));
+      return result;
+    },
+    validate:sample=>prepareMaterial(sample),
+    protected:[...(protectedBakes.get(bake) ?? [])]
+  });
 }
 
 function clip(polygon, plane) {
@@ -222,6 +248,7 @@ export function bakeObjectTexels(mesh, { origin = [0,0,0], resolution = 16, pain
       writeMaterial(bake,id,value);
     }
     bake.cells=Object.freeze(cells);
+    bake.triangleCells=Uint32Array.from({length:result.triangles.length/3},(_,i)=>texels[i*3]);
     materialBakes.add(bake);
   }
   return bake;
