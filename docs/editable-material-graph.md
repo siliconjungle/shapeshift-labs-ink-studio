@@ -29,7 +29,7 @@ The top-level fields are `format`, `version`, `id`, and `graph`, with optional `
 | `graph.outputs` | A link can target the output ID. Use `{ binding }` for a literal or animated output. An empty record is an editable pending output. |
 | `graph.groups` | `{ graph }` for an inline graph with its own tables, or `{ reference }` for a native external group file or pinned reference. |
 | `resources` | `{ definition }` wrapping a native graph asset definition such as `{ format: "png", file: "press.png" }`. Asset operations use the resource ID. |
-| `controls` | `{ input }` exposes one root graph input under a stable control ID. |
+| `controls` | Entries expose root graph inputs under stable IDs. Add [parameter presentation and defaults](#expose-and-reset-material-parameters) as needed. |
 | `instances` | `{ overrides }` stores values keyed by control ID. Each instance uses the shared graph. |
 
 `settings` carries native `time`, `seed`, `exports`, `assertions`, and `assetRegistry`, plus optional [shared material base settings](material-base-settings.md) in `base`, with optional `inheritance` rules and a named `primaryInput`. Use [output usages](material-graph-ports.md#publish-material-output-usages) in `outputUsages` to bind previews and delivery files to graph outputs. The document, graph scopes, and table entries accept optional `label` and `extensions` fields. Use namespaced keys in `extensions` for opaque JSON editor or plugin data. Saving preserves these values. Ink omits them when preparing the execution graph.
@@ -140,3 +140,48 @@ ink-studio graph material-visibility /tmp/ink-signal/signal-lens.material.json -
 ```
 
 Open `demo.html` to switch the finish and lamp, select visible output maps, and repair the example rule. The demo evaluates conditions in the browser with `KIT.procedural.graphVisibility.inspect`.
+
+## Expose and reset material parameters
+
+A control's table key is its stable parameter ID. The entry can specify a label, group, widget, default, units, limits, editing step, enum options, and display order.
+
+| Field | Meaning |
+| --- | --- |
+| `input`, `label`, `group`, `order` | Bound root input ID, display label, inspector section, and nonnegative sort position. IDs break order ties. |
+| `widget` | `slider`, `number`, `toggle`, `select`, `text`, or `json`. An omitted widget follows the socket type and any enum options. |
+| `default` | Optional authored parameter default. This takes precedence over the socket default. |
+| `units`, `min`, `max`, `step` | Display units, numeric limits, and the widget's edit increment. A slider needs both limits. Units fall back to the socket's physical quantity when present. |
+| `options` | Ordered list of `{ label, value }` options for a select widget. The values keep their declared scalar type. |
+| `visibleWhen` | An optional [typed visibility rule](#show-controls-and-ports-conditionally). |
+
+Use `ink.editMaterialParameters(document, request, options)` to edit a copy of a graph. An `expose` batch maps parameter IDs to definitions. Bind an existing graph input with `input`, or promote a node input using `target: { node, port }`. Promotion captures the node's literal value or socket default and gives the new input and its connection stable IDs. Wired and animated ports require a separate authoring edit before promotion.
+
+```json
+{
+  "kind": "expose",
+  "parameters": {
+    "colorway": {
+      "input": "colorway", "label": "Colorway", "group": "Glaze", "order": 10,
+      "options": [{ "label": "Coastal teal", "value": "coast" }, { "label": "Kiln copper", "value": "kiln" }]
+    },
+    "gloss": {
+      "target": { "node": "shineWeight", "port": "a" },
+      "label": "Gloss", "group": "Glaze", "widget": "slider",
+      "min": 0, "max": 1, "step": 0.05, "order": 20
+    }
+  }
+}
+```
+
+Use `{ "kind": "set", "instance": "kiln", "values": { "gloss": 0.7 } }` to create or update a named instance. A `reset` request takes the instance ID and an optional `controls` list of parameter IDs. With the list omitted, the instance uses its shared defaults again. Bounds and enum membership apply to authored defaults and instance overrides. Raw graph input bindings still use the graph socket contract.
+
+`ink.inspectMaterialParameters(document, { instance, inputs })` returns ordered parameters with their type, current value, default, value origin and visibility. Runtime `inputs` are keyed by graph input ID. The browser toolkit exposes the same schema through `KIT.procedural.materialParameters.prepare`.
+
+```sh
+node examples/material-exposed-parameters/demo.cjs /tmp/ink-medallion
+ink-studio graph material-parameters /tmp/ink-medallion/before.material.json /tmp/ink-medallion/expose.json --out /tmp/ink-medallion/batch.material.json
+ink-studio graph material-parameters /tmp/ink-medallion/medallion.material.json --instance kiln
+ink-studio graph material-parameters /tmp/ink-medallion/medallion.material.json /tmp/ink-medallion/reset.json --out /tmp/ink-medallion/default.material.json
+```
+
+Open `demo.html` to edit and reset the exposed controls against a live render of the same graph.

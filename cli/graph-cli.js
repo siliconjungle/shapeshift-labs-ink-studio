@@ -7,6 +7,7 @@ const { readGraphProject } = require('./graph-project.js');
 const { openMaterialGraph, readMaterialGraph, writeMaterialGraph } = require('./material-graph.js');
 const { describeMaterialMetadata } = require('./material-metadata.js');
 const { inspectMaterialVisibility } = require('./material-visibility.js');
+const { editMaterialParameters, inspectMaterialParameters } = require('./material-parameters.js');
 const { searchMaterialLibrary, publishMaterialLibrary } = require('./material-library.js');
 const { describeMaterialSubgraph, editMaterialSubgraph, publishMaterialSubgraph } = require('./material-subgraphs.js');
 const { findGraphGroupUsers } = require('./graph-groups.js');
@@ -31,6 +32,7 @@ for (const options of Object.values(flags)) options.push('instance','base-contex
 const discoveryFlags = { nodes: ['json'], describe: ['json', 'example'] };
 const analysisFlags = { impact: ['root', 'json'], diff: ['adapters', 'json'], material: ['id', 'out', 'base', 'output-usages', 'metadata'],
   subgraph: ['out', 'adapters'], 'publish-subgraph': ['out', 'revision', 'adapters'],
+  'material-parameters': ['out', 'instance', 'inputs', 'adapters'],
   'material-visibility': ['inputs', 'instance', 'scope'], 'material-info': ['audience'], 'material-library': ['audience', 'query', 'tag', 'offset', 'limit', 'out'] };
 const commandOptions = { ...flags, ...discoveryFlags, ...analysisFlags, ...host.commands };
 
@@ -146,6 +148,27 @@ async function graphCommand(pos,opt,settings) {
     if (opt.out===undefined) return send(document);
     const result=writeMaterialGraph(opt.out,document,{baseDir:path.dirname(path.resolve(file))});
     return send({file:path.resolve(opt.out),format:result.format,version:result.version,id:result.id});
+  }
+  if (mode==='material-parameters') {
+    if (![2,3].includes(pos.length) || Object.entries(opt).some(([key,value])=>
+      !analysisFlags[mode].includes(key) || typeof value!=='string' || !value.trim()) ||
+      caseFile && (opt.instance!==undefined || opt.inputs!==undefined) ||
+      !caseFile && (opt.out!==undefined || opt.adapters!==undefined))
+      throw new TypeError('Use graph material-parameters <material.json> [--instance ID] [--inputs values.json] or <material.json> <request.json> [--out material.json]');
+    const sourceFile=path.resolve(file), baseDir=path.dirname(sourceFile), document=readMaterialGraph(sourceFile);
+    if (!caseFile) {
+      const inputs=opt.inputs===undefined ? undefined : JSON.parse(fs.readFileSync(path.resolve(opt.inputs),'utf8'));
+      return send(inspectMaterialParameters(document,{kit:settings.kit,instance:opt.instance,inputs}));
+    }
+    const requestFile=path.resolve(caseFile);
+    if (opt.out && path.resolve(opt.out)===requestFile)
+      throw new TypeError('Choose a material output separate from the parameter request');
+    settings=await host.adapters(opt.adapters,settings);
+    const result=editMaterialParameters(document,JSON.parse(fs.readFileSync(requestFile,'utf8')),
+      {...settings,baseDir,sourceFile});
+    if (!opt.out) return send(result);
+    const saved=writeMaterialGraph(opt.out,result.document,{baseDir});
+    return send({file:path.resolve(opt.out),id:saved.id,inspector:result.inspector});
   }
   if (mode==='material-visibility') {
     if (pos.length!==2 || Object.entries(opt).some(([key,value])=>

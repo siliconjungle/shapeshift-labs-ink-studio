@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kiln medallion · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--ink:#f4e4c9;--quiet:#bdafa2;--rim:#52463e;--panel:#2f2926;--gold:#ecc086;--accent:#b7c8a7}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 25% 5%,#42362d,transparent 680px),#24211f;color:var(--ink);font:15px/1.45 system-ui,sans-serif}
+main{width:min(100% - 54px,1000px);margin:auto;padding:30px 0 22px}
+header{display:flex;align-items:end;justify-content:space-between;gap:22px;margin-bottom:18px}header small{color:var(--gold);font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.15em}
+h1{font:500 clamp(42px,6vw,72px)/1 Georgia,serif;letter-spacing:-.054em;margin:5px 0 0}header p{max-width:280px;color:var(--quiet);margin:0 0 2px}
+.workbench{display:grid;grid-template-columns:minmax(0,1fr) minmax(365px,1fr);align-items:start;gap:15px}
+figure,aside{margin:0;background:var(--panel);border:1px solid var(--rim);border-radius:10px}
+figure{padding:13px}canvas{display:block;width:min(100%,400px);aspect-ratio:8/7;image-rendering:pixelated;margin:auto;background:#202020}
+figcaption,.topline{display:flex;justify-content:space-between;align-items:center;gap:8px}figcaption{padding:10px 4px 0}small,.source{color:var(--quiet)}header small{color:var(--gold)}
+aside{padding:13px}h2{font:500 28px/1.2 Georgia,serif;letter-spacing:-.03em;margin:0}
+.group{margin-top:12px;border-top:1px solid var(--rim);padding-top:7px}.group h3{margin:0 0 3px;font-size:11px;text-transform:uppercase;letter-spacing:.11em;color:var(--quiet)}
+.row{display:grid;grid-template-columns:minmax(100px,1fr) minmax(100px,1fr) 44px;gap:7px;min-height:45px;align-items:center}
+.row label{font-weight:600}.source{display:block;font-size:11px;font-weight:400}.values{display:flex;align-items:center;justify-content:flex-end;gap:5px;min-width:0}
+input,select{font:inherit;color:inherit;min-width:0;accent-color:var(--accent)}select,input[type=number]{background:#3e342d;border:1px solid #66554a;border-radius:4px;padding:4px 5px;width:100%}
+input[type=range]{width:100%;margin:0}input[type=checkbox]{margin-right:auto}output,.units{font:12px ui-monospace,monospace;text-align:right;color:var(--accent);white-space:nowrap}
+button{font:inherit;color:inherit;cursor:pointer}.reset{background:#43362e;border:1px solid #6f5a49;border-radius:4px;font-size:12px;padding:3px 5px}.reset:disabled{opacity:.42;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.fail{color:#f0a480;font-size:13px;margin:6px 0 0}
+footer{margin-top:14px;color:var(--quiet);font-size:13px}a{color:var(--gold);margin-right:12px;text-underline-offset:3px}
+[hidden]{display:none!important}
+@media(max-width:750px){main{width:calc(100% - 28px);padding-top:20px}.workbench{grid-template-columns:1fr}header{display:block}header p{margin-top:9px}}
+</style>
+</head>
+<body>
+<main>
+<header><div><small>Ink Studio · Exposed parameters</small><h1>Kiln medallion</h1></div><p id="exposure"></p></header>
+<div class="workbench">
+<figure><canvas id="preview" width="80" height="70" aria-label="Live pixel-art rendering of a ceramic kingfisher medallion"></canvas>
+<figcaption><b id="colorway-label"></b><small>80 × 70 px · Live Ink render</small></figcaption>
+</figure>
+<aside aria-label="Material parameter inspector">
+<div class="topline"><div><h2>Kiln instance</h2><small id="override-count" aria-live="polite"></small></div><button type="button" class="reset" id="reset-all">Reset all</button></div>
+<div id="fields"></div><p id="error" role="alert" class="fail" hidden></p>
+</aside>
+</div>
+<footer><a href="medallion.material.json">Editable graph</a><a href="expose.json">Batch request</a><a href="inspector.json">Inspector report</a></footer>
+</main>
+<script src="toolkit.js"></script>
+<script src="data.js"></script>
+<script>
+const get = id => document.getElementById(id);
+const program = KIT.procedural.materialParameters.prepare(medallion.scope);
+const graph = KIT.procedural.graph.create(medallion.graph, { operations: {
+  multiply: { inputs: { a: 'number', b: 'number' }, outputs: { value: 'number' },
+    run({ a, b }) { return { value: a * b }; } }
+} });
+let overrides = medallion.overrides;
+const entries = new Map(), groups = new Map(), canvas = get('preview');
+const context = canvas.getContext('2d');
+get('exposure').textContent = medallion.exposeCount + ' parameters exposed in one edit. Change a value or reset the instance to its defaults.';
+
+function element(tag, text, className) {
+  const out = document.createElement(tag);
+  if (text) out.textContent = text;
+  if (className) out.className = className;
+  return out;
+}
+function field(parameter) {
+  const groupName = parameter.group;
+  if (!groups.has(groupName)) {
+    const group = element('section', null, 'group');
+    group.append(element('h3', groupName));
+    get('fields').append(group);
+    groups.set(groupName, group);
+  }
+  const row = element('div', null, 'row');
+  row.dataset.parameter = parameter.id;
+  const label = element('label', parameter.label);
+  label.htmlFor = parameter.id;
+  const origin = element('span', null, 'source');
+  label.append(origin);
+  const input = element(parameter.widget === 'select' ? 'select' : 'input');
+  input.id = parameter.id;
+  if (parameter.widget === 'select') {
+    parameter.options.forEach(({ label }, index) => {
+      const option = element('option', label);
+      option.value = String(index);
+      input.append(option);
+    });
+  } else {
+    input.type = { slider: 'range', number: 'number', toggle: 'checkbox' }[parameter.widget];
+    for (const key of ['min', 'max', 'step']) if (parameter[key] !== undefined) input[key] = parameter[key];
+  }
+  const readout = element(parameter.widget === 'slider' ? 'output' : 'span', null, 'units');
+  const values = element('div', null, 'values');
+  values.append(input, readout);
+  const reset = element('button', 'Reset', 'reset');
+  reset.type = 'button';
+  reset.setAttribute('aria-label', 'Reset ' + parameter.label);
+  input.addEventListener('input', () => {
+    const value = parameter.widget === 'select' ? parameter.options[Number(input.value)].value :
+      parameter.widget === 'toggle' ? input.checked : input.valueAsNumber;
+    try {
+      overrides = program.apply(overrides, { [parameter.id]: value });
+      show();
+    } catch (error) {
+      get('error').textContent = error.message;
+      get('error').hidden = false;
+    }
+  });
+  reset.addEventListener('click', () => {
+    overrides = KIT.procedural.materialParameters.reset(overrides, [parameter.id]);
+    show();
+  });
+  row.append(label, values, reset);
+  groups.get(groupName).append(row);
+  entries.set(parameter.id, { row, input, origin, readout, reset });
+}
+program.inspect({ overrides }).parameters.forEach(field);
+
+get('reset-all').addEventListener('click', () => {
+  overrides = KIT.procedural.materialParameters.reset(overrides);
+  show();
+});
+function show() {
+  const { parameters } = program.inspect({ overrides });
+  for (const parameter of parameters) {
+    const { row, input, origin, readout, reset } = entries.get(parameter.id), overridden = parameter.origin === 'override';
+    row.hidden = !parameter.visible;
+    origin.textContent = overridden ? 'Override' : 'Default';
+    reset.disabled = !overridden;
+    if (parameter.widget === 'select') input.value = String(parameter.options.findIndex(option => option.value === parameter.value));
+    else if (parameter.widget === 'toggle') input.checked = parameter.value;
+    else input.value = parameter.value;
+    const units = parameter.units ?? '';
+    readout.textContent = parameter.widget === 'slider' ? Number(parameter.value.toFixed(2)) + units : units;
+  }
+  const count = Object.keys(overrides).length;
+  get('override-count').textContent = count === 1 ? '1 override' : count + ' overrides';
+  get('reset-all').disabled = count === 0;
+  get('error').hidden = true;
+  const colorway = parameters.find(parameter => parameter.id === 'colorway');
+  get('colorway-label').textContent = colorway.options.find(option => option.value === colorway.value).label;
+  const inputs = Object.fromEntries(parameters.map(({ input, value }) => [input, value]));
+  const { outputs: { preview } } = graph.evaluate(inputs);
+  context.putImageData(new ImageData(Uint8ClampedArray.from(preview.data), preview.width, preview.height), 0, 0);
+}
+show();
+</script>
+</body>
+</html>

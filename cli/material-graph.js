@@ -4,6 +4,7 @@ const { createHash } = require('node:crypto');
 const files = require('./asset-files.js');
 const { groupReference } = require('./graph-groups.js');
 const Base = require('../src/material-base-settings.js');
+const Parameters = require('../src/material-parameters.js');
 const OutputUsages = require('./material-output-usages.js');
 const Metadata = require('./material-metadata.js');
 
@@ -194,18 +195,24 @@ function lower(document, { requireOutputs, instance } = {}) {
   }));
   const exposed = new Set();
   for (const [id, control] of entries(controls, 'controls')) {
-    entity(control, ['input', 'visibleWhen'], 'control ' + id);
+    entity(control, ['input', 'visibleWhen', ...Parameters.keys], 'control ' + id);
     if (!isId(control.input) || !Object.hasOwn(native.inputs ?? {}, control.input) || exposed.has(control.input))
       throw new RangeError('Control ' + id + ' needs a distinct graph input');
     exposed.add(control.input);
+    Parameters.validate(control, id);
+    const input = control.input;
+    if (Object.hasOwn(control, 'default')) native.inputs[input] = Parameters.inputDefault(native.inputs[input], control.default);
+    if (Object.hasOwn(native.inputs[input] ?? {}, 'default'))
+      Parameters.checkValue(control, id, native.inputs[input].default);
   }
   for (const [id, value] of entries(instances, 'instances')) {
     entity(value, ['overrides'], 'instance ' + id);
     for (const [key, override] of entries(value.overrides ?? {}, 'instance overrides')) {
       if (!Object.hasOwn(controls, key)) throw new RangeError('Unknown control ' + key + ' on instance ' + id);
+      Parameters.checkValue(controls[key], key, override);
       if (instance === id) {
-        const input = controls[key].input, definition = native.inputs[input];
-        native.inputs[input] = { ...(typeof definition === 'string' ? { type: definition } : definition), default: override };
+        const input = controls[key].input;
+        native.inputs[input] = Parameters.inputDefault(native.inputs[input], override);
       }
     }
   }

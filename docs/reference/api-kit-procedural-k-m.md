@@ -219,6 +219,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.materialChannels.validMap` | function | `(name, map)` | [source](../../src/kit/paq-material-channels.js) |
 | `KIT.procedural.materialChannels.version` | value | `number = 1` |  |
 
+## KIT.procedural.materialParameters
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.materialParameters` | namespace |  |  |
+| `KIT.procedural.materialParameters.prepare` | function | `({ inputs = {}, controls = {}, outputs = {} })` | [guide](../editable-material-graph.md#expose-and-reset-material-parameters), [source](../../src/material-parameters.js) |
+| `KIT.procedural.materialParameters.reset` | function | `(overrides, ids = Object.keys(overrides))` | [source](../../src/material-parameters.js) |
+
 ## KIT.procedural.materials
 
 | Member | Kind | Signature or value | Guides and source |

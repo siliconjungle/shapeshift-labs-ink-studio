@@ -54,6 +54,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.describeMaterialSubgraph` | function | `(source, target, options)` | [guide](../editable-material-graph.md#publish-and-edit-reusable-subgraphs), [guide](../editable-material-graph.md#show-controls-and-ports-conditionally), [source](../../cli/material-subgraphs.js) |
 | `node.describeRenderFrame` | function | `(world, frame)` | [guide](../browser-renderer.md#shared-rendering-contract), [guide](../browser-renderer.md#review-compatibility-before-export), [source](../../index.js) |
 | `node.diffGraphs` | function | `(before, after)` | [source](../../cli/graph-diff.js) |
+| `node.editMaterialParameters` | function | `(source, request, { kit = require('../index.js').load(), sourceFile, baseDir = sourceFile && path.dirname(path.resolve(sourceFile)), ...options } = {})` | [guide](../editable-material-graph.md#expose-and-reset-material-parameters), [source](../../cli/material-parameters.js) |
 | `node.editMaterialSubgraph` | function | `(source, edit, options = {})` | [guide](../editable-material-graph.md#publish-and-edit-reusable-subgraphs), [source](../../cli/material-subgraphs.js) |
 | `node.encodeDeepEXR` | function | `(frame, options)` | [guide](../deep-openexr.md#node-api), [guide](../deep-openexr.md), [source](../../cli/deep-openexr.js) |
 | `node.encodeSceneryPack` | function | `(id, meshes)` | [source](../../cli/scenery-delivery.js) |
@@ -76,6 +77,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.httpJsonAdapter` | function | `(location, { maxBytes = 1048576, timeout = 5000, headers = {} } = {})` | [guide](../graph-media.md#optional-host-adapters), [source](../../cli/graph-host.js) |
 | `node.inspectEffectPixel` | function | `(world, { at, ...view } = {})` | [guide](../material-response.md#inspect-a-pixel), [source](../../cli/render.js) |
 | `node.inspectEnvironment` | function | `(world, options = {})` | [guide](../environment-inspector.md), [source](../../cli/environment-inspector.js) |
+| `node.inspectMaterialParameters` | function | `(source, { inputs, instance, kit = require('../index.js').load() } = {})` | [guide](../editable-material-graph.md#expose-and-reset-material-parameters), [source](../../cli/material-parameters.js) |
 | `node.inspectMaterialVisibility` | function | `(source, { inputs = {}, instance, scope = [], kit = require('../index.js').load() } = {})` | [guide](../editable-material-graph.md#show-controls-and-ports-conditionally), [source](../../cli/material-visibility.js) |
 | `node.inspectPalettePixel` | function | `(world, { at, ...view } = {})` | [guide](../palette-recipes.md#inspect-the-palette-at-a-pixel), [source](../../cli/palette-pixel.js) |
 | `node.inspectPxc` | function | `(source, { image = false, tolerateArt = false } = {})` | [source](../../cli/pxc.js) |
