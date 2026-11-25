@@ -82,6 +82,10 @@ test('batch exposure preserves node literals, declared defaults and typed presen
     parameters: { valid: { target: { node: 'scale', port: 'a' } }, linked: { target: { node: 'sum', port: 'a' } } } }),
   /Cannot expose wired/);
   assert.equal(before.graph.nodes.scale.params.a.value, .65);
+  const named = Ink.editMaterialParameters(before, { kind: 'expose', parameters: {
+    materialBase: { target: { node: 'scale', port: 'b' } }
+  } });
+  assert.equal(row(named.inspector, 'materialBase').value, 2);
   assert.throws(() => Ink.editMaterialParameters(before, { kind: 'expose',
     parameters: { advance: { widget: 'number' } } }), /do not match its boolean/);
   assert.throws(() => Ink.editMaterialParameters(after, { kind: 'expose',

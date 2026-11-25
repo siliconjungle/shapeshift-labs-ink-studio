@@ -28,7 +28,7 @@ function lift(graph, name, target, project) {
       !id(target.node) || !id(target.port) || !own(graph.nodes, target.node))
     throw new TypeError('Expose a known node input port');
   const { node, port } = target, namePath = node + '.' + port;
-  if (own(graph.inputs ?? {}, name) || name === 'materialBase')
+  if (own(graph.inputs ?? {}, name))
     throw new RangeError('Choose a new graph input ID for ' + namePath);
   if (Object.values(graph.links).some(({ to }) => to.node === node && to.port === port))
     throw new RangeError('Cannot expose wired node input ' + namePath);
