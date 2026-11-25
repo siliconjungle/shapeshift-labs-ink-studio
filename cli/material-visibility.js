@@ -1,3 +1,4 @@
+const { effectiveInputs } = require('../src/material-parameters.js');
 const { openMaterialGraph, editableScope } = require('./material-graph.js');
 
 function inspectMaterialVisibility(source, { inputs = {}, instance, scope = [], kit = require('../index.js').load() } = {}) {
@@ -16,7 +17,7 @@ function inspectMaterialVisibility(source, { inputs = {}, instance, scope = [], 
   const path = '/graph' + scope.map(name => '/groups/' + name + '/graph').join('');
   return { format: 'ink-studio/material-visibility', version: 1, material: material.id, scope,
     ...(instance !== undefined && { instance }),
-    ...graphVisibility.inspect({ inputs: graph.inputs, outputs: graph.outputs, controls }, { values: { ...defaults, ...inputs }, path }) };
+    ...graphVisibility.inspect({ inputs: effectiveInputs(graph.inputs ?? {}, controls), outputs: graph.outputs, controls }, { values: { ...defaults, ...inputs }, path }) };
 }
 
 module.exports = { inspectMaterialVisibility };

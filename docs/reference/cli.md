@@ -587,6 +587,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   graph describe <op> [--json | --example]   show schema, units, limits and a runnable example
   graph material <project-or-material.json> [--id ID] [--base settings.json] [--output-usages maps.json] [--metadata metadata.json] [--out material.json]   open or save an editable material graph
   graph material-info <material.json> [--audience workspace|publication]   show authored metadata and thumbnail information
+  graph material-parameters <material.json> [--instance ID] [--inputs values.json]   inspect exposed parameters
+  graph material-parameters <material.json> <request.json> [--out material.json]   batch expose, set or reset parameters
   graph material-visibility <material.json> [--inputs values.json] [--instance ID] [--scope GROUP/PATH]   show inspector visibility and expression diagnostics
   graph material-library <registry.json> [--audience library|workspace|publication] [--query TEXT] [--tag TAG] [--offset N] [--limit N] [--out directory]
   graph subgraph <material.json> <request.json> [--out material.json]   inspect or edit reusable material instances
@@ -757,6 +759,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio graph material` · `--id`, `--out`, `--base`, `--output-usages`, `--metadata` · [source](../../cli/graph-cli.js)
 - `ink-studio graph material-info` · `--audience` · [source](../../cli/graph-cli.js)
 - `ink-studio graph material-library` · `--audience`, `--query`, `--tag`, `--offset`, `--limit`, `--out` · [source](../../cli/graph-cli.js)
+- `ink-studio graph material-parameters` · `--out`, `--instance`, `--inputs`, `--adapters` · [source](../../cli/graph-cli.js)
 - `ink-studio graph material-visibility` · `--inputs`, `--instance`, `--scope` · [source](../../cli/graph-cli.js)
 - `ink-studio graph nodes` · `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio graph plan` · `--inputs`, `--json`, `--memory`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
