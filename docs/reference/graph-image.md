@@ -1275,6 +1275,35 @@ Guides: [guide](../material-color-corrections.md)
 Get the runnable example with `ink-studio graph describe image.threshold --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.tileGenerator
+
+Bake seeded grid, brick, column-stagger and checker patterns from an editable signed stamp.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `width` | `pixelCount` | `128` | pixels · {"integer":true,"min":1} |
+| Input | `height` | `pixelCount` | `128` | pixels · {"integer":true,"min":1} |
+| Input | `columns` | `number` | `4` | {"finite":true,"min":1,"max":128,"integer":true} |
+| Input | `rows` | `number` | `6` | {"finite":true,"min":1,"max":128,"integer":true} |
+| Input | `stamp` | `shape2d` | `{"type":"rectangle","size":[1,1]}` | {"layout":"Serializable planar geometry, profile, symbol or bevel definition"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"pattern":{"type":"string","constraints":{"choices":["grid","brick","column-stagger","checker"]},"default":"grid"},"size":{"type":"vec2","unit":"cell widths and heights","constraints":{"min":0.025,"max":3},"default":[1,1]},"gutter":{"type":"vec2","unit":"cell fractions","constraints":{"min":0,"max":0.98},"default":[0.08,0.08]},"rotation":{"type":"number","unit":"degrees clockwise","default":0},"rowOffset":{"type":"number","unit":"cell widths per course","constraints":{"min":-4,"max":4}},"columnOffset":{"type":"number","unit":"cell heights per column","constraints":{"min":-4,"max":4}},"wrap":{"type":"array<boolean>","constraints":{"length":2},"default":[true,true]},"crop":{"type":"array<number>","unit":"texture coordinates","constraints":{"length":4,"order":"left, top, right, bottom"},"default":[0,0,1,1]},"aspect":{"type":"number","constraints":{"min":0.125,"max":8},"default":1},"color":{"type":"string\|number\|array<number>","default":"#b97853"},"palette":{"type":"array<any>","constraints":{"minItems":1,"maxItems":64,"entries":"Hex, packed RGB, or normalized RGB/RGBA"}},"colorMode":{"type":"string","constraints":{"choices":["tile","course","column","cycle"]},"default":"tile"},"background":{"type":"string\|number\|array<number>","default":[0,0,0,0]},"jitter":{"type":"record","properties":{"position":{"type":"vec2","unit":"cell fractions","constraints":{"min":0,"max":0.95},"default":[0,0]},"size":{"type":"vec2","unit":"stamp size fractions","constraints":{"min":0,"max":0.95},"default":[0,0]},"rotation":{"type":"number","unit":"degrees","constraints":{"min":0,"max":180},"default":0},"color":{"type":"number","constraints":{"min":0,"max":1},"default":0}}},"samples":{"type":"number","unit":"samples per axis","constraints":{"choices":[1,2,4]},"default":1},"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]},"default":"unorm8"},"seed":{"type":"number","constraints":{"integer":true,"safe":true}}} |
+| Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
+| Output | `coverage` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `tileId` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `course` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `layout` | `record` | — | {"layout":"Plain named object"} |
+
+- Tile and course IDs are one-based. Zero marks the background.
+- Wrapped rows and columns quantize stagger to a closed cycle. Layout reports authored and effective offsets.
+- Crops change the sampled window while keeping the same placements and IDs. Connect a shape definition to stamp for custom coverage.
+
+Guides: [guide](../material-tile-generator.md)
+
+Get the runnable example with `ink-studio graph describe image.tileGenerator --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.toDisplay
 
 Convert typed color to straight-alpha sRGB8 for legacy compositing and PNG exports.

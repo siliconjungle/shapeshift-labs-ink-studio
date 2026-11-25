@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiln &amp; Course · Ink Studio</title>
+<style>
+  :root{color-scheme:dark;--text:#f4e9d8;--soft:#cfbcb3;--gold:#ffc891;--line:#55404a;--well:#241c25;--panel:#2c222b}
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  body{margin:0;background:#201923;color:var(--text);font:14px/1.35 system-ui,sans-serif}
+  main{max-width:1390px;margin:auto;padding:20px 29px 25px}
+  h1,h2,p,figure{margin:0}
+  h1{font:400 clamp(44px,6vw,83px)/.96 Georgia,serif;letter-spacing:-.059em;margin-top:5px}
+  h2{font-size:14px;font-weight:650}
+  header{display:flex;align-items:end;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);padding-bottom:17px;margin-bottom:15px}
+  .mono{font:11px/1.4 ui-monospace,Menlo,monospace}
+  .eyebrow{letter-spacing:.17em;color:var(--gold);text-transform:uppercase}
+  a,button,select,input[type=number]{color:inherit;font:inherit;background:var(--well);border:1px solid var(--line);border-radius:4px;padding:5px 8px}
+  a{text-decoration:none;color:var(--gold);white-space:nowrap}
+  button,select,summary{cursor:pointer}
+  button:hover,a:hover,select:hover{border-color:#b78a6b;color:var(--gold)}
+  :focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+  .stage{display:grid;grid-template-columns:minmax(0,1fr) 346px;gap:13px;align-items:start}
+  .display,.settings{border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--panel);min-width:0}
+  .display-title{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:9px 12px;border-bottom:1px solid var(--line)}
+  .display-title label{display:inline-flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap}
+  .display-title select,.setting select{padding:4px 5px;font-size:12px}
+  .plate{position:relative;aspect-ratio:1.5;background:#27202a}
+  canvas{display:block;width:100%;height:100%;image-rendering:pixelated}
+  .seams{position:absolute;inset:0;pointer-events:none}
+  .seams::before,.seams::after{content:"";position:absolute;opacity:.62}
+  .seams::before{left:50%;top:0;bottom:0;border-left:1px dashed #ffd9a1}
+  .seams::after{top:50%;left:0;right:0;border-top:1px dashed #ffd9a1}
+  .data{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line)}
+  .data div{padding:9px 11px;border-right:1px solid var(--line);color:var(--soft);font-size:11px}
+  .data div:last-child{border:0}
+  .data strong{display:block;color:var(--gold);font:600 12px/1.3 ui-monospace,Menlo,monospace;margin-top:3px}
+  fieldset{border:0;margin:0;padding:5px 10px 8px;min-width:0}
+  fieldset+fieldset{border-top:1px solid var(--line)}
+  legend{color:var(--soft);padding:0 4px}
+  .setting{display:grid;grid-template-columns:1fr 1fr;gap:7px;align-items:center;min-height:29px}
+  .setting label{font-size:12px}
+  .setting select{width:100%}
+  .slider{display:grid;grid-template-columns:86px minmax(36px,1fr) 44px;gap:6px;align-items:center;min-height:25px}
+  .slider label{font-size:12px}
+  .slider output{color:var(--gold);text-align:right}
+  input[type=number]{min-width:0;width:100%;font-size:12px;padding:4px 5px}
+  input[type=checkbox],input[type=range]{accent-color:var(--gold);margin:0}
+  input[type=range]{width:100%;cursor:pointer}
+  .actions{display:flex;gap:7px;justify-content:space-between;align-items:center;padding:8px 11px;border-top:1px solid var(--line)}
+  .actions label{white-space:nowrap;display:flex;align-items:center;gap:6px;font-size:12px}
+  #error{color:#ffb9a8;padding:8px 11px}
+  #error:empty{display:none}
+  @media(max-width:930px){main{padding-inline:14px}.stage{grid-template-columns:minmax(0,1fr) 272px}}
+  @media(max-width:690px){.stage{grid-template-columns:minmax(0,1fr)}.settings{display:grid;grid-template-columns:1fr 1fr}.actions{grid-column:1/-1}}
+  @media(max-width:430px){main{padding:12px 8px}.settings{display:block}h1{font-size:43px}header a{font-size:12px}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><p class="mono eyebrow">Ink Studio / Material graphs</p><h1>Kiln &amp; Course</h1></div>
+    <a href="kiln-and-course.material.json" download>Download graph</a>
+  </header>
+  <div class="stage">
+    <section class="display" aria-labelledby="preview-title">
+      <div class="display-title"><h2 id="preview-title">Terracotta running bond</h2>
+        <label>View <select id="view"><option value="glaze">Glazed clay</option><option value="albedo">Base color</option><option value="courses">Course IDs</option></select></label>
+      </div>
+      <figure class="plate">
+        <canvas id="plate" aria-label="Procedural tile preview"></canvas>
+        <span class="seams" id="seams" aria-hidden="true"></span>
+      </figure>
+      <div class="data">
+        <div>Grid<strong id="grid-read"></strong></div>
+        <div>Effective row step<strong id="offset-read"></strong></div>
+        <div>Window<strong id="crop-read"></strong></div>
+      </div>
+    </section>
+    <section class="settings" aria-label="Tile generator controls">
+      <fieldset>
+        <legend class="mono">Layout</legend>
+        <div class="setting"><label for="pattern">Bond</label><select id="pattern"></select></div>
+        <div class="slider"><label for="columns">Columns</label><input id="columns" type="range" min="2" max="12" step="1"><output class="mono"></output></div>
+        <div class="slider"><label for="rows">Courses</label><input id="rows" type="range" min="2" max="16" step="1"><output class="mono"></output></div>
+        <div class="slider"><label for="rowOffset">Row offset</label><input id="rowOffset" type="range" min="-1" max="1" step=".05"><output class="mono"></output></div>
+        <div class="slider"><label for="columnOffset">Column offset</label><input id="columnOffset" type="range" min="-1" max="1" step=".05"><output class="mono"></output></div>
+        <div class="setting"><label for="crop">Crop</label><select id="crop"></select></div>
+      </fieldset>
+      <fieldset>
+        <legend class="mono">Stamp</legend>
+        <div class="setting"><label for="stamp">Shape</label><select id="stamp"></select></div>
+        <div class="slider"><label for="uSize">Width</label><input id="uSize" type="range" min=".45" max="1.5" step=".01"><output class="mono"></output></div>
+        <div class="slider"><label for="vSize">Height</label><input id="vSize" type="range" min=".45" max="1.5" step=".01"><output class="mono"></output></div>
+        <div class="slider"><label for="gutterU">Gutter U</label><input id="gutterU" type="range" min="0" max=".55" step=".01"><output class="mono"></output></div>
+        <div class="slider"><label for="gutterV">Gutter V</label><input id="gutterV" type="range" min="0" max=".55" step=".01"><output class="mono"></output></div>
+        <div class="slider"><label for="rotation">Rotation</label><input id="rotation" type="range" min="-45" max="45" step="1"><output class="mono"></output></div>
+      </fieldset>
+      <fieldset>
+        <legend class="mono">Color and variation</legend>
+        <div class="setting"><label for="palette">Palette</label><select id="palette"></select></div>
+        <div class="setting"><label for="colorMode">Assign by</label><select id="colorMode"><option value="tile">Seeded tile</option><option value="course">Course</option><option value="column">Column</option><option value="cycle">Cycle</option></select></div>
+        <div class="slider"><label for="jitter">Jitter</label><input id="jitter" type="range" min="0" max="2" step=".01"><output class="mono"></output></div>
+        <div class="setting"><label for="seed">Seed</label><input id="seed" type="number" step="1"></div>
+      </fieldset>
+      <div class="actions">
+        <label><input id="guides" type="checkbox" checked> Show seams</label>
+        <button type="button" id="reset">Reset recipe</button>
+      </div>
+      <p id="error" role="alert"></p>
+    </section>
+  </div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="kiln.js"></script>
+<script>
+  const get=id=>document.getElementById(id), graph=KIT.procedural.graph.create(kilnGraph());
+  let outputs, recipe, queued=0;
+  for (const [id,source] of Object.entries({pattern:kilnPatterns,stamp:kilnStamps,palette:kilnPalettes,crop:kilnCrops}))
+    for (const [key,row] of Object.entries(source)) get(id).add(new Option(row.label??row,key));
+  const knobs=Object.keys(kilnDefaults);
+  function defaults() {
+    for (const id of knobs) get(id).value=kilnDefaults[id];
+    get('view').value='glaze';get('guides').checked=true;
+    schedule();
+  }
+  function paint() {
+    if (!outputs) return;
+    const canvas=get('plate'), full=recipe.crop==='full', repeat=full?2:1;
+    const {width,height,data}=kilnPreview(outputs,kilnCrops[recipe.crop].window,get('view').value);
+    canvas.width=repeat*width;canvas.height=repeat*height;
+    const image=new ImageData(new Uint8ClampedArray(data),width,height), ctx=canvas.getContext('2d');
+    for(let y=0;y<repeat;y++) for(let x=0;x<repeat;x++) ctx.putImageData(image,x*width,y*height);
+    get('seams').hidden=recipe.crop==='detail'||!get('guides').checked;
+    get('crop-read').textContent=full?'2 × 2 repeat':kilnCrops[recipe.crop].label;
+  }
+  function render() {
+    queued=0;
+    try {
+      const value=Object.fromEntries(knobs.map(id=>[id,typeof kilnDefaults[id]==='number'?get(id).valueAsNumber:get(id).value]));
+      if (!Number.isSafeInteger(value.seed)) throw new RangeError('Enter an integer seed.');
+      if(value.pattern==='checker') for(const id of ['columns','rows']){
+        if(value[id]%2) { value[id]++;get(id).value=value[id]; }
+      }
+      const {columns,rows,stamp}=value;
+      outputs=graph.evaluate({columns,rows,definition:kilnStamps[stamp].shape,tileOptions:kilnRecipe(value)}).outputs;
+      recipe=value;
+      for(const id of knobs) {
+        const out=get(id).nextElementSibling;
+        if(out?.tagName==='OUTPUT') out.value=value[id]+(id==='rotation'?'°':'');
+      }
+      get('preview-title').textContent=kilnPalettes[value.palette].label+' · '+kilnPatterns[value.pattern];
+      get('grid-read').textContent=columns+' × '+rows+' cells';
+      const {effective}=outputs.layout.rowOffset, n=Math.round(effective*rows);
+      get('offset-read').textContent=n?(n+'/'+rows+' cell'):'0 cells';
+      get('error').textContent='';
+      paint();
+    } catch(error) { get('error').textContent=error.message; }
+  }
+  function schedule() { if (!queued) queued=requestAnimationFrame(render); }
+  for (const id of knobs) get(id).addEventListener('input',()=>{
+    if(id==='pattern'){
+      get('rowOffset').value=get(id).value==='brick'?.5:0;
+      get('columnOffset').value=get(id).value==='column-stagger'?.5:0;
+    }
+    schedule();
+  });
+  for (const id of ['view','guides']) get(id).addEventListener('input',paint);
+  get('reset').addEventListener('click',defaults);
+  defaults();
+</script>
+</body>
+</html>

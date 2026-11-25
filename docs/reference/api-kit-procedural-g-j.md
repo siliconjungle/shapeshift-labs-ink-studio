@@ -1195,6 +1195,35 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.threshold"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.threshold"].outputs.value` | value | `string = "typedImage"` |  |
 | `KIT.procedural.graphImages.operations["image.threshold"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].description` | value | `string = "Bake seeded grid, brick, column-stagger and checker patterns from an editable signed stamp."` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.columns` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.columns.default` | value | `number = 4` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.columns.type` | value | `string = "number"` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.height` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.height.default` | value | `number = 128` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.height.type` | value | `string = "pixelCount"` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.rows` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.rows.default` | value | `number = 6` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.rows.type` | value | `string = "number"` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.stamp` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.stamp.default` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.stamp.default.size` | value | `array` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.stamp.default.type` | value | `string = "rectangle"` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.stamp.type` | value | `string = "shape2d"` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.width` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.width.default` | value | `number = 128` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].inputs.width.type` | value | `string = "pixelCount"` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].outputs.course` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].outputs.coverage` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].outputs.layout` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].outputs.tileId` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].outputs.value` | value | `string = "colorImage"` |  |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].run` | function | `({width,height,columns,rows,stamp,options},{seed})` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.tileGenerator"].seed` | value | `string = "options"` |  |
 | `KIT.procedural.graphImages.operations["image.toDisplay"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.toDisplay"].description` | value | `string = "Convert typed color to straight-alpha sRGB8 for legacy compositing and PNG exports."` |  |
 | `KIT.procedural.graphImages.operations["image.toDisplay"].inputs` | namespace |  |  |
@@ -1294,6 +1323,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.spatial.symmetry` | function | `(source, options = {})` | [source](../../src/kit/paq-coordinate-sampling.js) |
 | `KIT.procedural.graphImages.spatial.transform` | function | `(source, options = {})` | [source](../../src/kit/paq-coordinate-sampling.js) |
 | `KIT.procedural.graphImages.split` | function | `(source, channels)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.tileGenerator` | function | `(width,height,columns=4,rows=6,source=stamp,options={},seed=0)` | [guide](../material-tile-generator.md#outputs), [source](../../src/kit/paq-def-tile-generator.js) |
 | `KIT.procedural.graphImages.toDisplay` | function | `(source, outOfRange = 'clamp')` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.toHeight` | function | `(source, { scale, offset = 0, units = 'art-px', channel = 'luminance' } = {})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.toRaster` | function | `(source)` | [source](../../src/kit/paq-graph-images.js) |
