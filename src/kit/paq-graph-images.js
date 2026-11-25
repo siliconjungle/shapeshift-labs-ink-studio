@@ -926,11 +926,11 @@
       run({ source, mask, options }) { return advancedHeight.edgeWear(source, options, mask); }
     },
     'image.noise': {
-      description: 'Bake a named scalar noise family into a typed image with explicit periods, seed and sample encoding.',
+      description: 'Bake a named scalar noise family into a typed image with spatial controls and optional looping motion.',
       seed: 'options', inputs: { family: { type:'string', default:'perlin' }, width: { type:'pixelCount', default:128 },
-        height: { type:'pixelCount', default:128 }, options: correctionOptions },
+        height: { type:'pixelCount', default:128 }, options: correctionOptions, time:{type:'seconds',default:0} },
       outputs: { value: 'typedImage', info: 'record' },
-      run({ family, width, height, options }, context) { return makeNoise(family,width,height,options,context.seed); }
+      run({ family, width, height, options,time }, context) { return makeNoise(family,width,height,options,context.seed,time); }
     },
     'image.toDisplay': {
       description: 'Convert typed color to straight-alpha sRGB8 for legacy compositing and PNG exports.',

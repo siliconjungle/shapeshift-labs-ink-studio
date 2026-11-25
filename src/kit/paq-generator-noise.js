@@ -1,4 +1,10 @@
 /* Named scalar noise families shared by procedural fields and typed material generators. */
+const NamedNoiseCells = ['worley','voronoi','cellular'];
+const NamedNoiseStacks = ['fractal','ridged'];
+const NamedNoiseIntegerPeriods = (family, carrier) =>
+  ['perlin','white','gaussian',...NamedNoiseCells].includes(family) ||
+  NamedNoiseStacks.includes(family) && (carrier ?? 'perlin') === 'perlin';
+
 (function (P) {
   const dimensions = Object.freeze({
     perlin:[2,3,4], simplex:[2,3,4], gaussian:[2,3,4], white:[2,3,4], blue:[2],
@@ -9,12 +15,13 @@
   const extra = {
     gaussian:['mean','deviation'], blue:['rankSize','sigma','density'],
     worley:['metric','jitter'], voronoi:['metric','jitter'], cellular:['metric','jitter'],
-    fractal:['carrier','octaves','gain','lacunarity'], ridged:['carrier','octaves','gain','lacunarity'],
+    fractal:['carrier','octaves','octaveRange','gain','lacunarity'], ridged:['carrier','octaves','octaveRange','gain','lacunarity'],
     anisotropic:['angle','aspect'], directional:['angle','wander']
   };
-  const isCells = family => ['worley','voronoi','cellular'].includes(family);
-  const isStack = family => family === 'fractal' || family === 'ridged';
-  const lattice = family => ['perlin','white','gaussian'].includes(family) || isCells(family);
+  const isCells = family => NamedNoiseCells.includes(family);
+  const isStack = family => NamedNoiseStacks.includes(family);
+  const phaseControls = ['disorder','animationSpeed'];
+  const canEvolve = family => !['blue','white','gaussian'].includes(family);
   const finite = Number.isFinite, integer = Number.isSafeInteger, TAU = 2 * Math.PI;
   const range = (n,min,max) => finite(n) && n >= min && n <= max;
   const unit = n => Math.max(0,Math.min(1,n));
@@ -26,6 +33,29 @@
   const seed32 = (seed, label) => P.data.hash(label + '/' + seed);
   const random = (seed, coords) => (NoiseLatticeHash(seed, coords) + .5) / 4294967296;
   const fade = t => t * t * t * (t * (t * 6 - 15) + 10);
+
+  function phaseAt(options, time) {
+    const { disorder = 0, animationSpeed = 0 } = options;
+    if (!range(disorder,-1e6,1e6) || !range(animationSpeed,-64,64) ||
+        animationSpeed !== 0 && !finite(1 / animationSpeed) || !range(time,-1e7,1e7))
+      throw new RangeError('Invalid noise disorder phase, animation speed or sample time');
+    const loopSeconds = animationSpeed === 0 ? null : 1 / Math.abs(animationSpeed);
+    const phase = mod(mod(disorder,1) + time*animationSpeed,1);
+    return { disorder,animationSpeed,loopSeconds,phase:phase === 1 ? 0 : phase };
+  }
+
+  function phaseKeys(seed, phase) {
+    const cursor = phase * 3, from = Math.floor(cursor), weight = fade(cursor - from);
+    const key = step => step === 0 ? seed : NoiseLatticeHash(seed,[0x27d9,step]);
+    return [key(from), key((from + 1) % 3), weight];
+  }
+
+  function evolvingKernel(make, seed, phase) {
+    const [from,to,weight] = phaseKeys(seed,phase), a = make(from);
+    if (!weight) return a;
+    const b = make(to), norm = Math.hypot(1-weight,weight), low = (1-weight)/norm, high = weight/norm;
+    return { ...a, cost:a.cost+b.cost, run:p=>signed(low*a.run(p) + high*b.run(p)) };
+  }
 
   function tileBlend(base, periods) {
     const axes = periods.flatMap((period, i) => period === null ? [] : [i]);
@@ -73,7 +103,7 @@
     return { run: p => signed(periodic.run(p)), cost: periodic.cost * (dimension+1), tiling: periodic.tiling };
   }
 
-  function cells(family, dimension, seed, periods, options) {
+  function cells(family, dimension, seed, periods, options, phase) {
     const { metric = 'euclidean', jitter = 1 } = options;
     if (!['euclidean','manhattan','chebyshev'].includes(metric) || !range(jitter,0,1))
       throw new RangeError('Cell noise needs a distance metric and jitter from zero to one');
@@ -82,7 +112,12 @@
       (x,y,z) => x + y + z : Math.max;
     const length = euclidean ? Math.sqrt : n => n;
     const keys = [1,2,3,4].map(n => NoiseLatticeHash(seed,[n,0x71be]));
-    return { cost: d3 ? 512 : 64, tiling: 'cell-lattice', defaults:{ metric,jitter }, run(p) {
+    const motion = keys.slice(0,3).map(key=>phaseKeys(key,phase));
+    const site = phase === 0 ? (axis,coords)=>random(keys[axis],coords) : (axis,coords) => {
+      const [from,to,weight] = motion[axis], a = random(from,coords);
+      return a + weight * (random(to,coords) - a);
+    };
+    return { cost: (d3 ? 512 : 64) * (phase === 0 ? 1 : 2), tiling: 'cell-lattice', defaults:{ metric,jitter }, run(p) {
       const [u,v,w = 0] = p, a = Math.floor(u), b = Math.floor(v), c = Math.floor(w);
       const side = u - a < .5 ? a - 1 : a + 1, coords = new Array(dimension);
       let first = Infinity, second = Infinity, id = Infinity;
@@ -92,9 +127,9 @@
         if (metricOf(dx,dy,dz) > second) return;
         coords[0] = fold(x,periods[0]); coords[1] = fold(y,periods[1]);
         if (d3) coords[2] = fold(z,periods[2]);
-        const xDist = Math.abs(x+pad+jitter*random(keys[0],coords)-u);
-        const yDist = Math.abs(y+pad+jitter*random(keys[1],coords)-v);
-        const zDist = d3 ? Math.abs(z+pad+jitter*random(keys[2],coords)-w) : 0;
+        const xDist = Math.abs(x+pad+jitter*site(0,coords)-u);
+        const yDist = Math.abs(y+pad+jitter*site(1,coords)-v);
+        const zDist = d3 ? Math.abs(z+pad+jitter*site(2,coords)-w) : 0;
         const d = metricOf(xDist,yDist,zDist), key = NoiseLatticeHash(keys[3],coords);
         if (d < first || d === first && key < id) {
           second = first; first = d; id = key;
@@ -114,21 +149,28 @@
     } };
   }
 
-  function octaveNoise(family, dimension, seed, periods, options) {
+  function octaveNoise(family, dimension, seed, periods, options, phase) {
     const { carrier = 'perlin', octaves = 4, gain = .5, lacunarity = 2 } = options;
     if (!['perlin','simplex'].includes(carrier) || !integer(octaves) || !range(octaves,1,8) ||
         !range(gain,0,1) || !range(lacunarity,1,4))
       throw new RangeError('Invalid fractal carrier, octave count, gain or lacunarity');
+    const { octaveRange = [0,octaves-1] } = options;
+    if (Object.hasOwn(options,'octaveRange') && Object.hasOwn(options,'octaves'))
+      throw new TypeError('Choose octaveRange or octaves for a noise stack');
+    if (!list(octaveRange,2,n=>integer(n) && range(n,0,7)) || octaveRange[0] > octaveRange[1])
+      throw new RangeError('Noise octave range needs ordered inclusive bounds from zero to seven');
+    const [first,last] = octaveRange;
     const bands = [];
     let sum = 0, cost = 0;
-    for (let i = 0, weight = 1; i < octaves && weight; i++, weight *= gain) {
+    for (let i = first, weight = 1; i <= last && weight; i++, weight *= gain) {
       const frequency = lacunarity ** i;
-      const kernel = gradient(carrier,dimension,NoiseLatticeHash(seed,[i,0x235]),periods.map(n => n === null ? null : n*frequency));
+      const octavePeriods = periods.map(n => n === null ? null : n*frequency);
+      const kernel = evolvingKernel(key=>gradient(carrier,dimension,key,octavePeriods),NoiseLatticeHash(seed,[i,0x235]),phase);
       bands.push({ ...kernel,frequency,weight });
       sum += weight;
       cost += kernel.cost;
     }
-    return { cost, defaults:{carrier,octaves,gain,lacunarity}, tiling: bands[0].tiling, run(p) {
+    return { cost, defaults:{carrier,octaves:last-first+1,octaveRange:octaveRange.slice(),gain,lacunarity}, tiling: bands[0].tiling, run(p) {
       let value = 0;
       for (const band of bands) {
         const n = band.run(p.map(x => x * band.frequency));
@@ -156,27 +198,31 @@
 
   function settings(family, options) {
     if (!Object.hasOwn(dimensions,family) || !validateRecord(options) ||
-        Object.keys(options).some(key => !['dimension','seed','periods','output',...(extra[family] ?? [])].includes(key)))
+        Object.keys(options).some(key => !['dimension','seed','periods','output',...(extra[family] ?? []),
+          ...(canEvolve(family) ? phaseControls : [])].includes(key)))
       throw new TypeError('Unknown named noise family or option');
     const { dimension = 2, seed = 0, output = 'unit' } = options;
     if (!dimensions[family].includes(dimension) || !integer(seed) || !['unit','native'].includes(output))
       throw new RangeError('Invalid dimensions, seed or noise sample encoding');
     const { periods = Array(dimension).fill(null) } = options;
-    if (!list(periods,dimension,n => n === null || range(n,1e-4,1e6) && (!lattice(family) || integer(n))))
+    if (!list(periods,dimension,n => n === null || range(n,1e-4,1e6) &&
+        (!NamedNoiseIntegerPeriods(family) || isStack(family) || integer(n))))
       throw new RangeError('Invalid per-axis noise periods');
     return { dimension,seed,periods:periods.slice(),output };
   }
 
-  function create(family, options = {}) {
+  function create(family, options = {}, time = 0) {
     const { dimension,seed,periods,output } = settings(family,options);
     const salt = seed32(seed,'noise lattice');
+    const animation = canEvolve(family) ? phaseAt(options,time) : undefined, phase = animation?.phase ?? 0;
     let kernel, normalize = unit, nativeUnits = 'unitless';
-    if (family === 'perlin' || family === 'simplex' || isStack(family) || ['anisotropic','directional'].includes(family)) {
-      kernel = isStack(family) ? octaveNoise(family,dimension,salt,periods,options) : ['anisotropic','directional'].includes(family) ?
-        oriented(family,salt,periods,options) : gradient(family,dimension,salt,periods);
+    if (canEvolve(family) && !isCells(family)) {
+      kernel = isStack(family) ? octaveNoise(family,dimension,salt,periods,options,phase) : evolvingKernel(
+        key=>['anisotropic','directional'].includes(family) ? oriented(family,key,periods,options) :
+          gradient(family,dimension,key,periods),salt,phase);
       if (family !== 'ridged') normalize = n => unit(.5+.5*n);
     } else if (isCells(family)) {
-      kernel = cells(family,dimension,salt,periods,options);
+      kernel = cells(family,dimension,salt,periods,options,phase);
       if (family !== 'voronoi') nativeUnits = 'noise-cells';
     } else if (family === 'blue') {
       const { rankSize = [32,32],sigma = 1.4,density = .13 } = options;
@@ -197,7 +243,7 @@
       kernel = { ...kernel, run:p=>draw(p.map(Math.floor)),cost:1,tiling:'discrete-lattice' };
     }
     const spec = P.data.freeze({ family,dimension,seed,periods,output,
-      units:output === 'native' ? nativeUnits : 'unitless', tiling:kernel.tiling,...kernel.defaults });
+      units:output === 'native' ? nativeUnits : 'unitless', tiling:kernel.tiling,...kernel.defaults,...animation });
     function value(...p) {
       if (!list(p,dimension,n=>range(n,-5e7,5e7))) throw new RangeError('Noise coordinates must match the field dimension');
       const n = kernel.run(p.map((x,i)=>fold(x,periods[i])));
@@ -216,34 +262,60 @@ const TypedNoiseImage = ({ named, descriptor, wrap, pack, storage, dimensions, f
   const range = (n,min,max) => finite(n) && n >= min && n <= max;
   const tuple = (value,size,check) => Array.isArray(value) && value.length === size && Array.from(value).every(check);
 
-  function noise(family, width, height, options = {}, graphSeed = 0) {
+  function noise(family, width, height, options = {}, graphSeed = 0, time = 0) {
     if (![width,height].every(n => integer(n) && n > 0) || !dimensions({width,height}) || width*height > 4e6)
       throw new RangeError('Noise image extent exceeds its four-million-texel budget');
     // Field settings are validated by the family after stripping the raster-only controls.
     if (!fields(options,['dimension','seed','output','mean','deviation','rankSize','sigma','density','metric','jitter',
-      'carrier','octaves','gain','lacunarity','angle','aspect','wander','extent','tiling','offset','slicePeriods','precision','pixelPitchMm']))
+      'carrier','octaves','octaveRange','gain','lacunarity','angle','aspect','wander','disorder','animationSpeed',
+      'extent','scale','tileOffset','nonSquareExpansion','tiling','offset','slicePeriods','precision','pixelPitchMm']))
       throw new TypeError('Unknown noise image option');
-    const { extent, tiling = 'wrap', offset, slicePeriods, precision = 'float32', pixelPitchMm, ...fieldOptions } = options;
+    const { extent, scale = 1, tileOffset = [0,0], nonSquareExpansion = false,
+      tiling = 'wrap', offset, slicePeriods, precision = 'float32', pixelPitchMm, ...fieldOptions } = options;
     const { dimension = 2, seed = graphSeed, output = 'unit' } = fieldOptions;
     if (!integer(dimension) || !range(dimension,2,4) || !Object.hasOwn(storage,precision) ||
         output === 'native' && !['float32','float64'].includes(precision))
       throw new RangeError('Noise image needs two to four field dimensions and floating precision for native samples');
     const edges = borders(tiling, {u:'wrap',v:'wrap'});
+    const wrapped = [edges.u === 'wrap',edges.v === 'wrap'];
     const defaultRank = [width,height].map(n => n >= 4 && n <= 64 ? n : 32);
     const rankSize = fieldOptions.rankSize ?? defaultRank;
-    let spans = nominal[family] === undefined ? [width,height] : [nominal[family],nominal[family]];
+    const hasNominal = Object.hasOwn(nominal,family);
+    let base = hasNominal ? [nominal[family],nominal[family]] : [width,height];
     if (family === 'blue') {
       if (!tuple(rankSize,2,n => integer(n) && range(n,4,96))) throw new RangeError('Invalid noise rank size');
-      spans = spans.map((n,i)=>rankSize[i]*Math.max(1,Math.round(n/rankSize[i])));
+      base = base.map((n,i)=>rankSize[i]*Math.max(1,Math.round(n/rankSize[i])));
       fieldOptions.rankSize = rankSize;
     }
-    spans = extent === undefined ? spans : typeof extent === 'number' ? [extent,extent] : extent;
-    const origin = offset ?? Array(dimension).fill(0), tail = slicePeriods ?? Array(dimension-2).fill(null);
-    if (!tuple(spans,2,n=>range(n,1e-4,1e6)) || !tuple(origin,dimension,n=>range(n,-1e6,1e6)) ||
+    base = extent === undefined ? base : typeof extent === 'number' ? [extent,extent] : extent;
+    const baseOffset = offset ?? Array(dimension).fill(0), tail = slicePeriods ?? Array(dimension-2).fill(null);
+    if (!tuple(base,2,n=>range(n,1e-4,1e6)) || !tuple(baseOffset,dimension,n=>range(n,-1e6,1e6)) ||
         !tuple(tail,dimension-2,n=>n===null || range(n,1e-4,1e6)))
       throw new RangeError('Noise image needs positive XY extent, a matching offset and valid slice periods');
-    const periods = [edges.u === 'wrap' ? spans[0] : null, edges.v === 'wrap' ? spans[1] : null, ...tail];
-    const field = named.create(family,{...fieldOptions,seed,periods});
+    if (!range(scale,1/16,64) || typeof nonSquareExpansion !== 'boolean' ||
+        !tuple(tileOffset,2,n=>range(n,-64,64)))
+      throw new RangeError('Invalid noise scale, tile offset or non-square expansion');
+
+    // Rank and discrete image defaults already use a rectangular sampling window.
+    const expand = nonSquareExpansion && (hasNominal || extent !== undefined);
+    const shortSide = Math.min(width,height), ratios = expand ? [width/shortSide,height/shortSide] : [1,1];
+    const requestedExtent = base.map((n,i)=>n*scale*ratios[i]);
+    const adjust = expand || scale !== 1;
+    const spans = requestedExtent.map((n,i)=>{
+      if (!adjust || !wrapped[i]) return n;
+      const step = family === 'blue' ? rankSize[i] : NamedNoiseIntegerPeriods(family,fieldOptions.carrier) ? 1 : 0;
+      return step ? Math.max(step,Math.round(n/step)*step) : n;
+    });
+    if (spans.some(n=>!range(n,1e-4,1e6))) throw new RangeError('Scaled noise extent exceeds its coordinate budget');
+    const periods = [...spans.map((n,i)=>wrapped[i] ? n : null), ...tail];
+    const origin = baseOffset.slice();
+    for (let i=0;i<2;i++) {
+      const tiles = wrapped[i] ? ((tileOffset[i]%1)+1)%1 : tileOffset[i];
+      origin[i] += tiles*spans[i];
+    }
+    if (origin.slice(0,2).some((n,i)=>Math.abs(n)+spans[i] > 5e7))
+      throw new RangeError('Noise tile offset exceeds its coordinate budget');
+    const field = named.create(family,{...fieldOptions,seed,periods},time);
     if (width*height*field.cost > 160e6) throw new RangeError('Noise image exceeds its family work budget');
     const data = new storage[precision](width*height), grid = {width,height,channels:1,data};
     const spec = descriptor(grid,{intent:'data',precision,units:field.spec.units,tiling:edges,pixelPitchMm,materialSeed:seed,
@@ -256,8 +328,8 @@ const TypedNoiseImage = ({ named, descriptor, wrap, pack, storage, dimensions, f
         data[i] = pack(field.value(...p),spec,false,'error');
       }
     }
-    return { value:wrap(grid,spec), info:freeze({ ...field.spec, width,height,extent:spans.slice(),offset:origin.slice(),
-      address:edges,precision }) };
+    return { value:wrap(grid,spec), info:freeze({ ...field.spec, width,height,extent:spans,offset:origin,
+      baseExtent:base.slice(),requestedExtent,scale,tileOffset:tileOffset.slice(),nonSquareExpansion,address:edges,precision }) };
   }
   return noise;
 };

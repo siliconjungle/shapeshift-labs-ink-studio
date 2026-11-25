@@ -143,10 +143,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.generator.operations["proc.noiseFamily"].inputs.family.default` | value | `string = "perlin"` | [guide](../headless-authoring.md#procedural-generation-and-recipes) |
 | `KIT.procedural.generator.operations["proc.noiseFamily"].inputs.family.type` | value | `string = "string"` | [guide](../headless-authoring.md#procedural-generation-and-recipes) |
 | `KIT.procedural.generator.operations["proc.noiseFamily"].inputs.options` | alias | `Alias of KIT.procedural.generator.operations["proc.cable"].inputs.options` | [guide](../headless-authoring.md#procedural-generation-and-recipes) |
+| `KIT.procedural.generator.operations["proc.noiseFamily"].inputs.time` | namespace |  | [guide](../headless-authoring.md#procedural-generation-and-recipes) |
+| `KIT.procedural.generator.operations["proc.noiseFamily"].inputs.time.default` | value | `number = 0` | [guide](../headless-authoring.md#procedural-generation-and-recipes) |
+| `KIT.procedural.generator.operations["proc.noiseFamily"].inputs.time.type` | value | `string = "seconds"` | [guide](../headless-authoring.md#procedural-generation-and-recipes) |
 | `KIT.procedural.generator.operations["proc.noiseFamily"].outputs` | namespace |  | [guide](../headless-authoring.md#procedural-generation-and-recipes) |
 | `KIT.procedural.generator.operations["proc.noiseFamily"].outputs.info` | value | `string = "record"` | [guide](../headless-authoring.md#procedural-generation-and-recipes) |
 | `KIT.procedural.generator.operations["proc.noiseFamily"].outputs.value` | value | `string = "field"` | [guide](../headless-authoring.md#procedural-generation-and-recipes) |
-| `KIT.procedural.generator.operations["proc.noiseFamily"].run` | function | `({ family,options }, context)` | [guide](../headless-authoring.md#procedural-generation-and-recipes), [source](../../src/kit/par-generate.js) |
+| `KIT.procedural.generator.operations["proc.noiseFamily"].run` | function | `({ family,options,time }, context)` | [guide](../headless-authoring.md#procedural-generation-and-recipes), [source](../../src/kit/par-generate.js) |
 | `KIT.procedural.generator.operations["proc.noiseFamily"].seed` | value | `string = "options"` | [guide](../headless-authoring.md#procedural-generation-and-recipes) |
 | `KIT.procedural.generator.operations["proc.parallax"]` | namespace |  | [guide](../headless-authoring.md#procedural-generation-and-recipes) |
 | `KIT.procedural.generator.operations["proc.parallax"].inputs` | namespace |  | [guide](../headless-authoring.md#procedural-generation-and-recipes) |
@@ -543,7 +546,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.morphology.outline` | function | `(source, options = {})` | [source](../../src/kit/paq-distance-images.js) |
 | `KIT.procedural.graphImages.morphology.propagate` | function | `(source, nearest)` | [source](../../src/kit/paq-distance-images.js) |
 | `KIT.procedural.graphImages.morphology.signedDistance` | function | `(source, options = {})` | [source](../../src/kit/paq-distance-images.js) |
-| `KIT.procedural.graphImages.noise` | function | `(family, width, height, options = {}, graphSeed = 0)` | [source](../../src/kit/paq-generator-noise.js) |
+| `KIT.procedural.graphImages.noise` | function | `(family, width, height, options = {}, graphSeed = 0, time = 0)` | [source](../../src/kit/paq-generator-noise.js) |
 | `KIT.procedural.graphImages.normals` | namespace |  |  |
 | `KIT.procedural.graphImages.normals.heightBlend` | function | `(baseSource, layerSource, options = {}, mask = null)` | [source](../../src/kit/paq-geometry-image-filters.js) |
 | `KIT.procedural.graphImages.normals.heightToNormal` | function | `(source, options = {})` | [source](../../src/kit/paq-geometry-image-filters.js) |
@@ -927,7 +930,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.multiDirectionalWarp"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].outputs.value` |  |
 | `KIT.procedural.graphImages.operations["image.multiDirectionalWarp"].run` | function | `({ source, map, direction: angleMap, intensity, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.noise"]` | namespace |  |  |
-| `KIT.procedural.graphImages.operations["image.noise"].description` | value | `string = "Bake a named scalar noise family into a typed image with explicit periods, seed and sample encoding."` |  |
+| `KIT.procedural.graphImages.operations["image.noise"].description` | value | `string = "Bake a named scalar noise family into a typed image with spatial controls and optional looping motion."` |  |
 | `KIT.procedural.graphImages.operations["image.noise"].inputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.noise"].inputs.family` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.noise"].inputs.family.default` | value | `string = "perlin"` |  |
@@ -936,13 +939,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.noise"].inputs.height.default` | value | `number = 128` |  |
 | `KIT.procedural.graphImages.operations["image.noise"].inputs.height.type` | value | `string = "pixelCount"` |  |
 | `KIT.procedural.graphImages.operations["image.noise"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.noise"].inputs.time` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.noise"].inputs.time.default` | value | `number = 0` |  |
+| `KIT.procedural.graphImages.operations["image.noise"].inputs.time.type` | value | `string = "seconds"` |  |
 | `KIT.procedural.graphImages.operations["image.noise"].inputs.width` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.noise"].inputs.width.default` | value | `number = 128` |  |
 | `KIT.procedural.graphImages.operations["image.noise"].inputs.width.type` | value | `string = "pixelCount"` |  |
 | `KIT.procedural.graphImages.operations["image.noise"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.noise"].outputs.info` | value | `string = "record"` |  |
 | `KIT.procedural.graphImages.operations["image.noise"].outputs.value` | value | `string = "typedImage"` |  |
-| `KIT.procedural.graphImages.operations["image.noise"].run` | function | `({ family, width, height, options }, context)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.noise"].run` | function | `({ family, width, height, options,time }, context)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.noise"].seed` | value | `string = "options"` |  |
 | `KIT.procedural.graphImages.operations["image.nonuniformWarp"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.nonuniformWarp"].description` | value | `string = "Drive displacement strength and local direction with independent scalar maps."` |  |

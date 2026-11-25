@@ -17,10 +17,10 @@
     },
     'proc.noiseFamily': {
       description: 'Evaluate a named two-, three- or four-coordinate noise field for procedural sampling.',
-      seed: 'options', inputs: { family: input('string','perlin'), options },
+      seed: 'options', inputs: { family: input('string','perlin'), options,time:input('seconds',0) },
       outputs: { value: 'field', info: 'record' },
-      run({ family,options }, context) {
-        const field = P.namedNoise.create(family, seeded(options,context));
+      run({ family,options,time }, context) {
+        const field = P.namedNoise.create(family, seeded(options,context),time);
         return { value:field, info:field.spec };
       }
     },
