@@ -5,6 +5,7 @@
   const visibilityFormat = 'ink-studio/mesh-component-visibility';
   const domains = ['vertices', 'edges', 'faces'];
   const modes = ['loop', 'ring', 'boundary', 'island'];
+  const filterKeys = ['materials', 'seam', 'crease', 'visibility', 'backfaces'];
   const graphs = new WeakMap();
   const record = (value, keys) => !!value && Object.getPrototypeOf(value) === Object.prototype &&
     Object.keys(value).every(key => keys.includes(key));
@@ -152,7 +153,7 @@
 
   function filtered(doc, g, domain, selection, filter, { visibility, object, part }) {
     if (filter === undefined) return selection;
-    if (!record(filter, ['materials', 'seam', 'crease', 'visibility', 'backfaces'])) throw new TypeError('Invalid mesh selection filter');
+    if (!record(filter, filterKeys)) throw new TypeError('Invalid mesh selection filter');
     const { materials, seam: uv, crease, visibility: view, backfaces } = filter;
     if (materials !== undefined && (!Array.isArray(materials) || !materials.length ||
         !Array.from(materials).every(id => typeof id === 'string' && id.trim())))
@@ -209,11 +210,43 @@
     }));
   }
 
+  function combine(doc, g, domain, { from, region, operation = 'replace', ids: operandIds, filter }, context) {
+    if (!['replace', 'add', 'subtract', 'invert'].includes(operation) || operation !== 'replace' && !from ||
+        operation === 'invert' && (region !== undefined || operandIds !== undefined) ||
+        ['add', 'subtract'].includes(operation) && region === undefined && operandIds === undefined)
+      throw new TypeError('Add and subtract need a saved selection and a region or IDs. Invert needs a saved selection');
+    const components = g.components[domain];
+    const base = from ? ids(from.ids, components) : new Set();
+    const candidates = operandIds === undefined ? new Set(components.keys()) : ids(operandIds, components);
+    if (region !== undefined) {
+      const { visibility } = context;
+      if (!Array.isArray(visibility?.grid) || visibility.grid.length !== 2)
+        throw new RangeError('Capture mesh visibility for this selection region');
+      const shape = MeshSelectionRegion.read(region, ...visibility.grid);
+      const saved = visibility.regional?.query;
+      if (!saved || JSON.stringify(shape) !== JSON.stringify(MeshSelectionRegion.read(saved, ...visibility.grid)))
+        throw new RangeError('Capture mesh visibility for this selection region');
+      if (filter !== undefined && !record(filter, filterKeys)) throw new TypeError('Invalid mesh selection filter');
+      const mode = filter?.visibility === undefined ? 'visible' : filter.visibility;
+      if (!['visible', 'through'].includes(mode)) throw new TypeError('A selection region needs visible or through mode');
+      filter = { ...filter, visibility: mode };
+      const { visible, participation } = visibility.regional;
+      context = { ...context, visibility: { ...visibility, visible, participation } };
+    }
+    const operand = filtered(doc, g, domain, candidates, filter, context);
+    if (operation === 'replace') return operand;
+    if (operation === 'add') return new Set([...base, ...operand]);
+    if (operation === 'subtract') return new Set([...base].filter(id => !operand.has(id)));
+    return new Set([...operand].filter(id => !base.has(id)));
+  }
+
   function select(source, request, { visibility, object, part } = {}) {
-    if (!record(request, ['domain', 'ids', 'from', 'traverse', 'grow', 'shrink', 'convert', 'match', 'filter']))
+    if (!record(request, ['domain', 'ids', 'from', 'traverse', 'grow', 'shrink', 'convert', 'match', 'filter', 'region', 'operation']))
       throw new TypeError('Use a mesh component selection query');
     const doc = topology.create(source), revision = topology.revision(doc), g = graph(doc);
     const { from, traverse, grow = 0, shrink = 0, convert: into, match = 'any', filter } = request;
+    const combining = request.region !== undefined || request.operation !== undefined;
+    const context = { visibility, object, part };
     let domain = request.domain === undefined ? from?.domain : request.domain;
     if (!domains.includes(domain) || into !== undefined && !domains.includes(into) ||
         !['any', 'all'].includes(match) || request.match !== undefined && into === undefined)
@@ -221,17 +254,18 @@
     if (traverse !== undefined && !modes.includes(traverse)) throw new TypeError('Unknown mesh selection traversal');
     if (![grow, shrink].every(n => Number.isSafeInteger(n) && n >= 0 && n <= 128))
       throw new RangeError('Grow and shrink need 0 to 128 steps');
-    if (from !== undefined && (request.ids !== undefined || from?.format !== format || from.version !== 1 ||
+    if (from !== undefined && (!combining && request.ids !== undefined || from?.format !== format || from.version !== 1 ||
         from.mesh !== doc.id || from.revision !== revision || from.domain !== domain || !Array.isArray(from.ids)))
       throw new RangeError('Use a saved selection for the same topology revision and domain');
     const seeds = from === undefined ? request.ids : from.ids;
-    let selection = seeds === undefined ? new Set(g.components[domain].keys()) : ids(seeds, g.components[domain]);
+    let selection = combining ? combine(doc, g, domain, request, context) :
+      seeds === undefined ? new Set(g.components[domain].keys()) : ids(seeds, g.components[domain]);
     if (traverse === 'island') selection = layers(g, domain, selection, Infinity);
     if (traverse === 'boundary' && domain === 'faces') {
       selection = boundary(g, selection);
       domain = 'edges';
     } else if (traverse !== undefined && traverse !== 'island') {
-      if (domain !== 'edges' || traverse !== 'boundary' && seeds === undefined)
+      if (domain !== 'edges' || traverse !== 'boundary' && seeds === undefined && request.region === undefined)
         throw new TypeError('Loop and ring traversal need edge seeds, and boundaries need an edge or face domain');
       if (traverse === 'ring') selection = flood(selection, id => acrossFace(g, id));
       else {
@@ -253,7 +287,7 @@
       selection = convert(g, selection, domain, into, match);
       domain = into;
     }
-    selection = filtered(doc, g, domain, selection, filter, { visibility, object, part });
+    if (!combining) selection = filtered(doc, g, domain, selection, filter, context);
     return Object.freeze({ format, version: 1, mesh: doc.id, revision, domain, ids: Object.freeze([...selection].sort()) });
   }
 
@@ -311,12 +345,12 @@
       return true;
     }
 
-    function triangle(points) {
+    function polygon(points) {
       const inside = points.every(point);
-      if (!inside && planes.some(plane => points.every(p => distance(plane, p) > 0))) return false;
-      const polygon = inside ? points : K.procedural.geometry.clipPlanarFaces([{ points }], planes)[0]?.points;
-      if (!polygon) return false;
-      return projectedArea(polygon.map(raster.project)) > 1e-10;
+      if (!inside && planes.some(plane => points.every(p => distance(plane, p) > 0))) return null;
+      const clipped = inside ? points : K.procedural.geometry.clipPlanarFaces([{ points }], planes)[0]?.points;
+      const projected = clipped?.map(raster.project);
+      return projected && projectedArea(projected) > 1e-10 ? projected : null;
     }
 
     function projectedArea([origin, ...ring]) {
@@ -331,14 +365,14 @@
       const normal = V.cross(V.sub(b, a), V.sub(c, a));
       return (ortho ? normal[2] : V.dot(normal, a)) > 0;
     }
-    return { point, segment, triangle, front };
+    return { point, segment, polygon, front };
   }
 
   const componentSets = () => Object.fromEntries(domains.map(domain => [domain, new Set()]));
   const savedSets = sets => Object.freeze(Object.fromEntries(domains.map(domain =>
     [domain, Object.freeze([...sets[domain]].sort())])));
 
-  function captureVisibility(mesh, frame, camera, { participation = false } = {}) {
+  function captureVisibility(mesh, frame, camera, { participation = false, region } = {}) {
     const doc = topology.sourceDocument(mesh);
     const { w, h, passes } = frame ?? {};
     if (!doc || !Number.isSafeInteger(w) || !Number.isSafeInteger(h) || w < 1 || h < 1 ||
@@ -350,6 +384,9 @@
     const visible = componentSets();
     const viewport = participation && viewParticipation(raster, camera, w, h);
     const visibleFront = viewport && componentSets();
+    const footprint = region === undefined ? null : MeshSelectionRegion.prepare(region, w, h);
+    const regional = footprint && { visible: componentSets(), visibleFront: viewport && componentSets(),
+      through: viewport && componentSets(), throughFront: viewport && componentSets() };
     const slots = passes.surfaceSources.map(row => row?.kind === 'mesh' && row.asset === mesh.id &&
       row.object === mesh.objectId && (row.part ?? undefined) === mesh.partId ? row.primitive : null);
 
@@ -372,17 +409,17 @@
       return sample;
     }
 
-    function markVisible(triangle, pixel) {
-      const front = triangle.front ? visibleFront : null;
-      visible.faces.add(triangle.face);
+    function markVisible(sets, frontSets, triangle, pixel) {
+      const front = triangle.front ? frontSets : null;
+      sets.faces.add(triangle.face);
       front?.faces.add(triangle.face);
       for (const { id, point } of triangle.vertices)
         if (point && Math.max(Math.abs(pixel[0] - point[0]), Math.abs(pixel[1] - point[1])) <= 1) {
-          visible.vertices.add(id);
+          sets.vertices.add(id);
           front?.vertices.add(id);
         }
       for (const { id, line } of triangle.edges) if (nearSegment(pixel, line)) {
-        visible.edges.add(id);
+        sets.edges.add(id);
         front?.edges.add(id);
       }
     }
@@ -392,30 +429,39 @@
       if (!Number.isSafeInteger(first)) continue;
       const triangle = sampleTriangle(first / 3 + passes.sourceTriangle[i]);
       const pixel = [i % w + .5, Math.floor(i / w) + .5];
-      markVisible(triangle, pixel);
+      markVisible(visible, visibleFront, triangle, pixel);
+      if (footprint?.mask[i]) markVisible(regional.visible, regional.visibleFront, triangle, pixel);
     }
     let projected;
     if (viewport) {
       const through = componentSets(), throughFront = componentSets();
+      function mark(domain, id, front, inRegion) {
+        through[domain].add(id);
+        if (front) throughFront[domain].add(id);
+        if (inRegion) {
+          regional.through[domain].add(id);
+          if (front) regional.throughFront[domain].add(id);
+        }
+      }
       for (let i = 0; i < mesh.triangles; i++) {
         const { face, points, vertices, edges, front } = sampleTriangle(i, false);
-        if (viewport.triangle(points)) {
-          through.faces.add(face);
-          if (front) throughFront.faces.add(face);
-        }
+        const polygon = viewport.polygon(points);
+        if (polygon) mark('faces', face, front, footprint?.face(polygon));
         for (const [index, { id }] of vertices.entries()) if (viewport.point(points[index])) {
-          through.vertices.add(id);
-          if (front) throughFront.vertices.add(id);
+          mark('vertices', id, front, footprint?.vertex(vertices[index].point));
         }
-        for (const { id, from, to } of edges) if (viewport.segment(points[from], points[to])) {
-          through.edges.add(id);
-          if (front) throughFront.edges.add(id);
+        for (const { id, from, to, line } of edges) if (viewport.segment(points[from], points[to])) {
+          mark('edges', id, front, footprint?.edge(line));
         }
       }
       projected = Object.freeze({ visibleFront: savedSets(visibleFront), through: savedSets(through), throughFront: savedSets(throughFront) });
     }
+    const regionData = regional && Object.freeze({ query: K.procedural.data.freeze(footprint.query), visible: savedSets(regional.visible),
+      ...(viewport && { participation: Object.freeze({ visibleFront: savedSets(regional.visibleFront),
+        through: savedSets(regional.through), throughFront: savedSets(regional.throughFront) }) }) });
     return Object.freeze({ format: visibilityFormat, version: 1, mesh: doc.id, revision: topology.revision(doc),
-      grid: Object.freeze([w, h]), visible: savedSets(visible), ...(projected && { participation: projected,
+      grid: Object.freeze([w, h]), visible: savedSets(visible), ...(projected && { participation: projected }),
+      ...(regionData && { regional: regionData }), ...((projected || regionData) && {
         ...(mesh.objectId !== undefined && { object: mesh.objectId }), ...(mesh.partId !== undefined && { part: mesh.partId }) }) });
   }
 

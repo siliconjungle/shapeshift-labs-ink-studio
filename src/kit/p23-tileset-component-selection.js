@@ -16,7 +16,7 @@
     return freeze(supported.filter(domain=>requested.includes(domain)));
   }
 
-  function selectMesh(row, domain, query, options) {
+  function selectMesh(row, domain, query, options, enabledDomains) {
     const tiles = domain === 'tiles' ? new Map((row.bindings ?? []).filter(binding=>
       !binding.review && A.tilesetFaces.isSourceBinding(binding)).map(binding=>[binding.element,binding])) : null;
     const native = tiles ? 'faces' : domain;
@@ -26,10 +26,18 @@
       if (!tiles.has(id)) throw new RangeError('Face '+id+' has no retained tile source');
     }
     const seeds = tiles && query.ids === undefined && query.from === undefined ? {ids:[...tiles.keys()]} : {};
-    const selection = K.meshTopology.select(row.document,{...query,...seeds,domain:native},options);
+    const {convert,match,...sourceQuery} = query;
+    const converting = tiles && ['edges','vertices'].includes(convert);
+    if (converting && !enabledDomains.includes(convert))
+      throw new RangeError('Domain '+convert+' is disabled for this tile conversion');
+    const selection = K.meshTopology.select(row.document,{...(converting ? sourceQuery : query),...seeds,domain:native},options);
     if (selection.domain !== native) throw new RangeError('Use mesh-topology select to convert selection domains');
     if (!tiles) return {ids:selection.ids,selection};
     const ids = selection.ids.filter(id=>tiles.has(id));
+    if (converting) {
+      const converted = K.meshTopology.select(row.document,{from:{...selection,ids},convert,match});
+      return {domain:convert,sourceDomain:'tiles',ids:converted.ids,selection:converted};
+    }
     return {ids,selection:{...selection,ids},tiles:ids.map(face=>{
       const {id,data} = tiles.get(face);
       return {face,binding:id,selection:data.selection};
@@ -62,7 +70,7 @@
     const row = Object.hasOwn(meshes,object) && meshes[object];
     if (!row || part !== undefined && row.part !== part) throw new RangeError('No editable topology for scene object '+object);
     const options = {visibility,object,part:row.part};
-    return freeze({...report,domain,object,...(row.part && {part:row.part}),...selectMesh(row,domain,query,options)});
+    return freeze({...report,domain,object,...(row.part && {part:row.part}),...selectMesh(row,domain,query,options,enabledDomains)});
   }
 
   A.tilesetComponentSelection = Object.freeze({select,selectionDomains});
