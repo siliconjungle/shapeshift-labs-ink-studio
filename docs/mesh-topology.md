@@ -135,6 +135,27 @@ node examples/mesh-component-selection.cjs component-selection-review
 ink-studio mesh-topology select component-selection-review/mesh.json component-selection-review/rim-query.json --visibility component-selection-review/visible.json
 ```
 
+## Move one vertex
+
+Run `mesh-topology move` with an existing vertex ID and an XYZ offset in
+mesh coordinates. A retained scene mesh also needs its object ID.
+
+```sh
+ink-studio mesh-topology move gatehouse-sign.json --object entrance --vertex painted-sign/v2 --by .25,.125,0
+ink-studio mesh-topology move gatehouse-sign.json --object entrance --vertex painted-sign/v2 --by .25,.125,0 --out revised.json
+```
+
+The preview records the vertex ID, exact positions before and after the
+move, and topology revisions. To commit against the reviewed input, pass
+the preview's `beforeRevision` as `--expect`. The move uses the component
+transform planner and the scene's topology transaction. A standalone
+topology document also works without `--object`.
+
+Use [tileset stamp](mesh-uv.md#place-a-painted-tile-as-a-mesh-face) when
+adding a face. Its preview records the source rectangle and new face,
+vertices, and UVs. Use a [component selection](#transform-and-snap-a-component-selection)
+for moving several vertices, snapping, or applying proportional falloff.
+
 ## Transform and snap a component selection
 
 Use a saved selection for the exact topology revision. A transform writes

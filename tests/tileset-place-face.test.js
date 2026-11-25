@@ -126,3 +126,62 @@ test('CLI previews, accepts a saved pick, and renders the placed texels at 1×',
   render('inline.json','inline.png');
   assert.deepEqual(fs.readFileSync(file('placed.png')),fs.readFileSync(file('inline.png')));
 });
+
+test('stamp and vertex move have separate dry runs and preserve each other’s authored data',t=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-stamp-and-move-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const file=name=>path.join(dir,name), read=name=>JSON.parse(fs.readFileSync(file(name),'utf8'));
+  const original=JSON.stringify(scene);
+  fs.writeFileSync(file('draft.json'),original);
+  const cli=path.resolve(__dirname,'../cli/ink-studio.js');
+  const run=(...args)=>spawnSync(process.execPath,[cli,...args],{cwd:dir,encoding:'utf8'});
+  const json=(...args)=>{
+    const result=run(...args);
+    assert.equal(result.status,0,result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  const stamp=['tileset','stamp','--scene','draft.json','--object','gate','--part','wall',
+    '--face','brick','--id','atlas','--x','2','--y','1','--width','4','--height','3'];
+  const placement=json(...stamp);
+  assert.equal(placement.format,'ink-studio/tileset-face-placement');
+  assert.deepEqual(placement.source.selection,selection);
+  assert.deepEqual(placement.corners.map(corner=>corner.id),['brick/c0','brick/c1','brick/c2','brick/c3']);
+  assert.deepEqual(fs.readdirSync(dir),['draft.json']);
+  assert.deepEqual(json(...stamp,'--out','stamped.json'),placement);
+  assert.equal(fs.readFileSync(file('draft.json'),'utf8'),original);
+  const stampSnapshot=fs.readFileSync(file('stamped.json'),'utf8');
+  const stamped=read('stamped.json'), row=stamped.topologyMeshes.gate;
+  const move=['mesh-topology','move','stamped.json','--object','gate','--part','wall','--vertex','brick/v2','--by','.25,.125,0'];
+  const preview=json(...move);
+  assert.equal(preview.format,'ink-studio/mesh-component-transform');
+  assert.deepEqual(preview.operation,{kind:'move',offset:[.25,.125,0]});
+  assert.deepEqual(preview.vertices,[{id:'brick/v2',before:[1,.75,0],after:[1.25,.875,0],weight:1,selected:true}]);
+  assert.equal(fs.readFileSync(file('stamped.json'),'utf8'),stampSnapshot);
+  assert(!fs.existsSync(file('moved.json')));
+  assert.deepEqual(json(...move,'--expect',preview.beforeRevision,'--out','moved.json'),preview);
+  const moved=read('moved.json'), after=moved.topologyMeshes.gate;
+  const positionUpdate={id:'brick/v2',position:[1.25,.875,0]};
+  assert.deepEqual(after.document.vertices,row.document.vertices.map(vertex=>vertex.id === positionUpdate.id ? positionUpdate : vertex));
+  assert.deepEqual(after.document.faces,row.document.faces);
+  assert.deepEqual(after.document.edges,row.document.edges);
+  assert.deepEqual(after.materials,row.materials);
+  assert.deepEqual(after.bindings,row.bindings);
+  assert.deepEqual(moved.tilesets,stamped.tilesets);
+
+  const stale=run(...move.map(arg=>arg === 'stamped.json' ? 'moved.json' : arg),
+    '--expect',preview.beforeRevision,'--out','stale.json');
+  assert.equal(stale.status,1);
+  assert.match(stale.stderr,/expected topology revision/);
+  assert(!fs.existsSync(file('stale.json')));
+  const collapse=run(...move.map(arg=>arg === '.25,.125,0' ? '0,-.75,0' : arg),'--out','collapsed.json');
+  assert.equal(collapse.status,1);
+  assert.match(collapse.stderr,/simple polygon/);
+  assert(!fs.existsSync(file('collapsed.json')));
+  assert.equal(run(...stamp,'--vertex','brick/v2').status,1);
+  assert.equal(run(...move,'--selection','pick.json').status,1);
+
+  fs.writeFileSync(file('mesh.json'),JSON.stringify(row.document));
+  const standalone=json('mesh-topology','move','mesh.json','--vertex','brick/v2','--by','.25,.125,0','--out','edited-mesh.json');
+  assert.deepEqual(standalone.vertices,preview.vertices);
+  assert.deepEqual(read('edited-mesh.json'),after.document);
+});

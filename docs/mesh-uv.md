@@ -114,7 +114,7 @@ and `--height` to place a painted rectangle. Give the polygon its own
 face ID and choose an existing or new editable mesh.
 
 ```sh
-ink-studio tileset place --scene gatehouse-tiles.json --selection sign-selection.json \
+ink-studio tileset stamp --scene gatehouse-tiles.json --selection sign-selection.json \
   --object entrance --face painted-sign --origin 0,2,0 --out gatehouse-sign.json
 ```
 
@@ -134,6 +134,10 @@ rectangle and atlas size. Atlas swaps and canvas edits report source
 binding migrations, and exact deduplication redirects the source sheet.
 
 Omit `--out` to preview the face, corners, source binding, and any conflicts.
+The earlier `tileset place` spelling accepts the same inputs. To move an
+existing corner, use [the vertex move command](mesh-topology.md#move-one-vertex)
+with its vertex ID from the stamp preview.
+
 In Node, call `editor.planTilesetFace(request)` or `editor.placeTilesetFace(request)`
 with `object`, `face`, and a version 1 `selection` from the picker. Optional
 fields are `origin`, `right`, `up`, `part`, `material`, `texelsPerUnit`,

@@ -309,7 +309,7 @@ function brushUVCommand([file,...rest], options, toolkit, openEditor) {
   process.stdout.write(JSON.stringify(result,null,2)+'\n');
 }
 
-function placeCommand(args, options, toolkit, projectTexelsPerUnit, openEditor) {
+function stampCommand(action, args, options, toolkit, projectTexelsPerUnit, openEditor) {
   const {scene,id,object,face,part,out,material,selection} = options;
   const names = ['scene','id','object','face','part','out','material','selection'];
   const vectors = ['origin','right','up'];
@@ -319,7 +319,7 @@ function placeCommand(args, options, toolkit, projectTexelsPerUnit, openEditor) 
       names.some(key=>options[key] !== undefined && !(typeof options[key] === 'string' && options[key].trim())) ||
       (saved ? id !== undefined || rectangleFields.some(key=>options[key] !== undefined) :
         !id || !rectangleFields.every(key=>integerText(options[key]))))
-    throw new TypeError('Use tileset place --scene <scene.json> --object <mesh-id> --face <face-id> with a saved selection or --id and exact texel bounds');
+    throw new TypeError('Use tileset '+action+' --scene <scene.json> --object <mesh-id> --face <face-id> with a saved selection or --id and exact texel bounds');
   const input = path.resolve(scene), output = out && sceneOutput(input,out,selection);
   const editor = openEditor(input);
   const crop = saved ? JSON.parse(fs.readFileSync(path.resolve(selection),'utf8')) : pickTilesetRectangle(editor.snapshot(),id,
@@ -349,7 +349,7 @@ function placeCommand(args, options, toolkit, projectTexelsPerUnit, openEditor) 
 }
 
 function command([action, ...args], options, toolkit, projectTexelsPerUnit, openEditor) {
-  if (action === 'place') return placeCommand(args,options,toolkit,projectTexelsPerUnit,openEditor);
+  if (action === 'stamp' || action === 'place') return stampCommand(action,args,options,toolkit,projectTexelsPerUnit,openEditor);
   if (['resize','resample','swap'].includes(action))
     return require('./tileset-canvas.js').command(action,args,options,openEditor);
   if (action === 'link' || action === 'reload')

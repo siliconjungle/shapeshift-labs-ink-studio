@@ -62,6 +62,42 @@ function transform(file, input, rest, opt, meshTopology, openEditor) {
   return { document: editor.snapshot(), evidence };
 }
 
+function moveVertex(file, input, rest, opt, meshTopology, openEditor) {
+  const {object,part,vertex,by,expect,out} = opt;
+  const allowed = ['object','part','vertex','by','expect','out'];
+  const name = value => typeof value === 'string' && value.trim();
+  const components = typeof by === 'string' ? by.split(',').map(value=>value.trim()) : [];
+  const offset = components.map(Number);
+  if (!name(file) || input !== undefined || rest.length || !name(vertex) ||
+      components.length !== 3 || !components.every(value=>/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value)) ||
+      !offset.every(Number.isFinite) || part !== undefined && object === undefined ||
+      Object.entries(opt).some(([key,value])=>!allowed.includes(key) || !name(value)))
+    throw new TypeError('Use mesh-topology move <mesh-or-scene.json> [--object id] [--part id] --vertex id --by X,Y,Z [--expect revision] [--out file.json]');
+  const source = path.resolve(file), output = out && path.resolve(out);
+  if (output && (!/\.json$/i.test(output) || output === source || object && path.dirname(output) !== path.dirname(source)))
+    throw new RangeError('Write a separate JSON output beside the input for scene edits');
+
+  const editor = object && openEditor(source);
+  const raw = editor ? editor.meshTopology(object,part).document : read(source);
+  if (!editor && raw?.topologyMeshes) throw new TypeError('Choose an editable mesh with --object');
+  const document = meshTopology.create(raw), revision = meshTopology.revision(document);
+  if (expect !== undefined && expect !== revision)
+    throw new RangeError('Vertex move expected topology revision '+expect+' but found '+revision);
+  const selection = meshTopology.select(document,{domain:'vertices',ids:[vertex]});
+  const operation = {kind:'move',offset};
+  const request = {selection,operation};
+  let report;
+  if (editor && output) {
+    report = editor.transformMeshTopology(object,request,{part,label:'Move vertex '+vertex}).transform;
+    files.publishJson(output,editor.snapshot(),'A different scene already exists at '+output);
+  } else {
+    const plan = editor ? editor.planMeshTransform(object,request,{part}) : meshTopology.planTransform(document,request);
+    report = plan.report;
+    if (output) files.publishJson(output,plan.document,'A different mesh already exists at '+output);
+  }
+  process.stdout.write(JSON.stringify({...report,operation,...(object && {object}),...(part && {part})},null,2)+'\n');
+}
+
 function maintenance(action, file, input, rest, opt, meshTopology, openEditor) {
   const { object, out, report, pieces } = opt, cutting = action === 'cut', editing = action !== 'health';
   const filenames = [file, input, out, report].filter(value => value !== undefined);
@@ -123,6 +159,7 @@ function command([action, file, input, ...rest], opt, toolkit, { build, openEdit
   if (action === 'retopology') return require('./mesh-retopology-preview.js').command(file, input, rest, opt, toolkit, openEditor);
   if (action === 'boolean') return require('./mesh-boolean-preview.js').command(file, input, rest, opt, toolkit, openEditor);
   if (action === 'bevel') return require('./mesh-bevel-preview.js').command(file, input, rest, opt, toolkit, openEditor);
+  if (action === 'move') return moveVertex(file,input,rest,opt,meshTopology,openEditor);
   if (opt.preview !== undefined) throw new TypeError('Use --preview with mesh-topology bevel or shading');
   if (opt.subdivision !== undefined) throw new TypeError('Use --subdivision with mesh-topology shading');
   const { out, report, projection, lineage, 'match-ids': matchIds } = opt;
