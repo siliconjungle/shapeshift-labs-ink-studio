@@ -170,10 +170,27 @@
   }
 
   function select(source, query = {}) {
-    if (!fields(query, ['domain', 'ids', 'atlas', 'from', 'uvSet']) || !domains.includes(query.domain) ||
-        [query.ids, query.atlas, query.from].filter(n => n !== undefined).length !== 1)
-      throw new TypeError('Choose a UV selection domain and IDs, an atlas location, or a saved selection');
-    const g = graph(source,query.uvSet ?? query.from?.uvSet ?? 0), { domain, ids, atlas, from } = query;
+    if (!fields(query, ['domain', 'ids', 'atlas', 'from', 'uvSet', 'tint']) || !domains.includes(query.domain) ||
+        [query.ids, query.atlas, query.from, query.tint].filter(n => n !== undefined).length !== 1)
+      throw new TypeError('Choose a UV selection domain and IDs, an atlas location, a tint, or a saved selection');
+    const g = graph(source,query.uvSet ?? query.from?.uvSet ?? 0), { domain, ids, atlas, from, tint } = query;
+    if (tint !== undefined) {
+      if (domain !== 'faces' || !fields(tint, ['color', 'tolerance', 'match']))
+        throw new TypeError('A vertex tint query needs the faces domain and a tint object');
+      const { color, tolerance = 0, match = 'any' } = tint;
+      if (!(tuple(color, 3, unit) || tuple(color, 4, unit)) || !unit(tolerance) || !['any', 'all'].includes(match))
+        throw new RangeError('Vertex tint needs normalized RGB or RGBA, a channel tolerance in [0, 1], and any or all corners');
+      const matched = [];
+      for (const face of g.faces.values()) {
+        const corners = face.corners.filter(({ attributes: { tint: value } = {} }) =>
+          (tuple(value, 3, unit) || tuple(value, 4, unit)) &&
+          color.every((channel, i) => Math.abs(channel - (value[i] ?? 1)) <= tolerance + (tolerance ? Number.EPSILON : 0)));
+        if (corners.length && (match === 'any' || corners.length === face.corners.length))
+          matched.push({ face: face.id, corners: order(corners.map(corner => corner.id)) });
+      }
+      matched.sort((a, b) => a.face < b.face ? -1 : a.face > b.face ? 1 : 0);
+      return { ...selection(g, domain, matched.map(row => row.face)), tint: { color: color.slice(), tolerance, match, matches: matched } };
+    }
     if (atlas !== undefined) {
       if (!fields(atlas, ['at', 'radius', 'face', 'material'])) throw new TypeError('Invalid UV atlas pick');
       return atlasSelection(g, domain, atlas);
@@ -580,7 +597,7 @@
   }
 
   function fromTriangles(source, { id, joinCoincident = false } = {}) {
-    const { points, triangles, uvs, uvSets, uvBindings, groupsByFace, cutSeams = [], uvCuts } = source ?? {};
+    const { points, triangles, uvs, uvSets, uvBindings, groupsByFace, tints, cutSeams = [], uvCuts } = source ?? {};
     if (typeof id !== 'string' || !id.trim() || typeof joinCoincident !== 'boolean')
       throw new TypeError('UV import needs a mesh ID and an optional coincident vertex policy');
     MeshUV.validate(points, triangles, uvs, true);
@@ -588,6 +605,10 @@
       throw new RangeError('UV import needs a normalized UV pair for every triangle corner');
     if (groupsByFace !== undefined && (!Array.isArray(groupsByFace) || groupsByFace.length !== triangles.length))
       throw new TypeError('UV face groups must match the imported triangles');
+    if (tints !== undefined && (!Array.isArray(tints) || tints.length !== triangles.length ||
+        Array.from(tints).some(row => row !== null && !(Array.isArray(row) && row.length === 3 &&
+          Array.from(row).every(color => tuple(color, row[0]?.length, unit) && [3, 4].includes(color.length))))))
+      throw new RangeError('Imported vertex tints need one normalized RGB or RGBA value per tinted triangle corner');
     const vertices = [], aliases = new Map();
     const ids = points.map((position, i) => {
       const key = joinCoincident ? position.join('/') : i;
@@ -600,8 +621,11 @@
     });
     const faces = triangles.map((row, i) => ({ id: 'f/' + i, material: groupsByFace?.[i]?.material ?? 'default',
       corners: row.map((vertex, j) => ({ id: 'c/' + i + '/' + j, vertex: ids[vertex], uv: uvs[i][j],
-        ...(uvSets && {attributes:Object.fromEntries(Object.entries(uvSets).filter(([set,rows])=>Number(set)>0&&rows[i])
-          .map(([set,rows])=>[MaterialUV.key(set),rows[i][j]]))}) })) }));
+        ...((uvSets || tints?.[i]) && { attributes: {
+          ...(uvSets && Object.fromEntries(Object.entries(uvSets).filter(([set,rows])=>Number(set)>0&&rows[i])
+            .map(([set,rows])=>[MaterialUV.key(set),rows[i][j]]))),
+          ...(tints?.[i] && { tint: tints[i][j] })
+        } }) })) }));
     const cuts = new Map();
     for (const [set, pairs] of [[0, cutSeams], ...Object.entries(uvCuts ?? {})]) {
       if (!MaterialUV.layout(+set) || !Array.isArray(pairs)) throw new TypeError('Imported UV cuts need triangle edge pairs');
