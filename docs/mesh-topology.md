@@ -56,8 +56,8 @@ remove a face and its otherwise-referenced vertex in the same edit.
 Supply optional `edges` with `{id, vertices: [a, b]}` records to name
 specific edges. Remaining IDs derive from their unordered endpoint IDs.
 An edit keeps a boundary edge's ID while that pair remains adjacent
-anywhere in the mesh. A triangulation diagonal exists only in the
-render output. `inspect` lists each authored edge and its incident
+anywhere in the mesh. A quad can retain a `diagonal` pair of opposite
+corner IDs to control its render triangles. `inspect` lists authored edges and their incident
 faces and directed corner pairs, including open boundaries.
 
 Faces are single rings of 3 to 128 corners. Ink triangulates simple
@@ -840,6 +840,7 @@ report and lists ordered `operations`. Choose IDs from that report or
 | `weld` | Supply a vertex `keep` ID, a `remove` list, and `maxDistance` from the keeper. Retains the keeper position and the surviving corner UVs. Set `removeCollapsed` to explicitly remove faces the weld collapses. |
 | `dissolve` | Supply an `edge` shared by two faces and optionally the face ID to `keep`. The faces must share a plane, material, affine UV mapping and, where present, affine weight interpolation. Optional `tolerance` sets the plane distance threshold. |
 | `winding` | Supply an `anchor` to orient its manifold neighbors, or choose faces explicitly with a `faces` list or revision-checked face `selection`. |
+| `flip-diagonal` | Choose quads with a `faces` list or revision-checked face `selection`. Swap to the other interior diagonal and retain the authored quad. |
 
 Each winding step shows the face normals and corner orders before and
 after, plus any inconsistent edges incident to the reversed faces. Supply
@@ -848,6 +849,31 @@ when the authored corner normals should reverse with the winding. The
 default `"normals": "preserve"` keeps those shading directions. Use a
 winding repair after a geometric mirror that preserved corner order, or
 choose the `reverse` policy directly in the mirror request.
+
+### Flip a quad's triangulation diagonal
+
+Add `{ "kind": "flip-diagonal", "faces": ["tile"] }` to the repair
+request's `operations`. A saved face `selection` can supply the IDs.
+The preview shows the original and alternative corner pairs, derived
+triangles, geometric normals, bend angle, and diagonal midpoint in
+mesh space and pigment UVs. On a bent tile, the two triangulations can
+produce different surfaces from the same four corners.
+
+Commit with the ordinary repair command and `--out`. The chosen diagonal
+is stored on the face with its corner IDs, and render, picking, and
+dependent bakes use the new triangulation. Winding changes and copies
+carry the diagonal with its corners. Operations that rebuild the boundary
+can derive triangulation for the new rings. A diagonal that crosses a
+concave boundary or collapses a triangle rejects the edit. Leaving the
+`diagonal` field out of a complete face upsert restores automatic tessellation.
+
+```sh
+ink-studio mesh-topology repair roof.json flip.json --object cover
+ink-studio mesh-topology repair roof.json flip.json --object cover --out revised.json --report diagonal-receipt.json
+node examples/tileset-pick/quad-diagonal-demo.cjs quad-diagonal-review
+```
+
+### Repair weights and review changes
 
 A vertex can retain a `weights` object with named values in [0, 1].
 Ordinary position edits preserve these channels. A weld requires matching

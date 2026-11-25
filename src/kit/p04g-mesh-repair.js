@@ -53,7 +53,8 @@
         else compact.push(corner);
       }
       if (compact[0].vertex === compact.at(-1).vertex) retain(compact[0], compact.pop());
-      faces.push({ ...face, corners: compact });
+      faces.push({ id:face.id, material:face.material, corners:compact,
+        ...(compact.length===face.corners.length && face.diagonal && {diagonal:face.diagonal}) });
     }
     const next = topology.edit(doc, { vertices: verticesToUpdate, removeVertices: removed, faces, removeFaces });
     const nextEdge = new Map(next.edges.map(edge => [JSON.stringify(edge.vertices), edge.id]));
@@ -130,7 +131,7 @@
     }
     const first = outside(a, uses[0]), second = outside(b, uses[1]);
     const corners = [...first, ...second.slice(1, -1)];
-    const next = topology.edit(doc, { faces: [{ ...a, corners }], removeFaces: [b.id] });
+    const next = topology.edit(doc, { faces: [{ id:a.id, material:a.material, corners }], removeFaces: [b.id] });
     return { document: next,
       links: { faces: [{ from: b.id, to: a.id }], corners: [
         { from: second[0].id, to: first.at(-1).id }, { from: second.at(-1).id, to: first[0].id }
@@ -179,6 +180,51 @@
       windingConflicts:meshWinding.conflicts(document,new Set(ids)) } };
   }
 
+  function flipDiagonal(doc, op) {
+    if (!record(op,['kind','faces','selection']) || (op.faces === undefined) === (op.selection === undefined) ||
+        op.faces !== undefined && (!Array.isArray(op.faces) || !op.faces.length))
+      throw new TypeError('Flip diagonal needs face IDs or a saved face selection');
+    const {ids} = K.meshTopology.select(doc,op.selection === undefined ?
+      {domain:'faces',ids:op.faces} : {domain:'faces',from:op.selection});
+    if (!ids.length) throw new RangeError('Choose at least one quad to flip its diagonal');
+    const g = incidence(doc), selected = new Set(ids);
+    function triangles(source) {
+      const rows = new Map(ids.map(id=>[id,[]]));
+      for (const row of topology.triangulate(source).triangleSources)
+        if (selected.has(row.face)) rows.get(row.face).push(row.corners);
+      return rows;
+    }
+    const before = triangles(doc);
+    const patch = ids.map(id=>{
+      const face = g.faces.get(id);
+      if (face.corners.length !== 4) throw new RangeError('Flip diagonal needs a four-corner face: ' + id);
+      const [a,b] = before.get(id);
+      const ends = new Set(a.filter(corner=>b.includes(corner)));
+      return {...face,diagonal:face.corners.map(row=>row.id).filter(corner=>!ends.has(corner))};
+    });
+    const document = topology.edit(doc,{faces:patch});
+    const after = triangles(document), uvSet = MaterialUV.resolve(doc.uvBindings,'pigment');
+    function describe(rows) {
+      const [a,b] = rows;
+      const diagonal = a.filter(id=>b.includes(id)).sort();
+      const vertex = id=>g.corners.get(id).vertex;
+      const point = id=>g.vertices.get(vertex(id)).position.map(Math.fround);
+      const samples = rows.map(corners=>{
+        const [a,b,c] = corners.map(point);
+        const cross = V.cross(V.sub(b,a),V.sub(c,a)), length = V.len(cross);
+        return { corners, vertices:corners.map(vertex), normal:cross.map(n=>n/length || 0) };
+      });
+      const dot = V.dot(samples[0].normal,samples[1].normal);
+      return { diagonal, vertices:diagonal.map(vertex), midpoint:V.lerp(...diagonal.map(point),.5),
+        midpointUV:MaterialUV.uv(g.corners.get(diagonal[0]),uvSet).map((n,i)=>
+          (n+MaterialUV.uv(g.corners.get(diagonal[1]),uvSet)[i])*.5),
+        bendDegrees:Math.acos(Math.min(1,Math.max(-1,dot)))*180/Math.PI, triangles:samples };
+    }
+    return {document,links:{},effect:{kind:'flip-diagonal',uvSet,faces:ids.map(face=>({
+      face,before:describe(before.get(face)),after:describe(after.get(face))
+    }))}};
+  }
+
   function patchFor(before, after, transfers) {
     const { vertices, faces, corners, edges } = K.authoring.meshTopologyScene.diff({ document: before }, { document: after });
     const beforeIncidence = incidence(before), afterIncidence = incidence(after);
@@ -221,7 +267,8 @@
         !request.operations.length || request.operations.length > 128)
       throw new TypeError('Repair needs a topology revision and 1 to 128 explicit operations');
     if (request.revision !== topology.revision(before)) throw new RangeError('Stale mesh repair revision');
-    const commands = { weld, dissolve, winding }, steps = [], transfers = { faces: new Map(), corners: new Map(), edges: new Map() };
+    const commands = { weld, dissolve, winding, 'flip-diagonal': flipDiagonal };
+    const steps = [], transfers = { faces: new Map(), corners: new Map(), edges: new Map() };
     let after = before;
     for (const [i, op] of request.operations.entries()) {
       if (!op || !Object.hasOwn(commands, op.kind)) throw new TypeError('Unknown mesh repair operation at ' + i);

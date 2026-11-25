@@ -83,11 +83,12 @@
           if (shell) lineage.corners.push({ from: corner.id, to: id });
           return { ...corner, id, vertex: raised.get(corner.vertex).id, uv: uvs?.[i] ?? corner.uv };
         });
+        const diagonal = meshQuadDiagonal.remap(face,corners);
         if (shell) {
           corners.reverse();
           lineage.faces.push({ from: face.id, to: id });
         }
-        faceRows.push({ id, material: config.interior.material ?? face.material, corners });
+        faceRows.push({ id, material: config.interior.material ?? face.material, corners, ...(diagonal && {diagonal}) });
         group.interiorFaces.push(id);
       }
       for (const loop of region.loops) {

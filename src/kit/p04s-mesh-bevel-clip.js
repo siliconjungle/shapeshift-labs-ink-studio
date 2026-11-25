@@ -94,7 +94,10 @@ const meshBevelClip = (function (K) {
         state.faces.delete(face.id);
         continue;
       }
-      state.faces.set(face.id, { ...face, corners: ring });
+      const revised = {...face,corners:ring};
+      if (face.diagonal && (ring.length !== face.corners.length || ring.some((corner,i)=>corner.id!==face.corners[i].id)))
+        delete revised.diagonal;
+      state.faces.set(face.id, revised);
       for (const [i, a] of ring.entries()) {
         const b = cyclic(ring, i + 1);
         if (!distance(a.vertex) && !distance(b.vertex)) section.set(pair(a.vertex, b.vertex), []);
