@@ -92,6 +92,15 @@ test('splitting a quad strip yields valid new rings with their own tessellation'
   assert.equal(plan.document.faces.find(row=>row.id===face.id).diagonal,undefined);
 });
 
+test('bevel retains its facet provenance when clipping a face with an authored diagonal',()=>{
+  const example=require('../examples/mesh-bevel/fixture.cjs');
+  const doc=flip(T.create(example.consoleMesh()),{faces:['panel/side/0']}).document;
+  const plan=T.planBevel(doc,example.request(T,doc));
+  assert(plan.report.canCommit,JSON.stringify(plan.report.issues));
+  assert.equal(plan.report.faces.filter(row=>row.corner).length,4);
+  assert.equal(plan.document.faces.find(row=>row.id==='panel/side/0').diagonal,undefined);
+});
+
 function paintedScene() {
   const base={id:'bench',style:'slate',solids:[],tilesets:{
     trim:ink.createBlankTileset({width:8,height:8,background:'#608277'})
