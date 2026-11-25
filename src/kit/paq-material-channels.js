@@ -21,9 +21,16 @@
   }
 
   function validMap(name, map) {
-    const components = layout(name);
-    return components !== undefined && raster(map) &&
-      components.includes(map.channels ?? map.data.length / (map.width * map.height));
+    const components = layout(name), images = P.graphImages;
+    if (components === undefined) return false;
+    if (map?.format === images.format) {
+      if (!images.valid(map)) return false;
+      const { intent } = map.descriptor;
+      const accepts = name === 'baseColor' || name === 'emission' ? ['color'] :
+        name === 'normal' ? ['normal'] : name === 'height' ? ['height'] : ['data', 'mask'];
+      return accepts.includes(intent) && components.includes(map.raster.channels ?? map.descriptor.layout.length);
+    }
+    return raster(map) && components.includes(map.channels ?? map.data.length / (map.width * map.height));
   }
 
   function validMetadata(value) {
@@ -89,6 +96,16 @@
       inputs: { source: 'materialChannels', name: 'string' }, outputs: { value: 'raster', metadata: 'record' },
       run({ source, name }) {
         const { raster, metadata } = channel(source, name);
+        if (raster?.format === P.graphImages.format) throw new TypeError('Use material.image to read the contract for ' + name);
+        return { value: raster, metadata };
+      }
+    },
+    'material.image': {
+      description: 'Read a contracted image and its material metadata without dropping the image contract.',
+      inputs: { source: 'materialChannels', name: 'string' }, outputs: { value: 'typedImage', metadata: 'record' },
+      run({ source, name }) {
+        const { raster, metadata } = channel(source, name);
+        if (raster?.format !== P.graphImages.format) throw new TypeError('Material channel ' + name + ' needs image.declare first');
         return { value: raster, metadata };
       }
     },

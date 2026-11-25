@@ -48,6 +48,10 @@
     const rate = ratio(value) ? value.numerator / value.denominator : value;
     return Number.isFinite(rate) && rate >= .001 && rate <= 1000;
   }
+  function scalarRaster(value) {
+    return raster(value) && (value.channels ?? value.data.length / (value.width * value.height)) === 1 &&
+      (value.colorSpace === undefined || value.colorSpace === 'none');
+  }
   function linearRaster(value) {
     if (!raster(value) || byteData(value.data) || value.colorSpace === 'srgb') return false;
     const channels = value.channels ?? value.data.length / (value.width * value.height);
@@ -151,6 +155,12 @@
     record: value => record(value) && [Object.prototype,null].includes(Object.getPrototypeOf(value)),
     geometry: value => record(value) && ((value.points && value.faces) || (value.pos && value.tri) || value.positions || mesh(value)),
     field: value => typeof value === 'function' || typeof value?.sample === 'function',
+    scalarRaster,
+    typedImage: value => K.procedural.graphImages.valid(value),
+    colorImage: value => K.procedural.graphImages.valid(value, 'color'),
+    heightImage: value => K.procedural.graphImages.valid(value, 'height'),
+    reliefHeight: value => value === null || scalarRaster(value) ||
+      K.procedural.graphImages.valid(value, 'height') && value.descriptor.units === 'art-px',
     materialChannels: value => K.procedural.materialChannels.valid(value),
     fieldSpriteMaterial: value => value?.format === 'ink-studio/field-sprite-material' && typeof value.sample === 'function',
     fieldSpriteSurface: value => value?.format === 'ink-studio/field-sprite-surface' &&
@@ -192,6 +202,11 @@
     'srgb-linear': ['linear sRGB(A)', 'vec3', 'array<number>'],
     displayRaster: ['display RGB(A) raster in byte levels', 'raster', 'image'],
     linearRaster: ['linear RGB(A) raster with unit alpha', 'raster', 'image'],
+    scalarRaster: ['uncolored single-channel raster'],
+    typedImage: ['typed image with a sample contract'],
+    colorImage: ['typed color image'],
+    heightImage: ['typed height image'],
+    reliefHeight: ['height in art pixels'],
     materialChannels: ['material channel packet'],
     cameraGrid: ['camera grid with view and viewport', 'record']
   };
@@ -206,7 +221,14 @@
     'srgb/srgb-linear': 'color.toLinear', 'srgb-linear/srgb': 'color.toDisplay',
     'rgb8/srgb-linear': 'color.fromRGB8, then color.toLinear',
     'srgb-linear/rgb8': 'color.toDisplay, then color.toRGB8',
-    'displayRaster/linearRaster': 'color.rasterToLinear', 'linearRaster/displayRaster': 'color.rasterToDisplay'
+    'displayRaster/linearRaster': 'color.rasterToLinear', 'linearRaster/displayRaster': 'color.rasterToDisplay',
+    'colorImage/reliefHeight': 'image.toHeight',
+    'displayRaster/reliefHeight': 'image.declare followed by image.toHeight',
+    'linearRaster/reliefHeight': 'image.declare followed by image.toHeight',
+    'image/reliefHeight': 'image.declare followed by image.toHeight',
+    'displayRaster/scalarRaster': 'image.declare followed by image.toHeight',
+    'linearRaster/scalarRaster': 'image.declare followed by image.toHeight',
+    'image/scalarRaster': 'image.declare followed by image.toHeight'
   };
   const conversion = (from, to) => conversions[from + '/' + to];
   function element(type) {
@@ -221,6 +243,9 @@
   }
   function compatible(from,to) {
     if (from === to || from === 'any' || to === 'any') return true;
+    if (to === 'typedImage' && ['colorImage', 'heightImage'].includes(from)) return true;
+    if (to === 'reliefHeight') return ['heightImage', 'typedImage', 'scalarRaster', 'raster'].includes(from);
+    if (from === 'raster' && to === 'scalarRaster' || from === 'scalarRaster' && to === 'raster') return true;
     const source = Object.hasOwn(semantics, from) ? semantics[from] : null;
     const target = Object.hasOwn(semantics, to) ? semantics[to] : null;
     if (source || target) return !(source && target) &&

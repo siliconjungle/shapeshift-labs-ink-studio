@@ -182,7 +182,11 @@ const assetFixtures = {
   rasterAsset: ['png', 'swatch.png'], audioAsset: ['wav', 'tone.wav'],
   inputAsset: ['inputs', 'input.json'], jsonAsset: ['json', 'input.json']
 };
+const declareColor = { op: 'image.declare', inputs: { source: rgba,
+  descriptor: { intent: 'color', precision: 'unorm8', tiling: { u: 'wrap', v: 'clamp' }, sampling: 'linear' } } };
+const declareData = { op: 'image.declare', inputs: { source: mask, descriptor: { intent: 'data' } } };
 const dynamic = {
+  'image.declare': { inputs: declareColor.inputs },
   'quantity.convert': {inputs:{value:12.5,from:{unit:'kPa'},to:{unit:'Pa'}}},
   'array.map': { inputs: { items: [1, 2, 3] }, callback: group({ item: 'number' }, 'multiply', { a: param('item'), b: 2 }) },
   'array.mapById': { inputs: { items: [{id: 'panel', width: 2}, {id: 'trim', width: .15}] },
@@ -216,6 +220,13 @@ const materialSource = { op: 'material.pack', inputs: {
   metadata: { baseColor: { colorSpace: 'srgb', texCoord: 0 }, 'mask.wear': { texCoord: 1 } }
 } };
 const specifications = {
+  'image.toHeight': { nodes: { color: declareColor }, inputs: { source: link('color'), scale: 2 } },
+  'image.resize': { nodes: { data: declareData }, inputs: { source: link('data'), width: 8, height: 6 } },
+  'image.toDisplay': { nodes: { color: declareColor }, inputs: { source: link('color') } },
+  'image.toRaster': { nodes: { color: declareColor }, inputs: { source: link('color') } },
+  'image.inspect': { nodes: { color: declareColor }, inputs: { source: link('color') } },
+  'material.image': { nodes: { color: declareColor, maps: { op: 'data.record', inputs: { baseColor: link('color') } },
+    packed: { op: 'material.pack', inputs: { maps: link('maps') } } }, inputs: { source: link('packed'), name: 'baseColor' } },
   'material.pack': { inputs: materialSource.inputs },
   'material.channel': { nodes: { material: materialSource }, inputs: { source: link('material'), name: 'mask.wear' } },
   'material.replace': { nodes: { material: materialSource }, inputs: {

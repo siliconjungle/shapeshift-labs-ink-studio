@@ -78,16 +78,25 @@ function jsonBytes(value) {
   return Buffer.from(JSON.stringify(visit(value),null,2)+'\n');
 }
 
+function imageContract(value) {
+  if (value?.format !== 'ink-studio/graph-image' || value.version !== 1 ||
+      !record(value.descriptor) || !record(value.raster)) return;
+  const { width, height, data } = value.raster;
+  return { kind: 'typedImage', width, height, samples: data?.length, descriptor: value.descriptor };
+}
+
 function describe(value, depth = 0) {
   if (typeof value === 'function') return {kind:'runtime',type:'function'};
   if (value === undefined || typeof value === 'bigint' || typeof value === 'symbol' ||
       typeof value === 'number' && !Number.isFinite(value)) return {kind:'runtime',type:typeof value};
   if (!value || typeof value !== 'object') return value;
+  const contract = imageContract(value);
+  if (contract) return contract;
   if (value.format === 'ink-studio/material-channels' && value.version === 1 && record(value.channels) &&
       Object.values(value.channels).every(entry => record(entry?.raster) && record(entry.metadata))) {
     return { kind: 'materialChannels', version: value.version, channels: Object.fromEntries(
       Object.entries(value.channels).map(([name, { raster, metadata }]) =>
-        [name, { width: raster.width, height: raster.height, samples: raster.data?.length, metadata }])) };
+        [name, { ...(imageContract(raster) ?? { width: raster.width, height: raster.height, samples: raster.data?.length }), metadata }])) };
   }
   if (Number.isSafeInteger(value.width) && Number.isSafeInteger(value.height) && value.data)
     return {kind:'image',width:value.width,height:value.height,samples:value.data.length,
@@ -382,6 +391,8 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     const port=rootPlan.outputs[output].type, compatible=kit.KIT.procedural.graphTypes.compatible;
     if ((format==='png' || format==='codec' && type==='raster') && port==='linearRaster')
       throw new TypeError('Graph image export '+name+' needs display RGB. Use color.rasterToDisplay first.');
+    if ((format==='png' || format==='codec' && type==='raster') && ['typedImage','colorImage','heightImage'].includes(port))
+      throw new TypeError('Graph image export '+name+' needs a display raster. Use image.toDisplay for color or export the typed image as JSON.');
     if (format==='png' && !compatible(port,'raster')) throw new TypeError('Graph PNG export '+name+' needs an image output');
     if (format==='atlas' && !compatible(port,'atlas')) throw new TypeError('Graph atlas export '+name+' needs an atlas output');
     if (format==='wav' && (!compatible(port,'audio') || encoding!==undefined && !WAV.encodings.includes(encoding)))

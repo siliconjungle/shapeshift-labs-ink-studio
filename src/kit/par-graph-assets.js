@@ -268,6 +268,7 @@
     ...P.motionDeformation.operations,
     ...P.rasterColor.operations,
     ...P.materialChannels.operations,
+    ...P.graphImages.operations,
     ...P.pixelEffects.operations,
     ...P.signalRecovery.operations,
     ...P.rasterWarp.operations,

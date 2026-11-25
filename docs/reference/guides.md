@@ -155,6 +155,7 @@ All checked-in guides, indexed by title and section headings.
 - [GPU finite curves](../gpu-finite-curves.md)
 - [Graph automata](../graph-automata.md)
 - [Export graph clips](../graph-clips.md)
+- [Image types in graphs](../graph-image-types.md)
 - [Audio, recorded inputs and host adapters](../graph-media.md)
 - [Grid and mesh operators](../grid-operators.md)
 - [Groups and formations](../group-formations.md)

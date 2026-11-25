@@ -137,10 +137,14 @@
     },
     'fx.relight':{
       description:'Transfer colored raster emission onto a masked receiver with optional normals and height.',
-      inputs:{emission:'raster',normals:{type:'any',default:null},height:{type:'any',default:null},
+      inputs:{emission:'raster',normals:{type:'any',default:null},height:{type:'reliefHeight',default:null},
         mask:{type:'any',default:null},options},
       outputs:{value:'displayRaster',irradiance:'linearRaster',intensity:'raster'},
-      run({emission,normals,height,mask,options}){return E.relight(emission,{...options,normals,height,mask});}
+      run({emission,normals,height,mask,options}) {
+        if (height?.format === P.graphImages.format && options.heightScale !== undefined && options.heightScale !== 1)
+          throw new TypeError('Typed relief is already in art pixels. Use image.toHeight to change its scale');
+        return E.relight(emission,{...options,normals,height:height?.format === P.graphImages.format ? height.raster : height,mask});
+      }
     },
     'fx.trackRegions': {
       inputs: { frames: 'array<raster>', options },

@@ -286,7 +286,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.pixelEffects.operations["fx.relight"].inputs.emission` | value | `string = "raster"` | [guide](../headless-authoring.md#pixel-effects-and-raster-analysis), [guide](../tile-attributes.md) |
 | `KIT.procedural.pixelEffects.operations["fx.relight"].inputs.height` | namespace |  | [guide](../headless-authoring.md#pixel-effects-and-raster-analysis), [guide](../tile-attributes.md) |
 | `KIT.procedural.pixelEffects.operations["fx.relight"].inputs.height.default` | value | `null` | [guide](../headless-authoring.md#pixel-effects-and-raster-analysis), [guide](../tile-attributes.md) |
-| `KIT.procedural.pixelEffects.operations["fx.relight"].inputs.height.type` | value | `string = "any"` | [guide](../headless-authoring.md#pixel-effects-and-raster-analysis), [guide](../tile-attributes.md) |
+| `KIT.procedural.pixelEffects.operations["fx.relight"].inputs.height.type` | value | `string = "reliefHeight"` | [guide](../headless-authoring.md#pixel-effects-and-raster-analysis), [guide](../tile-attributes.md) |
 | `KIT.procedural.pixelEffects.operations["fx.relight"].inputs.mask` | namespace |  | [guide](../headless-authoring.md#pixel-effects-and-raster-analysis), [guide](../tile-attributes.md) |
 | `KIT.procedural.pixelEffects.operations["fx.relight"].inputs.mask.default` | value | `null` | [guide](../headless-authoring.md#pixel-effects-and-raster-analysis), [guide](../tile-attributes.md) |
 | `KIT.procedural.pixelEffects.operations["fx.relight"].inputs.mask.type` | value | `string = "any"` | [guide](../headless-authoring.md#pixel-effects-and-raster-analysis), [guide](../tile-attributes.md) |

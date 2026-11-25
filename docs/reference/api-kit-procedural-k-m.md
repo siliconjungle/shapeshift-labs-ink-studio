@@ -124,6 +124,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.materialChannels.operations["material.channel"].outputs.metadata` | value | `string = "record"` |  |
 | `KIT.procedural.materialChannels.operations["material.channel"].outputs.value` | value | `string = "raster"` |  |
 | `KIT.procedural.materialChannels.operations["material.channel"].run` | function | `({ source, name })` | [source](../../src/kit/paq-material-channels.js) |
+| `KIT.procedural.materialChannels.operations["material.image"]` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.image"].description` | value | `string = "Read a contracted image and its material metadata without dropping the image contract."` |  |
+| `KIT.procedural.materialChannels.operations["material.image"].inputs` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.image"].inputs.name` | value | `string = "string"` |  |
+| `KIT.procedural.materialChannels.operations["material.image"].inputs.source` | value | `string = "materialChannels"` |  |
+| `KIT.procedural.materialChannels.operations["material.image"].outputs` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.image"].outputs.metadata` | value | `string = "record"` |  |
+| `KIT.procedural.materialChannels.operations["material.image"].outputs.value` | value | `string = "typedImage"` |  |
+| `KIT.procedural.materialChannels.operations["material.image"].run` | function | `({ source, name })` | [source](../../src/kit/paq-material-channels.js) |
 | `KIT.procedural.materialChannels.operations["material.pack"]` | namespace |  |  |
 | `KIT.procedural.materialChannels.operations["material.pack"].description` | value | `string = "Bundle named material rasters into one typed port, with independent map sizes and metadata."` |  |
 | `KIT.procedural.materialChannels.operations["material.pack"].inputs` | namespace |  |  |

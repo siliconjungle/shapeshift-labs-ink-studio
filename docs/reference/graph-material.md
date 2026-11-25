@@ -17,9 +17,27 @@ Origin: toolkit.
 | Output | `value` | `raster` | — | {"layout":"Interleaved samples on a positive integer grid","channels":[1,4],"finite":true} |
 | Output | `metadata` | `record` | — | {"layout":"Plain named object"} |
 
-Guides: [guide](../material-graph-ports.md#read-and-edit-maps)
+Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes), [guide](../material-graph-ports.md#read-and-edit-maps)
 
 Get the runnable example with `ink-studio graph describe material.channel --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### material.image
+
+Read a contracted image and its material metadata without dropping the image contract.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `materialChannels` | Required | {"layout":"Versioned named raster channels with independent grids and metadata","minItems":1,"maxItems":64} |
+| Input | `name` | `string` | Required |  |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `metadata` | `record` | — | {"layout":"Plain named object"} |
+
+Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes)
+
+Get the runnable example with `ink-studio graph describe material.image --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### material.pack
@@ -34,7 +52,7 @@ Origin: toolkit.
 | Input | `metadata` | `record` | `{}` | Optional JSON metadata keyed by supplied channel. · {"layout":"Plain named object"} |
 | Output | `value` | `materialChannels` | — | {"layout":"Versioned named raster channels with independent grids and metadata","minItems":1,"maxItems":64} |
 
-Guides: [guide](../material-graph-ports.md#read-and-edit-maps)
+Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes), [guide](../material-graph-ports.md#read-and-edit-maps)
 
 Get the runnable example with `ink-studio graph describe material.pack --example > example.json`.
 Run it with `ink-studio graph run example.json`.
@@ -52,7 +70,7 @@ Origin: toolkit.
 | Input | `metadata` | `record` | `{}` | Optional JSON metadata keyed by supplied channel. · {"layout":"Plain named object"} |
 | Output | `value` | `materialChannels` | — | {"layout":"Versioned named raster channels with independent grids and metadata","minItems":1,"maxItems":64} |
 
-Guides: [guide](../material-graph-ports.md#read-and-edit-maps)
+Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes), [guide](../material-graph-ports.md#read-and-edit-maps)
 
 Get the runnable example with `ink-studio graph describe material.replace --example > example.json`.
 Run it with `ink-studio graph run example.json`.
