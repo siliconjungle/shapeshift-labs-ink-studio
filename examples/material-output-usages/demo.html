@@ -108,7 +108,7 @@ function show() {
   const download = get('download');
   download.hidden = !row.artifact;
   if (row.artifact) {
-    download.href = row.artifact.file;
+    download.href = row.download;
     download.download = row.artifact.file.split('/').at(-1);
     download.textContent = 'Download ' + format(row);
   }

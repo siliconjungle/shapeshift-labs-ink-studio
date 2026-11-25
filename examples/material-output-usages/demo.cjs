@@ -143,6 +143,8 @@ const preview = (map, component) => {
 };
 const payload = report.outputUsages.map(row => ({
   ...row, preview: preview(row.id),
+  ...(row.artifact && { download: 'data:application/octet-stream;base64,' +
+    artifacts.find(artifact => artifact.name === row.id).bytes.toString('base64') }),
   ...(row.packing && { components: Object.fromEntries(Object.keys(row.packing).map(component => [component, preview(row.id, component)])) })
 }));
 files.write(at('data.js'), 'const maps = ' + JSON.stringify(payload) + ';\n');
