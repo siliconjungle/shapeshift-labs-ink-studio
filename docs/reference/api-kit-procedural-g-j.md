@@ -489,6 +489,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.corrections.colorReplace` | function | `(source, from, to, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
 | `KIT.procedural.graphImages.corrections.colorSelect` | function | `(source, color, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
 | `KIT.procedural.graphImages.corrections.contrast` | function | `(source, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
+| `KIT.procedural.graphImages.corrections.curve` | function | `(source, definition, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
 | `KIT.procedural.graphImages.corrections.exposure` | function | `(source, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
 | `KIT.procedural.graphImages.corrections.histogram` | function | `(source, options)` | [source](../../src/kit/paq-color-corrections.js) |
 | `KIT.procedural.graphImages.corrections.histogramAdjust` | function | `(source, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
@@ -588,6 +589,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.convert"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.convert"].description` | value | `string = "Convert the channel layout, precision, color space or alpha convention of a typed image."` |  |
 | `KIT.procedural.graphImages.operations["image.convert"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.curve"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.curve"].description` | value | `string = "Apply an editable channel curve with named stops, cubic handles and clamp or repeat addressing."` |  |
+| `KIT.procedural.graphImages.operations["image.curve"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.curve"].inputs.curve` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.curve"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.curve"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.curve"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.curve"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].outputs.value` |  |
+| `KIT.procedural.graphImages.operations["image.curve"].run` | function | `({ source, curve, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.declare"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.declare"].description` | value | `string = "Attach a verified image contract to a legacy raster using a literal descriptor."` |  |
 | `KIT.procedural.graphImages.operations["image.declare"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
@@ -599,6 +609,33 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.exposure"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.exposure"].outputs.value` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].outputs.value` |  |
 | `KIT.procedural.graphImages.operations["image.exposure"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.gradient"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.gradient"].description` | value | `string = "Sample an authored gradient ramp into a typed RGBA image along a UV segment."` |  |
+| `KIT.procedural.graphImages.operations["image.gradient"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.gradient"].inputs.height` | value | `string = "pixelCount"` |  |
+| `KIT.procedural.graphImages.operations["image.gradient"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.gradient"].inputs.ramp` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.gradient"].inputs.width` | value | `string = "pixelCount"` |  |
+| `KIT.procedural.graphImages.operations["image.gradient"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.gradient"].outputs.value` | value | `string = "colorImage"` |  |
+| `KIT.procedural.graphImages.operations["image.gradient"].run` | function | `({ ramp, width, height, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.gradientFromImage"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.gradientFromImage"].description` | value | `string = "Sample editable gradient pins along a UV path in an input color image."` |  |
+| `KIT.procedural.graphImages.operations["image.gradientFromImage"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.gradientFromImage"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.gradientFromImage"].inputs.source` | value | `string = "colorImage"` |  |
+| `KIT.procedural.graphImages.operations["image.gradientFromImage"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.gradientFromImage"].outputs.value` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.gradientFromImage"].run` | function | `({ source, options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.gradientMap"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.gradientMap"].description` | value | `string = "Map a typed measurement channel through a gradient ramp while retaining image alignment and coverage."` |  |
+| `KIT.procedural.graphImages.operations["image.gradientMap"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.gradientMap"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.autoLevels"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.gradientMap"].inputs.ramp` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.gradientMap"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.gradientMap"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.gradientMap"].outputs.value` | value | `string = "colorImage"` |  |
+| `KIT.procedural.graphImages.operations["image.gradientMap"].run` | function | `({ source, ramp, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.histogram"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.histogram"].description` | value | `string = "Count decoded samples with explicit bins, clipping counts and range."` |  |
 | `KIT.procedural.graphImages.operations["image.histogram"].inputs` | namespace |  |  |
@@ -724,6 +761,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.toRaster"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.toRaster"].outputs.value` | value | `string = "raster"` |  |
 | `KIT.procedural.graphImages.operations["image.toRaster"].run` | function | `({ source })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.transferPreset"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.transferPreset"].description` | value | `string = "Load a fresh editable curve or gradient ramp preset by stable name."` |  |
+| `KIT.procedural.graphImages.operations["image.transferPreset"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.transferPreset"].inputs.name` | value | `string = "string"` |  |
+| `KIT.procedural.graphImages.operations["image.transferPreset"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.transferPreset"].outputs.kind` | value | `string = "string"` |  |
+| `KIT.procedural.graphImages.operations["image.transferPreset"].outputs.label` | value | `string = "string"` |  |
+| `KIT.procedural.graphImages.operations["image.transferPreset"].outputs.value` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.transferPreset"].run` | function | `({ name })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.uniform"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.uniform"].description` | value | `string = "Promote a scalar or a tuple to a typed constant image. UNORM inputs use normalized values, linear float color can be HDR."` |  |
 | `KIT.procedural.graphImages.operations["image.uniform"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
@@ -734,6 +780,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.toDisplay` | function | `(source, outOfRange = 'clamp')` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.toHeight` | function | `(source, { scale, offset = 0, units = 'art-px', channel = 'luminance' } = {})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.toRaster` | function | `(source)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.transfers` | namespace |  |  |
+| `KIT.procedural.graphImages.transfers.gradient` | function | `(definition, width, height, options = {})` | [source](../../src/kit/paq-color-transfers.js) |
+| `KIT.procedural.graphImages.transfers.gradientFromImage` | function | `(source, options = {})` | [source](../../src/kit/paq-color-transfers.js) |
+| `KIT.procedural.graphImages.transfers.gradientMap` | function | `(source, definition, options = {})` | [source](../../src/kit/paq-color-transfers.js) |
+| `KIT.procedural.graphImages.transfers.preset` | function | `(name)` | [source](../../src/kit/paq-color-transfers.js) |
+| `KIT.procedural.graphImages.transfers.ramp` | function | `(definition)` | [source](../../src/kit/paq-color-transfers.js) |
 | `KIT.procedural.graphImages.uniform` | function | `(value, width, height, settings)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.valid` | function | `(value, intent)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.version` | value | `number = 1` |  |

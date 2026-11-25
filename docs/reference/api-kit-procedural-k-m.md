@@ -247,6 +247,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.materials.colorCurves.modes` | value | `array` | [guide](../moire-gratings.md) |
 | `KIT.procedural.materials.colorCurves.prepare` | function | `(definition, resolveColor = color, override)` | [guide](../moire-gratings.md), [source](../../src/color-curves.js) |
 | `KIT.procedural.materials.colorCurves.ramp` | function | `(definition, resolveColor = color, extended = false)` | [guide](../moire-gratings.md), [source](../../src/color-curves.js) |
+| `KIT.procedural.materials.colorCurves.rgba` | function | `(definition, resolveColor)` | [guide](../moire-gratings.md), [source](../../src/color-curves.js) |
 | `KIT.procedural.materials.colorCurves.scalar` | function | `(definition, normalized = false)` | [guide](../moire-gratings.md), [source](../../src/color-curves.js) |
 | `KIT.procedural.materials.colorCurves.segmentIndex` | function | `(stops, value)` | [guide](../moire-gratings.md), [source](../../src/color-curves.js) |
 | `KIT.procedural.materials.colorCurves.weight` | function | `(mode, t)` | [guide](../moire-gratings.md), [source](../../src/color-curves.js) |

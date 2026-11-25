@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Copper Tide · Ink Studio</title>
+<style>
+  :root { color-scheme:dark; --bg:#131c25; --panel:#1c2a34; --line:#40535b; --muted:#b6c4c4;
+    --text:#f2e8d5; --gold:#f3bc8a; font:16px/1.42 system-ui,sans-serif; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:radial-gradient(ellipse at 26% -28%,#344d55,var(--bg) 64%); color:var(--text); }
+  main { max-width:1200px; padding:31px 34px; margin:auto; }
+  header { display:flex; align-items:end; justify-content:space-between; gap:14px; margin-bottom:18px; }
+  h1 { margin:2px 0 7px; font:normal clamp(3rem,8vw,5rem)/.95 Georgia,serif; letter-spacing:-.045em; }
+  h2 { margin:0 0 8px; font:normal 1.6rem Georgia,serif; }
+  p { margin:0; color:var(--muted); }
+  a { color:var(--text); text-underline-offset:4px; }
+  small,.kicker { font:600 .71rem ui-monospace,monospace; letter-spacing:.09em; color:var(--gold); text-transform:uppercase; }
+  .layout { display:grid; grid-template-columns:minmax(0,1.82fr) minmax(295px,1fr); gap:14px; align-items:start; }
+  section, figure { border:1px solid var(--line); background:var(--panel); margin:0 0 12px; min-width:0; }
+  .tools { padding:13px; }
+  canvas { width:100%; display:block; }
+  #picture,#strip,#reference { image-rendering:pixelated; }
+  #curve,#reference,#pins { touch-action:none; }
+  #curve { background:#14222c; border:1px solid var(--line); height:auto; }
+  .caption { padding:7px 10px; color:var(--muted); font-size:.81rem; border-top:1px solid var(--line); }
+  .row { display:flex; flex-wrap:wrap; align-items:end; gap:7px 12px; margin-top:7px; }
+  label { display:block; color:var(--muted); font-size:.8rem; flex:1; min-width:0; }
+  input,select,button { color:var(--text); background:#14222c; border:1px solid var(--line); border-radius:3px;
+    padding:4px 7px; font:inherit; }
+  label :is(select,input:not([type=checkbox])) { display:block; width:100%; margin-top:2px; }
+  input[type=color] { padding:1px; min-height:29px; }
+  button { font-size:.8rem; cursor:pointer; min-height:28px; }
+  button:disabled { opacity:.45; cursor:default; }
+  .primary { background:var(--gold); color:#13212a; border-color:var(--gold); font-weight:650; }
+  #pins { position:relative; height:20px; border-inline:1px solid var(--line); }
+  .pin { position:absolute; top:1px; min-height:15px; width:15px; height:15px; padding:0; transform:translateX(-50%); border-radius:1px; }
+  .pin[aria-pressed=true] { outline:2px solid var(--gold); outline-offset:1px; }
+  .strip { border:1px solid var(--line); border-bottom:0; height:22px; }
+  .reference { display:grid; grid-template-columns:minmax(0,1fr) minmax(104px,.65fr); gap:10px; align-items:start; }
+  .reference canvas { border:1px solid var(--line); }
+  .reference label { margin-bottom:8px; }
+  #status { min-height:1.25em; color:#ffcba3; font-size:.83rem; }
+  :focus-visible { outline:2px solid #81ded3; outline-offset:2px; }
+  @media(max-width:770px) { main { padding:22px 14px; } .layout { grid-template-columns:1fr; } header { display:block; } header a { display:inline-block; margin-top:5px; } }
+</style>
+<main>
+  <header>
+    <div><div class="kicker">Ink Studio · Material graphs</div><h1>Copper Tide</h1><p>Shape the tonal curve, recolor the cove, or sample a ramp from the reference.</p></div>
+    <a href="copper-tide.material.json">Original material graph</a>
+  </header>
+  <div class="layout">
+    <div>
+      <figure><canvas id="picture" width="160" height="96" aria-label="Recolored pixel art cove"></canvas>
+        <figcaption class="caption">Curve → gradient map · 160 × 96 native pixels</figcaption></figure>
+      <section class="tools" aria-label="Ramp controls">
+        <h2>Gradient ramp</h2>
+        <canvas class="strip" id="strip" width="320" height="10" aria-label="Sampled gradient strip"></canvas>
+        <div id="pins" aria-label="Ramp pins"></div>
+        <div class="row">
+          <label>Preset <select id="ramp-preset">
+            <option value="copper-tide">Copper Tide</option><option value="silver-mist">Silver Mist</option>
+            <option value="night-signal">Night Signal</option><option value="sampled" disabled>From image</option>
+          </select></label>
+          <label>Interpolation <select id="ramp-mode">
+            <option>step</option><option>linear</option><option>smooth</option><option>bezier</option>
+          </select></label>
+          <label>Address <select id="ramp-address"><option>clamp</option><option>repeat</option></select></label>
+        </div>
+        <div class="row">
+          <label>Pin position <input id="pin-position" type="number" min="0" max="1" step=".01"></label>
+          <label>Pin color <input id="pin-color" type="color"></label>
+          <button id="add-pin" type="button">Add pin</button><button id="remove-pin" type="button">Remove</button>
+          <button id="save" class="primary" type="button">Save edited graph</button>
+        </div>
+      </section>
+    </div>
+    <div>
+      <section class="tools" aria-label="Curve controls">
+        <h2>Tonal curve</h2>
+        <canvas id="curve" width="360" height="156" aria-label="Transfer curve with draggable stops and cubic handles"></canvas>
+        <div class="row">
+          <label>Preset <select id="curve-preset"><option value="soft-contrast">Soft contrast</option>
+            <option value="lifted-ink">Lifted ink</option><option value="linear">Linear</option></select></label>
+          <label>Interpolation <select id="curve-mode">
+            <option>step</option><option>linear</option><option>smooth</option><option>bezier</option></select></label>
+          <label>Address <select id="curve-address"><option>clamp</option><option>repeat</option></select></label>
+        </div>
+        <div class="row">
+          <label>Stop <select id="curve-stop"></select></label>
+          <label>Input <input id="curve-input" type="number" min="0" max="1" step=".01"></label>
+          <label>Output <input id="curve-output" type="number" min="0" max="1" step=".01"></label>
+        </div>
+      </section>
+      <section class="tools" aria-label="Reference image controls">
+        <h2>Sample from image</h2>
+        <div class="reference">
+          <canvas id="reference" width="160" height="96" aria-label="Reference artwork with a sampling path"></canvas>
+          <div><label>Pin count <input id="sample-count" type="number" value="7" min="2" max="24"></label>
+            <button id="extract" class="primary" type="button">Use sampled ramp</button></div>
+        </div>
+      </section>
+      <p id="status" role="status"></p>
+    </div>
+  </div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="tide.js"></script>
+<script src="editor.js"></script>
+</html>
