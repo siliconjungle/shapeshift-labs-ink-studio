@@ -522,6 +522,64 @@ geometry, materials, and source bindings. Run
 `node examples/tileset-pick/tiled-block-demo.cjs block-demo` to build
 a wall, raise its crown from an edge-oriented face, and cut an opening.
 
+### Stamp and revise textured primitives
+
+Use `tileset primitive` to stamp a box, wedge, cylinder, cone, or sphere.
+The mesh retains shared vertices, editable polygons, face-corner UVs,
+and an atlas binding for each face. Boxes and wedges map the crop onto
+each side. Round shapes wrap the crop once around the body and use a
+separate mapping on any flat caps.
+
+Save a stamp request with a primitive `id`, target `object`, shape
+`kind`, and `size:[width,depth,height]` along construction-plane right,
+up, and normal. `at:[u,v,n]` is optional and defaults to the plane
+origin. Its first pair uses grid addresses and the optional normal
+offset uses scene units. Use `snapGrid:true` to round the grid addresses.
+
+```json
+{
+  "id": "reservoir",
+  "object": "props",
+  "kind": "cylinder",
+  "size": [1.4, 1.4, 2],
+  "segments": { "radial": 12, "axial": 3 },
+  "at": [2, 1]
+}
+```
+
+```sh
+ink-studio tileset primitive reservoir.json --scene workshop.json --selection enamel.json
+ink-studio tileset primitive reservoir.json --scene workshop.json --selection enamel.json --out stamped.json
+ink-studio tileset primitive revise.json --scene stamped.json --out revised.json
+```
+
+For boxes and wedges, `segments.subdivisions` is the number of
+divisions per edge, from 1 to 24. Round shapes use
+`segments.radial` from 3 to 128 and `segments.axial` up to 64,
+with a minimum of 2 for spheres and 1 for cylinders and cones.
+The defaults are one division for flat-sided shapes, 16 radial
+segments for round shapes, and 8 axial segments for spheres.
+
+The selection can be an exact crop, a saved multi-tile brush, or an
+eyedropped face. Choose `cell:{column,row}` for a brush with atlas
+gutters. A request can carry `selection`, `paint`, and `uvInset`.
+Paint rotation follows the brush independently of the construction
+frame.
+
+To edit saved dimensions or segments, give `revise.json` the same
+`id` and `object`, set `mode:"revise"`, and provide the new `size`
+or `segments`. Unspecified parameters keep their saved values.
+Dimensional edits preserve the authored UVs and individual face
+materials. Segment edits recover the current atlas chart, including
+after atlas swaps. They report a conflict when manual topology,
+mixed paint, or authored corner details would be overwritten.
+
+Use `editor.planTilesetPrimitive(request)` to preview and
+`editor.applyTilesetPrimitive(request)` to commit in Node. Stamps
+and revisions each use one undo entry. Run
+`node examples/tileset-pick/primitive-stamp-demo.cjs primitive-demo`
+to compare the five shapes and a sphere revision.
+
 ### Extract a crop as a reusable tileset
 
 Use an exact texel rectangle or a saved `tileset pick` selection.

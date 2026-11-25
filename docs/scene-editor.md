@@ -98,6 +98,10 @@ Use `planTilesetBlock(request)` and `applyTilesetBlock(request)` to
 place, extend, or cut a tiled volume in one edit.
 [Tiled block workflow](mesh-uv.md#add-and-subtract-tiled-blocks)
 
+Use `planTilesetPrimitive(request)` and `applyTilesetPrimitive(request)`
+to stamp and revise painted primitives. The source retains dimensions
+and segment counts with its mesh. [Textured primitive workflow](mesh-uv.md#stamp-and-revise-textured-primitives)
+
 ## Brushes and local rebuilds
 
 Use `paintShadowBand(stroke, { pbrMaterial })` to append a stroke to a [named PBR diffuse ramp](pbr-materials.md#paint-a-pbr-shadow-band).

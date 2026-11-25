@@ -555,6 +555,16 @@
       return stageTilesetFaceEdit(planTilesetBlockEdit,request).report;
     }
 
+    function planTilesetPrimitiveEdit(scene, request) {
+      const part = scene.topologyMeshes?.[request?.object]?.part ?? request?.part;
+      requireMeshShapeOwner(request?.object,part,scene,'Edit');
+      return A.tilesetPrimitives.plan(scene,request);
+    }
+
+    function planTilesetPrimitive(request) {
+      return stageTilesetFaceEdit(planTilesetPrimitiveEdit,request).report;
+    }
+
     function commitTilesetFaceEdit(plan, request, options, name) {
       const {patch,remove,report} = stageTilesetFaceEdit(plan,request,options);
       if (!report.canCommit) throw Object.assign(new RangeError('Tile face '+name+' needs review'),{report});
@@ -590,6 +600,10 @@
 
     function applyTilesetBlock(request) {
       return commitTilesetFaceEdit(planTilesetBlockEdit,request,undefined,'block');
+    }
+
+    function applyTilesetPrimitive(request) {
+      return commitTilesetFaceEdit(planTilesetPrimitiveEdit,request,undefined,'primitive');
     }
 
     function meshTopology(object, part) {
@@ -1037,6 +1051,7 @@
       planTilesetFace, placeTilesetFace, eyedropTilesetFace, planTilesetStroke, applyTilesetStroke,
       planTilesetRectangle, applyTilesetRectangle, planTilesetBrushRun, applyTilesetBrushRun,
       planTilesetReskin, applyTilesetReskin, planTilesetGrow, growTilesetFace, planTilesetBlock, applyTilesetBlock,
+      planTilesetPrimitive, applyTilesetPrimitive,
       planTilesetCanvas,
       transformTilesetCanvas,
       tilesetDependencies, planTilesetRevision, editTilesetRevision,

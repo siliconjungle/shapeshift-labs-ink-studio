@@ -180,5 +180,5 @@
     return remove ? {remove,report} : {row,report};
   }
 
-  A.tilesetBlocks = Object.freeze({plan});
+  A.tilesetBlocks = Object.freeze({plan,boxTopology:freeze({positions:unitBox,sides})});
 })(KIT);

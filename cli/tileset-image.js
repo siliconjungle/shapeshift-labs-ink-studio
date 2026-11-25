@@ -393,12 +393,13 @@ const faceEdits = {
   stroke:['planTilesetStroke','applyTilesetStroke'],
   rectangle:['planTilesetRectangle','applyTilesetRectangle'],
   'brush-run':['planTilesetBrushRun','applyTilesetBrushRun'],
-  block:['planTilesetBlock','applyTilesetBlock']
+  block:['planTilesetBlock','applyTilesetBlock'],
+  primitive:['planTilesetPrimitive','applyTilesetPrimitive']
 };
 
 function faceEditCommand(action, [file,...rest], options, projectTexelsPerUnit, openEditor) {
   const {scene,out,selection,'brush-file':brush} = options;
-  const extra = action === 'brush-run' ? ['brush-file'] : action === 'block' ? ['selection'] : [];
+  const extra = action === 'brush-run' ? ['brush-file'] : ['block','primitive'].includes(action) ? ['selection'] : [];
   const name = value=>typeof value === 'string' && value.trim();
   if (rest.length || ![file,scene].every(name) || out !== undefined && !name(out) ||
       Object.keys(options).some(key=>!['scene','out',...extra].includes(key)) ||
@@ -416,7 +417,7 @@ function faceEditCommand(action, [file,...rest], options, projectTexelsPerUnit, 
   if (selection !== undefined) {
     if (output === path.resolve(selection)) throw new RangeError('Write the scene separately from the selection');
     if (!request || Object.getPrototypeOf(request) !== Object.prototype || Object.hasOwn(request,'selection'))
-      throw new TypeError('Provide the selection in the block request or with --selection');
+      throw new TypeError('Provide the selection in the request or with --selection');
     const picked = read(selection);
     if (picked?.format === 'ink-studio/tileset-face-pick') {
       if (picked.version !== 1 || picked.canStamp !== true || !picked.stamp)

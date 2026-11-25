@@ -868,6 +868,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.styles` | namespace |  |  |
 | `KIT.authoring.styles.resolve` | function | `(source, id)` | [source](../../src/kit/p25-authoring-bindings.js) |
 | `KIT.authoring.tilesetBlocks` | namespace |  |  |
+| `KIT.authoring.tilesetBlocks.boxTopology` | namespace |  |  |
+| `KIT.authoring.tilesetBlocks.boxTopology.positions` | value | `array` |  |
+| `KIT.authoring.tilesetBlocks.boxTopology.sides` | value | `array` |  |
 | `KIT.authoring.tilesetBlocks.plan` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-blocks.js) |
 | `KIT.authoring.tilesetBrushRuns` | namespace |  |  |
 | `KIT.authoring.tilesetBrushRuns.plan` | function | `(scene, request, options)` | [source](../../src/kit/p23-tileset-brush-runs.js) |
@@ -890,6 +893,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetFaces.stamp` | function | `(brush, face, anchor, shared)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetGrow` | namespace |  |  |
 | `KIT.authoring.tilesetGrow.plan` | function | `(scene, request, options)` | [source](../../src/kit/p23-tileset-grow.js) |
+| `KIT.authoring.tilesetPrimitiveGeometry` | namespace |  |  |
+| `KIT.authoring.tilesetPrimitiveGeometry.build` | function | `(id, kind, frame, size, segments)` | [source](../../src/kit/p23-tileset-primitive-geometry.js) |
+| `KIT.authoring.tilesetPrimitives` | namespace |  |  |
+| `KIT.authoring.tilesetPrimitives.plan` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-primitives.js) |
 | `KIT.authoring.tilesetReskin` | namespace |  |  |
 | `KIT.authoring.tilesetReskin.plan` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-reskin.js) |
 | `KIT.authoring.tilesetRevisions` | namespace |  |  |
