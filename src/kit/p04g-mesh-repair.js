@@ -158,18 +158,25 @@
   }
 
   function winding(doc, op) {
-    if (!record(op, ['kind', 'anchor', 'faces']) || (op.anchor === undefined) === (op.faces === undefined) ||
-        op.faces !== undefined && (!Array.isArray(op.faces) || !op.faces.length))
-      throw new TypeError('Winding needs an orientation anchor or explicit faces to reverse');
+    const { normals = 'preserve' } = op;
+    if (!record(op, ['kind', 'anchor', 'faces', 'selection', 'normals', 'viewFrom']) ||
+        ['anchor','faces','selection'].filter(key=>op[key] !== undefined).length !== 1 ||
+        op.faces !== undefined && (!Array.isArray(op.faces) || !op.faces.length) ||
+        !['preserve','reverse'].includes(normals))
+      throw new TypeError('Winding needs an anchor, explicit face IDs, or a saved face selection and optional normal policy');
+    const viewFrom = meshWinding.direction(op.viewFrom);
+    const selection = op.selection !== undefined && K.meshTopology.select(doc,{from:op.selection,domain:'faces'});
+    if (selection && !selection.ids.length) throw new RangeError('Select at least one face to reverse');
     const g = incidence(doc);
-    if ((op.faces ?? [op.anchor]).some(id => !g.faces.has(id))) throw new RangeError('Unknown winding face');
-    const ids = [...new Set(op.faces ?? orientation(g, op.anchor))].sort();
-    const faces = ids.map(id => {
-      const face = g.faces.get(id);
-      return { ...face, corners: [face.corners[0], ...face.corners.slice(1).reverse()] };
-    });
-    return { document: faces.length ? topology.edit(doc, { faces }) : doc,
-      links: {}, effect: { kind: 'winding', reversed: ids, ...(op.anchor !== undefined && { anchor: op.anchor }) } };
+    if ((op.faces ?? selection?.ids ?? [op.anchor]).some(id => !g.faces.has(id))) throw new RangeError('Unknown winding face');
+    const ids = [...new Set(op.faces ?? selection?.ids ?? orientation(g, op.anchor))].sort();
+    const normal = normals === 'reverse' ? n=>n.map(value=>-value || 0) : undefined;
+    const faces = ids.map(id=>meshWinding.edit(g.faces.get(id),true,normal));
+    const document = faces.length ? topology.edit(doc, { faces }) : doc;
+    return { document, links: {}, effect: { kind: 'winding', reversed: ids, normals,
+      ...(op.anchor !== undefined && { anchor: op.anchor }), ...(viewFrom && {viewFrom}),
+      facing:meshWinding.changes(doc,document,ids.map(from=>({from})),viewFrom),
+      windingConflicts:meshWinding.conflicts(document,new Set(ids)) } };
   }
 
   function patchFor(before, after, transfers) {

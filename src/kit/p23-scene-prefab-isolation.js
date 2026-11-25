@@ -114,7 +114,8 @@ const prefabEditIsolation = (function (K) {
           ...(raw.space === 'camera' && raw.camera === undefined && { camera: camera ??= authoredCamera() }),
           mesh: targetMesh
         });
-        if (transformed.patch.vertices.length) ({ row: next, ...changes } = revise(row, transformed.patch));
+        if (transformed.patch.vertices.length || transformed.patch.faces?.length)
+          ({ row: next, ...changes } = revise(row, transformed.patch));
         evidence = transformed.report;
       }
       if (kind === 'reskin') {

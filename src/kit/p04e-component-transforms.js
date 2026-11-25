@@ -39,6 +39,31 @@ const meshComponentSnap = (function (K) {
     throw new TypeError('Use a move offset, rotation axis and degrees, or positive scale factors');
   }
 
+  function mirrorOperation(raw, request) {
+    if (!record(raw,['kind','normal','winding','viewFrom']) || !vector(raw.normal) || !['preserve','reverse'].includes(raw.winding))
+      throw new TypeError('Mirror needs a plane normal and an explicit winding of preserve or reverse');
+    if (request.falloff !== undefined || request.snap !== undefined)
+      throw new TypeError('Mirror uses the full reflection about its pivot plane');
+    const viewFrom = meshWinding.direction(raw.viewFrom);
+    return { normal:meshWinding.direction(raw.normal,'Mirror plane normal'), winding:raw.winding, ...(viewFrom && {viewFrom}) };
+  }
+
+  function mirrorFaces(doc, mirror, weights, selected, changed, onPlane, normal) {
+    const moved = new Set(changed.map(({id})=>id)), faces=[], reversed=[], fullyReflected=[], partialFaces=[];
+    for (const face of doc.faces) {
+      if (!face.corners.some(({vertex})=>weights.has(vertex))) continue;
+      if (!face.corners.every(({vertex})=>weights.has(vertex) || selected.has(vertex) && onPlane(vertex))) {
+        if (face.corners.some(({vertex})=>moved.has(vertex))) partialFaces.push(face.id);
+        continue;
+      }
+      fullyReflected.push(face.id);
+      const reverse = mirror.winding === 'reverse';
+      if (reverse) reversed.push(face.id);
+      if (reverse || face.corners.some(corner=>corner.normal)) faces.push(meshWinding.edit(face,reverse,normal));
+    }
+    return {faces,fullyReflected,partialFaces,reversed};
+  }
+
   const constraints = ['align', 'flatten', 'collapse'];
   function usesConstructionPlane(request) {
     const { operation, space, snap } = request ?? {};
@@ -340,7 +365,9 @@ const meshComponentSnap = (function (K) {
     if (request.operation?.kind === 'replay-randomize') return meshRandomTransform.replay(doc,request);
     const pushing = request.operation?.kind === 'push';
     const random = request.operation?.kind === 'randomize' && meshRandomTransform.parse(request.operation);
-    const run = special || pushing || random ? undefined : operation(request.operation);
+    const mirror = request.operation?.kind === 'mirror' && mirrorOperation(request.operation,request);
+    const reflectionDelta = mirror && (p=>V.mul(mirror.normal,-2*V.dot(p,mirror.normal)));
+    const run = mirror ? reflectionDelta : special || pushing || random ? undefined : operation(request.operation);
     if (special && request.snap !== undefined)
       throw new TypeError('Align, flatten, and collapse already define their target');
     if (pushing && (request.snap !== undefined || request.falloff !== undefined || !vector(request.operation.direction)))
@@ -382,6 +409,7 @@ const meshComponentSnap = (function (K) {
       space === 'normal' ? normalFrame(doc, selection, world, normal, tangent) : cardinal;
     const worldAxes = space === 'local' ? axes.map(axis => M.app(frame.matrix, axis)) : axes;
     const basis = axes.flat(), fromBasis = M.tr(basis);
+    const relativeSpace = p => space === 'local' ? p : M.app(basis,M.app(frame.matrix,p));
     const pushDirection = pushing && unit(M.app(M.tr(worldAxes.flat()),request.operation.direction),'Push');
     const push = pushing && meshPush.plan(request.operation,pushDirection,doc,world,frame,selection,selected,fixed,coincident,context);
     const localPush = push && M.app(inverse.matrix,pushDirection);
@@ -391,7 +419,7 @@ const meshComponentSnap = (function (K) {
       const row = randomized && randomized.byVertex.get(id);
       const delta = V.sub(p, row ? row.pivot : pivot), apply = row ? row.delta : run;
       if (space === 'local') return V.add(p, apply(delta, weight));
-      const inSpace = M.app(basis, M.app(frame.matrix, delta));
+      const inSpace = relativeSpace(delta);
       const change = apply(inSpace, weight);
       return V.add(p, M.app(inverse.matrix, M.app(fromBasis, change)));
     }
@@ -416,7 +444,7 @@ const meshComponentSnap = (function (K) {
     const changed = [];
     for (const id of [...weights.keys()].sort()) {
       const { position: before } = vertices.get(id), weight = weights.get(id);
-      const leader = placed || push ? id : coincident?.leaders.get(id) ?? id;
+      const leader = placed || push || mirror ? id : coincident?.leaders.get(id) ?? id;
       if (!displaced.has(leader)) displaced.set(leader, destination(leader,weight));
       const end = displaced.get(leader), start = vertices.get(leader).position;
       const after = id === leader || before.every((value,i) => value === start[i]) ? end : V.add(before,V.sub(end,start));
@@ -426,12 +454,35 @@ const meshComponentSnap = (function (K) {
     const removeFaces = placed && placed.evidence.kind !== 'align' ? collapsedFaces(doc,vertices,changed) : [];
     if (removeFaces.length && !placed.removeCollapsed)
       throw new RangeError('Face ' + removeFaces[0] + ' would lose nonzero area. Set removeCollapsed to remove it');
+    let mirrored;
+    if (mirror) {
+      const onPlane = id => {
+        const relative = relativeSpace(V.sub(vertices.get(id).position,pivot));
+        return Math.abs(V.dot(relative,mirror.normal)) <= 32*Number.EPSILON*V.len(relative);
+      };
+      const toAxes = M.mul(basis,M.tr(inverse.matrix)), toLocal = M.mul(M.tr(frame.matrix),fromBasis);
+      const reflectedNormal = local => {
+        const normal = space === 'local' ? local : M.app(toAxes,local);
+        const reflected = V.add(normal,reflectionDelta(normal));
+        const oriented = mirror.winding === 'reverse' ? reflected : V.mul(reflected,-1);
+        return space === 'local' ? oriented : M.app(toLocal,oriented);
+      };
+      mirrored = mirrorFaces(doc,mirror,weights,selected,changed,onPlane,reflectedNormal);
+    }
     const patch = { vertices: changed.map(({ id, after }) => ({ id, position: after })),
-      ...(removeFaces.length && { removeFaces }) };
-    const document = changed.length ? topology.edit(doc, patch) : doc;
+      ...(removeFaces.length && { removeFaces }), ...(mirrored?.faces.length && {faces:mirrored.faces}) };
+    const document = changed.length || patch.faces?.length ? topology.edit(doc, patch) : doc;
     const result = placed && placed.measure(measured.map(id =>
       K.sceneGraph.point(frame,displaced.get(id))));
     const beforeRevision = topology.revision(doc), afterRevision = topology.revision(document);
+    let mirrorEvidence;
+    if (mirrored) {
+      const {fullyReflected,partialFaces,reversed} = mirrored;
+      const affected = [...fullyReflected,...partialFaces];
+      mirrorEvidence = {kind:'mirror',...mirror,fullyReflected,partialFaces,reversed,
+        facing:meshWinding.changes(doc,document,affected.map(from=>({from})),mirror.viewFrom),
+        windingConflicts:meshWinding.conflicts(document,new Set(reversed))};
+    }
     return freeze({ document, patch, report: {
       format: 'ink-studio/mesh-component-transform', version: 1, mesh: doc.id,
       beforeRevision, afterRevision,
@@ -441,6 +492,7 @@ const meshComponentSnap = (function (K) {
       ...(coincident && { coincident: coincident.report }),
       ...(placed && { operation: { ...placed.evidence, ...result, measured, removedFaces: removeFaces } }),
       ...(push && { operation: push.report }),
+      ...(mirrorEvidence && { operation: mirrorEvidence }),
       ...(randomized && { operation: { ...randomized.evidence, replay: { selection,
         operation: { kind:'replay-randomize',version:1,beforeRevision,afterRevision,vertices:patch.vertices } } } }),
       ...(construction && {constructionPlane:construction.plane}),

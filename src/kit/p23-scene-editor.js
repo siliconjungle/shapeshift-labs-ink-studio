@@ -793,7 +793,7 @@
 
     function transformMeshTopology(object, request, options) {
       const plan = planMeshTransform(object, request, options);
-      return freeze({ transform: plan.report, ...(plan.patch.vertices.length && {
+      return freeze({ transform: plan.report, ...((plan.patch.vertices.length || plan.patch.faces?.length) && {
         topology: editMeshTopology(object, plan.patch, options)
       }) });
     }
