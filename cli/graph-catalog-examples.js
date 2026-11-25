@@ -203,6 +203,11 @@ const dynamic = {
   'image.tileGenerator': { nodes:{stamp:{op:'shape.define',inputs:{definition:{type:'rectangle',size:[1,1],radius:.065}}}},
     inputs:{width:24,height:20,columns:3,rows:5,stamp:link('stamp'),options:{
       pattern:'brick',palette:['#ad5b42','#d89558'],background:'#251a22',jitter:{color:.12},samples:2,seed:37}} },
+  'image.tileSampler': { nodes:{data:declareData},inputs:{width:22,height:16,columns:4,rows:3,
+    stamps:[{type:'rectangle',size:[.93,.83],radius:.08},{type:'disc',radius:.47},{type:'star',tips:4}],
+    selection:link('data'),density:link('data'),priority:link('data'),
+    options:{pattern:'brick',color:'#be8c65',background:'#283638',seed:38},
+    controls:{seeds:{density:114},density:.9}} },
   'image.noise': { nodes:{ clock:{op:'anim.clock',inputs:{options:{range:[0,4]}}} },
     inputs: { family:'ridged',width:16,height:12,time:link('clock'),
     options:{ seed:34,scale:1.25,tileOffset:[.25,0],nonSquareExpansion:true,carrier:'simplex',

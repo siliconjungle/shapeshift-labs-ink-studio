@@ -55,29 +55,39 @@ const TypedTileGenerator = ({ shapes,descriptor,wrap,pack,storage,dimensions,fie
     return {requested:step,effective,phases};
   }
 
-  function prepare(columns,rows,config) {
+  function prepare(columns,rows,config,stamps,driver) {
     const {pattern,periodic,aspect,size,gutter,rotation,colors,colorMode,seed,position,scale,turn,tone}=config;
     const course=courseOffsets(rows,config.rowOffset,periodic[1]);
     const column=courseOffsets(columns,config.columnOffset,periodic[0]);
     const buckets=Array.from({length:columns*rows},()=>[]), placements=[];
     const salt=hash('tile generator/'+seed), across=[columns,rows], eps=1/phaseUnits;
-    const signed=(id,channel)=>hash01(channel+'/'+id,salt)*2-1;
-    let visits=0,maxCandidates=0;
+    const stream=name=>driver?.salts[name]??salt;
+    const positionSalt=stream('position'), scaleSalt=stream('scale'), rotationSalt=stream('rotation'), colorSalt=stream('color');
+    const signed=(id,channel,key)=>hash01(channel+'/'+id,key)*2-1;
+    const rejected={density:0,visibility:0};
+    let visits=0,maxCandidates=0,maxCost=0;
     for (let r=0;r<rows;r++) for (let c=0;c<columns;c++) {
       if (pattern==='checker'&&(c+r)%2) continue;
       const id=1+r*columns+c;
-      const center=[(c+.5+course.phases[r]+position[0]*signed(id,'u'))/columns,
-        (r+.5+column.phases[c]+position[1]*signed(id,'v'))/rows];
-      const stampSize=size.map((n,i)=>n*(1-gutter[i])*(1+scale[i]*signed(id,i?'height':'width')));
-      const angle=(rotation%360+turn*signed(id,'angle'))%360;
+      const u=c+.5+course.phases[r], v=r+.5+column.phases[c], anchor=[u/columns,v/rows];
+      const driven=driver?.at(id,anchor);
+      if (driven?.skip) { rejected[driven.skip]++; continue; }
+      const stampId=driven?.stampId??1, shape=stamps[stampId-1], priority=driven?.priority??0;
+      const center=[(u+position[0]*signed(id,'u',positionSalt)+(driven?.position[0]??0))/columns,
+        (v+position[1]*signed(id,'v',positionSalt)+(driven?.position[1]??0))/rows];
+      const stampSize=size.map((n,i)=>n*(1-gutter[i])*(1+scale[i]*signed(id,i?'height':'width',scaleSalt))*(driven?.scale[i]??1));
+      const angle=(rotation%360+turn*signed(id,'angle',rotationSalt)+(driven?.rotation??0))%360;
       const theta=angle*Math.PI/180, cos=Math.cos(theta), sin=Math.sin(theta);
       let slot = id-1;
       if (colorMode==='course') slot=r;
       if (colorMode==='column') slot=c;
-      if (colorMode==='tile') slot=Math.floor(hash01('palette/'+id,salt)*colors.length);
-      const rgba=colors[slot%colors.length], shift=tone*signed(id,'tone');
+      if (colorMode==='tile') slot=Math.floor(hash01('palette/'+id,colorSalt)*colors.length);
+      const rgba=colors[slot%colors.length], shift=tone*signed(id,'tone',colorSalt);
       const rgb=rgba.slice(0,3).map(n=>shift<0 ? n*(1+shift) : n+(1-n)*shift);
       const rgbaLinear=[...toLinear(rgb),rgba[3]];
+      const tint=driven?.color;
+      if (tint) for (let i=0;i<4;i++) rgbaLinear[i]*=tint[i];
+      const displayColor=tint ? [...toDisplay(rgbaLinear),rgbaLinear[3]] : [...rgb,rgba[3]];
       const [sx,sy]=[stampSize[0]*aspect/columns,stampSize[1]/rows];
       const ex=(Math.abs(cos)*sx+Math.abs(sin)*sy)/2/aspect, ey=(Math.abs(sin)*sx+Math.abs(cos)*sy)/2;
       const extremes=[ex,ey];
@@ -86,7 +96,8 @@ const TypedTileGenerator = ({ shapes,descriptor,wrap,pack,storage,dimensions,fie
       for (let i=0;i<2;i++) if(!periodic[i]) { min[i]=Math.max(0,min[i]); max[i]=Math.min(across[i]-1,max[i]); }
       const count=Math.max(0,1+max[0]-min[0])*Math.max(0,1+max[1]-min[1]);
       if ((visits+=count)>1e6) throw new RangeError('Tile placements exceed their bucket budget');
-      const tile={id,row:r+1,cos,sin,sx,sy,rgba:rgbaLinear};
+      const tile={id,row:r+1,cos,sin,sx,sy,rgba:rgbaLinear,shape,stampId,priority};
+      if (count) maxCost=Math.max(maxCost,shape.cost);
       for (let y=min[1];y<=max[1];y++) for (let x=min[0];x<=max[0];x++) {
         const u=periodic[0]?mod(x,columns):x, v=periodic[1]?mod(y,rows):y;
         const bucket=buckets[v*columns+u];
@@ -94,14 +105,17 @@ const TypedTileGenerator = ({ shapes,descriptor,wrap,pack,storage,dimensions,fie
         bucket.push({tile,x:center[0]-(x-u)/columns,y:center[1]-(y-v)/rows});
         maxCandidates=Math.max(maxCandidates,bucket.length);
       }
-      placements.push({id,row:r+1,column:c+1,center,size:stampSize,rotation:angle,color:[...rgb,rgba[3]]});
+      placements.push({id,row:r+1,column:c+1,center,size:stampSize,rotation:angle,color:displayColor,
+        ...(driver&&{anchor,stampId,priority})});
     }
-    return {buckets,maxCandidates,layout:{pattern,columns,rows,wrap:periodic.slice(),aspect,seed,
-      rowOffset:course,columnOffset:column,placements}};
+    if (driver?.prioritize) for (const bucket of buckets)
+      bucket.sort((a,b)=>a.tile.priority-b.tile.priority || a.tile.id-b.tile.id);
+    return {buckets,work:Math.max(1,maxCandidates*maxCost),layout:{pattern,columns,rows,wrap:periodic.slice(),aspect,seed,
+      rowOffset:course,columnOffset:column,placements,...(driver&&{rejected,seeds:driver.seeds})}};
   }
 
-  function compositor(buckets,columns,rows,config,shape) {
-    const {aspect,periodic,background}=config, {distance,profile}=shape;
+  function compositor(buckets,columns,rows,config) {
+    const {aspect,periodic,background}=config;
     const [br,bg,bb]=toLinear(background.slice(0,3)), ba=background[3];
     function axis(x,repeat) {
       const integer=Math.round(x*phaseUnits);
@@ -109,11 +123,12 @@ const TypedTileGenerator = ({ shapes,descriptor,wrap,pack,storage,dimensions,fie
     }
     return (x,y,out)=>{
       const u=axis(x,periodic[0]),v=axis(y,periodic[1]);
-      let r=0,g=0,b=0,a=0,coverage=0,id=0,row=0;
+      let r=0,g=0,b=0,a=0,coverage=0,id=0,row=0,stampId=0;
       if(u>=0&&u<1&&v>=0&&v<1) {
         const hit=buckets[Math.floor(v*rows)*columns+Math.floor(u*columns)];
         for(let i=hit.length;i>0;) {
           const {tile}=hit[i-1], {cos,sin,sx,sy,rgba}=tile;
+          const {distance,profile}=tile.shape;
           let opacity=0;
           // A wide stamp can touch itself. Multiple copies contribute a single maximum mask for its ID.
           do {
@@ -123,7 +138,7 @@ const TypedTileGenerator = ({ shapes,descriptor,wrap,pack,storage,dimensions,fie
               opacity=Math.max(opacity,profile?profile(px,py):1);
           } while(i>0&&hit[i-1].tile===tile);
           if (!opacity) continue;
-          if (!id) {id=tile.id;row=tile.row;}
+          if (!id) {id=tile.id;row=tile.row;stampId=tile.stampId;}
           const weight=(1-a)*opacity*rgba[3];
           r+=rgba[0]*weight; g+=rgba[1]*weight; b+=rgba[2]*weight; a+=weight;
           coverage+=(1-coverage)*opacity;
@@ -132,17 +147,21 @@ const TypedTileGenerator = ({ shapes,descriptor,wrap,pack,storage,dimensions,fie
       }
       const weight=(1-a)*ba;
       out[0]=r+br*weight; out[1]=g+bg*weight; out[2]=b+bb*weight; out[3]=a+weight;
-      out[4]=coverage; out[5]=id; out[6]=row;
+      out[4]=coverage; out[5]=id; out[6]=row; out[7]=stampId;
     };
   }
 
-  function generate(width,height,columns=4,rows=6,source=stamp,options={},seed=0) {
+  function render(width,height,columns,rows,sources,options,seed,controls) {
     if (![width,height].every(n=>safe(n)&&n>0)||!dimensions({width,height})||width*height>4e6)
       throw new RangeError('Tile bake exceeds its four-million-texel budget');
     const config=settings(columns,rows,options,seed);
-    const shape=shapes.compile(source), {buckets,maxCandidates,layout}=prepare(columns,rows,config);
+    if (!Array.isArray(sources)||sources.length<1||sources.length>32)
+      throw new RangeError('Tile sampling needs 1–32 signed stamp definitions');
+    const stamps=Array.from(sources,source=>shapes.compile(source));
+    const driver=controls?.(config.seed,config.periodic,stamps.length);
+    const {buckets,work,layout}=prepare(columns,rows,config,stamps,driver);
     const {samples,precision,crop,periodic}=config, subpixels=samples*samples, count=width*height;
-    if (count*(subpixels+(samples===1?0:1))*Math.max(1,maxCandidates)*shape.cost>160e6)
+    if (count*(subpixels+(samples===1?0:1))*work>160e6)
       throw new RangeError('Tile bake exceeds its sample budget');
     const [left,top,right,bottom]=crop, spans=[right-left,bottom-top];
     const stepX=spans[0]/width,stepY=spans[1]/height;
@@ -150,10 +169,11 @@ const TypedTileGenerator = ({ shapes,descriptor,wrap,pack,storage,dimensions,fie
     const tiling={u:address[0],v:address[1]}, materialSeed=config.seed;
     const data=new storage[precision](count*4), coverage=new Float32Array(count);
     const id=new Float32Array(count), course=new Float32Array(count);
+    const picked=driver&&new Float32Array(count);
     const grid={width,height,channels:4,data}, colorSpec=descriptor(grid,{intent:'color',colorSpace:'srgb',
       precision,tiling,materialSeed,sampling:samples===1?'nearest':'linear'});
-    const sample=compositor(buckets,columns,rows,config,shape);
-    const hit=new Float64Array(7), rgba=new Float64Array(5), rgb=[0,0,0];
+    const sample=compositor(buckets,columns,rows,config);
+    const hit=new Float64Array(8), rgba=new Float64Array(5), rgb=[0,0,0];
     for(let y=0,p=0;y<height;y++) for(let x=0;x<width;x++,p++) {
       rgba.fill(0);
       for(let j=0;j<samples;j++) for(let k=0;k<samples;k++) {
@@ -168,13 +188,18 @@ const TypedTileGenerator = ({ shapes,descriptor,wrap,pack,storage,dimensions,fie
       coverage[p]=clamp(rgba[4]/subpixels);
       if(samples!==1) sample(left+(x+.5)*stepX,top+(y+.5)*stepY,hit);
       id[p]=hit[5]; course[p]=hit[6];
+      if (picked) picked[p]=hit[7];
     }
     function scalar(data,intent,sampling='nearest') {
       const raster={width,height,channels:1,data};
       return wrap(raster,descriptor(raster,{intent,precision:'float32',tiling,materialSeed,sampling}));
     }
     return {value:wrap(grid,colorSpec),coverage:scalar(coverage,'mask',samples===1?'nearest':'linear'),
-      tileId:scalar(id,'data'),course:scalar(course,'data'),layout:freeze(layout)};
+      tileId:scalar(id,'data'),course:scalar(course,'data'),layout:freeze(layout),
+      ...(picked&&{stampId:scalar(picked,'data')})};
   }
-  return Object.freeze({generate,stamp});
+  function generate(width,height,columns=4,rows=6,source=stamp,options={},seed=0) {
+    return render(width,height,columns,rows,[source],options,seed);
+  }
+  return Object.freeze({generate,render,stamp});
 };

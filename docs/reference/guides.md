@@ -212,6 +212,7 @@ All checked-in guides, indexed by title and section headings.
 - [Portable material response recipes](../material-response.md)
 - [Editable material shape library](../material-shape-library.md)
 - [Material Tile Generator](../material-tile-generator.md)
+- [Map-driven Tile Sampler](../material-tile-sampler.md)
 - [Surface materialisation](../materialisation.md)
 - [Procedural math fields](../math-fields.md)
 - [Editable mesh topology](../mesh-topology.md)
