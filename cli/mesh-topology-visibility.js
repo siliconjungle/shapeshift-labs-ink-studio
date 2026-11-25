@@ -2,7 +2,7 @@
 
 const { render, cameraCapture } = require('./render.js');
 
-function captureMeshTopologyVisibility(world, object, view = {}, { participation = false } = {}) {
+function captureMeshTopologyVisibility(world, object, view = {}, { participation = false, region } = {}) {
   const part = Object.hasOwn(world?.topologyMeshes ?? {}, object) && world.topologyMeshes[object];
   if (!part?.mesh) throw new RangeError('Choose an editable scene mesh object for visibility capture');
   const { w = 160, h = 96, px = 1, t = world.lookSnapshot?.time ?? 0 } = view;
@@ -18,7 +18,7 @@ function captureMeshTopologyVisibility(world, object, view = {}, { participation
     }) });
   if (!camera || frame.w !== w || frame.h !== h)
     throw new Error('Mesh visibility needs matching native camera and source surface passes');
-  return { frame, visibility: kit.KIT.meshTopology.captureVisibility(part.mesh, frame, camera, { participation }) };
+  return { frame, visibility: kit.KIT.meshTopology.captureVisibility(part.mesh, frame, camera, { participation, region }) };
 }
 
 function needsParticipation(filter) {

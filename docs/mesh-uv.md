@@ -244,6 +244,55 @@ or occluder changes.
 Run `node examples/tileset-pick/through-selection-demo.cjs through-demo`
 to compare both modes with backfaces included and excluded.
 
+### Select geometry with a marquee or brush
+
+Set `query.region` to a `marquee` with an integer `[x, y, width, height]`
+or a `brush` with a path of `[x, y]` points and a radius. Coordinates
+are native view pixels measured from the upper-left edge. Pixel centers
+are at half-integers. A brush sweeps a disk continuously between its
+points. A single point makes one dab.
+
+```json
+{
+  "domain": "tiles",
+  "object": "wall",
+  "query": {
+    "operation": "add",
+    "region": {"type":"brush","points":[[19.5,31.5],[48.5,31.5]],"radius":3},
+    "filter": {"visibility":"through","backfaces":"exclude"}
+  }
+}
+```
+
+The region defaults to visible selection. Through mode tests projected
+geometry against the same pixels. A face needs a covered pixel center.
+Edges and vertices use the one-pixel support used by view selection.
+`--view` captures the region for the current scene. To reuse saved
+evidence, pass the same `region` to
+`captureMeshTopologyVisibility(world, object, view, {region, participation:true})`.
+
+`replace` is the default. `add` and `subtract` take a saved selection
+`from` the same domain and topology revision, plus a region or IDs.
+`invert` takes a saved selection and returns its complement in the
+current domain and filter. For tiles, this universe is the set of faces
+with retained tile bindings. Use `--from` to load a native saved pick.
+
+```sh
+ink-studio tileset select marquee.json --scene wall.json --view view.json --topology-out first.json
+ink-studio tileset select add.json --scene wall.json --view view.json --from first.json --topology-out combined.json
+ink-studio tileset select to-edges.json --scene wall.json --from combined.json --topology-out edges.json
+```
+
+For `to-edges.json`, use `{"domain":"tiles","object":"wall","query":{"convert":"edges"}}`.
+Use `"convert":"vertices"` for corners. Conversion uses the incident
+authored components of the resultant faces. The requested edit must
+enable both domains. The native `mesh-topology select` command accepts
+the same `region`, `operation`, and `convert` fields directly.
+
+Run `node examples/tileset-pick/region-selection-demo.cjs region-demo`
+to replay a marquee, a brush addition and subtraction, inversion,
+and both conversions on the same mesh.
+
 ### Create weighted tile collections
 
 Save interchangeable tiles as a version 1 collection. Give each entry
