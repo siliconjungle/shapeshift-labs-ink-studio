@@ -595,11 +595,17 @@
   const morphology = TypedImageMorphology({
     requireImage, descriptor, wrap, storage, alphaAt, integerMax, convertColor, luminance, fields, geometry: P.geometry
   });
+  const spatial = TypedImageSpatial({ requireImage, descriptor, wrap, storage, pack, integerMax, convertColor, dimensions, fields });
   const correctionOptions = { type: 'record', default: {} };
   const sameImage = { type: 'typedImage', typeFrom: 'source' };
   function filter(name, description, output = sameImage) {
     return { description, inputs: { source: 'typedImage', options: correctionOptions }, outputs: { value: output },
       run({ source, options }) { return { value: filters[name](source, options) }; } };
+  }
+
+  function remap(name, description) {
+    return { description, inputs: { source: 'typedImage', options: correctionOptions }, outputs: { value: sameImage },
+      run({ source, options }) { return { value: spatial[name](source, options) }; } };
   }
 
   function correction(name, description, type = 'typedImage', output = sameImage) {
@@ -770,6 +776,11 @@
       inputs: { source: 'typedImage', width: 'pixelCount', height: 'pixelCount' }, outputs: { value: { type: 'typedImage', typeFrom: 'source' } },
       run({ source, width, height }) { return { value: resize(source, width, height) }; }
     },
+    'image.transform': remap('transform', 'Apply an affine matrix, scale, rotation and translation around an editable pivot.'),
+    'image.crop': remap('crop', 'Extract a pixel or normalized source rectangle with an optional output extent.'),
+    'image.symmetry': remap('symmetry', 'Reflect an authored side across horizontal, vertical or paired axes.'),
+    'image.polar': remap('polar', 'Convert between Cartesian images and angular strips with aspect-correct radii.'),
+    'image.perspective': remap('perspective', 'Project the source onto a convex four-corner destination plane.'),
     'image.toDisplay': {
       description: 'Convert typed color to straight-alpha sRGB8 for legacy compositing and PNG exports.',
       inputs: { source: 'typedImage', outOfRange: { type: 'string', default: 'clamp' } },
@@ -786,5 +797,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);
