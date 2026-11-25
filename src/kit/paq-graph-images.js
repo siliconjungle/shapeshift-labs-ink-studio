@@ -585,6 +585,16 @@
     };
   }
 
+  const corrections = TypedImageCorrections({
+    requireImage, descriptor, wrap, storage, pack, alphaAt, integerMax, convertColor, luminance
+  });
+  const correctionOptions = { type: 'record', default: {} };
+  const sameImage = { type: 'typedImage', typeFrom: 'source' };
+  function correction(name, description, type = 'typedImage', output = sameImage) {
+    return { description, inputs: { source: type, options: correctionOptions }, outputs: { value: output },
+      run({ source, options }) { return { value: corrections[name](source, options) }; } };
+  }
+
   const operations = Object.freeze({
     'image.declare': { description: 'Attach a verified image contract to a legacy raster using a literal descriptor.', specialize },
     'image.uniform': {
@@ -636,6 +646,31 @@
       outputs: { value: { type: 'typedImage', typeFrom: 'background' } },
       run({ background, foreground, ...options }) { return { value: blendImage(background, foreground, options) }; }
     },
+    'image.levels': correction('levels', 'Map input black and white through gamma to an output range.'),
+    'image.autoLevels': {
+      description: 'Fit linked levels from exact percentiles of visible decoded samples and return the measured bounds.',
+      inputs: { source: 'typedImage', options: correctionOptions }, outputs: { value: sameImage, report: 'record' },
+      run({ source, options }) { return corrections.autoLevels(source, options); }
+    },
+    'image.histogram': correction('histogram', 'Count decoded samples with explicit bins, clipping counts and range.', 'typedImage', 'record'),
+    'image.histogramAdjust': correction('histogramAdjust', 'Equalize, remap, shift, scan or select an interval of sample values.'),
+    'image.hsl': correction('hsl', 'Rotate HSL hue and adjust saturation and lightness in display RGB.', 'colorImage', 'colorImage'),
+    'image.hsv': correction('hsv', 'Rotate HSV hue and adjust saturation and value in display RGB.', 'colorImage', 'colorImage'),
+    'image.exposure': correction('exposure', 'Apply exposure stops in linear light, retaining HDR in floating linear images.'),
+    'image.contrast': correction('contrast', 'Scale the distance of decoded samples from an authored pivot.'),
+    'image.threshold': correction('threshold', 'Create a typed coverage mask from a threshold with optional feathering.', 'typedImage', 'typedImage'),
+    'image.invert': correction('invert', 'Invert decoded samples around a pivot while preserving alpha.'),
+    'image.posterize': correction('posterize', 'Quantize decoded samples to tonal steps or an ordered RGB palette.'),
+    'image.colorSelect': {
+      description: 'Generate a typed mask for a swatch using RGB, OKLab or OKLab chroma distance.',
+      inputs: { source: 'colorImage', color: 'any', options: correctionOptions }, outputs: { value: 'typedImage' },
+      run({ source, color, options }) { return { value: corrections.colorSelect(source, color, options) }; }
+    },
+    'image.colorReplace': {
+      description: 'Replace an authored color with a typed swatch while retaining coverage and precision.',
+      inputs: { source: 'colorImage', from: 'any', to: 'any', options: correctionOptions }, outputs: { value: 'colorImage' },
+      run({ source, from, to, options }) { return { value: corrections.colorReplace(source, from, to, options) }; }
+    },
     'image.toHeight': {
       description: 'Map linear-light color or scalar samples to height using an explicit scale and units.',
       inputs: { source: 'typedImage', scale: 'number', offset: { type: 'number', default: 0 },
@@ -663,5 +698,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);
