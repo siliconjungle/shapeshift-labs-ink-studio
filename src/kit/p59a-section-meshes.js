@@ -207,7 +207,14 @@
       }
       return K.revolvePoint(src.origin,row.radius,row.y,u*tau);
     });
-    return {pole,vertices:positions.map((position,i)=>({id:vertexId(row.id,i),position}))};
+    // Normalize generated coordinates before deriving a mesh revision. Browser and
+    // Node math libraries can differ in the last bits of rotated profile samples.
+    return {pole,vertices:positions.map((position,i)=>({
+      id:vertexId(row.id,i),position:position.map(n=>{
+        const rounded=Number(n.toFixed(9));
+        return rounded===0 ? 0 : rounded;
+      })
+    }))};
   }
 
   function sample(src,mesh,{section,u}) {

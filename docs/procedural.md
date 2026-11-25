@@ -2410,7 +2410,8 @@ perimeter columns.
 A section's `material` labels its outgoing band. `crease` sets the ring
 edge weight from 0 to 1. Use `profileCreases` to designate hard perimeter
 columns, and `capMaterial` for the caps of an open sweep or loft. Side
-faces keep their UVs when a ring moves. The perimeter wraps at a UV
+faces keep their UVs when a ring moves. Generated positions are rounded
+to nine decimal places before mesh revisions are computed. The perimeter wraps at a UV
 seam, with separate charts for caps and distinct revolve meridians.
 Sweep frames and sampled width or height functions are retained as
 section data. A local position or roll edit affects the selected ring.

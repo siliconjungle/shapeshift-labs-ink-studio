@@ -118,3 +118,36 @@ test('mesh topology CLI compiles, previews and commits a reproducible local patc
   assert.deepEqual(topology.edit(base.mesh,read('patch')),read('mesh'));
   assert.deepEqual(api.compile(read('committed')).mesh,read('mesh'));
 });
+
+test('WebGL can replay a section edit carrying the Node mesh revision', {skip:!process.env.INK_TEST_CHROME},()=>{
+  const fixtures=require('../examples/section-meshes.cjs').fixtures(K);
+  const cases=fixtures.map(({fixture:{source,report},edit})=>({source,request:{
+    revision:report.revision,meshRevision:report.meshRevision,sections:[edit]
+  }}));
+  const runWebGL=require('../cli/look-webgl.js');
+  const result=runWebGL({asyncFixture:true},function build({KIT,makeBuilder},mesh) {
+    const colors={lip:0x294c5a,enamel:0x438985,brass:0xc09058,ceramic:0xb87e60};
+    const materials=[...new Set(mesh.faces.map(row=>row.material))].map(id=>({id,color:colors[id]}));
+    const part=KIT.meshTopology.toSceneMesh(mesh,{materials});
+    return makeBuilder(31,[0x112130]).finish({meshes:[part],
+      cam:{target:[0,0,0],dist:5,yaw:.12,pitch:.22,ortho:true},radius:4,dither:0});
+  },(kit,build,backend,input)=>{
+    const api=kit.KIT.procedural.sectionMeshes;
+    const view=backend(117,85,{raw:true,outline:false,dither:0});
+    try {
+      return {parts:input.map(({source,request})=>{
+        const before=api.compile(source), after=api.plan(source,request);
+        const images=[before,after].map(({mesh})=>{
+          view.draw(build(kit,mesh),{t:0});
+          return view.image();
+        });
+        return {revision:after.report.meshRevision, images, drift:after.report.attachments.map(row=>row.displacement)};
+      })};
+    } finally { view.close(); }
+  },cases);
+  for (const [i,{revision,images:[a,b],drift}] of result.parts.entries()) {
+    assert.equal(revision,api.plan(cases[i].source,cases[i].request).report.meshRevision);
+    assert.deepEqual(drift,[0,0]);
+    assert.notEqual(a,b);
+  }
+});
