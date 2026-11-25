@@ -942,6 +942,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.forms` | namespace |  |  |
 | `KIT.procedural.forms.fractal` | function | `({ family = 'mandelbulb', iterations = family === 'menger' ? 3 : 16, bounds, pose, ...options } = {})` | [guide](../fractal-forms.md), [source](../../src/kit/p59-sculptural-fields.js) |
 | `KIT.procedural.forms.loft` | function | `(sections, { pose } = {})` | [source](../../src/kit/p59-sculptural-fields.js) |
+| `KIT.procedural.forms.loft.mesh` | function | `(sections, options={})` | [source](../../src/kit/p59a-section-meshes.js) |
+| `KIT.procedural.forms.loft.point` | function | `([x,z], {y, center = [0,0], scale = 1, roll = 0})` | [source](../../src/kit/p59-sculptural-fields.js) |
 | `KIT.procedural.forms.periodic` | function | `({ bounds, type = 'gyroid', period = 1, phase = [0, 0, 0], mode = 'sheet', thickness = 0.09, level = 0, host, pose } = {})` | [source](../../src/kit/p59-sculptural-fields.js) |
 | `KIT.procedural.forms.shell` | function | `(host, { inner = 0.08, outer = 0, maxOuter } = {})` | [source](../../src/kit/p59-sculptural-fields.js) |
 | `KIT.procedural.forms.skeleton` | function | `(nodes, { blend = 0, pose } = {})` | [source](../../src/kit/p59-sculptural-fields.js) |

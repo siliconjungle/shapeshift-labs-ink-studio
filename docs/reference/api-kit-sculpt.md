@@ -77,6 +77,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.sculpt().renderSurface` | function | `(x,y,z)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().res` | value | `number` | [guide](../../README.md#geometry-and-materials) |
 | `KIT.sculpt().revolve` | function | `(loops, c, mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/kit/k3-shapes.js) |
+| `KIT.sculpt().revolve.mesh` | function | `(loops, c, options)` | [guide](../../README.md#geometry-and-materials), [source](../../src/kit/k3-shapes.js) |
 | `KIT.sculpt().rock` | function | `(c, r, mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().rough` | function | `(p0, fn, amp, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/kit/k3-shapes.js) |
 | `KIT.sculpt().sdf` | function | `(x, y, z)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |

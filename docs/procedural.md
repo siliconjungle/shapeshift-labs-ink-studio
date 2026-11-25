@@ -2365,6 +2365,85 @@ rendering resolution.
 `examples/sculptural-fields.js` combines an open pottery loft, a
 gyroid inside a rounded carrier, and a mirrored medial ornament.
 
+### Editable meshes from sweeps, lofts, and revolves
+
+`KIT.sweep.mesh(path, profile, options)`, `P.forms.loft.mesh(sections, options)`,
+and `S.revolve.mesh(outline, origin, options)` return `{ source, mesh, report }`.
+Use `P.sectionMeshes.revolve` when a sculpt instance is unnecessary. The
+mesh is ordinary retained topology, ready for component editing, UV
+inspection, scene rendering, and GLB export.
+
+```js
+const model = K.sweep.mesh(
+  [[-2,0,0], [-1,0,0], [0,.45,0], [1,.6,0], [2,.6,0]],
+  { shape: 'rect', w: t => .18 + .15*t, h: .12, round: .3 },
+  {
+    id: 'flow-duct', sides: 16, capMaterial: 'trim',
+    sections: [
+      { id: 'inlet', material: 'trim' },
+      { id: 'approach', material: 'enamel' },
+      { id: 'bend', material: 'enamel', crease: .5 },
+      { id: 'exit', material: 'trim' },
+      { id: 'outlet', material: 'trim' }
+    ],
+    attachments: [{ id: 'gauge', section: 'inlet', u: .25 }]
+  }
+);
+const changed = P.sectionMeshes.plan(model.source, {
+  revision: model.report.revision,
+  meshRevision: model.report.meshRevision,
+  sections: [{ id: 'bend', w: .46, roll: .2, material: 'ceramic' }]
+});
+```
+
+Save the version 1 `ink-studio/section-mesh` source for later section
+edits. Supply IDs at creation to keep meaningful names. Sweep options
+accept one section record per path ring. Loft sections can carry an ID
+alongside their `y`, `profile`, `center`, `scale`, and `roll`. Revolve
+options accept one list of section records per closed meridian. Meridians
+use radius and height and may include holes or poles on the axis. The
+loft mesh connects corresponding profiles with ruled bands. Sections
+with different profile point counts share columns that retain each
+authored corner. Editable meshes allow up to 256 sections and 128
+perimeter columns.
+
+A section's `material` labels its outgoing band. `crease` sets the ring
+edge weight from 0 to 1. Use `profileCreases` to designate hard perimeter
+columns, and `capMaterial` for the caps of an open sweep or loft. Side
+faces keep their UVs when a ring moves. The perimeter wraps at a UV
+seam, with separate charts for caps and distinct revolve meridians.
+Sweep frames and sampled width or height functions are retained as
+section data. A local position or roll edit affects the selected ring.
+
+Store an attachment as `{ id, section, u }` with a perimeter fraction
+from 0 to 1. The report lists world positions and backing mesh vertices.
+`P.sectionMeshes.anchor(source, { section, u }, { mesh })` samples the
+same address on an optionally edited mesh. A section edit rebuilds the
+selected rings and updates their incident bands. The receipt lists the
+affected faces, changed creases, and attachment displacement. The
+original profile correspondence is preserved during local edits.
+Loft profiles keep their point counts and winding, and revolved
+meridians keep their poles and nesting.
+
+Supply the current editable mesh with `plan(source, request, { mesh })`
+to retain manual corner UVs and apply the section movement over any
+vertex offsets. The affected generated faces need their original
+connectivity. Apply the returned `patch` through ordinary mesh topology
+editing or `sceneEditor.editMeshTopology(object, patch)` for scene undo
+and binding updates.
+
+```sh
+node cli/ink-studio.js mesh-topology sections inspect source.json
+node cli/ink-studio.js mesh-topology sections compile source.json --out original-mesh.json
+node cli/ink-studio.js mesh-topology sections edit source.json edit.json --mesh original-mesh.json \
+  --out revised-source.json --out-mesh revised-mesh.json --out-patch patch.json
+node examples/section-meshes.cjs flow-bench-demo
+```
+
+The Flow bench demo revises one ring on each of three parts while keeping
+their gauge mounts in place. Its output includes meshes, GLBs, and edit
+receipts for the matched captures.
+
 ### Implicit fracture and crack paths
 
 `fracture.power({host, seeds, stretch, rotation, gap, cell, bond})`
@@ -2895,6 +2974,7 @@ For authored correspondences, use `correspondence: 'geometry'` with
 [point tracks and rigid feature poses](geometry-morphs.md). The stage
 keeps the same live splat IDs through the morph, with intermediate keys
 for positions and feature rotations.
+
 
 ## Optional retained authoring
 

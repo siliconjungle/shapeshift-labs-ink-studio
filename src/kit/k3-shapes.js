@@ -12,6 +12,8 @@
   const V = K.V,
     SQ = Math.SQRT1_2,
     mod = (a, n) => a - n * Math.floor(a / n);
+  const turnedPoint = (c, radius, y, angle) =>
+    [c[0]+Math.cos(angle)*radius,c[1]+y,c[2]+Math.sin(angle)*radius];
   const stairs = (a, b, r, n) => {
     const s = r / n,
       u = b - r;
@@ -64,6 +66,7 @@
     for (const p of list) br = Math.max(br, V.dist(c, p.bc) + p.br);
     return { bc: c, br };
   };
+  K.revolvePoint = turnedPoint;
   K.sculpt = S => {
     if (S.join) return S;
     const asList = a => (Array.isArray(a) ? a : [a]),
@@ -646,13 +649,14 @@
               row++;
               for (let k = 0; k < cnt; k++) {
                 const t = ((k + (row % 2) * 0.5) / cnt) * Math.PI * 2;
-                f(c[0] + Math.cos(t) * a, c[1] + b, c[2] + Math.sin(t) * a);
+                f(...turnedPoint(c,a,b,t));
               }
             });
           }
         };
       return S.add(p, mat, o);
     };
+    S.revolve.mesh = (loops, c, options) => K.procedural.sectionMeshes.revolve(loops,c,options);
     S.inflate = S.swell;
     // bubble wrap: a held solid's surface raised into rows of domes. cell: spacing; h: how far each stands out; fill: how much of its cell a dome takes (0..1).
     // flat: 'x' | 'y' | 'z' lays the rows out ignoring that direction, which is what a flat sheet facing that way wants; without it they sit on a 3D lattice

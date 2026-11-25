@@ -860,6 +860,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.renderOutputs.raster` | function | `(frame, channel = 'color', {miss = 0} = {})` | [guide](../render-outputs.md), [guide](../render-outputs.md#pick-and-route-channels), [source](../../src/render-outputs.js) |
 | `KIT.renderOutputs.snapshot` | function | `(frame)` | [guide](../render-outputs.md), [guide](../render-outputs.md#pick-and-route-channels), [source](../../src/render-outputs.js) |
 
+## KIT.revolvePoint
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.revolvePoint` | function | `(c, radius, y, angle)` | [source](../../src/kit/k3-shapes.js) |
+
 ## KIT.rig
 
 | Member | Kind | Signature or value | Guides and source |
@@ -1764,3 +1770,5 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.sweep` | function | `(S, pts, pf, mat, o)` | [guide](../../README.md#procedural-worlds), [guide](../curve-analysis.md#adaptive-sampling), [guide](../curve-families.md), [guide](../curve-families.md#definitions), [source](../../src/kit/kp-curve.js) |
 | `KIT.sweep.leaf` | function | `(wide, base)` | [guide](../../README.md#procedural-worlds), [guide](../curve-analysis.md#adaptive-sampling), [guide](../curve-families.md), [guide](../curve-families.md#definitions), [source](../../src/kit/kp-curve.js) |
+| `KIT.sweep.mesh` | function | `(path, profile={}, options={})` | [guide](../procedural.md#editable-meshes-from-sweeps-lofts-and-revolves), [guide](../../README.md#procedural-worlds), [guide](../curve-analysis.md#adaptive-sampling), [guide](../curve-families.md), [guide](../curve-families.md#definitions), [source](../../src/kit/p59a-section-meshes.js) |
+| `KIT.sweep.outline` | function | `({ w, h, shape = 'flat', fold = 0, cup = 0, round = .3 }, angle)` | [guide](../../README.md#procedural-worlds), [guide](../curve-analysis.md#adaptive-sampling), [guide](../curve-families.md), [guide](../curve-families.md#definitions), [source](../../src/kit/kp-curve.js) |

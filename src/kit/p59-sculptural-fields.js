@@ -37,6 +37,11 @@
     }, { min: [-rx, -ry, -rz], max: [rx, ry, rz] }, pose);
   }
 
+  function loftPoint([x,z], {y, center = [0,0], scale = 1, roll = 0}) {
+    const c = Math.cos(roll), s = Math.sin(roll);
+    return [center[0] + scale * (x * c - z * s), y, center[1] + scale * (x * s + z * c)];
+  }
+
   function loft(sections, { pose } = {}) {
     if (!Array.isArray(sections) || sections.length < 2 || sections.length > 128)
       throw new Error('A loft needs between two and 128 ordered sections');
@@ -47,9 +52,8 @@
         !Array.isArray(profile) || profile.length < 3 || profile.length > 4096 || !profile.every(p => point(p, 2)))
         throw new Error('Loft sections need increasing elevations, positive scales and polygon profiles');
       previous = y;
-      const c = Math.cos(roll), s = Math.sin(roll), f = P.geometry.profileDistance(profile);
-      for (const [x, z] of profile)
-        points.push([center[0] + scale * (x * c - z * s), y, center[1] + scale * (x * s + z * c)]);
+      const f = P.geometry.profileDistance(profile);
+      for (const p of profile) points.push(loftPoint(p,{y,center,scale,roll}));
       maxEdges = Math.max(maxEdges, profile.length);
       return { y, x: center[0], z: center[1], scale, roll, f };
     });
@@ -299,5 +303,6 @@
     return S;
   };
 
+  loft.point = loftPoint;
   P.forms = { superquadric, loft, skeleton, periodic, shell, fractal };
 })(KIT);

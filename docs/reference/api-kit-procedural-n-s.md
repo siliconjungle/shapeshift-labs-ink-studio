@@ -1613,6 +1613,21 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sdfProtection.retainFaces` | function | `(guard,before,after)` | [source](../../src/kit/p59b-sdf-protection.js) |
 | `KIT.procedural.sdfProtection.verify` | function | `(guards,chunks,bricks,previous,dirty)` | [source](../../src/kit/p59b-sdf-protection.js) |
 
+## KIT.procedural.sectionMeshes
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.sectionMeshes` | namespace |  |  |
+| `KIT.procedural.sectionMeshes.anchor` | function | `(input,location,{mesh}={})` | [source](../../src/kit/p59a-section-meshes.js) |
+| `KIT.procedural.sectionMeshes.compile` | function | `(input)` | [source](../../src/kit/p59a-section-meshes.js) |
+| `KIT.procedural.sectionMeshes.create` | function | `(raw)` | [source](../../src/kit/p59a-section-meshes.js) |
+| `KIT.procedural.sectionMeshes.format` | value | `string = "ink-studio/section-mesh"` |  |
+| `KIT.procedural.sectionMeshes.loft` | function | `(sections, options={})` | [source](../../src/kit/p59a-section-meshes.js) |
+| `KIT.procedural.sectionMeshes.plan` | function | `(input, request, { mesh:authored } = {})` | [source](../../src/kit/p59a-section-meshes.js) |
+| `KIT.procedural.sectionMeshes.revision` | function | `(input)` | [source](../../src/kit/p59a-section-meshes.js) |
+| `KIT.procedural.sectionMeshes.revolve` | function | `(outline,origin=[0,0,0],options={})` | [source](../../src/kit/p59a-section-meshes.js) |
+| `KIT.procedural.sectionMeshes.sweep` | function | `(path, profile={}, options={})` | [source](../../src/kit/p59a-section-meshes.js) |
+
 ## KIT.procedural.signalRecovery
 
 | Member | Kind | Signature or value | Guides and source |

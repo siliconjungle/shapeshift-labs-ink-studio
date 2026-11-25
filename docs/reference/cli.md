@@ -215,6 +215,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
      --gaussian-footprint legacy|compensated --gaussian-projection affine|ray --gaussian-variance 0.3
   mesh <file.obj|.gltf|.glb>  import and inspect as splats (--uv requires textured GLB stamps, --uv off uses geometry)
   mesh-topology inspect|triangulate <mesh.json> [--out file.json]   inspect authored connectivity or derive triangles
+  mesh-topology sections inspect|compile <source.json> [--out file.json]   inspect retained sections or build editable mesh topology
+  mesh-topology sections edit <source.json> <request.json> [--mesh mesh.json] [--out source.json] [--out-mesh mesh.json] [--out-patch patch.json] [--report file.json]   rebuild named sections
   mesh-topology edit <mesh.json> <patch.json> [--out file.json] [--report map.json]   edit polygon topology with an optional correspondence receipt
   mesh-topology select <mesh-or-scene.json> <query.json> [--object id] [--from selection.json] [--view settings.json | --visibility capture.json] [--out file.json]   select authored components
   mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--out file] [--report file]   move, rotate, scale and snap authored components

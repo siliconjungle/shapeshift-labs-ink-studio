@@ -274,6 +274,14 @@
       qy = Math.abs(v) - h + r;
     return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
   };
+  function profileDistance(u, v, w, h, shape, round) {
+    if (shape === 'rect') return rbox(u, v, w, h, round * h);
+    if (shape === 'round') return (Math.hypot(u / w, v / h) - 1) * Math.min(w, h);
+    return rbox(u, v, w, h, h);
+  }
+  function profileLift(u, slope, cup) {
+    return cup * u * u + Math.abs(u) * slope;
+  }
   K.sweep = (S, pts, pf, mat, o) => {
     o = o || {};
     pf = pf || {};
@@ -322,15 +330,8 @@
       };
     };
     const section = (u, v, t) => {
-      const w = Math.max(1e-4, W(t)),
-        h = Math.max(1e-4, H(t)),
-        vv = v - cup * u * u - Math.abs(u) * tf;
-      if (shape === 'rect') return rbox(u, vv, w, h, rnd * h);
-      if (shape === 'round') {
-        const k0 = Math.hypot(u / w, vv / h);
-        return (k0 - 1) * Math.min(w, h);
-      }
-      return rbox(u, vv, w, h, h); // flat: rounded along the edges
+      const w = Math.max(1e-4, W(t)), h = Math.max(1e-4, H(t));
+      return profileDistance(u, v - cup * u * u - Math.abs(u) * tf, w, h, shape, rnd);
     };
     let cx = 0,
       cy = 0,
@@ -433,7 +434,7 @@
             across = Math.max(1, Math.ceil((2 * w) / (res * 0.8)));
           for (let j = 0; j <= across; j++) {
             const u = -w + (2 * w * j) / across,
-              lift = cup * u * u + Math.abs(u) * tf;
+              lift = profileLift(u, tf, cup);
             for (const side of [-1, 1]) {
               const v = lift + side * h;
               f(c[0] + fr.B[0] * u + fr.N[0] * v, c[1] + fr.B[1] * u + fr.N[1] * v, c[2] + fr.B[2] * u + fr.N[2] * v);
@@ -443,6 +444,26 @@
       }
     };
     return S.add(p, mat, Object.assign({ reach: 0.02 }, o));
+  };
+  K.sweep.outline = ({ w, h, shape = 'flat', fold = 0, cup = 0, round = .3 }, angle) => {
+    w = Math.max(1e-4, w);
+    h = Math.max(1e-4, h);
+    const cos = Math.cos(angle), sin = Math.sin(angle), slope = Math.tan(fold);
+    let u, v;
+    if (shape === 'round') {
+      u = w * cos;
+      v = h * sin;
+    } else {
+      let low = 0, high = 2 * Math.hypot(w,h);
+      for (let i = 0; i < 36; i++) {
+        const t = (low + high) / 2;
+        if (profileDistance(cos * t, sin * t, w, h, shape, round) < 0) low = t;
+        else high = t;
+      }
+      u = cos * (low + high) / 2;
+      v = sin * (low + high) / 2;
+    }
+    return [u, v + profileLift(u, slope, cup)];
   };
   // a leaf's outline along its length: full a little below the middle, round at the base, coming to a point
   K.sweep.leaf = (wide, base) => t =>
