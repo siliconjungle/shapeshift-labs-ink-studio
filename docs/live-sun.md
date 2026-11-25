@@ -14,6 +14,87 @@ Set `finish.relighting` in a JSON diorama or `relighting` in `B.finish()`. Both 
 
 Pass a `relighting` override to either renderer to move or recolor lights without rebaking. Light changes merge by ID, and a `null` entry removes a light for that frame. Pass `false` to disable the mode. The CLI accepts `--relighting on|off|file.json` and `--sky-time seconds`. Emissive splats keep their authored colors.
 
+## Authored proxy shadows for moving rigs
+
+Use `sun.shadows` with captured lighting to let a moving part cast onto
+explicitly named receivers. A proxy follows its owning part's current affine
+pose. The CPU stage painter works with Ink's regular draw path. WebGL2 hosts can
+run the same test in their own shader using `KIT.light.proxyGLSL`.
+
+Set `S.shSteps = 0` **before baking the proxy receivers**. This turns off the
+baked shadow march for sun and point lights on that bake. Ambient occlusion and
+the base palette ramp still bake as usual. Set `bake: 'unshadowed'` to declare
+that starting point. Ink checks this for rows recorded by `KIT.light.capture`.
+Rebake an older receiver with a painted cast shadow
+before enabling this option. The live shadow scales direct sunlight. Ambient,
+sky fill, lamps, and flash still follow captured lighting.
+
+```js
+// Before baking with the sculpt and builder already set up
+S.shSteps = 0;
+const capture = KIT.light.capture(B, S);
+const rig = KIT.rig(B, S);
+// Sculpt solids tagged 'fuselage', 'wing', and 'tail', then call S.bake().
+const stage = KIT.stage(B.finish({}));
+rig.bind(stage);
+
+const sun = {
+  dir: S.sun, amb: S.amb, sky: S.sky, k: S.sunK,
+  parts: ['fuselage', 'wing', 'tail'],
+  keep: Infinity,
+  shadows: {
+    bake: 'unshadowed',
+    bias: 0.02,
+    casters: [
+      { part: 'wing', type: 'box', center: [0, 0.5, 0], halfSize: [1.7, 0.05, 0.45],
+        receivers: ['fuselage', 'tail'] },
+      { part: 'fuselage', type: 'capsule', a: [0, 0, -1], b: [0, 0, 1], radius: 0.32,
+        feather: 0.05, receivers: ['wing'] }
+    ]
+  }
+};
+stage.add(KIT.light.system(stage, capture, [], { sun }));
+// Set and apply the rig transforms before stage.update(), or animate
+// the rig in a stage system that runs before the light system.
+```
+
+Boxes are axis-aligned in the unposed bake. Author their centers and half sizes,
+and capsule endpoints and radii, in those same coordinates. The bias offsets the start of the ray along the current receiver
+normal in world units. Boxes have a hard edge. Capsule `feather` is an optional
+fade inside the radius, in bake units. A capsule with coincident endpoints
+acts as a sphere. Each of the one to eight proxies has its own receiver list.
+Every receiver must also be in `sun.parts`. A proxy ignores a sample already
+inside it, and a collapsed part has no shadow volume. Keep proxy shapes clear
+of neighboring surfaces where you want a clean seam.
+
+Use `sun.shadows: false` for an A/B against unoccluded captured sunlight.
+Leave this option off to use regular captured lighting. Use the headless
+directional shadow map below when you need shadows from the whole scene.
+
+### Host shader wiring
+
+After binding the rig, call `KIT.light.pack(stage, capture, { sun })` as in
+[captured lighting](procedural.md#captured-lighting-for-a-host-renderer). Call
+`KIT.light.proxyFrame(packed)` after updating the pose. It refreshes a
+reusable frame from the bound rig and returns `null` when proxies are off.
+A host that keeps its own pose palette can pass it as the second argument.
+Use the same layout as `rig.M`: nine row-major matrix elements and three
+translation values per part, including slot zero.
+
+- Upload `frame.uniforms` with `gl.uniform4fv` to
+  `uCapturedProxies[0]`, and `frame.bias` to `uCapturedProxyBias`.
+- For each receiver use `frame.masks[partId]`, with part ID from the second
+  `rigRamp` component. Pass that byte to the shader as an attribute or draw
+  uniform. It is fixed for the capture and can be uploaded once.
+- Include both `KIT.light.glsl` and `KIT.light.proxyGLSL` in a
+  high-precision GLSL ES 3.00 shader. In the live-sun branch, call
+  `capturedProxyVisibility(worldPosition, worldNormal, sunDirection, uint(mask))`.
+  Pass the result as the fourth argument to `capturedSun` before adding lamp
+  shares and evaluating `capturedBase`.
+- `KIT.light.proxyVisibility(frame, mask, position, normal, direction)`
+  returns the same direct-light factor from 0 to 1 on the CPU.
+  `KIT.light.step` uses the last refreshed proxy frame.
+
 ## Headless directional relighting
 
 The Node renderer and CLI can relight sculpted objects with one directional sun at render time. A light-space depth map is rebuilt from posed opaque splats. Move the light to change illumination and cast shadows while keeping the same sculpt.

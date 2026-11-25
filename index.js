@@ -12,7 +12,7 @@ const KIT_DIR = path.join(__dirname, 'src', 'kit'),
 // direct sculpting, materials, rigs, captured light, and native splat delivery.
 const bakeKit = new Set([
   'k0-math.js', 'k0-ownership.js', 'k1-stage.js', 'k2-motion.js', 'k3-motion-matching.js', 'k3-shapes.js', 'k4-art.js',
-  'k5-fields.js', 'k8-light.js', 'ka-build.js', 'kb-mesh.js', 'ke-volume.js', 'ki-deform.js', 'kj-pose-correctives.js', 'kj-view-poses.js', 'kl-vox.js', 'km-ramp.js',
+  'k5-fields.js', 'k8-light-proxies.js', 'k8-light.js', 'ka-build.js', 'kb-mesh.js', 'ke-volume.js', 'ki-deform.js', 'kj-pose-correctives.js', 'kj-view-poses.js', 'kl-vox.js', 'km-ramp.js',
   'kn-afterimages.js', 'kn-scene-optics.js', 'ko-grow.js', 'kp-curve.js', 'kpx-pixel.js',
   'kq-surface-presets.js', 'kr-tex.js', 'kt-nodes.js', 'kv-form.js', 'kz-weather.js', 'kza-ascii.js',
   'p00-procedural.js', 'p01-cutaway.js', 'p01-procedural-surfaces.js', 'p01-splat-sample-state.js',
