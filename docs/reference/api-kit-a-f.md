@@ -869,6 +869,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.storyExchange.validate` | function | `(manifest)` | [source](../../src/kit/p23zz-story-exchange.js) |
 | `KIT.authoring.styles` | namespace |  |  |
 | `KIT.authoring.styles.resolve` | function | `(source, id)` | [source](../../src/kit/p25-authoring-bindings.js) |
+| `KIT.authoring.tilesetAtlasSelection` | namespace |  |  |
+| `KIT.authoring.tilesetAtlasSelection.select` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-atlas-selection.js) |
 | `KIT.authoring.tilesetBlocks` | namespace |  |  |
 | `KIT.authoring.tilesetBlocks.boxTopology` | namespace |  |  |
 | `KIT.authoring.tilesetBlocks.boxTopology.positions` | value | `array` |  |

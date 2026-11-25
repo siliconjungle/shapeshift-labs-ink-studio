@@ -4,12 +4,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {publishJson} = require('./asset-files.js');
 const {captureMeshTopologyVisibility,needsParticipation} = require('./mesh-topology-visibility.js');
+const read = input=>JSON.parse(fs.readFileSync(input,'utf8'));
+const name = value=>typeof value === 'string' && value.trim();
 
 function command([file,...rest], options, openEditor) {
   const {scene,view,visibility,from,out,'topology-out':topologyOut} = options;
   const inputs = [file,scene,view,visibility,from].filter(value=>value !== undefined);
   const output = out ?? topologyOut;
-  const name = value=>typeof value === 'string' && value.trim();
   if (rest.length || ![file,scene,...inputs].every(name) ||
       Object.keys(options).some(key=>!['scene','view','visibility','from','out','topology-out'].includes(key)) ||
       (view !== undefined && visibility !== undefined) || (out !== undefined && topologyOut !== undefined) ||
@@ -17,7 +18,6 @@ function command([file,...rest], options, openEditor) {
     throw new TypeError('Use tileset select <query.json> --scene <scene.json> with one view input and one output');
   if (output && inputs.some(input=>path.resolve(input)===path.resolve(output)))
     throw new RangeError('Write the selection separately from its inputs');
-  const read = input=>JSON.parse(fs.readFileSync(input,'utf8'));
   const request = read(file), editor = openEditor(path.resolve(scene));
   if (from) {
     if (!request || Object.getPrototypeOf(request) !== Object.prototype || !['tiles','edges','vertices'].includes(request.domain) ||
@@ -38,4 +38,17 @@ function command([file,...rest], options, openEditor) {
   process.stdout.write(JSON.stringify(report,null,2)+'\n');
 }
 
-module.exports = {command};
+function atlasCommand([file,...rest], options, openEditor) {
+  const {scene,object,part,mode,out} = options;
+  if (rest.length || ![file,scene,object].every(name) ||
+      Object.entries(options).some(([key,value])=>!['scene','object','part','mode','out'].includes(key) || !name(value)) ||
+      out !== undefined && !/\.json$/i.test(out))
+    throw new TypeError('Use tileset select-atlas <pick.json> --scene <scene.json> --object <mesh-id>');
+  if (out && [scene,file].some(input=>path.resolve(input)===path.resolve(out)))
+    throw new RangeError('Write the selection separately from its inputs');
+  const report = openEditor(path.resolve(scene)).selectTilesetAtlas({object,part,mode,selection:read(file)});
+  if (out) publishJson(out,report.selection,'A different selection already exists at '+out);
+  process.stdout.write(JSON.stringify(report,null,2)+'\n');
+}
+
+module.exports = {command,atlasCommand};

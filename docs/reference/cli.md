@@ -294,6 +294,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   tileset collection sample <collection.json> --scene <scene.json> --seed N --key <key> [--out <pick.json>]   select a reproducible tile variant
   tileset collection play <collection.json> --scene <scene.json> [--step N] [--seed N] [--out <pick.json>]   resolve one step of an authored sequence
   tileset select <query.json> --scene <scene.json> [--from <selection.json>] [--view <view.json> | --visibility <capture.json>] [--out <report.json> | --topology-out <selection.json>]   query independent tile, edge, vertex, or instance domains
+  tileset select-atlas <pick.json> --scene <scene.json> --object <mesh-id> [--part <part-id>] [--mode match|inside|touch] [--out <selection.json>]   select faces by pigment UV coverage of a tileset rectangle
   tileset eyedrop --scene <scene.json> --object <mesh-id> --face <face-id> [--part ID] [--brush-size] [--out <pick.json>]   recover a reusable painted face pick for stamp --selection
   tileset reskin --scene <scene.json> --object <mesh-id> --face <face-id> --mode crop|tileset|relative (--selection <pick.json> | --id <tileset-id>) [--part ID] [--column N --row N] [--out <new-scene.json>]   change the paint on an existing mesh face
   tileset stroke <stroke.json> --scene <scene.json> [--collection <collection.json>] [--out <new-scene.json>]   draw or erase an interval-sampled run of painted faces
