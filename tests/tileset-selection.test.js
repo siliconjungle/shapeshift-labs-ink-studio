@@ -305,3 +305,82 @@ test('headless brush UV edits only the selected face pigment layout and invalida
   assert.throws(()=>cli(file('pinned'),'inset',...target,'--out',file('rejected')));
   assert.equal(fs.existsSync(file('rejected')),false);
 });
+
+const paddedSize = {width:3,height:2,paddingX:2,paddingY:3,offsetX:1,offsetY:2};
+const paddedBounds = {x:6,y:7,width:8,height:7};
+const paddedBrush = {format:'ink-studio/tileset-brush',version:1,tileset:'signals',...paddedBounds,
+  tileWidth:3,tileHeight:2,columns:2,rows:2,paddingX:2,paddingY:3,offsetX:1,offsetY:2,texelsPerUnit:2,brushScale:1};
+const paddedPixels = Uint8Array.from({length:16*15*4},(_,i)=>i%4 === 3 ? (Math.floor(i/4)%2 ? 255 : 0) : i%251);
+const paddedScene = {id:'padded',style:'slate',solids:[],
+  tilesetDefaults:{tileSize:paddedSize,texelsPerUnit:2},
+  tilesets:{signals:ink.readTilesetImage(PNG.encode(16,15,paddedPixels,4))}};
+
+test('padded tile brushes skip the atlas gutters and keep the original world grid',()=>{
+  assert.deepEqual(ink.pickTilesetBlock(paddedScene,'signals',paddedBounds),paddedBrush);
+  const block = ink.rasterizeTilesetBrush(paddedScene,paddedBrush);
+  assert.deepEqual([block.width,block.height],[6,4]);
+  for (const [column,row,x,y] of [[0,0,6,7],[1,0,11,7],[0,1,6,12],[1,1,11,12]]) {
+    const pick = ink.pickTilesetBlock(paddedScene,'signals',{x,y,width:3,height:2});
+    assert.deepEqual([pick.columns,pick.rows],[1,1]);
+    const single = ink.rasterizeTilesetBrush(paddedScene,pick);
+    const cell = ink.tilesetBrushCellUV(paddedScene,paddedBrush,{column,row},{left:.25,bottom:.5});
+    assert.deepEqual(cell.cell,{column,row,x,y,width:3,height:2,offset:[column*3,row*2]});
+    assert.deepEqual(cell.texelBounds,[x+.25,y,x+3,y+1.5]);
+    assert.deepEqual(cell.uvBounds,ink.tilesetBrushUV(paddedScene,pick,{left:.25,bottom:.5}).uvBounds);
+    for (let dy=0;dy<2;dy++) {
+      const at = ((row*2+dy)*block.width+column*3)*4, sourceAt = ((y+dy)*16+x)*4;
+      assert.deepEqual(block.pixels.slice(at,at+12),paddedPixels.slice(sourceAt,sourceAt+12));
+      assert.deepEqual(single.pixels.slice(dy*12,dy*12+12),block.pixels.slice(at,at+12));
+    }
+  }
+  assert.deepEqual(ink.sizeTilesetBrush(paddedScene,paddedBrush).worldSize,{width:3,height:2});
+  assert.deepEqual(ink.sizeTilesetBrush(paddedScene,paddedBrush).tileWorldSize,{width:1.5,height:1});
+  for (const bounds of [{x:7},{y:8},{width:7},{height:6},{width:9}])
+    assert.throws(()=>ink.pickTilesetBlock(paddedScene,'signals',{...paddedBounds,...bounds}),/inside the tileset|whole tile/);
+  assert.throws(()=>ink.pickTilesetBlock(paddedScene,'signals',paddedBounds,{...paddedSize,paddingY:-1}),/Tile padding/);
+  assert.throws(()=>ink.tilesetBrushCellUV(paddedScene,paddedBrush,{column:2,row:0}),/inside the pick/);
+  assert.throws(()=>ink.rasterizeTilesetBrush(paddedScene,{...paddedBrush,rows:3}),/counts do not match/);
+
+  const editor = ink.createSceneEditor(paddedScene);
+  editor.setTilesetGrid('signals',{...paddedSize,paddingY:1});
+  assert.equal(editor.tilesetGrid('signals').tileSize.paddingY,1);
+  editor.setTilesetGrid('signals',{width:3,height:2});
+  assert.deepEqual(editor.tilesetGrid('signals').tileSize,{width:3,height:2});
+  assert.deepEqual(ink.rasterizeTilesetBrush(editor.snapshot(),paddedBrush),block);
+  editor.undo();
+  assert.equal(editor.tilesetGrid('signals').tileSize.paddingY,1);
+});
+
+test('the CLI picks aligned cells from the saved padded grid and resolves their UVs',t=>{
+  const vertices = [[0,0,0],[1.5,0,0],[1.5,1,0],[0,1,0]].map((position,i)=>({id:'v'+i,position}));
+  const uvs = [[11/16,14/15],[14/16,14/15],[14/16,12/15],[11/16,12/15]];
+  const corners = vertices.map(({id:vertex},i)=>({id:'c'+i,vertex,uv:uvs[i]}));
+  const face = {id:'cell',material:'paint',corners};
+  const source = {...paddedScene,tilesetDefaults:{texelsPerUnit:2},topologyMeshes:{sign:{
+    document:{id:'sign',vertices,faces:[face]},materials:[{id:'paint',texture:{tileset:'signals'}}]
+  }}};
+  const {dir,filename,tileset} = setup(t,source);
+  const file = name=>path.join(dir,name+'.json'), preview=path.join(dir,'preview.png');
+  const args = ['--tile-width','3','--tile-height','2','--padding-x','2','--padding-y','3','--offset-x','1','--offset-y','2'];
+  const grid = JSON.parse(tileset('grid','--scene',filename,'--id','signals',...args,'--out',file('gridded')));
+  assert.deepEqual(grid.tileSize,paddedSize);
+  const coords = ['--x','6','--y','7','--width','8','--height','7'];
+  tileset('pick','--scene',file('gridded'),'--id','signals','--brush',...coords,'--out',file('brush'));
+  assert.deepEqual(JSON.parse(fs.readFileSync(file('brush'),'utf8')),paddedBrush);
+  assert.deepEqual(JSON.parse(tileset('pick','--scene',filename,'--id','signals',...args,...coords)),paddedBrush);
+
+  tileset('brush-preview',file('brush'),'--scene',file('gridded'),'--out',preview);
+  const {w,h,data} = PNG.raster(preview), expected = ink.rasterizeTilesetBrush(paddedScene,paddedBrush);
+  assert.deepEqual([w,h],[expected.width,expected.height]);
+  assert.deepEqual(new Uint8Array(data),expected.pixels);
+  const uv = JSON.parse(tileset('brush-uv',file('brush'),'--scene',file('gridded'),'--column','1','--row','1','--inset-top','.5'));
+  assert.deepEqual(uv,ink.tilesetBrushCellUV(paddedScene,paddedBrush,{column:1,row:1},{top:.5}));
+  const edit = ['brush-uv',file('brush'),'--scene',file('gridded'),'--object','sign','--face','cell','--inset-top','.5'];
+  assert.throws(()=>tileset(...edit),/Choose --column and --row/);
+  const applied = JSON.parse(tileset(...edit,'--column','1','--row','1','--out',file('inset')));
+  assert.equal(applied.uv.canCommit,true);
+  const updated = JSON.parse(fs.readFileSync(file('inset'),'utf8')).topologyMeshes.sign.document;
+  assert.deepEqual(updated.vertices,vertices);
+  assert.deepEqual(updated.faces[0].corners.map(corner=>corner.uv),
+    [[11/16,14/15],[14/16,14/15],[14/16,12.5/15],[11/16,12.5/15]]);
+});

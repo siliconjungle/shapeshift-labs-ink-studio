@@ -11,13 +11,7 @@
       throw new RangeError('Tileset images need dimensions from 1 to '+maxEdge+' texels per side');
   }
 
-  function tileDimensions(size) {
-    if (size == null) return null;
-    if (!record(size) || Object.keys(size).length !== 2 || ![size.width,size.height].every(
-      edge => Number.isInteger(edge) && edge >= 1 && edge <= maxEdge))
-      throw new RangeError('Tile size needs an integer width and height from 1 to '+maxEdge+' texels');
-    return freeze({width:size.width,height:size.height});
-  }
+  const tileDimensions = size => size == null ? null : freeze(TilesetSelection.tileSize(size));
 
   function positiveScale(value, label) {
     if (!Number.isFinite(value) || value <= 0) throw new RangeError(label+' must be a finite positive number');
@@ -70,7 +64,7 @@
     for (const [key,source] of Object.entries(sources)) {
       if (!id(key)) throw new TypeError('Invalid tileset ID '+key);
       const asset = image(source), size = asset.tileSize ?? defaultSize;
-      if (size && (size.width > asset.width || size.height > asset.height))
+      if (size && !TilesetSelection.gridFits(asset,size))
         throw new RangeError('Tile size must fit tileset '+key);
       prepared.set(key,asset);
     }
@@ -126,7 +120,7 @@
       const {tileSize:newSize,...newImage} = image(source);
       if (JSON.stringify(oldImage) !== JSON.stringify(newImage))
         throw new RangeError('A different image is already registered as tileset '+key);
-      if (newSize && (newSize.width !== oldSize?.width || newSize.height !== oldSize?.height))
+      if (newSize && JSON.stringify(newSize) !== JSON.stringify(oldSize))
         throw new RangeError('Edit the registered tile grid for '+key+' separately');
       return scene;
     }
@@ -137,14 +131,15 @@
 
   function gridPatch(scene, key, size) {
     checkScene(scene);
+    if (key !== undefined && (!id(key) || !Object.hasOwn(scene.tilesets ?? {},key)))
+      throw new RangeError('Unknown tileset '+key);
+    const current = key === undefined ? scene.tilesetDefaults : scene.tilesets[key];
     const tileSize = tileDimensions(size);
-    let patch;
-    if (key === undefined) {
-      patch = {tilesetDefaults:{...scene.tilesetDefaults,tileSize}};
-    } else {
-      if (!id(key) || !Object.hasOwn(scene.tilesets ?? {},key)) throw new RangeError('Unknown tileset '+key);
-      patch = {tilesets:{...scene.tilesets,[key]:{...scene.tilesets[key],tileSize}}};
-    }
+    // The scene editor merges records. Reset any previous layout field omitted from the replacement.
+    const fields = tileSize && {...Object.fromEntries(TilesetSelection.layoutKeys.filter(name=>
+      Object.hasOwn(current?.tileSize ?? {},name)).map(name=>[name,0])),...tileSize};
+    const patch = key === undefined ? {tilesetDefaults:{...current,tileSize:fields}} :
+      {tilesets:{...scene.tilesets,[key]:{...current,tileSize:fields}}};
     const updated = {...scene,...patch};
     const grid = prepare(updated.tilesets,updated.tilesetDefaults).grid(key);
     return {patch,grid};

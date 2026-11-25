@@ -18,14 +18,21 @@ function readTilesetImage(source, toolkit = require('..').load()) {
 }
 
 const insetEdges = ['top','bottom','left','right'];
-const tileFields = ['tile-width','tile-height'];
+const layoutFlags = {'padding-x':'paddingX','padding-y':'paddingY','offset-x':'offsetX','offset-y':'offsetY'};
+const tileFields = ['tile-width','tile-height',...Object.keys(layoutFlags)];
 const integerText = value => typeof value === 'string' && /^-?\d+$/.test(value);
 
 function tileOptions(options) {
   if (!tileFields.some(key => options[key] !== undefined)) return;
-  if (!tileFields.every(key => integerText(options[key])))
+  if (!['tile-width','tile-height'].every(key => integerText(options[key])))
     throw new TypeError('Specify both --tile-width and --tile-height as integers');
-  return {width:Number(options['tile-width']),height:Number(options['tile-height'])};
+  const size = {width:Number(options['tile-width']),height:Number(options['tile-height'])};
+  for (const [flag,name] of Object.entries(layoutFlags)) {
+    if (options[flag] === undefined) continue;
+    if (!integerText(options[flag])) throw new TypeError('--'+flag+' needs an integer texel distance');
+    size[name] = Number(options[flag]);
+  }
+  return size;
 }
 
 function numberOption(options, name) {
@@ -61,7 +68,7 @@ function physicalSize(brush, texelsPerUnit, brushScale, toolkit) {
   function extent(width,height) {
     return {width:positiveScale(width*unitsPerTexel,'World width'),height:positiveScale(height*unitsPerTexel,'World height')};
   }
-  return {brush:{...brush,texelsPerUnit,brushScale},worldSize:extent(brush.width,brush.height),
+  return {brush:{...brush,texelsPerUnit,brushScale},worldSize:extent(brush.columns*brush.tileWidth,brush.rows*brush.tileHeight),
     tileWorldSize:extent(brush.tileWidth,brush.tileHeight)};
 }
 
@@ -83,17 +90,27 @@ function pickTilesetBlock(scene, id, rectangle, tileSize, toolkit = require('..'
 function brushSelection(tilesets, brush) {
   if (brush?.format !== 'ink-studio/tileset-brush' || brush.version !== 1)
     throw new TypeError('Expected a version 1 tileset brush');
+  const layout = Object.fromEntries(Selection.layoutKeys.filter(key=>Object.hasOwn(brush,key)).map(key=>[key,brush[key]]));
   const selected = Selection.block(brush.tileset,tilesets.source(brush.tileset),brush,
-    {width:brush.tileWidth,height:brush.tileHeight});
+    {width:brush.tileWidth,height:brush.tileHeight,...layout});
   if (brush.columns !== selected.columns || brush.rows !== selected.rows)
     throw new RangeError('Tile brush row and column counts do not match its bounds');
   return selected;
 }
 
+function brushMapping(scene, brush, insets, toolkit, cell) {
+  const tilesets = prepare(scene,toolkit), selected = brushSelection(tilesets,brush);
+  const sample = cell ?? (Selection.hasGaps(selected) ? {column:0,row:0} : null);
+  return Selection.uvMapping(tilesets.source(selected.tileset),brush,insets,sample && Selection.cell(selected,sample));
+}
+
 function tilesetBrushUV(scene, brush, insets, toolkit = require('..').load()) {
-  const tilesets = prepare(scene,toolkit);
-  const {tileset} = brushSelection(tilesets,brush);
-  return Selection.uvMapping(tilesets.source(tileset),brush,insets);
+  return brushMapping(scene,brush,insets,toolkit);
+}
+
+function tilesetBrushCellUV(scene, brush, cell, insets, toolkit = require('..').load()) {
+  if (!cell || typeof cell !== 'object') throw new TypeError('Specify a brush column and row');
+  return brushMapping(scene,brush,insets,toolkit,cell);
 }
 
 function sizeTilesetBrush(scene, brush, {brushScale,projectTexelsPerUnit} = {}, toolkit = require('..').load()) {
@@ -109,12 +126,17 @@ function sizeTilesetBrush(scene, brush, {brushScale,projectTexelsPerUnit} = {}, 
 
 function rasterizeTilesetBrush(scene, brush, toolkit = require('..').load()) {
   const tilesets = prepare(scene, toolkit);
-  const {tileset:id,x,y,width,height} = brushSelection(tilesets,brush);
-  const source = tilesets.source(id);
-  const {pixels} = tilesets.resolve({tileset:id}), crop = new Uint8Array(width*height*4), stride = width*4;
+  const {tileset:id,x,y,tileWidth,tileHeight,columns,rows,paddingX=0,paddingY=0} = brushSelection(tilesets,brush);
+  const source = tilesets.source(id), {pixels} = tilesets.resolve({tileset:id});
+  const width = columns*tileWidth, height = rows*tileHeight, crop = new Uint8Array(width*height*4);
+  const strips = paddingX ? columns : 1, span = paddingX ? tileWidth : width;
   for (let row=0;row<height;row++) {
-    const start = ((y+row)*source.width+x)*4;
-    crop.set(pixels.subarray(start,start+stride),row*stride);
+    const sourceY = y+row+Math.floor(row/tileHeight)*paddingY;
+    const start = (sourceY*source.width+x)*4;
+    for (let column=0;column<strips;column++) {
+      const sample = start+column*(span+paddingX)*4;
+      crop.set(pixels.subarray(sample,sample+span*4),(row*width+column*span)*4);
+    }
   }
   return {width,height,pixels:crop};
 }
@@ -234,13 +256,15 @@ function brushSizeCommand([file,...rest], options, toolkit, projectTexelsPerUnit
 }
 
 function brushUVCommand([file,...rest], options, toolkit, openEditor) {
-  const {scene,object,face,out} = options, target = object !== undefined || face !== undefined;
+  const {scene,object,face,out,column,row} = options, target = object !== undefined || face !== undefined;
+  const cell = column !== undefined || row !== undefined;
   const insetFlags = insetEdges.map(edge=>'inset-'+edge);
   const name = value=>typeof value === 'string' && value.trim();
   if (rest.length || ![file,scene].every(name) || target && ![object,face].every(name) ||
-      Object.keys(options).some(key=>!['scene','object','face','out',...insetFlags].includes(key)) ||
+      Object.keys(options).some(key=>!['scene','object','face','out','column','row',...insetFlags].includes(key)) ||
       out !== undefined && (!name(out) || !/\.json$/i.test(out)))
     throw new TypeError('Use tileset brush-uv <brush.json> --scene <scene.json> with optional --inset-top, --inset-bottom, --inset-left, --inset-right, and --object <id> --face <id>');
+  if (cell && ![column,row].every(integerText)) throw new TypeError('Specify both --column and --row as integers');
   const input = path.resolve(scene), brushFile = path.resolve(file), output = out && path.resolve(out);
   if ([input,brushFile].includes(output)) throw new RangeError('Write a separate brush or scene file');
   const insets = Object.fromEntries(insetEdges.flatMap(edge=>{
@@ -249,8 +273,10 @@ function brushUVCommand([file,...rest], options, toolkit, openEditor) {
   }));
   const editor = target && openEditor(input);
   const read = filename=>JSON.parse(fs.readFileSync(filename,'utf8'));
-  const result = tilesetBrushUV(editor ? editor.snapshot() : read(input),read(brushFile),insets,toolkit);
+  const result = brushMapping(editor ? editor.snapshot() : read(input),read(brushFile),insets,toolkit,
+    cell ? {column:Number(column),row:Number(row)} : undefined);
   if (editor) {
+    if (result.cell && !cell) throw new RangeError('Choose --column and --row to map one cell of a padded brush to a face');
     const mesh = editor.meshTopology(object), polygon = mesh.document.faces.find(row=>row.id === face);
     if (!polygon) throw new RangeError('Unknown mesh face '+face);
     const material = mesh.materials?.find(row=>row.id === (polygon.material ?? 'default'));
@@ -299,4 +325,4 @@ function command([action, ...args], options, toolkit, projectTexelsPerUnit, open
   process.stdout.write(JSON.stringify({scene:output,id,width:asset.width,height:asset.height,encoding:asset.encoding},null,2)+'\n');
 }
 
-module.exports = {readTilesetImage,pickTilesetRectangle,pickTilesetBlock,sizeTilesetBrush,tilesetBrushUV,rasterizeTilesetBrush,command};
+module.exports = {readTilesetImage,pickTilesetRectangle,pickTilesetBlock,sizeTilesetBrush,tilesetBrushUV,tilesetBrushCellUV,rasterizeTilesetBrush,command};

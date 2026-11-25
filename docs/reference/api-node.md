@@ -94,7 +94,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.packProject` | function | `(scene, { out, root, revision, assetPack, paint, attachments } = {})` | [source](../../cli/project-bundle.js) |
 | `node.paletteUsage` | function | `(world,{select,rarePixels=3,rareShare=.001,...view}={})` | [guide](../palette-recipes.md#measure-palette-usage-at-export-size), [source](../../cli/palette-usage.js) |
 | `node.pickSurface` | function | `(passes,x,y)` | [guide](../art-passes.md#shared-opaque-surfaces), [guide](../textured-surfaces.md#inspecting-a-mesh), [guide](../art-passes.md), [source](../../src/art-passes.js) |
-| `node.pickTilesetBlock` | function | `(scene, id, rectangle, tileSize, toolkit = require('..').load())` | [guide](../mesh-uv.md#pick-a-brush-of-neighboring-tiles), [source](../../cli/tileset-image.js) |
+| `node.pickTilesetBlock` | function | `(scene, id, rectangle, tileSize, toolkit = require('..').load())` | [guide](../mesh-uv.md#pick-a-brush-of-neighboring-tiles), [guide](../mesh-uv.md#pick-across-padded-tiles), [source](../../cli/tileset-image.js) |
 | `node.pickTilesetRectangle` | function | `(scene, id, rectangle, toolkit = require('..').load())` | [guide](../mesh-uv.md#pick-an-exact-texel-rectangle), [source](../../cli/tileset-image.js) |
 | `node.pixelCommandSchema` | function | `()` | [source](../../index.js) |
 | `node.pixelDocumentFromAseprite` | function | `(source, options)` | [source](../../index.js) |
@@ -176,6 +176,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.sizeTilesetBrush` | function | `(scene, brush, {brushScale,projectTexelsPerUnit} = {}, toolkit = require('..').load())` | [guide](../mesh-uv.md#set-brush-size-in-world-units), [source](../../cli/tileset-image.js) |
 | `node.spriteAtlas` | function | `(world, options = {})` | [source](../../cli/sprite-atlas.js) |
 | `node.startModelingBenchmark` | function | `(...args)` | [source](../../index.js) |
+| `node.tilesetBrushCellUV` | function | `(scene, brush, cell, insets, toolkit = require('..').load())` | [guide](../mesh-uv.md#pick-across-padded-tiles), [source](../../cli/tileset-image.js) |
 | `node.tilesetBrushUV` | function | `(scene, brush, insets, toolkit = require('..').load())` | [guide](../mesh-uv.md#inset-brush-uvs-on-each-edge), [source](../../cli/tileset-image.js) |
 | `node.toolkitBuildHash` | function | `(kit)` | [source](../../index.js) |
 | `node.trackPixelSelection` | function | `({ binding,selection,documentGrid,revision,views,render,review,visit,feature })` | [source](../../cli/pixel-selection-track.js) |

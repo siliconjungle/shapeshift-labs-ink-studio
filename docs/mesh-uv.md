@@ -109,8 +109,8 @@ A selection addresses the source image's texels.
 
 ### Pick a brush of neighboring tiles
 
-Give the picker a tile width and height in texels. This grid starts at the
-top left of the source sheet. The picker selects whole tiles and leaves any
+Give the picker a tile width and height in texels. The default grid starts
+at the top left of the source sheet. The picker selects whole tiles and leaves any
 partial tiles along the right and bottom edges outside the brush.
 
 ```sh
@@ -122,8 +122,8 @@ ink-studio tileset brush-preview sign-brush.json --scene gatehouse-tiles.json --
 The numeric bounds use texels and must align to tile boundaries.
 Use `brush-preview` to check the selected block as a 1× PNG.
 The `ink-studio/tileset-brush` record stores the tileset ID, source
-rectangle, tile size, and row and column counts. Tile `[column,row]`
-uses source origin `[x + column * tileWidth, y + row * tileHeight]` and
+rectangle, tile size, and row and column counts. On an unpadded sheet,
+tile `[column,row]` uses source origin `[x + column * tileWidth, y + row * tileHeight]` and
 the same offset from the brush origin without `x` and `y`. This keeps
 the whole arrangement in one record, including transparent cells.
 
@@ -173,6 +173,45 @@ Run `node examples/tileset-pick/grid-demo.cjs tile-grid-demo` for a headless
 comparison of the same TIDE sign picked from two sheets with different
 tile sizes.
 
+### Pick across padded tiles
+
+Set `--padding-x` and `--padding-y` to the gaps between adjacent content
+rectangles, measured in whole source texels. Use `--offset-x` and
+`--offset-y` for the first cell's origin when the sheet has a leading border.
+These settings start at zero. Supply them alongside the tile dimensions
+when you configure a grid or specify a one-off pick.
+
+```sh
+ink-studio tileset grid --scene painted.json --id masonry \
+  --tile-width 16 --tile-height 8 --padding-x 3 --padding-y 2 \
+  --offset-x 2 --offset-y 3 --out padded.json
+ink-studio tileset pick --scene padded.json --id masonry --brush \
+  --x 2 --y 3 --width 54 --height 18 --out sign-brush.json
+ink-studio tileset brush-preview sign-brush.json --scene padded.json --out sign-1x.png
+ink-studio tileset brush-uv sign-brush.json --scene padded.json --column 2 --row 1
+```
+
+The rectangle starts at the first tile's content and ends at the last
+tile's content edge. A single tile still spans 16×8 texels. A 3×2 block
+spans 54×18 texels in the atlas, including its internal gaps. Its native
+brush preview is 48×16. World sizing uses those compact art dimensions
+and the brush stores the grid it was picked from.
+
+A cell's source origin advances by tile size plus padding. Its local brush
+offset advances by tile size alone. `brush-uv` reports the selected cell's
+origin, local offset, and UV bounds using zero-based column and row within
+the brush. On a brush with gaps, it defaults to the upper-left cell for
+inspection and requires an explicit cell when editing a mesh face. This
+keeps faces sampling artwork between the gutters. Saved UV insets on these
+brushes apply to each cell's sampling rectangle.
+
+In Node, pass `{ width, height, paddingX, paddingY, offsetX, offsetY }` to
+`editor.setTilesetGrid` or as the optional size in `ink.pickTilesetBlock`.
+Use `ink.tilesetBrushCellUV(scene, brush, { column, row })` to address one cell.
+
+Run `node examples/tileset-pick/padding-demo.cjs tile-padding-demo` to compare
+a padded atlas, the assembled sign, and one tile selected on its own.
+
 ### Set brush size in world units
 
 Set `texelsPerUnit` once in the project's existing `ink-studio.config.js`.
@@ -192,7 +231,7 @@ ink-studio tileset brush-size inset-brush.json --scene gatehouse-scale.json \
 ```
 
 `brush-size` reports the total width and height and the size of an individual
-tile in world units. Each dimension is `source texels × brush scale / texels
+tile in world units. Each dimension is `art texels × brush scale / texels
 per unit`. A 16×16 crop at 16 texels per unit covers 0.5×0.5 world units at
 scale 0.5, and 2×2 at scale 2. Both use the same source rectangle and native
 PNG bytes. Density and brush scale must be positive finite numbers.
