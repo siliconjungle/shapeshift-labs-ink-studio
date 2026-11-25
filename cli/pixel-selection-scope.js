@@ -7,11 +7,14 @@ const PartMotion = require('./part-motion.js');
 const minimumCoverage = 1e-6;
 
 function create(world,w,h,request) {
-  const { object,part,isolated = false,captureDepth = false } = request;
-  if (Object.keys(request).some(key=>!['object','part','isolated','captureDepth'].includes(key)) ||
+  const { object,part,objects,isolated = false,captureDepth = false } = request;
+  if (Object.keys(request).some(key=>!['object','part','objects','isolated','captureDepth'].includes(key)) ||
+      objects !== undefined && (!Array.isArray(objects) || object !== undefined || part !== undefined ||
+        !Array.from(objects).every(Targets.name)) ||
       typeof isolated !== 'boolean' || typeof captureDepth !== 'boolean') throw new TypeError('Invalid pixel selection capture');
-  const target = Targets.prepare({object,...(part !== undefined && {part})});
-  const matches = subject => !!Targets.objectScope(target,subject);
+  const target = objects === undefined && Targets.prepare({object,...(part !== undefined && {part})});
+  const group = objects !== undefined && new Set(objects);
+  const matches = subject => group ? group.has(subject.object) || group.has(subject.entity) : !!Targets.objectScope(target,subject);
   const { row } = Targets.index(world);
   const parts = part !== undefined ? PartMotion.catalog(world) : null;
   const rows = Uint8Array.from({length:world.count},(_,i)=>{
@@ -43,7 +46,7 @@ function create(world,w,h,request) {
       }
     },
     finish() {
-      return { w,h,scene:world.id ?? world.spec?.id,object,...(part !== undefined && {part}),isolated,
+      return { w,h,scene:world.id ?? world.spec?.id,...(group ? {objects:[...group]} : {object,...(part !== undefined && {part})}),isolated,
         coverage:topDown(coverage),...(depth && { depth:topDown(depth) }) };
     }
   };

@@ -154,6 +154,66 @@ IDs of its successors. Resolve an override on a retired member by updating
 the instance's edit list for the target library. A failed refresh leaves the
 editor on its current library and exposes the report on the thrown error.
 
+### Isolate a prefab instance for mesh edits
+
+A visual prefab can include a `topologyMeshes` map alongside its `solids`.
+Use the same retained mesh rows as a diorama, including material slots
+and tile bindings. Store vertices in prefab-local space. Each instance
+renders its own placement with qualified scene object IDs such as
+`west.panel`. Declare referenced tilesets in `usesTilesets` so dependency
+review can find them even when the definition is unused.
+
+```json
+{
+  "instance": "west",
+  "revision": 3,
+  "faces": { "panel": ["sign"] },
+  "hideSurroundings": true,
+  "edits": [
+    { "member": "panel", "transform": {
+      "operation": { "kind": "move", "offset": [0.08, 0, 0] },
+      "pins": { "vertices": ["sign/v1", "sign/v2"] }
+    } }
+  ]
+}
+```
+
+Use prefab-local member and face IDs. A member can take a saved native
+face selection in place of its ID list to validate the topology revision.
+Omit `faces` to include every face of the instance's retained meshes.
+Omit `edits` to inspect the scope or capture an unedited view.
+
+Each edit takes one `patch`, `transform`, or `reskin` request. Patches edit
+retained faces, corners, and their vertices or edges. A transform defaults
+to the active faces. Its local axes follow the prefab and its world axes
+follow the scene. Use the normal transform pins to hold vertices shared
+with inactive faces. A reskin reuses the existing tile brush, crop and
+tileset modes. A request that changes an inactive face, shared boundary,
+or shared bake used outside the scope blocks the batch and lists the
+affected faces. Face IDs created outside the active set also block.
+
+```sh
+ink-studio mesh-topology isolate-prefab station.json edit.json \
+  --view view.json --preview isolated.png --out revised-station.json
+```
+
+Omit `--out` to review without writing changes. With `hideSurroundings`,
+the native preview keeps the entire selected prefab visible, including
+its inactive reference faces, and filters out other scene objects. The
+report lists the visible objects and their pixel counts. Saved scenes
+retain their full surroundings. A commit stores the changed mesh on
+the selected instance as one undoable override. It pins the source
+prefab revision and base mesh revision so a changed library cannot
+silently replace or shadow the original mesh.
+
+Use `editor.planPrefabIsolation(request)` for the report,
+`editor.previewPrefabIsolation(request)` for the world and headless
+render options, or `editor.editIsolatedPrefab(request)` to commit.
+
+```sh
+node examples/tileset-pick/prefab-isolation-demo.cjs prefab-isolation-demo
+```
+
 See [shared parameter bindings](parameter-bindings.md) for named controls, expressions, fields, and signals in editor builds.
 See the [unified scene timeline](scene-timeline.md) for animating those builds and inspecting their markers and audio cues.
 

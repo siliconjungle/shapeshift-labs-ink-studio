@@ -824,9 +824,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.meshTopologyScene` | namespace |  |  |
 | `KIT.authoring.meshTopologyScene.applyModifiers` | function | `(row, plan)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.diff` | function | `(before, after)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
-| `KIT.authoring.meshTopologyScene.evaluator` | function | `(rows)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
+| `KIT.authoring.meshTopologyScene.evaluator` | function | `(rows, placements)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.mount` | function | `(world, prepared)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
-| `KIT.authoring.meshTopologyScene.prepare` | function | `(rows, tilesets = A.tilesets.prepare())` | [source](../../src/kit/p23-mesh-topology-scene.js) |
+| `KIT.authoring.meshTopologyScene.prepare` | function | `(rows, tilesets = A.tilesets.prepare(), placements)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.revise` | function | `(row, patch, { projection } = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.transferAttachments` | function | `(row, patch, settings, projection)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.physicalMaterials` | namespace |  |  |

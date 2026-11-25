@@ -1,7 +1,7 @@
 /* Expand linked visual recipes into the native diorama schema at build time. */
 (function (K) {
   const A = K.authoring, DIO = K.diorama, { M, V } = K;
-  const tables = ['solids', 'parts', 'groups', 'motion', 'effects'];
+  const tables = ['solids', 'parts', 'groups', 'motion', 'effects', 'topologyMeshes'];
   const axes = [[0, 1, 0], [1, 0, 0], [0, 0, 1]];
 
   function frame(raw, fallback) {
@@ -10,7 +10,8 @@
     const basis = rotation.reduce((out, angle, i) => M.mul(out, M.rot(axes[i], angle)), M.id());
     const direction = value => M.app(basis, value);
     const offset = V.sub(V.add(pivot, translation), V.mul(direction(pivot), scale));
-    return { scale, basis, direction, point: value => V.mad(offset, direction(value), scale) };
+    return { scale, basis, direction, point: value => V.mad(offset, direction(value), scale),
+      mesh: { matrix: basis.map(value => value * scale), position: offset } };
   }
 
   function combine(placement, solid) {
@@ -42,7 +43,7 @@
 
   function expand(source, { prefabs: external } = {}) {
     if (!source || source.prefabs === undefined && source.instances === undefined && source.prefabLibrary === undefined)
-      return { spec: source, instances: new Map() };
+      return { spec: source, instances: new Map(), meshPlacements: new Map() };
     const W = K.world, tasks = W.data, { check, own, record, id, selector } = tasks;
     const { prefabs = {}, instances = {}, prefabLibrary, ...rest } = source;
     check(record(prefabs) && record(instances) && (external === undefined || record(external)), 'Expected prefab and instance maps');
@@ -66,11 +67,11 @@
     }
     const spec = { ...rest, solids: [...(rest.solids ?? [])], parts: { ...rest.parts }, groups: { ...rest.groups },
       motion: [...(rest.motion ?? [])], effects: [...(rest.effects ?? [])] };
-    const links = new Map();
+    const links = new Map(), meshPlacements = new Map();
     for (const [key, instance] of Object.entries(instances)) {
       try {
         check(id(key) && record(instance) &&
-          Object.keys(instance).every(field => ['prefab', 'transform', 'overrides'].includes(field)) &&
+          Object.keys(instance).every(field => ['prefab', 'transform', 'overrides', 'meshOverrides'].includes(field)) &&
           available.has(instance.prefab), 'Unknown visual prefab or invalid instance');
         const definition = available.get(instance.prefab);
         for (const sheet of definition.usesTilesets ?? [])
@@ -96,9 +97,18 @@
           }
         }
         const resolved = W.apply(baseline, edits, { validate: null }).world;
+        const meshOverrides = instance.meshOverrides ?? {};
+        check(record(meshOverrides), 'Expected a map of prefab mesh overrides');
+        for (const [member, override] of Object.entries(meshOverrides)) {
+          check(own(resolved.topologyMeshes, member), 'Mesh override refers to missing member ' + member);
+          check(record(override) && Object.keys(override).every(key => ['revision', 'base', 'mesh'].includes(key)) &&
+            override.revision === definition.revision &&
+            override.base === K.meshTopology.revision(resolved.topologyMeshes[member].document) && record(override.mesh),
+            'Mesh override for ' + member + ' needs review against prefab revision ' + definition.revision);
+        }
         const name = local => key + '.' + local;
         const placement = instance.transform === undefined ? null : frame(instance.transform);
-        const ids = [];
+        const ids = [], meshes = new Map();
         for (const [local, solid] of Object.entries(resolved.solids)) {
           check(record(solid), 'Expected a solid at ' + local);
           const next = scopedSolid(solid, name, tasks, { primary: true, key: local, placement, prefab: instance.prefab });
@@ -109,6 +119,16 @@
           check(!own(spec.parts, name(local)), 'Part ID is already in use: ' + name(local));
           spec.parts[name(local)] = { ...row, ...(row.parent !== undefined && { parent: name(row.parent) }),
             ...(placement && row.joint && { joint: placement.point(row.joint) }) };
+        }
+        for (const [local, base] of Object.entries(resolved.topologyMeshes)) {
+          const object = name(local), row = own(meshOverrides, local) ? meshOverrides[local].mesh : base;
+          check(!own(spec.topologyMeshes, object), 'Mesh ID is already in use: ' + object);
+          meshes.set(local, { object, base: K.meshTopology.revision(base.document), row });
+          spec.topologyMeshes = { ...spec.topologyMeshes, [object]: { ...row,
+            ...(row.part !== undefined && { part: name(row.part) }),
+            ...(Array.isArray(row.modifiers) && { modifiers: row.modifiers.map(op =>
+              op?.kind === 'projection' && own(resolved.topologyMeshes, op.target) ? { ...op, target: name(op.target) } : op) }) } };
+          if (placement) meshPlacements.set(object, placement.mesh);
         }
         for (const [local, row] of Object.entries(resolved.groups)) {
           check(!own(spec.groups, name(local)), 'Group ID is already in use: ' + name(local));
@@ -140,7 +160,7 @@
           }
           spec.effects.push(next);
         }
-        links.set(key, { instance, revision: definition.revision, solids: ids });
+        links.set(key, { instance, revision: definition.revision, solids: ids, meshes, frame: placement?.mesh });
       } catch (error) {
         const problem = { level: 'error', path: 'instances.' + key, problem: error.message, hint: '' };
         const failure = new Error(DIO.report([problem]));
@@ -148,7 +168,7 @@
         throw failure;
       }
     }
-    return { spec, instances: links };
+    return { spec, instances: links, meshPlacements };
   }
 
   function review(source, before, after) {

@@ -322,7 +322,7 @@
     return geometry;
   }
 
-  function toSceneMesh(source, { materials, objectId, partId, meshId } = {}) {
+  function toSceneMesh(source, { materials, objectId, partId, meshId, frame } = {}) {
     const doc = create(source);
     const { materials: slots, triangleSources, vertexSources, ...geometry } = renderGeometry(doc);
     if (!triangleSources.length) throw new RangeError('Add at least one polygon before rendering a mesh topology');
@@ -331,6 +331,20 @@
       if (options && !options.has(id)) throw new RangeError('Missing mesh material ' + id);
       return options?.get(id) ?? { id };
     });
+    if (frame) {
+      const place = K.sceneGraph.transform(frame);
+      const map = (values, point) => {
+        const output = new Array(values.length);
+        for (let i = 0; i < values.length; i += 3)
+          [output[i], output[i + 1], output[i + 2]] = point(values.slice(i, i + 3));
+        return output;
+      };
+      geometry.positions = map(geometry.positions, value => K.sceneGraph.point(place, value));
+      if (geometry.normals) {
+        const normals = K.M.tr(K.sceneGraph.inverse(place).matrix);
+        geometry.normals = map(geometry.normals, value => K.M.app(normals, value));
+      }
+    }
     const mesh = K.sceneMeshes.create({ id: meshId ?? doc.id, objectId, partId, ...geometry, materials: definitions });
     K.sceneMeshes.layer(mesh).featureFaces=Array.from({length:mesh.triangles},(_,i)=>
       triangleSources[K.sceneMeshes.sourceTriangle(mesh,i)].face);

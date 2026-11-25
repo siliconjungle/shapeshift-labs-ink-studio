@@ -1,7 +1,7 @@
 /* Stable authored identities for generated prefab members. */
 (function (K) {
   const P = K.procedural, {clone, freeze} = P.data;
-  const visual = ['solids', 'parts', 'groups', 'motion', 'effects'];
+  const visual = ['solids', 'parts', 'groups', 'motion', 'effects', 'topologyMeshes'];
   const world = ['entities', 'systems'];
   const own = (object, key) => object != null && Object.hasOwn(object, key);
 
