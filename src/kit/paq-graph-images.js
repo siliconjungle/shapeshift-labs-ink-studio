@@ -591,8 +591,14 @@
   const transfers = TypedImageTransfers({
     requireImage, descriptor, wrap, storage, pack, alphaAt, integerMax, convertColor, luminance, sampler, dimensions, fields
   });
+  const filters = TypedImageFilters({ requireImage, descriptor, wrap, storage, pack, integerMax, convertColor, fields });
   const correctionOptions = { type: 'record', default: {} };
   const sameImage = { type: 'typedImage', typeFrom: 'source' };
+  function filter(name, description, output = sameImage) {
+    return { description, inputs: { source: 'typedImage', options: correctionOptions }, outputs: { value: output },
+      run({ source, options }) { return { value: filters[name](source, options) }; } };
+  }
+
   function correction(name, description, type = 'typedImage', output = sameImage) {
     return { description, inputs: { source: type, options: correctionOptions }, outputs: { value: output },
       run({ source, options }) { return { value: corrections[name](source, options) }; } };
@@ -649,6 +655,19 @@
       outputs: { value: { type: 'typedImage', typeFrom: 'background' } },
       run({ background, foreground, ...options }) { return { value: blendImage(background, foreground, options) }; }
     },
+    'image.gaussianBlur': filter('gaussianBlur', 'Blur a typed material image with a separable Gaussian kernel.'),
+    'image.directionalBlur': filter('directionalBlur', 'Average along a centered line with subpixel samples and a clockwise angle.'),
+    'image.radialBlur': filter('radialBlur', 'Blur by rotating or zooming around an authored image center.'),
+    'image.anisotropicBlur': filter('anisotropicBlur', 'Apply rotated Gaussian kernels with separate along and across radii.'),
+    'image.variableBlur': {
+      description: 'Scale the local Gaussian footprint per texel using an aligned scalar radius map.',
+      inputs: { source: 'typedImage', radiusMap: 'typedImage', options: correctionOptions }, outputs: { value: sameImage },
+      run({ source, radiusMap, options }) { return { value: filters.variableBlur(source, radiusMap, options) }; }
+    },
+    'image.highPass': filter('highPass', 'Extract signed detail by subtracting a Gaussian, optionally adding a display bias.'),
+    'image.unsharpMask': filter('unsharpMask', 'Add back Gaussian detail with independent intensity and contrast threshold.'),
+    'image.sharpen': filter('sharpen', 'Sharpen with a four-neighbor cross while retaining original coverage.'),
+    'image.antialias': filter('antialias', 'Apply edge-adaptive subpixel reconstruction to diagonal raster edges.'),
     'image.curve': {
       description: 'Apply an editable channel curve with named stops, cubic handles and clamp or repeat addressing.',
       inputs: { source: 'typedImage', curve: 'record', options: correctionOptions }, outputs: { value: sameImage },
@@ -726,5 +745,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);

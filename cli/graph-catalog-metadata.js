@@ -180,6 +180,15 @@ const colorDistance = { metric: property('string', oneOf('rgb','perceptual','chr
   tolerance: property('number',positive,.04), softness: property('number',positive,0) };
 const maskOutput = { precision: {...imagePrecision, default: 'float64'}, useAlpha: property('boolean',{},true),
   invert: property('boolean',{},false) };
+const imageFilterOutput = { ...correctionOutput, border:property('string|record',
+  {constraints:{modes:['clamp','wrap','mirror','transparent'],axes:['u','v']}}),
+  space:property('string',oneOf('linear','native'),'linear') };
+const blendIntensity = property('number',limit(0,1),1);
+const detailIntensity = property('number',limit(0,16),1);
+const filterRadius = (max, fallback, integer = false) => property('number',pixelRange(0,max,integer),fallback);
+const filterSigma = property('number',{unit:'pixels',constraints:{exclusiveMin:0}});
+const filterAngle = property('number',unit('degrees'),0);
+const filterSamples = property('number',limit(2,65,true),17);
 const options = {
   'textile.pattern': {
     size: property('vec2', {unit:'world units'}, [4,3]),
@@ -198,6 +207,23 @@ const options = {
   'raster.mix': {amount:property('number',limit(0,1),1),
     maskMode:property('string',oneOf('alpha','mean'),'alpha'),invert:property('boolean',{},false),
     keepTransparentRGB:property('boolean',{},false),channels:property('number',limit(0,15,true),15)},
+  'image.gaussianBlur': { ...imageFilterOutput, intensity:blendIntensity, radius:filterRadius(64,2,true), sigma:filterSigma },
+  'image.directionalBlur': { ...imageFilterOutput, intensity:blendIntensity, radius:filterRadius(64,4),
+    angle:filterAngle, samples:filterSamples },
+  'image.radialBlur': { ...imageFilterOutput, intensity:blendIntensity, radius:filterRadius(64,7), samples:filterSamples,
+    center:property('vec2',limit(0,1),[.5,.5]), mode:property('string',oneOf('spin','zoom'),'spin') },
+  'image.anisotropicBlur': { ...imageFilterOutput, intensity:blendIntensity, angle:filterAngle,
+    radii:property('vec2',pixelRange(0,64,true),[7,2]), sigma:property('vec2',{unit:'pixels',constraints:{exclusiveMin:0}}) },
+  'image.variableBlur': { ...imageFilterOutput, intensity:blendIntensity, radius:filterRadius(16,4,true), sigma:filterSigma },
+  'image.highPass': { precision:{...imagePrecision,default:'float64'}, outOfRange:{...imageRangePolicy,default:'error'},
+    border:imageFilterOutput.border, intensity:detailIntensity, radius:filterRadius(64,2,true), sigma:filterSigma,
+    bias:property('number',{},0), threshold:property('number',positive,0) },
+  'image.unsharpMask': { ...imageFilterOutput, intensity:detailIntensity, radius:filterRadius(64,2,true),
+    sigma:filterSigma, threshold:property('number',positive,0) },
+  'image.sharpen': { ...imageFilterOutput, intensity:detailIntensity, radius:filterRadius(64,1,true),
+    threshold:property('number',positive,0) },
+  'image.antialias': { ...imageFilterOutput, intensity:blendIntensity, radius:filterRadius(2,.85),
+    threshold:property('number',positive,.08) },
   'image.curve': { ...correctionOutput, channel:property('string',oneOf('all','r','g','b','value'),'all') },
   'image.gradient': { precision:{...imagePrecision,default:'float64'}, outOfRange:{...imageRangePolicy,default:'error'},
     from:property('vec2',limit(0,1),[0,.5]), to:property('vec2',limit(0,1),[1,.5]) },

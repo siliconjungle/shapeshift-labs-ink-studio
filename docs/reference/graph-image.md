@@ -4,6 +4,40 @@
 
 Ports, defaults, and constraints come from the registered operations. Use `graph describe <op> --json` for the full structured record.
 
+### image.anisotropicBlur
+
+Apply rotated Gaussian kernels with separate along and across radii.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"space":{"type":"string","constraints":{"choices":["linear","native"]},"default":"linear"},"intensity":{"type":"number","constraints":{"min":0,"max":1},"default":1},"angle":{"type":"number","unit":"degrees","default":0},"radii":{"type":"vec2","unit":"pixels","constraints":{"min":0,"max":64,"integer":true},"default":[7,2]},"sigma":{"type":"vec2","unit":"pixels","constraints":{"exclusiveMin":0}}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.anisotropicBlur --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.antialias
+
+Apply edge-adaptive subpixel reconstruction to diagonal raster edges.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"space":{"type":"string","constraints":{"choices":["linear","native"]},"default":"linear"},"intensity":{"type":"number","constraints":{"min":0,"max":1},"default":1},"radius":{"type":"number","unit":"pixels","constraints":{"min":0,"max":2},"default":0.85},"threshold":{"type":"number","constraints":{"min":0},"default":0.08}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.antialias --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.autoLevels
 
 Fit linked levels from exact percentiles of visible decoded samples and return the measured bounds.
@@ -174,6 +208,23 @@ Guides: [guide](../graph-image-types.md)
 Get the runnable example with `ink-studio graph describe image.declare --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.directionalBlur
+
+Average along a centered line with subpixel samples and a clockwise angle.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"space":{"type":"string","constraints":{"choices":["linear","native"]},"default":"linear"},"intensity":{"type":"number","constraints":{"min":0,"max":1},"default":1},"radius":{"type":"number","unit":"pixels","constraints":{"min":0,"max":64},"default":4},"angle":{"type":"number","unit":"degrees","default":0},"samples":{"type":"number","constraints":{"min":2,"max":65,"integer":true},"default":17}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.directionalBlur --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.exposure
 
 Apply exposure stops in linear light, retaining HDR in floating linear images.
@@ -189,6 +240,23 @@ Origin: toolkit.
 Guides: [guide](../material-color-corrections.md)
 
 Get the runnable example with `ink-studio graph describe image.exposure --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.gaussianBlur
+
+Blur a typed material image with a separable Gaussian kernel.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"space":{"type":"string","constraints":{"choices":["linear","native"]},"default":"linear"},"intensity":{"type":"number","constraints":{"min":0,"max":1},"default":1},"radius":{"type":"number","unit":"pixels","constraints":{"min":0,"max":64,"integer":true},"default":2},"sigma":{"type":"number","unit":"pixels","constraints":{"exclusiveMin":0}}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.gaussianBlur --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.gradient
@@ -243,6 +311,23 @@ Origin: toolkit.
 Guides: [guide](../material-curves-gradients.md)
 
 Get the runnable example with `ink-studio graph describe image.gradientMap --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.highPass
+
+Extract signed detail by subtracting a Gaussian, optionally adding a display bias.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]},"default":"float64"},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"error"},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"intensity":{"type":"number","constraints":{"min":0,"max":16},"default":1},"radius":{"type":"number","unit":"pixels","constraints":{"min":0,"max":64,"integer":true},"default":2},"sigma":{"type":"number","unit":"pixels","constraints":{"exclusiveMin":0}},"bias":{"type":"number","default":0},"threshold":{"type":"number","constraints":{"min":0},"default":0}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.highPass --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.histogram
@@ -399,6 +484,23 @@ Guides: [guide](../material-color-corrections.md)
 Get the runnable example with `ink-studio graph describe image.posterize --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.radialBlur
+
+Blur by rotating or zooming around an authored image center.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"space":{"type":"string","constraints":{"choices":["linear","native"]},"default":"linear"},"intensity":{"type":"number","constraints":{"min":0,"max":1},"default":1},"radius":{"type":"number","unit":"pixels","constraints":{"min":0,"max":64},"default":7},"samples":{"type":"number","constraints":{"min":2,"max":65,"integer":true},"default":17},"center":{"type":"vec2","constraints":{"min":0,"max":1},"default":[0.5,0.5]},"mode":{"type":"string","constraints":{"choices":["spin","zoom"]},"default":"spin"}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.radialBlur --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.resize
 
 Resample a typed image using its own per-axis tiling and sampling policy. The output keeps the source port type.
@@ -415,6 +517,23 @@ Origin: toolkit.
 Guides: [guide](../graph-image-types.md), [guide](../material-image-blend.md#inputs-and-output)
 
 Get the runnable example with `ink-studio graph describe image.resize --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.sharpen
+
+Sharpen with a four-neighbor cross while retaining original coverage.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"space":{"type":"string","constraints":{"choices":["linear","native"]},"default":"linear"},"intensity":{"type":"number","constraints":{"min":0,"max":16},"default":1},"radius":{"type":"number","unit":"pixels","constraints":{"min":0,"max":64,"integer":true},"default":1},"threshold":{"type":"number","constraints":{"min":0},"default":0}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.sharpen --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.shuffle
@@ -561,4 +680,39 @@ A literal image intent and layout select the value port and typed output.
 Guides: [guide](../graph-image-types.md#make-and-convert-uniform-images)
 
 Get the runnable example with `ink-studio graph describe image.uniform --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.unsharpMask
+
+Add back Gaussian detail with independent intensity and contrast threshold.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"space":{"type":"string","constraints":{"choices":["linear","native"]},"default":"linear"},"intensity":{"type":"number","constraints":{"min":0,"max":16},"default":1},"radius":{"type":"number","unit":"pixels","constraints":{"min":0,"max":64,"integer":true},"default":2},"sigma":{"type":"number","unit":"pixels","constraints":{"exclusiveMin":0}},"threshold":{"type":"number","constraints":{"min":0},"default":0}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.unsharpMask --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.variableBlur
+
+Scale the local Gaussian footprint per texel using an aligned scalar radius map.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `radiusMap` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]}},"outOfRange":{"type":"string","constraints":{"choices":["clamp","error"]},"default":"clamp"},"border":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]}},"space":{"type":"string","constraints":{"choices":["linear","native"]},"default":"linear"},"intensity":{"type":"number","constraints":{"min":0,"max":1},"default":1},"radius":{"type":"number","unit":"pixels","constraints":{"min":0,"max":16,"integer":true},"default":4},"sigma":{"type":"number","unit":"pixels","constraints":{"exclusiveMin":0}}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-filters.md)
+
+Get the runnable example with `ink-studio graph describe image.variableBlur --example > example.json`.
 Run it with `ink-studio graph run example.json`.
