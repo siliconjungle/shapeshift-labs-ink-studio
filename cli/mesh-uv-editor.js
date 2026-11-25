@@ -9,7 +9,7 @@ const { viewSettings, worldFor } = require('./mesh-native-view.js');
 
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const options = {
-  layout: ['object','out','uv-set','channel'], select: ['object','out','view','preview','uv-set','channel'],
+  layout: ['object','out','uv-set','channel'], select: ['object','out','topology-out','view','preview','uv-set','channel'],
   edit: ['object','out','view','preview','report','selection','uv-set','channel']
 };
 const imageNames = ['atlas-before.png', 'model-before.png', 'atlas-after.png', 'model-after.png', 'comparison.png'];
@@ -64,42 +64,56 @@ function capture(document, settings, kit, editor, object) {
   return { frame, mesh, camera };
 }
 
-function atlas(layout, material, selection, settings, kit) {
+function atlas(layout, material, selection, settings, kit, paint) {
   const { h } = settings, w = h, margin = 8, extent = w - margin * 2;
-  const at = uv => uv.map(n => margin + n * (extent - 1));
+  const factor = paint ? extent / Math.max(paint.w, paint.h) : 1;
+  const size = paint ? [paint.w, paint.h].map(n => Math.max(1, Math.round(n * factor))) : [extent, extent];
+  const start = size.map(n => Math.floor((h - n) / 2));
+  const at = uv => uv.map((n, axis) => start[axis] + .5 + n * (size[axis] - 1));
   const corners = new Map(layout.corners.map(row => [row.id, row]));
   const faces = new Set(layout.faces.filter(row => row.material === material).map(row => row.id));
   const selected = new Set(selection?.faces), selectedEdges = new Set(selection?.domain === 'edges' ? selection.edges : []);
   const selectedCorners = new Set(selection?.domain === 'corners' ? selection.corners : []);
   const chartColors = new Map(layout.islands.map((row, i) => [row.id, tints[i % tints.length]]));
   const sampleEvery = Math.max(1, Math.ceil(faces.size / 4000));
-  const draw = [rect([margin, margin, extent, extent], '#152634')];
-  for (let i = 0; i <= 8; i++) {
+  const layers = paint ? [{ source: paint, rect: [...start, ...size] }] : [];
+  const draw = paint ? [] : [rect([...start, ...size], '#152634')], highlights = [];
+  for (let i = 0; !paint && i <= 8; i++) {
     draw.push(line([at([i / 8, 0]), at([i / 8, 1])], '#29404f'));
     draw.push(line([at([0, i / 8]), at([1, i / 8])], '#29404f'));
   }
   let step = 0;
   for (const row of layout.faces) if (faces.has(row.id) && (step++ % sampleEvery === 0 || selected.has(row.id))) {
-    draw.push({ type: 'polygon', points: row.corners.map(id => at(corners.get(id).uv)),
-      fill: selected.has(row.id) ? '#357c75' : chartColors.get(row.island) });
+    const points = row.corners.map(id => at(corners.get(id).uv));
+    if (selected.has(row.id)) {
+      highlights.push({ type: 'polygon', points, fill: paint ? '#75e2c84d' : '#357c75' },
+        line([...points, points[0]], ink.selected, 2));
+    } else if (!paint) draw.push({ type: 'polygon', points, fill: chartColors.get(row.island) });
   }
   for (const [i, edge] of layout.edges.entries()) if (i % sampleEvery === 0 || selectedEdges.has(edge.id) || edge.authored) {
     const color = selectedEdges.has(edge.id) ? ink.selected : ink[edge.kind];
     for (const side of edge.sides) if (faces.has(side.face)) draw.push(line(side.uv.map(at), color, selectedEdges.has(edge.id) ? 2 : 1));
   }
+  for (const highlight of highlights) draw.push(highlight);
   for (const corner of corners.values()) if (faces.has(corner.face) && (corner.pinned || selectedCorners.has(corner.id)))
     draw.push(rect(center(at(corner.uv), corner.pinned ? 2 : 1), corner.pinned ? ink.pin : ink.selected));
-  return composite(w, h, [], draw, kit);
+  return composite(w, h, layers, draw, kit);
 }
 
-function model(layout, { frame, mesh, camera }, selection, kit) {
+function model(layout, { frame, mesh, camera }, selection, kit, visiblePixels) {
   const { w, h } = frame, K = kit.KIT, UV = K.meshTopology.uv;
   const mapped = UV.modelFaces(mesh, frame), selected = new Set(selection?.faces);
   const rgb = frame.rgb.slice();
-  for (let i = 0; i < mapped.faceAt.length; i++) if (selected.has(mapped.faces[mapped.faceAt[i]]))
-    [93, 205, 179].forEach((n, channel) => {
-      rgb[i * 3 + channel] = Math.round((rgb[i * 3 + channel] * 2 + n) / 3);
-    });
+  const selectedAt = i => selected.has(mapped.faces[mapped.faceAt[i]]);
+  for (let i = 0; i < mapped.faceAt.length; i++) if (selectedAt(i)) {
+    const face = mapped.faces[mapped.faceAt[i]], x = i % w;
+    if (visiblePixels) visiblePixels.set(face, visiblePixels.get(face) + 1);
+    const outline = visiblePixels && (x === 0 || x === w - 1 ||
+      !selectedAt(i - 1) || !selectedAt(i + 1) || !selectedAt(i - w) || !selectedAt(i + w));
+    const tint = outline ? [117, 226, 200] : [93, 205, 179];
+    for (const [channel, n] of tint.entries())
+      rgb[i * 3 + channel] = outline ? n : Math.round((rgb[i * 3 + channel] * 2 + n) / 3);
+  }
   const { eye, right, up, back } = kit.CameraLens.fromView(camera.view);
   function project(p) {
     const relative = K.V.sub(p, eye), depth = -K.V.dot(relative, back);
@@ -137,7 +151,20 @@ function model(layout, { frame, mesh, camera }, selection, kit) {
   return composite(w, h, [{ source: { w, h, rgb } }], draw, kit);
 }
 
-function review(before, after, nativeBefore, nativeAfter, selected, settings, kit, paths, readability) {
+function atlasPaint(mesh, material, layout, kit) {
+  if ((layout.uvSet ?? 0) !== MaterialUV.resolve(layout.uvBindings, 'pigment')) return;
+  const layer = kit.KIT.sceneMeshes.layer(mesh);
+  const region = layer.surfaceCharts?.find(row => row.materialId === material)?.region;
+  if (!region || region.width === 1 && region.height === 1) return;
+  const { x, y, width: w, height: h } = region, rgba = new Uint8Array(w * h * 4);
+  for (let row = 0; row < h; row++) {
+    const at = ((y + row) * layer.width + x) * 4;
+    rgba.set(layer.pixels.subarray(at, at + w * 4), row * w * 4);
+  }
+  return { w, h, rgba };
+}
+
+function review(before, after, nativeBefore, nativeAfter, selected, settings, kit, paths, readability, selectionOutput) {
   if (settings.h < 32) throw new RangeError('UV review needs at least 32 native rows');
   const UV = kit.KIT.meshTopology.uv;
   const layouts = [UV.inspect(before,selected?.uvSet ?? 0), UV.inspect(after,selected?.uvSet ?? 0)];
@@ -145,7 +172,23 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     layouts[0].faces[0]?.material;
   if (!layouts[0].faces.some(row => row.material === material)) throw new RangeError('Choose an authored UV material');
   const captures = [nativeBefore, nativeAfter], views = [];
-  for (const [i, layout] of layouts.entries()) {
+  let crossHighlight;
+  if (selectionOutput) {
+    const layout = layouts[0], byId = new Map(layout.faces.map(row => [row.id, row]));
+    const visible = new Map(selected.faces.map(id => [id, 0]));
+    const materials = [...new Set([material, ...selected.faces.map(id => byId.get(id).material).sort()])];
+    const sheets = materials.map((id, i) => ({ material: id, file: i ? 'atlas-' + (i + 1) + '.png' : imageNames[0] }));
+    const extra = sheets.slice(1).map(row => path.resolve(selectionOutput.directory, row.file));
+    selectionOutput.guard(extra);
+    const atlasImage = id => atlas(layout, id, selected, settings, kit, atlasPaint(nativeBefore.mesh, id, layout, kit));
+    const sheet = atlasImage(material), scene = model(layout, nativeBefore, selected, kit, visible);
+    views.push(sheet, scene, sheet, scene);
+    for (const [i, file] of extra.entries()) {
+      const image = atlasImage(sheets[i + 1].material);
+      files.write(file, PNG.encode(image.w, image.h, image.rgb));
+    }
+    crossHighlight = { sheets, faces: selected.faces.map(id => ({ id, material: byId.get(id).material, visiblePixels: visible.get(id) })) };
+  } else for (const [i, layout] of layouts.entries()) {
     views.push(atlas(layout, material, selected, settings, kit), model(layout, captures[i], selected, kit));
   }
   const gap = 6, { w, h } = settings, width = h + w + 3 * gap, height = h * 2 + 64;
@@ -166,7 +209,8 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     before: UV.readability(nativeBefore.mesh, nativeBefore.frame, readability),
     after: UV.readability(nativeAfter.mesh, nativeAfter.frame, readability)
   };
-  return { material, grid: [w, h], files: imageNames, ...(evidence && { readability: evidence }) };
+  return { material, grid: [w, h], files: [...imageNames, ...crossHighlight?.sheets.slice(1).map(row => row.file) ?? []],
+    ...(crossHighlight && { crossHighlight }), ...(evidence && { readability: evidence }) };
 }
 
 function command([action, file, input, ...rest], opt, kit, openEditor) {
@@ -174,12 +218,15 @@ function command([action, file, input, ...rest], opt, kit, openEditor) {
       Object.entries(opt).some(([key, value]) => !options[action].includes(key) || !name(value)) ||
       opt.selection && !opt.preview)
     throw new TypeError('Use mesh-uv layout, select, or edit on a retained mesh topology document');
-  const { object, out, report, preview } = opt;
+  const { object, out, report, preview, 'topology-out': topologyOut } = opt;
   const inputs = [file, input, opt.view, opt.selection].filter(Boolean).map(value => path.resolve(value));
   const paths = preview ? imageNames.map(name => path.resolve(preview, name)) : [];
-  const outputs = [...[out, report].filter(Boolean).map(value => path.resolve(value)), ...paths];
-  if (new Set(outputs).size !== outputs.length || outputs.some(value => inputs.includes(value)))
-    throw new RangeError('Write UV reports and edited documents separately from the source and request');
+  const outputs = [...[out, report, topologyOut].filter(Boolean).map(value => path.resolve(value)), ...paths];
+  const separate = filenames => {
+    if (new Set(filenames).size !== filenames.length || filenames.some(value => inputs.includes(value)))
+      throw new RangeError('Write UV reports and edited documents separately from the source and request');
+  };
+  separate(outputs);
   if (object && action === 'edit' && out && path.dirname(path.resolve(out)) !== path.dirname(inputs[0]))
     throw new RangeError('Write the revised scene beside its source so relative assets still resolve');
   const source = read(file), { meshTopology: topology } = kit.KIT, UV = topology.uv;
@@ -208,7 +255,12 @@ function command([action, file, input, ...rest], opt, kit, openEditor) {
         result = UV.pickModel(old.mesh, old.frame, request.model.pixel, request.domain,request.uvSet);
       } else result = UV.select(document, request);
       value = result;
-      if (preview) result.preview = review(document, document, old, old, result, settings, kit, paths, settings.readability);
+      if (preview) result.preview = review(document, document, old, old, result, settings, kit, paths, settings.readability,
+        { directory: preview, guard: extra => separate([...outputs, ...extra]) });
+      if (topologyOut) {
+        const selection = topology.select(document, { domain: 'faces', ids: result.faces });
+        files.publishJson(path.resolve(topologyOut), selection, 'A different topology selection already exists at ' + topologyOut);
+      }
     } else {
       const plan = editor ? editor.planMeshUV(object, request) : UV.plan(document, request);
       result = { ...plan.report };

@@ -225,6 +225,7 @@
       T = [],
       TM = [],
       uvFaces = [],
+      vertexTints = [],
       mats = [{ name: 'default', rgb: [0.7, 0.7, 0.7] }],
       matOf = new Map();
     let anyCol = false,
@@ -303,11 +304,12 @@
             if (ca) {
               const k = ca.ints ? 1 / ca.top : 1,
                 tint = pr.material === undefined ? [1, 1, 1] : mrgb;
-              C.push(
-                Math.pow(ca.get(e, 0) * k, 1 / 2.2) * tint[0],
-                Math.pow(ca.get(e, 1) * k, 1 / 2.2) * tint[1],
-                Math.pow(ca.get(e, 2) * k, 1 / 2.2) * tint[2]
-              );
+              const color = [0, 1, 2].map(channel => ca.get(e, channel) * k);
+              C.push(...color.map((value, channel) => Math.pow(value, 1 / 2.2) * tint[channel]));
+              if (attributes && (ca.w === 3 || ca.w === 4)) {
+                if (ca.w === 4) color.push(ca.get(e, 3) * k);
+                vertexTints[base + e] = color;
+              }
               anyCol = true;
             } else C.push(mrgb[0], mrgb[1], mrgb[2]);
           }
@@ -342,6 +344,7 @@
           : (g.nodes || []).map((n, i) => i).filter(i => !(g.nodes || []).some(n => (n.children || []).includes(i)));
     for (const r of roots) walk(r, ID);
     const mesh = M.make(P, T, anyCol ? C : null, TM, mats);
+    if (vertexTints.length) mesh.vertexTints = Array.from({ length: P.length / 3 }, (_, i) => vertexTints[i] ?? null);
     if (attributes && uvFaces.some(Boolean)) {
       if (uvFaces.every(Boolean)) mesh.uvs=uvFaces;
       else mesh.uvFaces=uvFaces;

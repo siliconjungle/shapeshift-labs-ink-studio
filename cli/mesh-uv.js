@@ -39,6 +39,10 @@ function source(file,selector,preserve = false) {
       if(preserve) for(const row of corner.values()) for(const set of UV.setsOf(row)) sets.add(set);
       return {points:doc.vertices.map(row=>row.position),triangles:triangles.map(row=>row.corners.map(id=>indices.get(corner.get(id).vertex))),
         uvs:layoutAt(uvSet),cutSeams:cutAt(uvSet),uvSet,uvBindings:doc.uvBindings,
+        tints:triangles.map(row=>{
+          const values=row.corners.map(id=>corner.get(id).attributes?.tint);
+          return values.every(value=>[3,4].includes(value?.length) && value.every(n=>n>=0 && n<=1)) ? values : null;
+        }),
         ...(sets.size && {uvSets:Object.fromEntries([...sets].map(set=>[set,layoutAt(set)])),
           uvCuts:Object.fromEntries([...sets].map(set=>[set,cutAt(set)]))}),
         groupsByFace:triangles.map(row=>({material:byFace.get(row.face)}))};
@@ -55,7 +59,9 @@ function source(file,selector,preserve = false) {
     throw new RangeError('UV assignments differ across exported parts. Import the part as its own retained mesh.');
   const layout=mesh.uvSets?.[set] ?? (set===uvSet ? mesh.uvs??mesh.uvFaces : undefined);
   const triples=data=>Array.from({length:data.length/3},(_,i)=>Array.from(data.subarray(i*3,i*3+3)));
-  return {points:triples(mesh.pos),triangles:triples(mesh.tri),uvs:layout,uvSet:set,uvBindings:mesh.uvBindings, ...(preserve && mesh.uvSets && {uvSets:mesh.uvSets}),
+  const triangles=triples(mesh.tri);
+  return {points:triples(mesh.pos),triangles,uvs:layout,uvSet:set,uvBindings:mesh.uvBindings, ...(preserve && mesh.uvSets && {uvSets:mesh.uvSets}),
+    ...(mesh.vertexTints && {tints:triangles.map(row=>mesh.vertexTints[row[0]] ? row.map(i=>mesh.vertexTints[i]) : null)}),
     groupsByFace:Array.from(mesh.tmat,i=>({material:mesh.mats[i].name}))};
 }
 
