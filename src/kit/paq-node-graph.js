@@ -99,6 +99,13 @@
         return [key, socket, link, valid];
       });
       stack.delete(name);
+      for (const [port, socket] of Object.entries(outputs)) {
+        if (socket.typeFrom === undefined) continue;
+        const declared = bindings.find(([key]) => key === socket.typeFrom);
+        if (!declared) throw new TypeError('Unknown source socket for output type ' + name + '.' + port);
+        const { type } = declared[2];
+        if (type !== 'any' && compatible(type, socket.type)) outputs[port] = { ...socket, type };
+      }
       const run = planOnly ? undefined : operation.instantiate ? operation.instantiate() : operation.run;
       configs.set(name, { name, op: spec.op, group:spec.group, type:spec.type, run, outputs, bindings,
         clock: !!operation.time, seed: operation.seed, asset: operation.asset,

@@ -36,7 +36,7 @@ const PNGRaster = (() => {
     const paint = capturePalette === 'paint', sheet = capturePalette === 'sheet', tileset = capturePalette === 'tileset';
     const readIndices = color === 3 && (paint || sheet || tileset || capturePalette === 'indices');
     if (capturePalette === 'indices' && color !== 3) throw new Error('Indexed PNG asset needs a palette-indexed PNG');
-    if (layoutOnly) return { w, h };
+    if (layoutOnly) return { w, h, ...(capturePalette === 'native' && { bitDepth: bits }) };
     if (paint && (w > 512 || h > 512 || bits > 8))
       throw new RangeError('Pixel art import needs a PNG up to 512 × 512 with 8-bit or smaller channels');
     if (sheet && bits > 8) throw new RangeError('Sprite sheets need 8-bit or smaller PNG channels');

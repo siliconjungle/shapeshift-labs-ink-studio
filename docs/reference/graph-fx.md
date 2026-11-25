@@ -348,7 +348,7 @@ Origin: toolkit.
 | --- | --- | --- | --- | --- |
 | Input | `emission` | `raster` | Required | {"layout":"Interleaved samples on a positive integer grid","channels":[1,4],"finite":true} |
 | Input | `normals` | `any` | `null` | view XYZ, +Y up · {"channels":[3,4]} |
-| Input | `height` | `any` | `null` | art pixels before heightScale · {"channels":[1,1]} |
+| Input | `height` | `reliefHeight` | `null` | art pixels before heightScale · {"layout":"Typed height in art pixels or a legacy numeric scalar raster","channels":[1,1]} |
 | Input | `mask` | `any` | `null` |  |
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"radius":{"type":"number","unit":"pixels","constraints":{"min":1,"max":256},"default":32},"emitterHeight":{"type":"number","unit":"pixels","constraints":{"min":-4096,"max":4096},"default":8},"strength":{"type":"number","constraints":{"min":0,"max":1024},"default":1},"heightScale":{"type":"number","constraints":{"min":-4096,"max":4096},"default":1},"normalEncoding":{"type":"string","constraints":{"choices":["signed","rgb8"]},"default":"signed"},"emissionEncoding":{"type":"string","constraints":{"choices":["srgb","linear"]},"default":"srgb"},"emissionScale":{"type":"number","constraints":{"min":0.0000152587890625,"max":65536},"default":255},"maskScale":{"type":"number","constraints":{"min":0.0000152587890625,"max":65536},"default":255},"sampleStep":{"type":"number","constraints":{"min":1,"max":32,"integer":true},"default":1}} |
 | Output | `value` | `displayRaster` | — | display byte levels · {"channels":[1,4],"samples":[0,255]} |
@@ -359,7 +359,7 @@ Origin: toolkit.
 - Samples use 3D distance falloff and diffuse facing. Height supplies elevation and generates normals when none are connected.
 - Dense emission can pool adjacent source pixels with sampleStep to stay within the 64 million light visit budget.
 
-Guides: [guide](../headless-authoring.md#pixel-effects-and-raster-analysis), [guide](../raster-relight.md)
+Guides: [guide](../graph-image-types.md#convert-color-to-relief), [guide](../headless-authoring.md#pixel-effects-and-raster-analysis), [guide](../raster-relight.md)
 
 Get the runnable example with `ink-studio graph describe fx.relight --example > example.json`.
 Run it with `ink-studio graph run example.json`.

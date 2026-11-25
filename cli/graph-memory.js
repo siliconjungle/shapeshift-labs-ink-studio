@@ -45,7 +45,7 @@ function estimateGraphMemory({ graph, groups, assets, overrides, kit, hostOperat
       external.set(name, { value: index, alpha });
       reserve(index.bytes + alpha.bytes);
     } else if (type === 'raster') {
-      const info = raster(value.width, value.height, value.channels ?? 4, value.data?.BYTES_PER_ELEMENT ?? 1);
+      const info = raster(value.width, value.height, value.channels ?? 4, value.data?.BYTES_PER_ELEMENT ?? value.sampleBytes ?? 1);
       external.set(name, { value: info });
       if (info) reserve(info.bytes);
     }

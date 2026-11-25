@@ -476,6 +476,77 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graph.simulation` | function | `({ initial, step, dt = 1 / 60, checkpoint = 15, cache = 32, maxSteps = 10000, clone = P.data.clone, seed = 0 } = {})` | [source](../../src/kit/paq-node-graph.js) |
 | `KIT.procedural.graph.tiles` | function | `({ bounds, cell = [1, 1], seed = 0, mask = () => 1, vector = () => [0, 0], scale = 1, jitter = .25, limit = 65536, time = 0 } = {})` | [source](../../src/kit/par-graph-assets.js) |
 
+## KIT.procedural.graphImages
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.graphImages` | namespace |  |  |
+| `KIT.procedural.graphImages.declare` | function | `(source, settings)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.format` | value | `string = "ink-studio/graph-image"` |  |
+| `KIT.procedural.graphImages.inspect` | function | `(source)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.declare"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.declare"].description` | value | `string = "Attach a verified image contract to a legacy raster using a literal descriptor."` |  |
+| `KIT.procedural.graphImages.operations["image.declare"].specialize` | function | `({ params, inputs })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.inspect"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.inspect"].description` | value | `string = "Report image extent and the full sampling and sample encoding contract."` |  |
+| `KIT.procedural.graphImages.operations["image.inspect"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.inspect"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.inspect"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.inspect"].outputs.value` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.inspect"].run` | function | `({ source })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.resize"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.resize"].description` | value | `string = "Resample a typed image using its own per-axis tiling and sampling policy. The output keeps the source port type."` |  |
+| `KIT.procedural.graphImages.operations["image.resize"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.resize"].inputs.height` | value | `string = "pixelCount"` |  |
+| `KIT.procedural.graphImages.operations["image.resize"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.resize"].inputs.width` | value | `string = "pixelCount"` |  |
+| `KIT.procedural.graphImages.operations["image.resize"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.resize"].outputs.value` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.resize"].outputs.value.type` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.resize"].outputs.value.typeFrom` | value | `string = "source"` |  |
+| `KIT.procedural.graphImages.operations["image.resize"].run` | function | `({ source, width, height })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.toDisplay"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.toDisplay"].description` | value | `string = "Convert typed color to straight-alpha sRGB8 for legacy compositing and PNG exports."` |  |
+| `KIT.procedural.graphImages.operations["image.toDisplay"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.toDisplay"].inputs.outOfRange` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.toDisplay"].inputs.outOfRange.default` | value | `string = "clamp"` |  |
+| `KIT.procedural.graphImages.operations["image.toDisplay"].inputs.outOfRange.type` | value | `string = "string"` |  |
+| `KIT.procedural.graphImages.operations["image.toDisplay"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.toDisplay"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.toDisplay"].outputs.value` | value | `string = "displayRaster"` |  |
+| `KIT.procedural.graphImages.operations["image.toDisplay"].run` | function | `({ source, outOfRange })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.toHeight"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.toHeight"].description` | value | `string = "Map linear-light color or scalar samples to height using an explicit scale and units."` |  |
+| `KIT.procedural.graphImages.operations["image.toHeight"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.toHeight"].inputs.channel` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.toHeight"].inputs.channel.default` | value | `string = "luminance"` |  |
+| `KIT.procedural.graphImages.operations["image.toHeight"].inputs.channel.type` | value | `string = "string"` |  |
+| `KIT.procedural.graphImages.operations["image.toHeight"].inputs.offset` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.toHeight"].inputs.offset.default` | value | `number = 0` |  |
+| `KIT.procedural.graphImages.operations["image.toHeight"].inputs.offset.type` | value | `string = "number"` |  |
+| `KIT.procedural.graphImages.operations["image.toHeight"].inputs.scale` | value | `string = "number"` |  |
+| `KIT.procedural.graphImages.operations["image.toHeight"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.toHeight"].inputs.units` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.toHeight"].inputs.units.default` | value | `string = "art-px"` |  |
+| `KIT.procedural.graphImages.operations["image.toHeight"].inputs.units.type` | value | `string = "string"` |  |
+| `KIT.procedural.graphImages.operations["image.toHeight"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.toHeight"].outputs.value` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.toHeight"].run` | function | `({ source, ...options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.toRaster"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.toRaster"].description` | value | `string = "Explicitly hand the raw samples of a typed image to a legacy raster operation."` |  |
+| `KIT.procedural.graphImages.operations["image.toRaster"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.toRaster"].inputs.source` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.toRaster"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.toRaster"].outputs.value` | value | `string = "raster"` |  |
+| `KIT.procedural.graphImages.operations["image.toRaster"].run` | function | `({ source })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.resize` | function | `(source, width, height)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.toDisplay` | function | `(source, outOfRange = 'clamp')` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.toHeight` | function | `(source, { scale, offset = 0, units = 'art-px', channel = 'luminance' } = {})` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.toRaster` | function | `(source)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.valid` | function | `(value, intent)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.version` | value | `number = 1` |  |
+
 ## KIT.procedural.graphTypes
 
 | Member | Kind | Signature or value | Guides and source |

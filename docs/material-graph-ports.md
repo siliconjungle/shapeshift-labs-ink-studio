@@ -8,7 +8,7 @@ Use the `materialChannels` socket type to pass named rasters through a graph or 
 | `height`, `roughness`, `metalness`, `ao`, `opacity` | One |
 | `mask.<name>` | One |
 
-The package keeps sample values as supplied. A signed height raster or float normal can pass beside byte pigment without quantization. Metadata is per-map JSON such as `{ "texCoord": 1, "unit": "world" }` or `{ "encoding": "rgb8", "space": "tangent" }`. Graph operations and carriers use the conventions they already expect. Extract a grayscale channel from an RGBA source with `raster.channel` before packing scalar maps.
+The package keeps sample values as supplied. A signed height raster or float normal can pass beside byte pigment without quantization. Metadata is per-map JSON such as `{ "texCoord": 1, "unit": "world" }` or `{ "encoding": "rgb8", "space": "tangent" }`. Graph operations and carriers use the conventions they already expect. For maps with verified layouts, precision and sampling policies, use [typed images](graph-image-types.md#send-images-through-materials-and-legacy-nodes). Extract a grayscale channel from an RGBA source with `raster.channel` before packing scalar maps.
 
 ## Read and edit maps
 
