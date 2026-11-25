@@ -211,6 +211,7 @@ All checked-in guides, indexed by title and section headings.
 - [Material-point passes and impacts](../material-point-impacts.md)
 - [Portable material response recipes](../material-response.md)
 - [Editable material shape library](../material-shape-library.md)
+- [SDF Shape Splatter](../material-shape-splatter.md)
 - [Material Tile Generator](../material-tile-generator.md)
 - [Map-driven Tile Sampler](../material-tile-sampler.md)
 - [Surface materialisation](../materialisation.md)

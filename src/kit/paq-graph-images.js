@@ -636,6 +636,10 @@
     freeze:P.data.freeze,hash:P.data.hash,hash01:P.data.hash01});
   const tileSampler=TypedTileSampler({tileGenerator,fields,requireImage,integerMax,convertColor,sampler:spatialSampler,
     hash:P.data.hash,hash01:P.data.hash01});
+  const shapeSplatter=TypedShapeSplatter({V:KIT.V,M:KIT.M,planar:P.shapeLibrary.compile,
+    volume:(source,time)=>({box:P.sceneGraph.sdfExtent(source),read:P.sceneGraph.sdfSampler(source,time)}),
+    scatter:options=>P.sampling.grid(options),descriptor,wrap,dimensions,fields,freeze:P.data.freeze,
+    requireImage,integerMax,sampler:spatialSampler,hash:P.data.hash,hash01:P.data.hash01});
   function bakeShape(source,width,height,options={}) {
     if (![width,height].every(n=>Number.isSafeInteger(n) && n>0) || !dimensions({width,height}) || width*height>4e6)
       throw new RangeError('Shape bake exceeds its four-million-texel budget');
@@ -1005,6 +1009,18 @@
       outputs: { value: 'typedImage', info: 'record' },
       run({ family, width, height, options,time }, context) { return makeNoise(family,width,height,options,context.seed,time); }
     },
+    'image.shapeSplatter': {
+      description:'Scatter signed planar and volumetric shapes and project aligned material maps from the highest visible surfaces.',
+      seed:'options', inputs:{width:{type:'pixelCount',default:96},height:{type:'pixelCount',default:64},
+        columns:{type:'number',default:8},rows:{type:'number',default:6},shapes:{type:'array<shape2d>',default:[]},
+        volumes:{type:'array<field>',default:[]},background:optional,density:optional,mask:optional,clip:optional,
+        time:{type:'seconds',default:0},options:correctionOptions},
+      outputs:{value:'heightImage',normal:'normalImage',instanceId:'typedImage',shapeId:'typedImage',
+        uv:'typedImage',coverage:'typedImage',layout:'record'},
+      run({width,height,columns,rows,shapes,volumes,options,time,...maps},{seed}) {
+        return shapeSplatter(width,height,columns,rows,shapes,volumes,maps,options,seed,time);
+      }
+    },
     'image.toDisplay': {
       description: 'Convert typed color to straight-alpha sRGB8 for legacy compositing and PNG exports.',
       inputs: { source: 'typedImage', outOfRange: { type: 'string', default: 'clamp' } },
@@ -1021,5 +1037,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, regions, advancedHeight, advancedTexture, shape:bakeShape, tileGenerator:tileGenerator.generate, tileSampler:tileSampler.sample, noise:makeNoise, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, regions, advancedHeight, advancedTexture, shape:bakeShape, tileGenerator:tileGenerator.generate, tileSampler:tileSampler.sample, shapeSplatter, noise:makeNoise, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);

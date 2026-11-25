@@ -118,6 +118,7 @@
     }, domain);
   }
 
-  Object.assign(A, { shape, boundSDF, transformSDF, combineSDF: combine, sdfMesh, facetedSDF, sdfSlices: slices });
+  Object.assign(A, { shape, boundSDF, transformSDF, combineSDF: combine, sdfMesh, facetedSDF, sdfSlices: slices,
+    sdfExtent:extent,sdfSampler:sampler });
   Object.assign(P.sceneGraphSupport, { sdfExtent: extent, sdfSampler: sampler, boundedSDF: field });
 })(KIT);
