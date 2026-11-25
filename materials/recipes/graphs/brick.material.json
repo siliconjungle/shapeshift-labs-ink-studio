@@ -1,0 +1,951 @@
+{
+  "format": "ink-studio/material-graph",
+  "version": 1,
+  "id": "brick",
+  "graph": {
+    "inputs": {
+      "resolution": {
+        "definition": {
+          "type": "number",
+          "default": 128
+        }
+      },
+      "seed": {
+        "definition": {
+          "type": "number",
+          "default": 41
+        }
+      },
+      "relief": {
+        "definition": {
+          "type": "number",
+          "default": 1.4
+        }
+      },
+      "courses": {
+        "definition": {
+          "type": "number",
+          "default": 8
+        }
+      },
+      "joint": {
+        "definition": {
+          "type": "number",
+          "default": 0.13
+        }
+      },
+      "firing": {
+        "definition": {
+          "type": "number",
+          "default": 0.17
+        }
+      }
+    },
+    "nodes": {
+      "mortarGapsParts": {
+        "op": "data.record",
+        "inputs": {}
+      },
+      "mortarGaps": {
+        "op": "data.collect",
+        "inputs": {
+          "keys": [
+            "item0",
+            "item1"
+          ]
+        }
+      },
+      "kilnJitter": {
+        "op": "data.record",
+        "inputs": {}
+      },
+      "stretcherBondOptions": {
+        "op": "data.record",
+        "inputs": {
+          "samples": 2,
+          "pattern": "brick",
+          "rowOffset": 0.5,
+          "background": "#353038",
+          "palette": [
+            "#a65647",
+            "#c47753",
+            "#9c4c44",
+            "#b96949",
+            "#d38c63",
+            "#83505a"
+          ]
+        }
+      },
+      "stretcherBond": {
+        "op": "image.tileGenerator",
+        "inputs": {
+          "columns": 4,
+          "stamp": {
+            "type": "rectangle",
+            "size": [
+              1,
+              1
+            ],
+            "radius": 0.11
+          }
+        }
+      },
+      "stretcherBondCoverageSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "stretcherBondCoverage": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "mask",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "clayPoresOptions": {
+        "op": "data.record",
+        "inputs": {
+          "tiling": "wrap",
+          "extent": [
+            21,
+            21
+          ],
+          "octaves": 3,
+          "gain": 0.7
+        }
+      },
+      "clayPores": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "fractal"
+        }
+      },
+      "brickBevelOptions": {
+        "op": "data.record",
+        "inputs": {
+          "width": 3,
+          "height": 1,
+          "profile": "smooth"
+        }
+      },
+      "brickBevel": {
+        "op": "image.bevel",
+        "inputs": {}
+      },
+      "brickSurfaceSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "brickSurface": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "firedFaceBase": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "firedFaceField": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "firedFaceDetail": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": 0.37,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "firedFace": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "add",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "soot": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#725361"
+              ],
+              [
+                0.5,
+                "#c98c69"
+              ],
+              [
+                1,
+                "#fff0c7"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "firedColor": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "multiply",
+          "opacity": 0.55
+        }
+      },
+      "materialHeight": {
+        "op": "image.toHeight",
+        "inputs": {
+          "units": "art-px"
+        }
+      },
+      "tangentNormal": {
+        "op": "image.heightToNormal",
+        "inputs": {
+          "options": {
+            "method": "central",
+            "border": "wrap"
+          }
+        }
+      },
+      "roughnessResponse": {
+        "op": "image.curve",
+        "inputs": {
+          "curve": {
+            "stops": [
+              [
+                0,
+                0.91
+              ],
+              [
+                1,
+                0.73
+              ]
+            ],
+            "interpolation": "smooth"
+          }
+        }
+      },
+      "previewLight": {
+        "op": "image.emboss",
+        "inputs": {
+          "options": {
+            "azimuth": -135,
+            "elevation": 37,
+            "strength": 0.86,
+            "bias": 0.68,
+            "border": "wrap"
+          }
+        }
+      },
+      "previewLightRamp": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#382947"
+              ],
+              [
+                0.29,
+                "#776477"
+              ],
+              [
+                0.68,
+                "#e8e2db"
+              ],
+              [
+                1,
+                "#fff8e6"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "preview": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "multiply",
+          "opacity": 0.89
+        }
+      },
+      "displayPreview": {
+        "op": "image.toDisplay",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "baseColor": {},
+      "height": {},
+      "normal": {},
+      "roughness": {},
+      "mask": {},
+      "preview": {},
+      "previewDisplay": {}
+    },
+    "groups": {},
+    "links": {
+      "link-336c79527e36b722d732ab6f": {
+        "from": {
+          "input": "joint"
+        },
+        "to": {
+          "node": "mortarGapsParts",
+          "slot": "inputs",
+          "port": "item0"
+        }
+      },
+      "link-c3f4bacbed5893b0d35482b0": {
+        "from": {
+          "input": "joint"
+        },
+        "to": {
+          "node": "mortarGapsParts",
+          "slot": "inputs",
+          "port": "item1"
+        }
+      },
+      "link-e9f67520bdf1791b9a4c42dd": {
+        "from": {
+          "node": "mortarGapsParts",
+          "port": "value"
+        },
+        "to": {
+          "node": "mortarGaps",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-ac6ac09526e28dfbd6466774": {
+        "from": {
+          "input": "firing"
+        },
+        "to": {
+          "node": "kilnJitter",
+          "slot": "inputs",
+          "port": "color"
+        }
+      },
+      "link-520e378f99bc082a25a257e5": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "stretcherBondOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-c174a858256ac782543bac7f": {
+        "from": {
+          "node": "mortarGaps",
+          "port": "value"
+        },
+        "to": {
+          "node": "stretcherBondOptions",
+          "slot": "inputs",
+          "port": "gutter"
+        }
+      },
+      "link-02b9878877c847b76c74264a": {
+        "from": {
+          "node": "kilnJitter",
+          "port": "value"
+        },
+        "to": {
+          "node": "stretcherBondOptions",
+          "slot": "inputs",
+          "port": "jitter"
+        }
+      },
+      "link-644124708428ac244c2b2e56": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "stretcherBond",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-d97a893fb1ee2331255d2e60": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "stretcherBond",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-9d2a3df77d742680aa037f9b": {
+        "from": {
+          "input": "courses"
+        },
+        "to": {
+          "node": "stretcherBond",
+          "slot": "inputs",
+          "port": "rows"
+        }
+      },
+      "link-a977712d54b93819a808f57f": {
+        "from": {
+          "node": "stretcherBondOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "stretcherBond",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-a72ab395fac7192a032054a4": {
+        "from": {
+          "node": "stretcherBond",
+          "port": "coverage"
+        },
+        "to": {
+          "node": "stretcherBondCoverageSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a9fc04caabc44752eaa4a802": {
+        "from": {
+          "node": "stretcherBondCoverageSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "stretcherBondCoverage",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-428f9cf2d2b7dc97dc38a9e4": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "clayPoresOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-9d8a02c73fd7057cb929b453": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "clayPores",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-e6c2b25f0b9b16569e87b843": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "clayPores",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-7642c1e28f50fd52325578f1": {
+        "from": {
+          "node": "clayPoresOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "clayPores",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-11e3f8769fabf3f4ab46c5b3": {
+        "from": {
+          "node": "stretcherBondCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "brickBevel",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-1e7c06df87ec2695c6cb9712": {
+        "from": {
+          "node": "brickBevelOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "brickBevel",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-4d8be6e6874bfff21bf4ae9e": {
+        "from": {
+          "node": "brickBevel",
+          "port": "value"
+        },
+        "to": {
+          "node": "brickSurfaceSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-22417ee81945b47a15545a06": {
+        "from": {
+          "node": "brickSurfaceSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "brickSurface",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-b5094fb23c4b409a3b967cec": {
+        "from": {
+          "node": "brickSurface",
+          "port": "value"
+        },
+        "to": {
+          "node": "firedFaceBase",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-b0f5e8aa13e1adc56f92a777": {
+        "from": {
+          "node": "clayPores",
+          "port": "value"
+        },
+        "to": {
+          "node": "firedFaceField",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a17005507c13f155a86d67b6": {
+        "from": {
+          "node": "firedFaceField",
+          "port": "value"
+        },
+        "to": {
+          "node": "firedFaceDetail",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-e2731eec26b6a1c57213538a": {
+        "from": {
+          "node": "firedFaceBase",
+          "port": "value"
+        },
+        "to": {
+          "node": "firedFace",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-c8783226bc05b81a4f7958eb": {
+        "from": {
+          "node": "firedFaceDetail",
+          "port": "value"
+        },
+        "to": {
+          "node": "firedFace",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-48fb2576df68af4fd82f8326": {
+        "from": {
+          "node": "clayPores",
+          "port": "value"
+        },
+        "to": {
+          "node": "soot",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-18e40a0f1986de1f9deed361": {
+        "from": {
+          "node": "stretcherBond",
+          "port": "value"
+        },
+        "to": {
+          "node": "firedColor",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-84e1658a4ccdf33d099e946f": {
+        "from": {
+          "node": "soot",
+          "port": "value"
+        },
+        "to": {
+          "node": "firedColor",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-72c81b6fdd71715028a992ce": {
+        "from": {
+          "node": "firedFace",
+          "port": "value"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-7932fc3572f9f4c80600b897": {
+        "from": {
+          "input": "relief"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "scale"
+        }
+      },
+      "link-6047479b518d64ed4f844fdf": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "tangentNormal",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-94788797b346010371dc32e1": {
+        "from": {
+          "node": "stretcherBondCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "roughnessResponse",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a21d99f38085fcf38ab84390": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a6c53800b0e43fc877dbee7e": {
+        "from": {
+          "node": "previewLight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLightRamp",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-75e9c7df85e791422d7a6fdb": {
+        "from": {
+          "node": "firedColor",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-d29fe1c5884cf934cfbb2a7e": {
+        "from": {
+          "node": "previewLightRamp",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-c352cbbdc72b4c5c4e273fa9": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "node": "displayPreview",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-0f9283946b735cbc9f680bdf": {
+        "from": {
+          "node": "firedColor",
+          "port": "value"
+        },
+        "to": {
+          "output": "baseColor"
+        }
+      },
+      "link-148e187fc906e84cde5c5c4c": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "output": "height"
+        }
+      },
+      "link-2beb1315e8b6b4ae6dbbba87": {
+        "from": {
+          "node": "tangentNormal",
+          "port": "value"
+        },
+        "to": {
+          "output": "normal"
+        }
+      },
+      "link-781ad7aba89d261554594672": {
+        "from": {
+          "node": "roughnessResponse",
+          "port": "value"
+        },
+        "to": {
+          "output": "roughness"
+        }
+      },
+      "link-787e0108c4644b99c65a4e1e": {
+        "from": {
+          "node": "stretcherBondCoverage",
+          "port": "value"
+        },
+        "to": {
+          "output": "mask"
+        }
+      },
+      "link-aba8cba83ef380fe1e194816": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "output": "preview"
+        }
+      },
+      "link-cc4f68d2b85426cd5c2d2c80": {
+        "from": {
+          "node": "displayPreview",
+          "port": "value"
+        },
+        "to": {
+          "output": "previewDisplay"
+        }
+      }
+    }
+  },
+  "settings": {
+    "exports": {
+      "preview": {
+        "output": "previewDisplay",
+        "format": "png"
+      }
+    },
+    "outputUsages": {
+      "baseColor": {
+        "usage": "baseColor",
+        "label": "Base color",
+        "order": 0,
+        "source": {
+          "output": "baseColor"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "height": {
+        "usage": "height",
+        "label": "Height",
+        "order": 1,
+        "source": {
+          "output": "height"
+        },
+        "format": {
+          "format": "json"
+        }
+      },
+      "normal": {
+        "usage": "normal",
+        "label": "Normal",
+        "order": 2,
+        "source": {
+          "output": "normal"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "roughness": {
+        "usage": "roughness",
+        "label": "Roughness",
+        "order": 3,
+        "source": {
+          "output": "roughness"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      },
+      "mask": {
+        "usage": "mask.feature",
+        "label": "Feature mask",
+        "order": 4,
+        "source": {
+          "output": "mask"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      }
+    }
+  },
+  "resources": {},
+  "controls": {
+    "resolution": {
+      "input": "resolution",
+      "label": "Texture size",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 48,
+      "max": 192,
+      "step": 8,
+      "units": "px",
+      "order": 0
+    },
+    "seed": {
+      "input": "seed",
+      "label": "Seed",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 0,
+      "max": 9999,
+      "step": 1,
+      "order": 1
+    },
+    "relief": {
+      "input": "relief",
+      "label": "Relief depth",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0,
+      "max": 4,
+      "step": 0.05,
+      "units": "art-px",
+      "order": 2
+    },
+    "courses": {
+      "input": "courses",
+      "label": "Courses",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 4,
+      "max": 14,
+      "step": 2,
+      "order": 3
+    },
+    "joint": {
+      "input": "joint",
+      "label": "Mortar width",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.045,
+      "max": 0.24,
+      "step": 0.005,
+      "order": 4
+    },
+    "firing": {
+      "input": "firing",
+      "label": "Kiln variation",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0,
+      "max": 0.35,
+      "step": 0.01,
+      "order": 5
+    }
+  },
+  "instances": {},
+  "label": "Kiln Brick",
+  "metadata": {
+    "author": "Ink Studio",
+    "description": "Soot-fired brick with rounded shoulders and broad charcoal mortar.",
+    "tags": [
+      "Masonry",
+      "Recipe",
+      "brick"
+    ],
+    "materialModel": "pbr.metallic-roughness",
+    "visibility": {
+      "library": true,
+      "publication": "public"
+    },
+    "thumbnail": {
+      "file": "../previews/brick.png",
+      "alt": "Kiln Brick material swatch"
+    }
+  }
+}

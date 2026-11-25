@@ -1,0 +1,90 @@
+{
+  "format": "ink-studio/asset-registry",
+  "version": 1,
+  "entries": [
+    {
+      "asset": "recipes/brick",
+      "revision": 1,
+      "kind": "graph",
+      "file": "graphs/brick.material.json",
+      "sha256": "70c08fa56ddfc1b00929fb5a65e1a7ca7497341c5bd711f56848f8792646c727"
+    },
+    {
+      "asset": "recipes/tile",
+      "revision": 1,
+      "kind": "graph",
+      "file": "graphs/tile.material.json",
+      "sha256": "364f5a64f08dafc1a047c8ef4774a60394826ff1fca9005841724161d4175cd1"
+    },
+    {
+      "asset": "recipes/wood",
+      "revision": 1,
+      "kind": "graph",
+      "file": "graphs/wood.material.json",
+      "sha256": "5fdb860da6617aa28ce589176f8773ae284aeeb2379d7a821576cd3b29848bf0"
+    },
+    {
+      "asset": "recipes/cloth",
+      "revision": 1,
+      "kind": "graph",
+      "file": "graphs/cloth.material.json",
+      "sha256": "65bb5c4743b29024328bd8af03324368f349495799ba58c85b4904d2bdd53895"
+    },
+    {
+      "asset": "recipes/weave",
+      "revision": 1,
+      "kind": "graph",
+      "file": "graphs/weave.material.json",
+      "sha256": "793800eea62305b5ed67d9b1cfa70630d82aa3675fb2f6b8dce07548d379c1a2"
+    },
+    {
+      "asset": "recipes/fur",
+      "revision": 1,
+      "kind": "graph",
+      "file": "graphs/fur.material.json",
+      "sha256": "47da5c491ff506456f64cf53cd679bc90f113e01dc848df5208cbd699da4a05d"
+    },
+    {
+      "asset": "recipes/cracks",
+      "revision": 1,
+      "kind": "graph",
+      "file": "graphs/cracks.material.json",
+      "sha256": "d2a09fa426b54f032f30d98658d28b104582c3572ed45bbe60d2d346296bc7da"
+    },
+    {
+      "asset": "recipes/chips",
+      "revision": 1,
+      "kind": "graph",
+      "file": "graphs/chips.material.json",
+      "sha256": "37afe9294fa55367f96b81cdd1e3eae5e179aba02ab4f55e94f6518e6558d602"
+    },
+    {
+      "asset": "recipes/scratches",
+      "revision": 1,
+      "kind": "graph",
+      "file": "graphs/scratches.material.json",
+      "sha256": "496a47b98d612bfdff5514e9e634f0b1cde89ac073eca8d1f3addb0b243b86f4"
+    },
+    {
+      "asset": "recipes/rain-streaks",
+      "revision": 1,
+      "kind": "graph",
+      "file": "graphs/rain-streaks.material.json",
+      "sha256": "cd808037fccab2427d00424a078375e6114877096ef01092fc183a3e27a6ac27"
+    },
+    {
+      "asset": "recipes/patina",
+      "revision": 1,
+      "kind": "graph",
+      "file": "graphs/patina.material.json",
+      "sha256": "91bbe92c3b3cf4131635729f9240b95d3130feff2e2517f484144d57dc3e5cb6"
+    },
+    {
+      "asset": "recipes/organic-scatter",
+      "revision": 1,
+      "kind": "graph",
+      "file": "graphs/organic-scatter.material.json",
+      "sha256": "2f55649a4606836f969bc76f856ee896c85363352fcd13ca2b7b2f1562e99cd7"
+    }
+  ]
+}

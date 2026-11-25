@@ -1,0 +1,1652 @@
+{
+  "format": "ink-studio/material-graph",
+  "version": 1,
+  "id": "organic-scatter",
+  "graph": {
+    "inputs": {
+      "resolution": {
+        "definition": {
+          "type": "number",
+          "default": 128
+        }
+      },
+      "seed": {
+        "definition": {
+          "type": "number",
+          "default": 41
+        }
+      },
+      "relief": {
+        "definition": {
+          "type": "number",
+          "default": 1.4
+        }
+      },
+      "density": {
+        "definition": {
+          "type": "number",
+          "default": 0.75
+        }
+      },
+      "scale": {
+        "definition": {
+          "type": "number",
+          "default": 0.145
+        }
+      }
+    },
+    "nodes": {
+      "mossPatchesOptions": {
+        "op": "data.record",
+        "inputs": {
+          "tiling": "wrap",
+          "extent": [
+            7,
+            7
+          ],
+          "octaves": 4
+        }
+      },
+      "mossPatches": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "fractal"
+        }
+      },
+      "softEarth": {
+        "op": "image.toHeight",
+        "inputs": {
+          "scale": 0.072,
+          "units": "shape-units"
+        }
+      },
+      "patchyGrowth": {
+        "op": "image.curve",
+        "inputs": {
+          "curve": {
+            "stops": [
+              [
+                0,
+                0.49
+              ],
+              [
+                0.42,
+                0.72
+              ],
+              [
+                0.65,
+                0.99
+              ],
+              [
+                1,
+                1
+              ]
+            ],
+            "interpolation": "smooth"
+          }
+        }
+      },
+      "riverPebble": {
+        "op": "sdf.shape",
+        "inputs": {
+          "kind": "sphere",
+          "options": {
+            "radius": 0.47
+          }
+        }
+      },
+      "angularBark": {
+        "op": "sdf.shape",
+        "inputs": {
+          "kind": "box",
+          "options": {
+            "half": [
+              0.42,
+              0.19,
+              0.32
+            ],
+            "round": 0.09
+          }
+        }
+      },
+      "roundedLitterParts": {
+        "op": "data.record",
+        "inputs": {}
+      },
+      "roundedLitter": {
+        "op": "data.collect",
+        "inputs": {
+          "keys": [
+            "item0",
+            "item1"
+          ]
+        }
+      },
+      "litterPlacement": {
+        "op": "data.record",
+        "inputs": {
+          "scaleJitter": [
+            0.35,
+            0.4,
+            0.31
+          ],
+          "jitter": 0.92,
+          "rotationJitter": [
+            20,
+            179,
+            23
+          ],
+          "heightJitter": 0.023,
+          "rounding": 0.063,
+          "extrusion": 0.23,
+          "samples": 2,
+          "steps": 38
+        }
+      },
+      "signedLeafLitter": {
+        "op": "image.shapeSplatter",
+        "inputs": {
+          "columns": 11,
+          "rows": 11,
+          "shapes": [
+            {
+              "type": "polygon",
+              "points": [
+                [
+                  0.05,
+                  0.68
+                ],
+                [
+                  0.19,
+                  0.45
+                ],
+                [
+                  0.36,
+                  0.32
+                ],
+                [
+                  0.66,
+                  0.33
+                ],
+                [
+                  0.94,
+                  0.16
+                ],
+                [
+                  0.78,
+                  0.49
+                ],
+                [
+                  0.69,
+                  0.6
+                ],
+                [
+                  0.56,
+                  0.71
+                ],
+                [
+                  0.3,
+                  0.8
+                ]
+              ]
+            },
+            {
+              "type": "symbol",
+              "parts": [
+                {
+                  "shape": {
+                    "type": "disc",
+                    "radius": 0.44
+                  }
+                },
+                {
+                  "op": "subtract",
+                  "shape": {
+                    "type": "disc",
+                    "center": [
+                      0.56,
+                      0.45
+                    ],
+                    "radius": 0.21
+                  }
+                }
+              ]
+            },
+            {
+              "type": "polygon",
+              "points": [
+                [
+                  0.15,
+                  0.54
+                ],
+                [
+                  0.24,
+                  0.28
+                ],
+                [
+                  0.51,
+                  0.12
+                ],
+                [
+                  0.81,
+                  0.27
+                ],
+                [
+                  0.9,
+                  0.58
+                ],
+                [
+                  0.68,
+                  0.82
+                ],
+                [
+                  0.39,
+                  0.91
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      "leafVeins": {
+        "op": "image.shape",
+        "inputs": {
+          "width": 56,
+          "height": 56,
+          "source": {
+            "type": "symbol",
+            "parts": [
+              {
+                "shape": {
+                  "type": "stroke",
+                  "points": [
+                    [
+                      0.08,
+                      0.68
+                    ],
+                    [
+                      0.37,
+                      0.57
+                    ],
+                    [
+                      0.66,
+                      0.43
+                    ],
+                    [
+                      0.91,
+                      0.18
+                    ]
+                  ],
+                  "width": 0.025
+                }
+              },
+              {
+                "shape": {
+                  "type": "stroke",
+                  "points": [
+                    [
+                      0.27,
+                      0.63
+                    ],
+                    [
+                      0.22,
+                      0.43
+                    ]
+                  ],
+                  "width": 0.018
+                }
+              },
+              {
+                "shape": {
+                  "type": "stroke",
+                  "points": [
+                    [
+                      0.43,
+                      0.54
+                    ],
+                    [
+                      0.33,
+                      0.32
+                    ]
+                  ],
+                  "width": 0.018
+                }
+              },
+              {
+                "shape": {
+                  "type": "stroke",
+                  "points": [
+                    [
+                      0.57,
+                      0.48
+                    ],
+                    [
+                      0.46,
+                      0.31
+                    ]
+                  ],
+                  "width": 0.018
+                }
+              },
+              {
+                "shape": {
+                  "type": "stroke",
+                  "points": [
+                    [
+                      0.31,
+                      0.59
+                    ],
+                    [
+                      0.39,
+                      0.78
+                    ]
+                  ],
+                  "width": 0.018
+                }
+              },
+              {
+                "shape": {
+                  "type": "stroke",
+                  "points": [
+                    [
+                      0.5,
+                      0.51
+                    ],
+                    [
+                      0.56,
+                      0.69
+                    ]
+                  ],
+                  "width": 0.018
+                }
+              },
+              {
+                "shape": {
+                  "type": "stroke",
+                  "points": [
+                    [
+                      0.68,
+                      0.42
+                    ],
+                    [
+                      0.7,
+                      0.58
+                    ]
+                  ],
+                  "width": 0.018
+                }
+              }
+            ]
+          },
+          "options": {
+            "samples": 2
+          }
+        }
+      },
+      "localLeafOil": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#7c8a47"
+              ],
+              [
+                0.5,
+                "#c0bf66"
+              ],
+              [
+                1,
+                "#e1ce8e"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "shellGrowthRings": {
+        "op": "image.shape",
+        "inputs": {
+          "width": 56,
+          "height": 56,
+          "source": {
+            "type": "gradient",
+            "source": {
+              "type": "radial",
+              "radius": 0.69,
+              "clip": {
+                "type": "rectangle",
+                "size": [
+                  1,
+                  1
+                ],
+                "radius": 0
+              }
+            },
+            "curve": {
+              "interpolation": "smooth",
+              "stops": [
+                [
+                  0,
+                  0.08
+                ],
+                [
+                  0.26,
+                  0.26
+                ],
+                [
+                  0.36,
+                  0.66
+                ],
+                [
+                  0.48,
+                  0.29
+                ],
+                [
+                  0.58,
+                  0.91
+                ],
+                [
+                  0.68,
+                  0.31
+                ],
+                [
+                  0.81,
+                  0.74
+                ],
+                [
+                  1,
+                  0.38
+                ]
+              ]
+            }
+          },
+          "options": {
+            "samples": 2
+          }
+        }
+      },
+      "localSeedBands": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#683d35"
+              ],
+              [
+                0.3333333333333333,
+                "#aa6a45"
+              ],
+              [
+                0.6666666666666666,
+                "#d29a57"
+              ],
+              [
+                1,
+                "#edba79"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "lichenGrainSettings": {
+        "op": "data.record",
+        "inputs": {
+          "extent": [
+            4,
+            4
+          ],
+          "octaves": 3,
+          "tiling": "wrap"
+        }
+      },
+      "lichenPores": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "fractal",
+          "width": 48,
+          "height": 48
+        }
+      },
+      "lichenPigment": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#4b5e45"
+              ],
+              [
+                0.5,
+                "#83966e"
+              ],
+              [
+                1,
+                "#aeb893"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "stoneGrainSettings": {
+        "op": "data.record",
+        "inputs": {
+          "extent": [
+            10,
+            12
+          ],
+          "octaves": 3,
+          "tiling": "wrap"
+        }
+      },
+      "stonePores": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "fractal",
+          "width": 48,
+          "height": 48
+        }
+      },
+      "stonePigment": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#415552"
+              ],
+              [
+                0.5,
+                "#68786b"
+              ],
+              [
+                1,
+                "#acac94"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "barkGrainSettings": {
+        "op": "data.record",
+        "inputs": {
+          "extent": [
+            5,
+            14
+          ],
+          "octaves": 3,
+          "tiling": "wrap"
+        }
+      },
+      "barkPores": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "fractal",
+          "width": 48,
+          "height": 48
+        }
+      },
+      "barkPigment": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#423138"
+              ],
+              [
+                0.5,
+                "#6d503e"
+              ],
+              [
+                1,
+                "#9a704e"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "signedLeafLitterCoverageSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "signedLeafLitterCoverage": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "mask",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "forestBed": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#1c2527"
+              ],
+              [
+                0.3333333333333333,
+                "#333930"
+              ],
+              [
+                0.6666666666666666,
+                "#4d5940"
+              ],
+              [
+                1,
+                "#6e7b50"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "litterColorsParts": {
+        "op": "data.record",
+        "inputs": {}
+      },
+      "litterColors": {
+        "op": "data.collect",
+        "inputs": {
+          "keys": [
+            "item0",
+            "item1",
+            "item2",
+            "item3",
+            "item4"
+          ]
+        }
+      },
+      "paintedLitter": {
+        "op": "image.scatterColor",
+        "inputs": {}
+      },
+      "litterRelief": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": 15.4,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "materialHeight": {
+        "op": "image.toHeight",
+        "inputs": {
+          "units": "art-px"
+        }
+      },
+      "tangentNormal": {
+        "op": "image.heightToNormal",
+        "inputs": {
+          "options": {
+            "method": "central",
+            "border": "wrap"
+          }
+        }
+      },
+      "roughnessResponse": {
+        "op": "image.curve",
+        "inputs": {
+          "curve": {
+            "stops": [
+              [
+                0,
+                0.91
+              ],
+              [
+                1,
+                0.68
+              ]
+            ],
+            "interpolation": "smooth"
+          }
+        }
+      },
+      "previewLight": {
+        "op": "image.emboss",
+        "inputs": {
+          "options": {
+            "azimuth": -135,
+            "elevation": 37,
+            "strength": 0.86,
+            "bias": 0.68,
+            "border": "wrap"
+          }
+        }
+      },
+      "previewLightRamp": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#382947"
+              ],
+              [
+                0.29,
+                "#776477"
+              ],
+              [
+                0.68,
+                "#e8e2db"
+              ],
+              [
+                1,
+                "#fff8e6"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "preview": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "multiply",
+          "opacity": 0.89
+        }
+      },
+      "contactShadows": {
+        "op": "image.heightShadow",
+        "inputs": {
+          "options": {
+            "azimuth": -135,
+            "elevation": 23,
+            "reach": 9,
+            "step": 1,
+            "softness": 21,
+            "bias": 0.035,
+            "border": "wrap"
+          }
+        }
+      },
+      "contactShade": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#ffffff"
+              ],
+              [
+                1,
+                "#594d65"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "shadowedPreview": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "multiply",
+          "opacity": 0.63
+        }
+      },
+      "displayPreview": {
+        "op": "image.toDisplay",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "baseColor": {},
+      "height": {},
+      "normal": {},
+      "roughness": {},
+      "mask": {},
+      "preview": {},
+      "previewDisplay": {}
+    },
+    "groups": {},
+    "links": {
+      "link-b6771535896a9f75c42d7e4a": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "mossPatchesOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-1c53a1a580100daf1345ab4c": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "mossPatches",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-f9df3c0a5f65f5a044f597f1": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "mossPatches",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-b6c01543dda72f1752b03e3a": {
+        "from": {
+          "node": "mossPatchesOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "mossPatches",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-4068a3498dd23aac5208a2e6": {
+        "from": {
+          "node": "mossPatches",
+          "port": "value"
+        },
+        "to": {
+          "node": "softEarth",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-d7210dda3679ab00fa6ac55e": {
+        "from": {
+          "node": "mossPatches",
+          "port": "value"
+        },
+        "to": {
+          "node": "patchyGrowth",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-c135d1b80584a58376be9aa4": {
+        "from": {
+          "node": "riverPebble",
+          "port": "value"
+        },
+        "to": {
+          "node": "roundedLitterParts",
+          "slot": "inputs",
+          "port": "item0"
+        }
+      },
+      "link-d878019cd0680cf492d1219a": {
+        "from": {
+          "node": "angularBark",
+          "port": "value"
+        },
+        "to": {
+          "node": "roundedLitterParts",
+          "slot": "inputs",
+          "port": "item1"
+        }
+      },
+      "link-c3e1d711b08aad00d593dbd4": {
+        "from": {
+          "node": "roundedLitterParts",
+          "port": "value"
+        },
+        "to": {
+          "node": "roundedLitter",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-21f05374595c32691db95cad": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "litterPlacement",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-5936b3066ef79c865b0e14e0": {
+        "from": {
+          "input": "density"
+        },
+        "to": {
+          "node": "litterPlacement",
+          "slot": "inputs",
+          "port": "density"
+        }
+      },
+      "link-f2cd456934007d6377784105": {
+        "from": {
+          "input": "scale"
+        },
+        "to": {
+          "node": "litterPlacement",
+          "slot": "inputs",
+          "port": "scale"
+        }
+      },
+      "link-236ed6385ce2e2cedaa4be3d": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "signedLeafLitter",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-e5b7880b9663e059800e0709": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "signedLeafLitter",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-1bcce905db3b5cd994a82ba3": {
+        "from": {
+          "node": "roundedLitter",
+          "port": "value"
+        },
+        "to": {
+          "node": "signedLeafLitter",
+          "slot": "inputs",
+          "port": "volumes"
+        }
+      },
+      "link-72a03bcfed7d11bed29762c4": {
+        "from": {
+          "node": "softEarth",
+          "port": "value"
+        },
+        "to": {
+          "node": "signedLeafLitter",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-a9160df0f8f39fbb3111f76a": {
+        "from": {
+          "node": "patchyGrowth",
+          "port": "value"
+        },
+        "to": {
+          "node": "signedLeafLitter",
+          "slot": "inputs",
+          "port": "density"
+        }
+      },
+      "link-1a26a4d0ffbfd1232a73912c": {
+        "from": {
+          "node": "litterPlacement",
+          "port": "value"
+        },
+        "to": {
+          "node": "signedLeafLitter",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-df21a4e782102ca45c0b9979": {
+        "from": {
+          "node": "leafVeins",
+          "port": "value"
+        },
+        "to": {
+          "node": "localLeafOil",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-4f5cfaa2ec7deffe28512d1d": {
+        "from": {
+          "node": "shellGrowthRings",
+          "port": "value"
+        },
+        "to": {
+          "node": "localSeedBands",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-91159d099dcf55c6f57f7768": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "lichenGrainSettings",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-3988d9d4dcd4fa297e54619f": {
+        "from": {
+          "node": "lichenGrainSettings",
+          "port": "value"
+        },
+        "to": {
+          "node": "lichenPores",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-e85114f929c1a391c2cf5321": {
+        "from": {
+          "node": "lichenPores",
+          "port": "value"
+        },
+        "to": {
+          "node": "lichenPigment",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-987086e9a01569b7527938f9": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "stoneGrainSettings",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-84a17a89b02ec49c0aca1aed": {
+        "from": {
+          "node": "stoneGrainSettings",
+          "port": "value"
+        },
+        "to": {
+          "node": "stonePores",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-7b6cd3e0877ca528c0e3356d": {
+        "from": {
+          "node": "stonePores",
+          "port": "value"
+        },
+        "to": {
+          "node": "stonePigment",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-075b4652974e890413bcde7e": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "barkGrainSettings",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-21325678b2b1f05cb5d35cdb": {
+        "from": {
+          "node": "barkGrainSettings",
+          "port": "value"
+        },
+        "to": {
+          "node": "barkPores",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-0079f3dffda88bdc9e1b8a81": {
+        "from": {
+          "node": "barkPores",
+          "port": "value"
+        },
+        "to": {
+          "node": "barkPigment",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-6749faa64a813d94d0e1be27": {
+        "from": {
+          "node": "signedLeafLitter",
+          "port": "coverage"
+        },
+        "to": {
+          "node": "signedLeafLitterCoverageSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-6023145be31491ce19d2dcc3": {
+        "from": {
+          "node": "signedLeafLitterCoverageSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "signedLeafLitterCoverage",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-23041c8ade973c23d87e9acf": {
+        "from": {
+          "node": "mossPatches",
+          "port": "value"
+        },
+        "to": {
+          "node": "forestBed",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-3a660d2171d1fd72d9b40dee": {
+        "from": {
+          "node": "localLeafOil",
+          "port": "value"
+        },
+        "to": {
+          "node": "litterColorsParts",
+          "slot": "inputs",
+          "port": "item0"
+        }
+      },
+      "link-8a24a4a84e246c378fcb26f9": {
+        "from": {
+          "node": "localSeedBands",
+          "port": "value"
+        },
+        "to": {
+          "node": "litterColorsParts",
+          "slot": "inputs",
+          "port": "item1"
+        }
+      },
+      "link-83728230be81435f0fbf93fa": {
+        "from": {
+          "node": "lichenPigment",
+          "port": "value"
+        },
+        "to": {
+          "node": "litterColorsParts",
+          "slot": "inputs",
+          "port": "item2"
+        }
+      },
+      "link-397bc62a36eeb450452139c9": {
+        "from": {
+          "node": "stonePigment",
+          "port": "value"
+        },
+        "to": {
+          "node": "litterColorsParts",
+          "slot": "inputs",
+          "port": "item3"
+        }
+      },
+      "link-e9cb739d4c75a825a434b258": {
+        "from": {
+          "node": "barkPigment",
+          "port": "value"
+        },
+        "to": {
+          "node": "litterColorsParts",
+          "slot": "inputs",
+          "port": "item4"
+        }
+      },
+      "link-c53866f44dc8ff3026770f43": {
+        "from": {
+          "node": "litterColorsParts",
+          "port": "value"
+        },
+        "to": {
+          "node": "litterColors",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-bca409b7ae900827bee7ffa3": {
+        "from": {
+          "node": "signedLeafLitter",
+          "port": "surface"
+        },
+        "to": {
+          "node": "paintedLitter",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-8adf7f1e1d7e6851079f0551": {
+        "from": {
+          "node": "forestBed",
+          "port": "value"
+        },
+        "to": {
+          "node": "paintedLitter",
+          "slot": "inputs",
+          "port": "base"
+        }
+      },
+      "link-151e738ebb8b9ce9dc7aeb45": {
+        "from": {
+          "node": "litterColors",
+          "port": "value"
+        },
+        "to": {
+          "node": "paintedLitter",
+          "slot": "inputs",
+          "port": "textures"
+        }
+      },
+      "link-9d9c51bc1625d853175fbe00": {
+        "from": {
+          "node": "signedLeafLitter",
+          "port": "value"
+        },
+        "to": {
+          "node": "litterRelief",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-72c81b6fdd71715028a992ce": {
+        "from": {
+          "node": "litterRelief",
+          "port": "value"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-7932fc3572f9f4c80600b897": {
+        "from": {
+          "input": "relief"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "scale"
+        }
+      },
+      "link-6047479b518d64ed4f844fdf": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "tangentNormal",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-94788797b346010371dc32e1": {
+        "from": {
+          "node": "signedLeafLitterCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "roughnessResponse",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a21d99f38085fcf38ab84390": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a6c53800b0e43fc877dbee7e": {
+        "from": {
+          "node": "previewLight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLightRamp",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-75e9c7df85e791422d7a6fdb": {
+        "from": {
+          "node": "paintedLitter",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-d29fe1c5884cf934cfbb2a7e": {
+        "from": {
+          "node": "previewLightRamp",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-2104391fe17d17582e4935ea": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "contactShadows",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-960d68420b5dd13410026d46": {
+        "from": {
+          "node": "contactShadows",
+          "port": "value"
+        },
+        "to": {
+          "node": "contactShade",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-46762765fe4615c212c7d484": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "node": "shadowedPreview",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-56d6a1d8858fc50cda207320": {
+        "from": {
+          "node": "contactShade",
+          "port": "value"
+        },
+        "to": {
+          "node": "shadowedPreview",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-c352cbbdc72b4c5c4e273fa9": {
+        "from": {
+          "node": "shadowedPreview",
+          "port": "value"
+        },
+        "to": {
+          "node": "displayPreview",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-0f9283946b735cbc9f680bdf": {
+        "from": {
+          "node": "paintedLitter",
+          "port": "value"
+        },
+        "to": {
+          "output": "baseColor"
+        }
+      },
+      "link-148e187fc906e84cde5c5c4c": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "output": "height"
+        }
+      },
+      "link-2beb1315e8b6b4ae6dbbba87": {
+        "from": {
+          "node": "tangentNormal",
+          "port": "value"
+        },
+        "to": {
+          "output": "normal"
+        }
+      },
+      "link-781ad7aba89d261554594672": {
+        "from": {
+          "node": "roughnessResponse",
+          "port": "value"
+        },
+        "to": {
+          "output": "roughness"
+        }
+      },
+      "link-787e0108c4644b99c65a4e1e": {
+        "from": {
+          "node": "signedLeafLitterCoverage",
+          "port": "value"
+        },
+        "to": {
+          "output": "mask"
+        }
+      },
+      "link-aba8cba83ef380fe1e194816": {
+        "from": {
+          "node": "shadowedPreview",
+          "port": "value"
+        },
+        "to": {
+          "output": "preview"
+        }
+      },
+      "link-cc4f68d2b85426cd5c2d2c80": {
+        "from": {
+          "node": "displayPreview",
+          "port": "value"
+        },
+        "to": {
+          "output": "previewDisplay"
+        }
+      }
+    }
+  },
+  "settings": {
+    "exports": {
+      "preview": {
+        "output": "previewDisplay",
+        "format": "png"
+      }
+    },
+    "outputUsages": {
+      "baseColor": {
+        "usage": "baseColor",
+        "label": "Base color",
+        "order": 0,
+        "source": {
+          "output": "baseColor"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "height": {
+        "usage": "height",
+        "label": "Height",
+        "order": 1,
+        "source": {
+          "output": "height"
+        },
+        "format": {
+          "format": "json"
+        }
+      },
+      "normal": {
+        "usage": "normal",
+        "label": "Normal",
+        "order": 2,
+        "source": {
+          "output": "normal"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "roughness": {
+        "usage": "roughness",
+        "label": "Roughness",
+        "order": 3,
+        "source": {
+          "output": "roughness"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      },
+      "mask": {
+        "usage": "mask.feature",
+        "label": "Feature mask",
+        "order": 4,
+        "source": {
+          "output": "mask"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      }
+    }
+  },
+  "resources": {},
+  "controls": {
+    "resolution": {
+      "input": "resolution",
+      "label": "Texture size",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 48,
+      "max": 192,
+      "step": 8,
+      "units": "px",
+      "order": 0
+    },
+    "seed": {
+      "input": "seed",
+      "label": "Seed",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 0,
+      "max": 9999,
+      "step": 1,
+      "order": 1
+    },
+    "relief": {
+      "input": "relief",
+      "label": "Relief depth",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0,
+      "max": 4,
+      "step": 0.05,
+      "units": "art-px",
+      "order": 2
+    },
+    "density": {
+      "input": "density",
+      "label": "Litter density",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.15,
+      "max": 1,
+      "step": 0.02,
+      "order": 3
+    },
+    "scale": {
+      "input": "scale",
+      "label": "Stamp scale",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.075,
+      "max": 0.24,
+      "step": 0.005,
+      "order": 4
+    }
+  },
+  "instances": {},
+  "label": "Forest Floor",
+  "metadata": {
+    "author": "Ink Studio",
+    "description": "Raised leaves, seed shells, pebbles, and moss on a dark bed.",
+    "tags": [
+      "Natural",
+      "Recipe",
+      "organic-scatter"
+    ],
+    "materialModel": "pbr.metallic-roughness",
+    "visibility": {
+      "library": true,
+      "publication": "public"
+    },
+    "thumbnail": {
+      "file": "../previews/organic-scatter.png",
+      "alt": "Forest Floor material swatch"
+    }
+  }
+}

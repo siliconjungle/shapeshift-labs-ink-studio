@@ -1,0 +1,1005 @@
+{
+  "format": "ink-studio/material-graph",
+  "version": 1,
+  "id": "cracks",
+  "graph": {
+    "inputs": {
+      "resolution": {
+        "definition": {
+          "type": "number",
+          "default": 128
+        }
+      },
+      "seed": {
+        "definition": {
+          "type": "number",
+          "default": 41
+        }
+      },
+      "relief": {
+        "definition": {
+          "type": "number",
+          "default": 1.4
+        }
+      },
+      "cells": {
+        "definition": {
+          "type": "number",
+          "default": 1
+        }
+      },
+      "width": {
+        "definition": {
+          "type": "number",
+          "default": 0.13
+        }
+      },
+      "wander": {
+        "definition": {
+          "type": "number",
+          "default": 0.29
+        }
+      }
+    },
+    "nodes": {
+      "fractureNetworkOptions": {
+        "op": "data.record",
+        "inputs": {
+          "tiling": "wrap",
+          "extent": [
+            8,
+            7
+          ],
+          "jitter": 0.89
+        }
+      },
+      "fractureNetwork": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "cellular"
+        }
+      },
+      "fractureWanderOptions": {
+        "op": "data.record",
+        "inputs": {
+          "tiling": "wrap",
+          "extent": [
+            5,
+            5
+          ],
+          "octaves": 3
+        }
+      },
+      "fractureWander": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "fractal"
+        }
+      },
+      "brokenEdgesOptions": {
+        "op": "data.record",
+        "inputs": {
+          "angle": 38,
+          "units": "normalized",
+          "center": 0.5,
+          "border": "wrap",
+          "filter": "linear"
+        }
+      },
+      "brokenEdges": {
+        "op": "image.directionalWarp",
+        "inputs": {}
+      },
+      "plasterCellsOptions": {
+        "op": "data.record",
+        "inputs": {
+          "softness": 0.06
+        }
+      },
+      "plasterCells": {
+        "op": "image.threshold",
+        "inputs": {}
+      },
+      "fissures": {
+        "op": "image.invert",
+        "inputs": {}
+      },
+      "limeGrainOptions": {
+        "op": "data.record",
+        "inputs": {
+          "tiling": "wrap",
+          "extent": [
+            14,
+            14
+          ],
+          "octaves": 4
+        }
+      },
+      "limeGrain": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "fractal"
+        }
+      },
+      "lime": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#978675"
+              ],
+              [
+                0.3333333333333333,
+                "#c7b695"
+              ],
+              [
+                0.6666666666666666,
+                "#eee1bf"
+              ],
+              [
+                1,
+                "#fff1d7"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "fissurePigment": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#362a30"
+              ],
+              [
+                0.5,
+                "#482f33"
+              ],
+              [
+                1,
+                "#75584a"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "splitPlaster": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "copy"
+        }
+      },
+      "cutFissuresInput": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "cutFissures": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": -1,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "plasterReliefBase": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "plasterReliefField": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "plasterReliefDetail": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": 0.36,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "plasterRelief": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "add",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "materialHeight": {
+        "op": "image.toHeight",
+        "inputs": {
+          "units": "art-px"
+        }
+      },
+      "tangentNormal": {
+        "op": "image.heightToNormal",
+        "inputs": {
+          "options": {
+            "method": "central",
+            "border": "wrap"
+          }
+        }
+      },
+      "roughnessResponse": {
+        "op": "image.curve",
+        "inputs": {
+          "curve": {
+            "stops": [
+              [
+                0,
+                0.78
+              ],
+              [
+                1,
+                0.98
+              ]
+            ],
+            "interpolation": "smooth"
+          }
+        }
+      },
+      "previewLight": {
+        "op": "image.emboss",
+        "inputs": {
+          "options": {
+            "azimuth": -135,
+            "elevation": 37,
+            "strength": 0.86,
+            "bias": 0.68,
+            "border": "wrap"
+          }
+        }
+      },
+      "previewLightRamp": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#382947"
+              ],
+              [
+                0.29,
+                "#776477"
+              ],
+              [
+                0.68,
+                "#e8e2db"
+              ],
+              [
+                1,
+                "#fff8e6"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "preview": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "multiply",
+          "opacity": 0.89
+        }
+      },
+      "displayPreview": {
+        "op": "image.toDisplay",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "baseColor": {},
+      "height": {},
+      "normal": {},
+      "roughness": {},
+      "mask": {},
+      "preview": {},
+      "previewDisplay": {}
+    },
+    "groups": {},
+    "links": {
+      "link-32c7e4a30fa9b2a90b8735c7": {
+        "from": {
+          "input": "cells"
+        },
+        "to": {
+          "node": "fractureNetworkOptions",
+          "slot": "inputs",
+          "port": "scale"
+        }
+      },
+      "link-516861d5a1743cef08ee56ac": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "fractureNetworkOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-0e8135e55623408cac2d68f0": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "fractureNetwork",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-ea38e2ef1faf385f6306ef0f": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "fractureNetwork",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-cbf368437af4c05392d0c84c": {
+        "from": {
+          "node": "fractureNetworkOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "fractureNetwork",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-975df0de1a24249e4edd52eb": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "fractureWanderOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-fa65f604ab109f61d15c6f07": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "fractureWander",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-df4a09e111c2946f353763e0": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "fractureWander",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-6e8512ae4cddb26bcfd12187": {
+        "from": {
+          "node": "fractureWanderOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "fractureWander",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-deb1593c89cbe32a61970e96": {
+        "from": {
+          "input": "wander"
+        },
+        "to": {
+          "node": "brokenEdgesOptions",
+          "slot": "inputs",
+          "port": "amount"
+        }
+      },
+      "link-ad535ce93f9c5bb8ea929a29": {
+        "from": {
+          "node": "fractureNetwork",
+          "port": "value"
+        },
+        "to": {
+          "node": "brokenEdges",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-0588f3504195183186f8168c": {
+        "from": {
+          "node": "fractureWander",
+          "port": "value"
+        },
+        "to": {
+          "node": "brokenEdges",
+          "slot": "inputs",
+          "port": "map"
+        }
+      },
+      "link-9b6c0b319d3e1aa268d2b851": {
+        "from": {
+          "node": "brokenEdgesOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "brokenEdges",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-e3ae067dcb0f40ec3b7bc279": {
+        "from": {
+          "input": "width"
+        },
+        "to": {
+          "node": "plasterCellsOptions",
+          "slot": "inputs",
+          "port": "level"
+        }
+      },
+      "link-a224d537a7087d8b74546297": {
+        "from": {
+          "node": "brokenEdges",
+          "port": "value"
+        },
+        "to": {
+          "node": "plasterCells",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-0a05a94c8d62478affdebc9b": {
+        "from": {
+          "node": "plasterCellsOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "plasterCells",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-3c3af27cc7652dabb268ca11": {
+        "from": {
+          "node": "plasterCells",
+          "port": "value"
+        },
+        "to": {
+          "node": "fissures",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-b2e3624552cb2477fb41c57d": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "limeGrainOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-e49a3e74ec1866a98b6d4dcd": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "limeGrain",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-1ae89f96f47dc1b6a4a9dd89": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "limeGrain",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-793072f9195f9ea21071d396": {
+        "from": {
+          "node": "limeGrainOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "limeGrain",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-ea76d8809dcf8431049517c7": {
+        "from": {
+          "node": "limeGrain",
+          "port": "value"
+        },
+        "to": {
+          "node": "lime",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-3156a386d07b752ff5744385": {
+        "from": {
+          "node": "limeGrain",
+          "port": "value"
+        },
+        "to": {
+          "node": "fissurePigment",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-2788d12ddfe279709196fce2": {
+        "from": {
+          "node": "lime",
+          "port": "value"
+        },
+        "to": {
+          "node": "splitPlaster",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-9a9db5e66c634164e3d654d1": {
+        "from": {
+          "node": "fissurePigment",
+          "port": "value"
+        },
+        "to": {
+          "node": "splitPlaster",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-f91f553fe6b2b782369421be": {
+        "from": {
+          "node": "fissures",
+          "port": "value"
+        },
+        "to": {
+          "node": "splitPlaster",
+          "slot": "inputs",
+          "port": "mask"
+        }
+      },
+      "link-3feb16e1b761a0e0a5300fea": {
+        "from": {
+          "node": "fissures",
+          "port": "value"
+        },
+        "to": {
+          "node": "cutFissuresInput",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-c85fadb3a4a16dfce9982c6f": {
+        "from": {
+          "node": "cutFissuresInput",
+          "port": "value"
+        },
+        "to": {
+          "node": "cutFissures",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-66e03bb337709d1df8d9bb90": {
+        "from": {
+          "node": "cutFissures",
+          "port": "value"
+        },
+        "to": {
+          "node": "plasterReliefBase",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-651af5baeb4a30689b1609ae": {
+        "from": {
+          "node": "limeGrain",
+          "port": "value"
+        },
+        "to": {
+          "node": "plasterReliefField",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-547ce9d1bb7b76c157366f20": {
+        "from": {
+          "node": "plasterReliefField",
+          "port": "value"
+        },
+        "to": {
+          "node": "plasterReliefDetail",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-2062dff61078a0768c206d0a": {
+        "from": {
+          "node": "plasterReliefBase",
+          "port": "value"
+        },
+        "to": {
+          "node": "plasterRelief",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-619b6f9c2fd384d02207de01": {
+        "from": {
+          "node": "plasterReliefDetail",
+          "port": "value"
+        },
+        "to": {
+          "node": "plasterRelief",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-72c81b6fdd71715028a992ce": {
+        "from": {
+          "node": "plasterRelief",
+          "port": "value"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-7932fc3572f9f4c80600b897": {
+        "from": {
+          "input": "relief"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "scale"
+        }
+      },
+      "link-6047479b518d64ed4f844fdf": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "tangentNormal",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-94788797b346010371dc32e1": {
+        "from": {
+          "node": "fissures",
+          "port": "value"
+        },
+        "to": {
+          "node": "roughnessResponse",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a21d99f38085fcf38ab84390": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a6c53800b0e43fc877dbee7e": {
+        "from": {
+          "node": "previewLight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLightRamp",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-75e9c7df85e791422d7a6fdb": {
+        "from": {
+          "node": "splitPlaster",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-d29fe1c5884cf934cfbb2a7e": {
+        "from": {
+          "node": "previewLightRamp",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-c352cbbdc72b4c5c4e273fa9": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "node": "displayPreview",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-0f9283946b735cbc9f680bdf": {
+        "from": {
+          "node": "splitPlaster",
+          "port": "value"
+        },
+        "to": {
+          "output": "baseColor"
+        }
+      },
+      "link-148e187fc906e84cde5c5c4c": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "output": "height"
+        }
+      },
+      "link-2beb1315e8b6b4ae6dbbba87": {
+        "from": {
+          "node": "tangentNormal",
+          "port": "value"
+        },
+        "to": {
+          "output": "normal"
+        }
+      },
+      "link-781ad7aba89d261554594672": {
+        "from": {
+          "node": "roughnessResponse",
+          "port": "value"
+        },
+        "to": {
+          "output": "roughness"
+        }
+      },
+      "link-787e0108c4644b99c65a4e1e": {
+        "from": {
+          "node": "fissures",
+          "port": "value"
+        },
+        "to": {
+          "output": "mask"
+        }
+      },
+      "link-aba8cba83ef380fe1e194816": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "output": "preview"
+        }
+      },
+      "link-cc4f68d2b85426cd5c2d2c80": {
+        "from": {
+          "node": "displayPreview",
+          "port": "value"
+        },
+        "to": {
+          "output": "previewDisplay"
+        }
+      }
+    }
+  },
+  "settings": {
+    "exports": {
+      "preview": {
+        "output": "previewDisplay",
+        "format": "png"
+      }
+    },
+    "outputUsages": {
+      "baseColor": {
+        "usage": "baseColor",
+        "label": "Base color",
+        "order": 0,
+        "source": {
+          "output": "baseColor"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "height": {
+        "usage": "height",
+        "label": "Height",
+        "order": 1,
+        "source": {
+          "output": "height"
+        },
+        "format": {
+          "format": "json"
+        }
+      },
+      "normal": {
+        "usage": "normal",
+        "label": "Normal",
+        "order": 2,
+        "source": {
+          "output": "normal"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "roughness": {
+        "usage": "roughness",
+        "label": "Roughness",
+        "order": 3,
+        "source": {
+          "output": "roughness"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      },
+      "mask": {
+        "usage": "mask.feature",
+        "label": "Feature mask",
+        "order": 4,
+        "source": {
+          "output": "mask"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      }
+    }
+  },
+  "resources": {},
+  "controls": {
+    "resolution": {
+      "input": "resolution",
+      "label": "Texture size",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 48,
+      "max": 192,
+      "step": 8,
+      "units": "px",
+      "order": 0
+    },
+    "seed": {
+      "input": "seed",
+      "label": "Seed",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 0,
+      "max": 9999,
+      "step": 1,
+      "order": 1
+    },
+    "relief": {
+      "input": "relief",
+      "label": "Relief depth",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0,
+      "max": 4,
+      "step": 0.05,
+      "units": "art-px",
+      "order": 2
+    },
+    "cells": {
+      "input": "cells",
+      "label": "Crack frequency",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.55,
+      "max": 1.9,
+      "step": 0.05,
+      "order": 3
+    },
+    "width": {
+      "input": "width",
+      "label": "Fissure width",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.035,
+      "max": 0.29,
+      "step": 0.005,
+      "order": 4
+    },
+    "wander": {
+      "input": "wander",
+      "label": "Wandering edges",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0,
+      "max": 0.59,
+      "step": 0.01,
+      "order": 5
+    }
+  },
+  "instances": {},
+  "label": "Lime Cracks",
+  "metadata": {
+    "author": "Ink Studio",
+    "description": "A branched crack network across mottled, chalky lime plaster.",
+    "tags": [
+      "Weathering",
+      "Recipe",
+      "cracks"
+    ],
+    "materialModel": "pbr.metallic-roughness",
+    "visibility": {
+      "library": true,
+      "publication": "public"
+    },
+    "thumbnail": {
+      "file": "../previews/cracks.png",
+      "alt": "Lime Cracks material swatch"
+    }
+  }
+}

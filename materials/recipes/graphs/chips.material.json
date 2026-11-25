@@ -1,0 +1,1291 @@
+{
+  "format": "ink-studio/material-graph",
+  "version": 1,
+  "id": "chips",
+  "graph": {
+    "inputs": {
+      "resolution": {
+        "definition": {
+          "type": "number",
+          "default": 128
+        }
+      },
+      "seed": {
+        "definition": {
+          "type": "number",
+          "default": 41
+        }
+      },
+      "relief": {
+        "definition": {
+          "type": "number",
+          "default": 1.4
+        }
+      },
+      "density": {
+        "definition": {
+          "type": "number",
+          "default": 0.72
+        }
+      },
+      "scale": {
+        "definition": {
+          "type": "number",
+          "default": 0.79
+        }
+      },
+      "lip": {
+        "definition": {
+          "type": "number",
+          "default": 2.4
+        }
+      }
+    },
+    "nodes": {
+      "chipScaleParts": {
+        "op": "data.record",
+        "inputs": {}
+      },
+      "chipScale": {
+        "op": "data.collect",
+        "inputs": {
+          "keys": [
+            "item0",
+            "item1"
+          ]
+        }
+      },
+      "flakeShapesOptions": {
+        "op": "data.record",
+        "inputs": {
+          "samples": 2,
+          "color": "#ffffff",
+          "gutter": [
+            0,
+            0
+          ],
+          "jitter": {
+            "position": [
+              0.62,
+              0.62
+            ],
+            "size": [
+              0.55,
+              0.55
+            ],
+            "rotation": 175
+          }
+        }
+      },
+      "flakeShapesControls": {
+        "op": "data.record",
+        "inputs": {}
+      },
+      "flakeShapes": {
+        "op": "image.tileSampler",
+        "inputs": {
+          "columns": 7,
+          "rows": 7,
+          "stamps": [
+            {
+              "type": "polygon",
+              "points": [
+                [
+                  0.06,
+                  0.38
+                ],
+                [
+                  0.31,
+                  0.3
+                ],
+                [
+                  0.27,
+                  0.13
+                ],
+                [
+                  0.49,
+                  0.1
+                ],
+                [
+                  0.55,
+                  0.21
+                ],
+                [
+                  0.79,
+                  0.17
+                ],
+                [
+                  0.93,
+                  0.49
+                ],
+                [
+                  0.7,
+                  0.55
+                ],
+                [
+                  0.57,
+                  0.83
+                ],
+                [
+                  0.36,
+                  0.72
+                ],
+                [
+                  0.25,
+                  0.88
+                ]
+              ]
+            },
+            {
+              "type": "polygon",
+              "points": [
+                [
+                  0.13,
+                  0.49
+                ],
+                [
+                  0.39,
+                  0.17
+                ],
+                [
+                  0.56,
+                  0.2
+                ],
+                [
+                  0.84,
+                  0.34
+                ],
+                [
+                  0.66,
+                  0.53
+                ],
+                [
+                  0.78,
+                  0.76
+                ],
+                [
+                  0.36,
+                  0.83
+                ],
+                [
+                  0.3,
+                  0.67
+                ]
+              ]
+            },
+            {
+              "type": "polygon",
+              "points": [
+                [
+                  0.09,
+                  0.51
+                ],
+                [
+                  0.33,
+                  0.46
+                ],
+                [
+                  0.28,
+                  0.27
+                ],
+                [
+                  0.53,
+                  0.36
+                ],
+                [
+                  0.74,
+                  0.15
+                ],
+                [
+                  0.83,
+                  0.38
+                ],
+                [
+                  0.8,
+                  0.63
+                ],
+                [
+                  0.52,
+                  0.91
+                ],
+                [
+                  0.42,
+                  0.73
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      "flakeShapesCoverageSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "flakeShapesCoverage": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "mask",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "oxidizedIronOptions": {
+        "op": "data.record",
+        "inputs": {
+          "tiling": "wrap",
+          "extent": [
+            19,
+            19
+          ],
+          "octaves": 4
+        }
+      },
+      "oxidizedIron": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "fractal"
+        }
+      },
+      "exposedIronBevelOptions": {
+        "op": "data.record",
+        "inputs": {
+          "height": 1,
+          "profile": "smooth"
+        }
+      },
+      "exposedIronBevel": {
+        "op": "image.bevel",
+        "inputs": {}
+      },
+      "exposedIronSurfaceSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "exposedIronSurface": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "oldEnamel": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#17343a"
+              ],
+              [
+                0.3333333333333333,
+                "#23585c"
+              ],
+              [
+                0.6666666666666666,
+                "#328081"
+              ],
+              [
+                1,
+                "#659b89"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "rustLayers": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#281e29"
+              ],
+              [
+                0.3333333333333333,
+                "#65332d"
+              ],
+              [
+                0.6666666666666666,
+                "#a55a3e"
+              ],
+              [
+                1,
+                "#da9358"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "brokenPrimer": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#6e5148"
+              ],
+              [
+                0.3333333333333333,
+                "#b89170"
+              ],
+              [
+                0.6666666666666666,
+                "#e2be90"
+              ],
+              [
+                1,
+                "#ffe0a9"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "ironBasinMaskSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "ironBasinMask": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "mask",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "exposedSubstrate": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "copy"
+        }
+      },
+      "chipDepthInput": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "chipDepth": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": -1,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "underpaintBase": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "underpaintField": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "underpaintDetail": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": 0.24,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "underpaint": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "add",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "flakedCoating": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "copy"
+        }
+      },
+      "materialHeight": {
+        "op": "image.toHeight",
+        "inputs": {
+          "units": "art-px"
+        }
+      },
+      "tangentNormal": {
+        "op": "image.heightToNormal",
+        "inputs": {
+          "options": {
+            "method": "central",
+            "border": "wrap"
+          }
+        }
+      },
+      "roughnessResponse": {
+        "op": "image.curve",
+        "inputs": {
+          "curve": {
+            "stops": [
+              [
+                0,
+                0.36
+              ],
+              [
+                1,
+                0.86
+              ]
+            ],
+            "interpolation": "smooth"
+          }
+        }
+      },
+      "previewLight": {
+        "op": "image.emboss",
+        "inputs": {
+          "options": {
+            "azimuth": -135,
+            "elevation": 37,
+            "strength": 0.86,
+            "bias": 0.68,
+            "border": "wrap"
+          }
+        }
+      },
+      "previewLightRamp": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#382947"
+              ],
+              [
+                0.29,
+                "#776477"
+              ],
+              [
+                0.68,
+                "#e8e2db"
+              ],
+              [
+                1,
+                "#fff8e6"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "preview": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "multiply",
+          "opacity": 0.89
+        }
+      },
+      "displayPreview": {
+        "op": "image.toDisplay",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "baseColor": {},
+      "height": {},
+      "normal": {},
+      "roughness": {},
+      "mask": {},
+      "preview": {},
+      "previewDisplay": {}
+    },
+    "groups": {},
+    "links": {
+      "link-35680994d86addee5461964d": {
+        "from": {
+          "input": "scale"
+        },
+        "to": {
+          "node": "chipScaleParts",
+          "slot": "inputs",
+          "port": "item0"
+        }
+      },
+      "link-f40fdbddf17cb5478266c98f": {
+        "from": {
+          "input": "scale"
+        },
+        "to": {
+          "node": "chipScaleParts",
+          "slot": "inputs",
+          "port": "item1"
+        }
+      },
+      "link-90d845a99700425c0804429f": {
+        "from": {
+          "node": "chipScaleParts",
+          "port": "value"
+        },
+        "to": {
+          "node": "chipScale",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-69691b16bd1776e39ea8401d": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "flakeShapesOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-4820412410df58497a6199fe": {
+        "from": {
+          "node": "chipScale",
+          "port": "value"
+        },
+        "to": {
+          "node": "flakeShapesOptions",
+          "slot": "inputs",
+          "port": "size"
+        }
+      },
+      "link-c49a68e6a084babc2f98f009": {
+        "from": {
+          "input": "density"
+        },
+        "to": {
+          "node": "flakeShapesControls",
+          "slot": "inputs",
+          "port": "density"
+        }
+      },
+      "link-8b02fffddae5851761700d99": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "flakeShapes",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-d48863a42bd6e1e0fcb528d3": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "flakeShapes",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-5ba753147d33b94871494279": {
+        "from": {
+          "node": "flakeShapesOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "flakeShapes",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-a188290b7ba216223237b9b1": {
+        "from": {
+          "node": "flakeShapesControls",
+          "port": "value"
+        },
+        "to": {
+          "node": "flakeShapes",
+          "slot": "inputs",
+          "port": "controls"
+        }
+      },
+      "link-d057435c3f52e2d510574860": {
+        "from": {
+          "node": "flakeShapes",
+          "port": "coverage"
+        },
+        "to": {
+          "node": "flakeShapesCoverageSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a3b39ae92d65582e3b6ddf69": {
+        "from": {
+          "node": "flakeShapesCoverageSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "flakeShapesCoverage",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-19224914ea36b2acb3acdff9": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "oxidizedIronOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-e1fe1706794ffcc30e0837aa": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "oxidizedIron",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-6eccf095ce659321a2d4a5e4": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "oxidizedIron",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-95f9701debf725402b8af272": {
+        "from": {
+          "node": "oxidizedIronOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "oxidizedIron",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-e241e7199b7a7b93546df7b9": {
+        "from": {
+          "input": "lip"
+        },
+        "to": {
+          "node": "exposedIronBevelOptions",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-76e2c25f644f08cb399258e0": {
+        "from": {
+          "node": "flakeShapesCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "exposedIronBevel",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a3a3e26b7044e49194f8548e": {
+        "from": {
+          "node": "exposedIronBevelOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "exposedIronBevel",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-28bbf598ef8a04d40d9202b6": {
+        "from": {
+          "node": "exposedIronBevel",
+          "port": "value"
+        },
+        "to": {
+          "node": "exposedIronSurfaceSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-77100544da8fefded78cdfe4": {
+        "from": {
+          "node": "exposedIronSurfaceSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "exposedIronSurface",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-1ebfc51111f5f30c13f656de": {
+        "from": {
+          "node": "oxidizedIron",
+          "port": "value"
+        },
+        "to": {
+          "node": "oldEnamel",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-d0d5a1b667267ae8530eed3e": {
+        "from": {
+          "node": "oxidizedIron",
+          "port": "value"
+        },
+        "to": {
+          "node": "rustLayers",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-5f56bbcc85216b17de7324f0": {
+        "from": {
+          "node": "oxidizedIron",
+          "port": "value"
+        },
+        "to": {
+          "node": "brokenPrimer",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-c68481ac74987b36d038f317": {
+        "from": {
+          "node": "exposedIronSurface",
+          "port": "value"
+        },
+        "to": {
+          "node": "ironBasinMaskSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-b2b755ab6aabfb8e768a2731": {
+        "from": {
+          "node": "ironBasinMaskSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "ironBasinMask",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-9b29dd2c1243a0cd3651aecd": {
+        "from": {
+          "node": "brokenPrimer",
+          "port": "value"
+        },
+        "to": {
+          "node": "exposedSubstrate",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-28c2923de22e1cd8c7af381b": {
+        "from": {
+          "node": "rustLayers",
+          "port": "value"
+        },
+        "to": {
+          "node": "exposedSubstrate",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-0ad6b1df839463bd076c35a9": {
+        "from": {
+          "node": "ironBasinMask",
+          "port": "value"
+        },
+        "to": {
+          "node": "exposedSubstrate",
+          "slot": "inputs",
+          "port": "mask"
+        }
+      },
+      "link-88f69b251c77bb4f8effb1ef": {
+        "from": {
+          "node": "exposedIronSurface",
+          "port": "value"
+        },
+        "to": {
+          "node": "chipDepthInput",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-8576fe731fba22b3289a45e6": {
+        "from": {
+          "node": "chipDepthInput",
+          "port": "value"
+        },
+        "to": {
+          "node": "chipDepth",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-e2c6dddf211f1cc1a2b2bb12": {
+        "from": {
+          "node": "chipDepth",
+          "port": "value"
+        },
+        "to": {
+          "node": "underpaintBase",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-348d417cad4eda9ed651a2aa": {
+        "from": {
+          "node": "oxidizedIron",
+          "port": "value"
+        },
+        "to": {
+          "node": "underpaintField",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-3420f89700554cb9f68582a7": {
+        "from": {
+          "node": "underpaintField",
+          "port": "value"
+        },
+        "to": {
+          "node": "underpaintDetail",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-3c104b97038566352ebda9a1": {
+        "from": {
+          "node": "underpaintBase",
+          "port": "value"
+        },
+        "to": {
+          "node": "underpaint",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-4a5184ef3d7d32ba77498e89": {
+        "from": {
+          "node": "underpaintDetail",
+          "port": "value"
+        },
+        "to": {
+          "node": "underpaint",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-2f90e80e7ff8414861c775e7": {
+        "from": {
+          "node": "oldEnamel",
+          "port": "value"
+        },
+        "to": {
+          "node": "flakedCoating",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-ae9590d3e8c2678406297aec": {
+        "from": {
+          "node": "exposedSubstrate",
+          "port": "value"
+        },
+        "to": {
+          "node": "flakedCoating",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-75c8442a7886c36a0721a2ff": {
+        "from": {
+          "node": "flakeShapesCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "flakedCoating",
+          "slot": "inputs",
+          "port": "mask"
+        }
+      },
+      "link-72c81b6fdd71715028a992ce": {
+        "from": {
+          "node": "underpaint",
+          "port": "value"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-7932fc3572f9f4c80600b897": {
+        "from": {
+          "input": "relief"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "scale"
+        }
+      },
+      "link-6047479b518d64ed4f844fdf": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "tangentNormal",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-94788797b346010371dc32e1": {
+        "from": {
+          "node": "flakeShapesCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "roughnessResponse",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a21d99f38085fcf38ab84390": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a6c53800b0e43fc877dbee7e": {
+        "from": {
+          "node": "previewLight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLightRamp",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-75e9c7df85e791422d7a6fdb": {
+        "from": {
+          "node": "flakedCoating",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-d29fe1c5884cf934cfbb2a7e": {
+        "from": {
+          "node": "previewLightRamp",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-c352cbbdc72b4c5c4e273fa9": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "node": "displayPreview",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-0f9283946b735cbc9f680bdf": {
+        "from": {
+          "node": "flakedCoating",
+          "port": "value"
+        },
+        "to": {
+          "output": "baseColor"
+        }
+      },
+      "link-148e187fc906e84cde5c5c4c": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "output": "height"
+        }
+      },
+      "link-2beb1315e8b6b4ae6dbbba87": {
+        "from": {
+          "node": "tangentNormal",
+          "port": "value"
+        },
+        "to": {
+          "output": "normal"
+        }
+      },
+      "link-781ad7aba89d261554594672": {
+        "from": {
+          "node": "roughnessResponse",
+          "port": "value"
+        },
+        "to": {
+          "output": "roughness"
+        }
+      },
+      "link-787e0108c4644b99c65a4e1e": {
+        "from": {
+          "node": "flakeShapesCoverage",
+          "port": "value"
+        },
+        "to": {
+          "output": "mask"
+        }
+      },
+      "link-aba8cba83ef380fe1e194816": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "output": "preview"
+        }
+      },
+      "link-cc4f68d2b85426cd5c2d2c80": {
+        "from": {
+          "node": "displayPreview",
+          "port": "value"
+        },
+        "to": {
+          "output": "previewDisplay"
+        }
+      }
+    }
+  },
+  "settings": {
+    "exports": {
+      "preview": {
+        "output": "previewDisplay",
+        "format": "png"
+      }
+    },
+    "outputUsages": {
+      "baseColor": {
+        "usage": "baseColor",
+        "label": "Base color",
+        "order": 0,
+        "source": {
+          "output": "baseColor"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "height": {
+        "usage": "height",
+        "label": "Height",
+        "order": 1,
+        "source": {
+          "output": "height"
+        },
+        "format": {
+          "format": "json"
+        }
+      },
+      "normal": {
+        "usage": "normal",
+        "label": "Normal",
+        "order": 2,
+        "source": {
+          "output": "normal"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "roughness": {
+        "usage": "roughness",
+        "label": "Roughness",
+        "order": 3,
+        "source": {
+          "output": "roughness"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      },
+      "mask": {
+        "usage": "mask.feature",
+        "label": "Feature mask",
+        "order": 4,
+        "source": {
+          "output": "mask"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      }
+    }
+  },
+  "resources": {},
+  "controls": {
+    "resolution": {
+      "input": "resolution",
+      "label": "Texture size",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 48,
+      "max": 192,
+      "step": 8,
+      "units": "px",
+      "order": 0
+    },
+    "seed": {
+      "input": "seed",
+      "label": "Seed",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 0,
+      "max": 9999,
+      "step": 1,
+      "order": 1
+    },
+    "relief": {
+      "input": "relief",
+      "label": "Relief depth",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0,
+      "max": 4,
+      "step": 0.05,
+      "units": "art-px",
+      "order": 2
+    },
+    "density": {
+      "input": "density",
+      "label": "Chip density",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.12,
+      "max": 1,
+      "step": 0.02,
+      "order": 3
+    },
+    "scale": {
+      "input": "scale",
+      "label": "Chip scale",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.43,
+      "max": 1.47,
+      "step": 0.02,
+      "order": 4
+    },
+    "lip": {
+      "input": "lip",
+      "label": "Exposed rim width",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.65,
+      "max": 4.5,
+      "step": 0.05,
+      "units": "px",
+      "order": 5
+    }
+  },
+  "instances": {},
+  "label": "Chipped Enamel",
+  "metadata": {
+    "author": "Ink Studio",
+    "description": "Irregular paint losses with a pale edge and rusted iron beneath.",
+    "tags": [
+      "Weathering",
+      "Recipe",
+      "chips"
+    ],
+    "materialModel": "pbr.metallic-roughness",
+    "visibility": {
+      "library": true,
+      "publication": "public"
+    },
+    "thumbnail": {
+      "file": "../previews/chips.png",
+      "alt": "Chipped Enamel material swatch"
+    }
+  }
+}
