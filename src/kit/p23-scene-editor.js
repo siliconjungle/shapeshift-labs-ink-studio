@@ -570,6 +570,15 @@
       return mesh;
     }
 
+    function eyedropTilesetFace(request) {
+      const {object,part} = request ?? {};
+      if (!request || Object.getPrototypeOf(request) !== Object.prototype ||
+          Object.keys(request).some(key=>!['object','part','face','brushSize'].includes(key)) ||
+          typeof object !== 'string' || !object.trim() || part !== undefined && (typeof part !== 'string' || !part.trim()))
+        throw new TypeError('Choose a scene mesh and face to eyedrop');
+      return A.tilesetEyedrop.inspect(snapshot(),meshTopology(object,part),request);
+    }
+
     function editMeshTopology(object, patch, { part, projection, label, materials } = {}) {
       const before = meshTopology(object, part);
       const { row, ...evidence } = A.meshTopologyScene.revise(before, patch, { projection });
@@ -995,7 +1004,7 @@
       setTilesetGrid,
       setTilesetTexelsPerUnit,
       constructionPlane, setConstructionPlane, planConstructionOrigin, snapConstructionOrigin,
-      planTilesetFace, placeTilesetFace, planTilesetStroke, applyTilesetStroke,
+      planTilesetFace, placeTilesetFace, eyedropTilesetFace, planTilesetStroke, applyTilesetStroke,
       planTilesetRectangle, applyTilesetRectangle, planTilesetBrushRun, applyTilesetBrushRun,
       planTilesetCanvas,
       transformTilesetCanvas,

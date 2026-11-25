@@ -364,6 +364,38 @@ The PNG preview shows the compact oriented brush in native texels.
 Run `node examples/tileset-pick/paint-orientation-demo.cjs paint-demo`
 for a matched comparison of paint rotation, reflection, and face rotation.
 
+### Eyedrop a painted mesh face
+
+Select an authored face by mesh and face ID. The result contains its
+atlas rectangle, material slot and definition, pigment UV orientation,
+and any effective UV insets. A rectangular face also reports its world
+axes separately from its paint orientation. Add `--brush-size` to copy
+its current world width and height.
+
+```sh
+ink-studio tileset eyedrop --scene wall.json --object facade --face sign --brush-size --out sign-pick.json
+ink-studio tileset stamp --scene wall.json --object entry --face sign-copy --selection sign-pick.json --plane 2,1 --out copied.json
+```
+
+Omit `--out` from eyedrop to inspect the pick on stdout. Stamp uses the
+destination plane or explicit frame. Use `--texels-per-unit` or
+`--brush-scale` on stamp to size the copy from the crop. Provide
+`--material` to choose a different destination slot. With the picked
+slot name, a conflicting definition on the destination requires review.
+
+Eyedrop checks the current pigment corners against the retained source
+binding. With no usable binding, it infers a texel rectangle from the
+UVs and marks it `uv-inferred`. Nonrectangular UV layouts, active
+material bakes, and faces without a tileset return a reason in the review
+report. A warped quad with rectangular UVs can supply paint and a
+material. An unavailable brush size is reported separately.
+
+In Node, call `editor.eyedropTilesetFace({object,face,brushSize:true})`
+and spread the returned `stamp` into a placement request with the
+destination object and face. Eyedrop leaves the edit journal untouched.
+Run `node examples/tileset-pick/face-eyedrop-demo.cjs eyedrop-demo`
+to recover an oriented sign and place it on a second frame.
+
 ### Extract a crop as a reusable tileset
 
 Use an exact texel rectangle or a saved `tileset pick` selection.

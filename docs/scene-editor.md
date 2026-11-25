@@ -82,6 +82,10 @@ Use `planTilesetBrushRun(request, options)` and
 with a chosen overlap and artwork anchor in one undo entry.
 [Brush run requests and CLI](mesh-uv.md#repeat-a-multi-tile-brush-with-overlap-and-alignment)
 
+Use `eyedropTilesetFace(request)` to inspect a painted face and recover
+a reusable stamp without opening an edit transaction.
+[Face eyedrop workflow](mesh-uv.md#eyedrop-a-painted-mesh-face)
+
 ## Brushes and local rebuilds
 
 Use `paintShadowBand(stroke, { pbrMaterial })` to append a stroke to a [named PBR diffuse ramp](pbr-materials.md#paint-a-pbr-shadow-band).

@@ -2,15 +2,17 @@
 (function (K) {
   const A = K.authoring, topology = K.meshTopology, {freeze} = K.procedural.data;
   const sourceFormat = 'ink-studio/tileset-face-source';
-  const fields = ['object','part','face','selection','origin','right','up','planeAt','snapGrid','texelsPerUnit','brushScale','material','paint'];
+  const fields = ['object','part','face','selection','origin','right','up','planeAt','snapGrid','texelsPerUnit','brushScale','material','paint','uvInset','worldSize','materialDefinition'];
   const name = value=>TargetSelectors.name(value) && !['__proto__','prototype','constructor'].includes(value);
+
+  const isSourceBinding = binding=>binding.domain === 'faces' && binding.data?.format === sourceFormat && binding.data.version === 1;
 
   function sourceBindings(row, id, update) {
     const changes = [];
     const bindings = row.bindings?.map(binding=>{
       const before = binding.data;
       const pick = before?.selection;
-      if (binding.domain !== 'faces' || before?.format !== sourceFormat || before.version !== 1 ||
+      if (!isSourceBinding(binding) ||
           pick?.tileset !== id || ![pick.x,pick.y,pick.width,pick.height].every(Number.isSafeInteger)) return binding;
       const after = update(before);
       if (!after || after === before) return binding;
@@ -18,6 +20,12 @@
       return {...binding,data:after};
     });
     return {bindings,changes};
+  }
+
+  function sameMaterial(a, b) {
+    const ordered = (_key,value)=>value && Object.getPrototypeOf(value) === Object.prototype ?
+      Object.fromEntries(Object.keys(value).sort().map(key=>[key,value[key]])) : value;
+    return JSON.stringify(a,ordered) === JSON.stringify(b,ordered);
   }
 
   // The renderer addresses first and last texel centers at 0 and 1.
@@ -36,7 +44,7 @@
 
   function prepare(scene, request, {projectTexelsPerUnit} = {}, cellSize) {
     const {object,part,face,selection,origin,right,up,planeAt,snapGrid=false,
-      texelsPerUnit,brushScale=1,material:requestedMaterial,paint:requestedPaint} = request ?? {};
+      texelsPerUnit,brushScale=1,material:requestedMaterial,paint:requestedPaint,uvInset,worldSize,materialDefinition} = request ?? {};
     if (!request || Object.getPrototypeOf(request) !== Object.prototype || Object.keys(request).some(key=>!fields.includes(key)) ||
         ![object,face].every(name) || part !== undefined && !name(part) ||
         requestedMaterial !== undefined && !name(requestedMaterial) ||
@@ -48,7 +56,10 @@
     const {positiveScale} = A.tilesets;
     const density = positiveScale(texelsPerUnit ?? tilesets.texelsPerUnit ?? projectTexelsPerUnit ?? 16,'Texels per unit');
     positiveScale(brushScale,'Brush scale');
-    const size = cellSize ?? [crop.width,crop.height].map(pixels=>positiveScale(pixels*brushScale/density,'World tile extent'));
+    if (worldSize !== undefined && (!Array.isArray(worldSize) || worldSize.length !== 2 ||
+        !Array.from(worldSize).every(n=>Number.isFinite(n) && n>0)))
+      throw new RangeError('World size needs a positive finite width and height');
+    const size = cellSize ?? worldSize?.slice() ?? [crop.width,crop.height].map(pixels=>positiveScale(pixels*brushScale/density,'World tile extent'));
     if (planeAt !== undefined && [origin,right,up].some(value=>value !== undefined))
       throw new TypeError('Choose plane grid coordinates or an explicit tile frame');
     if (typeof snapGrid !== 'boolean' || snapGrid && planeAt === undefined)
@@ -56,8 +67,12 @@
     const plane = A.constructionPlane;
     const frame = planeAt === undefined ? plane.resolve({origin,right,up}) : plane.forScene(scene);
     const paint = requestedPaint === undefined ? undefined : TilesetSelection.paintOrientation(requestedPaint);
-    const {source,pigmentUV} = cropSource(asset,crop,undefined,paint);
+    const texelBounds = uvInset === undefined ? undefined : TilesetSelection.uvMapping(asset,crop,uvInset).texelBounds;
+    const {source,pigmentUV} = cropSource(asset,crop,texelBounds,paint);
     const material = requestedMaterial ?? 'tileset/'+crop.tileset;
+    if (materialDefinition !== undefined && (!materialDefinition || Object.getPrototypeOf(materialDefinition) !== Object.prototype ||
+        materialDefinition.id !== material || materialDefinition.texture?.tileset !== crop.tileset))
+      throw new TypeError('A copied material definition must match the material ID and source tileset');
     const existing = Object.hasOwn(scene.topologyMeshes ?? {},object) ? scene.topologyMeshes[object] : undefined;
     const doc = existing && topology.create(existing.document);
     const uvSet = MaterialUV.resolve(doc?.uvBindings,'pigment');
@@ -68,9 +83,11 @@
     const slot = existing?.materials?.find(row=>row.id === material);
     if (slot ? slot.texture?.tileset !== crop.tileset : doc?.faces.some(row=>row.material === material))
       conflicts.push({reason:'material-in-use',material});
+    if (slot && materialDefinition && !sameMaterial(slot,materialDefinition))
+      conflicts.push({reason:'different-material-definition',material});
     if (existing?.bakes?.some(row=>row.material === material))
       conflicts.push({reason:'material-has-bake',material});
-    return {object,part:existing?.part ?? part,existing,doc,frame,snapGrid,source,material,slot,density,brushScale,size,
+    return {object,part:existing?.part ?? part,existing,doc,frame,snapGrid,source,material,slot,density,brushScale,size,materialDefinition,
       uvSet,activeSets,unitUV,pigmentUV,conflicts,faceIds:new Set(doc?.faces.map(row=>row.id)),
       bindingIds:new Set(existing?.bindings?.map(row=>row.id)),vertexIds:new Set(doc?.vertices.map(row=>row.id)),
       cornerIds:new Set(doc?.faces.flatMap(row=>row.corners.map(corner=>corner.id)))};
@@ -95,7 +112,7 @@
   }
 
   function append(brush, stamps) {
-    const {existing,doc,part,object,slot,material,source} = brush;
+    const {existing,doc,part,object,slot,material,source,materialDefinition} = brush;
     const added = {vertices:stamps.flatMap(row=>row.vertices),faces:stamps.map(row=>row.polygon)};
     const row = existing ? A.meshTopologyScene.revise(existing,added).row :
       {document:topology.create({id:object,...added}),...(part && {part})};
@@ -106,13 +123,13 @@
       if (row.shapeKeys?.restRevision === before) row.shapeKeys = {...row.shapeKeys,restRevision:after};
     }
     return {...row,bindings:[...(row.bindings ?? []),...stamps.map(stamp=>stamp.binding)],
-      materials:slot ? row.materials : [...(row.materials ?? []),{id:material,texture:{tileset:source.selection.tileset}}]};
+      materials:slot ? row.materials : [...(row.materials ?? []),materialDefinition ?? {id:material,texture:{tileset:source.selection.tileset}}]};
   }
 
   function plan(scene, request, options) {
     const brush = prepare(scene,request,options);
     const {face,planeAt} = request;
-    const {object,part,source,material,density,brushScale,size,uvSet,frame,snapGrid} = brush;
+    const {object,part,source,material,density,brushScale,size,uvSet,frame,snapGrid,materialDefinition} = brush;
     const plane = A.constructionPlane;
     const gridAt = snapGrid ? plane.quantize(frame,planeAt) : planeAt;
     const anchor = planeAt === undefined ? frame.plane.origin : plane.point(frame,gridAt);
@@ -120,12 +137,12 @@
     const {vertices,polygon,binding,conflicts:local} = placement;
     const conflicts = [...brush.conflicts,...local];
     const report = freeze({format:'ink-studio/tileset-face-placement',version:1,object,
-      ...(part && {part}),face,source,material,binding:binding.id,
+      ...(part && {part}),face,source,material,...(materialDefinition && {materialDefinition}),binding:binding.id,
       texelsPerUnit:density,brushScale,size,vertices,corners:polygon.corners,uvSet,
       ...(planeAt !== undefined && {constructionPlane:frame.plane,planeAt:planeAt.slice()}),
       ...(snapGrid && {gridAt}),conflicts,canCommit:!conflicts.length});
     return conflicts.length ? {report} : {report,row:append(brush,[placement])};
   }
 
-  A.tilesetFaces = Object.freeze({plan,prepare,stamp,append,cropSource,sourceBindings});
+  A.tilesetFaces = Object.freeze({plan,prepare,stamp,append,cropSource,sourceBindings,isSourceBinding});
 })(KIT);

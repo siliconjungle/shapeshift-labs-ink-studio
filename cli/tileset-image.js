@@ -327,10 +327,18 @@ function stampCommand(action, args, options, toolkit, projectTexelsPerUnit, open
     throw new TypeError('Use tileset '+action+' --scene <scene.json> --object <mesh-id> --face <face-id> with a saved selection or --id and exact texel bounds');
   const input = path.resolve(scene), output = out && sceneOutput(input,out,selection);
   const editor = openEditor(input);
-  const crop = saved ? JSON.parse(fs.readFileSync(path.resolve(selection),'utf8')) : pickTilesetRectangle(editor.snapshot(),id,
+  const picked = saved ? JSON.parse(fs.readFileSync(path.resolve(selection),'utf8')) : pickTilesetRectangle(editor.snapshot(),id,
     Object.fromEntries(rectangleFields.map(key=>[key,Number(options[key])])),toolkit);
-  const paint = paintOptions(options);
-  const request = {object,face,selection:crop,...(part && {part}),...(material && {material}),...(paint && {paint})};
+  const eyedrop = picked?.format === 'ink-studio/tileset-face-pick';
+  if (eyedrop && (picked.version !== 1 || picked.canStamp !== true || !picked.stamp))
+    throw new TypeError('The face pick needs a reusable version 1 stamp');
+  const preset = eyedrop ? picked.stamp : {selection:picked};
+  const paint = paintOptions(options) ?? preset.paint;
+  const slot = material ?? preset.material;
+  const worldSize = options['texels-per-unit'] === undefined && options['brush-scale'] === undefined ? preset.worldSize : undefined;
+  const request = {object,face,selection:preset.selection,...(part && {part}),...(slot && {material:slot}),...(paint && {paint}),
+    ...(preset.uvInset && {uvInset:preset.uvInset}),...(worldSize && {worldSize}),
+    ...(preset.materialDefinition && slot === preset.material && {materialDefinition:preset.materialDefinition})};
   const {coordinates} = require('./construction-plane.js');
   for (const key of vectors) if (options[key] !== undefined) request[key] = coordinates(options[key],3,'--'+key);
   if (plane !== undefined) request.planeAt = coordinates(plane,2,'--plane');
@@ -339,6 +347,22 @@ function stampCommand(action, args, options, toolkit, projectTexelsPerUnit, open
     if (options[key] !== undefined) request[field] = numberOption(options,key);
   }
   return publishFaceEdit(editor,request,{projectTexelsPerUnit},output,'planTilesetFace','placeTilesetFace');
+}
+
+function eyedropCommand(args, options, openEditor) {
+  const {scene,object,part,face,out,'brush-size':brushSize} = options;
+  const name = value=>typeof value === 'string' && value.trim();
+  if (args.length || ![scene,object,face].every(name) ||
+      [part,out].some(value=>value !== undefined && !name(value)) ||
+      brushSize !== undefined && brushSize !== true ||
+      Object.keys(options).some(key=>!['scene','object','part','face','out','brush-size'].includes(key)))
+    throw new TypeError('Use tileset eyedrop --scene <scene.json> --object <mesh-id> --face <face-id> [--brush-size] [--out <pick.json>]');
+  const input = path.resolve(scene), output = out && path.resolve(out);
+  if (output && (output === input || !/\.json$/i.test(output))) throw new RangeError('Write the face pick to a separate JSON file');
+  const result = openEditor(input).eyedropTilesetFace({object,part,face,brushSize});
+  if (output && result.canStamp) files.publishJson(output,result,'A different face pick already exists at '+output);
+  if (output && !result.canStamp) process.exitCode = 1;
+  process.stdout.write(JSON.stringify(result,null,2)+'\n');
 }
 
 const faceEdits = {
@@ -382,6 +406,7 @@ function publishFaceEdit(editor, request, settings, output, plan, apply) {
 }
 
 function command([action, ...args], options, toolkit, projectTexelsPerUnit, openEditor) {
+  if (action === 'eyedrop') return eyedropCommand(args,options,openEditor);
   if (Object.hasOwn(faceEdits,action)) return faceEditCommand(action,args,options,projectTexelsPerUnit,openEditor);
   if (action === 'stamp' || action === 'place') return stampCommand(action,args,options,toolkit,projectTexelsPerUnit,openEditor);
   if (['resize','resample','swap'].includes(action))

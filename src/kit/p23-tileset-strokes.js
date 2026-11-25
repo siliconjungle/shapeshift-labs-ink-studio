@@ -68,8 +68,7 @@
   }
 
   function tileBinding(binding) {
-    return binding.domain === 'faces' && !binding.review &&
-      binding.data?.format === 'ink-studio/tileset-face-source' && binding.data.version === 1;
+    return !binding.review && A.tilesetFaces.isSourceBinding(binding);
   }
 
   function hitRegions(doc, bound, frame) {
