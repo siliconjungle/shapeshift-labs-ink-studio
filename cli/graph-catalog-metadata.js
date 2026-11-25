@@ -65,6 +65,7 @@ const connectivity = property('number', oneOf(4, 8), 4);
 const dimension = { constraints: { integer: true, min: 1, max: 8192 } };
 const namedNoise = oneOf('perlin','simplex','gaussian','white','blue','worley','voronoi','cellular',
   'fractal','ridged','anisotropic','directional');
+const evolvingNoise = ['perlin','simplex','worley','voronoi','cellular','fractal','ridged','anisotropic','directional'];
 
 const ports = {
   'image.noise': { family:namedNoise },
@@ -224,6 +225,8 @@ const noiseOptions = {
   dimension:property('number',oneOf(2,3,4),2),
   seed:property('number',{constraints:{integer:true,safe:true}}),
   output:property('string',oneOf('unit','native'),'unit'),
+  disorder:property('number',{families:evolvingNoise,unit:'cycles',...limit(-1e6,1e6)},0),
+  animationSpeed:property('number',{families:evolvingNoise,unit:'cycles/second',...limit(-64,64)},0),
   mean:property('number',{families:['gaussian']},0),
   deviation:property('number',{families:['gaussian'],...positive},1),
   rankSize:property('vec2',{families:['blue'],...pixelRange(4,96,true)}),
@@ -233,6 +236,8 @@ const noiseOptions = {
   jitter:property('number',{families:['worley','voronoi','cellular'],...limit(0,1)},1),
   carrier:property('string',{families:['fractal','ridged'],...oneOf('perlin','simplex')},'perlin'),
   octaves:property('number',{families:['fractal','ridged'],...limit(1,8,true)},4),
+  octaveRange:property('vec2',{families:['fractal','ridged'],description:'Inclusive zero-based bounds. Replaces octaves.',
+    ...limit(0,7,true)},[0,3]),
   gain:property('number',{families:['fractal','ridged'],...limit(0,1)},.5),
   lacunarity:property('number',{families:['fractal','ridged'],...limit(1,4)},2),
   angle:property('number',{families:['anisotropic','directional'],unit:'degrees clockwise'},0),
@@ -242,6 +247,9 @@ const noiseOptions = {
 const options = {
   'proc.noiseFamily': { ...noiseOptions,periods:noisePeriods,rankSize:{...noiseOptions.rankSize,default:[32,32]} },
   'image.noise': { ...noiseOptions,extent:property('number|vec2',{unit:'noise cells',...limit(.0001,1e6)}),
+    scale:property('number',{unit:'domain multiplier',...limit(1/16,64)},1),
+    tileOffset:property('vec2',{unit:'tile lengths',...limit(-64,64)},[0,0]),
+    nonSquareExpansion:property('boolean',{description:'Extend the long axis to preserve feature proportions.'},false),
     offset:property('array<number>',{unit:'noise cells'}), slicePeriods:noisePeriods,
     tiling:{...spatialSampling.border,default:'wrap'}, precision:{...imagePrecision,default:'float32'},
     pixelPitchMm:property('vec2',{unit:'mm per texel'}) },
@@ -625,11 +633,14 @@ const specialization = {
 };
 const notes = {
   'image.noise': ['Samples a scalar field at texel centers. Wrapping axes use the matching extent as the period.',
+    'Connect anim.clock to time for timeline playback. Speed zero pins the disorder phase.',
+    'Scale and non-square expansion snap wrapped lattice periods to valid steps. Inspect requestedExtent and extent on info.',
     'Blue noise always repeats its rank tile. Use matching texel and rank density to retain the blue-noise distribution.',
     'Native output requires floating storage. The info port reports effective defaults, seed, periods and sampling extent.'],
   'proc.noiseFamily': ['Perlin, simplex, Gaussian, white, fractal and ridged support 2D, 3D and 4D.',
     'Worley, Voronoi and cellular support 2D and 3D. Blue, anisotropic and directional are 2D.',
-    'Use null to leave a field axis open. Blue is inherently periodic. A supplied seed overrides the contextual seed.'],
+    'Use null to leave a field axis open. Blue is inherently periodic. A supplied seed overrides the contextual seed.',
+    'For animated families, disorder plus time times animationSpeed selects the looping field phase.'],
   'raster.canvas': ['Width × height may not exceed 16,777,216 pixels.'],
   'raster.crop': ['The requested rectangle must fit inside the source.'],
   'raster.resize': ['Width × height may not exceed 16,777,216 pixels.'],

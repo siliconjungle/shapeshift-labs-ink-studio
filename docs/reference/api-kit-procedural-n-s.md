@@ -15,7 +15,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.namedNoise` | namespace |  |  |
-| `KIT.procedural.namedNoise.create` | function | `(family, options = {})` | [guide](../material-named-noise.md), [source](../../src/kit/paq-generator-noise.js) |
+| `KIT.procedural.namedNoise.create` | function | `(family, options = {}, time = 0)` | [guide](../material-named-noise.md), [source](../../src/kit/paq-generator-noise.js) |
 | `KIT.procedural.namedNoise.families` | value | `array` |  |
 
 ## KIT.procedural.offsetRails

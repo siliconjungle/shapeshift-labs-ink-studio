@@ -1,0 +1,22 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const Ink = require('../..');
+const files = require('../../cli/asset-files.js');
+const { workshopGraph } = require('./workshop.js');
+
+const out = path.resolve(process.argv[2] ?? 'studio/out/procedural-noise-controls');
+const at = name => path.join(out,name);
+const material = at('noise-workshop.material.json');
+Ink.writeMaterialGraph(material,Ink.openMaterialGraph(workshopGraph(true),{id:'noise-workshop',label:'Noise Workshop'}));
+const project = Ink.readGraphProject(material);
+const first = project.run({time:0}), middle = project.run({time:.75}), last = project.run({time:2});
+assert.notDeepEqual(first.outputs.live.data,middle.outputs.live.data);
+assert.deepEqual(first.outputs.live.data,last.outputs.live.data);
+assert.deepEqual(first.outputs.liveInfo.extent,[10,5]);
+for (const artifact of first.artifacts) files.write(at(artifact.file),artifact.bytes);
+const motion = project.clip({output:'live',from:0,to:48,format:'apng'});
+for (const artifact of motion.artifacts) files.write(at('motion/'+artifact.file),artifact.bytes);
+for (const file of ['index.html','workshop.js']) files.write(at(file),fs.readFileSync(path.join(__dirname,file)));
+files.write(at('ink-studio.browser.js'),Buffer.from(Ink.bundle()));
+console.log('Wrote Noise Workshop, an editable graph and a two-second loop to '+out);
