@@ -4,6 +4,29 @@
 
 Ports, defaults, and constraints come from the registered operations. Use `graph describe <op> --json` for the full structured record.
 
+### image.blend
+
+Blend typed images at native precision with a grayscale opacity mask, crop, alpha policy and explicit clamping.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `background` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `foreground` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `mask` | `any` | `null` |  |
+| Input | `mode` | `string` | `"copy"` | {"choices":["copy","add","subtract","multiply","addSub","max","min","switch","divide","overlay","screen","softLight","hardLight","difference","exclusion"]} |
+| Input | `opacity` | `unitScalar` | `1` | ratio · {"min":0,"max":1} |
+| Input | `crop` | `record` | `{}` | {"layout":"Plain named object"} |
+| Input | `alpha` | `string` | `"source"` | {"choices":["source","ignore","straight","premultiplied"]} |
+| Input | `clamp` | `string` | `"auto"` | {"choices":["auto","mode","output","none"]} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-blend.md)
+
+Get the runnable example with `ink-studio graph describe image.blend --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.convert
 
 Convert the channel layout, precision, color space or alpha convention of a typed image.
@@ -19,7 +42,7 @@ A literal target intent selects the output type. Optional fields change how samp
 | Input | `dropAlpha` | `boolean` | `false` |  |
 | Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
 
-Guides: [guide](../graph-image-types.md#make-and-convert-uniform-images)
+Guides: [guide](../graph-image-types.md#make-and-convert-uniform-images), [guide](../material-image-blend.md#inputs-and-output)
 
 Get the runnable example with `ink-studio graph describe image.convert --example > example.json`.
 Run it with `ink-studio graph run example.json`.
@@ -71,7 +94,7 @@ Origin: toolkit.
 | Input | `height` | `pixelCount` | Required | pixels · {"integer":true,"min":1} |
 | Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
 
-Guides: [guide](../graph-image-types.md)
+Guides: [guide](../graph-image-types.md), [guide](../material-image-blend.md#inputs-and-output)
 
 Get the runnable example with `ink-studio graph describe image.resize --example > example.json`.
 Run it with `ink-studio graph run example.json`.

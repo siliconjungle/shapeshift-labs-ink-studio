@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Breakwater · Ink Studio</title>
+<style>
+  :root { color-scheme:dark; --bg:#10191c; --panel:#172327; --border:#354749; --text:#f2e8d3;
+    --muted:#afc3be; --accent:#efbf75; font:16px/1.45 system-ui,sans-serif; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:radial-gradient(ellipse at 30% -24%,#294846,#10191c 64%); color:var(--text); }
+  main { max-width:1220px; margin:auto; padding:35px 36px 30px; }
+  header { display:flex; align-items:end; justify-content:space-between; gap:16px; margin-bottom:20px; }
+  h1 { font:normal clamp(3rem,8vw,5rem)/.94 Georgia,serif; letter-spacing:-.05em; margin:4px 0 7px; }
+  small,.kicker { font:600 .73rem ui-monospace,monospace; letter-spacing:.11em; text-transform:uppercase; color:var(--accent); }
+  p,figcaption { color:var(--muted); margin:0; }
+  a { color:var(--text); text-underline-offset:4px; }
+  h2 { margin:0 0 12px; font:normal 1.65rem Georgia,serif; }
+  .layout { display:grid; grid-template-columns:minmax(0,2.2fr) minmax(278px,1fr); gap:18px; align-items:start; }
+  .plates { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+  figure { margin:0; border:1px solid var(--border); background:var(--panel); }
+  figure canvas { display:block; width:100%; height:auto; image-rendering:pixelated; background:
+    repeating-conic-gradient(#192428 0% 25%,#263439 0% 50%) 0 0/16px 16px; }
+  figcaption { padding:7px 9px; font-size:.81rem; border-top:1px solid var(--border); }
+  .result { margin-bottom:8px; }
+  .result figcaption { display:flex; justify-content:space-between; gap:12px; }
+  aside { padding:17px; background:var(--panel); border:1px solid var(--border); }
+  label { display:block; font-size:.875rem; color:var(--muted); margin-bottom:8px; }
+  select { width:100%; font:inherit; display:block; background:#102023; color:var(--text); padding:6px 9px;
+    border:1px solid var(--border); border-radius:3px; }
+  input { accent-color:var(--accent); }
+  input[type=range] { display:block; width:100%; margin:3px 0 10px; }
+  .switches { display:flex; flex-wrap:wrap; gap:0 14px; }
+  .switches label { white-space:nowrap; }
+  .group { margin-top:12px; border-top:1px solid var(--border); padding-top:12px; }
+  .sample { margin-top:5px; font: .82rem/1.55 ui-monospace,monospace; overflow-wrap:anywhere; }
+  output { color:var(--accent); }
+  #message { color:#ffb98d; font-size:.85rem; min-height:1.25em; margin-top:5px; }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  @media(max-width:780px) { main { padding:22px 15px; } header { display:block; } header a { display:inline-block; margin-top:6px; }
+    .layout { grid-template-columns:1fr; } }
+</style>
+<main>
+  <header>
+    <div><div class="kicker">Ink Studio · Material graphs</div><h1>Breakwater</h1>
+      <p>Blend a painted beacon into a coastal plate and inspect the samples.</p></div>
+    <a href="breakwater.material.json">Editable material graph</a>
+  </header>
+  <div class="layout">
+    <section aria-label="Blend preview">
+      <figure class="result">
+        <canvas id="result" width="160" height="96" aria-label="Rendered coastal image"></canvas>
+        <figcaption><span>Composite</span><span id="result-label"></span></figcaption>
+      </figure>
+      <div class="plates">
+        <figure><canvas id="background" width="160" height="96" aria-label="Background plate"></canvas><figcaption>Background</figcaption></figure>
+        <figure><canvas id="foreground" width="160" height="96" aria-label="Foreground plate"></canvas><figcaption>Foreground</figcaption></figure>
+        <figure><canvas id="mask" width="160" height="96" aria-label="Opacity mask"></canvas><figcaption>Opacity mask</figcaption></figure>
+      </div>
+    </section>
+    <aside>
+      <h2>Blend controls</h2>
+      <label>Mode
+        <select id="mode">
+          <option value="copy">Copy</option><option value="add">Add</option><option value="subtract">Subtract</option>
+          <option value="multiply">Multiply</option><option value="addSub">Add Sub</option><option value="max">Max</option>
+          <option value="min">Min</option><option value="switch">Switch</option><option value="divide">Divide</option>
+          <option value="overlay">Overlay</option><option value="screen" selected>Screen</option><option value="softLight">Soft Light</option>
+        </select>
+      </label>
+      <label>Opacity <output id="opacity-label" for="opacity"></output>
+        <input id="opacity" type="range" min="0" max="100" value="80">
+      </label>
+      <label>Alpha policy
+        <select id="alpha"><option value="source">Use source alpha</option><option value="ignore">Ignore alpha</option>
+          <option value="straight">Straight</option><option value="premultiplied">Premultiplied</option></select>
+      </label>
+      <label>Clamp
+        <select id="clamp"><option value="auto">Auto by precision</option><option value="mode">Before mixing</option>
+          <option value="output">After mixing</option><option value="none">Preserve range</option></select>
+      </label>
+      <div class="switches">
+        <label><input id="apply-mask" type="checkbox" checked> Use mask</label>
+        <label><input id="apply-crop" type="checkbox"> Crop blend</label>
+      </div>
+      <div class="group">
+        <small>Composite sample · (88, 40)</small>
+        <div class="sample" id="pixel"></div>
+      </div>
+      <div class="group">
+        <small>HDR clamp probe</small>
+        <div class="sample">Add 0.75 + 0.75 at 50% → <output id="probe"></output></div>
+      </div>
+      <p id="message" role="status"></p>
+    </aside>
+  </div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="plates.js"></script>
+<script>
+  const kit = KIT.procedural, images = kit.graphImages;
+  const get = id => document.getElementById(id);
+  const {background, foreground, mask} = breakwaterPlates();
+  const color = source => images.declare(source,{intent:'color',precision:'unorm8',alpha:'straight'});
+  const typed = {background:color(background),foreground:color(foreground)};
+  const associated = Object.fromEntries(Object.entries(typed).map(([id, image]) =>
+    [id,images.convert(image,{intent:'color',alpha:'premultiplied'})]));
+  const gate = images.declare(mask,{intent:'mask',precision:'unorm8'});
+  const probe = images.uniform(.75,1,1,{intent:'data'});
+  const from = input => ({input});
+  const link = node => ({node});
+  const inputs = {background:'colorImage',foreground:'colorImage',mask:'any',mode:'string',opacity:'unitScalar',
+    crop:'record',alpha:'string',clamp:'string'};
+  const graph = kit.graph.create({
+    inputs, nodes: {
+      blend:{op:'image.blend',inputs:Object.fromEntries(Object.keys(inputs).map(key=>[key,from(key)]))},
+      preview:{op:'image.toDisplay',inputs:{source:link('blend')}}
+    }, outputs:{preview:link('preview'),native:link('blend')}
+  });
+  function paint(id, source) {
+    const canvas = get(id);
+    canvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(source.data),source.width,source.height),0,0);
+  }
+  paint('background',background);
+  paint('foreground',foreground);
+  const maskRGBA = new Uint8Array(mask.width * mask.height * 4);
+  mask.data.forEach((value,i)=>maskRGBA.set([value,value,value,255],i*4));
+  paint('mask',{...mask,data:maskRGBA});
+  function render() {
+    const mode = get('mode').value, alpha = get('alpha').value, clamp = get('clamp').value;
+    const opacity = Number(get('opacity').value) / 100;
+    get('opacity-label').value = get('opacity').value + '%';
+    const crop = get('apply-crop').checked ? {left:.2,right:.74,top:.25,bottom:.79} : {};
+    get('probe').value = images.blend(probe,probe,{mode:'add',opacity:.5,clamp}).raster.data[0];
+    get('message').textContent = '';
+    try {
+      const {outputs} = graph.evaluate({...(alpha === 'premultiplied' ? associated : typed),mode,alpha,clamp,opacity,crop,
+        mask:get('apply-mask').checked ? gate : null});
+      paint('result',outputs.preview);
+      const {raster,descriptor} = outputs.native, offset = (40 * raster.width + 88) * 4;
+      get('pixel').textContent = Array.from(raster.data.slice(offset,offset+4)).join(' / ') + ' · ' + descriptor.alpha;
+      get('result-label').textContent = get('mode').selectedOptions[0].textContent + ' · ' + descriptor.precision.toUpperCase();
+    } catch (error) {
+      get('result').getContext('2d').clearRect(0,0,background.width,background.height);
+      get('pixel').textContent = '—';
+      get('result-label').textContent = 'Range error';
+      get('message').textContent = error.message;
+    }
+  }
+  for (const control of document.querySelectorAll('select,input')) control.addEventListener('input',render);
+  render();
+</script>
+</html>

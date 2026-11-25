@@ -224,6 +224,93 @@
     return wrap({ width, height, channels: next, data: output, pivot }, to);
   }
 
+  const unitClamp = value => Math.min(1, Math.max(0, value));
+
+  function blendCrop(crop, width, height) {
+    if (!fields(crop, ['left', 'right', 'top', 'bottom'])) throw new TypeError('Invalid image blend crop');
+    const { left = 0, right = 1, top = 0, bottom = 1 } = crop;
+    if (![left, right, top, bottom].every(n => finite(n) && n >= 0 && n <= 1) || right < left || bottom < top)
+      throw new RangeError('Image blend crop needs ordered edges from 0 to 1');
+    return [left * width, right * width, top * height, bottom * height].map(edge => Math.ceil(edge - .5));
+  }
+
+  function blendImage(background, foreground, {
+    mode = 'copy', opacity = 1, mask = null, crop = {}, alpha = 'source', clamp = 'auto'
+  } = {}) {
+    const { raster: back, descriptor: base } = requireImage(background);
+    const { raster: front, descriptor: paint } = requireImage(foreground);
+    const { width, height, pivot } = back;
+    const color = base.intent === 'color';
+    const key = mode === 'switch' ? 'copy' : mode;
+    if (!own(RasterBlendModes, key) || !finite(opacity) || opacity < 0 || opacity > 1 ||
+        !['source', 'ignore', 'straight', 'premultiplied'].includes(alpha) ||
+        !['auto', 'mode', 'output', 'none'].includes(clamp))
+      throw new RangeError('Invalid image blend mode, opacity, alpha policy or clamp');
+    if (front.width !== width || front.height !== height || base.intent !== paint.intent ||
+        base.units !== paint.units || base.colorSpace !== paint.colorSpace || !color && (back.channels !== 1 || front.channels !== 1))
+      throw new TypeError('Image blend needs aligned matching RGB(A) or scalar images with the same intent, units and color space');
+    if ((alpha === 'straight' || alpha === 'premultiplied') &&
+        [base.alpha, paint.alpha].some(encoding => encoding !== 'none' && encoding !== alpha))
+      throw new TypeError('Image blend alpha policy requires ' + alpha + ' inputs. Use image.convert.');
+    const coverage = mask === null ? null : requireImage(mask, 'mask');
+    if (coverage && (coverage.raster.width !== width || coverage.raster.height !== height))
+      throw new TypeError('Image blend opacity mask must match the image extent');
+    const [left, right, top, bottom] = blendCrop(crop, width, height);
+    const withAlpha = color && (base.alpha !== 'none' || paint.alpha !== 'none');
+    const channels = withAlpha ? 4 : back.channels;
+    const encoding = withAlpha ? alpha === 'premultiplied' || alpha === 'source' && base.alpha === 'premultiplied' ?
+      'premultiplied' : 'straight' : 'none';
+    const spec = descriptor({ width, height, channels, data: back.data }, {
+      ...base, layout: withAlpha ? 'rgba' : base.layout, alpha: encoding
+    });
+    const output = new storage[spec.precision](width * height * channels);
+    const blend = RasterBlendModes[key], ignoreAlpha = alpha === 'ignore';
+    const clampMode = clamp === 'mode' || clamp === 'auto' && spec.domain === 'unit';
+    const clampOutput = clamp === 'output';
+    const packPolicy = clampMode || clampOutput ? 'clamp' : 'error';
+    const gateScale = coverage ? (integerMax(coverage.descriptor.precision) || 1) : 1;
+    const backScale = integerMax(base.precision) || 1, frontScale = integerMax(paint.precision) || 1;
+    const colors = color ? 3 : 1;
+    const copyBackground = channels === back.channels && encoding === base.alpha;
+    for (let y = 0, i = 0; y < height; y++) for (let x = 0; x < width; x++, i++) {
+      const b = i * back.channels, f = i * front.channels, o = i * channels;
+      const backAlpha = alphaAt(back.data, b, base), frontAlpha = alphaAt(front.data, f, paint);
+      const inside = x >= left && x < right && y >= top && y < bottom;
+      const gate = inside ? opacity * (coverage ? coverage.raster.data[i] / gateScale : 1) : 0;
+      const weight = gate * (ignoreAlpha ? 1 : frontAlpha);
+      if (!weight && copyBackground) {
+        for (let c = 0; c < channels; c++) output[o + c] = back.data[b + c];
+        continue;
+      }
+      const outAlpha = ignoreAlpha ? backAlpha : backAlpha + weight * (1 - backAlpha);
+      if (withAlpha) output[o + 3] = pack(outAlpha, spec, true, 'clamp');
+      const association = encoding === 'premultiplied' ? output[o + 3] ? outAlpha : 0 : 1;
+      const backGain = base.alpha === 'premultiplied' ? backAlpha : 1;
+      const frontGain = paint.alpha === 'premultiplied' ? frontAlpha : 1;
+      const overlap = ignoreAlpha ? 1 : backAlpha;
+      for (let c = 0; c < colors; c++) {
+        const backSample = backGain ? back.data[b + c] / backScale / backGain : 0;
+        let result = backSample;
+        if (weight) {
+          const frontSample = frontGain ? front.data[f + c] / frontScale / frontGain : 0;
+          const mixed = overlap ? blend(backSample, frontSample) : frontSample;
+          // Bounded divide gives black for 0/0 and saturates nonzero division by zero.
+          const tile = clampMode || clampOutput && !finite(mixed) && key === 'divide' ? unitClamp(mixed) : mixed;
+          result = ignoreAlpha ? backSample * (1 - weight) + tile * weight :
+            (backSample * backAlpha * (1 - weight) + weight * (frontSample * (1 - backAlpha) + tile * backAlpha)) / outAlpha;
+          if (clampOutput || spec.domain === 'unit' && clampMode) result = unitClamp(result);
+        }
+        if (spec.domain === 'unit' && packPolicy === 'error') {
+          if (result < -16 * Number.EPSILON || result > 1 + 16 * Number.EPSILON)
+            throw new RangeError('Image blend result ' + result + ' is outside [0, 1]');
+          result = unitClamp(result);
+        }
+        output[o + c] = pack(association ? result * association : 0, spec, false, packPolicy);
+      }
+    }
+    return wrap({ width, height, channels, data: output, pivot }, spec);
+  }
+
   function toHeight(source, { scale, offset = 0, units = 'art-px', channel = 'luminance' } = {}) {
     const { raster: grid, descriptor: spec } = requireImage(source);
     const { data, width, height, channels, pivot } = grid;
@@ -378,6 +465,15 @@
         run({ source, descriptor, ...options }) { return { value: convert(source, descriptor, options) }; } };
       }
     },
+    'image.blend': {
+      description: 'Blend typed images at native precision with a grayscale opacity mask, crop, alpha policy and explicit clamping.',
+      inputs: { background: 'typedImage', foreground: 'typedImage', mask: { type: 'any', default: null },
+        mode: { type: 'string', default: 'copy' }, opacity: { type: 'unitScalar', default: 1 },
+        crop: { type: 'record', default: {} }, alpha: { type: 'string', default: 'source' },
+        clamp: { type: 'string', default: 'auto' } },
+      outputs: { value: { type: 'typedImage', typeFrom: 'background' } },
+      run({ background, foreground, ...options }) { return { value: blendImage(background, foreground, options) }; }
+    },
     'image.toHeight': {
       description: 'Map linear-light color or scalar samples to height using an explicit scale and units.',
       inputs: { source: 'typedImage', scale: 'number', offset: { type: 'number', default: 0 },
@@ -405,5 +501,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, blend: blendImage, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);

@@ -42,6 +42,8 @@ node examples/uniform-graph-images/demo.cjs /tmp/ink-lantern-glass
 ink-studio graph run /tmp/ink-lantern-glass/lantern-glass.material.json --out /tmp/ink-lantern-glass/replay
 ```
 
+For compositing typed maps, see [Material image blend modes](material-image-blend.md).
+
 ## Convert color to relief
 
 The `fx.relight` height socket accepts typed height in `art-px` and existing uncolored scalar rasters. A connection from a known RGB source fails graph validation. For dynamically sourced images, the socket validates their value before relighting. Convert deliberately with `image.toHeight`.
