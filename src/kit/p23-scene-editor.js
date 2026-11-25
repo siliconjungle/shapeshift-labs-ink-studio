@@ -1067,6 +1067,8 @@
       planMeshTransform,
       transformMeshTopology,
       meshHealth: (object, settings, { part } = {}) => K.meshTopology.health(meshTopology(object, part).document, settings),
+      reviewMeshOverlaps: (object, settings, { part } = {}) =>
+        K.meshTopology.reviewOverlaps(meshTopology(object, part).document, settings),
       planMeshRepair,
       repairMeshTopology,
       planMeshCut,

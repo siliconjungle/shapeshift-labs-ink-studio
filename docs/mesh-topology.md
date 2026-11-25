@@ -483,6 +483,47 @@ The gatehouse demo shifts the left jamb to a construction plane while
 keeping footings and outer corners pinned. Teal marks the additional
 opening in the native-grid comparison.
 
+## Review coincident faces
+
+```sh
+ink-studio mesh-topology overlaps mesh.json --out review.json
+ink-studio mesh-topology overlaps scene.json settings.json --object canopy --selection-out duplicates.json
+```
+
+The review finds fully coincident faces with the same facing direction
+within one retained mesh. Different vertex IDs, a different starting
+corner, and extra collinear corners on a flat boundary are supported.
+Warped polygons also need matching render triangles. Reversed faces,
+shared edges, and partial overlaps are outside this review. Use
+`mesh-topology health` to inspect general contacts.
+
+In each group, the lowest stable face ID survives. Each duplicate is
+compared directly with its survivor. The report shows their material
+slots and maximum matched boundary distances so you can inspect each
+candidate before editing. The command leaves the input intact.
+`--selection-out` writes a native face selection for use with
+`mesh-topology select --from` and other component tools. The full report
+is printed even when you save a file.
+
+In settings, give a saved `selection` to review only the faces in that
+selection after conversion to faces. `tolerance` is in mesh units, with
+a default of `1e-8`. Set it to zero to require exact matching boundary
+coordinates. `maxPairs` caps candidate comparisons and `limit` caps the
+number of duplicate faces included in the report and selection. Check
+`complete` for exhausted search work and `truncated` for omitted results.
+
+Use `KIT.meshTopology.reviewOverlaps(document, settings)` or
+`sceneEditor.reviewMeshOverlaps(object, settings, { part })` from the SDK.
+
+```sh
+node examples/tileset-pick/overlap-review-demo.cjs overlap-review-demo
+```
+
+The demo reviews a painted canopy panel with a coincident spare, a
+reverse-facing copy, and a panel that overlaps only part of its width.
+The review image separates the coincident faces to make their individual
+paint visible.
+
 ## Inspect and repair local mesh health
 
 ```sh

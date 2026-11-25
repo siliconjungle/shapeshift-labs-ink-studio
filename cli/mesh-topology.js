@@ -100,6 +100,28 @@ function moveVertex(file, input, rest, opt, meshTopology, openEditor) {
   process.stdout.write(JSON.stringify({...report,operation,...(object && {object}),...(part && {part})},null,2)+'\n');
 }
 
+function overlaps(file, input, rest, opt, meshTopology) {
+  const { object, part, out, 'selection-out': selectionOut } = opt;
+  const name = value => typeof value === 'string' && value.trim();
+  if (!name(file) || input !== undefined && !name(input) || rest.length ||
+      part !== undefined && object === undefined || out !== undefined && selectionOut !== undefined ||
+      Object.entries(opt).some(([key, value]) => !['object', 'part', 'out', 'selection-out'].includes(key) || !name(value)))
+    throw new TypeError('Use mesh-topology overlaps <mesh-or-scene.json> [settings.json] [--object id] [--part id] [--out report.json | --selection-out faces.json]');
+  const destination = (out || selectionOut) && path.resolve(out || selectionOut);
+  if (destination && [file, input].some(name => name && path.resolve(name) === destination))
+    throw new RangeError('Write overlap review outputs separately from their inputs');
+  const source = read(file), rows = source?.topologyMeshes ?? {};
+  const row = object && Object.hasOwn(rows, object) && rows[object];
+  if (object && (!row || part !== undefined && row.part !== part))
+    throw new RangeError('No editable topology for scene object ' + object + (part === undefined ? '' : '/' + part));
+  if (!object && source?.topologyMeshes) throw new TypeError('Choose an editable mesh with --object');
+  const review = meshTopology.reviewOverlaps(row ? row.document : source, input === undefined ? {} : read(input));
+  const report = row ? { ...review, object, ...(row.part !== undefined && { part: row.part }) } : review;
+  if (destination) files.publishJson(destination, selectionOut ? review.selection : report,
+    'A different overlap review output already exists at ' + destination);
+  process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+}
+
 function maintenance(action, file, input, rest, opt, meshTopology, openEditor) {
   const { object, out, report, pieces } = opt, cutting = action === 'cut', editing = action !== 'health';
   const filenames = [file, input, out, report].filter(value => value !== undefined);
@@ -164,6 +186,7 @@ function command([action, file, input, ...rest], opt, toolkit, { build, openEdit
   if (action === 'plane')
     return require('./construction-plane.js').command(file,input === undefined ? rest : [input,...rest],opt,toolkit,openEditor,projectTexelsPerUnit);
   if (action === 'move') return moveVertex(file,input,rest,opt,meshTopology,openEditor);
+  if (action === 'overlaps') return overlaps(file,input,rest,opt,meshTopology);
   if (opt.preview !== undefined) throw new TypeError('Use --preview with mesh-topology bevel or shading');
   if (opt.subdivision !== undefined) throw new TypeError('Use --subdivision with mesh-topology shading');
   const { out, report, projection, lineage, 'match-ids': matchIds } = opt;
