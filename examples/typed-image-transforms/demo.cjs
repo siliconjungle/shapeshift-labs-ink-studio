@@ -1,0 +1,18 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const Ink = require('../..');
+const files = require('../../cli/asset-files.js');
+const { transitPlate, transitGraph } = require('./transit.js');
+const out = path.resolve(process.argv[2] ?? 'studio/out/typed-image-transforms');
+const at = file => path.join(out, file);
+const graph = transitGraph(), plate = transitPlate();
+graph.inputs.plate = { type: 'raster', default: { ...plate, data: Array.from(plate.data) } };
+const material = at('night-transit.material.json');
+Ink.writeMaterialGraph(material, Ink.openMaterialGraph(graph, { id: 'night-transit' }));
+const project = Ink.readGraphProject(material), { outputs, artifacts } = project.run();
+assert.notDeepEqual(outputs.perspectiveBase.data, outputs.perspectiveFiltered.data);
+for (const artifact of artifacts) files.write(at(artifact.file), artifact.bytes);
+for (const name of ['index.html', 'transit.js']) files.write(at(name), fs.readFileSync(path.join(__dirname, name)));
+files.write(at('ink-studio.browser.js'), Buffer.from(Ink.bundle()));
+console.log('Wrote the editable graph and interactive Night Transit comparison to ' + out);

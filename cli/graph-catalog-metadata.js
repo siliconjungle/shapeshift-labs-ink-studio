@@ -197,6 +197,13 @@ const distanceOptions = { ...imageSelection,
   precision:property('string',oneOf('float32','float64'),'float64'), maxDistance:property('number',positive) };
 const morphologyOptions = { ...imageSelection,
   precision:{...imagePrecision,default:'float64'}, radius:property('number',positive,1) };
+const spatialSampling = {
+  width:property('number',pixelRange(1,8192,true)), height:property('number',pixelRange(1,8192,true)),
+  border:imageFilterOutput.border, filter:property('string',oneOf('nearest','linear')),
+  mip:property('string|number',{constraints:{modes:['none','nearest','linear'],min:0}},'none'),
+  mipBias:property('number',{unit:'mip levels',...limit(-16,16)},0)
+};
+const spatialUnits = oneOf('pixels','normalized');
 const options = {
   'textile.pattern': {
     size: property('vec2', {unit:'world units'}, [4,3]),
@@ -241,6 +248,20 @@ const options = {
   'image.edgeDetect': { ...imageGeometry, precision:{...imagePrecision,default:'float64'},
     method:property('string',oneOf('sobel','scharr'),'sobel'), threshold:property('number',positive,.08),
     softness:property('number',positive,0) },
+  'image.transform': { ...spatialSampling, units:property('string',spatialUnits,'pixels'),
+    matrix:property('array<vec3>',{constraints:{minItems:2,maxItems:2}},[[1,0,0],[0,1,0]]),
+    rotation:filterAngle, scale:property('number|vec2',{},1), pivot:property('vec2',{}),
+    offset:property('vec2',{},[0,0]) },
+  'image.crop': { ...spatialSampling, units:property('string',spatialUnits,'pixels'),
+    rect:property('vec4',{description:'Source x, y, width and height from the texture edges.'}) },
+  'image.symmetry': { ...spatialSampling, axis:property('string',oneOf('x','y','both'),'x'),
+    side:property('string',oneOf('low','high'),'low'), pivot:property('vec2',limit(0,1),[.5,.5]) },
+  'image.polar': { ...spatialSampling, mode:property('string',oneOf('toPolar','fromPolar'),'toPolar'),
+    center:property('vec2',{},[.5,.5]), radius:property('number',{unit:'shorter Cartesian axis',constraints:{exclusiveMin:0}},.5),
+    rotation:filterAngle },
+  'image.perspective': { ...spatialSampling, units:property('string',spatialUnits,'normalized'),
+    corners:property('array<vec2>',{constraints:{minItems:4,maxItems:4}},[[0,0],[1,0],[1,1],[0,1]]),
+    clip:property('boolean',{},true) },
   'image.curve': { ...correctionOutput, channel:property('string',oneOf('all','r','g','b','value'),'all') },
   'image.gradient': { precision:{...imagePrecision,default:'float64'}, outOfRange:{...imageRangePolicy,default:'error'},
     from:property('vec2',limit(0,1),[0,.5]), to:property('vec2',limit(0,1),[1,.5]) },
