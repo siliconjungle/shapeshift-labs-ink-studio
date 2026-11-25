@@ -144,6 +144,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.renderBoundaryShot` | function | `({width:w,height:h,count,settings,draw,output,progress})` | [source](../../cli/pixel-boundary-shot.js) |
 | `node.renderGraphScene` | function | `(source, { camera, lights, channels = defaults, options = {}, renderGraphInputs, renderGraphCapture, take, time = take?.start ?? 0, kit, node } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../cli/graph-render.js) |
 | `node.renderPathInk` | function | `(world,options={},traceSettings={})` | [source](../../cli/path-ink-render.js) |
+| `node.repackTilesetImage` | function | `(source, options, toolkit = require('..').load())` | [guide](../mesh-uv.md#repack-an-imported-atlas), [source](../../cli/tileset-repack.js) |
 | `node.repairColorVisionPalette` | function | `(frame, options = {})` | [guide](../palette-recipes.md#repair-palette-separation-for-color-vision-deficiencies), [source](../../cli/color-vision-repair.js) |
 | `node.replayStoryBundle` | function | `(file, options)` | [source](../../index.js) |
 | `node.resolveMaterialBaseSettings` | function | `(source = {}, { seed: defaultSeed = 0 } = {})` | [guide](../material-base-settings.md#ferry-glaze-demo), [guide](../material-base-settings.md), [source](../../src/material-base-settings.js) |

@@ -212,6 +212,38 @@ Use `ink.tilesetBrushCellUV(scene, brush, { column, row })` to address one cell.
 Run `node examples/tileset-pick/padding-demo.cjs tile-padding-demo` to compare
 a padded atlas, the assembled sign, and one tile selected on its own.
 
+### Repack an imported atlas
+
+Use `tileset repack` to write a compact PNG from a uniformly spaced sheet.
+Supply the four outside margins and both inter-cell gutters in whole texels,
+including any zero values. The declared margins, complete cells, and
+interior gutters must account for the entire source image.
+
+```sh
+ink-studio tileset repack painted-sheet.png --tile-width 16 --tile-height 8 \
+  --margin-left 2 --margin-top 3 --margin-right 2 --margin-bottom 2 \
+  --gutter-x 3 --gutter-y 2 --out compact.png --report rectangles.json
+```
+
+The command copies each cell in row-major order at its original
+resolution, preserving Ink’s RGBA8 texels or indexed slots with their
+palette and alpha. The report is printed as JSON and can also be written to a file.
+It records both image sizes, the grid, and `rectangleMap.x` and
+`rectangleMap.y`. To recover the move for column `c` and row `r`,
+combine the `source` starts from `x[c]` and `y[r]` for the old origin
+and the `destination` starts for the new origin. The tile width and height
+apply to both rectangles. This represents every move without repeating
+the same column and row origins for each cell.
+
+Re-import `compact.png` with `tileset import` and the same tile dimensions
+to use it as a zero-spacing sheet. In Node,
+`ink.repackTilesetImage(input, { tileSize, margins, gutters })` accepts
+a PNG path, PNG bytes, or an imported tileset image. It returns a reusable
+`tileset` and its rectangle-move `report`.
+
+Run `node examples/tileset-pick/repack-demo.cjs tile-repack-demo` for the
+padded TIDE sign, its compact atlas, and the rectangle map.
+
 ### Set brush size in world units
 
 Set `texelsPerUnit` once in the project's existing `ink-studio.config.js`.

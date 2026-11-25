@@ -300,6 +300,7 @@ module.exports = {
   readHorizonBands: require('./cli/horizon-bands.js').readHorizonBands,
   readEnvironmentImage: require('./cli/horizon-bands.js').readEnvironmentImage,
   previewTimeline: require('./cli/animation-timeline.js').previewTimeline,
+  repackTilesetImage: require('./cli/tileset-repack.js').repackTilesetImage,
   readTilesetImage: require('./cli/tileset-image.js').readTilesetImage,
   pickTilesetRectangle: require('./cli/tileset-image.js').pickTilesetRectangle,
   pickTilesetBlock: require('./cli/tileset-image.js').pickTilesetBlock,

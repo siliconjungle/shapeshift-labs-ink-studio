@@ -61,6 +61,22 @@ const TilesetSelection = (() => {
       offset:[column*width,row*height]};
   }
 
+  function pack(brush, sourceWidth, pixels, channels) {
+    const {x,y,tileWidth,tileHeight,columns,rows,paddingX=0,paddingY=0} = brush;
+    const width = columns*tileWidth, height = rows*tileHeight;
+    const packed = new Uint8Array(width*height*channels);
+    const strips = paddingX ? columns : 1, span = paddingX ? tileWidth : width;
+    for (let row=0;row<height;row++) {
+      const sourceY = y+row+Math.floor(row/tileHeight)*paddingY;
+      const start = sourceY*sourceWidth+x;
+      for (let column=0;column<strips;column++) {
+        const sample = start+column*(span+paddingX);
+        packed.set(pixels.subarray(sample*channels,(sample+span)*channels),(row*width+column*span)*channels);
+      }
+    }
+    return {width,height,pixels:packed};
+  }
+
   const edges = ['top','bottom','left','right'];
 
   function uvMapping(grid, brush, changes = {}, sample) {
@@ -82,6 +98,6 @@ const TilesetSelection = (() => {
     return {brush:{...brush,uvInset},...(sample && {cell:sample}),texelBounds,uvBounds,sourceUVBounds:normalize([x,y,x+width,y+height])};
   }
 
-  return Object.freeze({pick,between,tileSize,layoutKeys:Object.freeze(layoutKeys),gridFits,block,hasGaps,cell,uvMapping});
+  return Object.freeze({pick,between,tileSize,layoutKeys:Object.freeze(layoutKeys),gridFits,block,hasGaps,cell,pack,uvMapping});
 })();
 if (typeof module !== 'undefined') module.exports = TilesetSelection;

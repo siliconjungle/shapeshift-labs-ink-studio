@@ -127,3 +127,66 @@ test('the CLI creates and binds a blank tileset without an image file',t => {
   const hit = K.sceneMeshes.rayQuery(mesh,K)({origin:[.5,.5,1],direction:[0,0,-1],maxDistance:2});
   assert.equal(hit.pigment,0x317285);
 });
+
+const repackOptions = {tileSize:{width:2,height:2},margins:{left:1,top:2,right:2,bottom:1},gutters:{x:2,y:1}};
+const contentRows = [[0,1,2,1],[1,0,0,2],[2,1,1,2],[0,2,2,0]];
+const contentSlots = contentRows.flat();
+const spacedSlots = new Uint8Array(9*8).fill(3);
+for (const [row,values] of contentRows.entries()) {
+  const y = [2,3,5,6][row];
+  for (const [column,x] of [1,2,5,6].entries()) spacedSlots[y*9+x] = values[column];
+}
+
+test('repacking an imported PNG maps rectangle origins and retains all authored RGBA bytes',()=>{
+  const source = Uint8Array.from({length:9*8*4},(_,i)=>i%249);
+  const asset = ink.readTilesetImage(PNG.encode(9,8,source,4));
+  const {tileset,report} = ink.repackTilesetImage(asset,repackOptions);
+  assert.deepEqual(report.rectangleMap,{x:[{source:1,destination:0},{source:5,destination:2}],
+    y:[{source:2,destination:0},{source:5,destination:2}]});
+  assert.deepEqual([report.columns,report.rows,report.removedTexels],[2,2,56]);
+  assert.deepEqual(report.source,{width:9,height:8,encoding:'rgba8'});
+  assert.deepEqual(report.destination,{width:4,height:4,encoding:'rgba8'});
+  const expected = [];
+  for (const y of [2,3,5,6]) for (const x of [1,2,5,6]) expected.push(...source.slice((y*9+x)*4,(y*9+x)*4+4));
+  assert.deepEqual([...Buffer.from(tileset.data,'base64')],expected);
+  assert.equal(asset.width,9);
+  const editor = ink.createSceneEditor(scene);
+  editor.registerTileset('compact',tileset);
+  const brush = ink.pickTilesetBlock(editor.snapshot(),'compact',{x:0,y:0,width:4,height:4});
+  assert.deepEqual([...ink.rasterizeTilesetBrush(editor.snapshot(),brush).pixels],expected);
+
+  for (const margins of [{left:1,top:2,right:1,bottom:1},{left:1,top:2,right:2,bottom:2}])
+    assert.throws(()=>ink.repackTilesetImage(asset,{...repackOptions,margins}),/covered exactly/);
+  assert.throws(()=>ink.repackTilesetImage(asset,{...repackOptions,gutters:{x:2}}),/explicit nonnegative/);
+  const one = ink.repackTilesetImage(ink.createBlankTileset({width:4,height:4}),{
+    tileSize:{width:2,height:2},margins:{left:1,top:0,right:1,bottom:2},gutters:{x:3,y:1}
+  });
+  assert.deepEqual([one.report.columns,one.report.rows,one.tileset.width,one.tileset.height],[1,1,2,2]);
+});
+
+test('the repack CLI preserves indexed slots, duplicate swatches and exact alpha entries',t=>{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-tileset-repack-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const input = path.join(dir,'spaced.png'), out = path.join(dir,'compact.png'), report = path.join(dir,'rectangles.json');
+  const colors = Uint8Array.from([21,34,57,21,34,57,91,57,34,255,0,211]), alpha = Uint8Array.from([255,144,0]);
+  const inputPNG = Buffer.concat(PNGBytes.indexed(9,8,colors,alpha,deflateSync(PNGBytes.scanlines(9,8,spacedSlots))));
+  fs.writeFileSync(input,inputPNG);
+  const flags = ['--tile-width','2','--tile-height','2','--margin-left','1','--margin-top','2',
+    '--margin-right','2','--margin-bottom','1','--gutter-x','2','--gutter-y','1'];
+  const cli = (...args)=>execFileSync(process.execPath,[path.resolve(__dirname,'../cli/ink-studio.js'),
+    'tileset','repack',input,...args],{cwd:dir,encoding:'utf8',stdio:'pipe'});
+  assert.throws(()=>cli(...flags.slice(0,-2),'--out',out),/explicit integer/);
+  assert.throws(()=>cli(...flags,'--out',input),/separate paths/);
+  assert.throws(()=>cli(...flags,'--margin-right','1','--out',out,'--report',report),/covered exactly/);
+  assert.equal(fs.existsSync(report),false);
+  assert.equal(fs.existsSync(out),false);
+  const result = JSON.parse(cli(...flags,'--out',out,'--report',report));
+  assert.deepEqual(result,JSON.parse(fs.readFileSync(report,'utf8')));
+  const {tileset,report:expected} = ink.repackTilesetImage(inputPNG,repackOptions);
+  assert.deepEqual(result,expected);
+  assert.deepEqual(fs.readFileSync(input),inputPNG);
+  assert.deepEqual(tileset.palette,[0x152239,0x152239,0x5b3922,0xff00d3]);
+  assert.deepEqual(tileset.alpha,[255,144,0]);
+  assert.deepEqual([...Buffer.from(tileset.data,'base64')],contentSlots);
+  assert.deepEqual({...ink.readTilesetImage(out),tileSize:{width:2,height:2}},tileset);
+});

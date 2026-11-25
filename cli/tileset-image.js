@@ -126,19 +126,9 @@ function sizeTilesetBrush(scene, brush, {brushScale,projectTexelsPerUnit} = {}, 
 
 function rasterizeTilesetBrush(scene, brush, toolkit = require('..').load()) {
   const tilesets = prepare(scene, toolkit);
-  const {tileset:id,x,y,tileWidth,tileHeight,columns,rows,paddingX=0,paddingY=0} = brushSelection(tilesets,brush);
-  const source = tilesets.source(id), {pixels} = tilesets.resolve({tileset:id});
-  const width = columns*tileWidth, height = rows*tileHeight, crop = new Uint8Array(width*height*4);
-  const strips = paddingX ? columns : 1, span = paddingX ? tileWidth : width;
-  for (let row=0;row<height;row++) {
-    const sourceY = y+row+Math.floor(row/tileHeight)*paddingY;
-    const start = (sourceY*source.width+x)*4;
-    for (let column=0;column<strips;column++) {
-      const sample = start+column*(span+paddingX)*4;
-      crop.set(pixels.subarray(sample,sample+span*4),(row*width+column*span)*4);
-    }
-  }
-  return {width,height,pixels:crop};
+  const selected = brushSelection(tilesets,brush);
+  const {width,pixels} = tilesets.resolve({tileset:selected.tileset});
+  return Selection.pack(selected,width,pixels,4);
 }
 
 function previewCommand([file,...rest], options, toolkit) {
@@ -298,6 +288,7 @@ function brushUVCommand([file,...rest], options, toolkit, openEditor) {
 }
 
 function command([action, ...args], options, toolkit, projectTexelsPerUnit, openEditor) {
+  if (action === 'repack') return require('./tileset-repack.js').command(args,options,toolkit);
   if (action === 'grid') return gridCommand(args,options,toolkit);
   if (action === 'world-scale') return worldScaleCommand(args,options,toolkit,projectTexelsPerUnit);
   if (action === 'pick') return pickCommand(args,options,toolkit,projectTexelsPerUnit);
@@ -310,7 +301,7 @@ function command([action, ...args], options, toolkit, projectTexelsPerUnit, open
   const allowed = ['id','scene','out',...tileFields,...(create ? ['width','height','background'] : [])];
   if (!['import','create'].includes(action) || rest.length || Object.keys(options).some(key => !allowed.includes(key)) ||
       ![id,scene,out].every(value => typeof value === 'string' && value.trim()))
-    throw new TypeError('Use tileset import, create, grid, world-scale, pick, brush-uv, brush-size, or brush-preview');
+    throw new TypeError('Use tileset import, create, repack, grid, world-scale, pick, brush-uv, brush-size, or brush-preview');
   if (create) {
     if (source !== undefined || ![width,height].every(value => typeof value === 'string' && /^\d+$/.test(value)))
       throw new TypeError('Use tileset create --width <texels> --height <texels> [--background <color>]');

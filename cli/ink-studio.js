@@ -1466,6 +1466,7 @@ const CMD = {
         '  asset-part manifest <asset.gltf|.glb> [--out revision.json]   show stable asset IDs',
         '  tileset import <image.png> [--tile-width N --tile-height N] [--padding-x N --padding-y N] [--offset-x N --offset-y N] --scene <scene.json> --id <tileset-id> --out <new-scene.json>   register a shared tileset image',
         '  tileset create --width <texels> --height <texels> [--background <color>] [--tile-width N --tile-height N] [--padding-x N --padding-y N] [--offset-x N --offset-y N] --scene <scene.json> --id <tileset-id> --out <new-scene.json>   register a blank tileset',
+        '  tileset repack <atlas.png> --tile-width N --tile-height N --margin-left N --margin-top N --margin-right N --margin-bottom N --gutter-x N --gutter-y N --out <compact.png> [--report <layout.json>]   remove atlas margins and gutters',
         '  tileset grid --scene <scene.json> [--id <tileset-id>] [--tile-width N --tile-height N | --clear] [--out <new-scene.json>] [--padding-x N --padding-y N] [--offset-x N --offset-y N]   inspect or edit shared or per-sheet tile grids',
         '  tileset world-scale --scene <scene.json> [--texels-per-unit N | --clear] [--out <new-scene.json>]   inspect or set tileset texels per world unit',
         '  tileset pick --scene <scene.json> --id <tileset-id> [--x N --y N --width N --height N] [--out file.html|file.json]   pick an exact texel rectangle',

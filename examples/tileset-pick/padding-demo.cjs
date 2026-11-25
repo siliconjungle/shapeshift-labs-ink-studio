@@ -6,7 +6,7 @@ const path = require('node:path');
 const {execFileSync} = require('node:child_process');
 const ink = require('../..');
 const PNG = require('../../cli/png.js');
-const portal = require('../gatehouse-revision/portal.cjs');
+const paddedSign = require('./padded-sign.cjs');
 
 const directory = path.resolve(process.argv[2] ?? 'tile-padding-demo');
 fs.mkdirSync(directory,{recursive:true});
@@ -20,16 +20,7 @@ function studio(...args) {
   return execFileSync(process.execPath,[cli,...args],{cwd:directory,encoding:'utf8'});
 }
 
-const {width:artWidth,pixels} = portal.atlas();
-const width=58,height=23, atlas = new Uint8Array(width*height*4), expected = new Uint8Array(48*16*4);
-for (let i=0;i<atlas.length;i+=4) atlas.set([133,70,121,255],i);
-for (let y=0;y<16;y++) for (let x=0;x<48;x++) {
-  const start = (y*artWidth+48+x)*4;
-  const pixel = pixels.subarray(start,start+4);
-  const sourceX = 2+x+Math.floor(x/16)*3, sourceY = 3+y+Math.floor(y/8)*2;
-  atlas.set(pixel,(sourceY*width+sourceX)*4);
-  expected.set(pixel,(y*48+x)*4);
-}
+const {width,height,atlas,expected} = paddedSign();
 write('painted-sheet.png',PNG.encode(width,height,atlas,4));
 json('draft.json',{id:'padded-tide-sign',style:'slate',solids:[],tilesetDefaults:{texelsPerUnit:16}});
 studio('tileset','import','painted-sheet.png','--scene','draft.json','--id','masonry','--out','painted.json');
