@@ -220,6 +220,37 @@ embedded images.
 Run `node examples/tileset-pick/source-link-demo.cjs tile-link-demo` to
 compare manual refresh, automatic refresh, and a protected local paint edit.
 
+### Swap atlas regions
+
+Exchange two equal-sized, disjoint rectangles in one registered tileset.
+Coordinates are integer texels measured from the top left. Omit `--out`
+to preview the rectangles and each affected face's pigment UVs. A
+successful commit writes a new scene beside its source.
+
+```sh
+ink-studio tileset swap --scene wall.json --id brick --a 2,1,4,3 --b 10,5,4,3
+ink-studio tileset swap --scene wall.json --id brick --a 2,1,4,3 --b 10,5,4,3 --out swapped.json
+```
+
+Raw RGBA bytes or exact palette slots move together. Each face whose texel
+footprint fits inside a rectangle follows its paint, including on alternate
+pigment UV layouts. To address a texel center on a mesh, divide its column
+or row by the corresponding atlas dimension minus one. Faces outside the
+swapped regions keep their coordinates.
+
+The preview blocks faces whose sampled bounds cross a swapped region,
+pinned corners, UVs shared with other texture data, atlas-wide filters, and
+active modifiers on affected meshes. Include any needed gutters in both rectangles.
+For a linked sheet, the swap counts as local paint against the last accepted
+external image. Publish the rearranged paint to the external source before
+accepting another revision over it.
+
+In Node, use `editor.planTilesetCanvas(id, {type:'swap', a, b})` and
+`editor.transformTilesetCanvas(id, {type:'swap', a, b})`, with rectangles
+defined by `x`, `y`, `width`, and `height`. One undo restores the pixels
+and the UVs. Run `node examples/tileset-pick/atlas-swap-demo.cjs tile-swap-demo`
+for a comparison of the atlas and matched 1× renders.
+
 ### Pick a brush of neighboring tiles
 
 Give the picker a tile width and height in texels. The default grid starts

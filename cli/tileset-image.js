@@ -310,7 +310,7 @@ function brushUVCommand([file,...rest], options, toolkit, openEditor) {
 }
 
 function command([action, ...args], options, toolkit, projectTexelsPerUnit, openEditor) {
-  if (action === 'resize' || action === 'resample')
+  if (['resize','resample','swap'].includes(action))
     return require('./tileset-canvas.js').command(action,args,options,openEditor);
   if (action === 'link' || action === 'reload')
     return require('./tileset-source-links.js').command(action,args,options,toolkit,openEditor);

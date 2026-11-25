@@ -401,7 +401,7 @@
     function transformTilesetCanvas(id,operation) {
       const {patch,report} = stageTilesetCanvas(id,operation);
       if (!report.canCommit)
-        throw Object.assign(new RangeError('Tileset canvas edit needs reference or tile grid review'),{report});
+        throw Object.assign(new RangeError('Tileset edit needs reference or tile grid review'),{report});
       if (!patch) return report;
       const write = () => document.batchSession(() => {
         // Replace the raster record in full so a promoted RGBA image drops its indexed fields.
@@ -409,7 +409,7 @@
         document.setEnvironment(patch);
         return report;
       });
-      return document.pending() ? write() : document.transact('Edit tileset canvas '+id,write);
+      return document.pending() ? write() : document.transact((operation.type === 'swap' ? 'Swap atlas regions in ' : 'Edit tileset canvas ')+id,write);
     }
 
     function tilesetDependencies(id) {

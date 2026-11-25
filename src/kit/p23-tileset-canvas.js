@@ -134,6 +134,7 @@
   }
 
   function plan(scene, id, operation) {
+    if (operation?.type === 'swap') return A.tilesetSwap.plan(scene,id,operation);
     const tilesets = A.tilesets.prepare(scene.tilesets,scene.tilesetDefaults);
     const asset = tilesets.source(id), {type,size,anchor,tileSize} = operation ?? {};
     if (!operation || Object.getPrototypeOf(operation) !== Object.prototype || Object.keys(operation).some(key=>!['type','size','anchor','tileSize'].includes(key)) ||
