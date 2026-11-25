@@ -124,10 +124,14 @@ const meshComponentSnap = (function (K) {
     return { point: V.mad(a, d, t), t };
   }
 
+  function meshTarget(doc, frame, object, context, action = 'snap') {
+    const target = object === undefined ? { document: doc, frame } : context.mesh?.(object);
+    if (!target?.document) throw new RangeError('No retained mesh ' + action + ' target ' + object);
+    return { source: topology.create(target.document), frame: K.sceneGraph.transform(target.frame) };
+  }
+
   function snapMesh(raw, point, doc, frame, context) {
-    const target = raw.object === undefined ? { document: doc, frame } : context.mesh?.(raw.object);
-    if (!target?.document) throw new RangeError('No retained mesh snap target ' + raw.object);
-    const source = topology.create(target.document), targetFrame = K.sceneGraph.transform(target.frame);
+    const { source, frame: targetFrame } = meshTarget(doc, frame, raw.object, context);
     const domain = { vertex: 'vertices', edge: 'edges', face: 'faces' }[raw.kind];
     const element = source[domain].find(row => row.id === raw.id);
     if (!element) throw new RangeError('Unknown snap ' + raw.kind + ' ' + raw.id);
@@ -239,10 +243,12 @@ const meshComponentSnap = (function (K) {
     if (!selected.size) throw new RangeError('Select at least one component to transform');
     const frame = K.sceneGraph.transform(request.frame), inverse = K.sceneGraph.inverse(frame);
     const vertices = index(doc.vertices), world = new Map(doc.vertices.map(({ id, position }) => [id, K.sceneGraph.point(frame, position)]));
-    const gridPivot = space === 'plane' && request.pivot === undefined ?
+    const retainedPivot = request.pivot === undefined && request.planePivot === undefined ? context.pivot : undefined;
+    const gridPivot = space === 'plane' && request.pivot === undefined && retainedPivot === undefined ?
       (request.planePivot === undefined ? [0,0] : request.planePivot) : undefined;
     const pivot = gridPivot !== undefined ? K.sceneGraph.point(inverse,plane.point(construction,gridPivot)) :
-      request.pivot === undefined ? average([...selected].map(id => vertices.get(id).position)) : request.pivot;
+      request.pivot !== undefined ? request.pivot : retainedPivot !== undefined ? retainedPivot :
+        average([...selected].map(id => vertices.get(id).position));
     if (!vector(pivot)) throw new TypeError('The transform pivot needs a local XYZ point');
     const fixed = pins(doc, selection, selected, request.pins), weights = influence(doc, world, selected, fixed, request.falloff);
     const axes = view ? view.axes : space === 'plane' ? construction.axes :
@@ -281,11 +287,12 @@ const meshComponentSnap = (function (K) {
       beforeRevision: topology.revision(doc), afterRevision: topology.revision(document),
       selection, space, pivot: pivot.slice(), worldPivot: K.sceneGraph.point(frame, pivot), axes, worldAxes, pinned: [...fixed].sort(),
       ...(request.frame !== undefined && { frame }), ...(view && { camera: view.camera }),
+      ...(retainedPivot !== undefined && { pivotSource: 'retained' }),
       ...(construction && {constructionPlane:construction.plane}),
       ...(gridPivot && {planePivot:gridPivot.slice()}), ...(snapped && { snap: snapped }), vertices: changed
     } });
   }
 
   K.meshTopology = Object.freeze({ ...topology, planTransform });
-  return Object.freeze({ snapField });
+  return Object.freeze({ snapField, meshTarget, average });
 })(KIT);

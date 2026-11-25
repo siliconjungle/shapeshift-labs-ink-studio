@@ -722,25 +722,54 @@
         { orbit: K.cameraStaging.prepare(world.look?.cameraStaging)?.orbit }).pose;
     }
 
+    function planMeshPivot(object, request = {}, { part } = {}) {
+      if (request?.frame !== undefined)
+        throw new TypeError('Retained scene mesh pivots already use scene placement');
+      const row = meshTopology(object, part), scene = snapshot();
+      let expanded;
+      const report = K.meshTopology.planPivot(row.document, request, {
+        pivot: row.pivot,
+        mesh(id) {
+          if (Object.hasOwn(scene.topologyMeshes ?? {}, id)) return scene.topologyMeshes[id];
+          expanded ??= A.scenePrefabs.expand(scene, buildEnv);
+          if (Object.hasOwn(expanded.spec.topologyMeshes ?? {}, id))
+            return { document: expanded.spec.topologyMeshes[id].document, frame: expanded.meshPlacements.get(id) };
+        },
+        instance: target => A.sceneInstances.anchor(scene, buildEnv, target)
+      });
+      return freeze({ ...report, object, ...(row.part !== undefined && { part: row.part }) });
+    }
+
+    function setMeshPivot(object, request, options) {
+      const report = planMeshPivot(object, request, options);
+      if (!report.changed) return report;
+      const write = () => {
+        if (report.after) return document.setEnvironment({ topologyMeshes: { [object]: { pivot: report.after.local } } });
+        const { pivot, ...row } = meshTopology(object);
+        return document.batchSession(() => {
+          document.setEnvironment({ topologyMeshes: { [object]: null } });
+          document.setEnvironment({ topologyMeshes: { [object]: row } });
+        });
+      };
+      if (document.pending()) write();
+      else document.transact('Place mesh pivot of ' + object, write);
+      return report;
+    }
+
     function planMeshTransform(object, request, { part } = {}) {
       if (request?.frame !== undefined)
         throw new TypeError('Retained scene mesh coordinates already use scene placement');
       const row = meshTopology(object, part), scene = current().preview;
       requireMeshShapeOwner(object, row.part, scene, 'Transform');
       return K.meshTopology.planTransform(row.document, request, {
+        pivot: row.pivot,
         ...(request?.constructionPlane === undefined && (request?.space === 'plane' || request?.snap?.kind === 'construction-plane') ?
           {constructionPlane:A.constructionPlane.forScene(scene).plane} : {}),
         ...(request?.space === 'camera' && request.camera === undefined && { camera: authoredTransformCamera() }),
         mesh(id) {
           return { document: meshTopology(id).document };
         },
-        socket(instance, binding) {
-          const placements = scene.assetParts ?? {}, imports = buildEnv.assetPartImports ?? {};
-          if (!Object.hasOwn(placements, instance) || !Object.hasOwn(imports, instance)) return;
-          const bindings = imports[instance].part.bindings;
-          const target = Object.hasOwn(bindings, binding) && bindings[binding];
-          if (target?.kind === 'socket' && target.status === 'bound') return target.resolved.position;
-        },
+        socket: (instance, binding) => A.sceneInstances.assetSocket(scene, buildEnv, instance, binding),
         sdf:id=>meshSnapField(scene,id)
       });
     }
@@ -1103,6 +1132,7 @@
       editMeshTopology,
       planMeshTransform,
       transformMeshTopology,
+      planMeshPivot, setMeshPivot,
       meshHealth: (object, settings, { part } = {}) => K.meshTopology.health(meshTopology(object, part).document, settings),
       reviewMeshOverlaps: (object, settings, { part } = {}) =>
         K.meshTopology.reviewOverlaps(meshTopology(object, part).document, settings),

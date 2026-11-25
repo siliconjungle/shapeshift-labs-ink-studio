@@ -56,9 +56,11 @@
   }
 
   function prepareRow(object, row, evaluation, tilesets, frame) {
-    if (!TargetSelectors.name(object) || !fields(row, ['document', 'part', 'label', 'materials', 'bindings', 'bakes', 'modifiers', 'attachments', 'shapeKeys']) ||
+    if (!TargetSelectors.name(object) || !fields(row, ['document', 'part', 'label', 'materials', 'bindings', 'bakes', 'modifiers', 'attachments', 'shapeKeys', 'pivot']) ||
         (row.part !== undefined && !TargetSelectors.name(row.part)) || (row.label !== undefined && !name(row.label)))
       throw new TypeError('An editable scene mesh needs an object ID, document, and optional named part');
+    if (row.pivot !== undefined && !meshPivot.xyz(row.pivot))
+      throw new TypeError('An editable mesh pivot needs a finite local XYZ point');
     const cage = topology.create(row.document), document = evaluation?.document ?? cage;
     if (!document.faces.length) throw new RangeError('An editable scene mesh needs at least one polygon');
     const records = elements(cage), bindings = index(row.bindings ?? [], 'Mesh bindings');

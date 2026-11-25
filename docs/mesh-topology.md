@@ -508,6 +508,58 @@ The gatehouse demo shifts the left jamb to a construction plane while
 keeping footings and outer corners pinned. Teal marks the additional
 opening in the native-grid comparison.
 
+## Place a pivot independently
+
+```sh
+ink-studio mesh-topology pivot gatehouse.json pivot-request.json --object gatehouse-portal
+ink-studio mesh-topology pivot gatehouse.json pivot-request.json --object gatehouse-portal --out pivoted.json
+ink-studio mesh-topology pivot pivoted.json --object gatehouse-portal
+```
+
+A pivot placement changes a local XYZ point on the scene mesh row.
+The geometry document, its revision, UVs, bindings, and bakes are
+identical before and after. The report shows the old and new pivot in
+local and world coordinates. Omit `--out` to plan without saving. Omit
+the request to inspect the current pivot or set `target: null` to clear
+it and restore the usual transform defaults.
+
+```json
+{ "target": { "kind": "edge", "id": "hinge", "from": "lower", "at": 0.25 } }
+```
+
+| Target kind | Fields after `kind` |
+| --- | --- |
+| `vertex` | Stable vertex `id`. |
+| `edge` | Stable edge `id` and optional fraction `at` in [0, 1]. The default is the midpoint. Use `from` to choose a start vertex or use the edge's stored endpoint order. |
+| `instance` | Instance ID in `instance`. Add `instanceKind` when names overlap. Use `anchor` for a named bound socket on an asset-part instance. By default the pivot takes the placed instance origin. |
+| `center` | Native mesh `selection` or `--selection file`. Uses the average of unique selected vertices, or the center of their local bounds with `mode: "bounds"`. |
+| `point` | Explicit XYZ `point` in local coordinates or `space: "world"`. |
+
+A scene target of `vertex`, `edge`, or `center` can name another editable
+mesh using `object`. Anchor positions are sampled when placing the pivot.
+The saved local point follows its own object's placement. Later edits
+to the sampled vertex, edge, selection, or other instance leave it in
+place. Use request `revision` to check the destination topology before
+resolving the target.
+
+Use `editor.planMeshPivot(object, request)` or
+`editor.setMeshPivot(object, request)`. The latter is undoable. Transform
+plans use the saved pivot in any coordinate space, with explicit
+`pivot` or `planePivot` taking precedence. An isolated prefab batch can
+use `{ "member": "panel", "pivot": request }` before a transform. In that
+batch, a center target without its own selection uses the active faces.
+
+For a standalone mesh, save the placement report and pass it to the
+transform. The pivot stays reusable for subsequent revisions of that
+mesh ID. In the SDK, use `KIT.meshTopology.planPivot` and pass the
+report's `after.local` as the transform's `pivot`.
+
+```sh
+ink-studio mesh-topology pivot panel.json pivot-request.json --out pivot.json
+ink-studio mesh-topology transform panel.json rotate.json --pivot pivot.json --out rotated.json
+node examples/tileset-pick/mesh-pivot-demo.cjs pivot-review
+```
+
 ## Review coincident faces
 
 ```sh

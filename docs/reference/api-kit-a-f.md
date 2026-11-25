@@ -854,6 +854,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.sceneEditor.transactionDocument` | function | `(editor)` | [source](../../src/kit/p23-scene-editor.js) |
 | `KIT.authoring.sceneEditor.validateSnapshot` | function | `(editor,snapshot)` | [source](../../src/kit/p23-scene-editor.js) |
 | `KIT.authoring.sceneInstances` | namespace |  |  |
+| `KIT.authoring.sceneInstances.anchor` | function | `(scene, env, { instance, instanceKind, anchor })` | [source](../../src/kit/p23-scene-instances.js) |
+| `KIT.authoring.sceneInstances.assetSocket` | function | `(scene, env, instance, binding)` | [source](../../src/kit/p23-scene-instances.js) |
 | `KIT.authoring.sceneInstances.select` | function | `(scene, {kind,ids} = {})` | [source](../../src/kit/p23-scene-instances.js) |
 | `KIT.authoring.sceneLibrary` | namespace |  |  |
 | `KIT.authoring.sceneLibrary.create` | function | `(storage, { key, backups = 8, prepareSnapshot } = {})` | [guide](../procedural.md#named-scene-library), [source](../../src/kit/p88-scene-library.js) |
