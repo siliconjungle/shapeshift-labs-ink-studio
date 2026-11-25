@@ -861,6 +861,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesets` | namespace |  |  |
 | `KIT.authoring.tilesets.blank` | function | `({ width, height, background = 'transparent' } = {})` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.dimensions` | function | `(width, height)` | [source](../../src/kit/p23-tilesets.js) |
+| `KIT.authoring.tilesets.extract` | function | `(scene, sourceId, targetId, rectangle)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.gridPatch` | function | `(scene, key, size)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.maxEdge` | value | `number = 2048` |  |
 | `KIT.authoring.tilesets.positiveScale` | function | `(value, label)` | [source](../../src/kit/p23-tilesets.js) |

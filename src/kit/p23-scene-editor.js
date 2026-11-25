@@ -341,15 +341,24 @@
       else document.transact('Edit prefab instance ' + id, write);
     }
 
-    function registerTileset(id, source) {
-      const before = snapshot(), next = A.tilesets.register(before,id,source);
+    function storeTileset(before, next, id, label) {
       const result = next.tilesets[id];
       if (next === before) return result;
       const write = () => {
         document.setEnvironment({tilesets:{[id]:result}});
         return result;
       };
-      return document.pending() ? write() : document.transact('Register tileset '+id,write);
+      return document.pending() ? write() : document.transact(label,write);
+    }
+
+    function registerTileset(id,source) {
+      const before = snapshot();
+      return storeTileset(before,A.tilesets.register(before,id,source),id,'Register tileset '+id);
+    }
+
+    function extractTileset(sourceId,targetId,rectangle) {
+      const before = snapshot();
+      return storeTileset(before,A.tilesets.extract(before,sourceId,targetId,rectangle),targetId,'Extract tileset '+targetId);
     }
 
     function tilesetGrid(id) {
@@ -829,6 +838,7 @@
       setPrefabInstance,
       planPrefabRefresh, refreshPrefabs,
       registerTileset,
+      extractTileset,
       tilesetGrid,
       setTilesetGrid,
       setTilesetTexelsPerUnit,

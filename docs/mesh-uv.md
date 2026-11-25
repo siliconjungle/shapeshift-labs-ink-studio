@@ -107,6 +107,33 @@ values with HTML output to set the initial selection.
 In Node, call `ink.pickTilesetRectangle(scene, "masonry", { x:48, y:0, width:48, height:16 })`.
 A selection addresses the source image's texels.
 
+### Extract a crop as a reusable tileset
+
+Use an exact texel rectangle or a saved `tileset pick` selection.
+
+```sh
+ink-studio tileset extract --scene gatehouse-tiles.json --id masonry \
+  --x 24 --y 24 --width 16 --height 8 --new-id brick --out gatehouse-brick.json
+ink-studio tileset extract --scene gatehouse-tiles.json --selection brick-selection.json \
+  --new-id brick --out gatehouse-brick.json
+```
+
+The new scene has a `brick` tileset whose origin is the crop's top-left
+texel. Its grid treats the entire crop as one tile, so you can pick it
+from `(0, 0)` or use the full UV range on a mesh face with
+`"texture": { "tileset": "brick" }`. Multiple faces can share that
+single texture. Extraction copies RGBA8 texels or indexed slots with the
+palette and alpha entries intact. The receipt records the source sheet
+and rectangle. The output scene also carries the source atlas and its
+existing mesh references.
+
+In Node, use `editor.extractTileset(sourceId, newId, { x, y, width, height })`
+to add the new image in one undoable edit. Use a different ID for a
+different crop.
+
+Run `node examples/tileset-pick/extract-demo.cjs tile-extract-demo` to
+copy one brick from the gatehouse atlas and render a wall using it.
+
 ### Pick a brush of neighboring tiles
 
 Give the picker a tile width and height in texels. The default grid starts

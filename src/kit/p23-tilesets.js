@@ -129,6 +129,22 @@
     return {...scene,tilesets:{...current,[key]:asset}};
   }
 
+  function extract(scene, sourceId, targetId, rectangle) {
+    checkScene(scene);
+    if (sourceId === targetId) throw new RangeError('Extract the crop under a different tileset ID');
+    const source = prepare(scene.tilesets,scene.tilesetDefaults).source(sourceId);
+    const {x,y,width,height} = TilesetSelection.pick(sourceId,source,rectangle);
+    const {encoding,palette,alpha} = source;
+    const channels = encoding === 'indexed8' ? 1 : 4, pixels = atob(source.data), rows = [];
+    for (let row=0;row<height;row++) {
+      const start = ((y+row)*source.width+x)*channels;
+      rows.push(pixels.slice(start,start+width*channels));
+    }
+    const asset = {version:1,width,height,encoding,data:btoa(rows.join('')),tileSize:{width,height},
+      ...(palette && {palette}),...(alpha !== undefined && {alpha})};
+    return register(scene,targetId,asset);
+  }
+
   function gridPatch(scene, key, size) {
     checkScene(scene);
     if (key !== undefined && (!id(key) || !Object.hasOwn(scene.tilesets ?? {},key)))
@@ -151,5 +167,5 @@
     return {tilesetDefaults:{...scene.tilesetDefaults,texelsPerUnit:density}};
   }
 
-  A.tilesets = Object.freeze({ maxEdge, dimensions, blank, prepare, register, gridPatch, positiveScale, scalePatch });
+  A.tilesets = Object.freeze({ maxEdge, dimensions, blank, prepare, register, extract, gridPatch, positiveScale, scalePatch });
 })(KIT);

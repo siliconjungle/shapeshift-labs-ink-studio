@@ -27,6 +27,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().editMeshTopology` | function | `(object, patch, { part, projection, label, materials } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().editMeshUV` | function | `(object, request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().editSurfaceDecal` | function | `(id, operation)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().extractTileset` | function | `(sourceId,targetId,rectangle)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().fork` | function | `(source = snapshot())` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().history` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().hybridRoute` | function | `(address)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
@@ -58,7 +59,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().preview` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().redo` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().refreshPrefabs` | function | `(prefabs, { assets = buildEnv.assets } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
-| `node.createSceneEditor().registerTileset` | function | `(id, source)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().registerTileset` | function | `(id,source)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().repairMeshTopology` | function | `(object, request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().retopologizeMeshTopology` | function | `(object,request,options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().revision` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |

@@ -190,3 +190,60 @@ test('the repack CLI preserves indexed slots, duplicate swatches and exact alpha
   assert.deepEqual([...Buffer.from(tileset.data,'base64')],contentSlots);
   assert.deepEqual({...ink.readTilesetImage(out),tileSize:{width:2,height:2}},tileset);
 });
+
+test('extracting an indexed crop keeps slot identity and registers an independent single-tile grid',()=>{
+  const colors = Uint8Array.from([21,34,57,21,34,57,91,57,34]), alpha = Uint8Array.from([255,144,0]);
+  const slots = Uint8Array.from([2,0,1,0,1,2]);
+  const png = Buffer.concat(PNGBytes.indexed(3,2,colors,alpha,deflateSync(PNGBytes.scanlines(3,2,slots))));
+  const source = {...ink.readTilesetImage(png),tileSize:{width:1,height:1,paddingX:1}};
+  const editor = ink.createSceneEditor({...scene,tilesetDefaults:{tileSize:{width:3,height:2}},tilesets:{atlas:source}});
+  const before = editor.snapshot(), crop = {x:1,y:0,width:2,height:2};
+  const asset = editor.extractTileset('atlas','sample',crop);
+  assert.deepEqual(asset,{version:1,width:2,height:2,encoding:'indexed8',data:'AAEBAg==',tileSize:{width:2,height:2},
+    palette:[0x152239,0x152239,0x5b3922],alpha:[255,144,0]});
+  assert.deepEqual(editor.snapshot().tilesets.atlas,source);
+  assert.deepEqual(editor.tilesetGrid('sample'),{tileSize:{width:2,height:2},source:'override'});
+  const brush = ink.pickTilesetBlock(editor.snapshot(),'sample',{x:0,y:0,width:2,height:2});
+  assert.deepEqual([brush.columns,brush.rows],[1,1]);
+  assert.deepEqual(editor.extractTileset('atlas','sample',crop),asset);
+  assert.throws(()=>editor.extractTileset('atlas','atlas',crop),/different tileset ID/);
+  assert.throws(()=>editor.extractTileset('atlas','sample',{...crop,x:0}),/different image/);
+  assert.throws(()=>editor.extractTileset('atlas','missing',{...crop,x:2}),/inside the tileset/);
+  editor.undo();
+  assert.deepEqual(editor.snapshot(),before);
+  editor.redo();
+  assert.deepEqual(editor.snapshot().tilesets.sample,asset);
+});
+
+test('the CLI extracts exact RGBA texels from coordinates or a saved pick and binds both sources',t=>{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-tileset-extract-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const file = name=>path.join(dir,name+'.json');
+  const pixels = Uint8Array.from({length:4*3*4},(_,i)=>i%4===3 ? 255 : i);
+  const atlas = ink.readTilesetImage(PNG.encode(4,3,pixels,4));
+  const source = {...scene,tilesets:{atlas},
+    topologyMeshes:{original:quad('original',0,{tileset:'atlas'}),cut:quad('cut',2,{tileset:'patch'})}};
+  fs.writeFileSync(file('source'),JSON.stringify(source));
+  const cli = (...args)=>execFileSync(process.execPath,[path.resolve(__dirname,'../cli/ink-studio.js'),
+    'tileset',...args],{encoding:'utf8',cwd:dir,stdio:'pipe'});
+  const rect = ['--id','atlas','--x','2','--y','1','--width','2','--height','2'];
+  const input = ['--scene',file('source')];
+  cli('pick',...input,...rect,'--out',file('saved'));
+  const command = ['extract',...input,'--new-id','patch'];
+  const report = JSON.parse(cli(...command,'--selection',file('saved'),'--out',file('cut')));
+  assert.deepEqual(report.source,{tileset:'atlas',x:2,y:1,width:2,height:2});
+  cli(...command,...rect,'--out',file('numeric'));
+  assert.deepEqual(fs.readFileSync(file('cut')),fs.readFileSync(file('numeric')));
+  assert.throws(()=>cli(...command,...rect,'--selection',file('saved'),'--out',file('invalid')),/selection.*or --id/);
+  assert.throws(()=>cli(...command,'--selection',file('saved'),'--out',file('saved')),/new scene JSON/);
+
+  const revised = JSON.parse(fs.readFileSync(file('cut'),'utf8'));
+  assert.deepEqual(revised.tilesets.atlas,atlas);
+  assert.deepEqual(revised.topologyMeshes,source.topologyMeshes);
+  assert.deepEqual(Buffer.from(revised.tilesets.patch.data,'base64'),Buffer.from([
+    ...pixels.subarray(24,32),...pixels.subarray(40,48)
+  ]));
+  const world = ink.createSceneEditor(revised).build();
+  const ray = K.sceneMeshes.rayQuery(world.meshes.find(mesh=>mesh.objectId==='cut'),K);
+  assert.equal(ray({origin:[2.25,.75,1],direction:[0,0,-1],maxDistance:2}).pigment,0x18191a);
+});

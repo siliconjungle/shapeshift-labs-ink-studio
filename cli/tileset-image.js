@@ -17,6 +17,7 @@ function readTilesetImage(source, toolkit = require('..').load()) {
   return {version:1,width,height,encoding:'rgba8',data:Buffer.from(rgba).toString('base64')};
 }
 
+const rectangleFields = ['x','y','width','height'];
 const insetEdges = ['top','bottom','left','right'];
 const layoutFlags = {'padding-x':'paddingX','padding-y':'paddingY','offset-x':'offsetX','offset-y':'offsetY'};
 const tileFields = ['tile-width','tile-height',...Object.keys(layoutFlags)];
@@ -144,7 +145,7 @@ function previewCommand([file,...rest], options, toolkit) {
 }
 
 function pickCommand(args, options, toolkit, projectTexelsPerUnit) {
-  const {scene,id,out} = options, fields = ['x','y','width','height'];
+  const {scene,id,out} = options, fields = rectangleFields;
   if (args.length || ![scene,id].every(value => typeof value === 'string' && value.trim()) ||
       Object.keys(options).some(key => !['scene','id','out','brush','brush-scale',...fields,...tileFields].includes(key)) ||
       out !== undefined && (typeof out !== 'string' || !/\.(html|json)$/i.test(out)))
@@ -182,12 +183,33 @@ function pickCommand(args, options, toolkit, projectTexelsPerUnit) {
   process.stdout.write(JSON.stringify(selection,null,2)+'\n');
 }
 
-function sceneOutput(input, out, imageFile) {
+function sceneOutput(input, out, sideInput) {
   const output = path.resolve(out);
   if (!/\.json$/i.test(output) || path.dirname(input) !== path.dirname(output) ||
-      output === input || imageFile !== undefined && output === path.resolve(imageFile))
+      output === input || sideInput !== undefined && output === path.resolve(sideInput))
     throw new RangeError('Write a new scene JSON beside the original to preserve relative scene assets');
   return output;
+}
+
+function extractCommand(args, options, toolkit) {
+  const {scene,id,out,selection,'new-id':targetId} = options, saved = selection !== undefined;
+  const name = value=>typeof value === 'string' && value.trim();
+  if (args.length || ![scene,out,targetId].every(name) ||
+      Object.keys(options).some(key=>!['scene','id','out','selection','new-id',...rectangleFields].includes(key)) ||
+      (saved ? !name(selection) || ['id',...rectangleFields].some(key=>options[key] !== undefined) :
+        !name(id) || !rectangleFields.every(key=>integerText(options[key]))))
+    throw new TypeError('Use tileset extract --scene <scene.json> --new-id <tileset-id> --out <new-scene.json> with --selection <selection.json> or --id and all four rectangle values');
+  const input = path.resolve(scene), output = sceneOutput(input,out,saved ? selection : undefined);
+  const read = file=>JSON.parse(fs.readFileSync(file,'utf8'));
+  const bounds = saved ? read(selection) : Object.fromEntries(rectangleFields.map(key=>[key,Number(options[key])]));
+  if (saved && (bounds?.format !== 'ink-studio/tileset-selection' || bounds.version !== 1))
+    throw new TypeError('Expected a version 1 exact texel selection from tileset pick');
+  const source = saved ? bounds.tileset : id;
+  const revised = toolkit.KIT.authoring.tilesets.extract(read(input),source,targetId,bounds);
+  const {width,height,encoding} = revised.tilesets[targetId];
+  files.publishJson(output,revised,'A different scene already exists at '+output);
+  process.stdout.write(JSON.stringify({scene:output,id:targetId,width,height,encoding,
+    source:{tileset:source,x:bounds.x,y:bounds.y,width,height}},null,2)+'\n');
 }
 
 function gridCommand(args, options, toolkit) {
@@ -290,6 +312,7 @@ function brushUVCommand([file,...rest], options, toolkit, openEditor) {
 function command([action, ...args], options, toolkit, projectTexelsPerUnit, openEditor) {
   if (action === 'resize' || action === 'resample')
     return require('./tileset-canvas.js').command(action,args,options,openEditor);
+  if (action === 'extract') return extractCommand(args,options,toolkit);
   if (action === 'repack') return require('./tileset-repack.js').command(args,options,toolkit);
   if (action === 'grid') return gridCommand(args,options,toolkit);
   if (action === 'world-scale') return worldScaleCommand(args,options,toolkit,projectTexelsPerUnit);
@@ -303,7 +326,7 @@ function command([action, ...args], options, toolkit, projectTexelsPerUnit, open
   const allowed = ['id','scene','out',...tileFields,...(create ? ['width','height','background'] : [])];
   if (!['import','create'].includes(action) || rest.length || Object.keys(options).some(key => !allowed.includes(key)) ||
       ![id,scene,out].every(value => typeof value === 'string' && value.trim()))
-    throw new TypeError('Use tileset import, create, repack, resize, resample, grid, world-scale, pick, brush-uv, brush-size, or brush-preview');
+    throw new TypeError('Use tileset import, create, extract, repack, resize, resample, grid, world-scale, pick, brush-uv, brush-size, or brush-preview');
   if (create) {
     if (source !== undefined || ![width,height].every(value => typeof value === 'string' && /^\d+$/.test(value)))
       throw new TypeError('Use tileset create --width <texels> --height <texels> [--background <color>]');
