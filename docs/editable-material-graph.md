@@ -101,6 +101,8 @@ ink-studio graph material-library /tmp/ink-station/registry.json --audience libr
 ink-studio graph material-library /tmp/ink-station/registry.json --out /tmp/ink-station/public-cards
 ```
 
+Run `graph material-library` without a registry file to browse the built-in [Material recipe library](material-recipe-library.md).
+
 Use `graph material ... --metadata metadata.json --out material.json` to replace the authored metadata record. Thumbnail paths in that record resolve relative to the input material and are rebased when saving to another folder. Open `demo.html` in the demo directory to compare the catalog views and open their records.
 
 ## Show controls and ports conditionally

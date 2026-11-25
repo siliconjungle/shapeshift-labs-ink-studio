@@ -1,0 +1,1431 @@
+{
+  "format": "ink-studio/material-graph",
+  "version": 1,
+  "id": "fur",
+  "graph": {
+    "inputs": {
+      "resolution": {
+        "definition": {
+          "type": "number",
+          "default": 128
+        }
+      },
+      "seed": {
+        "definition": {
+          "type": "number",
+          "default": 41
+        }
+      },
+      "relief": {
+        "definition": {
+          "type": "number",
+          "default": 1.4
+        }
+      },
+      "density": {
+        "definition": {
+          "type": "number",
+          "default": 0.88
+        }
+      },
+      "lean": {
+        "definition": {
+          "type": "number",
+          "default": -19
+        }
+      },
+      "variation": {
+        "definition": {
+          "type": "number",
+          "default": 0.3
+        }
+      }
+    },
+    "nodes": {
+      "lockScaleJitterParts": {
+        "op": "data.record",
+        "inputs": {}
+      },
+      "lockScaleJitter": {
+        "op": "data.collect",
+        "inputs": {
+          "keys": [
+            "item0",
+            "item1"
+          ]
+        }
+      },
+      "lockJitter": {
+        "op": "data.record",
+        "inputs": {
+          "position": [
+            0.56,
+            0.66
+          ],
+          "rotation": 25
+        }
+      },
+      "taperedLocksOptions": {
+        "op": "data.record",
+        "inputs": {
+          "samples": 2,
+          "color": "#ffffff",
+          "size": [
+            1.26,
+            1.46
+          ],
+          "gutter": [
+            0,
+            0
+          ]
+        }
+      },
+      "taperedLocksControls": {
+        "op": "data.record",
+        "inputs": {}
+      },
+      "taperedLocks": {
+        "op": "image.tileSampler",
+        "inputs": {
+          "columns": 19,
+          "rows": 17,
+          "stamps": [
+            {
+              "type": "polygon",
+              "points": [
+                [
+                  0.28,
+                  0.06
+                ],
+                [
+                  0.62,
+                  0.08
+                ],
+                [
+                  0.78,
+                  0.24
+                ],
+                [
+                  0.71,
+                  0.61
+                ],
+                [
+                  0.47,
+                  0.99
+                ],
+                [
+                  0.48,
+                  0.63
+                ],
+                [
+                  0.31,
+                  0.45
+                ]
+              ]
+            },
+            {
+              "type": "polygon",
+              "points": [
+                [
+                  0.35,
+                  0.02
+                ],
+                [
+                  0.61,
+                  0.16
+                ],
+                [
+                  0.72,
+                  0.42
+                ],
+                [
+                  0.57,
+                  0.78
+                ],
+                [
+                  0.36,
+                  0.98
+                ],
+                [
+                  0.42,
+                  0.64
+                ],
+                [
+                  0.28,
+                  0.38
+                ]
+              ]
+            },
+            {
+              "type": "polygon",
+              "points": [
+                [
+                  0.28,
+                  0.06
+                ],
+                [
+                  0.55,
+                  0.04
+                ],
+                [
+                  0.69,
+                  0.27
+                ],
+                [
+                  0.64,
+                  0.55
+                ],
+                [
+                  0.55,
+                  0.95
+                ],
+                [
+                  0.39,
+                  0.78
+                ],
+                [
+                  0.35,
+                  0.47
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      "taperedLocksCoverageSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "taperedLocksCoverage": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "mask",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "underfurOptions": {
+        "op": "data.record",
+        "inputs": {
+          "tiling": "wrap",
+          "extent": [
+            22,
+            34
+          ],
+          "angle": 64,
+          "aspect": 4.1
+        }
+      },
+      "underfur": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "anisotropic"
+        }
+      },
+      "pileBevelOptions": {
+        "op": "data.record",
+        "inputs": {
+          "width": 1.9,
+          "height": 1,
+          "profile": "smooth"
+        }
+      },
+      "pileBevel": {
+        "op": "image.bevel",
+        "inputs": {}
+      },
+      "pileSurfaceSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "pileSurface": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "guardHairsOptions": {
+        "op": "data.record",
+        "inputs": {
+          "samples": 2,
+          "color": "#ffffff",
+          "size": [
+            1.15,
+            1.2
+          ],
+          "gutter": [
+            0,
+            0
+          ],
+          "jitter": {
+            "position": [
+              0.82,
+              0.7
+            ],
+            "size": [
+              0.5,
+              0.48
+            ],
+            "rotation": 35
+          }
+        }
+      },
+      "guardHairsControls": {
+        "op": "data.record",
+        "inputs": {}
+      },
+      "guardHairs": {
+        "op": "image.tileSampler",
+        "inputs": {
+          "columns": 29,
+          "rows": 23,
+          "stamps": [
+            {
+              "type": "stroke",
+              "points": [
+                [
+                  0.36,
+                  0.05
+                ],
+                [
+                  0.52,
+                  0.38
+                ],
+                [
+                  0.48,
+                  0.66
+                ],
+                [
+                  0.37,
+                  0.93
+                ]
+              ],
+              "width": 0.08
+            },
+            {
+              "type": "stroke",
+              "points": [
+                [
+                  0.43,
+                  0.08
+                ],
+                [
+                  0.38,
+                  0.37
+                ],
+                [
+                  0.48,
+                  0.7
+                ],
+                [
+                  0.61,
+                  0.89
+                ]
+              ],
+              "width": 0.07
+            }
+          ]
+        }
+      },
+      "guardHairsCoverageSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "guardHairsCoverage": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "mask",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "liftedTips": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": 0.68,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "guardAndBaseBase": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "guardAndBaseField": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "guardAndBaseDetail": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": 0.4,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "guardAndBase": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "add",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "auburnFur": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#351c27"
+              ],
+              [
+                0.25,
+                "#773a2d"
+              ],
+              [
+                0.5,
+                "#b35b34"
+              ],
+              [
+                0.75,
+                "#d68a4d"
+              ],
+              [
+                1,
+                "#ffc782"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "sunlitGuardHairs": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#7e4835"
+              ],
+              [
+                0.3333333333333333,
+                "#b7794c"
+              ],
+              [
+                0.6666666666666666,
+                "#dba26d"
+              ],
+              [
+                1,
+                "#ffe1a0"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "foxCoat": {
+        "op": "image.blend",
+        "inputs": {
+          "opacity": 0.48
+        }
+      },
+      "pileHeightBase": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "pileHeightField": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "pileHeightDetail": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": 0.24,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "pileHeight": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "add",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "materialHeight": {
+        "op": "image.toHeight",
+        "inputs": {
+          "units": "art-px"
+        }
+      },
+      "tangentNormal": {
+        "op": "image.heightToNormal",
+        "inputs": {
+          "options": {
+            "method": "central",
+            "border": "wrap"
+          }
+        }
+      },
+      "roughnessResponse": {
+        "op": "image.curve",
+        "inputs": {
+          "curve": {
+            "stops": [
+              [
+                0,
+                0.94
+              ],
+              [
+                1,
+                0.72
+              ]
+            ],
+            "interpolation": "smooth"
+          }
+        }
+      },
+      "previewLight": {
+        "op": "image.emboss",
+        "inputs": {
+          "options": {
+            "azimuth": -135,
+            "elevation": 37,
+            "strength": 0.86,
+            "bias": 0.68,
+            "border": "wrap"
+          }
+        }
+      },
+      "previewLightRamp": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#382947"
+              ],
+              [
+                0.29,
+                "#776477"
+              ],
+              [
+                0.68,
+                "#e8e2db"
+              ],
+              [
+                1,
+                "#fff8e6"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "preview": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "multiply",
+          "opacity": 0.89
+        }
+      },
+      "displayPreview": {
+        "op": "image.toDisplay",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "baseColor": {},
+      "height": {},
+      "normal": {},
+      "roughness": {},
+      "mask": {},
+      "preview": {},
+      "previewDisplay": {}
+    },
+    "groups": {},
+    "links": {
+      "link-4b3dfd1a1564895703ee41c2": {
+        "from": {
+          "input": "variation"
+        },
+        "to": {
+          "node": "lockScaleJitterParts",
+          "slot": "inputs",
+          "port": "item0"
+        }
+      },
+      "link-2a8bfd658cf847b1504694d9": {
+        "from": {
+          "input": "variation"
+        },
+        "to": {
+          "node": "lockScaleJitterParts",
+          "slot": "inputs",
+          "port": "item1"
+        }
+      },
+      "link-c06f819c429877bb1fc90baf": {
+        "from": {
+          "node": "lockScaleJitterParts",
+          "port": "value"
+        },
+        "to": {
+          "node": "lockScaleJitter",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-c530dd9f4a249a2cc1b51982": {
+        "from": {
+          "node": "lockScaleJitter",
+          "port": "value"
+        },
+        "to": {
+          "node": "lockJitter",
+          "slot": "inputs",
+          "port": "size"
+        }
+      },
+      "link-a3dec731529171e8a7a1e4bd": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "taperedLocksOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-49d74f28691f73d749931ffa": {
+        "from": {
+          "input": "lean"
+        },
+        "to": {
+          "node": "taperedLocksOptions",
+          "slot": "inputs",
+          "port": "rotation"
+        }
+      },
+      "link-881ef689ba53f95fd649b8ab": {
+        "from": {
+          "node": "lockJitter",
+          "port": "value"
+        },
+        "to": {
+          "node": "taperedLocksOptions",
+          "slot": "inputs",
+          "port": "jitter"
+        }
+      },
+      "link-b509584ab800c20e1494eadc": {
+        "from": {
+          "input": "density"
+        },
+        "to": {
+          "node": "taperedLocksControls",
+          "slot": "inputs",
+          "port": "density"
+        }
+      },
+      "link-5e4f6e1f63b33ff1665995e7": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "taperedLocks",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-37e4a6bb50313c6e67c968ff": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "taperedLocks",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-da2f0a491ee4d68284eaa98e": {
+        "from": {
+          "node": "taperedLocksOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "taperedLocks",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-bba72ab14b6a0082102868b2": {
+        "from": {
+          "node": "taperedLocksControls",
+          "port": "value"
+        },
+        "to": {
+          "node": "taperedLocks",
+          "slot": "inputs",
+          "port": "controls"
+        }
+      },
+      "link-1d98fee3bb281d936d6d3f9e": {
+        "from": {
+          "node": "taperedLocks",
+          "port": "coverage"
+        },
+        "to": {
+          "node": "taperedLocksCoverageSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-4b8df7a3ba765abcc7177fb6": {
+        "from": {
+          "node": "taperedLocksCoverageSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "taperedLocksCoverage",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a4cc558aaadfebe6089bbbef": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "underfurOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-e6edfce300247d96334f5683": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "underfur",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-c806d4ae72d5d2534cf7dfb0": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "underfur",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-b12268e1033483b941a014f6": {
+        "from": {
+          "node": "underfurOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "underfur",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-cee19b552f9c5b6a2f8c3757": {
+        "from": {
+          "node": "taperedLocksCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "pileBevel",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-31d0aa78149a05d232398312": {
+        "from": {
+          "node": "pileBevelOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "pileBevel",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-ac6698600b92fecaed15fc88": {
+        "from": {
+          "node": "pileBevel",
+          "port": "value"
+        },
+        "to": {
+          "node": "pileSurfaceSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-6895294a11fb77acbfb7d49a": {
+        "from": {
+          "node": "pileSurfaceSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "pileSurface",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-351806c379a49f2cc82aed5c": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "guardHairsOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-5320fde33caa468ad0eeb17f": {
+        "from": {
+          "input": "lean"
+        },
+        "to": {
+          "node": "guardHairsOptions",
+          "slot": "inputs",
+          "port": "rotation"
+        }
+      },
+      "link-b46c7bb7c86d209a96d31ceb": {
+        "from": {
+          "input": "density"
+        },
+        "to": {
+          "node": "guardHairsControls",
+          "slot": "inputs",
+          "port": "density"
+        }
+      },
+      "link-e888ba028cc3651674918a9f": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "guardHairs",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-0255f9d3277f0563e8a34d26": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "guardHairs",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-27ad5225efeef3901f4b60d9": {
+        "from": {
+          "node": "guardHairsOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "guardHairs",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-d16e559fd533ef0087843d61": {
+        "from": {
+          "node": "guardHairsControls",
+          "port": "value"
+        },
+        "to": {
+          "node": "guardHairs",
+          "slot": "inputs",
+          "port": "controls"
+        }
+      },
+      "link-770274f1a399ace8ace3f346": {
+        "from": {
+          "node": "guardHairs",
+          "port": "coverage"
+        },
+        "to": {
+          "node": "guardHairsCoverageSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-b5aece76ef0bde183bc0d848": {
+        "from": {
+          "node": "guardHairsCoverageSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "guardHairsCoverage",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-73fc14d63fc1e881c1ba0ad3": {
+        "from": {
+          "node": "pileSurface",
+          "port": "value"
+        },
+        "to": {
+          "node": "liftedTips",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-0b18e4bf90c84cafdda49bd7": {
+        "from": {
+          "node": "liftedTips",
+          "port": "value"
+        },
+        "to": {
+          "node": "guardAndBaseBase",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-344be7f9c3db516a55752adf": {
+        "from": {
+          "node": "underfur",
+          "port": "value"
+        },
+        "to": {
+          "node": "guardAndBaseField",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-f07151acd45e443f2eae44bd": {
+        "from": {
+          "node": "guardAndBaseField",
+          "port": "value"
+        },
+        "to": {
+          "node": "guardAndBaseDetail",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-1fac6d56ed7784ee218e4703": {
+        "from": {
+          "node": "guardAndBaseBase",
+          "port": "value"
+        },
+        "to": {
+          "node": "guardAndBase",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-c934c8a4471f7b77b7c63738": {
+        "from": {
+          "node": "guardAndBaseDetail",
+          "port": "value"
+        },
+        "to": {
+          "node": "guardAndBase",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-ba605ef7984f499bc42890db": {
+        "from": {
+          "node": "guardAndBase",
+          "port": "value"
+        },
+        "to": {
+          "node": "auburnFur",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-77a877d0429e17a958e31b8f": {
+        "from": {
+          "node": "underfur",
+          "port": "value"
+        },
+        "to": {
+          "node": "sunlitGuardHairs",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a6e2ef0b3cc1ee65309de5f8": {
+        "from": {
+          "node": "auburnFur",
+          "port": "value"
+        },
+        "to": {
+          "node": "foxCoat",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-cb699da56345ad1993e8e8b3": {
+        "from": {
+          "node": "sunlitGuardHairs",
+          "port": "value"
+        },
+        "to": {
+          "node": "foxCoat",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-9a378ebcd39c42a3d8a689d6": {
+        "from": {
+          "node": "guardHairsCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "foxCoat",
+          "slot": "inputs",
+          "port": "mask"
+        }
+      },
+      "link-434d7addab7ad2bb91791cf5": {
+        "from": {
+          "node": "pileSurface",
+          "port": "value"
+        },
+        "to": {
+          "node": "pileHeightBase",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-491d7cb799a18316917b4b91": {
+        "from": {
+          "node": "underfur",
+          "port": "value"
+        },
+        "to": {
+          "node": "pileHeightField",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-ef1d8ce0afa79fc4fc16df63": {
+        "from": {
+          "node": "pileHeightField",
+          "port": "value"
+        },
+        "to": {
+          "node": "pileHeightDetail",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-adb5a3ffd440c68ffbdbdd2e": {
+        "from": {
+          "node": "pileHeightBase",
+          "port": "value"
+        },
+        "to": {
+          "node": "pileHeight",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-3b3c119ae0fc9e7594150031": {
+        "from": {
+          "node": "pileHeightDetail",
+          "port": "value"
+        },
+        "to": {
+          "node": "pileHeight",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-72c81b6fdd71715028a992ce": {
+        "from": {
+          "node": "pileHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-7932fc3572f9f4c80600b897": {
+        "from": {
+          "input": "relief"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "scale"
+        }
+      },
+      "link-6047479b518d64ed4f844fdf": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "tangentNormal",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-94788797b346010371dc32e1": {
+        "from": {
+          "node": "taperedLocksCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "roughnessResponse",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a21d99f38085fcf38ab84390": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a6c53800b0e43fc877dbee7e": {
+        "from": {
+          "node": "previewLight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLightRamp",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-75e9c7df85e791422d7a6fdb": {
+        "from": {
+          "node": "foxCoat",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-d29fe1c5884cf934cfbb2a7e": {
+        "from": {
+          "node": "previewLightRamp",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-c352cbbdc72b4c5c4e273fa9": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "node": "displayPreview",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-0f9283946b735cbc9f680bdf": {
+        "from": {
+          "node": "foxCoat",
+          "port": "value"
+        },
+        "to": {
+          "output": "baseColor"
+        }
+      },
+      "link-148e187fc906e84cde5c5c4c": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "output": "height"
+        }
+      },
+      "link-2beb1315e8b6b4ae6dbbba87": {
+        "from": {
+          "node": "tangentNormal",
+          "port": "value"
+        },
+        "to": {
+          "output": "normal"
+        }
+      },
+      "link-781ad7aba89d261554594672": {
+        "from": {
+          "node": "roughnessResponse",
+          "port": "value"
+        },
+        "to": {
+          "output": "roughness"
+        }
+      },
+      "link-787e0108c4644b99c65a4e1e": {
+        "from": {
+          "node": "taperedLocksCoverage",
+          "port": "value"
+        },
+        "to": {
+          "output": "mask"
+        }
+      },
+      "link-aba8cba83ef380fe1e194816": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "output": "preview"
+        }
+      },
+      "link-cc4f68d2b85426cd5c2d2c80": {
+        "from": {
+          "node": "displayPreview",
+          "port": "value"
+        },
+        "to": {
+          "output": "previewDisplay"
+        }
+      }
+    }
+  },
+  "settings": {
+    "exports": {
+      "preview": {
+        "output": "previewDisplay",
+        "format": "png"
+      }
+    },
+    "outputUsages": {
+      "baseColor": {
+        "usage": "baseColor",
+        "label": "Base color",
+        "order": 0,
+        "source": {
+          "output": "baseColor"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "height": {
+        "usage": "height",
+        "label": "Height",
+        "order": 1,
+        "source": {
+          "output": "height"
+        },
+        "format": {
+          "format": "json"
+        }
+      },
+      "normal": {
+        "usage": "normal",
+        "label": "Normal",
+        "order": 2,
+        "source": {
+          "output": "normal"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "roughness": {
+        "usage": "roughness",
+        "label": "Roughness",
+        "order": 3,
+        "source": {
+          "output": "roughness"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      },
+      "mask": {
+        "usage": "mask.feature",
+        "label": "Feature mask",
+        "order": 4,
+        "source": {
+          "output": "mask"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      }
+    }
+  },
+  "resources": {},
+  "controls": {
+    "resolution": {
+      "input": "resolution",
+      "label": "Texture size",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 48,
+      "max": 192,
+      "step": 8,
+      "units": "px",
+      "order": 0
+    },
+    "seed": {
+      "input": "seed",
+      "label": "Seed",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 0,
+      "max": 9999,
+      "step": 1,
+      "order": 1
+    },
+    "relief": {
+      "input": "relief",
+      "label": "Relief depth",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0,
+      "max": 4,
+      "step": 0.05,
+      "units": "art-px",
+      "order": 2
+    },
+    "density": {
+      "input": "density",
+      "label": "Lock density",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.24,
+      "max": 1,
+      "step": 0.02,
+      "order": 3
+    },
+    "lean": {
+      "input": "lean",
+      "label": "Nap direction",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": -65,
+      "max": 65,
+      "step": 1,
+      "units": "°",
+      "order": 4
+    },
+    "variation": {
+      "input": "variation",
+      "label": "Guard hair scale",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.06,
+      "max": 0.62,
+      "step": 0.02,
+      "order": 5
+    }
+  },
+  "instances": {},
+  "label": "Fox Pile",
+  "metadata": {
+    "author": "Ink Studio",
+    "description": "Tapered locks with auburn underfur and longer sunlit guard hairs.",
+    "tags": [
+      "Textiles",
+      "Recipe",
+      "fur"
+    ],
+    "materialModel": "pbr.metallic-roughness",
+    "visibility": {
+      "library": true,
+      "publication": "public"
+    },
+    "thumbnail": {
+      "file": "../previews/fur.png",
+      "alt": "Fox Pile material swatch"
+    }
+  }
+}

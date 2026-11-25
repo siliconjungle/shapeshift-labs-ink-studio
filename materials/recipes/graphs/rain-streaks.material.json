@@ -1,0 +1,1043 @@
+{
+  "format": "ink-studio/material-graph",
+  "version": 1,
+  "id": "rain-streaks",
+  "graph": {
+    "inputs": {
+      "resolution": {
+        "definition": {
+          "type": "number",
+          "default": 128
+        }
+      },
+      "seed": {
+        "definition": {
+          "type": "number",
+          "default": 41
+        }
+      },
+      "relief": {
+        "definition": {
+          "type": "number",
+          "default": 1.4
+        }
+      },
+      "density": {
+        "definition": {
+          "type": "number",
+          "default": 0.8
+        }
+      },
+      "lean": {
+        "definition": {
+          "type": "number",
+          "default": 0
+        }
+      },
+      "strength": {
+        "definition": {
+          "type": "number",
+          "default": 0.86
+        }
+      }
+    },
+    "nodes": {
+      "taperedTrailsOptions": {
+        "op": "data.record",
+        "inputs": {
+          "samples": 2,
+          "color": "#ffffff",
+          "size": [
+            0.57,
+            1.92
+          ],
+          "gutter": [
+            0,
+            0
+          ],
+          "jitter": {
+            "position": [
+              0.77,
+              0.69
+            ],
+            "size": [
+              0.48,
+              0.48
+            ],
+            "rotation": 4
+          }
+        }
+      },
+      "taperedTrailsControls": {
+        "op": "data.record",
+        "inputs": {}
+      },
+      "taperedTrails": {
+        "op": "image.tileSampler",
+        "inputs": {
+          "columns": 19,
+          "rows": 5,
+          "stamps": [
+            {
+              "type": "linear",
+              "from": [
+                0.5,
+                0.94
+              ],
+              "to": [
+                0.5,
+                0.02
+              ],
+              "clip": {
+                "type": "polygon",
+                "points": [
+                  [
+                    0.2,
+                    0.03
+                  ],
+                  [
+                    0.8,
+                    0.03
+                  ],
+                  [
+                    0.59,
+                    0.49
+                  ],
+                  [
+                    0.52,
+                    0.95
+                  ],
+                  [
+                    0.42,
+                    0.66
+                  ],
+                  [
+                    0.39,
+                    0.31
+                  ]
+                ]
+              }
+            },
+            {
+              "type": "linear",
+              "from": [
+                0.5,
+                0.84
+              ],
+              "to": [
+                0.5,
+                0.02
+              ],
+              "clip": {
+                "type": "polygon",
+                "points": [
+                  [
+                    0.3,
+                    0.03
+                  ],
+                  [
+                    0.7,
+                    0.05
+                  ],
+                  [
+                    0.68,
+                    0.43
+                  ],
+                  [
+                    0.53,
+                    0.83
+                  ],
+                  [
+                    0.48,
+                    0.82
+                  ],
+                  [
+                    0.43,
+                    0.41
+                  ]
+                ]
+              }
+            },
+            {
+              "type": "linear",
+              "from": [
+                0.5,
+                0.7
+              ],
+              "to": [
+                0.5,
+                0.02
+              ],
+              "clip": {
+                "type": "polygon",
+                "points": [
+                  [
+                    0.14,
+                    0.04
+                  ],
+                  [
+                    0.89,
+                    0.09
+                  ],
+                  [
+                    0.71,
+                    0.38
+                  ],
+                  [
+                    0.61,
+                    0.41
+                  ],
+                  [
+                    0.5,
+                    0.7
+                  ],
+                  [
+                    0.34,
+                    0.42
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "taperedTrailsCoverageSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "taperedTrailsCoverage": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "mask",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "depositedMinerals": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "cloudySlateOptions": {
+        "op": "data.record",
+        "inputs": {
+          "tiling": "wrap",
+          "extent": [
+            6,
+            9
+          ],
+          "octaves": 3
+        }
+      },
+      "cloudySlate": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "fractal"
+        }
+      },
+      "slatePores": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": 0.31,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "depositReliefBase": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "depositReliefField": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "depositReliefDetail": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": 0.3,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "depositRelief": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "add",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "slate": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#252832"
+              ],
+              [
+                0.5,
+                "#424851"
+              ],
+              [
+                1,
+                "#6e7478"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "salt": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#7a7e72"
+              ],
+              [
+                0.5,
+                "#b6b9a1"
+              ],
+              [
+                1,
+                "#e1e5c6"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "weatheredSlate": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "copy"
+        }
+      },
+      "materialHeight": {
+        "op": "image.toHeight",
+        "inputs": {
+          "units": "art-px"
+        }
+      },
+      "tangentNormal": {
+        "op": "image.heightToNormal",
+        "inputs": {
+          "options": {
+            "method": "central",
+            "border": "wrap"
+          }
+        }
+      },
+      "roughnessResponse": {
+        "op": "image.curve",
+        "inputs": {
+          "curve": {
+            "stops": [
+              [
+                0,
+                0.53
+              ],
+              [
+                1,
+                0.88
+              ]
+            ],
+            "interpolation": "smooth"
+          }
+        }
+      },
+      "previewLight": {
+        "op": "image.emboss",
+        "inputs": {
+          "options": {
+            "azimuth": -135,
+            "elevation": 37,
+            "strength": 0.86,
+            "bias": 0.68,
+            "border": "wrap"
+          }
+        }
+      },
+      "previewLightRamp": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#382947"
+              ],
+              [
+                0.29,
+                "#776477"
+              ],
+              [
+                0.68,
+                "#e8e2db"
+              ],
+              [
+                1,
+                "#fff8e6"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "preview": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "multiply",
+          "opacity": 0.89
+        }
+      },
+      "displayPreview": {
+        "op": "image.toDisplay",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "baseColor": {},
+      "height": {},
+      "normal": {},
+      "roughness": {},
+      "mask": {},
+      "preview": {},
+      "previewDisplay": {}
+    },
+    "groups": {},
+    "links": {
+      "link-f0086851aa622976ce0cbd77": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "taperedTrailsOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-c07259a80470fb3c14f45d65": {
+        "from": {
+          "input": "lean"
+        },
+        "to": {
+          "node": "taperedTrailsOptions",
+          "slot": "inputs",
+          "port": "rotation"
+        }
+      },
+      "link-3f569c3b59b595a4c47eef04": {
+        "from": {
+          "input": "density"
+        },
+        "to": {
+          "node": "taperedTrailsControls",
+          "slot": "inputs",
+          "port": "density"
+        }
+      },
+      "link-817b489724046abbb3847fa7": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "taperedTrails",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-d270009ce90aa542106e6461": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "taperedTrails",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-a5cf55bce3c1ad7409e03d40": {
+        "from": {
+          "node": "taperedTrailsOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "taperedTrails",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-c68f5099ebb189520ea8f7f2": {
+        "from": {
+          "node": "taperedTrailsControls",
+          "port": "value"
+        },
+        "to": {
+          "node": "taperedTrails",
+          "slot": "inputs",
+          "port": "controls"
+        }
+      },
+      "link-d83c3ce8bd2a1cce46401fd7": {
+        "from": {
+          "node": "taperedTrails",
+          "port": "coverage"
+        },
+        "to": {
+          "node": "taperedTrailsCoverageSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-1f9bc9625f4c507262f8951f": {
+        "from": {
+          "node": "taperedTrailsCoverageSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "taperedTrailsCoverage",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-e12185c9426acbfcd078e978": {
+        "from": {
+          "node": "taperedTrailsCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "depositedMinerals",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-483d6ded43f7a168be46ba44": {
+        "from": {
+          "input": "strength"
+        },
+        "to": {
+          "node": "depositedMinerals",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-62b722f6e556d6e3df71c3ab": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "cloudySlateOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-9a6dff43b74828ff05d37ed6": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "cloudySlate",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-13cc7ee952946b80e5e2c46c": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "cloudySlate",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-dd4e18ca3bd967bfc4d4e0c0": {
+        "from": {
+          "node": "cloudySlateOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "cloudySlate",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-598af68fecfc0ab81049ce14": {
+        "from": {
+          "node": "cloudySlate",
+          "port": "value"
+        },
+        "to": {
+          "node": "slatePores",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-974654796600bb1fe26af694": {
+        "from": {
+          "node": "slatePores",
+          "port": "value"
+        },
+        "to": {
+          "node": "depositReliefBase",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-eedaa58d72de3ed287af6ebf": {
+        "from": {
+          "node": "depositedMinerals",
+          "port": "value"
+        },
+        "to": {
+          "node": "depositReliefField",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-25d712a7d08e11ce6b19ad65": {
+        "from": {
+          "node": "depositReliefField",
+          "port": "value"
+        },
+        "to": {
+          "node": "depositReliefDetail",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-9eda6c0fedc706344742a529": {
+        "from": {
+          "node": "depositReliefBase",
+          "port": "value"
+        },
+        "to": {
+          "node": "depositRelief",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-548b5c0ae9bcb74e206178b4": {
+        "from": {
+          "node": "depositReliefDetail",
+          "port": "value"
+        },
+        "to": {
+          "node": "depositRelief",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-2c02a9185af3b757a0e06dd9": {
+        "from": {
+          "node": "cloudySlate",
+          "port": "value"
+        },
+        "to": {
+          "node": "slate",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-54e903cee46debbb00d12345": {
+        "from": {
+          "node": "cloudySlate",
+          "port": "value"
+        },
+        "to": {
+          "node": "salt",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-4513795063e4a9f43952457c": {
+        "from": {
+          "node": "slate",
+          "port": "value"
+        },
+        "to": {
+          "node": "weatheredSlate",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-c86dd5b08bd9614858d49a6a": {
+        "from": {
+          "node": "salt",
+          "port": "value"
+        },
+        "to": {
+          "node": "weatheredSlate",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-e02aab7387f3c1fb12a7e38a": {
+        "from": {
+          "node": "depositedMinerals",
+          "port": "value"
+        },
+        "to": {
+          "node": "weatheredSlate",
+          "slot": "inputs",
+          "port": "mask"
+        }
+      },
+      "link-72c81b6fdd71715028a992ce": {
+        "from": {
+          "node": "depositRelief",
+          "port": "value"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-7932fc3572f9f4c80600b897": {
+        "from": {
+          "input": "relief"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "scale"
+        }
+      },
+      "link-6047479b518d64ed4f844fdf": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "tangentNormal",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-94788797b346010371dc32e1": {
+        "from": {
+          "node": "depositedMinerals",
+          "port": "value"
+        },
+        "to": {
+          "node": "roughnessResponse",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a21d99f38085fcf38ab84390": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a6c53800b0e43fc877dbee7e": {
+        "from": {
+          "node": "previewLight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLightRamp",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-75e9c7df85e791422d7a6fdb": {
+        "from": {
+          "node": "weatheredSlate",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-d29fe1c5884cf934cfbb2a7e": {
+        "from": {
+          "node": "previewLightRamp",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-c352cbbdc72b4c5c4e273fa9": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "node": "displayPreview",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-0f9283946b735cbc9f680bdf": {
+        "from": {
+          "node": "weatheredSlate",
+          "port": "value"
+        },
+        "to": {
+          "output": "baseColor"
+        }
+      },
+      "link-148e187fc906e84cde5c5c4c": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "output": "height"
+        }
+      },
+      "link-2beb1315e8b6b4ae6dbbba87": {
+        "from": {
+          "node": "tangentNormal",
+          "port": "value"
+        },
+        "to": {
+          "output": "normal"
+        }
+      },
+      "link-781ad7aba89d261554594672": {
+        "from": {
+          "node": "roughnessResponse",
+          "port": "value"
+        },
+        "to": {
+          "output": "roughness"
+        }
+      },
+      "link-787e0108c4644b99c65a4e1e": {
+        "from": {
+          "node": "depositedMinerals",
+          "port": "value"
+        },
+        "to": {
+          "output": "mask"
+        }
+      },
+      "link-aba8cba83ef380fe1e194816": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "output": "preview"
+        }
+      },
+      "link-cc4f68d2b85426cd5c2d2c80": {
+        "from": {
+          "node": "displayPreview",
+          "port": "value"
+        },
+        "to": {
+          "output": "previewDisplay"
+        }
+      }
+    }
+  },
+  "settings": {
+    "exports": {
+      "preview": {
+        "output": "previewDisplay",
+        "format": "png"
+      }
+    },
+    "outputUsages": {
+      "baseColor": {
+        "usage": "baseColor",
+        "label": "Base color",
+        "order": 0,
+        "source": {
+          "output": "baseColor"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "height": {
+        "usage": "height",
+        "label": "Height",
+        "order": 1,
+        "source": {
+          "output": "height"
+        },
+        "format": {
+          "format": "json"
+        }
+      },
+      "normal": {
+        "usage": "normal",
+        "label": "Normal",
+        "order": 2,
+        "source": {
+          "output": "normal"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "roughness": {
+        "usage": "roughness",
+        "label": "Roughness",
+        "order": 3,
+        "source": {
+          "output": "roughness"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      },
+      "mask": {
+        "usage": "mask.feature",
+        "label": "Feature mask",
+        "order": 4,
+        "source": {
+          "output": "mask"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      }
+    }
+  },
+  "resources": {},
+  "controls": {
+    "resolution": {
+      "input": "resolution",
+      "label": "Texture size",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 48,
+      "max": 192,
+      "step": 8,
+      "units": "px",
+      "order": 0
+    },
+    "seed": {
+      "input": "seed",
+      "label": "Seed",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 0,
+      "max": 9999,
+      "step": 1,
+      "order": 1
+    },
+    "relief": {
+      "input": "relief",
+      "label": "Relief depth",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0,
+      "max": 4,
+      "step": 0.05,
+      "units": "art-px",
+      "order": 2
+    },
+    "density": {
+      "input": "density",
+      "label": "Trail density",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.2,
+      "max": 1,
+      "step": 0.02,
+      "order": 3
+    },
+    "lean": {
+      "input": "lean",
+      "label": "Runoff angle",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": -32,
+      "max": 32,
+      "step": 1,
+      "units": "°",
+      "order": 4
+    },
+    "strength": {
+      "input": "strength",
+      "label": "Deposit strength",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0.1,
+      "max": 1,
+      "step": 0.02,
+      "order": 5
+    }
+  },
+  "instances": {},
+  "label": "Rain Streaks",
+  "metadata": {
+    "author": "Ink Studio",
+    "description": "Long mineral trails and shorter runs on smoky slate.",
+    "tags": [
+      "Weathering",
+      "Recipe",
+      "rain-streaks"
+    ],
+    "materialModel": "pbr.metallic-roughness",
+    "visibility": {
+      "library": true,
+      "publication": "public"
+    },
+    "thumbnail": {
+      "file": "../previews/rain-streaks.png",
+      "alt": "Rain Streaks material swatch"
+    }
+  }
+}

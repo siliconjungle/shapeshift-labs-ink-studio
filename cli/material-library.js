@@ -5,7 +5,9 @@ const MaterialGraph = require('./material-graph.js');
 const Metadata = require('./material-metadata.js');
 const files = require('./asset-files.js');
 
-function selectMaterialLibrary(file, { audience = 'library', query, tag, offset, limit, kit = require('../index.js').load() } = {}) {
+const bundledRegistry = path.resolve(__dirname,'../materials/recipes/registry.json');
+
+function selectMaterialLibrary(file = bundledRegistry, { audience = 'library', query, tag, offset, limit, kit = require('../index.js').load() } = {}) {
   if (!['library', 'workspace', 'publication'].includes(audience))
     throw new TypeError('Material library audience must be library, workspace or publication');
   const { authoring, procedural } = kit.KIT;

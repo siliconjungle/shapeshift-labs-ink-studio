@@ -1,0 +1,1697 @@
+{
+  "format": "ink-studio/material-graph",
+  "version": 1,
+  "id": "weave",
+  "graph": {
+    "inputs": {
+      "resolution": {
+        "definition": {
+          "type": "number",
+          "default": 128
+        }
+      },
+      "seed": {
+        "definition": {
+          "type": "number",
+          "default": 41
+        }
+      },
+      "relief": {
+        "definition": {
+          "type": "number",
+          "default": 1.4
+        }
+      },
+      "count": {
+        "definition": {
+          "type": "number",
+          "default": 10
+        }
+      },
+      "width": {
+        "definition": {
+          "type": "number",
+          "default": 1
+        }
+      },
+      "fiber": {
+        "definition": {
+          "type": "number",
+          "default": 0.24
+        }
+      }
+    },
+    "nodes": {
+      "warpThreadsWidthParts": {
+        "op": "data.record",
+        "inputs": {
+          "item1": 1
+        }
+      },
+      "warpThreadsWidth": {
+        "op": "data.collect",
+        "inputs": {
+          "keys": [
+            "item0",
+            "item1"
+          ]
+        }
+      },
+      "warpThreadsOptions": {
+        "op": "data.record",
+        "inputs": {
+          "samples": 2,
+          "gutter": [
+            0,
+            0
+          ]
+        }
+      },
+      "warpThreads": {
+        "op": "image.tileGenerator",
+        "inputs": {
+          "stamp": {
+            "type": "gradient",
+            "source": {
+              "type": "linear",
+              "from": [
+                0,
+                0.5
+              ],
+              "to": [
+                1,
+                0.5
+              ]
+            },
+            "curve": {
+              "interpolation": "smooth",
+              "stops": [
+                [
+                  0,
+                  0
+                ],
+                [
+                  0.14,
+                  0
+                ],
+                [
+                  0.25,
+                  0.48
+                ],
+                [
+                  0.48,
+                  1
+                ],
+                [
+                  0.68,
+                  0.79
+                ],
+                [
+                  0.87,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ]
+            }
+          }
+        }
+      },
+      "warpThreadsCoverageSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "warpThreadsCoverage": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "mask",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "weftThreadsWidthParts": {
+        "op": "data.record",
+        "inputs": {
+          "item0": 1
+        }
+      },
+      "weftThreadsWidth": {
+        "op": "data.collect",
+        "inputs": {
+          "keys": [
+            "item0",
+            "item1"
+          ]
+        }
+      },
+      "weftThreadsOptions": {
+        "op": "data.record",
+        "inputs": {
+          "samples": 2,
+          "gutter": [
+            0,
+            0
+          ]
+        }
+      },
+      "weftThreads": {
+        "op": "image.tileGenerator",
+        "inputs": {
+          "stamp": {
+            "type": "gradient",
+            "source": {
+              "type": "linear",
+              "from": [
+                0.5,
+                0
+              ],
+              "to": [
+                0.5,
+                1
+              ]
+            },
+            "curve": {
+              "interpolation": "smooth",
+              "stops": [
+                [
+                  0,
+                  0
+                ],
+                [
+                  0.14,
+                  0
+                ],
+                [
+                  0.25,
+                  0.48
+                ],
+                [
+                  0.48,
+                  1
+                ],
+                [
+                  0.68,
+                  0.79
+                ],
+                [
+                  0.87,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ]
+            }
+          }
+        }
+      },
+      "weftThreadsCoverageSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "weftThreadsCoverage": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "mask",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "overUnderDraftOptions": {
+        "op": "data.record",
+        "inputs": {
+          "samples": 2,
+          "pattern": "checker",
+          "gutter": [
+            0,
+            0
+          ]
+        }
+      },
+      "overUnderDraft": {
+        "op": "image.tileGenerator",
+        "inputs": {
+          "stamp": {
+            "type": "rectangle",
+            "size": [
+              1,
+              1
+            ],
+            "radius": 0
+          }
+        }
+      },
+      "overUnderDraftCoverageSamples": {
+        "op": "image.toRaster",
+        "inputs": {}
+      },
+      "overUnderDraftCoverage": {
+        "op": "image.declare",
+        "inputs": {
+          "descriptor": {
+            "intent": "mask",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "warpInFront": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "oppositeCrossings": {
+        "op": "image.invert",
+        "inputs": {}
+      },
+      "weftInFront": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "intersectingThreads": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "max",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "crossingUnderside": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": 0.52,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "overCrossings": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "max",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "overUnderThreads": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "max",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "reedFibersOptions": {
+        "op": "data.record",
+        "inputs": {
+          "tiling": "wrap",
+          "extent": [
+            29,
+            42
+          ],
+          "octaves": 2
+        }
+      },
+      "reedFibers": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "fractal"
+        }
+      },
+      "weftFiberToneBase": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "weftFiberToneField": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "weftFiberToneDetail": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "weftFiberTone": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "add",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "goldWeft": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#2d272c"
+              ],
+              [
+                0.3333333333333333,
+                "#785640"
+              ],
+              [
+                0.6666666666666666,
+                "#b27e49"
+              ],
+              [
+                1,
+                "#e4bb79"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "warpFiberToneBase": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "warpFiberToneField": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "warpFiberToneDetail": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "warpFiberTone": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "add",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "sageWarp": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#1f2d2b"
+              ],
+              [
+                0.3333333333333333,
+                "#446050"
+              ],
+              [
+                0.6666666666666666,
+                "#80946d"
+              ],
+              [
+                1,
+                "#c8c995"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "wovenReeds": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "copy"
+        }
+      },
+      "reedReliefBase": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "reedReliefField": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "reedReliefDetail": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": 0.13,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "reedRelief": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "add",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "materialHeight": {
+        "op": "image.toHeight",
+        "inputs": {
+          "units": "art-px"
+        }
+      },
+      "tangentNormal": {
+        "op": "image.heightToNormal",
+        "inputs": {
+          "options": {
+            "method": "central",
+            "border": "wrap"
+          }
+        }
+      },
+      "roughnessResponse": {
+        "op": "image.curve",
+        "inputs": {
+          "curve": {
+            "stops": [
+              [
+                0,
+                0.91
+              ],
+              [
+                1,
+                0.73
+              ]
+            ],
+            "interpolation": "smooth"
+          }
+        }
+      },
+      "previewLight": {
+        "op": "image.emboss",
+        "inputs": {
+          "options": {
+            "azimuth": -135,
+            "elevation": 37,
+            "strength": 0.86,
+            "bias": 0.68,
+            "border": "wrap"
+          }
+        }
+      },
+      "previewLightRamp": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#382947"
+              ],
+              [
+                0.29,
+                "#776477"
+              ],
+              [
+                0.68,
+                "#e8e2db"
+              ],
+              [
+                1,
+                "#fff8e6"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "preview": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "multiply",
+          "opacity": 0.89
+        }
+      },
+      "displayPreview": {
+        "op": "image.toDisplay",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "baseColor": {},
+      "height": {},
+      "normal": {},
+      "roughness": {},
+      "mask": {},
+      "preview": {},
+      "previewDisplay": {}
+    },
+    "groups": {},
+    "links": {
+      "link-a1d3dc59128363faba574781": {
+        "from": {
+          "input": "width"
+        },
+        "to": {
+          "node": "warpThreadsWidthParts",
+          "slot": "inputs",
+          "port": "item0"
+        }
+      },
+      "link-53ee7f9841af58b9ae1db689": {
+        "from": {
+          "node": "warpThreadsWidthParts",
+          "port": "value"
+        },
+        "to": {
+          "node": "warpThreadsWidth",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-151b6150780e347df32464fe": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "warpThreadsOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-0a4da7e40d0aac0f99836631": {
+        "from": {
+          "node": "warpThreadsWidth",
+          "port": "value"
+        },
+        "to": {
+          "node": "warpThreadsOptions",
+          "slot": "inputs",
+          "port": "size"
+        }
+      },
+      "link-7c14251076a5cc1426c33910": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "warpThreads",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-8e361737e77fb50cf94cd4a9": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "warpThreads",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-1520e0b0861fe5813e72c8bc": {
+        "from": {
+          "input": "count"
+        },
+        "to": {
+          "node": "warpThreads",
+          "slot": "inputs",
+          "port": "columns"
+        }
+      },
+      "link-6492486cdc0713946b543c8b": {
+        "from": {
+          "input": "count"
+        },
+        "to": {
+          "node": "warpThreads",
+          "slot": "inputs",
+          "port": "rows"
+        }
+      },
+      "link-59b9aa4ddfbccb505070d370": {
+        "from": {
+          "node": "warpThreadsOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "warpThreads",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-404a641787e6640889c2ff58": {
+        "from": {
+          "node": "warpThreads",
+          "port": "coverage"
+        },
+        "to": {
+          "node": "warpThreadsCoverageSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-9149f5bc19ac68d886c2b8c4": {
+        "from": {
+          "node": "warpThreadsCoverageSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "warpThreadsCoverage",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-5e96d66e276e56a9f6b1b09b": {
+        "from": {
+          "input": "width"
+        },
+        "to": {
+          "node": "weftThreadsWidthParts",
+          "slot": "inputs",
+          "port": "item1"
+        }
+      },
+      "link-eca5a1bb986bc372a3456590": {
+        "from": {
+          "node": "weftThreadsWidthParts",
+          "port": "value"
+        },
+        "to": {
+          "node": "weftThreadsWidth",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-ec317809fdbc5e1ea5a24d38": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "weftThreadsOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-1c6434bde5054857d6b070a9": {
+        "from": {
+          "node": "weftThreadsWidth",
+          "port": "value"
+        },
+        "to": {
+          "node": "weftThreadsOptions",
+          "slot": "inputs",
+          "port": "size"
+        }
+      },
+      "link-46491bdcce67a27eaeac0ee1": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "weftThreads",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-56efef4d1668dd45fef746ff": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "weftThreads",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-f127b9515123e2de986c1f96": {
+        "from": {
+          "input": "count"
+        },
+        "to": {
+          "node": "weftThreads",
+          "slot": "inputs",
+          "port": "columns"
+        }
+      },
+      "link-efd4397fa6e59523e0b6627a": {
+        "from": {
+          "input": "count"
+        },
+        "to": {
+          "node": "weftThreads",
+          "slot": "inputs",
+          "port": "rows"
+        }
+      },
+      "link-f0525f2ae1a1254be9d03d70": {
+        "from": {
+          "node": "weftThreadsOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "weftThreads",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-8a27f295ba22496fcd856852": {
+        "from": {
+          "node": "weftThreads",
+          "port": "coverage"
+        },
+        "to": {
+          "node": "weftThreadsCoverageSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-5e81b3da327f4b2dbc267b6e": {
+        "from": {
+          "node": "weftThreadsCoverageSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "weftThreadsCoverage",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-1ea91ac241881350031722ee": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "overUnderDraftOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-5d57efe86463ca20b5699d6b": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "overUnderDraft",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-ec06812f0122731108f7d603": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "overUnderDraft",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-0f740903ff99f2a3d340839c": {
+        "from": {
+          "input": "count"
+        },
+        "to": {
+          "node": "overUnderDraft",
+          "slot": "inputs",
+          "port": "columns"
+        }
+      },
+      "link-c336a537264856bc5c12ca51": {
+        "from": {
+          "input": "count"
+        },
+        "to": {
+          "node": "overUnderDraft",
+          "slot": "inputs",
+          "port": "rows"
+        }
+      },
+      "link-198c31f3a46596f4a9909a74": {
+        "from": {
+          "node": "overUnderDraftOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "overUnderDraft",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-9c06e8f877b0b10529727210": {
+        "from": {
+          "node": "overUnderDraft",
+          "port": "coverage"
+        },
+        "to": {
+          "node": "overUnderDraftCoverageSamples",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-1d5ec50bb3ab7c99043ff983": {
+        "from": {
+          "node": "overUnderDraftCoverageSamples",
+          "port": "value"
+        },
+        "to": {
+          "node": "overUnderDraftCoverage",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-11ebf283c4b9354a19594e35": {
+        "from": {
+          "node": "warpThreadsCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "warpInFront",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-2741d9c6701fbd808e4a4ff2": {
+        "from": {
+          "node": "overUnderDraftCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "warpInFront",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-98c4e60996a35be62ecfde35": {
+        "from": {
+          "node": "overUnderDraftCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "oppositeCrossings",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-c119a486c25df107c0fa038a": {
+        "from": {
+          "node": "weftThreadsCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "weftInFront",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-7aacb21932596889898c6f11": {
+        "from": {
+          "node": "oppositeCrossings",
+          "port": "value"
+        },
+        "to": {
+          "node": "weftInFront",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-18bd5770416891d01e940917": {
+        "from": {
+          "node": "warpThreadsCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "intersectingThreads",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-5b8f0c6801d010d4ef0dfc42": {
+        "from": {
+          "node": "weftThreadsCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "intersectingThreads",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-1a601329caa431fb8a6c84ad": {
+        "from": {
+          "node": "intersectingThreads",
+          "port": "value"
+        },
+        "to": {
+          "node": "crossingUnderside",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-ba0ad98607b6c2e5fe053a12": {
+        "from": {
+          "node": "warpInFront",
+          "port": "value"
+        },
+        "to": {
+          "node": "overCrossings",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-8d8d518dbbbe7c3603817161": {
+        "from": {
+          "node": "weftInFront",
+          "port": "value"
+        },
+        "to": {
+          "node": "overCrossings",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-5a19aafed659d35885ff9558": {
+        "from": {
+          "node": "overCrossings",
+          "port": "value"
+        },
+        "to": {
+          "node": "overUnderThreads",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-c636657f0921df169cbdf300": {
+        "from": {
+          "node": "crossingUnderside",
+          "port": "value"
+        },
+        "to": {
+          "node": "overUnderThreads",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-d630771a73acfbba0b3616cf": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "reedFibersOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-ec8f7b614efe336fd5f6444c": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "reedFibers",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-c35a0e147196494cddb70712": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "reedFibers",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-d40090c45af48646bf9d87cd": {
+        "from": {
+          "node": "reedFibersOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "reedFibers",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-fe518553a39060e3c1631f5f": {
+        "from": {
+          "node": "weftInFront",
+          "port": "value"
+        },
+        "to": {
+          "node": "weftFiberToneBase",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-4bdd06f20092e29544c0e46d": {
+        "from": {
+          "node": "reedFibers",
+          "port": "value"
+        },
+        "to": {
+          "node": "weftFiberToneField",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-bf401954c831b7ce5b381831": {
+        "from": {
+          "node": "weftFiberToneField",
+          "port": "value"
+        },
+        "to": {
+          "node": "weftFiberToneDetail",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-ad0028064b6746a086fd40db": {
+        "from": {
+          "input": "fiber"
+        },
+        "to": {
+          "node": "weftFiberToneDetail",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-33f4877c6964611a94095bd1": {
+        "from": {
+          "node": "weftFiberToneBase",
+          "port": "value"
+        },
+        "to": {
+          "node": "weftFiberTone",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-549ba6c91347599cd1e19bdd": {
+        "from": {
+          "node": "weftFiberToneDetail",
+          "port": "value"
+        },
+        "to": {
+          "node": "weftFiberTone",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-ae19636c1f8a72901866c4da": {
+        "from": {
+          "node": "weftFiberTone",
+          "port": "value"
+        },
+        "to": {
+          "node": "goldWeft",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-7a732dbe63634ab0c71430ac": {
+        "from": {
+          "node": "warpInFront",
+          "port": "value"
+        },
+        "to": {
+          "node": "warpFiberToneBase",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-22639ed38d8cdfbb346f8777": {
+        "from": {
+          "node": "reedFibers",
+          "port": "value"
+        },
+        "to": {
+          "node": "warpFiberToneField",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-743cad9ff778487635c79783": {
+        "from": {
+          "node": "warpFiberToneField",
+          "port": "value"
+        },
+        "to": {
+          "node": "warpFiberToneDetail",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-f7d4487e1c0fb2fdeaed628c": {
+        "from": {
+          "input": "fiber"
+        },
+        "to": {
+          "node": "warpFiberToneDetail",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-07462f5da8a27e5e136c3dc1": {
+        "from": {
+          "node": "warpFiberToneBase",
+          "port": "value"
+        },
+        "to": {
+          "node": "warpFiberTone",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-6c33b6af25b5dd206ee07c4b": {
+        "from": {
+          "node": "warpFiberToneDetail",
+          "port": "value"
+        },
+        "to": {
+          "node": "warpFiberTone",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-47d37355454d31e3fa4ea514": {
+        "from": {
+          "node": "warpFiberTone",
+          "port": "value"
+        },
+        "to": {
+          "node": "sageWarp",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a7c9fdf098135f84f36b7387": {
+        "from": {
+          "node": "goldWeft",
+          "port": "value"
+        },
+        "to": {
+          "node": "wovenReeds",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-74e1e4fe4347ee22d6d1d7a0": {
+        "from": {
+          "node": "sageWarp",
+          "port": "value"
+        },
+        "to": {
+          "node": "wovenReeds",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-0022c98e7bb0e95837e71d0f": {
+        "from": {
+          "node": "warpInFront",
+          "port": "value"
+        },
+        "to": {
+          "node": "wovenReeds",
+          "slot": "inputs",
+          "port": "mask"
+        }
+      },
+      "link-b0f3c09a9346203b6c0a403e": {
+        "from": {
+          "node": "overUnderThreads",
+          "port": "value"
+        },
+        "to": {
+          "node": "reedReliefBase",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-fcd9d3b82ee12d4285449bf4": {
+        "from": {
+          "node": "reedFibers",
+          "port": "value"
+        },
+        "to": {
+          "node": "reedReliefField",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-0a970312ad5b80cfecfd2138": {
+        "from": {
+          "node": "reedReliefField",
+          "port": "value"
+        },
+        "to": {
+          "node": "reedReliefDetail",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-abd98b30861729504c89cd1a": {
+        "from": {
+          "node": "reedReliefBase",
+          "port": "value"
+        },
+        "to": {
+          "node": "reedRelief",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-b3ee265f0e45a0db39ac1876": {
+        "from": {
+          "node": "reedReliefDetail",
+          "port": "value"
+        },
+        "to": {
+          "node": "reedRelief",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-72c81b6fdd71715028a992ce": {
+        "from": {
+          "node": "reedRelief",
+          "port": "value"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-7932fc3572f9f4c80600b897": {
+        "from": {
+          "input": "relief"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "scale"
+        }
+      },
+      "link-6047479b518d64ed4f844fdf": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "tangentNormal",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-94788797b346010371dc32e1": {
+        "from": {
+          "node": "overUnderThreads",
+          "port": "value"
+        },
+        "to": {
+          "node": "roughnessResponse",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a21d99f38085fcf38ab84390": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a6c53800b0e43fc877dbee7e": {
+        "from": {
+          "node": "previewLight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLightRamp",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-75e9c7df85e791422d7a6fdb": {
+        "from": {
+          "node": "wovenReeds",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-d29fe1c5884cf934cfbb2a7e": {
+        "from": {
+          "node": "previewLightRamp",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-c352cbbdc72b4c5c4e273fa9": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "node": "displayPreview",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-0f9283946b735cbc9f680bdf": {
+        "from": {
+          "node": "wovenReeds",
+          "port": "value"
+        },
+        "to": {
+          "output": "baseColor"
+        }
+      },
+      "link-148e187fc906e84cde5c5c4c": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "output": "height"
+        }
+      },
+      "link-2beb1315e8b6b4ae6dbbba87": {
+        "from": {
+          "node": "tangentNormal",
+          "port": "value"
+        },
+        "to": {
+          "output": "normal"
+        }
+      },
+      "link-781ad7aba89d261554594672": {
+        "from": {
+          "node": "roughnessResponse",
+          "port": "value"
+        },
+        "to": {
+          "output": "roughness"
+        }
+      },
+      "link-787e0108c4644b99c65a4e1e": {
+        "from": {
+          "node": "overUnderThreads",
+          "port": "value"
+        },
+        "to": {
+          "output": "mask"
+        }
+      },
+      "link-aba8cba83ef380fe1e194816": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "output": "preview"
+        }
+      },
+      "link-cc4f68d2b85426cd5c2d2c80": {
+        "from": {
+          "node": "displayPreview",
+          "port": "value"
+        },
+        "to": {
+          "output": "previewDisplay"
+        }
+      }
+    }
+  },
+  "settings": {
+    "exports": {
+      "preview": {
+        "output": "previewDisplay",
+        "format": "png"
+      }
+    },
+    "outputUsages": {
+      "baseColor": {
+        "usage": "baseColor",
+        "label": "Base color",
+        "order": 0,
+        "source": {
+          "output": "baseColor"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "height": {
+        "usage": "height",
+        "label": "Height",
+        "order": 1,
+        "source": {
+          "output": "height"
+        },
+        "format": {
+          "format": "json"
+        }
+      },
+      "normal": {
+        "usage": "normal",
+        "label": "Normal",
+        "order": 2,
+        "source": {
+          "output": "normal"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "roughness": {
+        "usage": "roughness",
+        "label": "Roughness",
+        "order": 3,
+        "source": {
+          "output": "roughness"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      },
+      "mask": {
+        "usage": "mask.feature",
+        "label": "Feature mask",
+        "order": 4,
+        "source": {
+          "output": "mask"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      }
+    }
+  },
+  "resources": {},
+  "controls": {
+    "resolution": {
+      "input": "resolution",
+      "label": "Texture size",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 48,
+      "max": 192,
+      "step": 8,
+      "units": "px",
+      "order": 0
+    },
+    "seed": {
+      "input": "seed",
+      "label": "Seed",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 0,
+      "max": 9999,
+      "step": 1,
+      "order": 1
+    },
+    "relief": {
+      "input": "relief",
+      "label": "Relief depth",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0,
+      "max": 4,
+      "step": 0.05,
+      "units": "art-px",
+      "order": 2
+    },
+    "count": {
+      "input": "count",
+      "label": "Threads across",
+      "group": "Pattern",
+      "widget": "select",
+      "options": [
+        {
+          "label": "4",
+          "value": 4
+        },
+        {
+          "label": "6",
+          "value": 6
+        },
+        {
+          "label": "8",
+          "value": 8
+        },
+        {
+          "label": "10",
+          "value": 10
+        },
+        {
+          "label": "12",
+          "value": 12
+        },
+        {
+          "label": "14",
+          "value": 14
+        },
+        {
+          "label": "16",
+          "value": 16
+        },
+        {
+          "label": "18",
+          "value": 18
+        }
+      ],
+      "order": 3
+    },
+    "width": {
+      "input": "width",
+      "label": "Thread width",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.55,
+      "max": 1,
+      "step": 0.025,
+      "order": 4
+    },
+    "fiber": {
+      "input": "fiber",
+      "label": "Fibrous variation",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0,
+      "max": 0.5,
+      "step": 0.01,
+      "order": 5
+    }
+  },
+  "instances": {},
+  "label": "Sedge Weave",
+  "metadata": {
+    "author": "Ink Studio",
+    "description": "Alternating over-and-under reed crossings in two dyed yarns.",
+    "tags": [
+      "Textiles",
+      "Recipe",
+      "weave"
+    ],
+    "materialModel": "pbr.metallic-roughness",
+    "visibility": {
+      "library": true,
+      "publication": "public"
+    },
+    "thumbnail": {
+      "file": "../previews/weave.png",
+      "alt": "Sedge Weave material swatch"
+    }
+  }
+}

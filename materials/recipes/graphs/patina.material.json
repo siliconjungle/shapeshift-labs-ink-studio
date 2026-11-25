@@ -1,0 +1,1092 @@
+{
+  "format": "ink-studio/material-graph",
+  "version": 1,
+  "id": "patina",
+  "graph": {
+    "inputs": {
+      "resolution": {
+        "definition": {
+          "type": "number",
+          "default": 128
+        }
+      },
+      "seed": {
+        "definition": {
+          "type": "number",
+          "default": 41
+        }
+      },
+      "relief": {
+        "definition": {
+          "type": "number",
+          "default": 1.4
+        }
+      },
+      "age": {
+        "definition": {
+          "type": "number",
+          "default": 0.57
+        }
+      },
+      "scale": {
+        "definition": {
+          "type": "number",
+          "default": 1
+        }
+      },
+      "pit": {
+        "definition": {
+          "type": "number",
+          "default": 0.6
+        }
+      }
+    },
+    "nodes": {
+      "oxidationBandsOptions": {
+        "op": "data.record",
+        "inputs": {
+          "tiling": "wrap",
+          "extent": [
+            6,
+            8
+          ],
+          "octaves": 5,
+          "gain": 0.67
+        }
+      },
+      "oxidationBands": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "fractal"
+        }
+      },
+      "oxideIslandsOptions": {
+        "op": "data.record",
+        "inputs": {
+          "tiling": "wrap",
+          "extent": [
+            16,
+            14
+          ],
+          "jitter": 0.92
+        }
+      },
+      "oxideIslands": {
+        "op": "image.noise",
+        "inputs": {
+          "family": "worley"
+        }
+      },
+      "oxidationFrontBase": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "oxidationFrontField": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "oxidationFrontDetail": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": 0.19,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "oxidationFront": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "add",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "verdigrisCoverageOptions": {
+        "op": "data.record",
+        "inputs": {
+          "softness": 0.085
+        }
+      },
+      "verdigrisCoverage": {
+        "op": "image.threshold",
+        "inputs": {}
+      },
+      "burnishedCopper": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#572b30"
+              ],
+              [
+                0.3333333333333333,
+                "#a45138"
+              ],
+              [
+                0.6666666666666666,
+                "#d0814e"
+              ],
+              [
+                1,
+                "#efb179"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "malachite": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#173b42"
+              ],
+              [
+                0.25,
+                "#25656a"
+              ],
+              [
+                0.5,
+                "#499281"
+              ],
+              [
+                0.75,
+                "#84b199"
+              ],
+              [
+                1,
+                "#b7ccb0"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "oxidePits": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "pitStrength": {
+        "op": "image.uniform",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32",
+            "sampling": "linear",
+            "tiling": {
+              "u": "wrap",
+              "v": "wrap"
+            }
+          }
+        }
+      },
+      "pitDepth": {
+        "op": "image.channelMath",
+        "inputs": {
+          "b": -1,
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "pittedReliefBase": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "pittedReliefField": {
+        "op": "image.convert",
+        "inputs": {
+          "descriptor": {
+            "intent": "data",
+            "precision": "float32"
+          }
+        }
+      },
+      "pittedReliefDetail": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "multiply",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "pittedRelief": {
+        "op": "image.channelMath",
+        "inputs": {
+          "operation": "add",
+          "options": {
+            "precision": "float32"
+          }
+        }
+      },
+      "oxidizedCopper": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "copy"
+        }
+      },
+      "metalness": {
+        "op": "image.curve",
+        "inputs": {
+          "curve": {
+            "stops": [
+              [
+                0,
+                0.94
+              ],
+              [
+                1,
+                0.13
+              ]
+            ],
+            "interpolation": "smooth"
+          }
+        }
+      },
+      "materialHeight": {
+        "op": "image.toHeight",
+        "inputs": {
+          "units": "art-px"
+        }
+      },
+      "tangentNormal": {
+        "op": "image.heightToNormal",
+        "inputs": {
+          "options": {
+            "method": "central",
+            "border": "wrap"
+          }
+        }
+      },
+      "roughnessResponse": {
+        "op": "image.curve",
+        "inputs": {
+          "curve": {
+            "stops": [
+              [
+                0,
+                0.28
+              ],
+              [
+                1,
+                0.79
+              ]
+            ],
+            "interpolation": "smooth"
+          }
+        }
+      },
+      "previewLight": {
+        "op": "image.emboss",
+        "inputs": {
+          "options": {
+            "azimuth": -135,
+            "elevation": 37,
+            "strength": 0.86,
+            "bias": 0.68,
+            "border": "wrap"
+          }
+        }
+      },
+      "previewLightRamp": {
+        "op": "image.gradientMap",
+        "inputs": {
+          "ramp": {
+            "stops": [
+              [
+                0,
+                "#382947"
+              ],
+              [
+                0.29,
+                "#776477"
+              ],
+              [
+                0.68,
+                "#e8e2db"
+              ],
+              [
+                1,
+                "#fff8e6"
+              ]
+            ],
+            "interpolation": "smooth"
+          },
+          "options": {
+            "precision": "unorm8"
+          }
+        }
+      },
+      "preview": {
+        "op": "image.blend",
+        "inputs": {
+          "mode": "multiply",
+          "opacity": 0.89
+        }
+      },
+      "displayPreview": {
+        "op": "image.toDisplay",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "baseColor": {},
+      "height": {},
+      "normal": {},
+      "roughness": {},
+      "mask": {},
+      "metalness": {},
+      "preview": {},
+      "previewDisplay": {}
+    },
+    "groups": {},
+    "links": {
+      "link-ea07b034736f5ba13793c9ba": {
+        "from": {
+          "input": "scale"
+        },
+        "to": {
+          "node": "oxidationBandsOptions",
+          "slot": "inputs",
+          "port": "scale"
+        }
+      },
+      "link-6641c7c885e322fdf007e04b": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "oxidationBandsOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-c3b7609cbe0f0fcf8775198f": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "oxidationBands",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-41413eb7755b97e21c7e2604": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "oxidationBands",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-73b1cf1d713c2dc3bd47e4fc": {
+        "from": {
+          "node": "oxidationBandsOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "oxidationBands",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-5a923e7a3172c11137460c3b": {
+        "from": {
+          "input": "seed"
+        },
+        "to": {
+          "node": "oxideIslandsOptions",
+          "slot": "inputs",
+          "port": "seed"
+        }
+      },
+      "link-d016bb8ba81c48bfe46f7646": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "oxideIslands",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-437973c26536c921fc5cdc21": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "oxideIslands",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-cc855dcfd709830e4f4b8fcc": {
+        "from": {
+          "node": "oxideIslandsOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "oxideIslands",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-c2cdbd908a96f430e41cc67d": {
+        "from": {
+          "node": "oxidationBands",
+          "port": "value"
+        },
+        "to": {
+          "node": "oxidationFrontBase",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-5d1adf2e6deca74a328eeae3": {
+        "from": {
+          "node": "oxideIslands",
+          "port": "value"
+        },
+        "to": {
+          "node": "oxidationFrontField",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-f0e4c3338b363f10c044ca6a": {
+        "from": {
+          "node": "oxidationFrontField",
+          "port": "value"
+        },
+        "to": {
+          "node": "oxidationFrontDetail",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-52e6df926a599c90a7fb349a": {
+        "from": {
+          "node": "oxidationFrontBase",
+          "port": "value"
+        },
+        "to": {
+          "node": "oxidationFront",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-1035d5b189f7720455a49988": {
+        "from": {
+          "node": "oxidationFrontDetail",
+          "port": "value"
+        },
+        "to": {
+          "node": "oxidationFront",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-d276db6b8536b40537bd05b0": {
+        "from": {
+          "input": "age"
+        },
+        "to": {
+          "node": "verdigrisCoverageOptions",
+          "slot": "inputs",
+          "port": "level"
+        }
+      },
+      "link-b33dd8281688c307a4c23823": {
+        "from": {
+          "node": "oxidationFront",
+          "port": "value"
+        },
+        "to": {
+          "node": "verdigrisCoverage",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-298f11d30403211617b3988b": {
+        "from": {
+          "node": "verdigrisCoverageOptions",
+          "port": "value"
+        },
+        "to": {
+          "node": "verdigrisCoverage",
+          "slot": "inputs",
+          "port": "options"
+        }
+      },
+      "link-ee0364081d4602f72c6fdaa7": {
+        "from": {
+          "node": "oxidationBands",
+          "port": "value"
+        },
+        "to": {
+          "node": "burnishedCopper",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-600449bb101d77992e4befb6": {
+        "from": {
+          "node": "oxidationFront",
+          "port": "value"
+        },
+        "to": {
+          "node": "malachite",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-30db32309d3396f62496f31a": {
+        "from": {
+          "node": "verdigrisCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "oxidePits",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-f556130498d34965d09d9817": {
+        "from": {
+          "node": "oxideIslands",
+          "port": "value"
+        },
+        "to": {
+          "node": "oxidePits",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-0a5a9e282af24a1f98fbb90d": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "pitStrength",
+          "slot": "inputs",
+          "port": "width"
+        }
+      },
+      "link-657b95479d3cd2b95580f4cc": {
+        "from": {
+          "input": "resolution"
+        },
+        "to": {
+          "node": "pitStrength",
+          "slot": "inputs",
+          "port": "height"
+        }
+      },
+      "link-66e8fa9f1bac63f1a43c9cc6": {
+        "from": {
+          "input": "pit"
+        },
+        "to": {
+          "node": "pitStrength",
+          "slot": "inputs",
+          "port": "value"
+        }
+      },
+      "link-581dab715fa35a40f329d70b": {
+        "from": {
+          "node": "pitStrength",
+          "port": "value"
+        },
+        "to": {
+          "node": "pitDepth",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-f86ca309f360e48dd0f79403": {
+        "from": {
+          "node": "oxidationBands",
+          "port": "value"
+        },
+        "to": {
+          "node": "pittedReliefBase",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-6e8e507a6d7fda0f95c2bff3": {
+        "from": {
+          "node": "oxidePits",
+          "port": "value"
+        },
+        "to": {
+          "node": "pittedReliefField",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a0ef5b237ad05a20d7e1f100": {
+        "from": {
+          "node": "pittedReliefField",
+          "port": "value"
+        },
+        "to": {
+          "node": "pittedReliefDetail",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-5f98beb6bc5eb2a081098d93": {
+        "from": {
+          "node": "pitDepth",
+          "port": "value"
+        },
+        "to": {
+          "node": "pittedReliefDetail",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-098b06f5f701b715b4d5c170": {
+        "from": {
+          "node": "pittedReliefBase",
+          "port": "value"
+        },
+        "to": {
+          "node": "pittedRelief",
+          "slot": "inputs",
+          "port": "a"
+        }
+      },
+      "link-8d474988b39f9583103b0541": {
+        "from": {
+          "node": "pittedReliefDetail",
+          "port": "value"
+        },
+        "to": {
+          "node": "pittedRelief",
+          "slot": "inputs",
+          "port": "b"
+        }
+      },
+      "link-823421d23d49175d94cd5638": {
+        "from": {
+          "node": "burnishedCopper",
+          "port": "value"
+        },
+        "to": {
+          "node": "oxidizedCopper",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-f044951b83c7633e57a9be72": {
+        "from": {
+          "node": "malachite",
+          "port": "value"
+        },
+        "to": {
+          "node": "oxidizedCopper",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-d15de140f7cd0e3bce2979b7": {
+        "from": {
+          "node": "verdigrisCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "oxidizedCopper",
+          "slot": "inputs",
+          "port": "mask"
+        }
+      },
+      "link-5adb98da5a0a4c8ad413cb63": {
+        "from": {
+          "node": "verdigrisCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "metalness",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-72c81b6fdd71715028a992ce": {
+        "from": {
+          "node": "pittedRelief",
+          "port": "value"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-7932fc3572f9f4c80600b897": {
+        "from": {
+          "input": "relief"
+        },
+        "to": {
+          "node": "materialHeight",
+          "slot": "inputs",
+          "port": "scale"
+        }
+      },
+      "link-6047479b518d64ed4f844fdf": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "tangentNormal",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-94788797b346010371dc32e1": {
+        "from": {
+          "node": "verdigrisCoverage",
+          "port": "value"
+        },
+        "to": {
+          "node": "roughnessResponse",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a21d99f38085fcf38ab84390": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLight",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-a6c53800b0e43fc877dbee7e": {
+        "from": {
+          "node": "previewLight",
+          "port": "value"
+        },
+        "to": {
+          "node": "previewLightRamp",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-75e9c7df85e791422d7a6fdb": {
+        "from": {
+          "node": "oxidizedCopper",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "background"
+        }
+      },
+      "link-d29fe1c5884cf934cfbb2a7e": {
+        "from": {
+          "node": "previewLightRamp",
+          "port": "value"
+        },
+        "to": {
+          "node": "preview",
+          "slot": "inputs",
+          "port": "foreground"
+        }
+      },
+      "link-c352cbbdc72b4c5c4e273fa9": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "node": "displayPreview",
+          "slot": "inputs",
+          "port": "source"
+        }
+      },
+      "link-0f9283946b735cbc9f680bdf": {
+        "from": {
+          "node": "oxidizedCopper",
+          "port": "value"
+        },
+        "to": {
+          "output": "baseColor"
+        }
+      },
+      "link-148e187fc906e84cde5c5c4c": {
+        "from": {
+          "node": "materialHeight",
+          "port": "value"
+        },
+        "to": {
+          "output": "height"
+        }
+      },
+      "link-2beb1315e8b6b4ae6dbbba87": {
+        "from": {
+          "node": "tangentNormal",
+          "port": "value"
+        },
+        "to": {
+          "output": "normal"
+        }
+      },
+      "link-781ad7aba89d261554594672": {
+        "from": {
+          "node": "roughnessResponse",
+          "port": "value"
+        },
+        "to": {
+          "output": "roughness"
+        }
+      },
+      "link-787e0108c4644b99c65a4e1e": {
+        "from": {
+          "node": "verdigrisCoverage",
+          "port": "value"
+        },
+        "to": {
+          "output": "mask"
+        }
+      },
+      "link-b3044221bbf24260f7c763b0": {
+        "from": {
+          "node": "metalness",
+          "port": "value"
+        },
+        "to": {
+          "output": "metalness"
+        }
+      },
+      "link-aba8cba83ef380fe1e194816": {
+        "from": {
+          "node": "preview",
+          "port": "value"
+        },
+        "to": {
+          "output": "preview"
+        }
+      },
+      "link-cc4f68d2b85426cd5c2d2c80": {
+        "from": {
+          "node": "displayPreview",
+          "port": "value"
+        },
+        "to": {
+          "output": "previewDisplay"
+        }
+      }
+    }
+  },
+  "settings": {
+    "exports": {
+      "preview": {
+        "output": "previewDisplay",
+        "format": "png"
+      }
+    },
+    "outputUsages": {
+      "baseColor": {
+        "usage": "baseColor",
+        "label": "Base color",
+        "order": 0,
+        "source": {
+          "output": "baseColor"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "height": {
+        "usage": "height",
+        "label": "Height",
+        "order": 1,
+        "source": {
+          "output": "height"
+        },
+        "format": {
+          "format": "json"
+        }
+      },
+      "normal": {
+        "usage": "normal",
+        "label": "Normal",
+        "order": 2,
+        "source": {
+          "output": "normal"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 8
+        }
+      },
+      "roughness": {
+        "usage": "roughness",
+        "label": "Roughness",
+        "order": 3,
+        "source": {
+          "output": "roughness"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      },
+      "mask": {
+        "usage": "mask.feature",
+        "label": "Feature mask",
+        "order": 4,
+        "source": {
+          "output": "mask"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      },
+      "metalness": {
+        "usage": "metalness",
+        "label": "Metalness",
+        "order": 5,
+        "source": {
+          "output": "metalness"
+        },
+        "format": {
+          "format": "png",
+          "bitDepth": 16
+        }
+      }
+    }
+  },
+  "resources": {},
+  "controls": {
+    "resolution": {
+      "input": "resolution",
+      "label": "Texture size",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 48,
+      "max": 192,
+      "step": 8,
+      "units": "px",
+      "order": 0
+    },
+    "seed": {
+      "input": "seed",
+      "label": "Seed",
+      "group": "Bake",
+      "widget": "slider",
+      "min": 0,
+      "max": 9999,
+      "step": 1,
+      "order": 1
+    },
+    "relief": {
+      "input": "relief",
+      "label": "Relief depth",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0,
+      "max": 4,
+      "step": 0.05,
+      "units": "art-px",
+      "order": 2
+    },
+    "age": {
+      "input": "age",
+      "label": "Oxidation threshold",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.38,
+      "max": 0.73,
+      "step": 0.01,
+      "order": 3
+    },
+    "scale": {
+      "input": "scale",
+      "label": "Bloom frequency",
+      "group": "Pattern",
+      "widget": "slider",
+      "min": 0.55,
+      "max": 2.2,
+      "step": 0.05,
+      "order": 4
+    },
+    "pit": {
+      "input": "pit",
+      "label": "Pitting depth",
+      "group": "Surface",
+      "widget": "slider",
+      "min": 0,
+      "max": 1.35,
+      "step": 0.05,
+      "order": 5
+    }
+  },
+  "instances": {},
+  "label": "Copper Patina",
+  "metadata": {
+    "author": "Ink Studio",
+    "description": "Verdigris blooms around small pits, revealing flashes of copper.",
+    "tags": [
+      "Weathering",
+      "Recipe",
+      "patina"
+    ],
+    "materialModel": "pbr.metallic-roughness",
+    "visibility": {
+      "library": true,
+      "publication": "public"
+    },
+    "thumbnail": {
+      "file": "../previews/patina.png",
+      "alt": "Copper Patina material swatch"
+    }
+  }
+}

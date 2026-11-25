@@ -72,6 +72,8 @@ For per-cell map controls, independent seeds and overlap ordering, see [Map-driv
 
 For projected 2D and 3D signed shapes, terrain alignment and material bake maps, see [SDF Shape Splatter](material-shape-splatter.md). For stamp selection, inspection and UV mapping, see [Scatter mappers](material-scatter-mappers.md).
 
+For complete examples with exposed controls and map exports, see the [Material recipe library](material-recipe-library.md).
+
 ## Convert color to relief
 
 The `fx.relight` height socket accepts typed height in `art-px` and existing uncolored scalar rasters. A connection from a known RGB source fails graph validation. For dynamically sourced images, the socket validates their value before relighting. Convert deliberately with `image.toHeight`.
