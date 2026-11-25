@@ -432,7 +432,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     if (format==='codec') host.requireCodec(codec,'encode');
     return {name,output,format,...(encoding && {encoding}),...(codec && {type,codec,...(options && {options})})};
   });
-  const maps=outputUsages===undefined ? [] : OutputUsages.normalize(outputUsages,rootPlan.outputs);
+  const maps=data.freeze(outputUsages===undefined ? [] : OutputUsages.normalize(outputUsages,rootPlan.outputs));
   OutputUsages.checkPorts(maps,rootPlan.outputs);
   const mapIds=new Map(maps.map(row=>[row.id,row]));
   separateNames([...exports.map(entry=>entry.name),...maps.filter(row=>row.export).map(row=>row.id)],'Graph exports');

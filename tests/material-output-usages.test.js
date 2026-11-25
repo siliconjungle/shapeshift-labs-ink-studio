@@ -96,7 +96,9 @@ test('previews use the map intent and show packed data without alpha compositing
   assert.deepEqual(decode(inspect('relief').artifacts[0]), [0, 0, 0, 255, 255, 255, 255, 255]);
   assert.deepEqual(decode(inspect('normals').artifacts[0]), [0, 128, 255, 255, 128, 255, 128, 255]);
   assert.deepEqual(decode(inspect('ormh').artifacts[0]), [255, 0, 64, 255, 64, 128, 64, 255]);
-  assert.equal(inspect('pigment').report.materialPreview.mode, 'color');
+  const color = inspect('pigment').report;
+  assert.equal(color.materialPreview.mode, 'color');
+  assert.equal(Object.isFrozen(color.outputUsage.format), true);
   assert.throws(() => inspect('pigment', 'g'), /packed channel/);
   const frame = await project.previewFrame({ mask: { map: 'finish' }, alpha: { map: 'ormh', component: 'a' } });
   assert.deepEqual(frame.artifacts.map(row => row.file), ['previews/mask.png', 'previews/alpha.png']);
