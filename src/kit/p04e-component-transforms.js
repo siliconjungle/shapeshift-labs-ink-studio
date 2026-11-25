@@ -82,6 +82,16 @@ const meshComponentSnap = (function (K) {
     return { near: max, center: min*.5 + max*.5, far: min };
   }
 
+  function planeEquation(origin, normal) {
+    return {origin:origin.slice(),normal,distance:p=>V.dot(V.sub(p,origin),normal)};
+  }
+
+  function explicitPlane(plane, label = 'Align or flatten plane', space = 'world') {
+    if (!record(plane, ['origin', 'normal']) || !vector(plane.origin))
+      throw new TypeError('Use a plane with a ' + space + ' origin and normal');
+    return planeEquation(plane.origin,unit(plane.normal,label));
+  }
+
   function constraint(raw, picked, construction, pivot, frame, inverse) {
     const { kind, side, plane, point, removeCollapsed = false } = raw;
     const fields = kind === 'align' ? ['side', 'plane'] :
@@ -99,11 +109,8 @@ const meshComponentSnap = (function (K) {
     }
     if (kind === 'align' && !['near','center','far'].includes(side))
       throw new TypeError('Plane alignment needs a side of near, center, or far');
-    if (plane !== undefined && (!record(plane, ['origin', 'normal']) || !vector(plane.origin)))
-      throw new TypeError('Use a plane with a world origin and normal');
-    const origin = (plane === undefined ? construction.plane.origin : plane.origin).slice();
-    const normal = plane === undefined ? construction.axes[2] : unit(plane.normal,'Align or flatten plane');
-    const distance = p => V.dot(V.sub(p,origin),normal);
+    const {origin,normal,distance} = plane === undefined ?
+      planeEquation(construction.plane.origin,construction.axes[2]) : explicitPlane(plane);
     const before = extent(picked,distance);
     const offset = kind === 'align' ? -before[side] : undefined;
     const localNormal = M.app(inverse.matrix,normal);
@@ -501,5 +508,5 @@ const meshComponentSnap = (function (K) {
   }
 
   K.meshTopology = Object.freeze({ ...topology, planTransform });
-  return Object.freeze({ snapField, meshTarget, edgeEnds, average, usesConstructionPlane });
+  return Object.freeze({ snapField, meshTarget, edgeEnds, average, usesConstructionPlane, explicitPlane });
 })(KIT);

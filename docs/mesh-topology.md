@@ -844,6 +844,7 @@ report and lists ordered `operations`. Choose IDs from that report or
 | `split-quad` | Choose quads with a `faces` list or revision-checked face `selection`. Turn the current two render triangles into editable faces with a shared authored edge. |
 | `join-triangles` | Choose two triangles with an `edge`, a two-ID `faces` list, or a revision-checked face `selection`. Retain their shared edge as the quad's render diagonal. |
 | `merge-tiles` | Choose two polygonal tiles with an `edge`, a two-ID `faces` list, or a revision-checked face `selection`. Remove the shared edge and retain the outer ring. |
+| `straighten-quad` | Project selected four-corner faces onto a mesh-local plane or straighten one quad against a neighboring face. |
 
 Each winding step shows the face normals and corner orders before and
 after, plus any inconsistent edges incident to the reversed faces. Supply
@@ -974,6 +975,37 @@ multiple crops. Affected bakes are invalidated in the same edit.
 ink-studio mesh-topology repair tiles.json merge.json --object sign
 ink-studio mesh-topology repair tiles.json merge.json --object sign --out merged.json --report merge-receipt.json
 node examples/tileset-pick/tile-merge-demo.cjs tile-merge-review
+```
+
+### Straighten a warped quad
+
+Add an operation to a revision-pinned repair request. Supply a
+`faces` list or a saved face `selection`.
+
+```json
+{ "kind": "straighten-quad", "faces": ["cover"], "plane": { "origin": [0, 0, 0], "normal": [0, 0, 1] } }
+```
+
+The plane coordinates are local to the retained mesh. Each selected
+corner projects along the plane normal. Choose `"neighbor": "brace"`
+in place of `plane` to use the geometric orientation of one adjoining
+face as the guide. This option targets a single quad and requires a
+manifold shared edge. The plane passes through that edge, with its
+normal adjusted to stay perpendicular to the edge when the guide is
+warped. Both hinge vertices stay fixed.
+
+The preview shows the resolved plane and each corner's vertex ID,
+positions, displacement, and signed distance before and after. The
+`adjacent` entries show any other face moved by a shared vertex.
+The repair keeps face and corner IDs, paint UVs, skin weights, and
+the authored render diagonal. A projection that would collapse a
+polygon or make its diagonal invalid blocks the edit and still shows
+the proposed positions.
+
+```sh
+ink-studio mesh-topology repair warped.json straighten.json --object panel
+ink-studio mesh-topology repair warped.json straighten.json --object panel --out straight.json --report straighten-receipt.json
+node examples/tileset-pick/quad-straighten-demo.cjs quad-straighten-review
 ```
 
 ### Repair weights and review changes
