@@ -1,0 +1,21 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const Ink = require('../..');
+const files = require('../../cli/asset-files.js'), PNG = require('../../cli/png.js');
+const { mosaicSources, mosaicGraph, mosaicPreview } = require('./mosaic.js');
+const out = path.resolve(process.argv[2] ?? 'studio/out/typed-flood-regions');
+const at = name => path.join(out,name);
+const graph = mosaicGraph();
+for (const [name,raster] of Object.entries(mosaicSources()))
+  graph.inputs[name] = { type:'raster', default:{...raster, data:Array.from(raster.data)} };
+const material = at('harbor-mosaic.material.json');
+Ink.writeMaterialGraph(material,Ink.openMaterialGraph(graph,{id:'harbor-mosaic'}));
+const project = Ink.readGraphProject(material), {outputs,artifacts} = project.run();
+assert.ok(outputs.field.regions.some(row => row.crosses.every(Boolean) && !row.winding.some(Boolean)));
+for (const artifact of artifacts) files.write(at(artifact.file),artifact.bytes);
+const {width,height,data} = mosaicPreview(outputs);
+files.write(at('glazed-tile.png'),PNG.encode(width,height,data,4));
+for (const name of ['index.html','mosaic.js']) files.write(at(name),fs.readFileSync(path.join(__dirname,name)));
+files.write(at('ink-studio.browser.js'),Buffer.from(Ink.bundle()));
+console.log('Wrote Harbor Mosaic with a tile, editable graph and region-field exports to ' + out);

@@ -196,6 +196,7 @@ All checked-in guides, indexed by title and section headings.
 - [Consistent material controls](../material-controls.md)
 - [Two-way material conversion](../material-conversion.md)
 - [Material curves and gradients](../material-curves-gradients.md)
+- [Typed Flood Fill region maps](../material-flood-region-maps.md)
 - [Multi-channel material ports](../material-graph-ports.md)
 - [Typed height and normal filters](../material-height-normal-filters.md)
 - [Seasonal and wear histories](../material-histories.md)

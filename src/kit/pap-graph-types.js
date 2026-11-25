@@ -160,6 +160,7 @@
     colorImage: value => K.procedural.graphImages.valid(value, 'color'),
     heightImage: value => K.procedural.graphImages.valid(value, 'height'),
     normalImage: value => K.procedural.graphImages.valid(value, 'normal'),
+    regionField: value => K.procedural.graphImages.regions.valid(value),
     reliefHeight: value => value === null || scalarRaster(value) ||
       K.procedural.graphImages.valid(value, 'height') && value.descriptor.units === 'art-px',
     materialChannels: value => K.procedural.materialChannels.valid(value),
@@ -208,6 +209,7 @@
     colorImage: ['typed color image'],
     heightImage: ['typed height image'],
     normalImage: ['typed normal image'],
+    regionField: ['versioned flood region field'],
     reliefHeight: ['height in art pixels'],
     materialChannels: ['material channel packet'],
     cameraGrid: ['camera grid with view and viewport', 'record']

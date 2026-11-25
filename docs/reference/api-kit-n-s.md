@@ -432,11 +432,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelPaintTools.four` | value | `array` |  |
 | `KIT.pixelPaintTools.freehand` | function | `(emit,{ pixelPerfect = false } = {})` | [source](../../src/pixel-paint-tools.js) |
 | `KIT.pixelPaintTools.insideEllipse` | function | `(x,y,w,h)` | [source](../../src/pixel-paint-tools.js) |
+| `KIT.pixelPaintTools.labelComponents` | function | `(width, height, steps, selected, { minArea = 1, wrapX = false, wrapY = false, stable = false, chart, describe } = {})` | [source](../../src/pixel-paint-tools.js) |
 | `KIT.pixelPaintTools.region` | function | `(width,height,point,matches,diagonal = false)` | [source](../../src/pixel-paint-tools.js) |
 | `KIT.pixelPaintTools.runs` | function | `(width,indices)` | [source](../../src/pixel-paint-tools.js) |
 | `KIT.pixelPaintTools.segment` | function | `([x,y],[toX,toY],emit)` | [source](../../src/pixel-paint-tools.js) |
 | `KIT.pixelPaintTools.staircase` | function | `(width,height,spec,grid)` | [source](../../src/pixel-paint-tools.js) |
-| `KIT.pixelPaintTools.visit` | function | `(seed, marks, id, matches, { width,height,steps,queue,wrapX,wrapY })` | [source](../../src/pixel-paint-tools.js) |
+| `KIT.pixelPaintTools.visit` | function | `(seed, marks, id, matches, { width,height,steps,queue,wrapX,wrapY,chart })` | [source](../../src/pixel-paint-tools.js) |
 
 ## KIT.pixelProtection
 

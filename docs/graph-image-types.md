@@ -58,6 +58,8 @@ For map-driven distortion, see [Typed material displacement filters](material-im
 
 For physical relief, tangent frames, and normal orientation, see [Typed height and normal filters](material-height-normal-filters.md).
 
+For reusable region labels and seam-continuous UVs, see [Typed Flood Fill region maps](material-flood-region-maps.md).
+
 ## Convert color to relief
 
 The `fx.relight` height socket accepts typed height in `art-px` and existing uncolored scalar rasters. A connection from a known RGB source fails graph validation. For dynamically sourced images, the socket validates their value before relighting. Convert deliberately with `image.toHeight`.
