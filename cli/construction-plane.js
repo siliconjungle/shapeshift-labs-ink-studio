@@ -15,24 +15,33 @@ function coordinates(value, count, flag) {
   return values;
 }
 
-function command(file, extra, options, toolkit, openEditor) {
+function intervals(value, flag) {
+  if (value.includes(',')) return coordinates(value,2,flag);
+  return coordinates(value,1,flag)[0];
+}
+
+function command(file, extra, options, toolkit, openEditor, projectTexelsPerUnit) {
   const cameraFlags = ['yaw','pitch','at','camera-shot'];
   const edgeFlags = ['edge-object','edge','edge-from','edge-at','tilt','reference-up'];
   const switches = ['from-camera','detach-edge'];
   const snapFields = {object:'object',vertex:'vertex',instance:'instance','instance-kind':'instanceKind'};
   const snapFlags = ['snap-origin','selection',...Object.keys(snapFields)];
-  const allowed = [...axes,'grid','out','lock',...switches,...cameraFlags,...edgeFlags,...snapFlags];
+  const allowed = [...axes,'grid','rounding','grid-preset','grid-tileset','module-size','out','lock',
+    ...switches,...cameraFlags,...edgeFlags,...snapFlags];
   const name = value=>typeof value === 'string' && value.trim();
-  const {grid,out,selection,'snap-origin':snapKind,'from-camera':fromCamera,'detach-edge':detach} = options;
+  const {grid,rounding,out,selection,'grid-preset':preset,'grid-tileset':sheet,'module-size':size,
+    'snap-origin':snapKind,'from-camera':fromCamera,'detach-edge':detach} = options;
   const lock = typeof options.lock === 'string' ? options.lock.toLowerCase() : options.lock;
   const cameraPick = fromCamera === true || lock !== undefined && lock !== 'off' ||
     cameraFlags.some(key=>options[key] !== undefined);
   const edgePick = edgeFlags.some(key=>options[key] !== undefined);
-  const scalarFlags = ['grid','yaw','pitch','at','edge-at','tilt'];
+  const scalarFlags = ['yaw','pitch','at','edge-at','tilt'];
   if (!name(file) || extra.length || Object.entries(options).some(([key,value])=>!allowed.includes(key) ||
         (switches.includes(key) ? value !== true : !name(value))) ||
       scalarFlags.some(key=>options[key] !== undefined && (!number.test(options[key]) || !Number.isFinite(Number(options[key])))) ||
       lock !== undefined && !['x','y','z','off'].includes(lock) ||
+      grid !== undefined && preset !== undefined || sheet !== undefined && preset !== 'brick' ||
+      size !== undefined && preset !== 'module' ||
       cameraPick && ['right','up'].some(key=>options[key] !== undefined) ||
       snapKind === undefined && snapFlags.some(key=>options[key] !== undefined) ||
       snapKind !== undefined && (options.origin !== undefined || !['vertex','instance','bounds','average'].includes(snapKind)) ||
@@ -44,9 +53,14 @@ function command(file, extra, options, toolkit, openEditor) {
     throw new RangeError('Write a separate scene JSON file beside its source');
   const changes = Object.fromEntries(axes.filter(axis=>options[axis] !== undefined)
     .map(axis=>[axis,coordinates(options[axis],3,'--'+axis)]));
-  if (grid !== undefined) changes.grid = Number(grid);
+  if (grid !== undefined) changes.grid = intervals(grid,'--grid');
+  if (rounding !== undefined) changes.rounding = rounding;
   if (lock === 'off' && !cameraPick) changes.lock = null;
   const editor = openEditor(input), scene = editor.snapshot(), plane = toolkit.KIT.authoring.constructionPlane;
+  const gridPreset = preset === undefined ? undefined : plane.gridPreset(scene,
+    {kind:preset,tileset:sheet,moduleSize:size === undefined ? undefined : intervals(size,'--module-size')},
+    {projectTexelsPerUnit});
+  if (gridPreset) changes.grid = gridPreset.grid;
   let before;
   try {
     before = editor.constructionPlane();
@@ -86,7 +100,7 @@ function command(file, extra, options, toolkit, openEditor) {
   }
   const camera = cameraPick && {axis:picked.axis,kept:picked.kept,pose:picked.camera};
   process.stdout.write(JSON.stringify({format:'ink-studio/construction-plane-edit',version:1,before,after,axes:basis,
-    ...(camera && {camera}),...(snap && {snap})},null,2)+'\n');
+    ...(camera && {camera}),...(snap && {snap}),...(gridPreset && {gridPreset})},null,2)+'\n');
 }
 
 module.exports = {command,coordinates};

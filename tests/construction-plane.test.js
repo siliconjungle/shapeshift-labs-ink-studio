@@ -382,3 +382,83 @@ test('headless origin snap previews and publishes vertex, instance, bounds, and 
   assert.equal(run(...prefix,'bounds','--object','wall','--selection','selection.json','--out','selection.json').status,1);
   assert.deepEqual(read('draft.json'),source);
 });
+
+test('retained rectangular grids round signed placement addresses and alignment consistently',()=>{
+  const guides = ink.load().KIT.authoring.constructionPlane;
+  const editor = ink.createSceneEditor(scene);
+  const at = [1.65,-1.75];
+  const targets = [['nearest',[2,-2]],['floor',[1,-2]],['ceiling',[2,-1]]];
+  for (const [rounding,gridAt] of targets) {
+    const stored = editor.setConstructionPlane({origin:[10,20,30],right:[1,0,-1],up:[0,1,0],grid:[.25,.5],rounding});
+    const frame = guides.resolve(stored);
+    const placed = editor.planTilesetFace({...stamp,planeAt:at,snapGrid:true});
+    assert.deepEqual(placed.planeAt,at);
+    assert.deepEqual(placed.gridAt,gridAt);
+    close(placed.vertices[0].position,guides.point(frame,gridAt));
+    close(editor.planTilesetFace({...stamp,planeAt:at}).vertices[0].position,guides.point(frame,at));
+    const point = guides.point(frame,at);
+    assert.deepEqual(guides.project(frame,point,'grid').gridAt,gridAt);
+    assert.deepEqual(guides.project(frame,guides.point(frame,[-3,4]),'grid').gridAt,[-3,4]);
+    close(guides.project(frame,point,'plane').gridAt,at);
+  }
+  assert.deepEqual(guides.quantize(guides.resolve(),[-1.5,1.5]),[-1,2]);
+  assert.throws(()=>editor.planTilesetFace({...stamp,planeAt:undefined,snapGrid:true}),/plane placement/);
+  assert.throws(()=>editor.setConstructionPlane({grid:[1,0]}),/positive/);
+  assert.throws(()=>editor.setConstructionPlane({rounding:['floor']}),/rounding/);
+  assert.equal(ink.createSceneEditor(JSON.parse(JSON.stringify(editor.snapshot()))).constructionPlane().rounding,'ceiling');
+  editor.undo();
+  assert.equal(editor.constructionPlane().rounding,'floor');
+});
+
+test('grid presets resolve density, authored tile extents, and custom module dimensions',()=>{
+  const guides = ink.load().KIT.authoring.constructionPlane;
+  const base = {id:'preset-grid',style:'slate',solids:[]};
+  assert.deepEqual(guides.gridPreset(base,{kind:'texel'}).grid,1/16);
+  assert.deepEqual(guides.gridPreset(base,{kind:'texel'},{projectTexelsPerUnit:32}).grid,1/32);
+  assert.deepEqual(guides.gridPreset(base,{kind:'brick'}).grid,[1,.5]);
+  const source = {...base,tilesetDefaults:{texelsPerUnit:8,tileSize:{width:4,height:3}},tilesets:{
+    masonry:{...ink.createBlankTileset({width:16,height:8}),tileSize:{width:8,height:2,paddingX:4,paddingY:1}}
+  }};
+  assert.deepEqual(guides.gridPreset(source,{kind:'brick'}).grid,[.5,.375]);
+  assert.deepEqual(guides.gridPreset(source,{kind:'brick',tileset:'masonry'},{projectTexelsPerUnit:32}).grid,[1,.25]);
+  assert.deepEqual(guides.gridPreset(source,{kind:'module',moduleSize:[2,1.5]}).grid,[2,1.5]);
+  assert.equal(guides.gridPreset(source,{kind:'module'}).grid,1);
+  assert.throws(()=>guides.gridPreset(source,{kind:'module',moduleSize:null}),/positive/);
+  assert.throws(()=>guides.gridPreset(source,{kind:'texel',tileset:'masonry'}),/grid preset/);
+});
+
+test('headless brick preset and rounding round stamps and mesh alignment on one saved plane',t=>{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-grid-preset-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const file = name=>path.join(dir,name);
+  const source = edgeScene();
+  source.tilesets = {...source.tilesets,paint:{...source.tilesets.paint,tileSize:{width:4,height:3}}};
+  fs.writeFileSync(file('draft.json'),JSON.stringify(source));
+  const cli = path.resolve(__dirname,'../cli/ink-studio.js');
+  const run = (...args)=>spawnSync(process.execPath,[cli,...args],{cwd:dir,encoding:'utf8'});
+  const json = (...args)=>{
+    const result=run(...args);
+    assert.equal(result.status,0,result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  const command=['mesh-topology','plane','draft.json','--grid-preset','brick','--grid-tileset','paint','--rounding','ceiling'];
+  const preview=json(...command);
+  assert.deepEqual(preview.gridPreset.grid,[1,.75]);
+  assert(!fs.existsSync(file('grid.json')));
+  assert.deepEqual(json(...command,'--out','grid.json'),preview);
+  const placed=json('tileset','stamp','--scene','grid.json','--object','guide','--face','sample','--id','paint',
+    '--x','0','--y','0','--width','4','--height','3','--plane','-.67,1.2','--snap-grid');
+  assert.deepEqual(placed.gridAt,[0,2]);
+  assert.deepEqual(placed.vertices[0].position,[0,1.5,0]);
+  const aligned=json('mesh-topology','move','grid.json','--object','wall','--vertex','beam-tr',
+    '--by','.2,.1,0','--align','grid');
+  assert.deepEqual(aligned.snap.gridAt,[3,2]);
+  assert.deepEqual(aligned.vertices[0].after,[3,1.5,0]);
+  assert.equal(aligned.constructionPlane.rounding,'ceiling');
+  const custom=json('mesh-topology','plane','grid.json','--grid','.125,.5','--rounding','floor');
+  assert.deepEqual(custom.after.grid,[.125,.5]);
+  const module=json('mesh-topology','plane','grid.json','--grid-preset','module','--module-size','2,1.5');
+  assert.deepEqual(module.after.grid,[2,1.5]);
+  assert.equal(run(...command,'--grid','1','--out','blocked.json').status,1);
+  assert(!fs.existsSync(file('blocked.json')));
+});

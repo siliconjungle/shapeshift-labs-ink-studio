@@ -145,7 +145,7 @@ function maintenance(action, file, input, rest, opt, meshTopology, openEditor) {
   if (report) write(report, result || plan.report);
 }
 
-function command([action, file, input, ...rest], opt, toolkit, { build, openEditor } = {}) {
+function command([action, file, input, ...rest], opt, toolkit, { build, openEditor, projectTexelsPerUnit } = {}) {
   const { KIT: { meshTopology } } = toolkit;
   if (action === 'transfer-attachments')
     return require('./mesh-attachment-transfer.js').command([file,input,...rest],opt,toolkit);
@@ -160,7 +160,7 @@ function command([action, file, input, ...rest], opt, toolkit, { build, openEdit
   if (action === 'boolean') return require('./mesh-boolean-preview.js').command(file, input, rest, opt, toolkit, openEditor);
   if (action === 'bevel') return require('./mesh-bevel-preview.js').command(file, input, rest, opt, toolkit, openEditor);
   if (action === 'plane')
-    return require('./construction-plane.js').command(file,input === undefined ? rest : [input,...rest],opt,toolkit,openEditor);
+    return require('./construction-plane.js').command(file,input === undefined ? rest : [input,...rest],opt,toolkit,openEditor,projectTexelsPerUnit);
   if (action === 'move') return moveVertex(file,input,rest,opt,meshTopology,openEditor);
   if (opt.preview !== undefined) throw new TypeError('Use --preview with mesh-topology bevel or shading');
   if (opt.subdivision !== undefined) throw new TypeError('Use --subdivision with mesh-topology shading');

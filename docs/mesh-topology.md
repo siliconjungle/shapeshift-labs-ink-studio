@@ -180,6 +180,43 @@ editor's undo journal. Stamp requests take `planeAt:[u,v]`. A standalone
 Run `node examples/tileset-pick/construction-plane-demo.cjs plane-demo`
 to replay a relocated plane, two stamps, a pivot rotation, and grid alignment.
 
+### Set grid increments and rounding
+
+Use `--grid N` for equal intervals along right and up, or `--grid U,V`
+for independent intervals in scene units. The stored rounding mode
+applies to `--align grid` and to a tile stamp with `--snap-grid`.
+
+```sh
+ink-studio mesh-topology plane wall.json --grid .5,.25 --rounding floor --out course.json
+ink-studio mesh-topology plane wall.json --grid-preset texel --out texel-guide.json
+ink-studio mesh-topology plane wall.json --grid-preset brick --grid-tileset masonry --rounding ceiling --out brick-guide.json
+ink-studio mesh-topology plane wall.json --grid-preset module --module-size 2,1 --out module-guide.json
+ink-studio tileset stamp --scene brick-guide.json --selection brick.json --object wall --face next --plane 1.7,-.2 --snap-grid --out next.json
+```
+
+- `nearest` uses the closest intersection, with exact ties toward the
+  positive axis. It is the default.
+- `floor` rounds toward the negative end of each plane axis.
+- `ceiling` rounds toward the positive end of each plane axis.
+
+The `texel` preset uses one texel at the scene or project density, with
+16 texels per unit as the default. `brick` uses the selected sheet's
+configured tile width and height without gutters. With no sheet, it
+uses the scene default tile dimensions or a 16×8 texel brick. `module`
+uses the supplied scene-unit dimensions or one unit on each axis.
+The preview reports the resolved preset. The saved guide stores the
+numeric increments for repeatable placement.
+
+A fractional `--plane U,V` address gives an exact position. Add
+`--snap-grid` to round it and see the chosen `gridAt` in the preview.
+In Node, pass `snapGrid:true` with `planeAt` when stamping. Use
+`KIT.authoring.constructionPlane.gridPreset(scene,{kind,tileset,moduleSize})`
+to resolve presets and `editor.setConstructionPlane({grid,rounding})`
+to save the settings.
+
+Run `node examples/tileset-pick/construction-grid-demo.cjs grid-demo`
+to compare the same address under all three rounding modes.
+
 ### Pick and lock a plane from the camera
 
 Use `--from-camera` to choose the most face-on world plane from the

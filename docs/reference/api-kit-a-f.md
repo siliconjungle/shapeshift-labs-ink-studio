@@ -757,9 +757,11 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.brushRegions.prepare` | function | `(spec, roles)` | [source](../../src/kit/p26-brush-regions.js) |
 | `KIT.authoring.constructionPlane` | namespace |  |  |
 | `KIT.authoring.constructionPlane.forScene` | function | `(scene)` | [source](../../src/kit/p23-construction-plane.js) |
+| `KIT.authoring.constructionPlane.gridPreset` | function | `(scene, request, {projectTexelsPerUnit} = {})` | [guide](../mesh-topology.md#set-grid-increments-and-rounding), [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.pick` | function | `(raw, pose, {lock} = {})` | [guide](../mesh-topology.md#pick-and-lock-a-plane-from-the-camera), [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.point` | function | `(frame, at)` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.project` | function | `(frame, position, mode = 'plane')` | [source](../../src/kit/p23-construction-plane.js) |
+| `KIT.authoring.constructionPlane.quantize` | function | `(frame, at, worldMagnitude = 0)` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.resolve` | function | `(raw = {})` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.snapOrigin` | function | `(scene, request, {detachEdge = false} = {})` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.tilt` | function | `(scene, options)` | [guide](../mesh-topology.md#tilt-a-plane-from-an-existing-edge), [source](../../src/kit/p23-construction-plane.js) |

@@ -1,8 +1,9 @@
 /* Shared scene coordinates for placement, transform pivots and alignment. */
 (function (K) {
   const A = K.authoring, { V } = K, { freeze } = K.procedural.data;
-  const fields = ['origin','right','up','grid','lock','edgeAnchor'];
+  const fields = ['origin','right','up','grid','rounding','lock','edgeAnchor'];
   const names = ['x','y','z'];
+  const round = Object.freeze({nearest:Math.round,floor:Math.floor,ceiling:Math.ceil});
   const vector = (value,size) => Array.isArray(value) && value.length === size && Array.from(value).every(Number.isFinite);
 
   function edgeAnchor(raw) {
@@ -20,14 +21,18 @@
 
   function resolve(raw = {}) {
     if (!raw || Object.getPrototypeOf(raw) !== Object.prototype || Object.keys(raw).some(key=>!fields.includes(key)))
-      throw new TypeError('A construction plane needs origin, right, up, grid, and an optional axis lock or edge anchor');
-    const {origin=[0,0,0],right=[1,0,0],up=[0,1,0],grid=1,lock} = raw;
+      throw new TypeError('A construction plane needs an origin, axes, grid settings, and an optional axis lock or edge anchor');
+    const {origin=[0,0,0],right=[1,0,0],up=[0,1,0],grid=1,rounding,lock} = raw;
     const anchor = edgeAnchor(raw.edgeAnchor);
     if (lock != null && anchor) throw new TypeError('Choose an axis lock or an edge anchor');
     if (lock != null && !names.includes(lock)) throw new TypeError('Construction plane lock must be x, y, or z');
     if (![origin,right,up].every(value=>vector(value,3)))
       throw new TypeError('A construction plane needs finite XYZ vectors');
-    if (!Number.isFinite(grid) || grid<=0) throw new RangeError('Construction plane grid must be positive');
+    const positive = value=>Number.isFinite(value) && value>0;
+    if (!(positive(grid) || vector(grid,2) && grid.every(positive)))
+      throw new RangeError('Construction plane grid needs a positive interval or two positive intervals');
+    if (rounding !== undefined && (typeof rounding !== 'string' || !Object.hasOwn(round,rounding)))
+      throw new TypeError('Construction plane rounding must be nearest, floor, or ceiling');
     const r = Math.hypot(...right), u = Math.hypot(...up);
     if (!r || !u || !Number.isFinite(r) || !Number.isFinite(u))
       throw new RangeError('Construction plane axes need nonzero directions');
@@ -37,7 +42,8 @@
     const axes = [x,y,z].map(axis=>axis.map(value=>value || 0));
     if (lock != null && Math.abs(axes[2][names.indexOf(lock)]) < 1-1e-10)
       throw new RangeError('Construction plane normal must match its '+lock.toUpperCase()+' lock');
-    return freeze({plane:{origin:origin.slice(),right:right.slice(),up:up.slice(),grid,...(lock && {lock}),...(anchor && {edgeAnchor:anchor})},axes});
+    return freeze({plane:{origin:origin.slice(),right:right.slice(),up:up.slice(),grid:Array.isArray(grid) ? grid.slice() : grid,
+      ...(rounding !== undefined && {rounding}),...(lock && {lock}),...(anchor && {edgeAnchor:anchor})},axes});
   }
 
   function pick(raw, pose, {lock} = {}) {
@@ -120,13 +126,13 @@
   }
 
   function tilt(scene, options) {
-    const fields = ['object','edge','from','at','degrees','referenceUp','grid'];
+    const fields = ['object','edge','from','at','degrees','referenceUp','grid','rounding'];
     if (!options || Object.getPrototypeOf(options) !== Object.prototype || Object.keys(options).some(key=>!fields.includes(key)))
       throw new TypeError('Use a construction plane edge tilt request');
     const base = resolve(scene.constructionPlane);
     const prior = options.object === undefined ? base.plane.edgeAnchor : undefined;
     const {object=prior?.object,edge=prior?.edge,from,at=prior?.at ?? 0,degrees=prior?.degrees,
-      referenceUp,grid=base.plane.grid} = options;
+      referenceUp,grid=base.plane.grid,rounding=base.plane.rounding} = options;
     if ((options.object === undefined) !== (options.edge === undefined) ||
         ![object,edge].every(TargetSelectors.name) || !Number.isFinite(degrees))
       throw new TypeError('Choose an edge mesh, edge ID, and tilt in degrees');
@@ -148,7 +154,7 @@
     }
     const guide = referenceUp ?? prior?.referenceUp ?? axes.slice(1).find(direction=>projectedUp(right,direction));
     const anchor = edgeAnchor({object,edge,vertices,at,degrees,referenceUp:guide});
-    return edgeFrame({...base.plane,grid},anchor,source);
+    return edgeFrame({...base.plane,grid,rounding},anchor,source);
   }
 
   function mean(points) {
@@ -230,10 +236,43 @@
     return freeze({...edgeFrame(frame.plane,{...anchor,at},source),snap});
   }
 
+  function gridPreset(scene, request, {projectTexelsPerUnit} = {}) {
+    const {kind,tileset,moduleSize} = request ?? {};
+    if (!request || Object.getPrototypeOf(request) !== Object.prototype ||
+        Object.keys(request).some(key=>!['kind','tileset','moduleSize'].includes(key)) ||
+        !['texel','brick','module'].includes(kind) || tileset !== undefined && kind !== 'brick' ||
+        moduleSize !== undefined && kind !== 'module')
+      throw new TypeError('Use a texel, brick, or module construction grid preset');
+    if (kind === 'module') return freeze({kind,grid:resolve({grid:moduleSize === undefined ? 1 : moduleSize}).plane.grid});
+    const api = A.tilesets, sheets = api.prepare(scene.tilesets,scene.tilesetDefaults);
+    const texelsPerUnit = api.positiveScale(sheets.texelsPerUnit ?? projectTexelsPerUnit ?? 16,'Texels per unit');
+    let grid = 1/texelsPerUnit;
+    if (kind === 'brick') {
+      const {tileSize} = sheets.grid(tileset);
+      if (tileset !== undefined && !tileSize) throw new RangeError('Set tile dimensions for '+tileset+' before using its brick grid');
+      const {width,height} = tileSize ?? {width:16,height:8};
+      grid = [width/texelsPerUnit,height/texelsPerUnit];
+    }
+    return freeze({kind,grid:resolve({grid}).plane.grid,texelsPerUnit,...(tileset !== undefined && {tileset})});
+  }
+
+  const intervals = grid=>Array.isArray(grid) ? grid : [grid,grid];
+
+  function quantize(frame, at, worldMagnitude = 0) {
+    if (!vector(at,2)) throw new TypeError('Construction plane grid coordinates need a finite [u, v] pair');
+    const mode = round[frame.plane.rounding ?? 'nearest'], step = intervals(frame.plane.grid);
+    return at.map((value,i)=>{
+      // Projection through a rotated basis can put an on-grid value a few ULPs below an integer.
+      const integer = Math.round(value);
+      const epsilon = Math.min(1e-7,8*Number.EPSILON*Math.max(1,Math.abs(value),worldMagnitude/step[i]));
+      return (Math.abs(value-integer)<=epsilon ? integer : mode(value)) || 0;
+    });
+  }
+
   function point(frame, at) {
     if (!vector(at,2)) throw new TypeError('Construction plane grid coordinates need a finite [u, v] pair');
-    const {plane:{origin,grid},axes:[right,up]} = frame;
-    const result = V.mad(V.mad(origin,right,at[0]*grid),up,at[1]*grid);
+    const {plane:{origin,grid},axes:[right,up]} = frame, [u,v] = intervals(grid);
+    const result = V.mad(V.mad(origin,right,at[0]*u),up,at[1]*v);
     if (!vector(result,3)) throw new RangeError('Construction plane grid point exceeds coordinate bounds');
     return result;
   }
@@ -242,10 +281,12 @@
     if (!vector(position,3) || !['plane','grid'].includes(mode))
       throw new TypeError('Construction plane alignment needs a world point and plane or grid mode');
     const delta = V.sub(position,frame.plane.origin);
-    const at = frame.axes.slice(0,2).map(axis=>V.dot(delta,axis)/frame.plane.grid);
-    const gridAt = mode === 'grid' ? at.map(value=>Math.round(value) || 0) : at;
+    const step = intervals(frame.plane.grid);
+    const at = frame.axes.slice(0,2).map((axis,i)=>V.dot(delta,axis)/step[i]);
+    const gridAt = mode === 'grid' ?
+      quantize(frame,at,Math.max(...position.map(Math.abs),...frame.plane.origin.map(Math.abs))) : at;
     return {point:point(frame,gridAt),gridAt};
   }
 
-  A.constructionPlane = Object.freeze({resolve,pick,forScene,tilt,snapOrigin,point,project});
+  A.constructionPlane = Object.freeze({resolve,pick,forScene,tilt,snapOrigin,gridPreset,quantize,point,project});
 })(KIT);

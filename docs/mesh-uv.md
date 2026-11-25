@@ -132,6 +132,9 @@ directions. Use a [camera pick or axis lock](mesh-topology.md#pick-and-lock-a-pl
 or [hinge it on an existing edge](mesh-topology.md#tilt-a-plane-from-an-existing-edge)
 to set that frame before stamping.
 
+Add `--snap-grid` to round a fractional plane address using the saved
+[grid increments and rounding mode](mesh-topology.md#set-grid-increments-and-rounding).
+
 The quad has four editable vertices and stable face corners. Its pigment UVs
 address the first and last texel centers in the crop, including when an axis
 has only one texel. The face uses the sheet through a shared material slot.

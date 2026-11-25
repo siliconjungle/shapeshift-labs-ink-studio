@@ -2,7 +2,7 @@
 (function (K) {
   const A = K.authoring, topology = K.meshTopology, {freeze} = K.procedural.data;
   const sourceFormat = 'ink-studio/tileset-face-source';
-  const fields = ['object','part','face','selection','origin','right','up','planeAt','texelsPerUnit','brushScale','material'];
+  const fields = ['object','part','face','selection','origin','right','up','planeAt','snapGrid','texelsPerUnit','brushScale','material'];
   const name = value=>TargetSelectors.name(value) && !['__proto__','prototype','constructor'].includes(value);
 
   function sourceBindings(row, id, update) {
@@ -21,7 +21,7 @@
   }
 
   function plan(scene, request, {projectTexelsPerUnit} = {}) {
-    const {object,part,face,selection,origin,right,up,planeAt,
+    const {object,part,face,selection,origin,right,up,planeAt,snapGrid=false,
       texelsPerUnit,brushScale=1,material:requestedMaterial} = request ?? {};
     if (!request || Object.getPrototypeOf(request) !== Object.prototype || Object.keys(request).some(key=>!fields.includes(key)) ||
         ![object,face].every(name) || part !== undefined && !name(part) ||
@@ -37,9 +37,12 @@
     const size = [crop.width,crop.height].map(pixels=>positiveScale(pixels*brushScale/density,'World tile extent'));
     if (planeAt !== undefined && [origin,right,up].some(value=>value !== undefined))
       throw new TypeError('Choose plane grid coordinates or an explicit tile frame');
+    if (typeof snapGrid !== 'boolean' || snapGrid && planeAt === undefined)
+      throw new TypeError('Grid snapping needs a construction plane placement');
     const plane = A.constructionPlane;
     const frame = planeAt === undefined ? plane.resolve({origin,right,up}) : plane.forScene(scene);
-    const anchor = planeAt === undefined ? frame.plane.origin : plane.point(frame,planeAt);
+    const gridAt = snapGrid ? plane.quantize(frame,planeAt) : planeAt;
+    const anchor = planeAt === undefined ? frame.plane.origin : plane.point(frame,gridAt);
     const [x,y] = frame.axes, [w,h] = size;
     const positions = [anchor,K.V.mad(anchor,x,w),K.V.mad(K.V.mad(anchor,x,w),y,h),K.V.mad(anchor,y,h)];
     const source = {format:sourceFormat,version:1,selection:crop,atlasSize:[asset.width,asset.height]};
@@ -73,7 +76,8 @@
     const report = freeze({format:'ink-studio/tileset-face-placement',version:1,object,
       ...((existing?.part ?? part) && {part:existing?.part ?? part}),face,source,material,binding:binding.id,
       texelsPerUnit:density,brushScale,size,vertices,corners,uvSet,
-      ...(planeAt !== undefined && {constructionPlane:frame.plane,planeAt:planeAt.slice()}),conflicts,canCommit:!conflicts.length});
+      ...(planeAt !== undefined && {constructionPlane:frame.plane,planeAt:planeAt.slice()}),
+      ...(snapGrid && {gridAt}),conflicts,canCommit:!conflicts.length});
     if (conflicts.length) return {report};
     const added = {vertices,faces:[polygon]};
     const row = existing ? A.meshTopologyScene.revise(existing,added).row :
