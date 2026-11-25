@@ -126,14 +126,22 @@ Bounce follows each posed world normal. Upward faces receive the upper fill, und
 
 ## Baked shadow march
 
-For a JSON scene, set `finish.shadowMarch` before baking. For example,
-`"shadowMarch": { "steps": 128, "distance": 42 }` lets the sculpt trace a sun
-shadow farther across a large set. `steps` is the maximum number of samples
+For a new JSON scene, start with `"finish": { "shadowMarch": { "emptySpace": "clear" } }`.
+To trace farther across a large set, use
+`"shadowMarch": { "steps": 128, "distance": 42, "emptySpace": "clear" }`.
+`steps` is the maximum number of samples
 per baked directional or point-light shadow ray and defaults to 20.
 Use an integer from 0 to 4096. Zero turns off baked shadow marching.
 `distance` is the maximum directional ray length in world units and defaults
 to 16. A point light's shadow ray ends at the light.
 
-When programming a sculpt directly, set `S.shSteps` and `S.shLen` before
-`S.bake()`. A long directional shadow needs enough steps and enough distance
-to reach its caster. Higher step counts can increase bake time.
+With `emptySpace: "clear"`, the directional march crosses empty space without
+dimming direct sun. Nearby samples still determine penumbra, and an occluder
+hit still casts a solid shadow. Omitting the setting uses `"legacy"` so
+existing bakes keep their look. For unstyled shadows, the legacy march can dim
+open surfaces at long distances. Styled shadows already skip capped samples.
+Point-light rays use the same behavior in either mode.
+
+When programming a sculpt directly, set `S.shEmptySpace = 'clear'` before
+`S.bake()`. Use `S.shSteps` and `S.shLen` to let the directional ray reach
+distant casters. Higher step counts can increase bake time.

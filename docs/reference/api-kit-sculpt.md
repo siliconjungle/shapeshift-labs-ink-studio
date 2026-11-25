@@ -82,6 +82,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.sculpt().rough` | function | `(p0, fn, amp, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/kit/k3-shapes.js) |
 | `KIT.sculpt().sdf` | function | `(x, y, z)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().seen` | function | `(p, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/kit/k3-shapes.js) |
+| `KIT.sculpt().shEmptySpace` | value | `string` | [guide](../../README.md#geometry-and-materials) |
 | `KIT.sculpt().shK` | value | `number` | [guide](../../README.md#geometry-and-materials) |
 | `KIT.sculpt().shLen` | value | `number` | [guide](../../README.md#geometry-and-materials) |
 | `KIT.sculpt().shSteps` | value | `number` | [guide](../../README.md#geometry-and-materials) |
