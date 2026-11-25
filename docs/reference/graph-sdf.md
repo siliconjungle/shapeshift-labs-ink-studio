@@ -16,7 +16,7 @@ Origin: toolkit.
 | Input | `bounds` | `record` | Required | {"layout":"Plain named object"} |
 | Output | `value` | `field` | — | {"layout":"Function or native object with a sample method"} |
 
-Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes)
+Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes), [guide](../material-shape-splatter.md#shape-sources)
 
 Get the runnable example with `ink-studio graph describe sdf.bound --example > example.json`.
 Run it with `ink-studio graph run example.json`.
@@ -33,7 +33,7 @@ Origin: toolkit.
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
 | Output | `value` | `field` | — | {"layout":"Function or native object with a sample method"} |
 
-Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes)
+Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes), [guide](../material-shape-splatter.md#shape-sources)
 
 Get the runnable example with `ink-studio graph describe sdf.combine --example > example.json`.
 Run it with `ink-studio graph run example.json`.
@@ -109,7 +109,7 @@ Origin: toolkit.
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
 | Output | `value` | `field` | — | {"layout":"Function or native object with a sample method"} |
 
-Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes)
+Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes), [guide](../material-shape-splatter.md#shape-sources)
 
 Get the runnable example with `ink-studio graph describe sdf.shape --example > example.json`.
 Run it with `ink-studio graph run example.json`.
@@ -145,7 +145,7 @@ Origin: toolkit.
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
 | Output | `value` | `field` | — | {"layout":"Function or native object with a sample method"} |
 
-Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes)
+Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes), [guide](../material-shape-splatter.md#shape-sources)
 
 Get the runnable example with `ink-studio graph describe sdf.transform --example > example.json`.
 Run it with `ink-studio graph run example.json`.

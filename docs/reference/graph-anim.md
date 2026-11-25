@@ -35,7 +35,7 @@ Samples the graph clock.
 | Output | `direction` | `number` | — | {"finite":true,"choices":[-1,1]} |
 | Output | `active` | `boolean` | — |  |
 
-Guides: [guide](../headless-authoring.md#animation-and-raster-simulation), [guide](../headless-authoring.md#author-layer-clocks), [guide](../material-named-noise.md#animate-disorder)
+Guides: [guide](../headless-authoring.md#animation-and-raster-simulation), [guide](../headless-authoring.md#author-layer-clocks), [guide](../material-named-noise.md#animate-disorder), [guide](../material-shape-splatter.md#placement-and-controls)
 
 Get the runnable example with `ink-studio graph describe anim.clock --example > example.json`.
 Run it with `ink-studio graph run example.json`.

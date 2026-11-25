@@ -1136,6 +1136,45 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.shape"].outputs.mask` | value | `string = "typedImage"` |  |
 | `KIT.procedural.graphImages.operations["image.shape"].outputs.value` | value | `string = "typedImage"` |  |
 | `KIT.procedural.graphImages.operations["image.shape"].run` | function | `({source,width,height,options})` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].description` | value | `string = "Scatter signed planar and volumetric shapes and project aligned material maps from the highest visible surfaces."` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.background` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.clip` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.columns` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.columns.default` | value | `number = 8` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.columns.type` | value | `string = "number"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.density` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.height` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.height.default` | value | `number = 64` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.height.type` | value | `string = "pixelCount"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.mask` | alias | `Alias of KIT.procedural.graphImages.operations["image.edgeWear"].inputs.mask` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.options` | alias | `Alias of KIT.procedural.graphImages.operations["image.anisotropicBlur"].inputs.options` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.rows` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.rows.default` | value | `number = 6` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.rows.type` | value | `string = "number"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.shapes` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.shapes.default` | value | `array` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.shapes.type` | value | `string = "array<shape2d>"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.time` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.time.default` | value | `number = 0` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.time.type` | value | `string = "seconds"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.volumes` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.volumes.default` | value | `array` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.volumes.type` | value | `string = "array<field>"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.width` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.width.default` | value | `number = 96` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].inputs.width.type` | value | `string = "pixelCount"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.coverage` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.instanceId` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.layout` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.normal` | value | `string = "normalImage"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.shapeId` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.uv` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.value` | value | `string = "heightImage"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].run` | function | `({width,height,columns,rows,shapes,volumes,options,time,...maps},{seed})` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].seed` | value | `string = "options"` |  |
 | `KIT.procedural.graphImages.operations["image.sharpen"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.sharpen"].description` | value | `string = "Sharpen with a four-neighbor cross while retaining original coverage."` |  |
 | `KIT.procedural.graphImages.operations["image.sharpen"].inputs` | namespace |  |  |
@@ -1352,6 +1391,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.regions.valid` | function | `(value)` | [source](../../src/kit/paq-flood-region-images.js) |
 | `KIT.procedural.graphImages.resize` | function | `(source, width, height)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.shape` | function | `(source,width,height,options={})` | [guide](../material-shape-library.md#share-shapes-across-bakes), [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.shapeSplatter` | function | `(width,height,columns=8,rows=6,shapes=[],volumes=[],maps={},options={},root=0,time=0)` | [guide](../material-shape-splatter.md#aligned-outputs), [source](../../src/kit/paq-def-splatter.js) |
 | `KIT.procedural.graphImages.shuffle` | function | `(source, routes, target)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.spatial` | namespace |  |  |
 | `KIT.procedural.graphImages.spatial.crop` | function | `(source, options = {})` | [source](../../src/kit/paq-coordinate-sampling.js) |

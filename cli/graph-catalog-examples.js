@@ -208,6 +208,12 @@ const dynamic = {
     selection:link('data'),density:link('data'),priority:link('data'),
     options:{pattern:'brick',color:'#be8c65',background:'#283638',seed:38},
     controls:{seeds:{density:114},density:.9}} },
+  'image.shapeSplatter': {nodes:{
+    stone:{op:'sdf.shape',inputs:{kind:'sphere'}},
+    library:{op:'data.record',inputs:{stone:link('stone')}},
+    volumes:{op:'data.collect',inputs:{source:link('library'),keys:['stone']}}
+  },inputs:{width:24,height:18,columns:3,rows:2,volumes:link('volumes'),
+    shapes:[{type:'star',tips:4,innerRadius:.2}],options:{seed:39,scale:[.29,.19,.29],rotationJitter:[12,34,16]}}},
   'image.noise': { nodes:{ clock:{op:'anim.clock',inputs:{options:{range:[0,4]}}} },
     inputs: { family:'ridged',width:16,height:12,time:link('clock'),
     options:{ seed:34,scale:1.25,tileOffset:[.25,0],nonSquareExpansion:true,carrier:'simplex',

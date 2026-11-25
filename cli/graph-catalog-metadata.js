@@ -70,6 +70,12 @@ const namedNoise = oneOf('perlin','simplex','gaussian','white','blue','worley','
 const evolvingNoise = ['perlin','simplex','worley','voronoi','cellular','fractal','ridged','anisotropic','directional'];
 
 const ports = {
+  'image.shapeSplatter': { columns:limit(1,128,true),rows:limit(1,128,true),
+    shapes:{constraints:{maxItems:32}},volumes:{constraints:{maxItems:32,bounds:'Finite local XYZ AABB'}},
+    background:{constraints:{intent:'height',channels:[1]}},
+    density:{constraints:{intent:['data','mask'],channels:[1],units:'unitless'}},
+    mask:{constraints:{intent:['data','mask'],channels:[1],units:'unitless'}},
+    clip:{constraints:{intent:['data','mask'],channels:[1],units:'unitless'}} },
   'image.tileGenerator': { columns:limit(1,128,true),rows:limit(1,128,true) },
   'image.tileSampler': { columns:limit(1,128,true),rows:limit(1,128,true),stamps:{constraints:{minItems:1,maxItems:32}},
     selection:{constraints:{intent:['data','mask'],channels:[1],units:'unitless'}},
@@ -290,6 +296,30 @@ const tileControls = {
     name=>[name,property('number',{constraints:{integer:true,safe:true}})]))})
 };
 const options = {
+  'image.shapeSplatter': {
+    span:property('vec2',{unit:'height units',...limit(1e-4,1e4)},[1,1]),
+    crop:tileLayout.crop,wrap:tileLayout.wrap,mapFilter:tileControls.mapFilter,units:property('string'),
+    jitter:property('number',limit(0,1),.88),density:tileControls.density,
+    scale:property('number|vec3',{unit:'height units',...limit(1e-5,1e4)},[.16,.16,.16]),
+    scaleJitter:property('vec3',limit(0,.95),[0,0,0]),
+    rotation:property('vec3',{unit:'degrees XYZ'},[0,0,0]),
+    rotationJitter:property('vec3',{unit:'degrees XYZ',...limit(0,360)},[0,0,0]),
+    slopeAlignment:property('number',limit(0,1),1),
+    heightOffset:property('number',{unit:'height units',...limit(-1e4,1e4)},0),
+    heightJitter:property('number',{unit:'height units',...limit(0,1e4)},0),
+    extrusion:property('number',{unit:'local shape units',...limit(.01,2)},.25),
+    rounding:property('number',{unit:'local shape units',...limit(0,1)},.035),
+    maskThreshold:property('number',limit(0,1),.5),clipThreshold:property('number',limit(0,1),.5),
+    samples:tileLayout.samples,steps:property('number',limit(8,128,true),64),
+    epsilon:property('number',{unit:'local shape units',...limit(1e-6,.025)},.0006),
+    safety:property('number',limit(.1,1),.78),
+    orientation:property('string',oneOf('opengl','directx'),'opengl'),
+    uv:property('record',{properties:{mode:property('string',oneOf('planar','cylindrical','spherical'),'planar'),
+      scale:property('vec2',limit(-64,64),[1,1]),offset:property('vec2',limit(-64,64),[0,0]),
+      angle:property('number',{unit:'degrees clockwise'},0),address:property('string',oneOf('raw','wrap','clamp'),'raw')}}),
+    seed:tileLayout.seed,seeds:property('record',{properties:Object.fromEntries(
+      ['layout','density','shape','scale','rotation','height'].map(name=>[name,tileLayout.seed]))})
+  },
   'image.tileGenerator':tileLayout,
   'image.tileSampler':tileLayout,
   'image.shape': { bounds:property('array<number>',{unit:'shape units',constraints:{length:4,order:'left, top, right, bottom'}},[0,0,1,1]),
@@ -682,6 +712,9 @@ const specialization = {
   'anim.retime': { field: 'group', description: 'Uses the group’s inputs and outputs and adds a timing record. The group cannot declare timing.' }
 };
 const notes = {
+  'image.shapeSplatter': ['Planar definitions become rounded extrusions. Volumetric fields need local XYZ bounds and use local Y as their height axis.',
+    'Projection keeps the top visible hit. Height, normal, IDs and stamp UVs refer to that hit; coverage measures subpixel visibility.',
+    'Density and mask gate placements; clip gates individual surface samples. Background height also drives slope alignment and occlusion.'],
   'image.tileGenerator': ['Tile and course IDs are one-based. Zero marks the background.',
     'Wrapped rows and columns quantize stagger to a closed cycle. Layout reports authored and effective offsets.',
     'Crops change the sampled window while keeping the same placements and IDs. Connect a shape definition to stamp for custom coverage.'],
