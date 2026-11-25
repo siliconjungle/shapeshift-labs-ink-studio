@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beacon Optics · Ink Studio</title>
+<style>
+  :root { color-scheme:dark; --ground:#142124; --paper:#1d2c2d; --line:#3c5553; --text:#f5ead3;
+    --muted:#b3c6bf; --amber:#f2ba77; font:16px/1.45 system-ui,sans-serif; }
+  * { box-sizing:border-box; }
+  body { margin:0; color:var(--text); background:radial-gradient(ellipse at 24% -36%,#3d5049,var(--ground) 65%); }
+  main { max-width:1220px; padding:32px 35px; margin:auto; }
+  header { display:flex; justify-content:space-between; align-items:end; gap:14px; margin-bottom:19px; }
+  h1 { margin:4px 0 7px; font:normal clamp(3rem,8vw,5rem)/.96 Georgia,serif; letter-spacing:-.045em; }
+  h2 { margin:0 0 11px; font:normal 1.6rem Georgia,serif; }
+  h3 { margin:0 0 6px; font:normal 1.25rem Georgia,serif; }
+  p,figcaption,label { margin:0; color:var(--muted); }
+  small,.kicker { color:var(--amber); font:600 .72rem ui-monospace,monospace; letter-spacing:.1em; text-transform:uppercase; }
+  a { color:var(--text); text-underline-offset:4px; }
+  .layout { display:grid; grid-template-columns:minmax(0,2.35fr) minmax(275px,1fr); gap:14px; align-items:start; }
+  figure,aside,.inspection { margin:0; min-width:0; border:1px solid var(--line); background:var(--paper); }
+  .plates,.crops { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  canvas { display:block; width:100%; height:auto; image-rendering:pixelated; background:
+    repeating-conic-gradient(#182829 0% 25%, #253637 0% 50%) 0 0 / 20px 20px; }
+  figcaption { padding:7px 9px; border-top:1px solid var(--line); font-size:.8rem; }
+  .inspection { display:grid; grid-template-columns:minmax(0,1fr) minmax(180px,.78fr); gap:14px; margin-top:10px; padding:13px; }
+  .crops canvas { aspect-ratio:1.6; }
+  .values { min-width:0; border-left:1px solid var(--line); padding-left:13px; }
+  .values dl { margin:0; } dt { color:var(--muted); font-size:.8rem; margin:7px 0 2px; }
+  dd { margin:0; font:.84rem/1.5 ui-monospace,monospace; overflow-wrap:anywhere; }
+  aside { padding:17px; }
+  label { display:block; font-size:.87rem; margin-bottom:10px; }
+  select,input[type=number] { display:block; width:100%; padding:6px 8px; margin-top:3px; font:inherit; color:var(--text);
+    background:#152626; border:1px solid var(--line); border-radius:3px; }
+  .pair { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .help { border-top:1px solid var(--line); margin-top:4px; padding-top:10px; font-size:.83rem; }
+  #error { margin-top:6px; color:#ffc8a0; font-size:.82rem; }
+  [hidden] { display:none!important; }
+  :focus-visible { outline:2px solid var(--amber); outline-offset:2px; }
+  @media(max-width:790px) { main { padding:24px 14px; } header { display:block; } header a { display:inline-block; margin-top:6px; }
+    .layout,.inspection { grid-template-columns:1fr; } .values { border-left:0; padding-left:0; } }
+</style>
+<main>
+  <header>
+    <div><div class="kicker">Ink Studio · Material graphs</div><h1>Beacon Optics</h1>
+      <p>Compare spatial filters on a native HDR plate and inspect their edge samples.</p></div>
+    <a href="beacon-optics.material.json">Editable material graph</a>
+  </header>
+  <div class="layout">
+    <section aria-label="Filter comparison">
+      <div class="plates">
+        <figure><canvas id="before" width="144" height="86" aria-label="Original beacon plate"></canvas><figcaption>Original plate</figcaption></figure>
+        <figure><canvas id="after" width="144" height="86" aria-label="Filtered beacon plate"></canvas><figcaption id="result-label"></figcaption></figure>
+      </div>
+      <div class="inspection">
+        <div><h3>Diagonal edge</h3><div class="crops">
+          <figure><canvas id="before-edge" width="32" height="20" aria-label="Original edge enlarged"></canvas><figcaption>Original</figcaption></figure>
+          <figure><canvas id="after-edge" width="32" height="20" aria-label="Filtered edge enlarged"></canvas><figcaption>Filtered</figcaption></figure>
+        </div></div>
+        <div class="values"><small>Native RGBA at (72, 41)</small><dl>
+          <dt>Source · linear float64</dt><dd id="before-sample"></dd>
+          <dt id="sample-format"></dt><dd id="after-sample"></dd>
+        </dl></div>
+      </div>
+    </section>
+    <aside>
+      <h2>Filter controls</h2>
+      <label>Operation <select id="operation"></select></label>
+      <div class="pair">
+        <label><span id="radius-label">Radius · px</span> <input id="radius" type="number" min="0" step="1"></label>
+        <label>Intensity <input id="intensity" type="number" min="0" value="1" step=".1"></label>
+      </div>
+      <label id="across-field">Across radius · px <input id="across" type="number" value="2" min="0" max="64" step="1"></label>
+      <label id="angle-field">Clockwise angle · ° <input id="angle" type="number" value="29" step="1"></label>
+      <label id="radial-field" hidden>Radial mode <select id="radial">
+        <option value="spin">Spin</option><option value="zoom">Zoom</option></select></label>
+      <div class="pair">
+        <label>Border <select id="border"><option>clamp</option><option>wrap</option><option>mirror</option><option>transparent</option></select></label>
+        <label>Precision <select id="precision"><option>float64</option><option>float32</option><option>unorm16</option><option>unorm8</option></select></label>
+      </div>
+      <p id="hint" class="help"></p>
+      <p id="error" role="status"></p>
+    </aside>
+  </div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="optics.js"></script>
+<script>
+  const get = id => document.getElementById(id);
+  const sources = opticsImages(), graphs = new Map();
+  const detail = ['highPass','unsharpMask','sharpen'];
+  const hints = {
+    gaussianBlur:'A separable kernel softens both axes.',
+    directionalBlur:'A centered line spreads the highlight along the chosen angle.',
+    radialBlur:'Choose a spin arc or a zoom ray from the plate’s center.',
+    anisotropicBlur:'The along and across radii shape the footprint independently.',
+    variableBlur:'The radius map leaves the left side sharp and gradually increases blur toward the right.',
+    highPass:'Signed differences use a 0.14 bias for display. Float output retains negative samples.',
+    unsharpMask:'Gaussian detail is added back while original alpha coverage stays in place.',
+    sharpen:'A four-neighbor cross sharpens locally while keeping original coverage.',
+    antialias:'Subpixel reconstruction softens diagonal coverage in the enlarged corner.'
+  };
+  for (const [key,{label}] of Object.entries(opticsFilters)) get('operation').add(new Option(label,key));
+  get('operation').value = 'anisotropicBlur';
+  function paint(id, raster) {
+    const {width,height,data} = raster;
+    get(id).getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(data),width,height),0,0);
+    const edge = get(id+'-edge').getContext('2d');
+    edge.clearRect(0,0,32,20);
+    edge.imageSmoothingEnabled = false;
+    edge.drawImage(get(id),12,13,32,20,0,0,32,20);
+  }
+  function sample(image) {
+    const {width,data} = image.raster, offset = (opticsProbe[1] * width + opticsProbe[0]) * 4;
+    return Array.from(data.slice(offset,offset+4), value=>Number(value.toFixed(4))).join(' / ');
+  }
+  function render() {
+    try {
+      const mode = get('operation').value;
+      if (!graphs.has(mode)) graphs.set(mode,KIT.procedural.graph.create(opticsGraph(mode)));
+      const settings = opticsSettings(mode,{
+        radius:Number(get('radius').value), across:Number(get('across').value), angle:Number(get('angle').value), intensity:Number(get('intensity').value),
+        border:get('border').value, precision:get('precision').value, radialMode:get('radial').value
+      });
+      const {outputs} = graphs.get(mode).evaluate({...sources,settings});
+      paint('before',outputs.before);
+      paint('after',outputs.after);
+      get('result-label').textContent = opticsFilters[mode].label;
+      get('sample-format').textContent = 'Filtered · ' + outputs.filtered.descriptor.precision;
+      get('before-sample').textContent = sample(outputs.source);
+      get('after-sample').textContent = sample(outputs.filtered);
+      get('error').textContent = '';
+    } catch (error) {
+      get('error').textContent = error.message;
+    }
+  }
+  function selectFilter() {
+    const mode = get('operation').value, {radius,angle=0} = opticsFilters[mode];
+    get('radius').value = radius;
+    get('radius').step = ['directionalBlur','radialBlur','antialias'].includes(mode) ? '.05' : '1';
+    get('radius').max = mode === 'variableBlur' ? 16 : mode === 'antialias' ? 2 : 64;
+    get('radius-label').textContent = mode === 'anisotropicBlur' ? 'Along radius · px' : 'Radius · px';
+    get('angle').value = angle;
+    get('across-field').hidden = mode !== 'anisotropicBlur';
+    get('angle-field').hidden = !['directionalBlur','anisotropicBlur'].includes(mode);
+    get('radial-field').hidden = mode !== 'radialBlur';
+    get('intensity').max = detail.includes(mode) ? 16 : 1;
+    if (Number(get('intensity').value) > Number(get('intensity').max)) get('intensity').value = get('intensity').max;
+    get('hint').textContent = hints[mode];
+    render();
+  }
+  get('operation').addEventListener('change',selectFilter);
+  for (const id of ['radius','across','angle','intensity','border','radial','precision']) get(id).addEventListener('change',render);
+  selectFilter();
+</script>
+</html>

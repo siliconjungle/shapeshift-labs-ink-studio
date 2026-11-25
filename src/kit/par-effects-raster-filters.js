@@ -39,14 +39,7 @@
     if (width*height*taps>96e6) throw new RangeError('Pixel filter exceeds its sample budget');
   }
 
-  function weights(radius,kind='gaussian',sigma=Math.max(.5,radius/2)) {
-    if (!int(radius,0,64) || !['box','gaussian'].includes(kind) || !finite(sigma) || sigma<=0)
-      throw new RangeError('Blur needs a radius from 0 to 64 and a positive sigma');
-    const values=Array.from({length:2*radius+1},(_,i) => kind==='box' || i===radius ? 1 :
-      Math.exp(-.5*((i-radius)/sigma)**2));
-    const sum=values.reduce((a,b)=>a+b);
-    return values.map(value=>value/sum);
-  }
+  const { weights } = RasterFilterKernels;
 
   function convolve(data,width,height,channels,taps,edge) {
     const {length}=data, result=new Float32Array(length), bound=boundary(edge);

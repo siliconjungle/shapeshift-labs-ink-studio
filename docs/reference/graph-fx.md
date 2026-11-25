@@ -172,7 +172,7 @@ Origin: toolkit.
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"tileSize":{"type":"number\|vec2\|boolean","unit":"pixels","constraints":{"integer":true,"min":1,"max":1024,"allowedBoolean":false,"automaticAbovePixels":1048576,"automaticSize":256}},"kind":{"type":"string","constraints":{"choices":["gaussian","box"]},"default":"gaussian"},"radius":{"type":"number","unit":"pixels","constraints":{"min":0,"max":64},"default":2},"sigma":{"type":"number","unit":"pixels","constraints":{"exclusiveMin":0}},"kernel":{"type":"array","constraints":{"entries":"Odd dimensions up to 31 and nonnegative weights"}},"edge":{"type":"string","constraints":{"choices":["clamp","transparent","wrap"]},"default":"clamp"}} |
 | Output | `value` | `raster` | — | {"layout":"Interleaved samples on a positive integer grid","channels":[1,4],"finite":true} |
 
-Guides: [guide](../headless-authoring.md#schedule-independent-raster-branches), [guide](../headless-authoring.md#pixel-effects-and-raster-analysis)
+Guides: [guide](../headless-authoring.md#schedule-independent-raster-branches), [guide](../headless-authoring.md#pixel-effects-and-raster-analysis), [guide](../material-image-filters.md)
 
 Get the runnable example with `ink-studio graph describe fx.kernelBlur --example > example.json`.
 Run it with `ink-studio graph run example.json`.
@@ -281,7 +281,7 @@ Origin: toolkit.
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"tileSize":{"type":"number\|vec2\|boolean","unit":"pixels","constraints":{"integer":true,"min":1,"max":1024,"allowedBoolean":false,"automaticAbovePixels":1048576,"automaticSize":256}},"edge":{"type":"string","constraints":{"choices":["clamp","transparent","wrap"]},"default":"transparent"},"samples":{"type":"number","constraints":{"min":2,"max":128,"integer":true},"default":13},"anchor":{"type":"string","constraints":{"choices":["start","center","end"]},"default":"start"},"falloff":{"type":"string","constraints":{"choices":["uniform","start","end"]},"default":"uniform"},"filter":{"type":"string","constraints":{"choices":["nearest","linear"]},"default":"linear"}} |
 | Output | `value` | `raster` | — | {"layout":"Interleaved samples on a positive integer grid","channels":[1,4],"finite":true} |
 
-Guides: [guide](../headless-authoring.md#schedule-independent-raster-branches), [guide](../headless-authoring.md#pixel-effects-and-raster-analysis)
+Guides: [guide](../headless-authoring.md#schedule-independent-raster-branches), [guide](../headless-authoring.md#pixel-effects-and-raster-analysis), [guide](../material-image-filters.md)
 
 Get the runnable example with `ink-studio graph describe fx.pathBlur --example > example.json`.
 Run it with `ink-studio graph run example.json`.
