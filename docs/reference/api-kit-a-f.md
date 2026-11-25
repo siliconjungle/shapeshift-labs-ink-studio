@@ -860,8 +860,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesets.blank` | function | `({ width, height, background = 'transparent' } = {})` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.dimensions` | function | `(width, height)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.gridPatch` | function | `(scene, key, size)` | [source](../../src/kit/p23-tilesets.js) |
+| `KIT.authoring.tilesets.positiveScale` | function | `(value, label)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.prepare` | function | `(sources = {}, defaults = {})` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.register` | function | `(scene, key, source)` | [source](../../src/kit/p23-tilesets.js) |
+| `KIT.authoring.tilesets.scalePatch` | function | `(scene, texelsPerUnit)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.worldFrame` | function | `(source, id, { resolveAnchor } = {})` | [guide](../procedural.md#optional-retained-authoring), [source](../../src/kit/p25-authoring-bindings.js) |
 
 ## KIT.bones

@@ -77,6 +77,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().setSdfProtection` | function | `(protection, targets = selectedKeys())` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().setSurfaceState` | function | `(state, targets = selectedKeys())` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().setTilesetGrid` | function | `(id, size)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().setTilesetTexelsPerUnit` | function | `(texelsPerUnit)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().setTransform` | function | `(patch, targets = selectedKeys())` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().snapshot` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().sourceDependencies` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |

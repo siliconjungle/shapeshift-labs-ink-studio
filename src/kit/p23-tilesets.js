@@ -19,6 +19,11 @@
     return freeze({width:size.width,height:size.height});
   }
 
+  function positiveScale(value, label) {
+    if (!Number.isFinite(value) || value <= 0) throw new RangeError(label+' must be a finite positive number');
+    return value;
+  }
+
   function blank({ width, height, background = 'transparent' } = {}) {
     dimensions(width,height);
     const color = background === 'transparent' ? [0,0,0,0] : DrawingPrimitives.color(background);
@@ -57,9 +62,10 @@
 
   function prepare(sources = {}, defaults = {}) {
     if (!record(sources)) throw new TypeError('Scene tilesets need a map of image sources');
-    if (!record(defaults) || Object.keys(defaults).some(key => key !== 'tileSize'))
-      throw new TypeError('Scene tilesetDefaults accepts a tileSize');
-    const defaultSize = tileDimensions(defaults.tileSize);
+    if (!record(defaults) || Object.keys(defaults).some(key => !['tileSize','texelsPerUnit'].includes(key)))
+      throw new TypeError('Scene tilesetDefaults accepts tileSize and texelsPerUnit');
+    const defaultSize = tileDimensions(defaults.tileSize), texelsPerUnit = defaults.texelsPerUnit ?? null;
+    if (texelsPerUnit !== null) positiveScale(texelsPerUnit,'Texels per unit');
     const prepared = new Map(), decoded = new Map();
     for (const [key,source] of Object.entries(sources)) {
       if (!id(key)) throw new TypeError('Invalid tileset ID '+key);
@@ -74,7 +80,7 @@
       return asset;
     }
     return {
-      source,
+      source,texelsPerUnit,
       grid(key) {
         const override = key === undefined ? null : source(key).tileSize;
         return {tileSize:override ?? defaultSize,source:override ? 'override' : defaultSize ? 'default' : 'unset'};
@@ -134,7 +140,7 @@
     const tileSize = tileDimensions(size);
     let patch;
     if (key === undefined) {
-      patch = {tilesetDefaults:{tileSize}};
+      patch = {tilesetDefaults:{...scene.tilesetDefaults,tileSize}};
     } else {
       if (!id(key) || !Object.hasOwn(scene.tilesets ?? {},key)) throw new RangeError('Unknown tileset '+key);
       patch = {tilesets:{...scene.tilesets,[key]:{...scene.tilesets[key],tileSize}}};
@@ -144,5 +150,11 @@
     return {patch,grid};
   }
 
-  A.tilesets = Object.freeze({ dimensions, blank, prepare, register, gridPatch });
+  function scalePatch(scene, texelsPerUnit) {
+    checkScene(scene);
+    const density = texelsPerUnit === null ? null : positiveScale(texelsPerUnit,'Texels per unit');
+    return {tilesetDefaults:{...scene.tilesetDefaults,texelsPerUnit:density}};
+  }
+
+  A.tilesets = Object.freeze({ dimensions, blank, prepare, register, gridPatch, positiveScale, scalePatch });
 })(KIT);

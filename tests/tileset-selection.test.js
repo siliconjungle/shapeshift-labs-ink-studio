@@ -25,7 +25,7 @@ function setup(t, document = scene) {
   const filename = path.join(dir,'scene.json');
   fs.writeFileSync(filename,JSON.stringify(document));
   const tileset = (...args)=>execFileSync(process.execPath,[path.resolve(__dirname,'../cli/ink-studio.js'),
-    'tileset',...args],{encoding:'utf8',stdio:'pipe'});
+    'tileset',...args],{cwd:dir,encoding:'utf8',stdio:'pipe'});
   const cli = (...args)=>tileset('pick','--scene',filename,'--id','masonry',...args);
   return {dir,filename,cli,tileset};
 }
@@ -174,4 +174,63 @@ test('headless tile grids persist defaults and sheet overrides and keep one-off 
   assert.deepEqual(grid(imported,'--id','border'),{id:'border',tileSize:{width:4,height:1},source:'override'});
   assert.throws(()=>grid(imported,'--id','border','--clear','--out',output('invalid')),/Tile size must fit tileset border/);
   assert.equal(fs.existsSync(output('invalid')),false);
+});
+
+test('tile brush dimensions remain pinned across scene revisions while raster pixels stay exact',()=>{
+  const editor = ink.createSceneEditor(scene);
+  for (const density of [0,-1,Infinity,'16',NaN]) {
+    assert.throws(()=>editor.setTilesetTexelsPerUnit(density),/finite positive number/);
+  }
+  assert.throws(()=>ink.sizeTilesetBrush(scene,brush),/Set tileset texels per unit/);
+  assert.equal(editor.setTilesetTexelsPerUnit(4),4);
+  const picked = ink.pickTilesetBlock(editor.snapshot(),'masonry',brushBounds,tile);
+  assert.deepEqual(picked,{...brush,texelsPerUnit:4,brushScale:1});
+  const sized = ink.sizeTilesetBrush(editor.snapshot(),picked,{brushScale:2.5});
+  assert.deepEqual(sized.worldSize,{width:2.5,height:2.5});
+  assert.deepEqual(sized.tileWorldSize,{width:1.25,height:1.25});
+  assert.equal(picked.brushScale,1);
+
+  editor.setTilesetTexelsPerUnit(8);
+  assert.deepEqual(ink.sizeTilesetBrush(editor.snapshot(),sized.brush),sized);
+  assert.deepEqual(ink.sizeTilesetBrush(editor.snapshot(),brush).worldSize,{width:.5,height:.5});
+  assert.deepEqual(ink.rasterizeTilesetBrush(editor.snapshot(),sized.brush),ink.rasterizeTilesetBrush(scene,brush));
+  editor.undo();
+  assert.equal(editor.snapshot().tilesetDefaults.texelsPerUnit,4);
+  assert.throws(()=>ink.sizeTilesetBrush(scene,{...brush,texelsPerUnit:4}),/Saved brush scale/);
+  assert.throws(()=>ink.sizeTilesetBrush(scene,{...picked,texelsPerUnit:1},{brushScale:Number.MAX_VALUE}),/World width/);
+  assert.throws(()=>ink.createSceneEditor({...scene,tilesetDefaults:{texelsPerUnit:0}}),/Texels per unit/);
+});
+
+test('headless brush picks share project texel density and can save independent world sizes',t=>{
+  const {dir,filename,tileset} = setup(t,{...scene,tilesets:{masonry:scene.tilesets.masonry},
+    tilesetDefaults:{tileSize:tile}});
+  fs.writeFileSync(path.join(dir,'ink-studio.config.js'),'module.exports = {texelsPerUnit: 4};');
+  const file = name=>path.join(dir,name+'.json');
+  const scale = (input,...args)=>JSON.parse(tileset('world-scale','--scene',input,...args));
+  const pick = (input,...args)=>tileset('pick','--scene',input,'--id','masonry','--brush',
+    '--x','0','--y','0','--width','4','--height','2',...args);
+  const measure = (input,asset,...args)=>JSON.parse(tileset('brush-size',asset,'--scene',input,...args));
+
+  assert.deepEqual(scale(filename),{texelsPerUnit:4,source:'project'});
+  const sibling = file('sibling'), small = file('small'), large = file('large');
+  fs.copyFileSync(filename,sibling);
+  pick(sibling,'--brush-scale','.5','--out',small);
+  const first = measure(filename,small);
+  const second = measure(filename,small,'--brush-scale','2','--out',large);
+  assert.equal(first.brush.texelsPerUnit,4);
+  assert.deepEqual(first.worldSize,{width:.5,height:.25});
+  assert.deepEqual(second.worldSize,{width:2,height:1});
+  assert.deepEqual(JSON.parse(fs.readFileSync(large,'utf8')),second.brush);
+  assert.deepEqual(ink.rasterizeTilesetBrush(scene,first.brush),ink.rasterizeTilesetBrush(scene,second.brush));
+
+  const portable = file('portable'), changed = file('changed'), inherited = file('inherited');
+  assert.equal(scale(filename,'--texels-per-unit','8','--out',portable).source,'scene');
+  assert.equal(JSON.parse(pick(portable)).texelsPerUnit,8);
+  assert.deepEqual(measure(portable,small),first);
+  assert.throws(()=>pick(portable,'--brush-scale','0'),/Brush scale/);
+  tileset('grid','--scene',portable,'--tile-width','4','--tile-height','2','--out',changed);
+  assert.deepEqual(scale(changed),{texelsPerUnit:8,source:'scene'});
+  assert.equal(JSON.parse(pick(changed)).tileWidth,4);
+  assert.equal(scale(changed,'--clear','--out',inherited).source,'project');
+  assert.equal(JSON.parse(pick(inherited)).texelsPerUnit,4);
 });

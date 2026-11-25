@@ -27,6 +27,14 @@ function tileOptions(options) {
   return {width:Number(options['tile-width']),height:Number(options['tile-height'])};
 }
 
+function scaleOption(options, name) {
+  const value = options[name];
+  if (value === undefined) return;
+  if (typeof value !== 'string' || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value))
+    throw new TypeError('--'+name+' needs a positive number');
+  return Number(value);
+}
+
 function prepare(scene, toolkit) {
   return toolkit.KIT.authoring.tilesets.prepare(scene.tilesets,scene.tilesetDefaults);
 }
@@ -37,6 +45,29 @@ function configuredTileSize(tilesets, id) {
   return tileSize;
 }
 
+function projectDensity(tilesets, projectTexelsPerUnit, toolkit) {
+  if (tilesets.texelsPerUnit !== null) return tilesets.texelsPerUnit;
+  return projectTexelsPerUnit === undefined ? null :
+    toolkit.KIT.authoring.tilesets.positiveScale(projectTexelsPerUnit,'Project texels per unit');
+}
+
+function physicalSize(brush, texelsPerUnit, brushScale, toolkit) {
+  if (texelsPerUnit === null) throw new RangeError('Set tileset texels per unit in the project config or with tileset world-scale');
+  const {positiveScale} = toolkit.KIT.authoring.tilesets;
+  positiveScale(texelsPerUnit,'Texels per unit');
+  positiveScale(brushScale,'Brush scale');
+  const unitsPerTexel = brushScale/texelsPerUnit;
+  function extent(width,height) {
+    return {width:positiveScale(width*unitsPerTexel,'World width'),height:positiveScale(height*unitsPerTexel,'World height')};
+  }
+  return {brush:{...brush,texelsPerUnit,brushScale},worldSize:extent(brush.width,brush.height),
+    tileWorldSize:extent(brush.tileWidth,brush.tileHeight)};
+}
+
+function scaledPick(brush, density, scale, toolkit) {
+  return density === null && scale === undefined ? brush : physicalSize(brush,density,scale ?? 1,toolkit).brush;
+}
+
 function pickTilesetRectangle(scene, id, rectangle, toolkit = require('..').load()) {
   const tilesets = prepare(scene, toolkit);
   return Selection.pick(id,tilesets.source(id),rectangle);
@@ -44,17 +75,35 @@ function pickTilesetRectangle(scene, id, rectangle, toolkit = require('..').load
 
 function pickTilesetBlock(scene, id, rectangle, tileSize, toolkit = require('..').load()) {
   const tilesets = prepare(scene, toolkit);
-  return Selection.block(id,tilesets.source(id),rectangle,tileSize === undefined ? configuredTileSize(tilesets,id) : tileSize);
+  const brush = Selection.block(id,tilesets.source(id),rectangle,tileSize === undefined ? configuredTileSize(tilesets,id) : tileSize);
+  return scaledPick(brush,tilesets.texelsPerUnit,undefined,toolkit);
+}
+
+function brushSelection(tilesets, brush) {
+  if (brush?.format !== 'ink-studio/tileset-brush' || brush.version !== 1)
+    throw new TypeError('Expected a version 1 tileset brush');
+  const selected = Selection.block(brush.tileset,tilesets.source(brush.tileset),brush,
+    {width:brush.tileWidth,height:brush.tileHeight});
+  if (brush.columns !== selected.columns || brush.rows !== selected.rows)
+    throw new RangeError('Tile brush row and column counts do not match its bounds');
+  return selected;
+}
+
+function sizeTilesetBrush(scene, brush, {brushScale,projectTexelsPerUnit} = {}, toolkit = require('..').load()) {
+  const tilesets = prepare(scene,toolkit);
+  brushSelection(tilesets,brush);
+  const pinned = Object.hasOwn(brush,'texelsPerUnit') || Object.hasOwn(brush,'brushScale');
+  const {positiveScale} = toolkit.KIT.authoring.tilesets;
+  const density = pinned ? positiveScale(brush.texelsPerUnit,'Saved texels per unit') :
+    projectDensity(tilesets,projectTexelsPerUnit,toolkit);
+  const savedScale = pinned ? positiveScale(brush.brushScale,'Saved brush scale') : 1;
+  return physicalSize(brush,density,brushScale === undefined ? savedScale : brushScale,toolkit);
 }
 
 function rasterizeTilesetBrush(scene, brush, toolkit = require('..').load()) {
-  if (brush?.format !== 'ink-studio/tileset-brush' || brush.version !== 1)
-    throw new TypeError('Expected a version 1 tileset brush');
-  const tilesets = prepare(scene, toolkit), id = brush.tileset;
+  const tilesets = prepare(scene, toolkit);
+  const {tileset:id,x,y,width,height} = brushSelection(tilesets,brush);
   const source = tilesets.source(id);
-  const {x,y,width,height,columns,rows} = Selection.block(id,source,brush,{width:brush.tileWidth,height:brush.tileHeight});
-  if (brush.columns !== columns || brush.rows !== rows)
-    throw new RangeError('Tile brush row and column counts do not match its bounds');
   const {pixels} = tilesets.resolve({tileset:id}), crop = new Uint8Array(width*height*4), stride = width*4;
   for (let row=0;row<height;row++) {
     const start = ((y+row)*source.width+x)*4;
@@ -75,13 +124,15 @@ function previewCommand([file,...rest], options, toolkit) {
   files.write(output,PNG.encode(width,height,pixels,4));
 }
 
-function pickCommand(args, options, toolkit) {
+function pickCommand(args, options, toolkit, projectTexelsPerUnit) {
   const {scene,id,out} = options, fields = ['x','y','width','height'];
   if (args.length || ![scene,id].every(value => typeof value === 'string' && value.trim()) ||
-      Object.keys(options).some(key => !['scene','id','out','brush',...fields,...tileFields].includes(key)) ||
+      Object.keys(options).some(key => !['scene','id','out','brush','brush-scale',...fields,...tileFields].includes(key)) ||
       out !== undefined && (typeof out !== 'string' || !/\.(html|json)$/i.test(out)))
     throw new TypeError('Use tileset pick --scene <scene.json> --id <tileset-id> with rectangle bounds and optional --brush');
   const tile = tileOptions(options), block = options.brush === true || tile !== undefined;
+  const scale = scaleOption(options,'brush-scale');
+  if (!block && scale !== undefined) throw new TypeError('--brush-scale requires a tile brush pick');
   const visual = out !== undefined && /\.html$/i.test(out);
   if (visual && block) throw new TypeError('Save a tile brush as JSON and render it with tileset brush-preview');
   const count = fields.filter(key => options[key] !== undefined).length;
@@ -93,7 +144,10 @@ function pickCommand(args, options, toolkit) {
   const tilesets = prepare(document, toolkit), source = tilesets.source(id);
   const bounds = count ? Object.fromEntries(fields.map(key => [key,Number(options[key])])) :
     {x:0,y:0,width:1,height:1};
-  const selection = block ? Selection.block(id,source,bounds,tile ?? configuredTileSize(tilesets,id)) : Selection.pick(id,source,bounds);
+  const selection = block
+    ? scaledPick(Selection.block(id,source,bounds,tile ?? configuredTileSize(tilesets,id)),
+      projectDensity(tilesets,projectTexelsPerUnit,toolkit),scale,toolkit)
+    : Selection.pick(id,source,bounds);
   if (visual) {
     const {width,height,pixels} = tilesets.resolve({tileset:id});
     const model = JSON.stringify({width,height,selection,rgba:Buffer.from(pixels).toString('base64')}).replaceAll('<','\\u003c');
@@ -140,9 +194,43 @@ function gridCommand(args, options, toolkit) {
   process.stdout.write(JSON.stringify(report,null,2)+'\n');
 }
 
-function command([action, ...args], options, toolkit) {
+function worldScaleCommand(args, options, toolkit, projectTexelsPerUnit) {
+  const {scene,out,clear} = options, density = scaleOption(options,'texels-per-unit');
+  const changing = clear === true || density !== undefined;
+  if (args.length || typeof scene !== 'string' || !scene.trim() ||
+      Object.keys(options).some(key => !['scene','out','clear','texels-per-unit'].includes(key)) ||
+      clear === true && density !== undefined ||
+      changing && (typeof out !== 'string' || !out.trim()) || !changing && out !== undefined)
+    throw new TypeError('Use tileset world-scale --scene <scene.json> [--texels-per-unit N or --clear, with --out <new-scene.json>]');
+  const input = path.resolve(scene), document = JSON.parse(fs.readFileSync(input,'utf8'));
+  const output = changing ? sceneOutput(input,out) : undefined;
+  const updated = changing ? {...document,...toolkit.KIT.authoring.tilesets.scalePatch(document,density ?? null)} : document;
+  const tilesets = prepare(updated,toolkit), texelsPerUnit = projectDensity(tilesets,projectTexelsPerUnit,toolkit);
+  if (changing) files.publishJson(output,updated,'A different scene already exists at '+output);
+  process.stdout.write(JSON.stringify({...(changing && {scene:output}),texelsPerUnit,
+    source:tilesets.texelsPerUnit !== null ? 'scene' : texelsPerUnit !== null ? 'project' : 'unset'},null,2)+'\n');
+}
+
+function brushSizeCommand([file,...rest], options, toolkit, projectTexelsPerUnit) {
+  const {scene,out} = options, brushScale = scaleOption(options,'brush-scale');
+  if (rest.length || ![file,scene].every(value => typeof value === 'string' && value.trim()) ||
+      Object.keys(options).some(key => !['scene','out','brush-scale'].includes(key)) ||
+      out !== undefined && (typeof out !== 'string' || !/\.json$/i.test(out)) ||
+      brushScale !== undefined && out === undefined)
+    throw new TypeError('Use tileset brush-size <brush.json> --scene <scene.json> [--brush-scale N --out <new-brush.json>]');
+  const output = out && path.resolve(out);
+  if ([file,scene].some(input=>path.resolve(input) === output)) throw new RangeError('Write a separate sized brush file');
+  const read = input=>JSON.parse(fs.readFileSync(path.resolve(input),'utf8'));
+  const result = sizeTilesetBrush(read(scene),read(file),{brushScale,projectTexelsPerUnit},toolkit);
+  if (output) files.publishJson(output,result.brush,'A different brush already exists at '+output);
+  process.stdout.write(JSON.stringify(result,null,2)+'\n');
+}
+
+function command([action, ...args], options, toolkit, projectTexelsPerUnit) {
   if (action === 'grid') return gridCommand(args,options,toolkit);
-  if (action === 'pick') return pickCommand(args,options,toolkit);
+  if (action === 'world-scale') return worldScaleCommand(args,options,toolkit,projectTexelsPerUnit);
+  if (action === 'pick') return pickCommand(args,options,toolkit,projectTexelsPerUnit);
+  if (action === 'brush-size') return brushSizeCommand(args,options,toolkit,projectTexelsPerUnit);
   if (action === 'brush-preview') return previewCommand(args,options,toolkit);
   const [source,...rest] = args;
   const {id,scene,out,width,height,background} = options;
@@ -150,7 +238,7 @@ function command([action, ...args], options, toolkit) {
   const allowed = ['id','scene','out',...tileFields,...(create ? ['width','height','background'] : [])];
   if (!['import','create'].includes(action) || rest.length || Object.keys(options).some(key => !allowed.includes(key)) ||
       ![id,scene,out].every(value => typeof value === 'string' && value.trim()))
-    throw new TypeError('Use tileset import, create, grid, pick, or brush-preview');
+    throw new TypeError('Use tileset import, create, grid, world-scale, pick, brush-size, or brush-preview');
   if (create) {
     if (source !== undefined || ![width,height].every(value => typeof value === 'string' && /^\d+$/.test(value)))
       throw new TypeError('Use tileset create --width <texels> --height <texels> [--background <color>]');
@@ -165,4 +253,4 @@ function command([action, ...args], options, toolkit) {
   process.stdout.write(JSON.stringify({scene:output,id,width:asset.width,height:asset.height,encoding:asset.encoding},null,2)+'\n');
 }
 
-module.exports = {readTilesetImage,pickTilesetRectangle,pickTilesetBlock,rasterizeTilesetBrush,command};
+module.exports = {readTilesetImage,pickTilesetRectangle,pickTilesetBlock,sizeTilesetBrush,rasterizeTilesetBrush,command};

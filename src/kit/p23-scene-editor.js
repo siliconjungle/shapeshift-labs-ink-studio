@@ -366,6 +366,15 @@
       return document.pending() ? write() : document.transact('Set tile grid'+(id ? ' for '+id : ' defaults'),write);
     }
 
+    function setTilesetTexelsPerUnit(texelsPerUnit) {
+      const patch = A.tilesets.scalePatch(snapshot(),texelsPerUnit);
+      const write = () => {
+        document.setEnvironment(patch);
+        return patch.tilesetDefaults.texelsPerUnit;
+      };
+      return document.pending() ? write() : document.transact('Set tileset texels per unit',write);
+    }
+
     function meshTopology(object, part) {
       const meshes = snapshot().topologyMeshes ?? {};
       const mesh = Object.hasOwn(meshes, object) ? meshes[object] : null;
@@ -794,6 +803,7 @@
       registerTileset,
       tilesetGrid,
       setTilesetGrid,
+      setTilesetTexelsPerUnit,
       meshTopology,
       selectMeshTopology: (object, request, { part, visibility } = {}) =>
         K.meshTopology.select(meshTopology(object, part).document, request, { visibility }),

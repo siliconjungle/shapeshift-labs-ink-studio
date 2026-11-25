@@ -173,6 +173,44 @@ Run `node examples/tileset-pick/grid-demo.cjs tile-grid-demo` for a headless
 comparison of the same TIDE sign picked from two sheets with different
 tile sizes.
 
+### Set brush size in world units
+
+Set `texelsPerUnit` once in the project's existing `ink-studio.config.js`.
+For example, add `texelsPerUnit: 16` to the exported configuration object.
+All scene files picked from that project use the same density by default.
+For a portable scene, store an explicit density with `tileset world-scale`.
+A scene value takes precedence over the project config. Use `--clear` to
+inherit the project value again.
+
+```sh
+ink-studio tileset world-scale --scene gatehouse-grids.json \
+  --texels-per-unit 16 --out gatehouse-scale.json
+ink-studio tileset pick --scene gatehouse-scale.json --id masonry --brush \
+  --x 48 --y 0 --width 16 --height 16 --brush-scale 0.5 --out inset-brush.json
+ink-studio tileset brush-size inset-brush.json --scene gatehouse-scale.json \
+  --brush-scale 2 --out panel-brush.json
+```
+
+`brush-size` reports the total width and height and the size of an individual
+tile in world units. Each dimension is `source texels × brush scale / texels
+per unit`. A 16×16 crop at 16 texels per unit covers 0.5×0.5 world units at
+scale 0.5, and 2×2 at scale 2. Both use the same source rectangle and native
+PNG bytes. Density and brush scale must be positive finite numbers.
+
+New brushes picked with a density save `texelsPerUnit` and `brushScale`.
+The default multiplier is 1. Existing brush files can be measured or saved
+with scale metadata using the current scene or project density. Files that
+already carry density keep it when a project's convention changes.
+
+In Node, use `editor.setTilesetTexelsPerUnit(value)` to write the scene setting
+through the undoable editor. Call `ink.sizeTilesetBrush(scene, brush)` to
+get `worldSize` and `tileWorldSize`. Pass `{ brushScale: 2 }` to get an updated
+brush record along with its extents. For an old brush from a project with no
+scene override, supply its shared density as `projectTexelsPerUnit`.
+
+Run `node examples/tileset-pick/world-scale-demo.cjs tile-world-scale-demo`
+to render the two sizes as editable mesh faces using the same atlas coordinates.
+
 ## Edit an authored layout
 
 A [polygon topology document](mesh-topology.md) keeps stable face, edge and

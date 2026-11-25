@@ -270,8 +270,10 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   tileset import <image.png> [--tile-width N --tile-height N] --scene <scene.json> --id <tileset-id> --out <new-scene.json>   register a shared tileset image
   tileset create --width <texels> --height <texels> [--background <color>] [--tile-width N --tile-height N] --scene <scene.json> --id <tileset-id> --out <new-scene.json>   register a blank tileset
   tileset grid --scene <scene.json> [--id <tileset-id>] [--tile-width N --tile-height N | --clear] [--out <new-scene.json>]   inspect or edit shared or per-sheet tile dimensions
+  tileset world-scale --scene <scene.json> [--texels-per-unit N | --clear] [--out <new-scene.json>]   inspect or set tileset texels per world unit
   tileset pick --scene <scene.json> --id <tileset-id> [--x N --y N --width N --height N] [--out file.html|file.json]   pick an exact texel rectangle
-  tileset pick --scene <scene.json> --id <tileset-id> (--brush | --tile-width N --tile-height N) --x N --y N --width N --height N [--out brush.json]   pick a tile brush
+  tileset pick --scene <scene.json> --id <tileset-id> (--brush | --tile-width N --tile-height N) --x N --y N --width N --height N [--brush-scale N] [--out brush.json]   pick a tile brush
+  tileset brush-size <brush.json> --scene <scene.json> [--brush-scale N --out <new-brush.json>]   measure a tile brush in world units or save a new scale
   tileset brush-preview <brush.json> --scene <scene.json> --out <preview.png>   render a tile brush on its native grid
   asset-part preview <scene.json> <instance> <asset.gltf|.glb> [--expect N] [--out report.json]   check a replacement
   asset-part replace <scene.json> <instance> <asset.gltf|.glb> [--expect N] --out <next-scene.json>   save one part revision
