@@ -29,6 +29,35 @@ All three cell families accept `metric: "euclidean"`, `"manhattan"` or `"chebysh
 - `offset` shifts the sampling window and defaults to zero in every field dimension. Extra coordinates select a slice. For example, `dimension: 4, offset: [0,0,1.5,2], slicePeriods: [null,6]` selects Z at 1.5 and an independently looping fourth coordinate at phase 2 of 6.
 - Image generation has a four-million-texel ceiling and a family work budget. For large, expensive fields, render smaller tiles or sample the procedural field at the points you need.
 
+## Shape a noise tile
+
+| Image option | Default | Effect |
+| --- | --- | --- |
+| `scale` | `1` | Multiply the XY extent by 1/16–64. Higher values pack more features into the same image. |
+| `tileOffset` | `[0,0]` | Move the sample window by the given fractions of its effective width and height. On a wrapped axis, adding a whole tile returns the same pattern. The offset combines with the existing cell-space `offset`. |
+| `nonSquareExpansion` | `false` | Treat the short image dimension as the starting scale and expand the long axis in proportion to its pixel count. Discrete defaults that already follow image dimensions keep their existing proportions. |
+
+Wrapped lattice generators choose the nearest whole-cell period when scale or expansion changes the span. Blue noise instead snaps to whole rank tiles. Continuous tilers accept fractional spans, as do open axes. The `info` output shows `baseExtent`, `requestedExtent`, and the effective `extent`. When exact per-axis extents matter, set `extent` directly at scale 1 with expansion off. Blue rank sampling still benefits from matching the number of texels to a whole number of rank tiles.
+
+For Fractal and Ridged, set `octaveRange: [first,last]` with inclusive, zero-based bounds from 0 to 7. This replaces `octaves`, which still selects a count starting at octave zero. Later bands use `lacunarity^index` for frequency, with lacunarity from 1 to 4. Gain ranges from 0 to 1 and weights each octave relative to the lowest selected octave, so a gain of zero isolates that band. Tiled Perlin still requires an integer period at each active octave. The simplex carrier supports fractional lacunarity with arbitrary wrapped periods. The same octave controls apply to `proc.noiseFamily`.
+
+## Animate disorder
+
+`disorder` sets a reproducible phase in a one-cycle range. Whole cycles repeat. `animationSpeed` moves through that range in cycles per second. Zero holds the selected phase, positive speed moves forward, and negative speed reverses. Set `time` on either noise node to sample a particular instant, or link an `anim.clock` output whose range covers your clip to play it on the graph timeline. The direct helpers take an optional final time argument in seconds. `info` reports the resulting phase and the loop duration when speed is active.
+
+Perlin, Simplex, Anisotropic and Directional blend independent seeded states. Fractal and Ridged evolve each octave before combining them. Worley, Voronoi and Cellular move sites inside their original jitter bounds and keep each site's identity. Voronoi still changes its value abruptly when an edge crosses a texel. White, Gaussian and Blue expose spatial controls and omit disorder and speed. They can still animate via a keyed sampling window.
+
+Every phase preserves the spatial periods. Phase zero with default controls reproduces the original static sample values. For examples of the authoring controls that informed this design, see [Adobe's Fractal Sum Base](https://experienceleague.adobe.com/en/docs/substance-3d-designer/using/substance-graphs/nodes-reference-for-substance-graphs/node-library/texture-generators/noises/fractal-sum-base) and [Clouds 1](https://experienceleague.adobe.com/en/docs/substance-3d-designer/using/substance-graphs/nodes-reference-for-substance-graphs/node-library/texture-generators/noises/clouds-1).
+
+## Noise Workshop
+
+```sh
+node examples/procedural-noise-controls/demo.cjs /tmp/ink-noise-workshop
+ink-studio graph clip /tmp/ink-noise-workshop/noise-workshop.material.json --output live --from 0 --to 48 --out /tmp/ink-noise-motion
+```
+
+Open `index.html` from the output folder. Compare the original recipe with a rectangular tile that uses expansion, offset, animated disorder, and a selected octave band. Play or scrub the loop, and switch families to see the controls each one supports.
+
 ## Noise Atlas
 
 ```sh
