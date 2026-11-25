@@ -292,7 +292,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     ['format','version','inputs','nodes','outputs','groups','assets','assetRegistry','exports','assertions','time','seed','base','inheritance','primaryInput'],'graph project');
   if (kind!==format || revision!==version) throw new TypeError('Expected ink-studio/graph-project version 1');
   const base=baseSpec===undefined ? undefined : data.freeze(Base.resolve(baseSpec,{seed:authoredSeed}));
-  const seed=base?.seed ?? authoredSeed ?? 0;
+  const seed=base?.seed ?? (authoredSeed===undefined ? 0 : authoredSeed);
   const rules=inheritance===undefined ? undefined : Base.checkRules(inheritance);
   const context=data.freeze(Base.checkContext(baseContext));
   if (!base && (rules || primaryInput!==undefined || Object.keys(context).length))
@@ -803,7 +803,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
             if(frameInputs===undefined)return runner.evaluate({...start,time:take.start,take},sequence).frame;
             const supplied=frameInputs(take);
             if(!record(supplied))throw new TypeError('Graph frame inputs must return a record');
-            const prepared=request({inputs:{...inputs,...supplied},take,seed});
+            const prepared=request({inputs:{...inputs,...supplied},take,seed:seed ?? undefined});
             sampledSeed??=prepared.seed;
             return runner.evaluate(prepared,sequence).frame;
           }});
