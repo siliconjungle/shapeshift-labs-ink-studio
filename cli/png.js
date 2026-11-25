@@ -47,10 +47,15 @@ function encodeMaterial(width, height, pixels, channels, pixelsPerMeter) {
   const color = { 1: 0, 3: 2, 4: 6 }[channels];
   if (color === undefined || !(pixels instanceof Uint8Array || pixels instanceof Uint16Array))
     throw new TypeError('Material PNG needs an 8- or 16-bit scalar, RGB or RGBA raster');
-  const density = Buffer.alloc(9);
-  density.writeUInt32BE(pixelsPerMeter[0], 0);
-  density.writeUInt32BE(pixelsPerMeter[1], 4);
-  density[8] = 1;
+  let density;
+  if (pixelsPerMeter !== undefined) {
+    if (pixelsPerMeter.length !== 2 || pixelsPerMeter.some(value => !Number.isInteger(value) || value < 1 || value > 0xffffffff))
+      throw new RangeError('Material PNG pixel density exceeds the physical density range');
+    density = Buffer.alloc(9);
+    density.writeUInt32BE(pixelsPerMeter[0], 0);
+    density.writeUInt32BE(pixelsPerMeter[1], 4);
+    density[8] = 1;
+  }
 
   const bytesPerSample = pixels.BYTES_PER_ELEMENT;
   let samples = pixels;

@@ -216,6 +216,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.materialChannels.pack` | function | `(maps, metadata = empty)` | [guide](../material-graph-ports.md#read-and-edit-maps), [source](../../src/kit/paq-material-channels.js) |
 | `KIT.procedural.materialChannels.replace` | function | `(source, maps, metadata = empty)` | [guide](../material-graph-ports.md#read-and-edit-maps), [source](../../src/kit/paq-material-channels.js) |
 | `KIT.procedural.materialChannels.valid` | function | `(value)` | [source](../../src/kit/paq-material-channels.js) |
+| `KIT.procedural.materialChannels.validMap` | function | `(name, map)` | [source](../../src/kit/paq-material-channels.js) |
 | `KIT.procedural.materialChannels.version` | value | `number = 1` |  |
 
 ## KIT.procedural.materials

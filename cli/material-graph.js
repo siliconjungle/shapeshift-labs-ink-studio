@@ -4,11 +4,12 @@ const { createHash } = require('node:crypto');
 const files = require('./asset-files.js');
 const { groupReference } = require('./graph-groups.js');
 const Base = require('../src/material-base-settings.js');
+const OutputUsages = require('./material-output-usages.js');
 
 const format = 'ink-studio/material-graph';
 const version = 1;
 const projectFormat = 'ink-studio/graph-project';
-const settingsKeys = ['assetRegistry', 'exports', 'assertions', 'time', 'seed', 'base', 'inheritance', 'primaryInput'];
+const settingsKeys = ['assetRegistry', 'exports', 'assertions', 'time', 'seed', 'base', 'inheritance', 'primaryInput', 'outputUsages'];
 const record = value => value && [Object.prototype, null].includes(Object.getPrototypeOf(value));
 const isId = value => typeof value === 'string' && /^[a-z][\w.-]{0,99}$/i.test(value) &&
   !['__proto__', 'constructor', 'prototype'].includes(value);
@@ -179,6 +180,7 @@ function lower(document, { requireOutputs, instance } = {}) {
     throw new TypeError('Material inheritance needs shared settings.base');
   if (Object.hasOwn(settings, 'inheritance')) Base.checkRules(settings.inheritance);
   const native = lowerGraph(graph, { requireOutputs, materialBase });
+  if (Object.hasOwn(settings, 'outputUsages')) OutputUsages.normalize(settings.outputUsages, graph.outputs);
   if (Object.hasOwn(settings, 'primaryInput') &&
       (!isId(settings.primaryInput) || !Object.hasOwn(native.inputs ?? {}, settings.primaryInput)))
     throw new RangeError('Material primaryInput must name a declared graph input');

@@ -1,8 +1,8 @@
 const PNG = require('./png.js');
 const Base = require('../src/material-base-settings.js');
 
-function png(P, image, base) {
-  const { bitDepth } = base.output, { raster, descriptor } = image;
+function typedPng(P, image, bitDepth, pixelsPerMeter) {
+  const { raster, descriptor } = image;
   const { width, height, channels, data } = raster;
   let samples;
   if (descriptor.intent === 'color') {
@@ -21,7 +21,11 @@ function png(P, image, base) {
       return Math.round(normalized * maximum);
     });
   }
-  return PNG.encodeMaterial(width, height, samples, channels, Base.measure(base).pixelsPerMeter);
+  return PNG.encodeMaterial(width, height, samples, channels, pixelsPerMeter);
 }
 
-module.exports = { png };
+function png(P, image, base) {
+  return typedPng(P, image, base.output.bitDepth, Base.measure(base).pixelsPerMeter);
+}
+
+module.exports = { png, typedPng };
