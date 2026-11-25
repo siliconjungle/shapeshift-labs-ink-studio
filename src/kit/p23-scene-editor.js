@@ -1052,6 +1052,7 @@
       planTilesetRectangle, applyTilesetRectangle, planTilesetBrushRun, applyTilesetBrushRun,
       planTilesetReskin, applyTilesetReskin, planTilesetGrow, growTilesetFace, planTilesetBlock, applyTilesetBlock,
       planTilesetPrimitive, applyTilesetPrimitive,
+      selectTilesetComponents: (request, options) => A.tilesetComponentSelection.select(snapshot(),request,options),
       planTilesetCanvas,
       transformTilesetCanvas,
       tilesetDependencies, planTilesetRevision, editTilesetRevision,

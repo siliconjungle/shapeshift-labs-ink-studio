@@ -73,6 +73,10 @@ edge, or face IDs. Use `sceneEditor.selectMeshTopology(object, query,
 draft. `mesh-topology inspect` lists IDs for authored edges, including
 edges without a hand-written name.
 
+Use [tile component selection](mesh-uv.md#select-tiles-edges-vertices-or-instances)
+to query retained tile bindings, edges, vertices, or scene instances
+within the domains enabled by a tile edit.
+
 ```json
 {
   "domain": "edges",

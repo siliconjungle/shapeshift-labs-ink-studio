@@ -853,6 +853,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.sceneEditor.create` | function | `(source, { env, historyLimit } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `KIT.authoring.sceneEditor.transactionDocument` | function | `(editor)` | [source](../../src/kit/p23-scene-editor.js) |
 | `KIT.authoring.sceneEditor.validateSnapshot` | function | `(editor,snapshot)` | [source](../../src/kit/p23-scene-editor.js) |
+| `KIT.authoring.sceneInstances` | namespace |  |  |
+| `KIT.authoring.sceneInstances.select` | function | `(scene, {kind,ids} = {})` | [source](../../src/kit/p23-scene-instances.js) |
 | `KIT.authoring.sceneLibrary` | namespace |  |  |
 | `KIT.authoring.sceneLibrary.create` | function | `(storage, { key, backups = 8, prepareSnapshot } = {})` | [guide](../procedural.md#named-scene-library), [source](../../src/kit/p88-scene-library.js) |
 | `KIT.authoring.scenePrefabs` | namespace |  |  |
@@ -883,6 +885,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetCollections.prepareSequence` | function | `(scene, document, {seed} = {})` | [source](../../src/kit/p23-tileset-collections.js) |
 | `KIT.authoring.tilesetCollections.prepareWeighted` | function | `(scene, document, {seed} = {})` | [source](../../src/kit/p23-tileset-collections.js) |
 | `KIT.authoring.tilesetCollections.sample` | function | `(scene, document, {seed,key} = {})` | [source](../../src/kit/p23-tileset-collections.js) |
+| `KIT.authoring.tilesetComponentSelection` | namespace |  |  |
+| `KIT.authoring.tilesetComponentSelection.select` | function | `(scene, request = {}, {visibility} = {})` | [source](../../src/kit/p23-tileset-component-selection.js) |
+| `KIT.authoring.tilesetComponentSelection.selectionDomains` | function | `(edit='inspect', requested)` | [source](../../src/kit/p23-tileset-component-selection.js) |
 | `KIT.authoring.tilesetEyedrop` | namespace |  |  |
 | `KIT.authoring.tilesetEyedrop.inspect` | function | `(scene, row, {object,face,brushSize=false} = {})` | [source](../../src/kit/p23-tileset-eyedrop.js) |
 | `KIT.authoring.tilesetEyedrop.orientationOf` | function | `(points, hint)` | [source](../../src/kit/p23-tileset-eyedrop.js) |

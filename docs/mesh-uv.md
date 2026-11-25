@@ -155,6 +155,58 @@ and `brushScale`. One undo removes the placement and its source binding.
 Run `node examples/tileset-pick/place-face-demo.cjs tile-placement-demo` to
 place painted masonry and trim and inspect their retained source references.
 
+### Select tiles, edges, vertices, or instances
+
+`tileset select` queries one domain at a time. A tile is an editable
+face with a retained tileset source binding. Edge and vertex queries
+use the authored topology. Instances are scene placements of prefabs
+or asset parts and use keys such as `prefab:gate-post`.
+
+Use `edit` to see which selection domains a tool accepts. Leave out
+`domain` to return the enabled list by itself. Set `enabledDomains`
+to narrow the tool's list for your current operation.
+
+| Edit | Enabled domains |
+| --- | --- |
+| `inspect`, `snap-origin` | `tiles`, `edges`, `vertices`, `instances` |
+| `eyedrop`, `reskin` | `tiles` |
+| `grow`, `tilt-plane` | `edges` |
+| `move-vertex` | `vertices` |
+| `mesh-transform` | `tiles`, `edges`, `vertices` |
+| `stamp`, `place`, `stroke`, `rectangle`, `brush-run`, `primitive` | `[]` |
+
+Save a query such as this one in `trim.json`.
+
+```json
+{"edit":"reskin","domain":"tiles","object":"wall","query":{"ids":["trim"]}}
+```
+
+```sh
+ink-studio tileset select trim.json --scene wall.json --out trim-report.json
+ink-studio tileset select corner.json --scene wall.json --topology-out corner-selection.json
+ink-studio mesh-topology transform wall.json move.json --object wall --selection corner-selection.json --out moved.json
+```
+
+Set `object` and optionally `part` for the mesh domains. Pass a
+[topology query](mesh-topology.md#select-authored-components) under
+`query` to use ID filters, traversal, visibility, or a previous native
+selection as `from`. Use `--view` or `--visibility` for a visible or
+hidden filter. Tile reports include the atlas crop and binding ID.
+`--topology-out` writes the ordinary revision-checked mesh selection,
+with `faces` as the native domain for tiles. Use `mesh-topology select`
+for explicit conversions between mesh domains.
+
+For instances, omit the mesh and use `query.kind` to choose `prefab`
+or `asset-part`. An ID shared by both kinds requires a kind when
+selected by name. Each result includes the resolved world origin
+used by the construction plane's instance snap.
+
+In the SDK, use `editor.selectTilesetComponents(request, {visibility})`
+or `selectTilesetComponents(scene, request, {visibility})`. Run
+`node examples/tileset-pick/component-domains-demo.cjs selection-demo`
+to inspect four independent selections on the same scene and replay a
+vertex move from the saved selection.
+
 ### Create weighted tile collections
 
 Save interchangeable tiles as a version 1 collection. Give each entry
