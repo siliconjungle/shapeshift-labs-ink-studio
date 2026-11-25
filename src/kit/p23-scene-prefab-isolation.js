@@ -109,7 +109,7 @@ const prefabEditIsolation = (function (K) {
         const selection = raw.selection ?? pickActive();
         const transformed = T.planTransform(doc, { ...raw, selection, frame: link.frame }, {
           pivot: row.pivot,
-          ...(raw.constructionPlane === undefined && (raw.space === 'plane' || raw.snap?.kind === 'construction-plane') ?
+          ...(raw.constructionPlane === undefined && meshComponentSnap.usesConstructionPlane(raw) ?
             { constructionPlane: A.constructionPlane.forScene(scene).plane } : {}),
           ...(raw.space === 'camera' && raw.camera === undefined && { camera: camera ??= authoredCamera() }),
           mesh: targetMesh

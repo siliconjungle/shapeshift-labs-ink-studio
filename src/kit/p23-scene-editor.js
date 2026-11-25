@@ -764,15 +764,17 @@
         throw new TypeError('Retained scene mesh coordinates already use scene placement');
       const row = meshTopology(object, part), scene = current().preview;
       requireMeshShapeOwner(object, row.part, scene, 'Transform');
-      return K.meshTopology.planTransform(row.document, request, {
+      const plan = K.meshTopology.planTransform(row.document, request, {
         pivot: row.pivot,
-        ...(request?.constructionPlane === undefined && (request?.space === 'plane' || request?.snap?.kind === 'construction-plane') ?
+        ...(request?.constructionPlane === undefined && meshComponentSnap.usesConstructionPlane(request) ?
           {constructionPlane:A.constructionPlane.forScene(scene).plane} : {}),
         ...(request?.space === 'camera' && request.camera === undefined && { camera: authoredTransformCamera() }),
         mesh: meshSnapTargets(scene),
         socket: (instance, binding) => A.sceneInstances.assetSocket(scene, buildEnv, instance, binding),
         sdf:id=>meshSnapField(scene,id)
       });
+      if (!plan.document.faces.length) throw new RangeError('A scene transform must retain at least one polygon');
+      return plan;
     }
 
     function transformMeshTopology(object, request, options) {

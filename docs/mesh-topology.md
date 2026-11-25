@@ -398,8 +398,9 @@ for moving several vertices, snapping, or applying proportional falloff.
 ## Transform and snap a component selection
 
 Use a saved selection for the exact topology revision. A transform writes
-vertex positions and preserves the IDs, polygons, materials, and corner UVs.
-A collapsed or self-intersecting polygon rejects the preview and the edit.
+vertex positions with stable IDs, polygons, materials, and corner UVs.
+Invalid polygons reject the preview and the edit. Flatten and collapse
+can explicitly remove faces that lose all area.
 
 ```json
 {
@@ -537,6 +538,46 @@ opening in the native-grid comparison.
 The coincident snap demo aligns a sign edge to a placed fixture.
 Its adjacent trim shares the displacement. The authored seam on
 the opposite side stays free.
+
+### Align a selection to a plane
+
+Use the same `mesh-topology transform` command and saved selection with one
+of these operations.
+
+| Operation | Result |
+| --- | --- |
+| `{ "kind": "align", "side": "near" }` | Translate the selection until its greatest signed distance along the plane normal is zero. |
+| `{ "kind": "align", "side": "center" }` | Translate the selection until the midpoint of its depth range lies on the plane. |
+| `{ "kind": "align", "side": "far" }` | Translate the selection until its smallest signed distance along the plane normal is zero. |
+| `{ "kind": "flatten" }` | Project each selected vertex onto the plane along its normal. |
+| `{ "kind": "collapse", "point": [0, 1, 0.5] }` | Move the selected vertices to a world XYZ point. Omit `point` to use the resolved transform pivot. Coincident vertex IDs stay distinct. |
+
+Align and flatten use the scene's working plane. To use another plane for
+one edit, give the operation `"plane": { "origin": [0, 0, 1], "normal":
+[0, 0, 1] }` in world coordinates. A standalone mesh can supply its working
+plane with `constructionPlane` at the request level. Reversing the normal
+swaps near and far. Align uses a single translation and retains the depth
+range. Align, flatten, and collapse define their own targets.
+
+Alignment measures the unpinned selected vertices after coincident groups
+are resolved. Falloff can give surrounding vertices a partial move.
+Flatten and collapse also use each influenced vertex's own projection or
+path to the point. The report includes the measured vertex IDs, the
+before and after signed extents for a plane, or the maximum distance to
+the collapse point.
+
+Flatten and collapse reject faces that would become a line or point by
+default. Set `"removeCollapsed": true` in the operation to explicitly
+remove those faces. The preview lists their IDs and the scene receipt
+records affected bindings. Edges, corners, and faces that survive still
+pass topology validation. A scene mesh must retain at least one polygon.
+Use [weld](#inspect-and-repair-local-mesh-health) for a topology merge.
+
+```sh
+ink-studio mesh-topology transform bench.json flatten.json --object plates --selection selection.json
+ink-studio mesh-topology transform bench.json flatten.json --object plates --selection selection.json --out flat.json --report flat-receipt.json
+node examples/tileset-pick/mesh-plane-alignment-demo.cjs plane-alignment-review
+```
 
 ## Place a pivot independently
 
