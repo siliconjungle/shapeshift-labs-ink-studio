@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {publishJson} = require('./asset-files.js');
-const {captureMeshTopologyVisibility} = require('./mesh-topology-visibility.js');
+const {captureMeshTopologyVisibility,needsParticipation} = require('./mesh-topology-visibility.js');
 
 function command([file,...rest], options, openEditor) {
   const {scene,view,visibility,out,'topology-out':topologyOut} = options;
@@ -21,7 +21,8 @@ function command([file,...rest], options, openEditor) {
   const request = read(file), editor = openEditor(path.resolve(scene));
   if (view && (!name(request?.object) || !['tiles','edges','vertices'].includes(request.domain)))
     throw new TypeError('A selection view needs an editable mesh and a component domain');
-  const evidence = view ? captureMeshTopologyVisibility(editor.build(),request.object,read(view)).visibility :
+  const participation = needsParticipation(request?.query?.filter);
+  const evidence = view ? captureMeshTopologyVisibility(editor.build(),request.object,read(view),{participation}).visibility :
     visibility && read(visibility);
   const report = editor.selectTilesetComponents(request,{visibility:evidence});
   if (topologyOut && !report.selection) throw new TypeError('--topology-out needs a tile, edge, or vertex selection');

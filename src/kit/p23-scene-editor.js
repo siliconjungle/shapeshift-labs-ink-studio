@@ -1058,8 +1058,10 @@
       tilesetDependencies, planTilesetRevision, editTilesetRevision,
       planTilesetSource, updateTilesetSource,
       meshTopology,
-      selectMeshTopology: (object, request, { part, visibility } = {}) =>
-        K.meshTopology.select(meshTopology(object, part).document, request, { visibility }),
+      selectMeshTopology(object, request, { part, visibility } = {}) {
+        const row = meshTopology(object, part);
+        return K.meshTopology.select(row.document, request, { visibility, object, part: row.part });
+      },
       editMeshTopology,
       planMeshTransform,
       transformMeshTopology,

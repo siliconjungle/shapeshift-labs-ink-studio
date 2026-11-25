@@ -16,7 +16,7 @@
     return freeze(supported.filter(domain=>requested.includes(domain)));
   }
 
-  function selectMesh(row, domain, query, visibility) {
+  function selectMesh(row, domain, query, options) {
     const tiles = domain === 'tiles' ? new Map((row.bindings ?? []).filter(binding=>
       !binding.review && A.tilesetFaces.isSourceBinding(binding)).map(binding=>[binding.element,binding])) : null;
     const native = tiles ? 'faces' : domain;
@@ -26,7 +26,7 @@
       if (!tiles.has(id)) throw new RangeError('Face '+id+' has no retained tile source');
     }
     const seeds = tiles && query.ids === undefined && query.from === undefined ? {ids:[...tiles.keys()]} : {};
-    const selection = K.meshTopology.select(row.document,{...query,...seeds,domain:native},{visibility});
+    const selection = K.meshTopology.select(row.document,{...query,...seeds,domain:native},options);
     if (selection.domain !== native) throw new RangeError('Use mesh-topology select to convert selection domains');
     if (!tiles) return {ids:selection.ids,selection};
     const ids = selection.ids.filter(id=>tiles.has(id));
@@ -61,7 +61,8 @@
     const meshes = scene.topologyMeshes ?? {};
     const row = Object.hasOwn(meshes,object) && meshes[object];
     if (!row || part !== undefined && row.part !== part) throw new RangeError('No editable topology for scene object '+object);
-    return freeze({...report,domain,object,...(row.part && {part:row.part}),...selectMesh(row,domain,query,visibility)});
+    const options = {visibility,object,part:row.part};
+    return freeze({...report,domain,object,...(row.part && {part:row.part}),...selectMesh(row,domain,query,options)});
   }
 
   A.tilesetComponentSelection = Object.freeze({select,selectionDomains});
