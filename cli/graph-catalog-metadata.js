@@ -67,6 +67,8 @@ const ports = {
   'array.sort': { direction: oneOf('asc', 'desc') },
   'model.prefab': {revision: {constraints: {integer: true, min: 1}}, kind: oneOf('visual', 'world')},
   'model.compare': {kind: oneOf('visual', 'world')},
+  'image.channelMath': { operation: oneOf('add', 'subtract', 'multiply', 'divide', 'min', 'max',
+    'difference', 'power', 'greater', 'less', 'equal') },
   'image.blend': {
     mode: oneOf('copy', 'add', 'subtract', 'multiply', 'addSub', 'max', 'min', 'switch', 'divide',
       'overlay', 'screen', 'softLight', 'hardLight', 'difference', 'exclusion'),
@@ -394,6 +396,9 @@ const simulationClock = { dt: property('number', { ...seconds, ...limit(.001, .1
 const specialization = {
   'image.uniform': { field: 'descriptor', description: 'A literal image intent and layout select the value port and typed output.' },
   'image.convert': { field: 'descriptor', description: 'A literal target intent selects the output type. Optional fields change how samples are represented.' },
+  'image.split': { field: 'channels', description: 'The literal selector keys become typed scalar output ports.' },
+  'image.shuffle': { field: 'descriptor', description: 'The optional literal descriptor selects the output image type.' },
+  'image.pack': { field: 'descriptor', description: 'The optional literal descriptor selects the output image type.' },
   'image.declare': { field: 'descriptor', description: 'A literal image intent selects the output type and the source raster contract.' },
   'array.map': { field: 'group', description: 'The group declares item, optional numeric index and value. Extra group inputs become ports.' },
   'array.mapById': {field: 'group', description: 'The group takes a record item and optional numeric index. Each result carries the source ID and optional split ancestry.'},

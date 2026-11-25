@@ -42,7 +42,7 @@ node examples/uniform-graph-images/demo.cjs /tmp/ink-lantern-glass
 ink-studio graph run /tmp/ink-lantern-glass/lantern-glass.material.json --out /tmp/ink-lantern-glass/replay
 ```
 
-For compositing typed maps, see [Material image blend modes](material-image-blend.md).
+For compositing typed maps, see [Material image blend modes](material-image-blend.md). For routing channels and retaining sub-code math, see [Split, shuffle, and pack typed image channels](material-image-channels.md).
 
 ## Convert color to relief
 

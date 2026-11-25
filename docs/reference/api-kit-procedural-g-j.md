@@ -482,6 +482,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.procedural.graphImages` | namespace |  |  |
 | `KIT.procedural.graphImages.blend` | function | `(background, foreground, { mode = 'copy', opacity = 1, mask = null, crop = {}, alpha = 'source', clamp = 'auto' } = {})` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.channelMath` | function | `(a, b, operation, { precision = 'float64', outOfRange = 'error' } = {})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.convert` | function | `(source, target, { outOfRange = 'error', dropAlpha = false } = {})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.declare` | function | `(source, settings)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.displaySamples` | function | `(source, bitDepth, outOfRange = 'clamp')` | [source](../../src/kit/paq-graph-images.js) |
@@ -516,6 +517,20 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.blend"].outputs.value.type` | value | `string = "typedImage"` |  |
 | `KIT.procedural.graphImages.operations["image.blend"].outputs.value.typeFrom` | value | `string = "background"` |  |
 | `KIT.procedural.graphImages.operations["image.blend"].run` | function | `({ background, foreground, ...options })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.channelMath"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.channelMath"].description` | value | `string = "Apply arithmetic to decoded typed channels and write float64 unless an output precision is chosen."` |  |
+| `KIT.procedural.graphImages.operations["image.channelMath"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.channelMath"].inputs.a` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.channelMath"].inputs.b` | value | `string = "any"` |  |
+| `KIT.procedural.graphImages.operations["image.channelMath"].inputs.operation` | value | `string = "string"` |  |
+| `KIT.procedural.graphImages.operations["image.channelMath"].inputs.options` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.channelMath"].inputs.options.default` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.channelMath"].inputs.options.type` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.channelMath"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.channelMath"].outputs.value` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.channelMath"].outputs.value.type` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.channelMath"].outputs.value.typeFrom` | value | `string = "a"` |  |
+| `KIT.procedural.graphImages.operations["image.channelMath"].run` | function | `({ a, b, operation, options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.convert"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.convert"].description` | value | `string = "Convert the channel layout, precision, color space or alpha convention of a typed image."` |  |
 | `KIT.procedural.graphImages.operations["image.convert"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
@@ -529,6 +544,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.inspect"].outputs` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.inspect"].outputs.value` | value | `string = "record"` |  |
 | `KIT.procedural.graphImages.operations["image.inspect"].run` | function | `({ source })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.pack"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.pack"].description` | value | `string = "Pack selected typed image channels and numeric constants into one image."` |  |
+| `KIT.procedural.graphImages.operations["image.pack"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.resize"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.resize"].description` | value | `string = "Resample a typed image using its own per-axis tiling and sampling policy. The output keeps the source port type."` |  |
 | `KIT.procedural.graphImages.operations["image.resize"].inputs` | namespace |  |  |
@@ -540,6 +558,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.resize"].outputs.value.type` | value | `string = "typedImage"` |  |
 | `KIT.procedural.graphImages.operations["image.resize"].outputs.value.typeFrom` | value | `string = "source"` |  |
 | `KIT.procedural.graphImages.operations["image.resize"].run` | function | `({ source, width, height })` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.shuffle"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.shuffle"].description` | value | `string = "Reorder, repeat or replace channels of one typed image."` |  |
+| `KIT.procedural.graphImages.operations["image.shuffle"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.operations["image.split"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.split"].description` | value | `string = "Split explicitly selected native channels into named scalar images, including alpha coverage."` |  |
+| `KIT.procedural.graphImages.operations["image.split"].specialize` | function | `({ params, inputs })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.toDisplay"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.toDisplay"].description` | value | `string = "Convert typed color to straight-alpha sRGB8 for legacy compositing and PNG exports."` |  |
 | `KIT.procedural.graphImages.operations["image.toDisplay"].inputs` | namespace |  |  |
@@ -577,7 +601,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.uniform"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.uniform"].description` | value | `string = "Promote a scalar or a tuple to a typed constant image. UNORM inputs use normalized values, linear float color can be HDR."` |  |
 | `KIT.procedural.graphImages.operations["image.uniform"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.pack` | function | `(sources, routes, target = { intent: 'data' })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.resize` | function | `(source, width, height)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.shuffle` | function | `(source, routes, target)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.split` | function | `(source, channels)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.toDisplay` | function | `(source, outOfRange = 'clamp')` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.toHeight` | function | `(source, { scale, offset = 0, units = 'art-px', channel = 'luminance' } = {})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.toRaster` | function | `(source)` | [source](../../src/kit/paq-graph-images.js) |

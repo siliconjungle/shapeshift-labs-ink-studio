@@ -224,6 +224,126 @@
     return wrap({ width, height, channels: next, data: output, pivot }, to);
   }
 
+  function selectChannel(spec, key) {
+    const index = key === 'alpha' ? spec.alpha === 'none' ? -1 : spec.layout.length - 1 :
+      typeof key === 'number' ? key : typeof key === 'string' && key.length === 1 ? spec.layout.indexOf(key) : -1;
+    if (!Number.isSafeInteger(index) || index < 0 || index >= spec.layout.length)
+      throw new RangeError('Image layout ' + spec.layout + ' has no channel ' + key);
+    return index;
+  }
+
+  function splitChannels(source, channels) {
+    const { raster: grid, descriptor: spec } = requireImage(source);
+    const { width, height, pivot, data, channels: stride } = grid;
+    if (!record(channels) || !Object.keys(channels).length || Object.keys(channels).length > 4)
+      throw new TypeError('Image split needs one to four named output selectors');
+    return Object.fromEntries(Object.entries(channels).map(([name, selector]) => {
+      const index = selectChannel(spec, selector);
+      const coverage = spec.alpha !== 'none' && index === stride - 1;
+      const intent = coverage || spec.intent === 'mask' ? 'mask' : spec.intent === 'height' ? 'height' : 'data';
+      const plane = new storage[spec.precision](width * height);
+      for (let p = 0; p < plane.length; p++) plane[p] = data[p * stride + index];
+      return [name, declare({ width, height, pivot, channels: 1, data: plane },
+        { ...spec, intent, layout: 'r', colorSpace: 'none', alpha: 'none', domain: undefined,
+          units: coverage ? 'unitless' : spec.units })];
+    }));
+  }
+
+  function alignedChannels(a, b) {
+    const pair = (left, right) => left === right || left && right && left[0] === right[0] && left[1] === right[1];
+    return a.raster.width === b.raster.width && a.raster.height === b.raster.height &&
+      pair(a.raster.pivot, b.raster.pivot) && pair(a.descriptor.pixelPitchMm, b.descriptor.pixelPitchMm) &&
+      a.descriptor.sampling === b.descriptor.sampling && a.descriptor.tiling.u === b.descriptor.tiling.u &&
+      a.descriptor.tiling.v === b.descriptor.tiling.v;
+  }
+
+  function packChannels(sources, routes, target = { intent: 'data' }) {
+    const names = record(sources) ? Object.keys(sources) : [];
+    if (!names.length || names.length > 32 || !Array.isArray(routes) || routes.length < 1 || routes.length > 4)
+      throw new TypeError('Image packing needs named input images and one to four routes');
+    if (!fields(target, ['intent', 'layout', 'precision', 'units', 'colorSpace', 'alpha']) || !intents.includes(target.intent))
+      throw new TypeError('Invalid image packing descriptor');
+    const used = new Map();
+    function input(name) {
+      if (typeof name !== 'string' || !own(sources, name)) throw new RangeError('Unknown image packing source ' + name);
+      if (!used.has(name)) used.set(name, requireImage(sources[name]));
+      return used.get(name);
+    }
+    const assignments = Array.from(routes, route => {
+      if (finite(route)) return { value: route };
+      if (!fields(route, ['source', 'channel']) || !own(route, 'channel'))
+        throw new TypeError('An image packing route needs a source and channel or a finite constant');
+      const source = input(route.source), { raster, descriptor } = source;
+      return { source, index: selectChannel(descriptor, route.channel), stride: raster.channels,
+        scale: integerMax(descriptor.precision) || 1 };
+    });
+    const first = assignments.find(route => route.source)?.source ?? input(names[0]);
+    if ([...used.values()].some(source => !alignedChannels(first, source)))
+      throw new RangeError('Image packing sources must match extent, pivot, pitch, tiling and sampling');
+    const { raster: grid, descriptor: base } = first;
+    const { width, height, pivot } = grid, channels = assignments.length;
+    const precisions = new Set([...used.values()].map(source => source.descriptor.precision));
+    const units = new Set([...used.values()].map(source => source.descriptor.units));
+    if (units.size > 1 && target.units === undefined)
+      throw new TypeError('Image packing sources have different units. Set the intended output units explicitly.');
+    const precision = precisions.size === 1 ? base.precision :
+      [...precisions].every(integerMax) ? 'unorm16' : 'float64';
+    const spec = descriptor({ width, height, channels, data: grid.data }, {
+      precision, units: base.units, tiling: base.tiling, sampling: base.sampling,
+      pixelPitchMm: base.pixelPitchMm, materialSeed: base.materialSeed, ...target
+    });
+    if (spec.intent === 'color') {
+      const colorSources = assignments.slice(0, 3).filter(({ source, index }) =>
+        source?.descriptor.intent === 'color' && index < 3);
+      if (colorSources.some(({ source }) => source.descriptor.colorSpace !== spec.colorSpace ||
+          (source.descriptor.alpha === 'premultiplied') !== (spec.alpha === 'premultiplied')))
+        throw new TypeError('Color packing needs matching source color spaces and RGB association. Use image.convert before routing.');
+    }
+    const data = new storage[spec.precision](width * height * channels);
+    for (let p = 0; p < width * height; p++) for (let c = 0; c < channels; c++) {
+      const { source, index, scale, stride, value } = assignments[c];
+      const sample = source ? source.raster.data[p * stride + index] / scale : value;
+      data[p * channels + c] = pack(sample, spec, spec.alpha !== 'none' && c === channels - 1, 'error');
+    }
+    if (!samples(data, spec)) throw new RangeError('Packed channels do not match the output alpha encoding');
+    return wrap({ width, height, channels, data, pivot }, spec);
+  }
+
+  function shuffleChannels(source, routes, target) {
+    if (!Array.isArray(routes)) throw new TypeError('Image shuffle needs a list of channel selectors or constants');
+    const selections = Array.from(routes, route => {
+      if (finite(route)) return route;
+      if (typeof route === 'string') return { source: 'source', channel: route };
+      if (fields(route, ['channel']) && own(route, 'channel')) return { source: 'source', channel: route.channel };
+      throw new TypeError('An image shuffle route needs a channel selector or a finite constant');
+    });
+    return packChannels({ source }, selections, target);
+  }
+
+  function channelMath(a, b, operation, { precision = 'float64', outOfRange = 'error' } = {}) {
+    const { raster: left, descriptor: spec } = requireImage(a);
+    const right = finite(b) ? null : requireImage(b);
+    if (!own(RasterChannelMath, operation) || !['error', 'clamp'].includes(outOfRange))
+      throw new RangeError('Invalid image channel math operation or range policy');
+    if (!['data', 'mask', 'height'].includes(spec.intent) || spec.alpha !== 'none' ||
+        right && (!['data', 'mask', 'height'].includes(right.descriptor.intent) || right.descriptor.alpha !== 'none' ||
+          !alignedChannels(a, right) || right.raster.channels !== 1 && right.descriptor.layout !== spec.layout))
+      throw new TypeError('Image channel math needs aligned unassociated numeric channels. Split color or alpha first.');
+    const { width, height, channels, pivot, data } = left;
+    const output = descriptor(left, { ...spec, precision, domain: undefined });
+    const out = new storage[output.precision](data.length);
+    const apply = RasterChannelMath[operation], leftScale = integerMax(spec.precision) || 1;
+    const rightScale = right ? integerMax(right.descriptor.precision) || 1 : 1;
+    const broadcast = right?.raster.channels === 1;
+    for (let i = 0; i < out.length; i++) {
+      const operand = right ? right.raster.data[broadcast ? Math.floor(i / channels) : i] / rightScale : b;
+      const value = apply(data[i] / leftScale, operand);
+      if (!finite(value)) throw new RangeError('Image channel math returned a nonfinite sample at index ' + i);
+      out[i] = pack(value, output, false, outOfRange);
+    }
+    return wrap({ width, height, channels, pivot, data: out }, output);
+  }
+
   const unitClamp = value => Math.min(1, Math.max(0, value));
 
   function blendCrop(crop, width, height) {
@@ -445,6 +565,26 @@
     };
   }
 
+  function channelRouter(name) {
+    const packing = name === 'image.pack';
+    return {
+      description: packing ? 'Pack selected typed image channels and numeric constants into one image.' :
+        'Reorder, repeat or replace channels of one typed image.',
+      specialize(node) {
+        const descriptor = literalDescriptor(node) ?? { intent: 'data' };
+        const { intent } = literalShape(descriptor, name);
+        const source = packing ? { sources: 'record' } : { source: 'typedImage' };
+        return {
+          inputs: { ...source, routes: 'array', descriptor: { type: 'record', default: { intent: 'data' } } },
+          outputs: typedOutput(intent),
+          run({ sources, source, routes, descriptor }) {
+            return { value: packing ? packChannels(sources, routes, descriptor) : shuffleChannels(source, routes, descriptor) };
+          }
+        };
+      }
+    };
+  }
+
   const operations = Object.freeze({
     'image.declare': { description: 'Attach a verified image contract to a legacy raster using a literal descriptor.', specialize },
     'image.uniform': {
@@ -464,6 +604,28 @@
           dropAlpha: { type: 'boolean', default: false } }, outputs: typedOutput(intent),
         run({ source, descriptor, ...options }) { return { value: convert(source, descriptor, options) }; } };
       }
+    },
+    'image.split': {
+      description: 'Split explicitly selected native channels into named scalar images, including alpha coverage.',
+      specialize({ params, inputs }) {
+        const binding = inputs?.channels ?? params?.channels;
+        const channels = own(binding ?? {}, 'value') ? binding.value : binding;
+        const names = record(channels) ? Object.keys(channels) : [];
+        if (!names.length || names.length > 4 || !Object.values(channels).every(key =>
+          typeof key === 'string' && /^([rgbaxyz]|alpha)$/.test(key) || Number.isSafeInteger(key) && key >= 0 && key < 4))
+          throw new TypeError('image.split needs literal channel selectors keyed by output name');
+        return { inputs: { source: 'typedImage', channels: 'record' },
+          outputs: Object.fromEntries(names.map(name => [name, 'typedImage'])),
+          run({ source, channels }) { return splitChannels(source, channels); } };
+      }
+    },
+    'image.shuffle': channelRouter('image.shuffle'),
+    'image.pack': channelRouter('image.pack'),
+    'image.channelMath': {
+      description: 'Apply arithmetic to decoded typed channels and write float64 unless an output precision is chosen.',
+      inputs: { a: 'typedImage', b: 'any', operation: 'string', options: { type: 'record', default: {} } },
+      outputs: { value: { type: 'typedImage', typeFrom: 'a' } },
+      run({ a, b, operation, options }) { return { value: channelMath(a, b, operation, options) }; }
     },
     'image.blend': {
       description: 'Blend typed images at native precision with a grayscale opacity mask, crop, alpha policy and explicit clamping.',
@@ -501,5 +663,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, blend: blendImage, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);

@@ -189,6 +189,12 @@ const dynamic = {
   'image.declare': { inputs: declareColor.inputs },
   'image.uniform': { inputs: { value: .375, width: 8, height: 6,
     descriptor: { intent: 'mask', precision: 'unorm16' } } },
+  'image.split': { nodes: { color: declareColor }, output: 'coverage',
+    inputs: { source: link('color'), channels: { red: 'r', coverage: 'alpha' } } },
+  'image.shuffle': { nodes: { color: declareColor }, inputs: { source: link('color'),
+    routes: ['b', 'g', { channel: 0 }, .5], descriptor: { intent: 'data' } } },
+  'image.pack': { nodes: { color: declareColor, sources: { op: 'data.record', inputs: { paint: link('color') } } },
+    inputs: { sources: link('sources'), routes: [{ source: 'paint', channel: 'alpha' }, .25, { source: 'paint', channel: 0 }] } },
   'image.convert': { nodes: { color: declareColor }, inputs: { source: link('color'),
     descriptor: { intent: 'color', layout: 'rgba', precision: 'float32', colorSpace: 'srgb-linear' } } },
   'quantity.convert': {inputs:{value:12.5,from:{unit:'kPa'},to:{unit:'Pa'}}},
@@ -229,6 +235,7 @@ const specifications = {
   'material.base': { inputs: { settings: { size: { width: 8, height: 6 }, seed: 4 } } },
   'material.imageOutput': { nodes: { data: declareData },
     inputs: { source: link('data'), settings: { size: { width: 8, height: 6 } } } },
+  'image.channelMath': { nodes: { data: declareData }, inputs: { a: link('data'), b: .5, operation: 'multiply' } },
   'image.blend': { nodes: { background: declareData, foreground: { op: 'image.uniform', inputs: {
     value: .35, width: mask.width, height: mask.height, descriptor: { intent: 'data' } } } },
     inputs: { background: link('background'), foreground: link('foreground'), mode: 'screen', opacity: .65,
@@ -858,8 +865,8 @@ function exampleFor(id, operation, kit) {
       { assets: { sample: { format, file: path.join(__dirname, 'graph-catalog-assets', file) } } }) };
   }
   if (Object.hasOwn(dynamic, id)) {
-    const { type, inputs, callback, nodes } = dynamic[id];
-    return { kind: 'graph', project: project({ op: id, inputs, ...(type && { type }), ...(callback && { group: 'Callback' }) }, 'value',
+    const { type, inputs, callback, nodes, output = 'value' } = dynamic[id];
+    return { kind: 'graph', project: project({ op: id, inputs, ...(type && { type }), ...(callback && { group: 'Callback' }) }, output,
       { nodes, ...(callback && { groups: { Callback: callback } }) }) };
   }
   if (operation.specialize) return;
