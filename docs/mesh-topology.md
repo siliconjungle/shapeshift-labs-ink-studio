@@ -1686,6 +1686,38 @@ ink-studio mesh-topology edge-edit sign.json texel-grid.json --object sign --out
 node examples/tileset-pick/texel-grid-demo.cjs texel-grid-review
 ```
 
+### Choose the subdivision orientation
+
+Set `basis` on `split-face`, `subdivide-face`, or `subdivide-texels`.
+
+| Basis | Positive direction |
+| --- | --- |
+| `face` | The authored quad's first-to-second and first-to-fourth corner directions. This is the default. |
+| `uv` | Increasing U and increasing V in the selected rectangular layout. Defaults to pigment. Use `uvSet` to choose a layout number or material channel. |
+| `camera` | The opposing face-edge directions that best align with camera right and up. The planner projects both directions onto the view and uses authored axis order for a tie. |
+
+In camera mode, a scene supplies its authored camera. Use `camera`
+with orthonormal `right`, `up`, and `back` axes to pin a specific view
+or to subdivide a standalone mesh. Camera orientation chooses and
+signs the quad's existing axes, so the subdivision follows its
+boundary. The face needs visible width and height in that view.
+
+The chosen basis interprets the picked coordinates, row and column
+counts, and cell order. Positive V is down in top-down pigment UVs
+and up in camera space. The receipt records the mapping to the
+authored axes, its origin corner, and any camera axes used. Geometry
+keeps its winding, and the cell containing the original first corner
+keeps the source face ID. Texel subdivision keeps its explicit atlas
+X and Y cuts and uses the basis to order the resulting grid.
+
+```json
+{ "kind": "subdivide-face", "face": "panel", "rows": 2, "columns": 3, "basis": "camera" }
+```
+
+```sh
+node examples/tileset-pick/subdivision-orientation-demo.cjs subdivision-orientation-review
+```
+
 ## Draw surface-snapped retopology patches
 
 Use `KIT.meshTopology.planRetopology(document, request)` to propose an

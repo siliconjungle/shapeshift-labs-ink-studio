@@ -508,5 +508,5 @@ const meshComponentSnap = (function (K) {
   }
 
   K.meshTopology = Object.freeze({ ...topology, planTransform });
-  return Object.freeze({ snapField, meshTarget, edgeEnds, average, usesConstructionPlane, explicitPlane });
+  return Object.freeze({ snapField, meshTarget, edgeEnds, average, usesConstructionPlane, explicitPlane, cameraBasis });
 })(KIT);
