@@ -135,6 +135,17 @@ const meshEdgeFlowData = (function (K) {
     return row;
   }
 
+  function retainUVPins(row, sources) {
+    const uvPins = Object.fromEntries(MaterialUV.setsOf(sources[0]).filter(set=>
+      sources.every(corner=>MaterialUV.pinned(corner,set))).map(set=>[set,true]));
+    return {...row,...(sources.every(corner=>corner.uvPinned) && {uvPinned:true}),...(Object.keys(uvPins).length && {uvPins})};
+  }
+
+  function inheritEdgeSettings(edge, chain) {
+    const {id,vertices,uses,...settings} = edge;
+    return Object.keys(settings).length ? chain.slice(1).map((vertex,i)=>({id:'edge/'+pair(chain[i],vertex),...settings})) : [];
+  }
+
   return { index, name, pair, edgeOf, front, position, around, cyclic, rotate, context, selection,
-    requireWinding, boundary, point, cornerData, corners, edgeCorner };
+    requireWinding, boundary, point, cornerData, corners, edgeCorner, retainUVPins, inheritEdgeSettings };
 })(KIT);

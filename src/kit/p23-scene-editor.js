@@ -901,7 +901,8 @@
       const scene = snapshot();
       requireMeshShapeOwner(object, row.part, scene, 'Edit');
       const plan = K.meshTopology.planEdgeEdit(row.document, request);
-      return plan.report.kind === 'split-face' ? A.tilesetPickedSplit.decorate(scene,row,plan) : {plan};
+      return ['split-face','subdivide-face'].includes(plan.report.kind) ?
+        A.tilesetPickedSplit.decorate(scene,row,plan) : {plan};
     }
 
     function planMeshEdgeEdit(object, request, options) {
