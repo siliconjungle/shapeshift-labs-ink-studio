@@ -11,6 +11,14 @@
       throw new RangeError('Tileset images need dimensions from 1 to '+maxEdge+' texels per side');
   }
 
+  function tileDimensions(size) {
+    if (size == null) return null;
+    if (!record(size) || Object.keys(size).length !== 2 || ![size.width,size.height].every(
+      edge => Number.isInteger(edge) && edge >= 1 && edge <= maxEdge))
+      throw new RangeError('Tile size needs an integer width and height from 1 to '+maxEdge+' texels');
+    return freeze({width:size.width,height:size.height});
+  }
+
   function blank({ width, height, background = 'transparent' } = {}) {
     dimensions(width,height);
     const color = background === 'transparent' ? [0,0,0,0] : DrawingPrimitives.color(background);
@@ -31,8 +39,8 @@
       throw new TypeError('Expected a version 1 tileset image');
     const {width,height,encoding,data,palette,alpha} = source;
     dimensions(width,height);
-    const indexed = encoding === 'indexed8';
-    if (Object.keys(source).some(key => !['version','width','height','encoding','data',...(indexed ? ['palette','alpha'] : [])].includes(key)) ||
+    const tileSize = tileDimensions(source.tileSize), indexed = encoding === 'indexed8';
+    if (Object.keys(source).some(key => !['version','width','height','encoding','data','tileSize',...(indexed ? ['palette','alpha'] : [])].includes(key)) ||
         !packed(data,width*height*(indexed ? 1 : 4)) ||
         indexed && (!Array.isArray(palette) || !palette.length || palette.length > 256 ||
           !Array.from(palette).every(color => Number.isInteger(color) && color >= 0 && color <= 0xffffff) ||
@@ -43,16 +51,22 @@
       for (let i=0;i<slots.length;i++) if (slots.charCodeAt(i) >= palette.length)
         throw new RangeError('Tileset image uses an index outside its palette');
     }
-    return freeze({version:1,width,height,encoding,data,
+    return freeze({version:1,width,height,encoding,data,...(tileSize && {tileSize}),
       ...(indexed && {palette:[...palette],...(alpha !== undefined && {alpha:[...alpha]})})});
   }
 
-  function prepare(sources = {}) {
+  function prepare(sources = {}, defaults = {}) {
     if (!record(sources)) throw new TypeError('Scene tilesets need a map of image sources');
+    if (!record(defaults) || Object.keys(defaults).some(key => key !== 'tileSize'))
+      throw new TypeError('Scene tilesetDefaults accepts a tileSize');
+    const defaultSize = tileDimensions(defaults.tileSize);
     const prepared = new Map(), decoded = new Map();
     for (const [key,source] of Object.entries(sources)) {
       if (!id(key)) throw new TypeError('Invalid tileset ID '+key);
-      prepared.set(key,image(source));
+      const asset = image(source), size = asset.tileSize ?? defaultSize;
+      if (size && (size.width > asset.width || size.height > asset.height))
+        throw new RangeError('Tile size must fit tileset '+key);
+      prepared.set(key,asset);
     }
     function source(key) {
       const asset = prepared.get(key);
@@ -61,6 +75,10 @@
     }
     return {
       source,
+      grid(key) {
+        const override = key === undefined ? null : source(key).tileSize;
+        return {tileSize:override ?? defaultSize,source:override ? 'override' : defaultSize ? 'default' : 'unset'};
+      },
       resolve(texture) {
         if (!record(texture) || !Object.hasOwn(texture,'tileset')) return;
         const key = texture.tileset;
@@ -87,20 +105,44 @@
     };
   }
 
-  function register(scene, key, source) {
+  function checkScene(scene) {
     if (!record(scene) || typeof scene.id !== 'string' || !Array.isArray(scene.solids))
       throw new TypeError('A tileset needs a retained scene with an ID and solids');
+  }
+
+  function register(scene, key, source) {
+    checkScene(scene);
     if (!id(key)) throw new TypeError('Use a lowercase tileset ID with letters, digits, and dashes');
     const current = scene.tilesets === undefined ? {} : scene.tilesets;
-    prepare(current);
-    const asset = image(source);
+    if (!record(current)) throw new TypeError('Scene tilesets need a map of image sources');
     if (Object.hasOwn(current,key)) {
-      if (JSON.stringify(image(current[key])) !== JSON.stringify(asset))
+      const {tileSize:oldSize,...oldImage} = prepare(current,scene.tilesetDefaults).source(key);
+      const {tileSize:newSize,...newImage} = image(source);
+      if (JSON.stringify(oldImage) !== JSON.stringify(newImage))
         throw new RangeError('A different image is already registered as tileset '+key);
+      if (newSize && (newSize.width !== oldSize?.width || newSize.height !== oldSize?.height))
+        throw new RangeError('Edit the registered tile grid for '+key+' separately');
       return scene;
     }
+    const tilesets = {...current,[key]:source};
+    const asset = prepare(tilesets,scene.tilesetDefaults).source(key);
     return {...scene,tilesets:{...current,[key]:asset}};
   }
 
-  A.tilesets = Object.freeze({ dimensions, blank, prepare, register });
+  function gridPatch(scene, key, size) {
+    checkScene(scene);
+    const tileSize = tileDimensions(size);
+    let patch;
+    if (key === undefined) {
+      patch = {tilesetDefaults:{tileSize}};
+    } else {
+      if (!id(key) || !Object.hasOwn(scene.tilesets ?? {},key)) throw new RangeError('Unknown tileset '+key);
+      patch = {tilesets:{...scene.tilesets,[key]:{...scene.tilesets[key],tileSize}}};
+    }
+    const updated = {...scene,...patch};
+    const grid = prepare(updated.tilesets,updated.tilesetDefaults).grid(key);
+    return {patch,grid};
+  }
+
+  A.tilesets = Object.freeze({ dimensions, blank, prepare, register, gridPatch });
 })(KIT);

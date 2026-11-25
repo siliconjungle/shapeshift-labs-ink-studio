@@ -76,10 +76,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().setSdfPaint` | function | `(paint, targets = selectedKeys())` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().setSdfProtection` | function | `(protection, targets = selectedKeys())` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().setSurfaceState` | function | `(state, targets = selectedKeys())` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().setTilesetGrid` | function | `(id, size)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().setTransform` | function | `(patch, targets = selectedKeys())` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().snapshot` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().sourceDependencies` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().suggestBreakable` | function | `({ world, ...options } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().tilesetGrid` | function | `(id)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().transferMeshAttachments` | function | `(object, patch, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().transformMeshTopology` | function | `(object, request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().tree` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |

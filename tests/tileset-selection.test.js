@@ -19,14 +19,15 @@ const scene = {id:'test',style:'slate',solids:[],tilesets:{
   wide:ink.createBlankTileset({width:600,height:1})
 }};
 
-function setup(t) {
+function setup(t, document = scene) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-tileset-pick-'));
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   const filename = path.join(dir,'scene.json');
-  fs.writeFileSync(filename,JSON.stringify(scene));
-  const cli = (...args)=>execFileSync(process.execPath,[path.resolve(__dirname,'../cli/ink-studio.js'),
-    'tileset','pick','--scene',filename,'--id','masonry',...args],{encoding:'utf8',stdio:'pipe'});
-  return {dir,filename,cli};
+  fs.writeFileSync(filename,JSON.stringify(document));
+  const tileset = (...args)=>execFileSync(process.execPath,[path.resolve(__dirname,'../cli/ink-studio.js'),
+    'tileset',...args],{encoding:'utf8',stdio:'pipe'});
+  const cli = (...args)=>tileset('pick','--scene',filename,'--id','masonry',...args);
+  return {dir,filename,cli,tileset};
 }
 
 test('SDK picks exact rectangular texels, handles the last pixel, and rejects invalid bounds',()=>{
@@ -114,4 +115,63 @@ test('the CLI reopens a brush and previews the original texels in brush order',t
   assert.deepEqual([...data],expected);
   assert.deepEqual([...ink.rasterizeTilesetBrush(scene,brush).pixels],expected);
   assert.throws(()=>ink.rasterizeTilesetBrush(scene,{...brush,columns:1}),/counts do not match/);
+});
+
+test('scene editor changes tile dimensions transactionally without changing images or saved brushes',()=>{
+  const editor = ink.createSceneEditor(scene);
+  assert.throws(()=>ink.pickTilesetBlock(editor.snapshot(),'masonry',brushBounds),/Set tile dimensions/);
+  assert.throws(()=>editor.setTilesetGrid(undefined,tile),/Tile size must fit tileset wide/);
+  assert.equal(editor.snapshot().tilesetDefaults,undefined);
+  editor.setTilesetGrid('wide',{width:4,height:1});
+  assert.deepEqual(editor.setTilesetGrid(undefined,tile),{tileSize:tile,source:'default'});
+  assert.deepEqual(editor.tilesetGrid('masonry'),{tileSize:tile,source:'default'});
+  assert.deepEqual(ink.pickTilesetBlock(editor.snapshot(),'masonry',brushBounds),brush);
+  const original = ink.rasterizeTilesetBrush(editor.snapshot(),brush);
+
+  editor.setTilesetGrid('masonry',{width:4,height:2});
+  assert.equal(editor.tilesetGrid('masonry').source,'override');
+  assert.throws(()=>ink.pickTilesetBlock(editor.snapshot(),'masonry',brushBounds),/whole tile boundaries/);
+  assert.deepEqual(ink.rasterizeTilesetBrush(editor.snapshot(),brush),original);
+  assert.equal(editor.snapshot().tilesets.masonry.data,scene.tilesets.masonry.data);
+  assert.deepEqual(editor.registerTileset('masonry',scene.tilesets.masonry).tileSize,{width:4,height:2});
+
+  editor.undo();
+  assert.deepEqual(editor.tilesetGrid('masonry'),{tileSize:tile,source:'default'});
+  editor.redo();
+  assert.deepEqual(editor.tilesetGrid('masonry'),{tileSize:{width:4,height:2},source:'override'});
+  editor.setTilesetGrid('masonry',null);
+  assert.deepEqual(editor.tilesetGrid('masonry'),{tileSize:tile,source:'default'});
+  editor.setTilesetGrid(undefined,null);
+  assert.deepEqual(editor.tilesetGrid('masonry'),{tileSize:null,source:'unset'});
+  assert.throws(()=>ink.createSceneEditor({...scene,tilesetDefaults:{tileSize:{width:2}}}),/integer width and height/);
+});
+
+test('headless tile grids persist defaults and sheet overrides and keep one-off picks compatible',t=>{
+  const {dir,filename,tileset} = setup(t,{...scene,tilesets:{masonry:scene.tilesets.masonry}});
+  const output = name=>path.join(dir,name+'.json');
+  const grid = (input,...args)=>JSON.parse(tileset('grid','--scene',input,...args));
+  const pick = (input,id,...args)=>JSON.parse(tileset('pick','--scene',input,'--id',id,
+    '--x','0','--y','0','--width','4','--height','4',...args));
+
+  const defaults = output('defaults'), revised = output('revised'), inherited = output('inherited');
+  grid(filename,'--tile-width','2','--tile-height','2','--out',defaults);
+  assert.deepEqual(grid(defaults),{tileSize:tile,source:'default'});
+  assert.equal(pick(defaults,'masonry','--brush').columns,2);
+  assert.equal(pick(defaults,'masonry').format,'ink-studio/tileset-selection');
+
+  tileset('create','--scene',defaults,'--id','glass','--width','4','--height','4','--out',revised,
+    '--tile-width','4','--tile-height','1');
+  assert.deepEqual(grid(revised,'--id','glass'),{id:'glass',tileSize:{width:4,height:1},source:'override'});
+  assert.deepEqual([pick(revised,'glass','--brush').columns,pick(revised,'glass','--brush').rows],[1,4]);
+  assert.equal(pick(revised,'glass','--tile-width','2','--tile-height','2').columns,2);
+  grid(revised,'--id','glass','--clear','--out',inherited);
+  assert.equal(grid(inherited,'--id','glass').source,'default');
+  assert.equal(pick(inherited,'glass','--brush').columns,2);
+
+  const png = path.join(dir,'border.png'), imported = output('imported');
+  fs.writeFileSync(png,PNG.encode(4,1,new Uint8Array(16),4));
+  tileset('import',png,'--scene',inherited,'--id','border','--out',imported,'--tile-width','4','--tile-height','1');
+  assert.deepEqual(grid(imported,'--id','border'),{id:'border',tileSize:{width:4,height:1},source:'override'});
+  assert.throws(()=>grid(imported,'--id','border','--clear','--out',output('invalid')),/Tile size must fit tileset border/);
+  assert.equal(fs.existsSync(output('invalid')),false);
 });

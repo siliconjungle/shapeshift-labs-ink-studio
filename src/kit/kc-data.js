@@ -230,6 +230,7 @@
     assetParts: 'obj',
     topologyMeshes: 'obj',
     tilesets: 'obj',
+    tilesetDefaults: 'obj',
     hybridOwnership: 'obj',
     environmentPreset: 'obj',
     roles: 'obj',
@@ -449,15 +450,16 @@
         bad('hybridOwnership', error.message);
       }
     }
+    const hasTilesets = spec.tilesets !== undefined || spec.tilesetDefaults !== undefined;
     let tilesets;
-    if (spec.tilesets !== undefined) {
+    if (hasTilesets) {
       try {
-        tilesets = K.authoring.tilesets.prepare(spec.tilesets);
+        tilesets = K.authoring.tilesets.prepare(spec.tilesets,spec.tilesetDefaults);
       } catch (error) {
-        bad('tilesets', error.message);
+        bad(spec.tilesets === undefined ? 'tilesetDefaults' : 'tilesets', error.message);
       }
     }
-    if (spec.topologyMeshes !== undefined && (spec.tilesets === undefined || tilesets)) {
+    if (spec.topologyMeshes !== undefined && (!hasTilesets || tilesets)) {
       try {
         presentation.topologyMeshes = K.authoring.meshTopologyScene.prepare(spec.topologyMeshes, tilesets);
         const names = new Set([...DIO.solids(spec).map(solid => solid?.id), ...Object.keys(spec.assetParts ?? {})]);
@@ -1611,7 +1613,7 @@
       const { palette, roles, sun } = st0;
       const { timeline: authoredTimeline, cameraRig: authoredCameraRig, dataInputs: authoredData, dataMarks: authoredMarks,
         breakables: authoredBreakables, surfaceDecals: authoredDecals, topologyMeshes: authoredTopology,
-        tilesets: authoredTilesets, ...geometry } = spec;
+        tilesets: authoredTilesets, tilesetDefaults: authoredTileDefaults, ...geometry } = spec;
       let world = (env.brushSession ?? K.authoring.brushRegions.create()).build(geometry, env, { palette, roles, sun });
       let marksSystem;
       if (marks) {

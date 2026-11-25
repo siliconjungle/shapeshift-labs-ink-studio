@@ -267,10 +267,11 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   hybrid-ownership route <scene.json> <object> <part> <channel>   resolve the authored edit destination
   hybrid-ownership plan <scene.json> <revisions.json> [--previous report.json] [--out report.json]   plan dependent rebuilds
   asset-part manifest <asset.gltf|.glb> [--out revision.json]   show stable asset IDs
-  tileset import <image.png> --scene <scene.json> --id <tileset-id> --out <new-scene.json>   register a shared tileset image
-  tileset create --width <texels> --height <texels> [--background <color>] --scene <scene.json> --id <tileset-id> --out <new-scene.json>   register a blank tileset
+  tileset import <image.png> [--tile-width N --tile-height N] --scene <scene.json> --id <tileset-id> --out <new-scene.json>   register a shared tileset image
+  tileset create --width <texels> --height <texels> [--background <color>] [--tile-width N --tile-height N] --scene <scene.json> --id <tileset-id> --out <new-scene.json>   register a blank tileset
+  tileset grid --scene <scene.json> [--id <tileset-id>] [--tile-width N --tile-height N | --clear] [--out <new-scene.json>]   inspect or edit shared or per-sheet tile dimensions
   tileset pick --scene <scene.json> --id <tileset-id> [--x N --y N --width N --height N] [--out file.html|file.json]   pick an exact texel rectangle
-  tileset pick --scene <scene.json> --id <tileset-id> --tile-width N --tile-height N --x N --y N --width N --height N [--out brush.json]   pick a tile brush
+  tileset pick --scene <scene.json> --id <tileset-id> (--brush | --tile-width N --tile-height N) --x N --y N --width N --height N [--out brush.json]   pick a tile brush
   tileset brush-preview <brush.json> --scene <scene.json> --out <preview.png>   render a tile brush on its native grid
   asset-part preview <scene.json> <instance> <asset.gltf|.glb> [--expect N] [--out report.json]   check a replacement
   asset-part replace <scene.json> <instance> <asset.gltf|.glb> [--expect N] --out <next-scene.json>   save one part revision

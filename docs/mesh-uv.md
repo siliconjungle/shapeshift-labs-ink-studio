@@ -128,11 +128,50 @@ the same offset from the brush origin without `x` and `y`. This keeps
 the whole arrangement in one record, including transparent cells.
 
 In Node, call `ink.pickTilesetBlock(scene, "masonry", { x:48, y:0, width:48, height:16 }, { width:16, height:8 })`.
+Omit the fourth argument to use the sheet’s configured grid.
 Use `ink.rasterizeTilesetBrush(scene, brush)` to resolve the saved brush
 to its exact RGBA bytes.
 
 Run `node examples/tileset-pick/demo.cjs tileset-pick-demo` for a painted
 gatehouse, a blank tileset, and the sign selected as a 3×2 tile brush.
+
+### Set tile dimensions per sheet
+
+Set a shared grid for a scene, then give any sheet its own dimensions.
+The values describe one tile in texels. A tile must fit on its sheet,
+and a sheet can have leftover texels along the right or bottom edge.
+
+```sh
+ink-studio tileset grid --scene gatehouse-tiles.json \
+  --tile-width 16 --tile-height 8 --out gatehouse-default-grid.json
+ink-studio tileset grid --scene gatehouse-default-grid.json \
+  --id window-glass --tile-width 8 --tile-height 12 --out gatehouse-grids.json
+ink-studio tileset grid --scene gatehouse-grids.json --id window-glass
+ink-studio tileset pick --scene gatehouse-grids.json --id masonry --brush \
+  --x 48 --y 0 --width 48 --height 16 --out sign-brush.json
+```
+
+The scene stores `tilesetDefaults.tileSize` as a `{ "width": 16, "height": 8 }`
+record. A sheet’s `tilesets[id].tileSize` takes precedence. Run
+`tileset grid` without edit flags to inspect the effective dimensions and
+their source (`default`, `override`, or `unset`). Use `--clear --out <new-scene.json>`
+to let a sheet inherit the shared default again or to remove the shared
+default when no ID is supplied. Add the tile dimensions to `tileset import`
+or `tileset create` to register a sheet with its own grid in one step.
+
+`tileset pick --brush` reads the saved dimensions. Supplying both tile
+dimension flags to the picker makes a one-off choice. The plain texel
+rectangle and the exact dimensions captured in saved brushes remain usable
+after grid edits.
+
+In Node, `editor.tilesetGrid(id)` reports the effective grid.
+`editor.setTilesetGrid(id, { width, height })` edits it with undo support.
+Use `undefined` for the ID to edit the shared default and `null` for the
+size to clear the setting.
+
+Run `node examples/tileset-pick/grid-demo.cjs tile-grid-demo` for a headless
+comparison of the same TIDE sign picked from two sheets with different
+tile sizes.
 
 ## Edit an authored layout
 

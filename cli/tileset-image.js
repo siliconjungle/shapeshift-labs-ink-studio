@@ -17,20 +17,40 @@ function readTilesetImage(source, toolkit = require('..').load()) {
   return {version:1,width,height,encoding:'rgba8',data:Buffer.from(rgba).toString('base64')};
 }
 
+const tileFields = ['tile-width','tile-height'];
+const integerText = value => typeof value === 'string' && /^-?\d+$/.test(value);
+
+function tileOptions(options) {
+  if (!tileFields.some(key => options[key] !== undefined)) return;
+  if (!tileFields.every(key => integerText(options[key])))
+    throw new TypeError('Specify both --tile-width and --tile-height as integers');
+  return {width:Number(options['tile-width']),height:Number(options['tile-height'])};
+}
+
+function prepare(scene, toolkit) {
+  return toolkit.KIT.authoring.tilesets.prepare(scene.tilesets,scene.tilesetDefaults);
+}
+
+function configuredTileSize(tilesets, id) {
+  const {tileSize} = tilesets.grid(id);
+  if (!tileSize) throw new RangeError('Set tile dimensions with tileset grid or supply --tile-width and --tile-height');
+  return tileSize;
+}
+
 function pickTilesetRectangle(scene, id, rectangle, toolkit = require('..').load()) {
-  const tilesets = toolkit.KIT.authoring.tilesets.prepare(scene.tilesets);
+  const tilesets = prepare(scene, toolkit);
   return Selection.pick(id,tilesets.source(id),rectangle);
 }
 
 function pickTilesetBlock(scene, id, rectangle, tileSize, toolkit = require('..').load()) {
-  const tilesets = toolkit.KIT.authoring.tilesets.prepare(scene.tilesets);
-  return Selection.block(id,tilesets.source(id),rectangle,tileSize);
+  const tilesets = prepare(scene, toolkit);
+  return Selection.block(id,tilesets.source(id),rectangle,tileSize === undefined ? configuredTileSize(tilesets,id) : tileSize);
 }
 
 function rasterizeTilesetBrush(scene, brush, toolkit = require('..').load()) {
   if (brush?.format !== 'ink-studio/tileset-brush' || brush.version !== 1)
     throw new TypeError('Expected a version 1 tileset brush');
-  const tilesets = toolkit.KIT.authoring.tilesets.prepare(scene.tilesets), id = brush.tileset;
+  const tilesets = prepare(scene, toolkit), id = brush.tileset;
   const source = tilesets.source(id);
   const {x,y,width,height,columns,rows} = Selection.block(id,source,brush,{width:brush.tileWidth,height:brush.tileHeight});
   if (brush.columns !== columns || brush.rows !== rows)
@@ -57,16 +77,11 @@ function previewCommand([file,...rest], options, toolkit) {
 
 function pickCommand(args, options, toolkit) {
   const {scene,id,out} = options, fields = ['x','y','width','height'];
-  const tileFields = ['tile-width','tile-height'];
-  const integerText = value => typeof value === 'string' && /^-?\d+$/.test(value);
   if (args.length || ![scene,id].every(value => typeof value === 'string' && value.trim()) ||
-      Object.keys(options).some(key => !['scene','id','out',...fields,...tileFields].includes(key)) ||
+      Object.keys(options).some(key => !['scene','id','out','brush',...fields,...tileFields].includes(key)) ||
       out !== undefined && (typeof out !== 'string' || !/\.(html|json)$/i.test(out)))
-    throw new TypeError('Use tileset pick --scene <scene.json> --id <tileset-id> with rectangle or tile options');
-  const block = tileFields.some(key => options[key] !== undefined);
-  if (block && !tileFields.every(key => integerText(options[key])))
-    throw new TypeError('Specify both --tile-width and --tile-height as integers');
-  const tile = block ? {width:Number(options['tile-width']),height:Number(options['tile-height'])} : undefined;
+    throw new TypeError('Use tileset pick --scene <scene.json> --id <tileset-id> with rectangle bounds and optional --brush');
+  const tile = tileOptions(options), block = options.brush === true || tile !== undefined;
   const visual = out !== undefined && /\.html$/i.test(out);
   if (visual && block) throw new TypeError('Save a tile brush as JSON and render it with tileset brush-preview');
   const count = fields.filter(key => options[key] !== undefined).length;
@@ -75,10 +90,10 @@ function pickCommand(args, options, toolkit) {
   const filename = path.resolve(scene), output = out && path.resolve(out);
   if (output === filename) throw new RangeError('Write the pick separately from the source scene');
   const document = JSON.parse(fs.readFileSync(filename,'utf8'));
-  const tilesets = toolkit.KIT.authoring.tilesets.prepare(document.tilesets), source = tilesets.source(id);
+  const tilesets = prepare(document, toolkit), source = tilesets.source(id);
   const bounds = count ? Object.fromEntries(fields.map(key => [key,Number(options[key])])) :
     {x:0,y:0,width:1,height:1};
-  const selection = block ? Selection.block(id,source,bounds,tile) : Selection.pick(id,source,bounds);
+  const selection = block ? Selection.block(id,source,bounds,tile ?? configuredTileSize(tilesets,id)) : Selection.pick(id,source,bounds);
   if (visual) {
     const {width,height,pixels} = tilesets.resolve({tileset:id});
     const model = JSON.stringify({width,height,selection,rgba:Buffer.from(pixels).toString('base64')}).replaceAll('<','\\u003c');
@@ -94,29 +109,58 @@ function pickCommand(args, options, toolkit) {
   process.stdout.write(JSON.stringify(selection,null,2)+'\n');
 }
 
+function sceneOutput(input, out, imageFile) {
+  const output = path.resolve(out);
+  if (!/\.json$/i.test(output) || path.dirname(input) !== path.dirname(output) ||
+      output === input || imageFile !== undefined && output === path.resolve(imageFile))
+    throw new RangeError('Write a new scene JSON beside the original to preserve relative scene assets');
+  return output;
+}
+
+function gridCommand(args, options, toolkit) {
+  const {scene,id,out,clear} = options;
+  if (args.length || typeof scene !== 'string' || !scene.trim() ||
+      id !== undefined && (typeof id !== 'string' || !id.trim()) ||
+      Object.keys(options).some(key => !['scene','id','out','clear',...tileFields].includes(key)))
+    throw new TypeError('Use tileset grid --scene <scene.json> with optional --id <tileset-id>');
+  const tileSize = tileOptions(options), changing = clear === true || tileSize !== undefined;
+  if (clear === true && tileSize || changing && (typeof out !== 'string' || !out.trim()) || !changing && out !== undefined)
+    throw new TypeError('For grid edits, specify tile dimensions or --clear, and --out <new-scene.json>');
+  const input = path.resolve(scene);
+  const document = JSON.parse(fs.readFileSync(input,'utf8'));
+  const report = id === undefined ? {} : {id};
+  if (changing) {
+    const output = sceneOutput(input,out);
+    const {patch,grid} = toolkit.KIT.authoring.tilesets.gridPatch(document,id,tileSize ?? null);
+    files.publishJson(output,{...document,...patch},'A different scene already exists at '+output);
+    Object.assign(report,{scene:output},grid);
+  } else {
+    Object.assign(report,prepare(document,toolkit).grid(id));
+  }
+  process.stdout.write(JSON.stringify(report,null,2)+'\n');
+}
+
 function command([action, ...args], options, toolkit) {
+  if (action === 'grid') return gridCommand(args,options,toolkit);
   if (action === 'pick') return pickCommand(args,options,toolkit);
   if (action === 'brush-preview') return previewCommand(args,options,toolkit);
   const [source,...rest] = args;
   const {id,scene,out,width,height,background} = options;
   const create = action === 'create';
-  const allowed = ['id','scene','out',...(create ? ['width','height','background'] : [])];
+  const allowed = ['id','scene','out',...tileFields,...(create ? ['width','height','background'] : [])];
   if (!['import','create'].includes(action) || rest.length || Object.keys(options).some(key => !allowed.includes(key)) ||
       ![id,scene,out].every(value => typeof value === 'string' && value.trim()))
-    throw new TypeError('Use tileset import, create, pick, or brush-preview');
+    throw new TypeError('Use tileset import, create, grid, pick, or brush-preview');
   if (create) {
     if (source !== undefined || ![width,height].every(value => typeof value === 'string' && /^\d+$/.test(value)))
       throw new TypeError('Use tileset create --width <texels> --height <texels> [--background <color>]');
   } else if (!source) {
     throw new TypeError('Use tileset import <image.png>');
   }
-  const output = path.resolve(out), input = path.resolve(scene);
-  if (!/\.json$/i.test(output) || path.dirname(input) !== path.dirname(output) ||
-      output === input || !create && output === path.resolve(source))
-    throw new RangeError('Write a new scene JSON beside the original to preserve relative scene assets');
-  const tilesets = toolkit.KIT.authoring.tilesets;
+  const input = path.resolve(scene), output = sceneOutput(input,out,source);
+  const tilesets = toolkit.KIT.authoring.tilesets, tileSize = tileOptions(options);
   const asset = create ? tilesets.blank({width:Number(width),height:Number(height),background}) : readTilesetImage(source,toolkit);
-  const registered = tilesets.register(JSON.parse(fs.readFileSync(input,'utf8')),id,asset);
+  const registered = tilesets.register(JSON.parse(fs.readFileSync(input,'utf8')),id,tileSize ? {...asset,tileSize} : asset);
   files.publishJson(output,registered,'A different scene already exists at '+output);
   process.stdout.write(JSON.stringify({scene:output,id,width:asset.width,height:asset.height,encoding:asset.encoding},null,2)+'\n');
 }

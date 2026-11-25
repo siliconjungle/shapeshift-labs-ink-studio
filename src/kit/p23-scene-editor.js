@@ -352,6 +352,20 @@
       return document.pending() ? write() : document.transact('Register tileset '+id,write);
     }
 
+    function tilesetGrid(id) {
+      const {tilesets,tilesetDefaults} = snapshot();
+      return A.tilesets.prepare(tilesets,tilesetDefaults).grid(id);
+    }
+
+    function setTilesetGrid(id, size) {
+      const {patch,grid} = A.tilesets.gridPatch(snapshot(),id,size);
+      const write = () => {
+        document.setEnvironment(patch);
+        return grid;
+      };
+      return document.pending() ? write() : document.transact('Set tile grid'+(id ? ' for '+id : ' defaults'),write);
+    }
+
     function meshTopology(object, part) {
       const meshes = snapshot().topologyMeshes ?? {};
       const mesh = Object.hasOwn(meshes, object) ? meshes[object] : null;
@@ -778,6 +792,8 @@
       setPrefabInstance,
       planPrefabRefresh, refreshPrefabs,
       registerTileset,
+      tilesetGrid,
+      setTilesetGrid,
       meshTopology,
       selectMeshTopology: (object, request, { part, visibility } = {}) =>
         K.meshTopology.select(meshTopology(object, part).document, request, { visibility }),
