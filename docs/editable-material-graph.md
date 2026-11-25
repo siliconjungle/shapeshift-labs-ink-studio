@@ -44,3 +44,31 @@ For example, a color output can keep its ID while its connection is rewired. Kee
 ```
 
 Opening checks document structure and references. Executing additionally checks socket types, operations, dependencies, and that each output is bound. Existing version 1 graph projects still run as before and can be converted without altering the source. Ink rejects a document with a newer, unsupported version before writing it.
+
+## Publish and edit reusable subgraphs
+
+A subgraph publishes its graph inputs as typed sockets, with optional defaults, and its bound graph outputs as named sockets. The compiler derives each output type and physical quantity from the connected source. Publish an inline editable scope or reference a shared graph group file from multiple materials. An external publication can be pinned by revision and SHA-256.
+
+Use `ink.editMaterialSubgraph(document, request, options)` to get a new document and the inspected subgraph. Pass `baseDir` for relative graph group files and `sourceFile` to include the editable file in navigation results. The original document remains available if an edit fails validation.
+
+| Request `kind` | Fields and effect |
+| --- | --- |
+| `publish` | `group` and either `graph` (an editable scope) or `reference` (a group path or pinned reference). |
+| `insert` | `node`, `group`, optional literal `overrides` keyed by input port, and optional `connections` keyed by link ID. A connection supplies `port` and `from`, such as `{"input":"accent"}`. |
+| `override` | `node` and `overrides` keyed by port. Values use the published socket types. Disconnect a wired port before setting a literal. |
+| `reset` | `node` and optional `ports`. Remove those local values or keyframes and use the definition defaults. Existing wires stay connected. An unwired required port still needs a value. |
+| `replace` | `node` and the new `group`. Keep the node ID, input bindings, and link IDs. Replacement fails if bindings or connected output types and quantities are incompatible. |
+| `inspect` | CLI request with `node` or `group`. In Node, call `ink.describeMaterialSubgraph(document, target, options)`. |
+
+Use the optional `scope` array of group IDs for nested definitions. Inspecting a definition returns its source file, any nested group path within that file, revision information for external groups, and the typed interface. Inspecting an instance also reports which inputs use local values, wires, keyframes, and defaults. Edits apply to direct instances in the open document. Open an external definition's source to edit its contents.
+
+Call `ink.publishMaterialSubgraph(file, document, { baseDir, revision })` to publish the material's root scope as a reusable graph group file. Expose shared data as explicit typed inputs. The publication keeps relative nested dependencies portable and returns the typed interface and pin metadata. Use a new filename for a revised publication.
+
+```sh
+node examples/material-subgraphs/demo.cjs /tmp/ink-glaze-library
+ink-studio graph subgraph /tmp/ink-glaze-library/glaze-library.material.json /tmp/ink-glaze-library/inspect.json
+ink-studio graph subgraph /tmp/ink-glaze-library/glaze-library.material.json /tmp/ink-glaze-library/replace.json --out /tmp/ink-glaze-library/replaced.material.json
+ink-studio graph run /tmp/ink-glaze-library/replaced.material.json --out /tmp/ink-glaze-library/replaced
+```
+
+Open `demo.html` in the demo directory to compare the rendered combinations. It previews graph runs from two instances with independent pigment settings and replacements.

@@ -1753,6 +1753,8 @@ const CMD = {
         '  graph nodes [--json]   list registered graph operations and their ports',
         '  graph describe <op> [--json | --example]   show schema, units, limits and a runnable example',
         '  graph material <project-or-material.json> [--id ID] [--base settings.json] [--out material.json]   open or save an editable material graph',
+        '  graph subgraph <material.json> <request.json> [--out material.json]   inspect or edit reusable material instances',
+        '  graph publish-subgraph <material.json> --out group.json [--revision N]   publish a reusable definition',
         '    graph execution commands accept --instance ID for material graph files',
         '    use --base-context context.json to supply material inheritance providers',
         '  graph validate|plan <project.json> [--inputs values.json]   validate and describe a headless graph',

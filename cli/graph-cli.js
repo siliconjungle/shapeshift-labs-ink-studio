@@ -5,6 +5,7 @@ const { createInterface } = require('node:readline');
 const { save, graphOutputs } = require('./graph-outputs.js');
 const { readGraphProject } = require('./graph-project.js');
 const { openMaterialGraph, readMaterialGraph, writeMaterialGraph } = require('./material-graph.js');
+const { describeMaterialSubgraph, editMaterialSubgraph, publishMaterialSubgraph } = require('./material-subgraphs.js');
 const { findGraphGroupUsers } = require('./graph-groups.js');
 const { snapshotFormat, diffGraphs } = require('./graph-diff.js');
 const { openGraphArtifactCache, engineFingerprint, fingerprint } = require('./graph-artifact-cache.js');
@@ -25,7 +26,8 @@ const flags = {
 };
 for (const options of Object.values(flags)) options.push('instance','base-context');
 const discoveryFlags = { nodes: ['json'], describe: ['json', 'example'] };
-const analysisFlags = { impact: ['root', 'json'], diff: ['adapters', 'json'], material: ['id', 'out', 'base'] };
+const analysisFlags = { impact: ['root', 'json'], diff: ['adapters', 'json'], material: ['id', 'out', 'base'],
+  subgraph: ['out', 'adapters'], 'publish-subgraph': ['out', 'revision', 'adapters'] };
 const commandOptions = { ...flags, ...discoveryFlags, ...analysisFlags, ...host.commands };
 
 async function sendText(text) {
@@ -138,6 +140,32 @@ async function graphCommand(pos,opt,settings) {
     if (opt.out===undefined) return send(document);
     const result=writeMaterialGraph(opt.out,document,{baseDir:path.dirname(path.resolve(file))});
     return send({file:path.resolve(opt.out),format:result.format,version:result.version,id:result.id});
+  }
+  if (mode==='subgraph' || mode==='publish-subgraph') {
+    const publish=mode==='publish-subgraph';
+    if (pos.length!==(publish ? 2 : 3) || publish && !opt.out || Object.entries(opt).some(([key,value])=>
+      !analysisFlags[mode].includes(key) || typeof value!=='string' || !value.trim()))
+      throw new TypeError('Use graph subgraph <material.json> <request.json> [--out material.json] or graph publish-subgraph <material.json> --out group.json [--revision N]');
+    settings=await host.adapters(opt.adapters,settings);
+    const sourceFile=path.resolve(file), baseDir=path.dirname(sourceFile);
+    const document=readMaterialGraph(sourceFile), options={...settings,baseDir,sourceFile};
+    if (publish) return send(publishMaterialSubgraph(opt.out,document,
+      {...options,revision:opt.revision===undefined ? undefined : Number(opt.revision)}));
+    const requestFile=path.resolve(caseFile), request=JSON.parse(fs.readFileSync(requestFile,'utf8'));
+    if (request?.kind==='inspect') {
+      if (opt.out) throw new TypeError('A subgraph inspection does not take --out');
+      const { kind, ...target }=request;
+      return send(describeMaterialSubgraph(document,target,options));
+    }
+    if (opt.out && path.resolve(opt.out)===requestFile)
+      throw new TypeError('Choose a material output separate from the subgraph request');
+    const edited=editMaterialSubgraph(document,request,options);
+    if (!opt.out) return send(edited);
+    const saved=writeMaterialGraph(opt.out,edited.document,{baseDir});
+    const materialFile=path.resolve(opt.out);
+    const source=edited.subgraph.source;
+    if (source.file===sourceFile && source.kind==='inline') source.file=materialFile;
+    return send({file:materialFile,id:saved.id,subgraph:edited.subgraph});
   }
   if (mode==='impact') {
     if (pos.length!==2 || Object.entries(opt).some(([key,value])=>
