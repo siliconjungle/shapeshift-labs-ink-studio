@@ -174,6 +174,12 @@ function dataScene(file, override, { installedPacks = false } = {}) {
     return world;
   } };
 }
+function openUVEditor(file) {
+  const descriptor = scene(file);
+  if (!descriptor.openEditor) throw new TypeError('UV authoring needs a plain editable scene');
+  return descriptor.openEditor();
+}
+
 function scene(id) {
   if (!id) die('which diorama? try: ink-studio scenes');
   if (id.startsWith('@')) {
@@ -1465,6 +1471,7 @@ const CMD = {
         '  tileset pick --scene <scene.json> --id <tileset-id> [--x N --y N --width N --height N] [--out file.html|file.json]   pick an exact texel rectangle',
         '  tileset pick --scene <scene.json> --id <tileset-id> (--brush | --tile-width N --tile-height N) --x N --y N --width N --height N [--brush-scale N] [--out brush.json]   pick a tile brush',
         '  tileset brush-size <brush.json> --scene <scene.json> [--brush-scale N --out <new-brush.json>]   measure a tile brush in world units or save a new scale',
+        '  tileset brush-uv <brush.json> --scene <scene.json> [--inset-top N] [--inset-bottom N] [--inset-left N] [--inset-right N] [--object ID --face ID] [--out file.json]   inspect or inset brush sampling and edit a retained face',
         '  tileset brush-preview <brush.json> --scene <scene.json> --out <preview.png>   render a tile brush on its native grid',
         '  asset-part preview <scene.json> <instance> <asset.gltf|.glb> [--expect N] [--out report.json]   check a replacement',
         '  asset-part replace <scene.json> <instance> <asset.gltf|.glb> [--expect N] --out <next-scene.json>   save one part revision',
@@ -2695,7 +2702,7 @@ const CMD = {
     return require('./hybrid-ownership.js').command(pos,opt,lib());
   },
   tileset() {
-    return require('./tileset-image.js').command(pos,opt,lib(),cfg.texelsPerUnit);
+    return require('./tileset-image.js').command(pos,opt,lib(),cfg.texelsPerUnit,openUVEditor);
   },
   'asset-part'() {
     return require('./asset-part.js').command(pos, opt, lib());
@@ -4213,11 +4220,7 @@ const CMD = {
   },
   'mesh-uv'() {
     if (['layout', 'select', 'edit'].includes(pos[0]))
-      return require('./mesh-uv-editor.js').command(pos, opt, lib(), file => {
-        const descriptor = scene(file);
-        if (!descriptor.openEditor) throw new TypeError('UV authoring needs a plain editable scene');
-        return descriptor.openEditor();
-      });
+      return require('./mesh-uv-editor.js').command(pos, opt, lib(), openUVEditor);
     require('./mesh-uv.js').command(pos,opt,{num,list});
   },
   mesh() {

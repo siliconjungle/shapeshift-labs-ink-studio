@@ -274,6 +274,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   tileset pick --scene <scene.json> --id <tileset-id> [--x N --y N --width N --height N] [--out file.html|file.json]   pick an exact texel rectangle
   tileset pick --scene <scene.json> --id <tileset-id> (--brush | --tile-width N --tile-height N) --x N --y N --width N --height N [--brush-scale N] [--out brush.json]   pick a tile brush
   tileset brush-size <brush.json> --scene <scene.json> [--brush-scale N --out <new-brush.json>]   measure a tile brush in world units or save a new scale
+  tileset brush-uv <brush.json> --scene <scene.json> [--inset-top N] [--inset-bottom N] [--inset-left N] [--inset-right N] [--object ID --face ID] [--out file.json]   inspect or inset brush sampling and edit a retained face
   tileset brush-preview <brush.json> --scene <scene.json> --out <preview.png>   render a tile brush on its native grid
   asset-part preview <scene.json> <instance> <asset.gltf|.glb> [--expect N] [--out report.json]   check a replacement
   asset-part replace <scene.json> <instance> <asset.gltf|.glb> [--expect N] --out <next-scene.json>   save one part revision

@@ -432,9 +432,36 @@
     return ids;
   }
 
+  function remapFace(g, operation, points, conflict) {
+    const {id,source,destination} = operation;
+    const rectangle = bounds => tuple(bounds,4,unit) && bounds[0] < bounds[2] && bounds[1] < bounds[3];
+    if (!fields(operation,['op','id','source','destination']) || !rectangle(source) || !rectangle(destination))
+      throw new TypeError('Face UV remap needs a face ID and positive normalized source and destination rectangles');
+    const face = g.faces.get(id);
+    if (!face) throw new RangeError('Unknown UV face '+id);
+    const u = face.corners.map(corner=>corner.uv[0]), v = face.corners.map(corner=>corner.uv[1]);
+    const low = [Math.min(...u),Math.min(...v)], high = [Math.max(...u),Math.max(...v)];
+    if ([0,1].some(axis => low[axis] < source[axis]-1e-7 || high[axis] > source[axis+2]+1e-7)) {
+      conflict('face-outside-source-uvs',{face:id,bounds:[...low,...high],source});
+    } else if (low.some((value,axis) => value === high[axis])) {
+      conflict('degenerate-face-uvs',{face:id,bounds:[...low,...high]});
+    } else {
+      for (const {id:corner,uv} of face.corners) {
+        points.set(corner,uv.map((value,axis)=>{
+          const start = destination[axis], end = destination[axis+2];
+          if (low[axis] === start && high[axis] === end) return value;
+          if (value === low[axis]) return start;
+          if (value === high[axis]) return end;
+          return start + (end-start)*(value-low[axis])/(high[axis]-low[axis]);
+        }));
+      }
+    }
+    return [id];
+  }
+
   function draft(g, operation) {
-    if (!operation || typeof operation !== 'object' || !['cut', 'stitch', 'pin', 'transform', 'unwrap', 'relax', 'texel-budget'].includes(operation.op))
-      throw new TypeError('Use a UV cut, stitch, pin, transform, local solve or texel budget operation');
+    if (!operation || typeof operation !== 'object' || !['cut', 'stitch', 'pin', 'transform', 'unwrap', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
+      throw new TypeError('Use a UV cut, stitch, pin, transform, face remap, local solve or texel budget operation');
     const points = new Map(), edges = new Map(), pins = new Map(), conflicts = [];
     let count = 0;
     function conflict(code, evidence) {
@@ -449,7 +476,8 @@
     } else if (operation.op === 'texel-budget') {
       evidence = meshUVTexelBudget.assign(g, operation, points, conflict);
       ids = order((evidence.islands ?? []).map(row => row.id));
-    } else if (operation.op === 'transform') ids = transform(g, operation, points);
+    } else if (operation.op === 'remap-face') ids = remapFace(g,operation,points,conflict);
+    else if (operation.op === 'transform') ids = transform(g, operation, points);
     else if (operation.op === 'stitch') ids = stitch(g, operation, points, edges, conflict);
     else if (operation.op === 'cut') {
       if (!fields(operation, ['op', 'ids', 'selection'])) throw new TypeError('Unknown UV cut setting');
@@ -463,7 +491,8 @@
     }
     for (const [id, uv] of points) {
       const corner = g.corners.get(id);
-      if (sameUV(uv, corner.uv)) { points.delete(id); continue; }
+      const unchanged = operation.op === 'remap-face' ? uv.every((n,i)=>n === corner.uv[i]) : sameUV(uv,corner.uv);
+      if (unchanged) { points.delete(id); continue; }
       if (corner.uvPinned) conflict('pinned-corner', { corner: id, uv: corner.uv, proposed: uv });
       else if (!uv.every(n => Number.isFinite(n) && n >= -1e-10 && n <= 1 + 1e-10))
         conflict('outside-atlas', { corner: id, proposed: uv.map(n => Number.isFinite(n) ? n : null) });

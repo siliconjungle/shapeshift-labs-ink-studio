@@ -300,6 +300,7 @@ module.exports = {
   pickTilesetRectangle: require('./cli/tileset-image.js').pickTilesetRectangle,
   pickTilesetBlock: require('./cli/tileset-image.js').pickTilesetBlock,
   sizeTilesetBrush: require('./cli/tileset-image.js').sizeTilesetBrush,
+  tilesetBrushUV: require('./cli/tileset-image.js').tilesetBrushUV,
   rasterizeTilesetBrush: require('./cli/tileset-image.js').rasterizeTilesetBrush,
   createBlankTileset(options) {
     return module.exports.load().KIT.authoring.tilesets.blank(options);

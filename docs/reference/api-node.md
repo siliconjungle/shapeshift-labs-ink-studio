@@ -175,6 +175,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.sizeTilesetBrush` | function | `(scene, brush, {brushScale,projectTexelsPerUnit} = {}, toolkit = require('..').load())` | [guide](../mesh-uv.md#set-brush-size-in-world-units), [source](../../cli/tileset-image.js) |
 | `node.spriteAtlas` | function | `(world, options = {})` | [source](../../cli/sprite-atlas.js) |
 | `node.startModelingBenchmark` | function | `(...args)` | [source](../../index.js) |
+| `node.tilesetBrushUV` | function | `(scene, brush, insets, toolkit = require('..').load())` | [guide](../mesh-uv.md#inset-brush-uvs-on-each-edge), [source](../../cli/tileset-image.js) |
 | `node.toolkitBuildHash` | function | `(kit)` | [source](../../index.js) |
 | `node.trackPixelSelection` | function | `({ binding,selection,documentGrid,revision,views,render,review,visit,feature })` | [source](../../cli/pixel-selection-track.js) |
 | `node.transitionReview` | function | `(world, { plan = world.transitionReview, width = 160, height = 90, scale = 1, view = {}, pose } = {})` | [guide](../transition-review.md#read-the-results), [guide](../transition-review.md), [source](../../cli/transition-review.js) |

@@ -211,6 +211,39 @@ scene override, supply its shared density as `projectTexelsPerUnit`.
 Run `node examples/tileset-pick/world-scale-demo.cjs tile-world-scale-demo`
 to render the two sizes as editable mesh faces using the same atlas coordinates.
 
+### Inset brush UVs on each edge
+
+Use inward distances measured in source texels. The top, bottom, left, and
+right can be set separately, including fractional values such as half a
+texel. Omitted edges keep their saved values and start at zero. An inset
+must leave a positive sampling rectangle. The brush keeps its original
+crop, tile arrangement, world size, and native source preview.
+
+```sh
+ink-studio tileset brush-uv original-brush.json --scene original.json \
+  --inset-top 2.5 --inset-bottom 4.5 --inset-left 3.5 --inset-right 1.5 \
+  --out inset-brush.json
+ink-studio tileset brush-uv inset-brush.json --scene original.json \
+  --object relay --face plate --out inset.json
+```
+
+The first command stores `uvInset` on a copy of the brush. Its report
+gives the source and inset bounds in top-down normalized UV coordinates
+and the inset bounds in texels, ordered left, top, right, bottom. Use
+`ink.tilesetBrushUV(scene, brush, { top: 0.5, bottom: 2 })` in Node to inspect
+or update the same mapping.
+
+With an object and a face ID, the command remaps the face's pigment UVs
+using its existing orientation. The face must reference the same tileset
+and its current UVs must lie inside the brush's original crop. Omitting
+`--out` previews the changed corners and any conflicts. A commit keeps the
+vertices and neighboring face corners in place and invalidates affected
+pigment bakes. Pinned corners constrain the edit as in ordinary mesh UV
+edits.
+
+Run `node examples/tileset-pick/uv-inset-demo.cjs tile-uv-inset-demo` to see
+an asymmetrically inset relay plate next to its original face.
+
 ## Edit an authored layout
 
 A [polygon topology document](mesh-topology.md) keeps stable face, edge and
@@ -262,6 +295,10 @@ separated island.
   radians, and uniform or two-axis scale. Negative scale mirrors the island.
   The default pivot is the center of each island's bounds. Supply `pivot`
   for a specific normalized UV anchor.
+- **Remap face** takes one face ID and maps its existing bounds to a new
+  normalized rectangle. Use `{ "op": "remap-face", "id": "plate",
+  "source": [0, 0, 0.5, 1], "destination": [0.05, 0.1, 0.45, 0.9] }`.
+  The source rectangle constrains the allowed original UVs.
 - **Stitch** takes shared edge IDs. The default `mode: "weld"` joins
   corresponding endpoint groups, respecting pins and an optional
   `keepFace`. Unanchored endpoints meet at their average. Use

@@ -27,6 +27,27 @@ const TilesetSelection = (() => {
       columns:width/tileWidth,rows:height/tileHeight};
   }
 
-  return Object.freeze({pick,between,block});
+  const edges = ['top','bottom','left','right'];
+
+  function uvMapping(grid, brush, changes = {}) {
+    function check(inset) {
+      if (!inset || Object.getPrototypeOf(inset) !== Object.prototype ||
+          Object.entries(inset).some(([edge,value]) => !edges.includes(edge) || !Number.isFinite(value) || value < 0))
+        throw new RangeError('UV insets need nonnegative finite texel distances for top, bottom, left, or right');
+    }
+    const saved = brush.uvInset === undefined ? {} : brush.uvInset;
+    check(saved);
+    check(changes);
+    const uvInset = {top:0,bottom:0,left:0,right:0,...saved,...changes};
+    const {x,y,width,height} = brush, {top,bottom,left,right} = uvInset;
+    const texelBounds = [x+left,y+top,x+width-right,y+height-bottom];
+    const normalize = ([u0,v0,u1,v1]) => [u0/grid.width,v0/grid.height,u1/grid.width,v1/grid.height];
+    const uvBounds = normalize(texelBounds);
+    if (!(uvBounds[0] < uvBounds[2] && uvBounds[1] < uvBounds[3]))
+      throw new RangeError('UV insets must leave a positive sampling width and height');
+    return {brush:{...brush,uvInset},texelBounds,uvBounds,sourceUVBounds:normalize([x,y,x+width,y+height])};
+  }
+
+  return Object.freeze({pick,between,block,uvMapping});
 })();
 if (typeof module !== 'undefined') module.exports = TilesetSelection;

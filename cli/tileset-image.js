@@ -17,6 +17,7 @@ function readTilesetImage(source, toolkit = require('..').load()) {
   return {version:1,width,height,encoding:'rgba8',data:Buffer.from(rgba).toString('base64')};
 }
 
+const insetEdges = ['top','bottom','left','right'];
 const tileFields = ['tile-width','tile-height'];
 const integerText = value => typeof value === 'string' && /^-?\d+$/.test(value);
 
@@ -27,11 +28,11 @@ function tileOptions(options) {
   return {width:Number(options['tile-width']),height:Number(options['tile-height'])};
 }
 
-function scaleOption(options, name) {
+function numberOption(options, name) {
   const value = options[name];
   if (value === undefined) return;
   if (typeof value !== 'string' || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value))
-    throw new TypeError('--'+name+' needs a positive number');
+    throw new TypeError('--'+name+' needs a number');
   return Number(value);
 }
 
@@ -89,6 +90,12 @@ function brushSelection(tilesets, brush) {
   return selected;
 }
 
+function tilesetBrushUV(scene, brush, insets, toolkit = require('..').load()) {
+  const tilesets = prepare(scene,toolkit);
+  const {tileset} = brushSelection(tilesets,brush);
+  return Selection.uvMapping(tilesets.source(tileset),brush,insets);
+}
+
 function sizeTilesetBrush(scene, brush, {brushScale,projectTexelsPerUnit} = {}, toolkit = require('..').load()) {
   const tilesets = prepare(scene,toolkit);
   brushSelection(tilesets,brush);
@@ -131,7 +138,7 @@ function pickCommand(args, options, toolkit, projectTexelsPerUnit) {
       out !== undefined && (typeof out !== 'string' || !/\.(html|json)$/i.test(out)))
     throw new TypeError('Use tileset pick --scene <scene.json> --id <tileset-id> with rectangle bounds and optional --brush');
   const tile = tileOptions(options), block = options.brush === true || tile !== undefined;
-  const scale = scaleOption(options,'brush-scale');
+  const scale = numberOption(options,'brush-scale');
   if (!block && scale !== undefined) throw new TypeError('--brush-scale requires a tile brush pick');
   const visual = out !== undefined && /\.html$/i.test(out);
   if (visual && block) throw new TypeError('Save a tile brush as JSON and render it with tileset brush-preview');
@@ -195,7 +202,7 @@ function gridCommand(args, options, toolkit) {
 }
 
 function worldScaleCommand(args, options, toolkit, projectTexelsPerUnit) {
-  const {scene,out,clear} = options, density = scaleOption(options,'texels-per-unit');
+  const {scene,out,clear} = options, density = numberOption(options,'texels-per-unit');
   const changing = clear === true || density !== undefined;
   if (args.length || typeof scene !== 'string' || !scene.trim() ||
       Object.keys(options).some(key => !['scene','out','clear','texels-per-unit'].includes(key)) ||
@@ -212,7 +219,7 @@ function worldScaleCommand(args, options, toolkit, projectTexelsPerUnit) {
 }
 
 function brushSizeCommand([file,...rest], options, toolkit, projectTexelsPerUnit) {
-  const {scene,out} = options, brushScale = scaleOption(options,'brush-scale');
+  const {scene,out} = options, brushScale = numberOption(options,'brush-scale');
   if (rest.length || ![file,scene].every(value => typeof value === 'string' && value.trim()) ||
       Object.keys(options).some(key => !['scene','out','brush-scale'].includes(key)) ||
       out !== undefined && (typeof out !== 'string' || !/\.json$/i.test(out)) ||
@@ -226,10 +233,49 @@ function brushSizeCommand([file,...rest], options, toolkit, projectTexelsPerUnit
   process.stdout.write(JSON.stringify(result,null,2)+'\n');
 }
 
-function command([action, ...args], options, toolkit, projectTexelsPerUnit) {
+function brushUVCommand([file,...rest], options, toolkit, openEditor) {
+  const {scene,object,face,out} = options, target = object !== undefined || face !== undefined;
+  const insetFlags = insetEdges.map(edge=>'inset-'+edge);
+  const name = value=>typeof value === 'string' && value.trim();
+  if (rest.length || ![file,scene].every(name) || target && ![object,face].every(name) ||
+      Object.keys(options).some(key=>!['scene','object','face','out',...insetFlags].includes(key)) ||
+      out !== undefined && (!name(out) || !/\.json$/i.test(out)))
+    throw new TypeError('Use tileset brush-uv <brush.json> --scene <scene.json> with optional --inset-top, --inset-bottom, --inset-left, --inset-right, and --object <id> --face <id>');
+  const input = path.resolve(scene), brushFile = path.resolve(file), output = out && path.resolve(out);
+  if ([input,brushFile].includes(output)) throw new RangeError('Write a separate brush or scene file');
+  const insets = Object.fromEntries(insetEdges.flatMap(edge=>{
+    const value = numberOption(options,'inset-'+edge);
+    return value === undefined ? [] : [[edge,value]];
+  }));
+  const editor = target && openEditor(input);
+  const read = filename=>JSON.parse(fs.readFileSync(filename,'utf8'));
+  const result = tilesetBrushUV(editor ? editor.snapshot() : read(input),read(brushFile),insets,toolkit);
+  if (editor) {
+    const mesh = editor.meshTopology(object), polygon = mesh.document.faces.find(row=>row.id === face);
+    if (!polygon) throw new RangeError('Unknown mesh face '+face);
+    const material = mesh.materials?.find(row=>row.id === (polygon.material ?? 'default'));
+    if (material?.texture?.tileset !== result.brush.tileset)
+      throw new RangeError('Face '+face+' must use tileset '+result.brush.tileset);
+    const request = {uvSet:'pigment',operations:[{op:'remap-face',id:face,
+      source:result.sourceUVBounds,destination:result.uvBounds}]};
+    result.uv = editor.planMeshUV(object,request).report;
+    if (output && result.uv.canCommit) {
+      sceneOutput(input,output);
+      const {topology} = editor.editMeshUV(object,request);
+      if (topology) result.transaction = {bakes:topology.bakes,bindings:topology.bindings};
+      files.publishJson(output,editor.snapshot(),'A different scene already exists at '+output);
+    } else if (output) process.exitCode = 1;
+  } else if (output) {
+    files.publishJson(output,result.brush,'A different brush already exists at '+output);
+  }
+  process.stdout.write(JSON.stringify(result,null,2)+'\n');
+}
+
+function command([action, ...args], options, toolkit, projectTexelsPerUnit, openEditor) {
   if (action === 'grid') return gridCommand(args,options,toolkit);
   if (action === 'world-scale') return worldScaleCommand(args,options,toolkit,projectTexelsPerUnit);
   if (action === 'pick') return pickCommand(args,options,toolkit,projectTexelsPerUnit);
+  if (action === 'brush-uv') return brushUVCommand(args,options,toolkit,openEditor);
   if (action === 'brush-size') return brushSizeCommand(args,options,toolkit,projectTexelsPerUnit);
   if (action === 'brush-preview') return previewCommand(args,options,toolkit);
   const [source,...rest] = args;
@@ -238,7 +284,7 @@ function command([action, ...args], options, toolkit, projectTexelsPerUnit) {
   const allowed = ['id','scene','out',...tileFields,...(create ? ['width','height','background'] : [])];
   if (!['import','create'].includes(action) || rest.length || Object.keys(options).some(key => !allowed.includes(key)) ||
       ![id,scene,out].every(value => typeof value === 'string' && value.trim()))
-    throw new TypeError('Use tileset import, create, grid, world-scale, pick, brush-size, or brush-preview');
+    throw new TypeError('Use tileset import, create, grid, world-scale, pick, brush-uv, brush-size, or brush-preview');
   if (create) {
     if (source !== undefined || ![width,height].every(value => typeof value === 'string' && /^\d+$/.test(value)))
       throw new TypeError('Use tileset create --width <texels> --height <texels> [--background <color>]');
@@ -253,4 +299,4 @@ function command([action, ...args], options, toolkit, projectTexelsPerUnit) {
   process.stdout.write(JSON.stringify({scene:output,id,width:asset.width,height:asset.height,encoding:asset.encoding},null,2)+'\n');
 }
 
-module.exports = {readTilesetImage,pickTilesetRectangle,pickTilesetBlock,sizeTilesetBrush,rasterizeTilesetBrush,command};
+module.exports = {readTilesetImage,pickTilesetRectangle,pickTilesetBlock,sizeTilesetBrush,tilesetBrushUV,rasterizeTilesetBrush,command};

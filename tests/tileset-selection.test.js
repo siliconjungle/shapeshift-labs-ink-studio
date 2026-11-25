@@ -234,3 +234,74 @@ test('headless brush picks share project texel density and can save independent 
   assert.equal(scale(changed,'--clear','--out',inherited).source,'project');
   assert.equal(JSON.parse(pick(inherited)).texelsPerUnit,4);
 });
+
+test('tile brush UV insets independently trim the sampling rectangle without altering the brush',()=>{
+  const scaled = {...brush,texelsPerUnit:4,brushScale:1.5};
+  const base = ink.tilesetBrushUV(scene,scaled);
+  const bounds = [2,2,6,6];
+  assert.deepEqual(base.texelBounds,bounds);
+  assert.deepEqual(base.uvBounds,base.sourceUVBounds);
+  for (const [axis,edge,step] of [[0,'left',1],[1,'top',1],[2,'right',-1],[3,'bottom',-1]]) {
+    const expected = bounds.slice();
+    expected[axis] += step*.5;
+    const mapped = ink.tilesetBrushUV(scene,scaled,{[edge]:.5});
+    assert.deepEqual(mapped.texelBounds,expected);
+    assert.deepEqual(mapped.uvBounds,expected.map((n,i)=>n/(i%2 ? 6 : 8)));
+  }
+  const {brush:inset} = ink.tilesetBrushUV(scene,scaled,{top:.5,bottom:1,left:1.25,right:.25});
+  const retouched = ink.tilesetBrushUV(scene,inset,{top:0});
+  assert.deepEqual(retouched.brush.uvInset,{top:0,bottom:1,left:1.25,right:.25});
+  assert.deepEqual(retouched.texelBounds,[3.25,2,5.75,5]);
+  assert.deepEqual(ink.sizeTilesetBrush(scene,inset).worldSize,ink.sizeTilesetBrush(scene,scaled).worldSize);
+  assert.deepEqual(ink.rasterizeTilesetBrush(scene,inset),ink.rasterizeTilesetBrush(scene,scaled));
+  assert.equal(scaled.uvInset,undefined);
+  for (const change of [{top:1,bottom:3},{left:4},{right:-1},{left:Infinity},{top:'1'},{center:1}]) {
+    assert.throws(()=>ink.tilesetBrushUV(scene,scaled,change),/UV inset/);
+  }
+});
+
+test('headless brush UV edits only the selected face pigment layout and invalidates its bake',t=>{
+  const [left,top,right,bottom] = ink.tilesetBrushUV(scene,brush).uvBounds;
+  const uvs = [[left,bottom],[right,bottom],[right,top],[left,top]];
+  const vertices = [[0,0,0],[2,0,0],[2,1,0],[0,1,0],[4,0,0],[4,1,0]].map((position,i)=>({id:'v'+i,position}));
+  function face(id, indices) {
+    return {id,material:'paint',corners:indices.map((i,j)=>({id:id+'-c'+j,vertex:vertices[i].id,
+      uv:[[0,1],[1,1],[1,0],[0,0]][j],attributes:{'uv/1':uvs[j]}}))};
+  }
+  const source = {...scene,topologyMeshes:{panel:{
+    document:{id:'panel',vertices,uvBindings:{pigment:1},faces:[face('sign',[0,1,2,3]),face('trim',[1,4,5,2])]},
+    materials:[{id:'paint',texture:{tileset:'masonry'}}],
+    bakes:[{id:'old-bake',material:'paint',maps:{roughness:.45}}]
+  }}};
+  const {dir,filename,tileset} = setup(t,source);
+  const file = name=>path.join(dir,name+'.json'), read = name=>JSON.parse(fs.readFileSync(name,'utf8'));
+  fs.writeFileSync(file('brush'),JSON.stringify(brush));
+  const cli = (input,asset,...args)=>JSON.parse(tileset('brush-uv',file(asset),'--scene',input,...args));
+  const report = cli(filename,'brush','--inset-top','.5','--inset-bottom','1','--inset-left','1.25',
+    '--inset-right','.25','--out',file('inset'));
+  assert.deepEqual(report.brush,read(file('inset')));
+  assert.deepEqual(report.texelBounds,[3.25,2.5,5.75,5]);
+  const target = ['--object','panel','--face','sign'];
+  const plan = cli(filename,'inset',...target);
+  assert.equal(plan.uv.canCommit,true);
+  assert.equal(plan.uv.corners.length,4);
+  const committed = cli(filename,'inset',...target,'--out',file('edited'));
+  assert.deepEqual(committed.uv,plan.uv);
+  const before = ink.createSceneEditor(read(filename)).meshTopology('panel');
+  const after = ink.createSceneEditor(read(file('edited'))).meshTopology('panel');
+  assert.deepEqual(before.document.vertices,after.document.vertices);
+  assert.deepEqual(before.document.faces[1],after.document.faces[1]);
+  assert.deepEqual(before.document.faces[0].corners.map(row=>row.uv),after.document.faces[0].corners.map(row=>row.uv));
+  assert.deepEqual(after.document.faces[0].corners.map(row=>row.attributes['uv/1']),
+    [[3.25/8,5/6],[5.75/8,5/6],[5.75/8,2.5/6],[3.25/8,2.5/6]]);
+  assert.deepEqual(after.bakes[0].invalidated.faces,['sign']);
+  assert.deepEqual(cli(file('edited'),'inset',...target).uv.corners,[]);
+
+  source.topologyMeshes.panel.document.faces[0].corners[0].uvPins = {1:true};
+  fs.writeFileSync(file('pinned'),JSON.stringify(source));
+  const rejected = cli(file('pinned'),'inset',...target);
+  assert.equal(rejected.uv.canCommit,false);
+  assert.equal(rejected.uv.operations[0].conflicts[0].code,'pinned-corner');
+  assert.throws(()=>cli(file('pinned'),'inset',...target,'--out',file('rejected')));
+  assert.equal(fs.existsSync(file('rejected')),false);
+});
