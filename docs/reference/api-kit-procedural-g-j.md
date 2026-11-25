@@ -481,12 +481,41 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.graphImages` | namespace |  |  |
+| `KIT.procedural.graphImages.blend` | function | `(background, foreground, { mode = 'copy', opacity = 1, mask = null, crop = {}, alpha = 'source', clamp = 'auto' } = {})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.convert` | function | `(source, target, { outOfRange = 'error', dropAlpha = false } = {})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.declare` | function | `(source, settings)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.displaySamples` | function | `(source, bitDepth, outOfRange = 'clamp')` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.format` | value | `string = "ink-studio/graph-image"` |  |
 | `KIT.procedural.graphImages.inspect` | function | `(source)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.blend"]` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.blend"].description` | value | `string = "Blend typed images at native precision with a grayscale opacity mask, crop, alpha policy and explicit clamping."` |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.alpha` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.alpha.default` | value | `string = "source"` |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.alpha.type` | value | `string = "string"` |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.background` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.clamp` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.clamp.default` | value | `string = "auto"` |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.clamp.type` | value | `string = "string"` |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.crop` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.crop.default` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.crop.type` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.foreground` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.mask` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.mask.default` | value | `null` |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.mask.type` | value | `string = "any"` |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.mode` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.mode.default` | value | `string = "copy"` |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.mode.type` | value | `string = "string"` |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.opacity` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.opacity.default` | value | `number = 1` |  |
+| `KIT.procedural.graphImages.operations["image.blend"].inputs.opacity.type` | value | `string = "unitScalar"` |  |
+| `KIT.procedural.graphImages.operations["image.blend"].outputs` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.blend"].outputs.value` | namespace |  |  |
+| `KIT.procedural.graphImages.operations["image.blend"].outputs.value.type` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.blend"].outputs.value.typeFrom` | value | `string = "background"` |  |
+| `KIT.procedural.graphImages.operations["image.blend"].run` | function | `({ background, foreground, ...options })` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.operations["image.convert"]` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.convert"].description` | value | `string = "Convert the channel layout, precision, color space or alpha convention of a typed image."` |  |
 | `KIT.procedural.graphImages.operations["image.convert"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-images.js) |

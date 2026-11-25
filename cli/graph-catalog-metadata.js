@@ -67,6 +67,12 @@ const ports = {
   'array.sort': { direction: oneOf('asc', 'desc') },
   'model.prefab': {revision: {constraints: {integer: true, min: 1}}, kind: oneOf('visual', 'world')},
   'model.compare': {kind: oneOf('visual', 'world')},
+  'image.blend': {
+    mode: oneOf('copy', 'add', 'subtract', 'multiply', 'addSub', 'max', 'min', 'switch', 'divide',
+      'overlay', 'screen', 'softLight', 'hardLight', 'difference', 'exclusion'),
+    opacity: { unit: 'ratio', ...limit(0, 1) }, alpha: oneOf('source', 'ignore', 'straight', 'premultiplied'),
+    clamp: oneOf('auto', 'mode', 'output', 'none')
+  },
   'raster.canvas': { width: dimension, height: dimension,
     color: { unit: 'byte levels', constraints: { lengths: [3, 4], min: 0, max: 255 } } },
   'raster.select': { index: { unit: 'zero-based index', constraints: { integer: true, min: 0 } } },
