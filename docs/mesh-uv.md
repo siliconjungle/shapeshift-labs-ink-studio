@@ -327,6 +327,10 @@ Call `editor.selectTilesetAtlas({object, selection, mode})` or
 Run `node examples/tileset-pick/atlas-face-selection-demo.cjs atlas-demo`
 to compare all three modes on one atlas and the faces that use it.
 
+Use a saved atlas pick as the seed for a
+[normal-angle patch](mesh-topology.md#select-by-geometric-relationship)
+when the painted face should lead a connected geometry selection.
+
 ### Create weighted tile collections
 
 Save interchangeable tiles as a version 1 collection. Give each entry

@@ -25,7 +25,8 @@
     if (tiles && Array.isArray(query.ids)) for (const id of query.ids) {
       if (!tiles.has(id)) throw new RangeError('Face '+id+' has no retained tile source');
     }
-    const seeds = tiles && query.ids === undefined && query.from === undefined ? {ids:[...tiles.keys()]} : {};
+    const seedAllTiles = query.traverse !== 'normal-patch' || query.region !== undefined;
+    const seeds = tiles && seedAllTiles && query.ids === undefined && query.from === undefined ? {ids:[...tiles.keys()]} : {};
     const {convert,match,...sourceQuery} = query;
     const converting = tiles && ['edges','vertices'].includes(convert);
     if (converting && !enabledDomains.includes(convert))
