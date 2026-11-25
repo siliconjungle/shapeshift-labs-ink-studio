@@ -1,4 +1,15 @@
 /* Seeded simplex and periodic gradient lattices, with analytic derivatives. */
+function NoiseLatticeHash(seed, coordinates) {
+  let h = seed | 0;
+  for (const coordinate of coordinates) {
+    h = Math.imul(h ^ (coordinate | 0), 0x9e3779b1);
+    h ^= h >>> 16;
+  }
+  h = Math.imul(h ^ (h >>> 16), 0x7feb352d);
+  h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
 (function (K) {
   const P = K.procedural,
     PI2 = 2 * Math.PI;
@@ -22,22 +33,12 @@
   }
   const gradients = [null, null, gradients2, gradientsWithZeros(3, 1), gradientsWithZeros(4, 1)];
 
-  function hash(seed, coordinates) {
-    let h = seed | 0;
-    for (const coordinate of coordinates) {
-      h = Math.imul(h ^ (coordinate | 0), 0x9e3779b1);
-      h ^= h >>> 16;
-    }
-    h = Math.imul(h ^ (h >>> 16), 0x7feb352d);
-    h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
-    return (h ^ (h >>> 16)) >>> 0;
-  }
   function options(dimension, seed) {
     if (!dimensionsOK(dimension) || !Number.isSafeInteger(seed) || Math.abs(seed) > 4294967295)
       throw new Error('Noise needs two to four dimensions and a 32-bit seed');
     const gradientsForDimension = gradients[dimension],
-      salt = hash(seed, [dimension, 0x52ac72b9]);
-    return coordinates => gradientsForDimension[hash(salt, coordinates) % gradientsForDimension.length];
+      salt = NoiseLatticeHash(seed, [dimension, 0x52ac72b9]);
+    return coordinates => gradientsForDimension[NoiseLatticeHash(salt, coordinates) % gradientsForDimension.length];
   }
   function coordinates(point, dimension) {
     if (point.length !== dimension || point.some(n => !Number.isFinite(n) || Math.abs(n) > 1e12))

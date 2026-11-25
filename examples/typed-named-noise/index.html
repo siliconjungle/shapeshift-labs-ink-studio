@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Noise Atlas · Ink Studio</title>
+<style>
+  :root{color-scheme:dark;--ink:#e8ebe0;--muted:#a2b1a4;--dim:#789288;--key:#d8dca8;--line:#344b43;--panel:#162621;--well:#101f1b}
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  body{margin:0;background:#101d19;color:var(--ink);font:14px/1.4 system-ui,sans-serif}
+  main{max-width:1270px;margin:auto;padding:24px 32px 22px}
+  header{display:flex;align-items:end;justify-content:space-between;gap:24px;border-bottom:1px solid var(--line);padding-bottom:17px;margin-bottom:20px}
+  h1,h2,p,figure{margin:0}
+  h1{font:500 clamp(46px,5.4vw,72px)/.94 Georgia,serif;letter-spacing:-.055em;margin:6px 0 0}
+  a{color:var(--key)}
+  button,input,select{font:inherit;color:inherit}
+  button,select,input[type=number]{background:var(--well);border:1px solid var(--line);border-radius:3px}
+  button{cursor:pointer}
+  button:hover,a:hover{color:#ffefae;border-color:#95a78f}
+  :focus-visible{outline:2px solid var(--key);outline-offset:3px}
+  label:has(input[type=checkbox]){cursor:pointer}
+  input[type=checkbox],input[type=range]{accent-color:var(--key)}
+  input[type=checkbox]{margin:0}
+  .mono,.eyebrow{font:600 11px/1.35 ui-monospace,Menlo,monospace}
+  .eyebrow{text-transform:uppercase;letter-spacing:.15em;color:var(--key)}
+  .open{display:inline-block;padding:8px 10px;border:1px solid var(--line);text-decoration:none;white-space:nowrap}
+  .stage{display:grid;grid-template-columns:minmax(0,1fr) 410px;gap:23px;align-items:start}
+  .mainview,.library{border:1px solid var(--line);background:var(--panel);min-width:0}
+  .panelhead{padding:11px 15px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .panelhead h2{font-size:14px;font-weight:650}
+  .panelhead .mono{color:var(--muted)}
+  .viewer{padding:15px 24px 9px;display:grid;justify-items:center}
+  .axis-u,.axis-v{color:var(--muted);font-size:10px}
+  .axis-u{grid-column:2;text-align:center;margin-top:5px}
+  .axis-v{writing-mode:vertical-rl;transform:rotate(180deg);align-self:center;margin-right:7px}
+  .mount{display:grid;grid-template-columns:18px minmax(0,1fr);width:min(100%,479px);padding-right:18px}
+  .plate{width:100%;aspect-ratio:1;position:relative;border:1px solid #597164;background:#0c1412;overflow:hidden}
+  canvas{display:block;image-rendering:pixelated}
+  .plate canvas{width:100%;height:100%}
+  .guides{position:absolute;inset:0;pointer-events:none}
+  .guides::before,.guides::after{position:absolute;content:"";mix-blend-mode:screen;opacity:.64}
+  .guides::before{top:0;bottom:0;left:50%;border-left:1px dashed #eddf9d}
+  .guides::after{left:0;right:0;top:50%;border-top:1px dashed #eddf9d}
+  .options{padding:11px 15px 12px;border-top:1px solid var(--line);display:flex;gap:9px 14px;flex-wrap:wrap;align-items:center}
+  .options label{display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:12px}
+  .options input[type=number]{width:74px;padding:3px 6px}
+  .options input[type=range]{width:94px}
+  .options select{padding:3px 5px}
+  .options output{min-width:23px;font-variant-numeric:tabular-nums}
+  .summary{padding:9px 15px 12px;min-height:42px;color:var(--muted);border-top:1px solid var(--line);font-size:12px}
+  #error{color:#ffc799}
+  #error:empty{display:none}
+  .family-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:10px}
+  .family-list button{padding:4px 4px 5px;text-align:left;min-width:0}
+  .family-list button[aria-pressed=true]{background:#263c2e;border-color:var(--key);color:var(--key)}
+  .family-list canvas{width:100%;aspect-ratio:1.66;object-fit:cover;object-position:center;background:#15231d}
+  .family-title,.family-dims{display:block;padding:2px 4px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .family-title{font-size:12px;font-weight:650}
+  .family-dims{font-size:9px;color:var(--muted)}
+  .key{padding:7px 15px 13px}
+  .key div{height:7px;background:linear-gradient(90deg,#091111,#133537 23%,#218278 46%,#8cc29e 68%,#f0c478 85%,#ffedba)}
+  .key.gray div{background:linear-gradient(90deg,#000,#fff)}
+  .key p{display:flex;justify-content:space-between;color:var(--muted);margin-top:4px}
+  @media(max-width:1010px){.stage{grid-template-columns:minmax(0,1fr) minmax(300px,36%);gap:14px}.viewer{padding-inline:10px}}
+  @media(max-width:740px){
+    main{padding:18px 12px}header{align-items:start;gap:8px}h1{font-size:45px}.open{font-size:11px}
+    .stage{grid-template-columns:minmax(0,1fr)}.mount{max-width:480px}.family-list{gap:6px}
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><p class="eyebrow">Ink Studio / Material graphs</p><h1>Noise Atlas</h1></div>
+    <a class="open" href="noise-atlas.material.json" download>Download material graph</a>
+  </header>
+  <div class="stage">
+    <section class="mainview" aria-label="Selected noise">
+      <div class="panelhead"><h2 id="selected">Cellular</h2><span class="mono" id="meta"></span></div>
+      <figure class="viewer">
+        <div class="mount">
+          <span class="mono axis-v" id="axis-v"></span>
+          <div class="plate">
+            <canvas id="plate" width="192" height="192" aria-label="Selected noise repeated two by two"></canvas>
+            <span class="guides" id="guides" aria-hidden="true"></span>
+          </div>
+          <span class="mono axis-u" id="axis-u"></span>
+        </div>
+      </figure>
+      <div class="options">
+        <label>Seed <input id="seed" type="number" step="1" value="173"></label>
+        <label>Wrap U <input id="wrap-u" type="checkbox" checked></label>
+        <label>Wrap V <input id="wrap-v" type="checkbox" checked></label>
+        <label>Seam guides <input id="seams" type="checkbox" checked></label>
+        <label>Palette <select id="ramp"><option value="mineral">Mineral</option><option value="grayscale">Gray</option></select></label>
+        <label id="scale-control">Span <input id="scale" type="range" min="2" max="16" value="7"><output id="scale-read"></output></label>
+        <label id="angle-control" hidden>Angle <input id="angle" type="range" min="-180" max="180" value="26"><output id="angle-read"></output></label>
+      </div>
+      <p class="summary" id="summary"></p>
+      <p class="summary" id="error" role="alert"></p>
+    </section>
+    <section class="library" aria-labelledby="families-title">
+      <div class="panelhead"><h2 id="families-title">Noise families</h2><span class="mono">12 swatches</span></div>
+      <div class="family-list" id="families"></div>
+      <div class="key" id="key"><div></div><p class="mono"><span>0</span><span>Unit samples</span><span>1</span></p></div>
+    </section>
+  </div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="atlas.js"></script>
+<script>
+  const get = id => document.getElementById(id);
+  const library = KIT.procedural.graph.create(atlasGraph());
+  const graphs = new Map(), cards = new Map(), settings = new Map();
+  const startSpan = {perlin:8,simplex:8,worley:7,voronoi:7,cellular:7,fractal:4,ridged:4,anisotropic:8,directional:8};
+  let selected = atlasDefault, libraryRamp, frame = 0;
+  for (const [id,[name,kind,dims]] of Object.entries(atlasFamilies)) {
+    const button = document.createElement('button'), canvas = document.createElement('canvas');
+    const title = document.createElement('span'), tag = document.createElement('span');
+    canvas.width = canvas.height = atlasSize;
+    title.className = 'family-title'; title.textContent = name;
+    tag.className = 'family-dims mono'; tag.textContent = dims.join(' / ') + 'D';
+    button.type = 'button'; button.title = kind; button.dataset.family = id;
+    button.append(canvas,title,tag); get('families').append(button);
+    cards.set(id,{button,canvas});
+    settings.set(id,{scale:startSpan[id],angle:atlasOptions(id).angle});
+    button.addEventListener('click',()=>select(id));
+  }
+  const toImage = ({width,height,data}) => new ImageData(new Uint8ClampedArray(data),width,height);
+  function select(id) {
+    selected = id;
+    for (const [key,{button}] of cards) button.setAttribute('aria-pressed',String(key === id));
+    const {scale,angle} = settings.get(id);
+    get('scale-control').hidden = scale === undefined;
+    get('scale').value = scale ?? 8;
+    get('angle-control').hidden = angle === undefined;
+    get('angle').value = angle ?? 0;
+    schedule();
+  }
+  function render() {
+    frame = 0;
+    try {
+      const rampId = get('ramp').value, ramp = atlasRamps[rampId];
+      if (rampId !== libraryRamp) {
+        const {outputs} = library.evaluate({ramp});
+        for (const [id,{canvas}] of cards) canvas.getContext('2d').putImageData(toImage(outputs[id]),0,0);
+        get('key').classList.toggle('gray',rampId === 'grayscale');
+        libraryRamp = rampId;
+      }
+      const seed = get('seed').valueAsNumber;
+      if (!Number.isSafeInteger(seed)) throw new Error('Enter an integer seed within the safe integer range.');
+      const current = settings.get(selected), {scale,angle} = current;
+      const tiling = {u:get('wrap-u').checked ? 'wrap' : 'clamp',v:get('wrap-v').checked ? 'wrap' : 'clamp'};
+      const options = {...atlasOptions(selected),seed,tiling,
+        ...(scale !== undefined && {extent:scale}),...(angle !== undefined && {angle})};
+      if (!graphs.has(selected)) graphs.set(selected,KIT.procedural.graph.create(atlasGraph([selected])));
+      const {outputs} = graphs.get(selected).evaluate({[selected+'Options']:options,ramp});
+      const image = toImage(outputs[selected]), ctx = get('plate').getContext('2d');
+      for (let y=0;y<2;y++) for (let x=0;x<2;x++) ctx.putImageData(image,x*atlasSize,y*atlasSize);
+      const [name,kind,,description] = atlasFamilies[selected], info = outputs[selected+'Info'];
+      get('selected').textContent = name + ' · ' + kind;
+      get('meta').textContent = info.width + ' × ' + info.height + ' / 2 × 2 repeat';
+      get('summary').textContent = description;
+      get('axis-u').textContent = axisText(info,0,'U');
+      get('axis-v').textContent = axisText(info,1,'V');
+      get('guides').hidden = !get('seams').checked;
+      get('scale-read').value = scale ?? '';
+      get('angle-read').value = angle === undefined ? '' : angle + '°';
+      get('error').textContent = '';
+    } catch (error) {
+      get('error').textContent = error.message;
+    }
+  }
+  function axisText(info,index,axis) {
+    if (info.periods[index] !== null) return axis + ' · ' + info.periods[index] + ' cells / repeat';
+    if (info.rankSize) return axis + ' · ' + info.rankSize[index] + ' texels / intrinsic tile';
+    return axis + ' · open';
+  }
+  function schedule() { if (!frame) frame = requestAnimationFrame(render); }
+  get('scale').addEventListener('input',event=>{settings.get(selected).scale=event.target.valueAsNumber;schedule();});
+  get('angle').addEventListener('input',event=>{settings.get(selected).angle=event.target.valueAsNumber;schedule();});
+  for (const id of ['seed','wrap-u','wrap-v','seams','ramp']) get(id).addEventListener('input',schedule);
+  select(selected);
+</script>
+</body>
+</html>

@@ -720,6 +720,30 @@ Guides: [guide](../material-image-displacement.md)
 Get the runnable example with `ink-studio graph describe image.multiDirectionalWarp --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.noise
+
+Bake a named scalar noise family into a typed image with explicit periods, seed and sample encoding.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `family` | `string` | `"perlin"` | {"choices":["perlin","simplex","gaussian","white","blue","worley","voronoi","cellular","fractal","ridged","anisotropic","directional"]} |
+| Input | `width` | `pixelCount` | `128` | pixels · {"integer":true,"min":1} |
+| Input | `height` | `pixelCount` | `128` | pixels · {"integer":true,"min":1} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"dimension":{"type":"number","constraints":{"choices":[2,3,4]},"default":2},"seed":{"type":"number","constraints":{"integer":true,"safe":true}},"output":{"type":"string","constraints":{"choices":["unit","native"]},"default":"unit"},"mean":{"type":"number","families":["gaussian"],"default":0},"deviation":{"type":"number","families":["gaussian"],"constraints":{"min":0},"default":1},"rankSize":{"type":"vec2","families":["blue"],"unit":"pixels","constraints":{"min":4,"max":96,"integer":true}},"sigma":{"type":"number","families":["blue"],"unit":"pixels","constraints":{"min":0.35,"max":8},"default":1.4},"density":{"type":"number","families":["blue"],"constraints":{"min":0.000001,"max":0.499999},"default":0.13},"metric":{"type":"string","families":["worley","voronoi","cellular"],"constraints":{"choices":["euclidean","manhattan","chebyshev"]},"default":"euclidean"},"jitter":{"type":"number","families":["worley","voronoi","cellular"],"constraints":{"min":0,"max":1},"default":1},"carrier":{"type":"string","families":["fractal","ridged"],"constraints":{"choices":["perlin","simplex"]},"default":"perlin"},"octaves":{"type":"number","families":["fractal","ridged"],"constraints":{"min":1,"max":8,"integer":true},"default":4},"gain":{"type":"number","families":["fractal","ridged"],"constraints":{"min":0,"max":1},"default":0.5},"lacunarity":{"type":"number","families":["fractal","ridged"],"constraints":{"min":1,"max":4},"default":2},"angle":{"type":"number","families":["anisotropic","directional"],"unit":"degrees clockwise","default":0},"aspect":{"type":"number","families":["anisotropic"],"constraints":{"min":1,"max":128},"default":4},"wander":{"type":"number","families":["directional"],"constraints":{"min":0,"max":4},"default":0.26},"extent":{"type":"number\|vec2","unit":"noise cells","constraints":{"min":0.0001,"max":1000000}},"offset":{"type":"array<number>","unit":"noise cells"},"slicePeriods":{"type":"array<number\|null>","unit":"noise cells"},"tiling":{"type":"string\|record","constraints":{"modes":["clamp","wrap","mirror","transparent"],"axes":["u","v"]},"default":"wrap"},"precision":{"type":"string","constraints":{"choices":["unorm8","unorm16","float32","float64"]},"default":"float32"},"pixelPitchMm":{"type":"vec2","unit":"mm per texel"}} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `info` | `record` | — | {"layout":"Plain named object"} |
+
+- Samples a scalar field at texel centers. Wrapping axes use the matching extent as the period.
+- Blue noise always repeats its rank tile. Use matching texel and rank density to retain the blue-noise distribution.
+- Native output requires floating storage. The info port reports effective defaults, seed, periods and sampling extent.
+
+Guides: [guide](../material-named-noise.md), [guide](../material-named-noise.md#seeds-ranges-and-sampling)
+
+Get the runnable example with `ink-studio graph describe image.noise --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.nonuniformWarp
 
 Drive displacement strength and local direction with independent scalar maps.

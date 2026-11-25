@@ -629,6 +629,9 @@
     requireImage, descriptor, wrap, storage, integerMax, measure, fields, alignedGrid, alphaAt,
     borders, sampler: spatialSampler, workingSamples
   });
+  const makeNoise = TypedNoiseImage({
+    named:P.namedNoise, descriptor, wrap, pack, storage, dimensions, fields, borders, freeze:P.data.freeze
+  });
   const correctionOptions = { type: 'record', default: {} };
   const sameImage = { type: 'typedImage', typeFrom: 'source' };
   const optional = { type: 'any', default: null };
@@ -922,6 +925,13 @@
       outputs: { value: 'typedImage', height: 'heightImage' },
       run({ source, mask, options }) { return advancedHeight.edgeWear(source, options, mask); }
     },
+    'image.noise': {
+      description: 'Bake a named scalar noise family into a typed image with explicit periods, seed and sample encoding.',
+      seed: 'options', inputs: { family: { type:'string', default:'perlin' }, width: { type:'pixelCount', default:128 },
+        height: { type:'pixelCount', default:128 }, options: correctionOptions },
+      outputs: { value: 'typedImage', info: 'record' },
+      run({ family, width, height, options }, context) { return makeNoise(family,width,height,options,context.seed); }
+    },
     'image.toDisplay': {
       description: 'Convert typed color to straight-alpha sRGB8 for legacy compositing and PNG exports.',
       inputs: { source: 'typedImage', outOfRange: { type: 'string', default: 'clamp' } },
@@ -938,5 +948,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, regions, advancedHeight, advancedTexture, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, regions, advancedHeight, advancedTexture, noise:makeNoise, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);
