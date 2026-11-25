@@ -214,11 +214,29 @@ voxel sizes, fitted world size, and optional up axis. A final voxel size
 of zero keeps the finest records. The packer groups samples into
 spatial chunks, matches the moments of each coarser voxel, and records the
 largest source-center displacement per tier. The `manifest.json` records
-bounds, levels, revisions, and chunk filenames. Its little-endian binary
-payloads contain the same 64-byte records as the imported Gaussian world.
+bounds, levels, revisions, and chunk filenames. The default `raw` encoding
+writes little-endian `.bin` payloads with 64 bytes per splat.
 Serve the manifest and its files together over HTTP. Code can use
 `packGaussianChunks(world, { layer: index => 'foliage', ...settings })`
 to assign layer IDs before writing a pack.
+
+Use `--encoding irc1` to write order-preserving `.irc` payloads. IRC1
+defaults to bounded position and covariance quantization. Add `--lossless`
+to preserve every packed float bit. The programmatic options are
+`{ encoding: 'irc1' }` and `{ encoding: 'irc1', lossless: true }`.
+
+```sh
+node scripts/pack-gaussian-chunks.mjs scan.ply packs/scan-irc --encoding irc1
+node scripts/pack-gaussian-chunks.mjs scan.ply packs/scan-exact --encoding irc1 --lossless
+```
+
+Each level declares its `encoding` and `payloadBytes`. This length
+describes the asset after any HTTP content encoding has been removed.
+Older manifests with implicit raw `.bin` levels still load, and a
+manifest can mix raw and IRC1 levels. Programmatic packing retains the
+unencoded rows in `level.data` and exposes the compressed bytes in
+`level.payload` for IRC1. Quantized packs derive chunk bounds from the
+decoded footprints and include any position drift in the LOD error.
 
 Pass an authored splat-fit asset to rebuild a pack with source edits.
 Use the same world size and up axis that you used while editing.
@@ -258,7 +276,9 @@ console.log(report.stream);
 Advance by rendering frames as the camera moves and while the shot has
 pending loads. The renderer uploads each admitted chunk as it arrives,
 draws from the resident buffers, and sorts their visible splats together.
-The byte budget caps chunk buffers and in-flight reservations. The render
+The byte budget caps chunk buffers and in-flight reservations at decoded
+GPU size. The stream report includes `payloadBytes` and `decodeCpuMs`
+for successful loads since the previous render. The render
 report lists reusable projection and sort workspace separately as
 `workBytes`. The visible splat ceiling applies before GPU culling, so
 the profiled GPU visible count is at or below that ceiling. The optional

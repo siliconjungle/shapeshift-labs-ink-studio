@@ -21,6 +21,14 @@ const SplatCodec = (() => {
   const fractionalPowers = Float64Array.from({ length: LOG_STEPS }, (_, i) => 2 ** (i / LOG_STEPS));
   const integerPowers = Float64Array.from({ length: 65536 / LOG_STEPS }, (_, i) => 2 ** (LOG_ORIGIN + i));
 
+  function maxEncodedBytes(count) {
+    if (!Number.isSafeInteger(count) || count < 0 || count > MAX_ROWS)
+      throw new RangeError('Invalid splat codec row count');
+    // Exact columns use at most four bytes per row plus one tag per block.
+    // The encoder only uses other column representations when they fit.
+    return HEADER_BYTES + STRIDE * (count * 4 + Math.ceil(count / BLOCK_ROWS));
+  }
+
   function variance(log) {
     return integerPowers[log >>> 9] * fractionalPowers[log & (LOG_STEPS - 1)];
   }
@@ -427,5 +435,6 @@ const SplatCodec = (() => {
     return { data, count };
   }
 
-  return Object.freeze({ encode, decode, version: 1 });
+  return Object.freeze({ encode, decode, maxEncodedBytes, version: 1 });
 })();
+if (typeof module !== 'undefined') module.exports = SplatCodec; else globalThis[Symbol.for('ink-studio.splat-codec')] = SplatCodec;

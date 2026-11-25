@@ -1,3 +1,5 @@
+import * as sharedCodec from './splat-codec.js';
+
 export const gaussianChunkSchema = 'ink.gaussian-chunks.v1';
 export const gaussianRecordFloats = 16;
 export const gaussianRecordBytes = gaussianRecordFloats * Float32Array.BYTES_PER_ELEMENT;
@@ -6,7 +8,9 @@ const finite = Number.isFinite;
 const xyz = value => Array.isArray(value) && value.length === 3 && value.every(finite);
 const validId = value => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,96}$/.test(value);
 const half = Math.sqrt(2 * Math.log(2));
-const validFile = value => typeof value === 'string' && /^[a-zA-Z0-9_-]+\.bin$/.test(value);
+const codec = sharedCodec.default ?? globalThis[Symbol.for('ink-studio.splat-codec')];
+const filename = /^[a-zA-Z0-9_-]+\.(?:bin|irc)$/;
+const losslessOptions = Object.freeze({ maxPositionError: 0, maxCovarianceError: 0 });
 const covarianceFields = [4, 5, 6, 8, 9, 10];
 const color = (value, channel) => value >>> (channel * 8) & 255;
 const littleEndian = new Uint8Array(Uint16Array.of(1).buffer)[0] === 1;
@@ -18,6 +22,22 @@ export function gaussianChunkData(input, count) {
   const source = new DataView(input), values = new Float32Array(count * gaussianRecordFloats);
   for (let i = 0; i < values.length; i++) values[i] = source.getFloat32(i * 4, true);
   return values;
+}
+
+export function decodeGaussianChunkPayload(bytes, count, encoding) {
+  return encoding === 'irc1'
+    ? codec.decode(bytes, { expectedCount: count }).data
+    : gaussianChunkData(bytes.buffer, count);
+}
+
+function validPayload(level) {
+  const { file, encoding, payloadBytes, splats } = level;
+  if (typeof file !== 'string' || !filename.test(file)) return false;
+  if (encoding === undefined && payloadBytes === undefined) return file.endsWith('.bin');
+  if (!Number.isSafeInteger(payloadBytes)) return false;
+  if (encoding === 'raw') return file.endsWith('.bin') && payloadBytes === splats * gaussianRecordBytes;
+  return encoding === 'irc1' && file.endsWith('.irc') &&
+    payloadBytes > 8 && payloadBytes <= codec.maxEncodedBytes(splats);
 }
 
 function setBounds(bounds, data, shaped) {
@@ -81,7 +101,8 @@ function coarsen(source, voxel, protect) {
   return { data, error };
 }
 
-export function packGaussianChunks(world, { cellSize = 2, voxelSizes = [.2, .1, .05, 0], layer = 'main', previousFootprints = [] } = {}) {
+export function packGaussianChunks(world, { cellSize = 2, voxelSizes = [.2, .1, .05, 0], layer = 'main',
+  previousFootprints = [], encoding = 'raw', lossless = false } = {}) {
   const { count, data, cam, radius, bg } = world ?? {};
   if (!Number.isSafeInteger(count) || count < 0 || !(data instanceof Float32Array) || data.length !== count * gaussianRecordFloats)
     throw new TypeError('Expected a packed imported Gaussian world');
@@ -91,6 +112,10 @@ export function packGaussianChunks(world, { cellSize = 2, voxelSizes = [.2, .1, 
       voxelSizes.length > 1 && !voxelSizes[voxelSizes.length - 2] ||
       typeof layer !== 'function' && !validId(layer))
     throw new RangeError('Gaussian chunk packing needs a positive cell size, nested voxel sizes ending in zero, and a layer ID');
+
+  if (!['raw', 'irc1'].includes(encoding) || typeof lossless !== 'boolean' || lossless && encoding !== 'irc1')
+    throw new RangeError('Gaussian chunks accept raw or irc1 encoding, with lossless available for irc1');
+  const compressed = encoding === 'irc1', extension = compressed ? '.irc' : '.bin';
 
   if (!Array.isArray(previousFootprints) || previousFootprints.length > 64)
     throw new TypeError('Invalid previous Gaussian footprint registry');
@@ -151,10 +176,18 @@ export function packGaussianChunks(world, { cellSize = 2, voxelSizes = [.2, .1, 
         const level = voxelSizes[i] ? coarsen(raw, voxelSizes[i],protect) : { data: raw, error: 0 };
         const splats = level.data.length / gaussianRecordFloats;
         if (levels[0]?.splats === splats) continue;
-        prior = Math.max(prior, level.error);
-        setBounds(bounds, level.data, shaped);
-        levels.unshift({ id: 'lod-' + i, file: name + '-' + i + '.bin', revision: 1, splats,
-          error: prior, data: level.data });
+        const payload = compressed ? codec.encode(level.data, splats, lossless ? losslessOptions : undefined) : undefined;
+        const decoded = compressed && !lossless ? decodeGaussianChunkPayload(payload, splats, encoding) : level.data;
+        let encodingError = 0;
+        if (decoded !== level.data) for (let at = 0; at < decoded.length; at += gaussianRecordFloats) {
+          encodingError = Math.max(encodingError, Math.hypot(decoded[at] - level.data[at],
+            decoded[at + 1] - level.data[at + 1], decoded[at + 2] - level.data[at + 2]));
+        }
+        prior = Math.max(prior, level.error + encodingError);
+        setBounds(bounds, decoded, shaped);
+        levels.unshift({ id: 'lod-' + i, file: name + '-' + i + extension, revision: 1, splats,
+          error: prior, encoding, payloadBytes: payload?.byteLength ?? level.data.byteLength,
+          data: level.data, ...(payload && { payload }) });
       }
       yield { id: name, layer, cell, bounds, levels,...(shaped&&{footprints:true}) };
     }
@@ -186,10 +219,10 @@ export function inspectGaussianChunkManifest(manifest) {
     const levels = new Set();
     let count = 0, error = Infinity;
     for (const level of chunk.levels) {
-      if (!validId(level?.id) || levels.has(level.id) || !validFile(level.file) || files.has(level.file) ||
+      if (!validId(level?.id) || levels.has(level.id) || files.has(level.file) ||
           !Number.isSafeInteger(level.revision) || level.revision < 1 ||
           !Number.isSafeInteger(level.splats) || level.splats < 1 || level.splats < count || level.splats > 4_000_000 ||
-          !finite(level.error) || level.error < 0 || level.error > error)
+          !validPayload(level) || !finite(level.error) || level.error < 0 || level.error > error)
         throw new TypeError('Invalid Gaussian chunk level, file, count, or projected error');
       levels.add(level.id);
       files.add(level.file);
