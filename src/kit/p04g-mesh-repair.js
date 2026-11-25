@@ -1,5 +1,5 @@
 /* Explicit repair plans. Stable face and corner lineage follows topology transactions. */
-(function (K) {
+const retainedMeshRepair = (function (K) {
   const topology = K.meshTopology, { V } = K;
   const { incidence, edgeSeam, crossesWinding, sameUV } = retainedMeshHealth;
   const { freeze, clone } = K.procedural.data;
@@ -603,4 +603,5 @@
   }
 
   K.meshTopology = Object.freeze({ ...topology, planRepair });
+  return { tileRegistration };
 })(KIT);

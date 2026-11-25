@@ -1529,6 +1529,9 @@ ink-studio mesh-topology edge-edit workshop.json bridge.json --object coupling -
   material, and new corners sample UVs and other attributes separately
   on each face, including across seams. New vertices blend source
   weights.
+- **Split one face at a pick** with `kind: "split-face"`, a face ID or
+  saved face selection, and a normalized face point. See
+  [Split a tile at a picked position](#split-a-tile-at-a-picked-position).
 - **Slide an edge chain or loop** with `kind: "slide"`, a `selection`,
   and an `amount` strictly between -1 and 1. Positive amounts follow
   the face winding on the forward side of the ordered chain. Negative
@@ -1577,6 +1580,46 @@ bake invalidations in the same undo and replay history.
 
 Run `node examples/mesh-edge-edit/render.cjs <directory>` for playable
 CLI requests and native-grid comparisons.
+
+### Split a tile at a picked position
+
+Use `"operation": { "kind": "split-face", "face": "panel", "axis": "u",
+"at": [0.35, 0.60] }` in the usual revision-pinned edge-edit request.
+A saved face `selection` can supply the target instead of `face`.
+The normalized face coordinates follow the authored corner order
+`(0,0), (1,0), (1,1), (0,1)`. Axis `u` holds the first coordinate
+fixed and axis `v` holds the second fixed. The cut starts and ends
+at opposite edges and passes through the pick.
+
+The preview reports the picked point and traced line in mesh-local
+positions and in the material's pigment UV set. For a scene using a
+registered tileset, `detail.atlas` shows the original crop, outline,
+pick, line, and child crops in top-down atlas coordinates measured
+from texel centers. The middle point identifies where the cut crosses
+the face's current render diagonal, so a warped or differently mapped
+surface can show a bent trace even when a local two-quad split is
+blocked.
+
+The cut creates two editable quads and keeps the original face ID on
+the side containing its first corner. Incident faces receive matching
+boundary vertices without extending the cut through them. The patch
+interpolates corner data and vertex weights, carries edge settings
+onto the split segments, and keeps reusable crop bindings for exact
+rectangular paint. A fractional cut can give both crops a shared
+border texel. The actual UVs keep their fractional positions.
+
+The two-quad edit needs a straight trace, planar geometry, and affine
+corner mapping on the target and incident faces. Inspect `registration-would-change`
+findings when the proposed tessellation cannot preserve that data.
+Use [straighten-quad](#straighten-a-warped-quad) to correct the surface
+first or [the knife](#cut-with-a-plane-or-knife-path) to cut along the
+existing render triangles.
+
+```sh
+ink-studio mesh-topology edge-edit sign.json picked-split.json --object sign
+ink-studio mesh-topology edge-edit sign.json picked-split.json --object sign --out split.json --report split-receipt.json
+node examples/tileset-pick/picked-split-demo.cjs picked-split-review
+```
 
 ## Draw surface-snapped retopology patches
 

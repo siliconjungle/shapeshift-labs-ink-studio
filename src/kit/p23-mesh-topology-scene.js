@@ -251,7 +251,7 @@
     });
   }
 
-  function transition(row, before, document, correspondence, paintReview) {
+  function transition(row, before, document, correspondence, {paintReview,sourceSplit} = {}) {
     const updated = { ...row, document };
     if (row.bindings) {
       const remapped = remapBindings(row.bindings,correspondence);
@@ -270,6 +270,7 @@
       } else updated.bindings = remapped;
       updated.bindings = A.tilesetFaces.splitSources(row.bindings,updated.bindings,before,document);
       updated.bindings = A.tilesetFaces.joinSources(row.bindings,updated.bindings,before,document,correspondence);
+      if (sourceSplit) updated.bindings = A.tilesetPickedSplit.install(updated.bindings,sourceSplit);
       if (paintReview?.size) updated.bindings = updated.bindings.map(binding=>
         paintReview.has(binding.id) && !binding.review ? {...binding,
           review:{reason:'merged-tile-paint-changed',candidates:[binding.element]}} : binding);
@@ -293,10 +294,10 @@
     return { row: updated, correspondence, ...diff(row, updated) };
   }
 
-  function revise(row, patch, { projection, paintReview } = {}) {
+  function revise(row, patch, { projection, paintReview, sourceSplit } = {}) {
     const before = topology.create(row.document);
     const { document, correspondence } = topology.editWithCorrespondence(before, patch, { projection });
-    return transition(row, before, document, correspondence, paintReview);
+    return transition(row, before, document, correspondence, {paintReview,sourceSplit});
   }
 
   function applyModifiers(row, plan) {

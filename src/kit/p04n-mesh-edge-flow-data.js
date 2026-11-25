@@ -126,6 +126,15 @@ const meshEdgeFlowData = (function (K) {
     });
   }
 
+  function edgeCorner(g, vertex, a, b, fraction, conflicts) {
+    const row = corners(g,[vertex],[cornerData([[a,1-fraction],[b,fraction]])],conflicts)[0];
+    if (a.normal || b.normal) {
+      const normal = meshTopologyShading.direction(V.lerp(a.normal ?? b.normal,b.normal ?? a.normal,fraction));
+      if (V.len(normal)) row.normal = normal;
+    }
+    return row;
+  }
+
   return { index, name, pair, edgeOf, front, position, around, cyclic, rotate, context, selection,
-    requireWinding, boundary, point, cornerData, corners };
+    requireWinding, boundary, point, cornerData, corners, edgeCorner };
 })(KIT);
