@@ -2134,9 +2134,8 @@ ink-studio graph run tideworks-review/resume-tideworks.json --out tideworks-revi
 
 ## Procedural pixel effects
 
-Use [the Effects Atlas](../examples/pixel-effects-atlas/README.md) to find
-examples of these native-grid generators and the material-point solver.
-`ink-studio graph describe <operation> --example` prints runnable inputs.
+Use `ink-studio graph describe <operation> --example` for runnable graphs
+that show the native-grid generators and material-point solver.
 
 | Node | Controls and outputs |
 | --- | --- |
