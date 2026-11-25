@@ -38,7 +38,7 @@ function transform(file, input, rest, opt, toolkit, openEditor) {
   if (!file || !input || rest.length || filenames.some(name => typeof name !== 'string' || !name.trim()) ||
       object !== undefined && (typeof object !== 'string' || !object.trim()) || report && !out ||
       view && !object || pivot && object ||
-      ['from', 'visibility', 'projection', 'lineage', 'match-ids'].some(key => opt[key] !== undefined))
+      ['from', 'visibility', 'projection', 'lineage', 'match-ids', 'coincident', 'coincident-distance'].some(key => opt[key] !== undefined))
     throw new TypeError('Use mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file | --pivot file] [--out file] [--report file]');
   const inputs = [file, input, selection, view, pivot].filter(Boolean).map(name => path.resolve(name));
   const outputs = [out, report].filter(Boolean).map(name => path.resolve(name));
@@ -108,16 +108,18 @@ function pivot(file, input, rest, opt, meshTopology, openEditor) {
 
 function moveVertex(file, input, rest, opt, toolkit, openEditor) {
   const { meshTopology } = toolkit.KIT;
-  const {object,part,vertex,by,expect,out,space,align,view} = opt;
-  const allowed = ['object','part','vertex','by','expect','out','space','align','view'];
+  const {object,part,vertex,by,expect,out,space,align,view,coincident,'coincident-distance':distance} = opt;
+  const allowed = ['object','part','vertex','by','expect','out','space','align','view','coincident','coincident-distance'];
   const name = value => typeof value === 'string' && value.trim();
   if (!name(file) || input !== undefined || rest.length || !name(vertex) || part !== undefined && object === undefined ||
       space !== undefined && !['local','world','plane','camera'].includes(space) ||
       view !== undefined && (!object || space !== 'camera') ||
       align !== undefined && !['plane','grid'].includes(align) ||
-      Object.entries(opt).some(([key,value])=>!allowed.includes(key) || !name(value)))
-    throw new TypeError('Use mesh-topology move <mesh-or-scene.json> [--object id] [--part id] --vertex id --by X,Y,Z [--space local|world|plane|camera] [--view file] [--align plane|grid] [--expect revision] [--out file.json]');
-  const offset = require('./construction-plane.js').coordinates(by,3,'--by');
+      distance !== undefined && coincident !== true ||
+      Object.entries(opt).some(([key,value])=>!allowed.includes(key) || (key === 'coincident' ? value !== true : !name(value))))
+    throw new TypeError('Use mesh-topology move <mesh-or-scene.json> [--object id] [--part id] --vertex id --by X,Y,Z [--space local|world|plane|camera] [--view file] [--align plane|grid] [--coincident [--coincident-distance N]] [--expect revision] [--out file.json]');
+  const { coordinates } = require('./construction-plane.js');
+  const offset = coordinates(by,3,'--by');
   const source = path.resolve(file), output = out && path.resolve(out);
   if (output && (!/\.json$/i.test(output) || output === source || view && output === path.resolve(view) ||
       object && path.dirname(output) !== path.dirname(source)))
@@ -132,6 +134,7 @@ function moveVertex(file, input, rest, opt, toolkit, openEditor) {
   const selection = meshTopology.select(document,{domain:'vertices',ids:[vertex]});
   const operation = {kind:'move',offset};
   const request = {selection,operation,...(space && {space}),
+    ...(coincident && {coincident: distance === undefined ? true : {tolerance:coordinates(distance,1,'--coincident-distance')[0]}}),
     ...(align && {snap:{kind:'construction-plane',mode:align,anchor:vertex}})};
   if (view) {
     const { transformView, captureTransformCamera } = require('./mesh-transform-camera.js');

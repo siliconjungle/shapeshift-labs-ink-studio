@@ -1,7 +1,7 @@
 /* Model pivot placement samples an anchor without editing the mesh. */
 const meshPivot = (function (K) {
   const topology = K.meshTopology, { V } = K, { freeze } = K.procedural.data;
-  const { meshTarget, average } = meshComponentSnap;
+  const { meshTarget, edgeEnds, average } = meshComponentSnap;
   const format = 'ink-studio/mesh-pivot';
   const record = (value, fields) => value && Object.getPrototypeOf(value) === Object.prototype &&
     Object.keys(value).every(key => fields.includes(key));
@@ -62,9 +62,7 @@ const meshPivot = (function (K) {
     } else if (kind === 'edge') {
       const edge = target.source.edges.find(row => row.id === id);
       if (!edge) throw new RangeError('Unknown pivot edge ' + id);
-      const ends = from === undefined || from === edge.vertices[0] ? edge.vertices :
-        from === edge.vertices[1] ? edge.vertices.slice().reverse() : null;
-      if (!ends) throw new RangeError('Pivot edge must start at one of its endpoints');
+      const ends = edgeEnds(edge, from, 'Pivot edge');
       point = V.lerp(...ends.map(vertex => vertices.get(vertex)), at);
       Object.assign(evidence, { id, vertices: ends.slice(), at });
     } else {

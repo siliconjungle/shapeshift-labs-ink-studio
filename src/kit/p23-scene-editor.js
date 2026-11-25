@@ -722,19 +722,22 @@
         { orbit: K.cameraStaging.prepare(world.look?.cameraStaging)?.orbit }).pose;
     }
 
+    function meshSnapTargets(scene) {
+      let expanded;
+      return id => {
+        if (Object.hasOwn(scene.topologyMeshes ?? {}, id)) return { document: scene.topologyMeshes[id].document };
+        expanded ??= A.scenePrefabs.expand(scene, buildEnv);
+        if (Object.hasOwn(expanded.spec.topologyMeshes ?? {}, id))
+          return { document: expanded.spec.topologyMeshes[id].document, frame: expanded.meshPlacements.get(id) };
+      };
+    }
+
     function planMeshPivot(object, request = {}, { part } = {}) {
       if (request?.frame !== undefined)
         throw new TypeError('Retained scene mesh pivots already use scene placement');
       const row = meshTopology(object, part), scene = snapshot();
-      let expanded;
       const report = K.meshTopology.planPivot(row.document, request, {
-        pivot: row.pivot,
-        mesh(id) {
-          if (Object.hasOwn(scene.topologyMeshes ?? {}, id)) return scene.topologyMeshes[id];
-          expanded ??= A.scenePrefabs.expand(scene, buildEnv);
-          if (Object.hasOwn(expanded.spec.topologyMeshes ?? {}, id))
-            return { document: expanded.spec.topologyMeshes[id].document, frame: expanded.meshPlacements.get(id) };
-        },
+        pivot: row.pivot, mesh: meshSnapTargets(scene),
         instance: target => A.sceneInstances.anchor(scene, buildEnv, target)
       });
       return freeze({ ...report, object, ...(row.part !== undefined && { part: row.part }) });
@@ -766,9 +769,7 @@
         ...(request?.constructionPlane === undefined && (request?.space === 'plane' || request?.snap?.kind === 'construction-plane') ?
           {constructionPlane:A.constructionPlane.forScene(scene).plane} : {}),
         ...(request?.space === 'camera' && request.camera === undefined && { camera: authoredTransformCamera() }),
-        mesh(id) {
-          return { document: meshTopology(id).document };
-        },
+        mesh: meshSnapTargets(scene),
         socket: (instance, binding) => A.sceneInstances.assetSocket(scene, buildEnv, instance, binding),
         sdf:id=>meshSnapField(scene,id)
       });

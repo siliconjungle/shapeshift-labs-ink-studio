@@ -467,19 +467,44 @@ world distance measured along connected mesh edges. `linear`, `smooth`,
 and `sharp` curves taper the movement, rotation angle, or scale toward
 the radius. Pinned vertices block that path.
 
-Snapping uses the edited position of a selected, unpinned `anchor`
-vertex or the transformed pivot. The snap moves the affected vertices
-by the resolved offset, weighted by falloff. The target is resolved
-against the original snapshot. `maxDistance` limits the snap offset in
-world units.
+Snapping starts from the transformed pivot or a selected, unpinned
+`anchor` vertex. An anchor object `{ "edge": "rim", "at": 0.25, "from":
+"rim/base" }` uses a fraction along an edge with two selected, unpinned
+endpoints. The default fraction is the midpoint. A snap applies the
+resolved offset, weighted by falloff. Targets use the original snapshot.
+`maxDistance` limits the snap offset in world units.
 
 | Snap kind | Required target fields |
 | --- | --- |
-| `vertex`, `edge`, `face` | Stable component `id`. The optional `object` selects another retained mesh. Edges and faces use the closest point on the target. |
+| `vertex`, `edge`, `face` | Stable component `id`. The optional `object` selects another retained mesh, including a placed prefab member such as `fixture.bar`. Edges and faces default to the closest point. An edge target also accepts `at` and `from` to pick a fraction from a specific endpoint. |
 | `plane` | World-space `origin` and `normal` |
 | `construction-plane` | Scene guide and optional `mode` of `plane` or `grid` |
 | `socket` | Placed asset `instance` and bound socket `binding` |
 | `sdf` | Authored SDF solid `object` and positive `maxDistance`. Optional `tolerance` and `iterations` control the bounded surface projection. |
+
+For edge-to-edge alignment, use `"match": "endpoints"` on the edge
+target and give the source `anchor` an edge ID. Omit both fractions.
+Move, rotate, or scale the selection to bring the two edges into matching
+length and direction. The snap then translates both endpoints together.
+The planner can reverse the target pairing unless you specify its
+`from` endpoint. The report gives both endpoint pairs and their
+residual alignment error in world units.
+
+Set `"coincident": true` beside `operation` to carry separate vertex
+IDs at the same position. It also accepts
+`{ "tolerance": 0.000001, "maxPairs": 250000 }`, the default world-space
+distance and comparison budget. Exact copies stay coincident, nearby
+copies keep their offsets, and a pin holds its entire eligible group.
+Authored UV seam edges and split edges with differing corner UVs on any
+layout keep their copies independent. Linked vertices retain their IDs
+and corner data. Omit the option to edit each vertex independently.
+The `coincident` report identifies moved or held groups and gives
+`blockedCount` plus up to 512 blocked pairs with their reason. Exceeding
+the comparison budget rejects the plan before applying any changes.
+
+```sh
+ink-studio mesh-topology move panel.json --vertex rim/base --by 0,0.125,0 --coincident
+```
 
 Use `KIT.meshTopology.planTransform(document, request, context)` for the
 pure planner. A host can resolve extra targets with `context.mesh(id)`
@@ -502,11 +527,16 @@ replay use the existing journal.
 ```sh
 node examples/mesh-component-transforms.cjs component-transform-review
 node examples/tileset-pick/explicit-transform-coordinates-demo.cjs coordinate-review
+node examples/tileset-pick/coincident-snap-demo.cjs coincident-snap-review
 ```
 
 The gatehouse demo shifts the left jamb to a construction plane while
 keeping footings and outer corners pinned. Teal marks the additional
 opening in the native-grid comparison.
+
+The coincident snap demo aligns a sign edge to a placed fixture.
+Its adjacent trim shares the displacement. The authored seam on
+the opposite side stays free.
 
 ## Place a pivot independently
 
