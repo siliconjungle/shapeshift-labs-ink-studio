@@ -1238,9 +1238,10 @@ applies Ink's four-influence limit and records dropped values.
 units. Defaults are 2%, 2.5%, and 7.5% of the source bounding-box diagonal.
 `maxAngle` defaults to 15 degrees and `maxWeightError` to 0.1.
 `minConfidence`, `minNormalDot`, `ambiguityDistance`, and `maxChecks`
-bound the mapped-surface search. Supply the poses the asset must pass.
-The report lists every evaluated pose and uses a null peak pose error if
-there is no pose measurement.
+bound the mapped-surface search. A skinned transfer needs at least one
+approved pose before acceptance. Static transfers can use rest checks.
+The report lists every evaluated pose and uses a null peak pose error
+when there is no pose measurement.
 
 In JavaScript, call
 `KIT.meshTopology.transferAttachments(before, replacement, map, settings)`.

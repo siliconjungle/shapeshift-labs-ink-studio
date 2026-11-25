@@ -59,6 +59,9 @@ test('split faces transfer weights and all attachment kinds with retained native
 test('revision pinning and an explicit posed budget block acceptance',()=>{
   const {before,target,map,attachments,patch,poses}=shape(.02);
   assert.throws(()=>T.transferAttachments(before,target,{...map,afterRevision:'old'},{attachments}),/pinned/);
+  const restOnly=T.transferAttachments(before,target,map,{attachments});
+  assert(!restOnly.report.canCommit);
+  assert(restOnly.report.issues.some(row=>row.reason==='pose-evidence-required'));
   const options={attachments,poses,maxRestError:.04,maxPoseError:.005};
   const result=T.transferAttachments(before,target,map,options);
   assert(!result.report.canCommit);

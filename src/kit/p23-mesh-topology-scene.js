@@ -97,7 +97,7 @@
     if (manifest && (!record(manifest) || manifest.format!=='ink-studio/mesh-attachments' || manifest.version!==1 ||
         manifest.mesh!==cage.id || !name(manifest.revision) || !Array.isArray(manifest.attachments)))
       throw new TypeError('An editable mesh needs a version 1 attachment manifest');
-    const attachmentBinding=manifest?.revision===topology.revision(document) && topology.attachments.bind(mesh,manifest);
+    const attachmentBinding=manifest && manifest.revision===topology.revision(document) && topology.attachments.bind(mesh,manifest);
     const attachmentStatus=manifest && (attachmentBinding ? 'ready' : 'needs-transfer');
     return { mesh, document, bindings: moved, resolvedBindings, bakes: [...bakes.values()], ...(skin && {skin}),
       ...(attachmentStatus && {attachmentStatus}), ...(attachmentBinding && {attachments:attachmentBinding}),
@@ -265,7 +265,8 @@
     const before=topology.create(row.document);
     const {document,correspondence}=topology.editWithCorrespondence(before,patch,{projection});
     const plan=topology.transferAttachments(before,document,correspondence,{attachments:row.attachments,...settings});
-    const updated=transition({...row,attachments:plan.attachments},before,plan.document,correspondence).row;
+    const updated=transition(row,before,plan.document,correspondence).row;
+    if (row.attachments || settings?.attachments) updated.attachments=plan.attachments;
     return {row:updated, correspondence, report:plan.report, changes:diff(row,updated)};
   }
 

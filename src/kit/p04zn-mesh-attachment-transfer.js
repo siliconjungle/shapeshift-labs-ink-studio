@@ -191,6 +191,7 @@
         method:next.method,confidence:next.confidence,rest:compare(a,b),poses:[]}});
     }
     const {poses,...budgets}=config;
+    if (!poses.length && (source.skin || document.skin)) issues.push({reason:'pose-evidence-required'});
     const poseReady = !poses.length || [source,document].every(doc=>!doc.skin ||
       topology.skin.inspect(doc).vertices.every(row=>row.effective));
     if (!poseReady) issues.push({reason:'pose-skin-unavailable'});
