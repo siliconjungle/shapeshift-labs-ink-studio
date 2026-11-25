@@ -117,6 +117,12 @@ components without supporting samples in that view, including ones
 outside the view or too small to resolve. Re-capture after changing the
 camera, pose, or occluders.
 
+Use `"visibility":"through"` to include projected components behind
+other surfaces within the camera view. Set `"backfaces":"exclude"` in
+the same filter to require front-facing support in visible or through
+mode. The [view selection guide](mesh-uv.md#select-visible-or-through-the-view)
+shows both modes and how to save a reusable capture.
+
 ```sh
 ink-studio mesh-topology select scene.json rim-query.json --object gatehouse-portal --view view.json --out rim-edges.json
 ink-studio mesh-topology select scene.json face-query.json --object gatehouse-portal --from rim-edges.json --view view.json --out rim-faces.json

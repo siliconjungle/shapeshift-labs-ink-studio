@@ -207,6 +207,43 @@ or `selectTilesetComponents(scene, request, {visibility})`. Run
 to inspect four independent selections on the same scene and replay a
 vertex move from the saved selection.
 
+### Select visible or through the view
+
+Tile, edge, and vertex queries support view filtering. Set
+`query.filter.visibility` to `"visible"` for components supported by
+frontmost pixels on the native art grid. Use `"through"` for components
+projected inside the same camera view, including those behind another
+surface. Through selection respects the view edges and depth planes.
+
+```json
+{
+  "domain": "tiles",
+  "object": "wall",
+  "query": {"filter": {"visibility":"through","backfaces":"exclude"}}
+}
+```
+
+Set `backfaces` to `"include"` or `"exclude"` in either mode. The
+default is `"include"`. Winding is evaluated against the active camera.
+An edge or vertex passes the front-facing filter when it has support
+from a qualifying front-facing triangle. In visible mode, a rejected
+backface can still occlude components behind it.
+
+```sh
+ink-studio tileset select through.json --scene wall.json --view view.json --topology-out tiles.json
+```
+
+The CLI captures the required evidence when given `--view`. To reuse
+one view across several queries, save `visibility` from
+`captureMeshTopologyVisibility(world, object, view, {participation:true})`
+and pass it with `--visibility` or the SDK's `visibility` option.
+The same filter works in `mesh-topology select`. Captures must match
+the scene object and topology revision. Recapture after camera, pose,
+or occluder changes.
+
+Run `node examples/tileset-pick/through-selection-demo.cjs through-demo`
+to compare both modes with backfaces included and excluded.
+
 ### Create weighted tile collections
 
 Save interchangeable tiles as a version 1 collection. Give each entry
