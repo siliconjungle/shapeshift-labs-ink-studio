@@ -19,7 +19,7 @@ To execute from disk use `ink.readGraphProject(file, { instance })`. To execute 
 
 ## Version 1 document
 
-The top-level fields are `format`, `version`, `id`, and `graph`, with optional `resources`, `controls`, `instances`, `settings`, and `metadata`. Each table is keyed by an ID. Display names live in the optional `label` field so renaming a label leaves references and output IDs intact.
+The top-level fields are `format`, `version`, `id`, and `graph`, with optional `resources`, `controls`, `instances`, `presets`, `settings`, and `metadata`. Each table is keyed by an ID. Display names live in the optional `label` field so renaming a label leaves references and output IDs intact.
 
 | Table | Entry |
 | --- | --- |
@@ -30,7 +30,8 @@ The top-level fields are `format`, `version`, `id`, and `graph`, with optional `
 | `graph.groups` | `{ graph }` for an inline graph with its own tables, or `{ reference }` for a native external group file or pinned reference. |
 | `resources` | `{ definition }` wrapping a native graph asset definition such as `{ format: "png", file: "press.png" }`. Asset operations use the resource ID. |
 | `controls` | Entries expose root graph inputs under stable IDs. Add [parameter presentation and defaults](#expose-and-reset-material-parameters) as needed. |
-| `instances` | `{ overrides }` stores values keyed by control ID. Each instance uses the shared graph. |
+| `instances` | `{ overrides }` stores values keyed by control ID. An applied preset adds an exact comparison snapshot. |
+| `presets` | Named parameter sets with a display label and typed values keyed by control ID. |
 
 `settings` carries native `time`, `seed`, `exports`, `assertions`, and `assetRegistry`, plus optional [shared material base settings](material-base-settings.md) in `base`, with optional `inheritance` rules and a named `primaryInput`. Use [output usages](material-graph-ports.md#publish-material-output-usages) in `outputUsages` to bind previews and delivery files to graph outputs. The document, graph scopes, and table entries accept optional `label` and `extensions` fields. Use namespaced keys in `extensions` for opaque JSON editor or plugin data. Saving preserves these values. Ink omits them when preparing the execution graph.
 
@@ -185,3 +186,31 @@ ink-studio graph material-parameters /tmp/ink-medallion/medallion.material.json 
 ```
 
 Open `demo.html` to edit and reset the exposed controls against a live render of the same graph.
+
+## Save and apply material presets
+
+A preset is a named set of exposed parameter values on an editable material. Its table key is a stable ID. The label can change independently. Values are keyed by exposed control ID, including on graphs where the graph input has a different name.
+
+Use `ink.editMaterialPresets(document, request)` for these edits.
+
+| Request `kind` | Fields and effect |
+| --- | --- |
+| `save` | `id`, optional `label`, and explicit `values` or an optional `instance` and `controls` list. Captures the current available values. Saving an existing ID updates that preset. |
+| `rename` | `id` and `label`. Changes the display name. |
+| `copy` | `id`, new ID in `to`, and optional `label`. Creates an independent set. |
+| `apply` | `id` and `instance`. Sets the preset's values on that instance and records the applied values for comparison. Partial presets leave other controls in place. |
+| `import` | `bundle` and optional `replace: true`. Validates the complete package against the destination's exposed controls before committing any entries. Use `replace` to update matching IDs. |
+
+`ink.inspectMaterialPresets(document, { instance })` reports compatible presets and the changed controls on one or all instances. Each control compares against the exact applied value when the preset covered it, or the current shared default otherwise. The report also indicates whether the current value differs from the shared default. Editing or replacing a preset leaves an instance's comparison snapshot in place until that preset is applied again. The parameter inspector includes the same per-control comparison for a selected instance.
+
+Use `ink.exportMaterialPresets(document, { ids })` for a portable version 1 package. Omitting `ids` exports all sets. Another editable material can import them when the affected IDs, types, bounds and options are compatible.
+
+```sh
+node examples/material-parameter-presets/demo.cjs /tmp/ink-station-presets
+ink-studio graph material-presets /tmp/ink-station-presets/station.material.json --instance hall
+ink-studio graph material-presets /tmp/ink-station-presets/station.material.json --export /tmp/ink-station-presets/copper.json --presets copper
+ink-studio graph material-presets /tmp/ink-station-presets/station.material.json /tmp/ink-station-presets/night-shift-presets.json --out /tmp/ink-station-presets/imported.material.json
+ink-studio graph material-presets /tmp/ink-station-presets/station.material.json /tmp/ink-station-presets/apply-twilight.json --out /tmp/ink-station-presets/twilight.material.json
+```
+
+Open `demo.html` to apply a preset to either live graph instance and edit its gloss. The demo includes a sample import package.

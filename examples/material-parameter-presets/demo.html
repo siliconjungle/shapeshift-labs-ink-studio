@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Station medallions · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--ink:#f3e5ce;--quiet:#bab5aa;--line:#504840;--panel:#2b2a26;--gold:#efbd83;--accent:#b1cabb}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 27% 0,#413d32,transparent 700px),#232421;color:var(--ink);font:15px/1.43 system-ui,sans-serif}
+main{width:min(100% - 52px,1120px);margin:auto;padding:31px 0 23px}
+header{display:flex;align-items:end;justify-content:space-between;gap:18px;margin-bottom:19px}
+header small{color:var(--gold);font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.14em}
+h1{font:500 clamp(43px,7vw,72px)/.98 Georgia,serif;letter-spacing:-.052em;margin:5px 0 0}header p{max-width:290px;margin:0 0 2px;color:var(--quiet)}
+.workbench{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:15px;align-items:start}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+button{font:inherit;color:inherit;cursor:pointer}.card,aside{padding:11px;background:var(--panel);border:1px solid var(--line);border-radius:9px;min-width:0}
+.card{text-align:left}.card[aria-pressed=true]{border-color:#bd9564;background:#393128}.card:hover{border-color:var(--gold)}
+.card canvas{display:block;width:min(100%,320px);aspect-ratio:8/7;image-rendering:pixelated;margin:auto}
+.caption{display:block;padding:8px 2px 0}.caption b{font-size:16px}.caption small{display:block;color:var(--quiet);margin-top:2px}
+aside{padding:14px}h2{font:500 28px/1.2 Georgia,serif;letter-spacing:-.03em;margin:0}h3{font-size:13px;margin:0}
+.applied{color:var(--quiet);font-size:13px;margin:3px 0 10px}
+.field{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:8px}
+select,input{font:inherit;color:inherit;min-width:0}select,input[type=text]{background:#37332d;border:1px solid #65594b;border-radius:4px;padding:5px 7px;width:100%}
+.actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.action{background:#41362d;border:1px solid #705b48;border-radius:4px;padding:4px 7px;font-size:13px}.action:hover:not(:disabled){border-color:var(--gold)}.action:disabled{opacity:.4;cursor:default}
+.detail{border-top:1px solid var(--line);margin-top:13px;padding-top:8px}.range{display:grid;grid-template-columns:auto minmax(70px,1fr) 38px;gap:9px;align-items:center}
+input[type=range]{width:100%;margin:0;accent-color:var(--accent)}output{text-align:right;color:var(--accent);font:12px ui-monospace,monospace}
+table{width:100%;border-collapse:collapse;margin-top:4px;font-size:13px}th,td{text-align:left;padding:5px 3px;border-bottom:1px solid #49423a}th{color:var(--quiet);font-weight:500}
+#empty,#feedback{font-size:13px;color:var(--quiet);margin:5px 0 0;min-height:18px}
+footer{margin-top:13px;color:var(--quiet);font-size:13px}a{color:var(--gold);margin-right:12px;text-underline-offset:3px}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+[hidden]{display:none!important}
+@media(max-width:820px){.workbench{grid-template-columns:minmax(0,1fr) 300px;gap:10px}.cards{gap:7px}.card{padding:7px}}
+@media(max-width:650px){main{width:calc(100% - 28px);padding-top:21px}header{display:block}header p{margin-top:9px}.workbench{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+<header><div><small>Ink Studio · Material presets</small><h1>Station medallions</h1></div><p>Apply a glaze to either tile and compare its current controls with the last applied preset.</p></header>
+<div class="workbench">
+<section id="cards" class="cards" aria-label="Rendered material instances"></section>
+<aside aria-label="Preset editor">
+<h2 id="instance-title"></h2><p id="applied" class="applied"></p>
+<label for="preset">Preset</label>
+<div class="field"><select id="preset"></select><button type="button" class="action" id="apply">Apply</button></div>
+<div class="detail range"><label for="gloss">Gloss</label><input id="gloss" type="range" min="0" max="1" step=".05"><output id="gloss-value" for="gloss"></output></div>
+<div class="detail">
+<h3>Changed controls</h3>
+<table id="changes"><thead><tr><th>Control</th><th>Baseline</th><th>Instance</th></tr></thead><tbody></tbody></table>
+<p id="empty">All controls match their baseline.</p>
+</div>
+<div class="detail">
+<label for="name">Preset name</label><div class="field"><input id="name" type="text" maxlength="120"></div>
+<div class="actions"><button type="button" class="action" id="save">Save current</button><button type="button" class="action" id="rename">Rename</button><button type="button" class="action" id="copy">Copy</button></div>
+<div class="actions"><button type="button" class="action" id="import">Import package</button><button type="button" class="action" id="export">Export package</button><input type="file" id="file" accept=".json,application/json" hidden></div>
+<p id="feedback" role="status"></p>
+</div>
+</aside>
+</div>
+<footer><a href="station.material.json">Editable material</a><a href="station-presets.json">Initial preset package</a><a href="night-shift-presets.json">Sample import</a><a href="inspector.json">Initial comparison</a></footer>
+</main>
+<script src="toolkit.js"></script>
+<script src="data.js"></script>
+<script>
+const get = id => document.getElementById(id);
+const tools = KIT.procedural.materialPresets.prepare(station.scope, station.material);
+const parameters = KIT.procedural.materialParameters.prepare(station.scope);
+const graph = KIT.procedural.graph.create(station.graph, { operations: {
+  multiply: { inputs: { a: 'number', b: 'number' }, outputs: { value: 'number' },
+    run({ a, b }) { return { value: a * b }; } }
+} });
+let state = station.state, active = 'hall', selected = 'copper';
+const cards = new Map();
+function element(tag, value) {
+  const node = document.createElement(tag);
+  if (value !== undefined) node.textContent = value;
+  return node;
+}
+for (const entry of tools.inspect(state).instances) {
+  const card = element('button'), canvas = element('canvas'), caption = element('span'), name = element('b', entry.label);
+  const note = element('small');
+  card.className = 'card';
+  card.type = 'button';
+  card.dataset.instance = entry.id;
+  canvas.width = 80;
+  canvas.height = 70;
+  canvas.setAttribute('aria-label', 'Live render for ' + entry.label);
+  caption.className = 'caption';
+  caption.append(name, note);
+  card.append(canvas, caption);
+  card.addEventListener('click', () => {
+    active = entry.id;
+    selected = state.instances[active].preset?.id;
+    show();
+  });
+  cards.set(entry.id, { card, canvas, note });
+  get('cards').append(card);
+}
+const pretty = value => value === undefined ? 'Unset' : typeof value === 'object' ? JSON.stringify(value) : String(value);
+function show() {
+  const report = tools.inspect(state), entry = report.instances.find(row => row.id === active);
+  for (const item of report.instances) {
+    const { card, canvas, note } = cards.get(item.id);
+    card.setAttribute('aria-pressed', String(item.id === active));
+    const inputs = Object.fromEntries(item.parameters.map(({ input, value }) => [input, value]));
+    const { outputs: { preview } } = graph.evaluate(inputs);
+    canvas.getContext('2d').putImageData(new ImageData(Uint8ClampedArray.from(preview.data), preview.width, preview.height), 0, 0);
+    const amount = item.changes.length;
+    note.textContent = (item.preset?.label ?? 'Shared defaults') + ' · ' + amount + (amount === 1 ? ' change' : ' changes');
+  }
+  get('instance-title').textContent = entry.label;
+  get('applied').textContent = entry.preset ? 'Applied ' + entry.preset.label +
+    (entry.preset.updated ? ' · newer preset available' : '') : 'Using shared defaults';
+  get('preset').replaceChildren(...report.presets.map(preset => {
+    const option = element('option', preset.label);
+    option.value = preset.id;
+    return option;
+  }));
+  selected = report.presets.find(preset => preset.id === selected)?.id ?? report.presets[0]?.id;
+  get('preset').value = selected ?? '';
+  get('apply').disabled = !report.presets.find(preset => preset.id === selected)?.compatible;
+  get('changes').hidden = !entry.changes.length;
+  get('empty').hidden = Boolean(entry.changes.length);
+  get('changes').querySelector('tbody').replaceChildren(...entry.changes.map(change => {
+    const line = element('tr');
+    line.append(element('td', change.label), element('td', pretty(change.baseline)), element('td', pretty(change.value)));
+    return line;
+  }));
+  const gloss = entry.parameters.find(row => row.id === 'gloss');
+  get('gloss').value = gloss.value;
+  get('gloss-value').textContent = pretty(gloss.value);
+}
+function act(request, message, choose) {
+  try {
+    state = tools.edit(state, request);
+    if (choose) selected = choose;
+    get('feedback').textContent = message;
+    show();
+  } catch (error) {
+    get('feedback').textContent = error.message;
+  }
+}
+function draftName() {
+  const label = get('name').value.trim(), base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return { label, id: base && (/^[a-z]/.test(base) ? base : 'set-' + base).slice(0, 100) };
+}
+get('preset').addEventListener('change', event => { selected = event.target.value; });
+get('apply').addEventListener('click', () => act({ kind: 'apply', id: selected, instance: active }, 'Preset applied'));
+get('save').addEventListener('click', () => {
+  const { id, label } = draftName();
+  act({ kind: 'save', id, label, instance: active }, 'Current values saved', id);
+});
+get('rename').addEventListener('click', () => act({ kind: 'rename', id: selected, label: draftName().label }, 'Preset renamed'));
+get('copy').addEventListener('click', () => {
+  const { id, label } = draftName();
+  act({ kind: 'copy', id: selected, to: id, label }, 'Preset copied', id);
+});
+get('gloss').addEventListener('input', event => {
+  const entry = state.instances[active];
+  const overrides = parameters.apply(entry.overrides, { gloss: event.target.valueAsNumber });
+  state = { ...state, instances: { ...state.instances, [active]: { ...entry, overrides } } };
+  show();
+});
+get('import').addEventListener('click', () => get('file').click());
+get('file').addEventListener('change', async event => {
+  const [file] = event.target.files;
+  if (!file) return;
+  try { act({ kind: 'import', bundle: JSON.parse(await file.text()) }, 'Package imported'); }
+  catch (error) { get('feedback').textContent = error.message; }
+  finally { event.target.value = ''; }
+});
+get('export').addEventListener('click', () => {
+  const file = new Blob([JSON.stringify(tools.exportPresets(state), null, 2) + '\n'], { type: 'application/json' });
+  const href = URL.createObjectURL(file), link = element('a');
+  link.href = href;
+  link.download = 'station-presets.json';
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(href), 0);
+});
+show();
+</script>
+</body>
+</html>
