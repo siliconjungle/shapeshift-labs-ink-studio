@@ -666,9 +666,13 @@
       return A.tilesetEyedrop.inspect(snapshot(),meshTopology(object,part),request);
     }
 
-    function editMeshTopology(object, patch, { part, projection, label, materials } = {}) {
+    function editMeshTopology(object, patch, options) {
+      return writeMeshTopology(object,patch,options);
+    }
+
+    function writeMeshTopology(object, patch, { part, projection, label, materials } = {}, paintReview) {
       const before = meshTopology(object, part);
-      const { row, ...evidence } = A.meshTopologyScene.revise(before, patch, { projection });
+      const { row, ...evidence } = A.meshTopologyScene.revise(before, patch, { projection, paintReview });
       function write() {
         const next = { topologyMeshes: { ...snapshot().topologyMeshes, [object]: materials===undefined ? row : {...row,materials} } };
         validate({ ...snapshot(), ...next });
@@ -798,19 +802,27 @@
       }) });
     }
 
-    function planMeshRepair(object, request, { part } = {}) {
+    function meshRepairPlan(object, request, { part } = {}) {
       const row = meshTopology(object, part);
       requireMeshShapeOwner(object, row.part, snapshot(), 'Repair');
-      return K.meshTopology.planRepair(row.document, request);
+      const plan = K.meshTopology.planRepair(row.document, request);
+      const {steps} = plan.report;
+      if (!steps.some(step=>step.kind === 'merge-tiles')) return {plan};
+      const {coverage,changed} = A.tilesetFaces.previewMerges(row,steps);
+      return {plan:freeze({...plan,report:{...plan.report,sourceCoverage:coverage}}),paintReview:changed};
+    }
+
+    function planMeshRepair(object, request, options) {
+      return meshRepairPlan(object,request,options).plan;
     }
 
     function repairMeshTopology(object, request, options) {
-      const plan = planMeshRepair(object, request, options);
+      const {plan,paintReview} = meshRepairPlan(object, request, options);
       if (!plan.report.canCommit)
         throw Object.assign(new RangeError(plan.report.blockers[0]?.message ??
           'Repair would create or worsen a non-manifold edge'), { report: plan.report });
       return freeze({ repair: plan.report, ...(Object.keys(plan.patch).length && {
-        topology: editMeshTopology(object, plan.patch, options)
+        topology: writeMeshTopology(object, plan.patch, options, paintReview)
       }) });
     }
 

@@ -68,30 +68,38 @@
       effect: { kind: 'weld', keep: keeper.id, removed, removedFaces: removeFaces, weights: policy } };
   }
 
-  function dissolveMapping(doc, g, face, corners, tolerance) {
-    const triangle = topology.triangulate(doc).triangleSources.find(row => row.face === face.id);
-    const [a, b, c] = triangle.corners.map(id => g.corners.get(id));
+  function facePlane(g, [a, b, c]) {
     const pos = corner => g.vertices.get(corner.vertex).position;
     const origin = pos(a), u = V.sub(pos(b), origin), v = V.sub(pos(c), origin);
     const raw = V.cross(u, v), length = V.len(raw);
     if (!length) throw new RangeError('Dissolve needs a stable face plane');
     const normal = V.mul(raw, 1 / length);
-    const layout = corner => Object.entries(corner.attributes ?? {}).map(([name, data]) => [name, Array.isArray(data) ? data.length : 0]);
-    const attributeLayout = layout(a);
+    return corner => {
+      const d = V.sub(pos(corner), origin);
+      return {distance:V.dot(d,normal),x:V.dot(V.cross(d,v),normal)/length,y:V.dot(V.cross(u,d),normal)/length};
+    };
+  }
+
+  const layout = corner => Object.entries(corner.attributes ?? {}).map(([key,value])=>
+    [key,Array.isArray(value) ? value.length : 0]);
+  const weights = (g,corner) => g.vertices.get(corner.vertex).weights ?? {};
+  const weight = (g,corner,channel) => Object.hasOwn(weights(g,corner),channel) ? weights(g,corner)[channel] : 0;
+  const affine = (a,b,c,x,y) => a+x*(b-a)+y*(c-a);
+  const blend = ([a,b,c],x,y) => a.map((n,i)=>affine(n,b[i],c[i],x,y));
+
+  function dissolveMapping(doc, g, face, corners, tolerance) {
+    const triangle = topology.triangulate(doc).triangleSources.find(row => row.face === face.id);
+    const [a, b, c] = triangle.corners.map(id => g.corners.get(id));
+    const coordinates = facePlane(g,[a,b,c]), attributeLayout = layout(a);
     if (corners.some(corner => !equal(corner.normal, a.normal)))
       throw new RangeError('Dissolve would change authored corner normal interpolation');
     if (corners.some(corner => !equal(layout(corner), attributeLayout)))
       throw new RangeError('Dissolve would merge different corner attribute layouts');
-    const channels = [...new Set(corners.flatMap(corner => Object.keys(g.vertices.get(corner.vertex).weights ?? {})))];
-    const weight = (corner, channel) => {
-      const weights = g.vertices.get(corner.vertex).weights ?? {};
-      return Object.hasOwn(weights, channel) ? weights[channel] : 0;
-    };
+    const channels = [...new Set(corners.flatMap(corner => Object.keys(weights(g,corner))))];
     for (const corner of corners) {
-      const d = V.sub(pos(corner), origin);
-      if (Math.abs(V.dot(d, normal)) > tolerance) throw new RangeError('Dissolve would remove a geometric crease');
-      const x = V.dot(V.cross(d, v), normal) / length, y = V.dot(V.cross(u, d), normal) / length;
-      const uv = a.uv.map((n, i) => n + x * (b.uv[i] - n) + y * (c.uv[i] - n));
+      const {distance,x,y} = coordinates(corner);
+      if (Math.abs(distance) > tolerance) throw new RangeError('Dissolve would remove a geometric crease');
+      const uv = blend([a.uv,b.uv,c.uv],x,y);
       if (!sameUV(corner.uv, uv)) throw new RangeError('Dissolve would change the face UV interpolation');
       for (const [channel, width] of attributeLayout) {
         const values = [a, b, c, corner].map(row => width ? row.attributes[channel] : [row.attributes[channel]]);
@@ -100,9 +108,8 @@
           throw new RangeError('Dissolve would change corner attribute interpolation for ' + channel);
       }
       for (const channel of channels) {
-        const start = weight(a, channel);
-        const expected = start + x * (weight(b, channel) - start) + y * (weight(c, channel) - start);
-        if (Math.abs(weight(corner, channel) - expected) > 1e-6)
+        const expected = affine(weight(g,a,channel),weight(g,b,channel),weight(g,c,channel),x,y);
+        if (Math.abs(weight(g,corner,channel) - expected) > 1e-6)
           throw new RangeError('Dissolve would change weight interpolation for ' + channel);
       }
     }
@@ -273,23 +280,26 @@
     return {document,links,effect:{kind:'split-quad',faces:splits.map(row=>({...row,edge:edges.get(edgeKey(row.vertices))}))}};
   }
 
-  function joinEdge(doc, g, op) {
+  function joinEdge(doc, g, op, label) {
     if (op.edge !== undefined) {
       const edge = g.edges.find(row=>row.id === op.edge);
-      if (edge?.uses.length !== 2) throw new RangeError('Join triangles needs a manifold edge between two faces');
+      if (edge?.uses.length !== 2) throw new RangeError(label + ' needs a manifold edge between two faces');
       return edge;
     }
     const {ids} = K.meshTopology.select(doc,op.selection === undefined ?
       {domain:'faces',ids:op.faces} : {domain:'faces',from:op.selection});
-    if (ids.length !== 2) throw new RangeError('Select exactly two triangles to join');
+    if (ids.length !== 2) throw new RangeError(label + ' needs exactly two selected faces');
     const shared = g.edges.filter(row=>ids.every(id=>row.uses.some(use=>use.face === id)));
     if (shared.length !== 1 || shared[0].uses.length !== 2)
-      throw new RangeError('Join triangles needs exactly one manifold shared edge');
+      throw new RangeError(label + ' needs exactly one manifold shared edge');
     return shared[0];
   }
 
   function joinUVs(edge, keep, remove, shared) {
-    return [0,...MaterialUV.setsOf(keep.corners[0])].map(set=>{
+    const layouts = [0,...MaterialUV.setsOf(keep.corners[0])];
+    const sets = [...new Set([...layouts,...Object.keys(edge.uvSeams ?? {}).map(Number)])].sort((a,b)=>a-b);
+    return sets.map(set=>{
+      if (!layouts.includes(set)) return {set,authored:true,discontinuous:false,endpoints:[]};
       const endpoints = shared.map(({kept,lost})=>{
         const after = MaterialUV.uv(kept,set), prior = MaterialUV.uv(lost,set);
         const pinned = {keep:MaterialUV.pinned(kept,set),remove:MaterialUV.pinned(lost,set)};
@@ -302,6 +312,10 @@
     });
   }
 
+  function retainPins(corner,lost) {
+    return {...corner,uvPinned:corner.uvPinned || lost.uvPinned,uvPins:{...corner.uvPins,...lost.uvPins}};
+  }
+
   function joinTriangles(doc, op) {
     const {uvs = 'match'} = op;
     if (!record(op,['kind','edge','faces','selection','keep','uvs']) ||
@@ -309,7 +323,7 @@
         op.faces !== undefined && (!Array.isArray(op.faces) || op.faces.length !== 2) ||
         !['match','keep'].includes(uvs))
       throw new TypeError('Join triangles needs an edge, two face IDs, or a saved face selection, and a match or keep UV policy');
-    const g = incidence(doc), edge = joinEdge(doc,g,op);
+    const g = incidence(doc), edge = joinEdge(doc,g,op,'Join triangles');
     const uses = [...edge.uses].sort((a,b)=>a.face < b.face ? -1 : 1);
     const faces = uses.map(use=>g.faces.get(use.face));
     if (faces.some(face=>face.corners.length !== 3) ||
@@ -319,9 +333,7 @@
     if (faces[0].material !== faces[1].material) throw new RangeError('Join triangles would remove a material boundary');
     if (edge.smooth === false || edge.crease > 0)
       throw new RangeError('Join triangles would remove an authored hard edge or subdivision crease');
-    const layout = face=>Object.entries(face.corners[0].attributes ?? {}).map(([key,value])=>
-      [key,Array.isArray(value) ? value.length : 0]);
-    if (!equal(layout(faces[0]),layout(faces[1])))
+    if (!equal(layout(faces[0].corners[0]),layout(faces[1].corners[0])))
       throw new RangeError('Join triangles needs matching corner attribute layouts');
 
     const [a,b] = faces.map(face=>face.sourceQuad ?? {});
@@ -337,14 +349,10 @@
       throw new RangeError('Join triangles would discard differing shared corner normals or non-UV attributes');
 
     const uvSets = joinUVs(edge,keep,remove,shared);
-    // A marked seam on an unused layout is still an authored constraint.
-    for (const set of Object.keys(edge.uvSeams ?? {}).map(Number))
-      if (!uvSets.some(row=>row.set === set)) uvSets.push({set,authored:true,discontinuous:false,endpoints:[]});
-    const seams = uvSets.filter(row=>row.authored || row.discontinuous).map(row=>row.set).sort((a,b)=>a-b);
+    const seams = uvSets.filter(row=>row.authored || row.discontinuous).map(row=>row.set);
     const corners = [...first,second[1]].map(corner=>{
       const lost = shared.find(row=>row.kept === corner)?.lost;
-      return lost ? {...corner,uvPinned:corner.uvPinned || lost.uvPinned,
-        uvPins:{...corner.uvPins,...lost.uvPins}} : corner;
+      return lost ? retainPins(corner,lost) : corner;
     });
     const start = corners.findIndex(corner=>corner.id === keep.corners[0].id);
     const ring = [...corners.slice(start),...corners.slice(0,start)];
@@ -361,6 +369,92 @@
       return {document:doc,links:{},effect,blockers:[{code:'join-uv-seam',edge:edge.id,sets:seams,message}]};
     }
     return {document:joined,links,effect};
+  }
+
+  function tileRegistration(g, faces, reference) {
+    const corners = faces.flatMap(face=>face.corners);
+    const coordinates = facePlane(g,reference);
+    const origin = g.vertices.get(reference[0].vertex).position;
+    const span = Math.max(...corners.map(corner=>V.dist(origin,g.vertices.get(corner.vertex).position)));
+    const uvSets = [0,...MaterialUV.setsOf(reference[0])];
+    const attributes = layout(reference[0]).filter(([key])=>!MaterialUV.isKey(key));
+    const joints = [...new Set(corners.flatMap(corner=>Object.keys(weights(g,corner))))].sort();
+    const issues = [];
+    for (const face of faces) for (const corner of face.corners) {
+      const {distance,x,y} = coordinates(corner);
+      if (Math.abs(distance) > 1e-7*span)
+        issues.push({kind:'geometry-interpolation',face:face.id,corner:corner.id,planeDistance:distance});
+      const compare = (kind, channel, values, actual) => {
+        const expected = blend(values,x,y);
+        if (!sameUV(actual,expected,1e-9)) issues.push({kind,...channel,face:face.id,corner:corner.id,actual,expected});
+      };
+      for (const set of uvSets)
+        compare('uv-interpolation',{set},reference.map(row=>MaterialUV.uv(row,set)),MaterialUV.uv(corner,set));
+      for (const [key,width] of attributes) {
+        const value = row=>width ? row.attributes[key] : [row.attributes[key]];
+        compare('attribute-interpolation',{attribute:key},reference.map(value),value(corner));
+      }
+      for (const joint of joints) {
+        const value = row=>[weight(g,row,joint)];
+        compare('weight-interpolation',{joint},reference.map(value),value(corner));
+      }
+      if (reference.some(row=>!equal(row.normal,corner.normal))) issues.push({
+        kind:'corner-shading',face:face.id,corner:corner.id,normal:corner.normal ?? null});
+    }
+    return issues;
+  }
+
+  function mergeTiles(doc, op) {
+    const {mode = 'safe'} = op;
+    if (!record(op,['kind','edge','faces','selection','keep','mode']) ||
+        ['edge','faces','selection'].filter(key=>op[key] !== undefined).length !== 1 ||
+        op.faces !== undefined && (!Array.isArray(op.faces) || op.faces.length !== 2) ||
+        !['safe','force'].includes(mode))
+      throw new TypeError('Merge tiles needs a shared edge, two face IDs, or a saved face selection, and safe or force mode');
+    const g = incidence(doc), edge = joinEdge(doc,g,op,'Merge tiles');
+    const uses = [...edge.uses].sort((a,b)=>a.face < b.face ? -1 : 1);
+    const keeper = op.keep ?? uses[0].face;
+    if (!uses.some(use=>use.face === keeper)) throw new RangeError('Merge keeper must be one of the incident tiles');
+    if (keeper === uses[1].face) uses.reverse();
+    const faces = uses.map(use=>g.faces.get(use.face)), [keep,remove] = faces;
+    if (faces.some(face=>face.corners.length < 4) ||
+        new Set(faces.flatMap(face=>face.corners.map(corner=>corner.vertex))).size !==
+          keep.corners.length+remove.corners.length-2)
+      throw new RangeError('Merge tiles needs two polygonal tiles meeting only at the shared edge');
+    if (crossesWinding(...uses,g.corners)) throw new RangeError('Repair face winding before merging tiles');
+    if (!equal(layout(keep.corners[0]),layout(remove.corners[0])))
+      throw new RangeError('Merge tiles needs matching corner attribute layouts');
+
+    const before = faceTriangles(doc,faces.map(face=>face.id));
+    const reference = before.get(keep.id)[0].map(id=>g.corners.get(id));
+    const discarded = tileRegistration(g,faces,reference);
+    if (keep.material !== remove.material)
+      discarded.push({kind:'material',face:remove.id,before:remove.material,after:keep.material});
+    const {id,vertices,uses:incidents,...settings} = edge;
+    if (Object.keys(settings).length) discarded.push({kind:'authored-edge',edge:{id,vertices,...settings}});
+    const [first,second] = faces.map((face,i)=>outside(face,uses[i]));
+    const shared = [{kept:first[0],lost:second.at(-1)},{kept:first.at(-1),lost:second[0]}];
+    const uvSets = joinUVs(edge,keep,remove,shared);
+    for (const {set,endpoints} of uvSets) for (const change of endpoints) {
+      if (change.delta.some(n=>n !== 0)) discarded.push({kind:'shared-uv',set,...change});
+    }
+    const keepPins = new Map(shared.map(({kept,lost})=>[kept.id,lost]));
+    const corners = [...first,...second.slice(1,-1)].map(corner=>
+      keepPins.has(corner.id) ? retainPins(corner,keepPins.get(corner.id)) : corner);
+    const start = corners.findIndex(corner=>corner.id === keep.corners[0].id);
+    const ring = [...corners.slice(start),...corners.slice(0,start)];
+    const polygon = {id:keep.id,material:keep.material,corners:ring};
+    const document = topology.edit(doc,{faces:[polygon],removeFaces:[remove.id]});
+    const links = {faces:[{from:remove.id,to:keep.id}],
+      corners:shared.map(({kept,lost})=>({from:lost.id,to:kept.id}))};
+    const effect = {kind:'merge-tiles',mode,edge:id,vertices,keep:keep.id,removedFace:remove.id,discarded,uvSets,links,
+      before:faces.map(face=>({...face,triangles:before.get(face.id)})),
+      after:{...polygon,triangles:faceTriangles(document,[keep.id]).get(keep.id)}};
+    if (mode === 'safe' && discarded.length) {
+      const message = 'Merging these tiles changes registered data. Preview mode force to choose what to discard';
+      return {document:doc,links:{},effect,blockers:[{code:'tile-merge-loss',edge:id,message}]};
+    }
+    return {document,links,effect};
   }
 
   function patchFor(before, after, transfers) {
@@ -409,7 +503,7 @@
       throw new TypeError('Repair needs a topology revision and 1 to 128 explicit operations');
     if (request.revision !== topology.revision(before)) throw new RangeError('Stale mesh repair revision');
     const commands = { weld, dissolve, winding, 'flip-diagonal': flipDiagonal, 'split-quad': splitQuad,
-      'join-triangles': joinTriangles };
+      'join-triangles': joinTriangles, 'merge-tiles':mergeTiles };
     const steps = [], transfers = { faces: new Map(), corners: new Map(), edges: new Map() };
     let after = before, refused = [];
     for (const [i, op] of request.operations.entries()) {

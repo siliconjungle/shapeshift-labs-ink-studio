@@ -827,7 +827,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.meshTopologyScene.evaluator` | function | `(rows, placements)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.mount` | function | `(world, prepared)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.prepare` | function | `(rows, tilesets = A.tilesets.prepare(), placements)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
-| `KIT.authoring.meshTopologyScene.revise` | function | `(row, patch, { projection } = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
+| `KIT.authoring.meshTopologyScene.revise` | function | `(row, patch, { projection, paintReview } = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.transferAttachments` | function | `(row, patch, settings, projection)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.physicalMaterials` | namespace |  |  |
 | `KIT.authoring.physicalMaterials.checkContactEffects` | function | `(value)` | [source](../../src/kit/p90-asset-materials.js) |
@@ -908,6 +908,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetFaces.plan` | function | `(scene, request, options)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.polygonStamp` | function | `(brush, face, ids, vertices, uvCorners)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.prepare` | function | `(scene, request, {projectTexelsPerUnit} = {}, cellSize)` | [source](../../src/kit/p23-tileset-faces.js) |
+| `KIT.authoring.tilesetFaces.previewMerges` | function | `(row, steps)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.sameMaterial` | function | `(a, b)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.sourceBindings` | function | `(row, id, update)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.sourceCorners` | function | `(binding, count)` | [source](../../src/kit/p23-tileset-faces.js) |
