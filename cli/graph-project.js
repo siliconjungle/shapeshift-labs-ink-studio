@@ -15,6 +15,7 @@ const { fingerprint } = require('./graph-artifact-cache.js');
 const { estimateGraphMemory } = require('./graph-memory.js');
 const Assets = require('./asset-references.js');
 const { resolveTakeFile } = require('./take-document.js');
+const materialGraph = require('./material-graph.js');
 
 const format = 'ink-studio/graph-project';
 const reportFormat = 'ink-studio/graph-report';
@@ -260,7 +261,9 @@ function cacheReport(frame) {
 }
 
 function createGraphProject(source, { kit=require('../index.js').load(), baseDir=process.cwd(), operations={}, adapters={},
-  sourceFile, workerPool, planAssets=false }={}) {
+  sourceFile, workerPool, planAssets=false, instance }={}) {
+  if (source?.format===materialGraph.format) source=materialGraph.toGraphProject(source,{instance});
+  else if (instance!==undefined) throw new TypeError('Graph instances require a material graph');
   if (workerPool && !workerPool.matches(kit)) throw new TypeError('Graph worker pool and project need the same toolkit');
   const {graph,data,mediaGraph,takeTime}=kit.KIT.procedural;
   const host=createGraphHost(adapters,{kit});

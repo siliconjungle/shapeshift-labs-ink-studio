@@ -132,10 +132,12 @@ function findGraphGroupUsers(groupFile, { root = process.cwd() } = {}) {
   const targetDocument = groupDocument(JSON.parse(bytes.toString('utf8')), bytes, target);
   const { revision, sha256 } = targetDocument, files = new Map([[physical, targetDocument]]);
   const projects = [], errors = [];
+  const materialGraph = require('./material-graph.js');
 
   function inspect(file, project) {
     const projectName = relative(folder, file), baseDir = path.dirname(file);
     try {
+      if (project.format === materialGraph.format) project = materialGraph.toGraphProject(project, { requireOutputs: false });
       const tree = loadGraphGroups(project.groups ?? {}, baseDir, { check: false, files });
       const aliases = new Set(tree.entries.filter(group => group.physical === physical).map(group => group.alias));
       if (!aliases.size) return;
@@ -158,7 +160,7 @@ function findGraphGroupUsers(groupFile, { root = process.cwd() } = {}) {
           document = JSON.parse(fs.readFileSync(file, 'utf8'));
         }
         catch { continue; }
-        if (document?.format === 'ink-studio/graph-project') inspect(file, document);
+        if (['ink-studio/graph-project', materialGraph.format].includes(document?.format)) inspect(file, document);
       }
     }
   }

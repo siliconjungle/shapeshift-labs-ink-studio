@@ -137,6 +137,8 @@ ink-studio graph batch examples/headless-graph.json cases.json --out graph-batch
 ink-studio graph session examples/headless-graph.json --protocol ndjson
 ```
 
+For editable material files with stable connection IDs and per-instance controls, see the [material graph guide](editable-material-graph.md).
+
 Use `"format": "ink-studio/graph-project"` and `"version": 1` with the same
 `inputs`, `nodes`, and `outputs` as a library graph. Set input defaults on the
 typed ports and pass overrides as a JSON object with `--inputs values.json`.

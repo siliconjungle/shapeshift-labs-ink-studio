@@ -4,6 +4,7 @@ const { once } = require('node:events');
 const { createInterface } = require('node:readline');
 const { save, graphOutputs } = require('./graph-outputs.js');
 const { readGraphProject } = require('./graph-project.js');
+const { readMaterialGraph, writeMaterialGraph } = require('./material-graph.js');
 const { findGraphGroupUsers } = require('./graph-groups.js');
 const { snapshotFormat, diffGraphs } = require('./graph-diff.js');
 const { openGraphArtifactCache, engineFingerprint, fingerprint } = require('./graph-artifact-cache.js');
@@ -22,8 +23,9 @@ const flags = {
   session:['protocol','out','workers'],
   clip:['inputs','seed','out','output','from','to','fps','warmup','cuts','clock','format','render-options','capture-options','json',...executionFlags]
 };
+for (const options of Object.values(flags)) options.push('instance');
 const discoveryFlags = { nodes: ['json'], describe: ['json', 'example'] };
-const analysisFlags = { impact: ['root', 'json'], diff: ['adapters', 'json'] };
+const analysisFlags = { impact: ['root', 'json'], diff: ['adapters', 'json'], material: ['id', 'out'] };
 const commandOptions = { ...flags, ...discoveryFlags, ...analysisFlags, ...host.commands };
 
 async function sendText(text) {
@@ -122,6 +124,15 @@ async function graphCommand(pos,opt,settings) {
     }
     return sendText(listing ? catalog.listText(result) : catalog.nodeText(result));
   }
+  if (mode==='material') {
+    if (pos.length!==2 || Object.entries(opt).some(([key,value])=>
+      !analysisFlags.material.includes(key) || typeof value!=='string' || !value.trim()))
+      throw new TypeError('Use graph material <project-or-material.json> [--id ID] [--out material.json]');
+    const document=readMaterialGraph(file,{id:opt.id});
+    if (opt.out===undefined) return send(document);
+    const result=writeMaterialGraph(opt.out,document,{baseDir:path.dirname(path.resolve(file))});
+    return send({file:path.resolve(opt.out),format:result.format,version:result.version,id:result.id});
+  }
   if (mode==='impact') {
     if (pos.length!==2 || Object.entries(opt).some(([key,value])=>
       key==='json' ? value!==true : !analysisFlags.impact.includes(key) || typeof value!=='string' || !value.trim()))
@@ -160,7 +171,7 @@ async function graphCommand(pos,opt,settings) {
 }
 
 async function projectCommand(mode,file,caseFile,opt,settings) {
-  const project=readGraphProject(file,{...settings,planAssets:opt.memory===true}), sources=project.sourceFiles();
+  const project=readGraphProject(file,{...settings,planAssets:opt.memory===true,instance:opt.instance}), sources=project.sourceFiles();
   if (settings.adapterFile) sources.push(settings.adapterFile);
   let inputs, result;
   if (opt.inputs!==undefined) {

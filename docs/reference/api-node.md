@@ -29,7 +29,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createCameraAtlas` | function | `(options)` | [guide](../camera-atlas.md#capture-and-schedule-feeds), [guide](../render-outputs.md#schedule-a-miniature-renderer-as-a-camera-feed), [source](../../index.js) |
 | `node.createEffectClip` | function | `(source, {kit=require('..').load(),baseDir=process.cwd(),sourceFile,operations,adapters} = {})` | [guide](../effect-clips.md#run-headlessly-and-reuse-a-group), [source](../../cli/effect-clip.js) |
 | `node.createGraphHost` | function | `(config = {}, { kit = require('../index.js').load() } = {})` | [guide](../graph-media.md#optional-host-adapters), [source](../../cli/graph-host.js) |
-| `node.createGraphProject` | function | `(source, { kit=require('../index.js').load(), baseDir=process.cwd(), operations={}, adapters={}, sourceFile, workerPool, planAssets=false }={})` | [guide](../headless-authoring.md#persistent-sessions), [source](../../cli/graph-project.js) |
+| `node.createGraphProject` | function | `(source, { kit=require('../index.js').load(), baseDir=process.cwd(), operations={}, adapters={}, sourceFile, workerPool, planAssets=false, instance }={})` | [guide](../editable-material-graph.md#open-edit-and-save), [guide](../headless-authoring.md#persistent-sessions), [source](../../cli/graph-project.js) |
 | `node.createGraphWorkers` | function | `(limit, { kit = require('../index.js').load(), timeoutMs = 60000 } = {})` | [source](../../cli/graph-workers.js) |
 | `node.createMotionalCoverageHistory` | function | `()` | [guide](../motional-coverage.md#matched-sequence-review), [guide](../motional-coverage.md), [source](../../src/motional-coverage.js) |
 | `node.createPartMotionHistory` | function | `()` | [guide](../art-passes.md#part-motion-and-previous-depth), [source](../../cli/part-motion.js) |
@@ -87,6 +87,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.objectMatte` | function | `(frame, {object, view = 'combined'} = {})` | [source](../../cli/object-mattes.js) |
 | `node.openCheckpointStore` | function | `(directory, { readBlock = file => fs.readFileSync(file) } = {})` | [guide](../simulation-checkpoints.md#node-integration), [source](../../src/simulation-checkpoint-store.js) |
 | `node.openGestureBank` | function | `(directory,{kit=require('../index.js').load()}={})` | [guide](../gesture-bank.md#tool-and-graph-api), [guide](../gesture-bank.md), [source](../../cli/gesture-bank.js) |
+| `node.openMaterialGraph` | function | `(source, { id } = {})` | [guide](../editable-material-graph.md#open-edit-and-save), [source](../../cli/material-graph.js) |
 | `node.openPixelEditorSession` | function | `(directory, options)` | [source](../../index.js) |
 | `node.openSampleLibrary` | function | `(directory, {kit = require('../index.js').load()} = {})` | [guide](../sample-capture.md#use-the-tools-from-code-or-a-graph), [source](../../cli/sample-library.js) |
 | `node.packProject` | function | `(scene, { out, root, revision, assetPack, paint, attachments } = {})` | [source](../../cli/project-bundle.js) |
@@ -112,8 +113,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.readGaussianGltf` | function | `(file, { optional, onFile, decodeImage, ...options } = {})` | [guide](../gaussian-gltf.md#api), [source](../../cli/gltf-asset.js) |
 | `node.readGaussianSplat` | function | `(file, options = {})` | [guide](../webgpu-graphs.md#import-gaussian-splats), [source](../../cli/gaussian-splats.js) |
 | `node.readGltfAsset` | function | `(file, { onFile } = {})` | [source](../../cli/gltf-asset.js) |
-| `node.readGraphProject` | function | `(file, options={})` | [guide](../graph-clips.md#node-api), [guide](../headless-authoring.md#persistent-sessions), [source](../../cli/graph-project.js) |
+| `node.readGraphProject` | function | `(file, options={})` | [guide](../editable-material-graph.md#open-edit-and-save), [guide](../graph-clips.md#node-api), [guide](../headless-authoring.md#persistent-sessions), [source](../../cli/graph-project.js) |
 | `node.readHorizonBands` | function | `(file, dependency)` | [guide](../layered-horizon.md), [source](../../cli/horizon-bands.js) |
+| `node.readMaterialGraph` | function | `(file, options)` | [guide](../editable-material-graph.md#open-edit-and-save), [source](../../cli/material-graph.js) |
 | `node.readMesh` | function | `(file, { attributes = false, uvSet = 0, allUVSets = false } = {})` | [guide](../../README.md#importing-meshes), [source](../../index.js) |
 | `node.readProjectBundle` | function | `(file)` | [source](../../cli/project-bundle.js) |
 | `node.readRasterAsset` | function | `(file)` | [guide](../headless-authoring.md#materials-artwork-and-animation-signals), [source](../../index.js) |
@@ -179,6 +181,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.writeCurveComparison` | function | `(world, options, directory)` | [source](../../cli/curve-compare.js) |
 | `node.writeCurveQualityReview` | function | `(world, options, directory)` | [source](../../cli/curve-quality-review.js) |
 | `node.writeGltfAsset` | function | `(source, { out } = {})` | [source](../../cli/gltf-asset.js) |
+| `node.writeMaterialGraph` | function | `(file, source, { baseDir = path.dirname(path.resolve(file)) } = {})` | [guide](../editable-material-graph.md#open-edit-and-save), [source](../../cli/material-graph.js) |
 | `node.writeProjectBundle` | function | `(source, { out } = {})` | [source](../../cli/project-bundle.js) |
 | `node.writeRasterAsset` | function | `(source, { out } = {})` | [source](../../cli/raster-asset.js) |
 | `node.writeSceneEmbed` | function | `(document, { out, settings } = {})` | [source](../../cli/scene-replay.js) |

@@ -71,8 +71,12 @@ async function validateContent({ entry, bytes, filename }, kit) {
       if (errors.length) throw new TypeError(kit.KIT.diorama.report(errors));
     }
   }
-  if (entry.kind === 'graph' && (document.format !== 'ink-studio/graph-project' || document.version !== 1))
-    throw new TypeError('Graph asset needs a version 1 graph project');
+  if (entry.kind === 'graph') {
+    const MaterialGraph = require('./material-graph.js');
+    if (document.format === MaterialGraph.format) MaterialGraph.openMaterialGraph(document);
+    else if (document.format !== 'ink-studio/graph-project' || document.version !== 1)
+      throw new TypeError('Graph asset needs a version 1 graph project or material graph');
+  }
   if (entry.kind === 'scene' && (typeof document.id !== 'string' || document.format !== undefined))
     throw new TypeError('Scene asset needs a named JSON diorama');
 }

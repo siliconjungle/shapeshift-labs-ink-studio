@@ -6,6 +6,7 @@ const { validateTake } = require('./take-document.js');
 const { resolveCheckpoint } = require('./checkpoint-file.js');
 const { isModel, mapModels, requireRevision } = require('./simulation-model-files.js');
 const { groupEntries, groupReference, groupDocument, requireGroupReference } = require('./graph-groups.js');
+const MaterialGraph = require('./material-graph.js');
 const Experiment = require('./experiment-schema.js');
 const Assets = require('./asset-references.js');
 const SoundPacks = require('./world-sound-pack.js');
@@ -16,6 +17,7 @@ const formats = {
   'ink-studio/world': 'world',
   'ink-studio/simulation-model': 'world',
   'ink-studio/graph-project': 'graph',
+  [MaterialGraph.format]: 'graph',
   'ink-studio/graph-group': 'group',
   'ink-studio/scene-audio': 'audio',
   [SoundPacks.format]: 'world-sound-pack',
@@ -254,9 +256,11 @@ function collectDependencies(bundles, entry, get, attachments = {}) {
       follow(document.checkpoint, 'checkpoints');
       for (const ref of values(document.shots)) follow(ref, 'shot');
     } else if (kind === 'graph') {
-      const bind = select(file, document);
-      graphGroups(file, document.groups);
-      for (const asset of values(document.assets)) {
+      const graph = document.format === MaterialGraph.format ?
+        MaterialGraph.toGraphProject(document, { requireOutputs: false }) : document;
+      const bind = select(file, graph);
+      graphGroups(file, graph.groups);
+      for (const asset of values(graph.assets)) {
         const ref = asset?.file, target = assetApi().isRef(ref) ?
           bind(ref, Assets.graphKinds(asset.format)).filename : resolvePath(file, ref);
         if (asset?.format === 'json') visit(target, undefined, true);

@@ -117,6 +117,7 @@ All checked-in guides, indexed by title and section headings.
 - [Geometry-driven early reflections](../early-reflections.md)
 - [Shared ecology and renderer bindings](../ecology.md)
 - [Selective edge filtering](../edge-filter.md)
+- [Editable material graph](../editable-material-graph.md)
 - [Editable simulation inputs](../editable-simulation-inputs.md)
 - [Editable effect clips](../effect-clips.md)
 - [Effect palette ramps](../effect-palettes.md)
