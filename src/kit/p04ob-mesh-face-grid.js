@@ -18,23 +18,30 @@ const meshFaceGrid = (function (K) {
     if (!record(op,['kind','face','selection','rows','columns']) || (op.face === undefined) === (op.selection === undefined) ||
         ![op.rows,op.columns].every(n=>Number.isInteger(n) && n>=1 && n<=gridLimit))
       throw new TypeError('Subdivide face needs a quad or saved face selection and 1 to '+gridLimit+' rows and columns');
-    const face = selectQuad(g,op), {rows,columns} = op, source = face.corners;
+    const axis = count=>Array.from({length:count+1},(_,i)=>i/count);
+    return buildGrid(g,selectQuad(g,op),axis(op.columns),axis(op.rows));
+  }
+
+  function buildGrid(g, face, uAxis, vAxis, texels) {
+    const rows = vAxis.length-1, columns = uAxis.length-1, source = face.corners;
+    const reverse = axis=>axis.slice().reverse().map(n=>1-n);
     const sides = [
-      [columns,i=>[0,i]], [rows,i=>[i,columns]],
-      [columns,i=>[rows,columns-i]], [rows,i=>[rows-i,0]]
-    ].flatMap(([segments,gridAt],i)=>segments === 1 ? [] :
-      [{segments,gridAt,edge:edgeOf(g,source[i].vertex,cyclic(source,i+1).vertex)}]);
+      [uAxis,i=>[0,i]], [vAxis,i=>[i,columns]],
+      [reverse(uAxis),i=>[rows,columns-i]], [reverse(vAxis),i=>[rows-i,0]]
+    ].flatMap(([fractions,gridAt],i)=>fractions.length === 2 ? [] :
+      [{fractions,gridAt,edge:edgeOf(g,source[i].vertex,cyclic(source,i+1).vertex)}]);
     const edges = sides.map(row=>row.edge), noop = rows === 1 && columns === 1;
     const {neighbors,audit} = noop ? {neighbors:[]} : subdivisionRegion(g,face,edges);
     const uvSet = MaterialUV.resolve(g.doc.uvBindings,'pigment');
-    const detail = {face:face.id,rows,columns,uvSet,edges:edges.map(row=>row.id),transitionFaces:neighbors};
+    const detail = {face:face.id,rows,columns,uvSet,edges:edges.map(row=>row.id),transitionFaces:neighbors,
+      ...(texels && {texels:texels.report})};
     const issues = noop ? [] : audit();
     if (!noop && !convex(g,face)) issues.push({kind:'non-convex-grid-face',face:face.id});
     if (issues.length) return {patch:{},affected:[],detail,issues};
 
     const vertices = [], conflicts = new Set();
     function gridPoint(column,row) {
-      const u = column/columns, v = row/rows;
+      const u = uAxis[column], v = vAxis[row];
       const values = [(1-u)*(1-v),u*(1-v),u*v,(1-u)*v];
       const samples = source.flatMap((corner,i)=>values[i] > 0 ? [[corner,values[i]]] : []);
       const sources = samples.map(([corner,weight])=>[corner.vertex,weight]);
@@ -43,6 +50,7 @@ const meshFaceGrid = (function (K) {
       vertices.push(vertex);
       const [corner] = corners(g,[vertex.id],[cornerData(samples)],conflicts);
       const pinned = retainUVPins(corner,samples.map(([item])=>item));
+      if (texels) texels.snap(pinned,column,row);
       return {corner:{...pinned,...(source[0].normal && {normal:source[0].normal})},vertex,sources};
     }
     const grid = Array.from({length:rows+1},(_,row)=>Array.from({length:columns+1},(_,column)=>gridPoint(column,row)));
@@ -63,19 +71,22 @@ const meshFaceGrid = (function (K) {
       ({vertex:vertex.id,position:vertex.position,uv:MaterialUV.uv(corner,uvSet),sources})))};
     if (noop) return {patch:{},affected:[],detail:updatedDetail};
 
-    const cuts = sides.map(({edge,segments,gridAt})=>({edge,chain:Array.from({length:segments+1},(_,i)=>{
+    const cuts = sides.map(({edge,fractions,gridAt})=>({edge,fractions,chain:fractions.map((_,i)=>{
       const [row,column] = gridAt(i);
       return grid[row][column].vertex.id;
     })}));
-    const byEdge = new Map(cuts.map(row=>[row.edge.id,row.chain]));
+    const byEdge = new Map(cuts.map(row=>[row.edge.id,row]));
     const transition = neighbors.map(id=>{
       const {diagonal,...neighbor} = g.faces.get(id);
       const ring = neighbor.corners.flatMap((a,i)=>{
-        const b = cyclic(neighbor.corners,i+1), chain = byEdge.get(edgeOf(g,a.vertex,b.vertex).id);
-        if (!chain) return [a];
-        const order = a.vertex === chain[0] ? chain : chain.slice().reverse();
-        const insert = order.slice(1,-1).map((vertex,j)=>
-          retainUVPins(edgeCorner(g,vertex,a,b,(j+1)/(chain.length-1),conflicts),[a,b]));
+        const b = cyclic(neighbor.corners,i+1), cut = byEdge.get(edgeOf(g,a.vertex,b.vertex).id);
+        if (!cut) return [a];
+        const {chain,fractions} = cut, forward = a.vertex === chain[0];
+        const order = forward ? chain : chain.slice().reverse(), ticks = forward ? fractions : reverse(fractions);
+        const insert = order.slice(1,-1).map((vertex,j)=>{
+          const fraction = texels ? ticks[j+1] : (j+1)/(chain.length-1);
+          return retainUVPins(edgeCorner(g,vertex,a,b,fraction,conflicts),[a,b]);
+        });
         return [a,...insert];
       });
       return {...neighbor,corners:ring};
@@ -86,5 +97,5 @@ const meshFaceGrid = (function (K) {
       cuts:cuts.map(({edge,chain})=>({edge:edge.id,chain})),detail:updatedDetail};
   }
 
-  return {subdivide};
+  return {subdivide,buildGrid,gridLimit};
 })(KIT);

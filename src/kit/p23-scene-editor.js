@@ -900,9 +900,12 @@
       const row = meshTopology(object, part);
       const scene = snapshot();
       requireMeshShapeOwner(object, row.part, scene, 'Edit');
-      const plan = K.meshTopology.planEdgeEdit(row.document, request);
-      return ['split-face','subdivide-face'].includes(plan.report.kind) ?
-        A.tilesetPickedSplit.decorate(scene,row,plan) : {plan};
+      let atlas;
+      const settings = request?.operation?.kind === 'subdivide-texels' ?
+        {texelAtlas:face=>(atlas=A.tilesetPickedSplit.atlasFor(scene,row,face))} : undefined;
+      const plan = K.meshTopology.planEdgeEdit(row.document, request, settings);
+      return ['split-face','subdivide-face','subdivide-texels'].includes(plan.report.kind) ?
+        A.tilesetPickedSplit.decorate(scene,row,plan,atlas) : {plan};
     }
 
     function planMeshEdgeEdit(object, request, options) {
