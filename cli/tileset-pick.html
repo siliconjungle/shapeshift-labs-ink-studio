@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tileset picker · Ink Studio</title>
+<style>
+:root { color-scheme:dark; background:#0f171a; color:#e9efea; font:15px/1.45 system-ui,sans-serif; }
+* { box-sizing:border-box; }
+body { margin:0; }
+main { max-width:1120px; margin:auto; padding:clamp(16px,4vw,44px); }
+header { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:18px; }
+h1 { margin:0; font:400 clamp(30px,5vw,48px)/1.05 Georgia,serif; }
+#tileset, #status { font:13px/1.4 ui-monospace,monospace; color:#b4ccc6; overflow-wrap:anywhere; }
+#view { border:1px solid #354549; border-radius:8px; overflow:hidden; }
+form { display:flex; align-items:end; flex-wrap:wrap; gap:12px; margin:14px 0 8px; }
+label { display:grid; gap:3px; }
+form input { width:6rem; padding:7px 8px; border:1px solid #526565; border-radius:5px; font:inherit; background:#202e30; color:inherit; }
+#save { background:#b3d6bb; color:#16221d; padding:8px 12px; border:0; border-radius:5px; font:inherit; font-weight:600; cursor:pointer; }
+#save:disabled { opacity:.45; cursor:default; }
+#status[data-invalid] { color:#f2baa0; }
+:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
+p { margin:0 0 12px; color:#bdcec6; }
+/* GRID_STYLE */
+</style>
+</head>
+<body>
+<main>
+  <header><h1>Pick a texel rectangle</h1><span id="tileset"></span></header>
+  <p>Drag across texels, or enter the bounds below. Coordinates start at the top left.</p>
+  <div id="view"></div>
+  <form novalidate>
+    <label>X <input name="x" type="number" step="1" min="0" required></label>
+    <label>Y <input name="y" type="number" step="1" min="0" required></label>
+    <label>Width <input name="width" type="number" step="1" min="1" required></label>
+    <label>Height <input name="height" type="number" step="1" min="1" required></label>
+    <button type="submit" id="save">Download selection</button>
+  </form>
+  <output id="status" role="status"></output>
+</main>
+<script type="module">
+/* GRID_MODULE */
+/* SELECTION_MODULE */
+
+const model = /* PICK_DATA */;
+const {width,height} = model, id = model.selection.tileset;
+const form = document.querySelector('form'), status = document.querySelector('#status');
+const save = document.querySelector('#save');
+const fields = ['x','y','width','height'].map(name=>form.elements.namedItem(name));
+const view = mountPixelGridCanvas(document.querySelector('#view'));
+let selection, drag;
+document.querySelector('#tileset').textContent = id+' · '+width+' × '+height+' texels';
+[width-1,height-1,width,height].forEach((max,index)=>{ fields[index].max = max; });
+const bytes = atob(model.rgba), rgba = new Uint8Array(bytes.length);
+for (let i=0;i<bytes.length;i++) rgba[i] = bytes.charCodeAt(i);
+view.setFrame({width,height,rgba});
+
+function show(next,{ populate = false } = {}) {
+  selection = next;
+  const bounds = fields.map(field=>next[field.name]);
+  if (populate) fields.forEach((field,index)=>{ field.value = bounds[index]; });
+  view.setSelection(bounds);
+  save.disabled = false;
+  status.removeAttribute('data-invalid');
+  status.value = bounds[2]+' × '+bounds[3]+' texels at ('+bounds[0]+', '+bounds[1]+')';
+}
+
+function fromFields() {
+  const bounds = Object.fromEntries(fields.map(field=>[field.name,field.valueAsNumber]));
+  try {
+    show(TilesetSelection.pick(id,model,bounds));
+  } catch (error) {
+    selection = undefined;
+    view.setSelection(null);
+    save.disabled = true;
+    status.setAttribute('data-invalid','');
+    status.value = error.message;
+  }
+}
+fields.forEach(field=>field.addEventListener('input',fromFields));
+show(model.selection,{populate:true});
+
+function updateDrag(end) {
+  show(TilesetSelection.pick(id,model,TilesetSelection.between(drag.start,end)),{populate:true});
+}
+
+view.canvas.addEventListener('pointerdown',event=>{
+  if (drag || !event.isPrimary || event.button !== 0) return;
+  const start = view.pixelAt(event.clientX,event.clientY);
+  if (!start) return;
+  event.preventDefault();
+  view.canvas.setPointerCapture(event.pointerId);
+  drag = {id:event.pointerId,start,prior:selection};
+  updateDrag(start);
+});
+view.canvas.addEventListener('pointermove',event=>{
+  if (drag?.id === event.pointerId)
+    updateDrag(view.pixelAt(event.clientX,event.clientY,{clamp:true}));
+});
+view.canvas.addEventListener('pointerup',event=>{
+  if (drag?.id !== event.pointerId) return;
+  updateDrag(view.pixelAt(event.clientX,event.clientY,{clamp:true}));
+  drag = undefined;
+});
+view.canvas.addEventListener('lostpointercapture',event=>{
+  if (drag?.id !== event.pointerId) return;
+  if (drag.prior) show(drag.prior,{populate:true});
+  drag = undefined;
+});
+
+form.addEventListener('submit',event=>{
+  event.preventDefault();
+  if (!selection) return;
+  const url = URL.createObjectURL(new Blob([JSON.stringify(selection,null,2)+'\n'],{type:'application/json'}));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = id+'-selection.json';
+  link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+</script>
+</body>
+</html>

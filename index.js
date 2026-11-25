@@ -296,6 +296,7 @@ module.exports = {
   readEnvironmentImage: require('./cli/horizon-bands.js').readEnvironmentImage,
   previewTimeline: require('./cli/animation-timeline.js').previewTimeline,
   readTilesetImage: require('./cli/tileset-image.js').readTilesetImage,
+  pickTilesetRectangle: require('./cli/tileset-image.js').pickTilesetRectangle,
   createBlankTileset(options) {
     return module.exports.load().KIT.authoring.tilesets.blank(options);
   },

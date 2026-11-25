@@ -87,6 +87,29 @@ serve as a mesh material's texture just like an imported image.
 In Node, pass `ink.createBlankTileset({ width:48, height:32, background:'#31728580' })`
 to `editor.registerTileset(id, image)` as the image argument.
 
+### Pick an exact texel rectangle
+
+Use zero-based `x` and `y` from the top-left corner and positive integer
+dimensions. The entire rectangle must fit in the selected tileset.
+
+```sh
+ink-studio tileset pick --scene gatehouse-tiles.json --id masonry \
+  --x 48 --y 0 --width 48 --height 16 --out sign-selection.json
+ink-studio tileset pick --scene gatehouse-tiles.json --id masonry --out pick-masonry.html
+```
+
+Open the HTML file offline. Drag from either corner on the art grid or
+enter X, Y, Width, and Height in the fields. A click selects one texel.
+The selected bounds are shown on the grid and can be downloaded as the
+same version 1 JSON returned by the numeric command. Supply all four
+values with HTML output to set the initial selection.
+
+In Node, call `ink.pickTilesetRectangle(scene, "masonry", { x:48, y:0, width:48, height:16 })`.
+A selection addresses the source image's texels.
+
+Run `node examples/tileset-pick/demo.cjs tileset-pick-demo` for a
+painted gatehouse, a blank tileset, and both ways of selecting the sign crop.
+
 ## Edit an authored layout
 
 A [polygon topology document](mesh-topology.md) keeps stable face, edge and

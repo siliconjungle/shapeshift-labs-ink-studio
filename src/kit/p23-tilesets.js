@@ -54,16 +54,20 @@
       if (!id(key)) throw new TypeError('Invalid tileset ID '+key);
       prepared.set(key,image(source));
     }
+    function source(key) {
+      const asset = prepared.get(key);
+      if (!asset) throw new RangeError('Unknown tileset '+key);
+      return asset;
+    }
     return {
+      source,
       resolve(texture) {
         if (!record(texture) || !Object.hasOwn(texture,'tileset')) return;
         const key = texture.tileset;
         if (!id(key) || Object.keys(texture).length !== 1)
           throw new TypeError('A tileset texture needs a single tileset ID');
-        const source = prepared.get(key);
-        if (!source) throw new RangeError('Unknown tileset '+key);
         if (!decoded.has(key)) {
-          const {width,height,encoding,data,palette,alpha} = source, bytes = atob(data);
+          const {width,height,encoding,data,palette,alpha} = source(key), bytes = atob(data);
           const pixels = new Uint8Array(width*height*4);
           if (encoding === 'rgba8') {
             for (let i=0;i<bytes.length;i++) pixels[i] = bytes.charCodeAt(i);

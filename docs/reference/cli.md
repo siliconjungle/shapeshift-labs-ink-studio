@@ -269,6 +269,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   asset-part manifest <asset.gltf|.glb> [--out revision.json]   show stable asset IDs
   tileset import <image.png> --scene <scene.json> --id <tileset-id> --out <new-scene.json>   register a shared tileset image
   tileset create --width <texels> --height <texels> [--background <color>] --scene <scene.json> --id <tileset-id> --out <new-scene.json>   register a blank tileset
+  tileset pick --scene <scene.json> --id <tileset-id> [--x N --y N --width N --height N] [--out file.html|file.json]   pick an exact texel rectangle
   asset-part preview <scene.json> <instance> <asset.gltf|.glb> [--expect N] [--out report.json]   check a replacement
   asset-part replace <scene.json> <instance> <asset.gltf|.glb> [--expect N] --out <next-scene.json>   save one part revision
                               [--res 0.08 --texture-size 1024 --triangles 16000 --duration 4 --fps 30]
