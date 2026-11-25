@@ -129,7 +129,11 @@ const ports = {
   'proc.path': { length: unit('source coordinate units') },
   'proc.cable': { length: unit('world units'), start: unit('world units'), end: unit('world units') },
   'geo.tube': { start: unit('world units'), end: unit('world units') },
-  attributeTransfer: { domain: oneOf('vertex', 'face', 'point', 'curve', 'instance', 'splat') },
+  attributeElements: { domain: oneOf('vertex', 'face', 'edge', 'corner', 'curve-control', 'splat') },
+  attributeTable: { domain: oneOf('vertex', 'face', 'edge', 'corner', 'point', 'curve', 'curve-control', 'instance', 'splat') },
+  attributeLineage: { domain: oneOf('edge', 'corner', 'curve-control', 'splat') },
+  attributeRemap: { domain: oneOf('vertex', 'face', 'edge', 'corner', 'point', 'curve', 'curve-control', 'instance', 'splat') },
+  attributeTransfer: { domain: oneOf('vertex', 'face', 'edge', 'corner', 'point', 'curve', 'curve-control', 'instance', 'splat') },
   time: { value: seconds },
   random: { value: { constraints: { min: 0, exclusiveMax: 1 } } }
 };

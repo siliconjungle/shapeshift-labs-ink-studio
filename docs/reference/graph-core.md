@@ -19,6 +19,95 @@ Origin: headless.
 Get the runnable example with `ink-studio graph describe add --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### attributeElements
+
+
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `geometry` | `any` | Required |  |
+| Input | `domain` | `string` | Required | {"choices":["vertex","face","edge","corner","curve-control","splat"]} |
+| Output | `value` | `points` | — |  |
+
+Get the runnable example with `ink-studio graph describe attributeElements --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### attributeLineage
+
+
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `domain` | `string` | Required | {"choices":["edge","corner","curve-control","splat"]} |
+| Input | `evidence` | `any` | Required |  |
+| Input | `before` | `any` | `null` |  |
+| Input | `after` | `any` | `null` |  |
+| Input | `options` | `any` | `{}` |  |
+| Output | `value` | `any` | — |  |
+
+Get the runnable example with `ink-studio graph describe attributeLineage --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### attributeMesh
+
+
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `mesh` | `any` | Required |  |
+| Input | `options` | `any` | `{}` |  |
+| Input | `vertex` | `any` | `null` |  |
+| Input | `face` | `any` | `null` |  |
+| Input | `edge` | `any` | `null` |  |
+| Input | `corner` | `any` | `null` |  |
+| Output | `value` | `field` | — | {"layout":"Function or native object with a sample method"} |
+
+Get the runnable example with `ink-studio graph describe attributeMesh --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### attributeRemap
+
+
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `any` | Required |  |
+| Input | `domain` | `string` | Required | {"choices":["vertex","face","edge","corner","point","curve","curve-control","instance","splat"]} |
+| Input | `entities` | `points` | Required |  |
+| Input | `lineage` | `any` | Required |  |
+| Input | `options` | `any` | `{}` |  |
+| Output | `value` | `any` | — |  |
+| Output | `report` | `any` | — |  |
+| Output | `field` | `field` | — | {"layout":"Function or native object with a sample method"} |
+
+Get the runnable example with `ink-studio graph describe attributeRemap --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### attributeTable
+
+
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `domain` | `string` | Required | {"choices":["vertex","face","edge","corner","point","curve","curve-control","instance","splat"]} |
+| Input | `entities` | `points` | Required |  |
+| Input | `channels` | `any` | `{}` |  |
+| Output | `value` | `any` | — |  |
+| Output | `field` | `field` | — | {"layout":"Function or native object with a sample method"} |
+
+Get the runnable example with `ink-studio graph describe attributeTable --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### attributeTransfer
 
 
@@ -28,7 +117,7 @@ Origin: toolkit.
 | Direction | Port | Type | Default | Details |
 | --- | --- | --- | --- | --- |
 | Input | `source` | `field` | Required | {"layout":"Function or native object with a sample method"} |
-| Input | `domain` | `string` | Required | {"choices":["vertex","face","point","curve","instance","splat"]} |
+| Input | `domain` | `string` | Required | {"choices":["vertex","face","edge","corner","point","curve","curve-control","instance","splat"]} |
 | Input | `entities` | `points` | Required |  |
 | Input | `options` | `any` | `{}` |  |
 | Output | `value` | `points` | — |  |

@@ -261,6 +261,47 @@
         return { value, curves: value.curves(targets), distance: point => value.distanceAt(point) };
       }
     },
+    attributeElements: {
+      inputs: { geometry: 'any', domain: 'string' },
+      outputs: { value: 'points' },
+      run({ geometry, domain }) { return {value:P.attributes.entities(domain,geometry)}; }
+    },
+    attributeTable: {
+      inputs: { domain: 'string', entities: 'points', channels: {type:'any',default:{}} },
+      outputs: { value: 'any', field: 'field' },
+      run({domain,entities,channels}) {
+        const value=P.attributes.asset(domain,entities,channels);
+        return {value,field:P.attributes.nearest(P.attributes.open(value))};
+      }
+    },
+    attributeMesh: {
+      inputs: { mesh:'any', options:{type:'any',default:{}}, vertex:{type:'any',default:null},
+        face:{type:'any',default:null}, edge:{type:'any',default:null}, corner:{type:'any',default:null} },
+      outputs: { value: 'field' },
+      run({mesh,options,...domains}) {
+        const columns=Object.fromEntries(Object.entries(domains).filter(([,value])=>value!==null));
+        return {value:P.attributes.mesh(mesh,{...options,...columns})};
+      }
+    },
+    attributeLineage: {
+      inputs: { domain:'string', evidence:'any', before:{type:'any',default:null}, after:{type:'any',default:null},
+        options:{type:'any',default:{}} },
+      outputs: { value:'any' },
+      run({domain,evidence,before,after,options}) {
+        const A=P.attributes;
+        const value=domain==='curve-control' ? A.curveLineage(evidence) : domain==='splat' ? A.splatLineage(evidence) :
+          A.meshLineage(domain,before,after,evidence,options);
+        return {value};
+      }
+    },
+    attributeRemap: {
+      inputs: { source:'any',domain:'string',entities:'points',lineage:'any',options:{type:'any',default:{}} },
+      outputs: { value:'any', report:'any', field:'field' },
+      run({source,domain,entities,lineage,options}) {
+        const {asset,report}=P.attributes.remap(source,domain,entities,lineage,options);
+        return {value:asset,report,field:P.attributes.nearest(P.attributes.open(asset))};
+      }
+    },
     attributeTransfer: {
       inputs: { source: 'field', domain: 'string', entities: 'points', options: { type: 'any', default: {} } },
       outputs: { value: 'points' },

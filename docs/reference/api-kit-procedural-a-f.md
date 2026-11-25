@@ -190,15 +190,25 @@ Members and callable signatures come from the public entry point. Guide links po
 
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
-| `KIT.procedural.attributes` | namespace |  |  |
-| `KIT.procedural.attributes.carrier` | function | `(carrier, channels)` | [source](../../src/kit/pap-attribute-domains.js) |
-| `KIT.procedural.attributes.mesh` | function | `(mesh, { vertex, face, maxDistance = Infinity } = {})` | [source](../../src/kit/pap-attribute-domains.js) |
-| `KIT.procedural.attributes.nearest` | function | `(source)` | [source](../../src/kit/pap-attribute-domains.js) |
-| `KIT.procedural.attributes.paths` | function | `(source, curves, options)` | [source](../../src/kit/pap-attribute-domains.js) |
-| `KIT.procedural.attributes.sdf` | function | `(field, channels, { interval = .012, steps = 6, reach = 2 } = {})` | [source](../../src/kit/pap-attribute-domains.js) |
-| `KIT.procedural.attributes.splats` | function | `(world, source, options)` | [source](../../src/kit/pap-attribute-domains.js) |
-| `KIT.procedural.attributes.table` | function | `(domain, entities, specifications = {})` | [source](../../src/kit/pap-attribute-domains.js) |
-| `KIT.procedural.attributes.transfer` | function | `(source, domain, entities, { maxDistance = Infinity, fallback = {} } = {})` | [source](../../src/kit/pap-attribute-domains.js) |
+| `KIT.procedural.attributes` | namespace |  | [guide](../headless-authoring.md#transfer-attributes-through-edits) |
+| `KIT.procedural.attributes.asset` | function | `(domain,entities,channels = {})` | [guide](../headless-authoring.md#transfer-attributes-through-edits), [source](../../src/kit/pap-attribute-domains.js) |
+| `KIT.procedural.attributes.blend` | function | `(channel,indices,weights)` | [guide](../headless-authoring.md#transfer-attributes-through-edits), [source](../../src/kit/pap-attribute-domains.js) |
+| `KIT.procedural.attributes.carrier` | function | `(carrier, channels)` | [guide](../headless-authoring.md#transfer-attributes-through-edits), [source](../../src/kit/pap-attribute-domains.js) |
+| `KIT.procedural.attributes.curveLineage` | function | `(report)` | [guide](../headless-authoring.md#transfer-attributes-through-edits), [source](../../src/kit/pap-attributes-remap.js) |
+| `KIT.procedural.attributes.domains` | value | `array` | [guide](../headless-authoring.md#transfer-attributes-through-edits) |
+| `KIT.procedural.attributes.entities` | function | `(domain,source)` | [guide](../headless-authoring.md#transfer-attributes-through-edits), [source](../../src/kit/pap-attribute-domains.js) |
+| `KIT.procedural.attributes.format` | value | `string = "ink-studio/geometry-attributes"` | [guide](../headless-authoring.md#transfer-attributes-through-edits) |
+| `KIT.procedural.attributes.mesh` | function | `(mesh, { vertex, face, edge, corner, maxDistance = Infinity, edgeMaxDistance = Infinity } = {})` | [guide](../headless-authoring.md#transfer-attributes-through-edits), [source](../../src/kit/pap-attribute-domains.js) |
+| `KIT.procedural.attributes.meshLineage` | function | `(domain,before,after,map,options={})` | [guide](../headless-authoring.md#transfer-attributes-through-edits), [source](../../src/kit/pap-attributes-remap.js) |
+| `KIT.procedural.attributes.nearest` | function | `(source)` | [guide](../headless-authoring.md#transfer-attributes-through-edits), [source](../../src/kit/pap-attribute-domains.js) |
+| `KIT.procedural.attributes.open` | function | `(source)` | [guide](../headless-authoring.md#transfer-attributes-through-edits), [source](../../src/kit/pap-attribute-domains.js) |
+| `KIT.procedural.attributes.paths` | function | `(source, curves, options)` | [guide](../headless-authoring.md#transfer-attributes-through-edits), [source](../../src/kit/pap-attribute-domains.js) |
+| `KIT.procedural.attributes.remap` | function | `(source,domain,entities,lineage=[],{retain=true}={})` | [guide](../headless-authoring.md#transfer-attributes-through-edits), [source](../../src/kit/pap-attributes-remap.js) |
+| `KIT.procedural.attributes.sdf` | function | `(field, channels, { interval = .012, steps = 6, reach = 2 } = {})` | [guide](../headless-authoring.md#transfer-attributes-through-edits), [source](../../src/kit/pap-attribute-domains.js) |
+| `KIT.procedural.attributes.splatLineage` | function | `(report)` | [guide](../headless-authoring.md#transfer-attributes-through-edits), [source](../../src/kit/pap-attributes-remap.js) |
+| `KIT.procedural.attributes.splats` | function | `(world, source, {identity='slot',...options}={})` | [guide](../headless-authoring.md#transfer-attributes-through-edits), [source](../../src/kit/pap-attribute-domains.js) |
+| `KIT.procedural.attributes.table` | function | `(domain, entities, specifications = {}, {allowMissing=false}={})` | [guide](../headless-authoring.md#transfer-attributes-through-edits), [source](../../src/kit/pap-attribute-domains.js) |
+| `KIT.procedural.attributes.transfer` | function | `(source, domain, entities, { maxDistance = Infinity, fallback = {}, sourceDomain } = {})` | [guide](../headless-authoring.md#transfer-attributes-through-edits), [source](../../src/kit/pap-attribute-domains.js) |
 
 ## KIT.procedural.audioCheckpoint
 

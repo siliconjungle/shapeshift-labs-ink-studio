@@ -220,8 +220,10 @@
     const next={...spline,points,segments};
     splines.splice(index,1,next);
     if (newSpline) cut(splines,{op:'cut',point:newPoint,newSpline,newStart});
+    const from=[{id:a.id,weight:1-t},{id:b.id,weight:t}];
+    const controls=[{id:newPoint,from},...(newStart?[{id:newStart,from}]:[])];
     return { mappings:[{from:segment,to:segment,fromRange:[0,t]},{from:segment,to:rightSegment,fromRange:[t,1]}],
-      detail:{segment,point:newPoint,rightSegment,...(newSpline && {newSpline,newStart})} };
+      detail:{segment,point:newPoint,rightSegment,controls,...(newSpline && {newSpline,newStart})} };
   }
 
   function cut(splines,op) {
@@ -243,7 +245,7 @@
       splines.splice(index,1,{...spline,points:points.slice(0,i+1),segments:segments.slice(0,i)},
         {...spline,id:newSpline,points:[{...points[i],id:newStart},...points.slice(i+1)],segments:right});
     }
-    return {mappings:[],detail:{point:idAt,newStart,...(newSpline && {newSpline})}};
+    return {mappings:[],detail:{point:idAt,newStart,controls:[{id:newStart,from:[{id:idAt,weight:1}]}],...(newSpline && {newSpline})}};
   }
 
   function directed(spline,reverse) {

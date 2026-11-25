@@ -765,6 +765,15 @@ const specifications = {
   'input.replay': { inputs: { source: { events: [event] } } },
   'input.actions': { inputs: { state: { 'key:space': true }, context: 'main', contexts: { main: { select: ['key:space'] } } } },
   meshPaths: { inputs: { sources: [0], targets: [1] }, output: 'curves' },
+  attributeElements: { inputs: { geometry: mesh, domain:'edge' } },
+  attributeMesh: { inputs: { mesh } },
+  attributeTable: { inputs: { domain:'curve-control', entities:[{id:'begin',point:[0,0,0]}],
+    channels:{conductance:{type:'number',values:[.6]}} } },
+  attributeLineage: { inputs: { domain:'splat', evidence:{operations:[{op:'split',id:'parent',children:[{id:'left'},{id:'right'}]}]} } },
+  attributeRemap: { inputs: { source:link('attrs'),domain:'splat',entities:[{id:'child',point:[0,0,0]}],
+    lineage:[{id:'child',from:[{id:'parent',weight:1}]}] },
+    nodes:{attrs:{op:'attributeTable',inputs:{domain:'splat',entities:[{id:'parent',point:[0,0,0]}],
+      channels:{conductance:{type:'number',values:[.6]}}}}} },
   tiles: { inputs: { settings: { bounds: { min: [0, 0], max: [2, 2] } } } }
 };
 

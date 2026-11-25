@@ -2330,7 +2330,80 @@ ink-studio graph run graph-3d-review/relay-foundry.json --at 1.13 --out graph-3d
 
 `geometry.meshPaths(mesh, { sources, edgeCost, maxCost })` supports native and imported indexed meshes. It returns per-vertex distances and predecessors, plus `path(vertex)`, `curves(vertices)` and a sampled `distanceAt(point)` field. The cost function receives positions, vertex IDs, length and adjacent faces. Return infinity to block an edge.
 
-`attributes.mesh(mesh, { vertex, face })` builds a nearest-surface sampler. Use `{ type: 'number' | 'vec2' | 'vec3' | 'label', values }` per channel. Numeric values interpolate across triangles. Labels and stable IDs are assigned from the dominant vertex or authored face. `attributes.sdf(field, callback)` projects a point onto a signed field. `attributes.carrier(carrier, callback)` samples a named surface chart. Use `attributes.transfer(sampler, domain, entities)` for points, faces, vertices, curve control points or instances. Use `attributes.paths` to retain curve IDs and per-control-point attributes, `attributes.nearest` to sample another captured table, and `attributes.splats(world, sampler)` to generate a table indexed by splat slot.
+`attributes.mesh(mesh, { vertex, face, edge, corner })` builds a nearest-surface
+sampler. It accepts indexed meshes and retained mesh topology, including
+posed scene meshes with authored IDs. Use `{ type, values, interpolation }`
+for a channel. Types include `number`, `vec2`, `vec3`, `vec4`, and `label`.
+Numeric channels default to `linear`. Labels default to `dominant`. Use
+`constant` to require agreement among contributing samples.
+
+Face-corner data interpolates within its owning face. The same vertex
+can have different values on the two sides of a seam. Edge data comes
+from the nearest authored boundary of the sampled face. Use
+`edgeMaxDistance` to limit how far an edge channel reaches. Set
+`entity.source.face` or `entity.source.edge` to select an explicit
+source side or edge. Use `sourceDomain` in the transfer options to
+select a single domain. The combined sample applies vertex, face,
+corner, then edge values in that order.
+
+`attributes.sdf(field, callback)` projects a point onto a signed field.
+`attributes.carrier(carrier, callback)` samples a surface chart.
+`attributes.paths` retains curve IDs and samples per control.
+`attributes.splats(world, sampler, { identity: 'stable' })` uses stable
+splat IDs. The default retains the original slot addresses.
+
+### Transfer attributes through edits
+
+`attributes.entities(domain, geometry)` enumerates stable native
+element IDs and their positions. Use `edge` or `corner` for a mesh,
+`curve-control` for a retained spline, and `splat` for a world with
+unambiguous IDs. The graph operation `attributeElements` exposes
+these lists as points.
+
+`attributeTable` builds a versioned geometry attribute asset. Supply
+flat channel values in element order or omit `values` to read that
+channel from incoming rows' `attributes` fields. Its `field` output
+samples the nearest captured element. `attributeMesh` accepts typed
+tables on its domain inputs and publishes a surface field for
+`attributeTransfer`.
+
+Use `attributeLineage` and `attributeRemap` for topology changes.
+Each lineage row is `{ id, from: [{ id, weight }] }`. Source IDs and
+weights come from the edit evidence or an authored transfer. Remapping
+has these rules.
+
+- A retained same-domain ID copies its value. An edge split copies its
+  source edge onto both descendants. Merged edges use source length
+  weighted by the map's confidence.
+- Retained corners copy their exact mapped corner. A new corner can
+  sample within a linked source face. Equally close competing source
+  surfaces produce a review issue. The topology map pins both revisions.
+- A spline split interpolates control attributes at the authored Bézier
+  parameter. Cut copies inherit the control. A joined endpoint keeps
+  the surviving control's values.
+- Splat split children inherit per-element attributes. A merge uses
+  the redistribution solver's recorded mass fractions.
+- Cross-domain remaps require explicit ancestry. Linear channels average
+  their contributors. Dominant channels use the greatest weight with
+  ties ordered by stable ID. Constant channels retain a value when all
+  contributing values agree. Missing or conflicting channels are
+  recorded in the report. An authored null label remains a value.
+
+The SDK exposes the same operations under `KIT.procedural.attributes`.
+Use `meshLineage(domain, before, after, map)`, `curveLineage(report)`,
+or `splatLineage(report)` to prepare the lineage. A chained edit expands
+generated IDs back to the input table before applying the interpolation
+rule. The remap returns a portable `asset` and a `report` containing
+the ancestry, missing values, and unused intermediate rows.
+
+Run the [Signal Inlay example](../examples/geometry-attributes/demo.cjs)
+to follow a split seam into cable controls and a redistributed splat
+group.
+
+```sh
+node examples/geometry-attributes/demo.cjs inlay-review
+node cli/ink-studio.js graph run inlay-review/attributes.json --out inlay-review/replay
+```
 
 ## Materials, artwork and animation signals
 
