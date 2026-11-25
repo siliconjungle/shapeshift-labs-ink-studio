@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Signal Dial · Ink Studio</title>
+<style>
+  :root { color-scheme:dark; --text:#f2ead9; --muted:#bcbecb; --line:#4b4960; --accent:#f3ba88; --panel:#242238;
+    font:16px/1.45 system-ui,sans-serif; }
+  * { box-sizing:border-box; }
+  body { margin:0; color:var(--text); background:radial-gradient(ellipse at 26% -35%,#514462,#181926 65%); }
+  main { max-width:1160px; padding:34px 34px 28px; margin:auto; }
+  header { display:flex; justify-content:space-between; align-items:end; gap:15px; margin-bottom:19px; }
+  h1 { margin:2px 0 8px; font:normal clamp(3rem,8vw,5rem)/.95 Georgia,serif; letter-spacing:-.045em; }
+  h2 { margin:0 0 10px; font:normal 1.55rem Georgia,serif; }
+  p,figcaption { color:var(--muted); margin:0; }
+  a { color:var(--text); text-underline-offset:4px; }
+  .kicker,dt { text-transform:uppercase; letter-spacing:.09em; font:600 .73rem ui-monospace,monospace; color:var(--accent); }
+  .workspace { display:grid; grid-template-columns:minmax(0,1.85fr) minmax(285px,1fr); gap:17px; align-items:start; }
+  .planes { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:8px; }
+  figure { margin:0; border:1px solid var(--line); background:var(--panel); }
+  canvas { display:block; width:100%; height:auto; image-rendering:pixelated; background:
+    repeating-conic-gradient(#28263a 0% 25%,#38364a 0% 50%) 0 0/16px 16px; }
+  figcaption { display:flex; justify-content:space-between; gap:10px; padding:7px 9px; border-top:1px solid var(--line); font-size:.8rem; }
+  aside { background:var(--panel); border:1px solid var(--line); padding:17px; }
+  .routes { display:grid; grid-template-columns:1fr 1fr; gap:7px 12px; margin-bottom:10px; }
+  label { font-size:.875rem; color:var(--muted); }
+  select { display:block; width:100%; margin-top:2px; font:inherit; padding:5px 7px; background:#18192a; color:var(--text);
+    border:1px solid var(--line); border-radius:3px; }
+  input { accent-color:var(--accent); }
+  .option { display:block; margin-top:4px; }
+  .group { border-top:1px solid var(--line); margin-top:13px; padding-top:12px; }
+  dl { margin:0; }
+  dl div + div { margin-top:9px; }
+  dd { margin:3px 0 0; font:.84rem/1.45 ui-monospace,monospace; overflow-wrap:anywhere; }
+  #association { margin-bottom:9px; }
+  [role=status] { color:#ffb98d; }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  @media(max-width:760px) { main { padding:22px 14px; } header { display:block; } header a { display:inline-block; margin-top:6px; }
+    .workspace { grid-template-columns:1fr; } }
+</style>
+<main>
+  <header>
+    <div><div class="kicker">Ink Studio · Material graphs</div><h1>Signal Dial</h1>
+      <p>Route material planes into RGBA and inspect the stored samples.</p></div>
+    <a href="signal-dial.material.json">Editable material graph</a>
+  </header>
+  <div class="workspace">
+    <section aria-label="Channel previews">
+      <figure>
+        <canvas id="packed" width="128" height="80" aria-label="Packed signal dial image"></canvas>
+        <figcaption><span>Packed channel preview</span><span id="format"></span></figcaption>
+      </figure>
+      <div class="planes">
+        <figure><canvas id="occlusion" width="128" height="80" aria-label="Ambient occlusion plane"></canvas><figcaption>Occlusion</figcaption></figure>
+        <figure><canvas id="roughness" width="128" height="80" aria-label="Roughness plane"></canvas><figcaption>Roughness</figcaption></figure>
+        <figure><canvas id="metalness" width="128" height="80" aria-label="Metalness plane"></canvas><figcaption>Metalness</figcaption></figure>
+      </div>
+    </section>
+    <aside>
+      <h2>Channel routes</h2>
+      <div class="routes">
+        <label>Red <select id="route-r" data-default="occlusion"></select></label>
+        <label>Green <select id="route-g" data-default="roughness"></select></label>
+        <label>Blue <select id="route-b" data-default="metalness"></select></label>
+        <label>Fourth slot <select id="route-a" data-default="1"></select></label>
+      </div>
+      <label class="option"><input id="swap" type="checkbox"> Shuffle red and blue</label>
+      <label class="option"><input id="adjust" type="checkbox" checked> Add ¼ of a UNORM16 code to roughness</label>
+      <div class="group">
+        <dl><div><dt>Roughness sample · (71, 40)</dt><dd id="reading"></dd></div>
+          <div><dt>Packed RGBA sample</dt><dd id="sample"></dd></div></dl>
+      </div>
+      <div class="group">
+        <label>HDR sample encoding
+          <select id="association"><option value="straight">Straight</option>
+            <option value="associated" selected>Premultiplied</option></select>
+        </label>
+        <dl><div><dt>Stored RGB</dt><dd id="hdr"></dd></div><div><dt>Split alpha</dt><dd id="alpha"></dd></div></dl>
+      </div>
+      <p id="error" role="status"></p>
+    </aside>
+  </div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="dial.js"></script>
+<script>
+  const get = id => document.getElementById(id);
+  const inputs = dialPlates();
+  const graph = KIT.procedural.graph.create(dialGraph());
+  const select = Array.from(document.querySelectorAll('.routes select'));
+  const choices = { occlusion:'Occlusion', roughness:'Roughness', metalness:'Metalness',
+    0:'Constant 0', .5:'Constant 0.5', 1:'Constant 1' };
+  for (const control of select) {
+    for (const key of ['occlusion','roughness','metalness','0','0.5','1'])
+      control.add(new Option(choices[key],key,false,key === control.dataset.default));
+  }
+  function paint(id, image, divisor) {
+    const {width,height,data,channels} = image;
+    const rgba = new Uint8ClampedArray(width * height * 4);
+    for (let p = 0; p < width * height; p++) {
+      const i = p * channels, at = p * 4;
+      for (let c = 0; c < 3; c++) rgba[at+c] = data[i + (channels === 1 ? 0 : c)] * 255 / divisor;
+      rgba[at+3] = channels === 4 ? data[i+3] * 255 / divisor : 255;
+    }
+    get(id).getContext('2d').putImageData(new ImageData(rgba,width,height),0,0);
+  }
+  for (const [id,image] of Object.entries(inputs)) paint(id,image,65535);
+  function render() {
+    try {
+      const routes = select.map(({value}) => Object.hasOwn(inputs,value) ? {source:value,channel:0} : Number(value));
+      const order = get('swap').checked ? ['b','g','r','a'] : ['r','g','b','a'];
+      const increment = get('adjust').checked ? quarterCode : 0;
+      const {outputs} = graph.evaluate({...inputs,increment,order,routes});
+      const {shuffled,adjusted,alpha} = outputs;
+      const image = outputs[get('association').value];
+      const i = dialSample[1] * dialWidth + dialSample[0];
+      const packScale = {unorm16:65535,unorm8:255}[shuffled.descriptor.precision] ?? 1;
+      const code = adjusted.raster.data[i] * 65535;
+      const number = value => Number(value.toFixed(7));
+      paint('packed',shuffled.raster,packScale);
+      get('format').textContent = shuffled.descriptor.precision.toUpperCase() + ' · RGBA data';
+      get('reading').textContent = '30001 → ' + number(code) + ' on the UNORM16 scale';
+      get('sample').textContent = Array.from(shuffled.raster.data.slice(i*4,i*4+4),number).join(' / ');
+      get('hdr').textContent = Array.from(image.raster.data.slice(0,3)).join(' / ');
+      get('alpha').textContent = alpha.raster.data[0] + ' · mask';
+      get('error').textContent = '';
+    } catch (error) {
+      get('error').textContent = error.message;
+    }
+  }
+  for (const control of document.querySelectorAll('select,input')) control.addEventListener('change',render);
+  render();
+</script>
+</html>

@@ -27,6 +27,25 @@ Guides: [guide](../material-image-blend.md)
 Get the runnable example with `ink-studio graph describe image.blend --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.channelMath
+
+Apply arithmetic to decoded typed channels and write float64 unless an output precision is chosen.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `a` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `b` | `any` | Required |  |
+| Input | `operation` | `string` | Required | {"choices":["add","subtract","multiply","divide","min","max","difference","power","greater","less","equal"]} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-channels.md), [guide](../material-image-channels.md#channel-math-and-delivery)
+
+Get the runnable example with `ink-studio graph describe image.channelMath --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.convert
 
 Convert the channel layout, precision, color space or alpha convention of a typed image.
@@ -42,7 +61,7 @@ A literal target intent selects the output type. Optional fields change how samp
 | Input | `dropAlpha` | `boolean` | `false` |  |
 | Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
 
-Guides: [guide](../graph-image-types.md#make-and-convert-uniform-images), [guide](../material-image-blend.md#inputs-and-output)
+Guides: [guide](../graph-image-types.md#make-and-convert-uniform-images), [guide](../material-image-blend.md#inputs-and-output), [guide](../material-image-channels.md), [guide](../material-image-channels.md#routing-and-encoding)
 
 Get the runnable example with `ink-studio graph describe image.convert --example > example.json`.
 Run it with `ink-studio graph run example.json`.
@@ -81,6 +100,25 @@ Guides: [guide](../graph-image-types.md)
 Get the runnable example with `ink-studio graph describe image.inspect --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.pack
+
+Pack selected typed image channels and numeric constants into one image.
+
+Origin: toolkit.
+The optional literal descriptor selects the output image type.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `sources` | `record` | Required | {"layout":"Plain named object"} |
+| Input | `routes` | `array` | Required |  |
+| Input | `descriptor` | `record` | `{"intent":"data"}` | {"layout":"Plain named object"} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-channels.md)
+
+Get the runnable example with `ink-studio graph describe image.pack --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.resize
 
 Resample a typed image using its own per-axis tiling and sampling policy. The output keeps the source port type.
@@ -97,6 +135,44 @@ Origin: toolkit.
 Guides: [guide](../graph-image-types.md), [guide](../material-image-blend.md#inputs-and-output)
 
 Get the runnable example with `ink-studio graph describe image.resize --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.shuffle
+
+Reorder, repeat or replace channels of one typed image.
+
+Origin: toolkit.
+The optional literal descriptor selects the output image type.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `routes` | `array` | Required |  |
+| Input | `descriptor` | `record` | `{"intent":"data"}` | {"layout":"Plain named object"} |
+| Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-channels.md)
+
+Get the runnable example with `ink-studio graph describe image.shuffle --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### image.split
+
+Split explicitly selected native channels into named scalar images, including alpha coverage.
+
+Origin: toolkit.
+The literal selector keys become typed scalar output ports.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
+| Input | `channels` | `record` | Required | {"layout":"Plain named object"} |
+| Output | `red` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `coverage` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+
+Guides: [guide](../material-image-channels.md)
+
+Get the runnable example with `ink-studio graph describe image.split --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### image.toDisplay
