@@ -32,7 +32,7 @@ The top-level fields are `format`, `version`, `id`, and `graph`, with optional `
 | `controls` | `{ input }` exposes one root graph input under a stable control ID. |
 | `instances` | `{ overrides }` stores values keyed by control ID. Each instance uses the shared graph. |
 
-`settings` carries native `time`, `seed`, `exports`, `assertions`, and `assetRegistry`, plus optional [shared material base settings](material-base-settings.md) in `base`. The document, graph scopes, and table entries accept optional `label` and `extensions` fields. Use namespaced keys in `extensions` for opaque JSON editor or plugin data. Saving preserves these values. Ink omits them when preparing the execution graph.
+`settings` carries native `time`, `seed`, `exports`, `assertions`, and `assetRegistry`, plus optional [shared material base settings](material-base-settings.md) in `base`, with optional `inheritance` rules and a named `primaryInput`. The document, graph scopes, and table entries accept optional `label` and `extensions` fields. Use namespaced keys in `extensions` for opaque JSON editor or plugin data. Saving preserves these values. Ink omits them when preparing the execution graph.
 
 For example, a color output can keep its ID while its connection is rewired. Keep `color-result` in `graph.links` and update its `from` endpoint. The `baseColor` output, its exports, and the connection ID all remain addressable.
 

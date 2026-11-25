@@ -32,6 +32,47 @@ Connect the record to `material.imageOutput.settings` to fit a typed image to th
 
 PNG delivers straight-alpha sRGB for color, normalized scalar or data samples, and encoded normals. Use material JSON for signed physical height, non-color HDR data, two-channel layouts, and the full typed contract. PNG bit depth controls storage precision. Existing quantized source data keeps its original detail.
 
+## Inherit individual settings
+
+Save rules in `settings.inheritance` next to `settings.base`. Every setting can use its own mode. A setting without a rule uses `absolute`.
+
+| Mode | Source |
+| --- | --- |
+| `absolute` | The value in `settings.base`, or its ordinary default. |
+| `parent` | A named parent provider supplied by the host at execution time. Pass the parent material's effective `base` settings to inherit through multiple levels. |
+| `primary` | The typed image on the named `settings.primaryInput` graph socket, including an instance's default or a run's input value. Hosts can instead supply a named primary settings provider. |
+
+Inherited `size` accepts an optional positive `scale: [x, y]` and a boolean `lock` override. Width and height round to the nearest pixel with a minimum of one. The lock follows the source unless overridden. An active lock makes height equal width after scaling. `pixelSizeMm` accepts a positive scalar scale. `pixelRatio` accepts a positive integer scale pair. `seed` accepts an integer offset. `output` and `tiling` copy as complete settings.
+
+A typed image supplies its extent, tiling, and precision. The output setting maps 8- and 16-bit unorm images to the corresponding PNG depth and floating-point images to typed JSON. Physical pixel size and ratio require pixel pitch metadata. A seed comes from the image's optional `materialSeed` descriptor field, which fitted material images preserve in the graph and typed JSON. A selected setting without a source value raises an error. As with absolute settings, `--seed` supplies an explicit override for the current run.
+
+For example, these editable settings halve the chosen image's resolution while doubling its pixel pitch and taking delivery format from its parent.
+
+```json
+{
+  "base": {},
+  "primaryInput": "artwork",
+  "inheritance": {
+    "size": { "mode": "primary", "scale": [0.5, 0.5] },
+    "pixelSizeMm": { "mode": "primary", "scale": 2 },
+    "pixelRatio": { "mode": "primary" },
+    "output": { "mode": "parent" }
+  }
+}
+```
+
+Use `{ "parent": { "id": "ceramics", "settings": { "output": { "format": "png", "bitDepth": 16 } } } }` as the context JSON. Supply it with `--base-context context.json` or the `baseContext` option of `ink.createGraphProject` and `ink.readGraphProject`. JSON graph inputs can be supplied separately with `--inputs inputs.json`. The plan, inspect, and run reports show `base` and `baseProvenance` with the effective setting, source, and any adjustment. Snapshots include these fields under `settings`.
+
+Use `material.inherit` inside a graph to resolve settings for a branch or a reusable group. Connect an upstream typed image to its `primary` input, or pass provider records to `context`. Its `value` and `provenance` outputs carry the effective settings and their sources. For non-graph use, call `ink.resolveMaterialInheritance(base, rules, context)` or `KIT.procedural.materialBase.inherit`.
+
+```sh
+node examples/material-setting-inheritance/demo.cjs /tmp/ink-waypoint
+ink-studio graph plan /tmp/ink-waypoint/waypoint.material.json --base-context /tmp/ink-waypoint/context.json --inputs /tmp/ink-waypoint/field.inputs.json
+ink-studio graph run /tmp/ink-waypoint/waypoint.material.json --base-context /tmp/ink-waypoint/context.json --inputs /tmp/ink-waypoint/archive.inputs.json --out /tmp/ink-waypoint/roundtrip
+```
+
+Open `demo.html` from that directory to compare the two renders and inspect their effective settings.
+
 ## Ferry glaze demo
 
 ```sh

@@ -76,6 +76,27 @@ Origin: toolkit.
 Get the runnable example with `ink-studio graph describe material.imageOutput --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### material.inherit
+
+Resolve local material settings from a parent or primary input and report their sources.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `settings` | `record` | `{}` | {"layout":"Plain named object"} |
+| Input | `rules` | `record` | Required | {"layout":"Plain named object"} |
+| Input | `context` | `record` | `{}` | {"layout":"Plain named object"} |
+| Input | `primary` | `any` | `null` |  |
+| Input | `primaryId` | `string` | `"primary-input"` |  |
+| Output | `value` | `record` | — | {"layout":"Plain named object"} |
+| Output | `provenance` | `record` | — | {"layout":"Plain named object"} |
+
+Guides: [guide](../material-base-settings.md#inherit-individual-settings)
+
+Get the runnable example with `ink-studio graph describe material.inherit --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### material.pack
 
 Bundle named material rasters into one typed port, with independent map sizes and metadata.

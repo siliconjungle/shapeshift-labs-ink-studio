@@ -278,7 +278,7 @@ function cacheReport(frame) {
 }
 
 function createGraphProject(source, { kit=require('../index.js').load(), baseDir=process.cwd(), operations={}, adapters={},
-  sourceFile, workerPool, planAssets=false, instance }={}) {
+  sourceFile, workerPool, planAssets=false, instance, baseContext }={}) {
   if (source?.format===materialGraph.format) source=materialGraph.toGraphProject(source,{instance});
   else if (instance!==undefined) throw new TypeError('Graph instances require a material graph');
   if (workerPool && !workerPool.matches(kit)) throw new TypeError('Graph worker pool and project need the same toolkit');
@@ -288,16 +288,28 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const groupOperators=[...graph.arrays.groupOperators,...kit.KIT.procedural.animationGraph.groupOperators];
   const project=data.freeze(data.clone(source));
   const {format:kind,version:revision,groups:definitions={},assets:assetDefinitions={},assetRegistry,exports:exportsSpec={},
-    assertions:assertionSpecs=[],time=0,seed:authoredSeed=0,base:baseSpec,...root}=fields(project,
-    ['format','version','inputs','nodes','outputs','groups','assets','assetRegistry','exports','assertions','time','seed','base'],'graph project');
+    assertions:assertionSpecs=[],time=0,seed:authoredSeed,base:baseSpec,inheritance,primaryInput,...root}=fields(project,
+    ['format','version','inputs','nodes','outputs','groups','assets','assetRegistry','exports','assertions','time','seed','base','inheritance','primaryInput'],'graph project');
   if (kind!==format || revision!==version) throw new TypeError('Expected ink-studio/graph-project version 1');
   const base=baseSpec===undefined ? undefined : data.freeze(Base.resolve(baseSpec,{seed:authoredSeed}));
-  const seed=base?.seed ?? authoredSeed;
+  const seed=base?.seed ?? (authoredSeed===undefined ? 0 : authoredSeed);
+  const rules=inheritance===undefined ? undefined : Base.checkRules(inheritance);
+  const context=data.freeze(Base.checkContext(baseContext));
+  if (!base && (rules || primaryInput!==undefined || Object.keys(context).length))
+    throw new TypeError('Material inheritance needs shared base settings');
+  if (primaryInput!==undefined && context.primary)
+    throw new TypeError('Choose a primary graph input or a primary settings provider');
   if (base && root.inputs!==undefined) named(root.inputs,'project graph parameters');
   if (base && Object.hasOwn(root.inputs ?? {}, 'materialBase'))
     throw new TypeError('The materialBase graph input is reserved by shared base settings');
   const spec=graphSpec(base ? {...root,inputs:{...root.inputs,materialBase:{type:'record',default:base}}} : root,
     'project graph',groupOperators);
+  if (primaryInput!==undefined) {
+    const socket=id(primaryInput) && Object.hasOwn(spec.inputs,primaryInput) ? spec.inputs[primaryInput] : undefined;
+    const type=typeof socket==='string' ? socket : socket?.type;
+    if (!['typedImage','colorImage','heightImage'].includes(type))
+      throw new TypeError('Material primaryInput must name a declared typed image input');
+  }
   const paths=new Set(sourceFile ? [path.resolve(sourceFile)] : []);
   const api=kit.KIT.authoring.assetReferences;
   const resolveAsset=Assets.scope(api,path.join(baseDir,'graph.json'),assetRegistry,{onFile:file=>paths.add(file)});
@@ -434,7 +446,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     { reference:group.reference, sha256:group.document.sha256 }]));
   const projectHash=sha256(jsonBytes({project,
     groups:Object.fromEntries([...groupSpecs].map(([group,body])=>[group.alias,body])),assets:assetInfo,
-    ...(versionedGroups.length && {groupFiles})}));
+    ...(versionedGroups.length && {groupFiles}),...(Object.keys(context).length && {baseContext:context})}));
   const header={format:reportFormat,version,projectHash};
 
   function clock(t,s) {
@@ -481,8 +493,18 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
 
   const groupDetails=()=>Object.fromEntries([...preparedGroups].map(([name,{compiled,scope}])=>[name,describeScope(compiled,scope)]));
 
-  function baseAt(seed) {
-    return seed===base?.seed ? base : {...base,seed};
+  function resolveBase(inputs, seedOverride) {
+    const effectiveSeed=seedOverride===undefined ? seed : seedOverride;
+    if (!rules) return {seed:effectiveSeed, base:base && (effectiveSeed===base.seed ? base : {...base,seed:effectiveSeed})};
+    let providers=context;
+    if (primaryInput && Object.entries(rules).some(([key, rule])=>rule.mode==='primary' &&
+        (key!=='seed' || seedOverride===undefined))) {
+      const image=Object.hasOwn(inputs,primaryInput) ? inputs[primaryInput] : rootPlan.inputs[primaryInput].default;
+      if (image===undefined) throw new RangeError('Material inheritance needs primary graph input '+primaryInput);
+      providers={...context,primary:kit.KIT.procedural.materialBase.primaryImage(primaryInput,image)};
+    }
+    const result=Base.inherit(baseSpec,rules,providers,{seed:authoredSeed,seedOverride});
+    return {...result,seed:result.base.seed};
   }
 
   function checkBaseInput(values) {
@@ -491,8 +513,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   }
 
   function snapshot(options={}) {
-    const {inputs={},time:at=time,seed:sampleSeed=seed}=fields(options,['inputs','time','seed'],'graph snapshot options');
-    clock(at,sampleSeed);
+    const {inputs={},time:at=time,seed:seedOverride}=fields(options,['inputs','time','seed'],'graph snapshot options');
     const declared=named(inputs,'input values');
     checkBaseInput(inputs);
     const values=Object.fromEntries(declared.map(([name,value])=>{
@@ -502,9 +523,12 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
         throw new TypeError('Wrong input value for graph socket '+name+': expected '+types.description(type));
       return [name,value];
     }));
-    if (base) values.materialBase=baseAt(sampleSeed);
+    const effective=resolveBase(values,seedOverride);
+    clock(at,effective.seed);
+    if (base) values.materialBase=effective.base;
     return JSON.parse(jsonBytes({format:snapshotFormat,version,projectHash,
-      settings:{seed:sampleSeed,time:at,...(base && {base:values.materialBase})},
+      settings:{seed:effective.seed,time:at,...(base && {base:values.materialBase}),
+        ...(effective.provenance && {baseProvenance:effective.provenance})},
       graph:describeScope(compiled,groupTree.scope,values),
       groups:groupDetails(),
       assets:assetInfo, references:Object.fromEntries(dependencyRows.map(({group,used,...reference})=>[group,reference])),
@@ -512,8 +536,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   }
 
   function request(options={}) {
-    const {inputs={},take,time:t=take?.start ?? time,seed:s=seed}=fields(options,['inputs','time','seed','take'],'graph run options');
-    const resolved=clock(t,s);
+    const {inputs={},take,time:t=take?.start ?? time,seed:seedOverride}=fields(options,['inputs','time','seed','take'],'graph run options');
     if (take!==undefined) {
       takeTime.requireFrame(take);
       if (t!==take.start) throw new RangeError('Graph seconds must match the take frame start');
@@ -521,8 +544,10 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     for (const [name] of named(inputs,'input values'))
       if (!Object.hasOwn(rootPlan.inputs,name)) throw new RangeError('Unknown graph input '+name);
     checkBaseInput(inputs);
-    const supplied=base ? {...inputs,materialBase:baseAt(s)} : inputs;
-    return {...resolved,take,inputs:compiled.parameters(snapshotInputs(supplied,data.clone))};
+    const effective=resolveBase(inputs,seedOverride);
+    const supplied=base ? {...inputs,materialBase:effective.base} : inputs;
+    return {...clock(t,effective.seed),take,inputs:compiled.parameters(snapshotInputs(supplied,data.clone)),
+      ...(effective.provenance && {baseProvenance:effective.provenance})};
   }
 
   function execution() {
@@ -551,9 +576,10 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       return values;
     }
 
-    function done(frame,values,{time,seed,take}) {
+    function done(frame,values,{time,seed,take,baseProvenance}) {
       previous=new Map(Object.entries(values));
-      return {frame,report:{...header,time,seed,...(base && {base:values.materialBase}),...(take!==undefined && {take}),cache:cacheReport(frame),
+      return {frame,report:{...header,time,seed,...(base && {base:values.materialBase}),
+        ...(baseProvenance && {baseProvenance}),...(take!==undefined && {take}),cache:cacheReport(frame),
         inputs:Object.fromEntries(Object.entries(values).map(([name,value])=>[name,describe(value)]))}};
     }
     function failed(error) {
@@ -604,8 +630,9 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     const artifacts=exports.flatMap(({name,output,format,...settings})=>{
       const value=frame.outputs[output];
       if (format==='material-image') {
-        const image=kit.KIT.procedural.materialBase.fit(value,base), delivery=base.output.format;
-        const bytes=delivery==='png' ? materialImage.png(kit.KIT.procedural,image,base) : jsonBytes(image);
+        const effective=report.base;
+        const image=kit.KIT.procedural.materialBase.fit(value,effective), delivery=effective.output.format;
+        const bytes=delivery==='png' ? materialImage.png(kit.KIT.procedural,image,effective) : jsonBytes(image);
         return [{name,output,file:'artifacts/'+name+'.'+delivery,format:delivery,sha256:sha256(bytes),bytes}];
       }
       const encoded=format==='atlas' ? encodeAtlas(name,value) : [encode(name,value,format,settings)];
@@ -742,11 +769,17 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   return Object.freeze({
     sockets: compiled.sockets,
     plan(inputs,{memory=false}={}) {
-      const resolved=inputs===undefined ? undefined : request({inputs}).inputs;
-      return {...data.clone(projectPlan),
-        ...(resolved && {resolvedInputs:Object.fromEntries(Object.entries(resolved).map(([name,value])=>[name,planValue(value)]))}),
-        ...(memory && {memory:estimateGraphMemory({graph:describeScope(compiled,groupTree.scope),
-          groups:groupDetails(),assets,overrides:resolved??{},kit,hostOperations:projectPlan.hostOperations})})};
+      const plan=data.clone(projectPlan), prepared=inputs===undefined ? undefined : request({inputs});
+      const resolved=prepared?.inputs;
+      if (rules) {
+        const effective=prepared ? {base:resolved.materialBase,seed:prepared.seed,provenance:prepared.baseProvenance} : resolveBase({});
+        Object.assign(plan,{seed:effective.seed,base:effective.base,baseProvenance:effective.provenance,...Base.measure(effective.base)});
+        plan.inputs.materialBase.default=effective.base;
+      }
+      if (resolved) plan.resolvedInputs=Object.fromEntries(Object.entries(resolved).map(([name,value])=>[name,planValue(value)]));
+      if (memory) plan.memory=estimateGraphMemory({graph:describeScope(compiled,groupTree.scope),
+        groups:groupDetails(),assets,overrides:resolved ?? (rules ? {materialBase:plan.base} : {}),kit,hostOperations:plan.hostOperations});
+      return plan;
     },
     validate(inputs) {
       if (inputs!==undefined) request({inputs});
@@ -760,17 +793,21 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       const { inputs, seed, ...settings } = fields(options,
         ['output','from','to','warmup','format','clock','renderOptions','capture','inputs','seed'], 'graph clip options');
       if (frameInputs!==undefined&&typeof frameInputs!=='function') throw new TypeError('Graph frame inputs need a host callback');
-      const start=frameInputs===undefined?request({inputs,seed}):clock(time,seed??projectPlan.seed);
+      const start=frameInputs===undefined ? request({inputs,seed}) : undefined;
+      let sampledSeed=start?.seed;
       const runner = execution();
       workerPool?.resetStats();
       try {
-        const result=clip(settings,{kit,plan:projectPlan,checks:assertions,seed:start.seed,
+        const result=clip(settings,{kit,plan:projectPlan,checks:assertions,seed:sampledSeed ?? projectPlan.seed,
           sample(take,sequence) {
             if(frameInputs===undefined)return runner.evaluate({...start,time:take.start,take},sequence).frame;
             const supplied=frameInputs(take);
             if(!record(supplied))throw new TypeError('Graph frame inputs must return a record');
-            return runner.evaluate(request({inputs:{...inputs,...supplied},take,seed:start.seed}),sequence).frame;
+            const prepared=request({inputs:{...inputs,...supplied},take,seed:seed ?? undefined});
+            sampledSeed??=prepared.seed;
+            return runner.evaluate(prepared,sequence).frame;
           }});
+        result.report.seed=sampledSeed ?? result.report.seed;
         if (workerPool) result.report.workers=workerPool.stats();
         return result;
       } finally { runner.clear(); }

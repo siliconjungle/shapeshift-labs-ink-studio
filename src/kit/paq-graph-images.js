@@ -9,7 +9,7 @@
   const colors = ['srgb', 'srgb-linear', 'display-p3', 'display-p3-linear'];
   const edges = ['clamp', 'transparent', 'wrap', 'mirror'];
   const specKeys = ['intent', 'layout', 'precision', 'units', 'colorSpace', 'alpha', 'tiling', 'sampling', 'domain'];
-  const optionalSpecKeys = [...specKeys, 'pixelPitchMm'];
+  const optionalSpecKeys = [...specKeys, 'pixelPitchMm', 'materialSeed'];
   const maxPixels = 16777216;
   const own = Object.hasOwn;
   const finite = Number.isFinite;
@@ -34,7 +34,7 @@
       units = intent === 'height' ? undefined : 'unitless',
       colorSpace = intent === 'color' ? source.colorSpace ?? 'srgb' : 'none',
       alpha = intent === 'color' && layout === 'rgba' || intent === 'normal' && layout === 'xyza' ? 'straight' : 'none',
-      sampling = 'nearest', tiling = {}, pixelPitchMm } = settings;
+      sampling = 'nearest', tiling = {}, pixelPitchMm, materialSeed } = settings;
     if (!intents.includes(intent) || typeof layout !== 'string' || layout.length !== count(source) ||
         !['r', 'rg', 'rgb', 'rgba', 'xyz', 'xyza'].includes(layout) || !own(storage, precision) || !unit(units) ||
         !['none', 'straight', 'premultiplied'].includes(alpha) || alpha !== 'none' && !layout.endsWith('a') ||
@@ -43,6 +43,8 @@
     if (pixelPitchMm !== undefined && (!Array.isArray(pixelPitchMm) || pixelPitchMm.length !== 2 ||
         !finite(pixelPitchMm[0]) || pixelPitchMm[0] <= 0 || !finite(pixelPitchMm[1]) || pixelPitchMm[1] <= 0))
       throw new TypeError('Graph image pixel pitch needs two positive millimeter values');
+    if (materialSeed !== undefined && !Number.isSafeInteger(materialSeed))
+      throw new TypeError('Graph image material seed must be a safe integer');
     const { u = 'clamp', v = 'clamp' } = tiling;
     if (!edges.includes(u) || !edges.includes(v)) throw new TypeError('Invalid graph image tiling');
     const color = intent === 'color', linear = color && typeof colorSpace === 'string' && colorSpace.endsWith('-linear');
@@ -60,7 +62,8 @@
       throw new TypeError('Graph image domain does not match its encoding');
     return Object.freeze({ intent, layout, precision, units, colorSpace, alpha, domain,
       tiling: Object.freeze({ u, v }), sampling,
-      ...(pixelPitchMm !== undefined && { pixelPitchMm: Object.freeze(pixelPitchMm.slice()) }) });
+      ...(pixelPitchMm !== undefined && { pixelPitchMm: Object.freeze(pixelPitchMm.slice()) }),
+      ...(materialSeed !== undefined && { materialSeed }) });
   }
 
   function samples(data, spec, serialized = false) {
@@ -151,7 +154,8 @@
     }
     return declare({ width, height, channels: 1, data: out, pivot },
       { intent: 'height', units, tiling: spec.tiling, sampling: spec.sampling,
-        ...(spec.pixelPitchMm && { pixelPitchMm: spec.pixelPitchMm }) });
+        ...(spec.pixelPitchMm && { pixelPitchMm: spec.pixelPitchMm }),
+        ...(spec.materialSeed !== undefined && { materialSeed: spec.materialSeed }) });
   }
 
   function displaySamples(source, bitDepth, outOfRange = 'clamp') {

@@ -188,6 +188,7 @@ module.exports = {
   readGraphProject: require('./cli/graph-project.js').readGraphProject,
   openMaterialGraph: require('./cli/material-graph.js').openMaterialGraph,
   resolveMaterialBaseSettings: require('./src/material-base-settings.js').resolve,
+  resolveMaterialInheritance: require('./src/material-base-settings.js').inherit,
   readMaterialGraph: require('./cli/material-graph.js').readMaterialGraph,
   writeMaterialGraph: require('./cli/material-graph.js').writeMaterialGraph,
   validateStoryDocument: require('./cli/story-document.js').validateStoryDocument,
