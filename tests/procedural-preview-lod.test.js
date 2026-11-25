@@ -1,7 +1,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const {KIT:K}=require('..').load();
-const {geometry,lod}=K.procedural;
+const {data,geometry,lod}=K.procedural;
 const near=(a,b,e=1e-7)=>assert(Math.abs(a-b)<=e,a+' differs from '+b);
 
 test('quadric simplification reduces a closed sphere and keeps its topology and pins',()=>{
@@ -148,8 +148,19 @@ test('seam bounds skip dense neighbouring groups that cannot touch', () => {
 
 test('screen coverage can reject a reduction while keeping the full authored splats', () => {
   const samples = [0, 0.04].map(x => ({
-    position: [x, 0, 0], normal: [0, 0, 1], color: [0.3, 0.5, 0.7], radius: 0.065
+    position: [x, 0, 0], normal: [0, 0, 1], color: [0.3, 0.5, 0.7], radius: 0.065,
+    target: { entity: 'coat', tags: ['worn'] }
   }));
+  const checkRows = rows => {
+    assert(data.isImmutable(rows));
+    for (const row of rows) {
+      assert(Object.isFrozen(row));
+      for (const value of [row.position, row.normal, row.covariance, row.color, row.members, row.target, row.target.tags])
+        assert(Object.isFrozen(value));
+      assert.equal(data.isImmutable(row), false);
+      assert.equal(data.isImmutable(row.position), false);
+    }
+  };
   const reference = Float32Array.of(0, 0.9, 0.9, 0.1);
   const preview = Float32Array.of(0, 0.9, 0.49, 0.8);
   const comparison = lod.compareCoverage(reference, preview);
@@ -157,10 +168,32 @@ test('screen coverage can reject a reduction while keeping the full authored spl
   assert.equal(comparison.extraFraction, 0.5);
   const rejected = lod.mergeSplats(samples, { target: 1, guard: rows => {
     assert.equal(rows.length, 1);
+    checkRows(rows);
     return comparison.accepted;
   } });
+  assert(data.isImmutable(rejected));
+  assert(data.isImmutable(rejected.work));
+  checkRows(rejected.splats);
   assert.equal(rejected.status, 'coverage');
   assert.equal(rejected.splats.length, 2);
   assert.equal(rejected.work.merged, 0);
   assert.equal(rejected.work.attemptedMerges, 1);
+  assert.deepEqual(rejected.splats, lod.mergeSplats(samples, { target: 2 }).splats);
+  assert.equal(Object.isFrozen(samples[0].target.tags), false);
+
+  let candidates;
+  const accepted = lod.mergeSplats(samples, { target: 1, guard: rows => {
+    candidates = rows;
+    checkRows(rows);
+    return true;
+  } });
+  assert.equal(accepted.splats, candidates);
+  assert(data.isImmutable(accepted));
+  assert(data.isImmutable(accepted.work));
+  assert.deepEqual(accepted, lod.mergeSplats(samples, { target: 1 }));
+  assert.equal(lod.mergeSplats(accepted.splats, { target: 1 }).status, 'ok');
+
+  const wrapper = data.freeze({ entries: [accepted] });
+  assert(data.isImmutable(wrapper.entries));
+  checkRows(wrapper.entries[0].splats);
 });
