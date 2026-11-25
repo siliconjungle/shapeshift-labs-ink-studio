@@ -1725,6 +1725,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.splatCodec` | namespace |  |  |
 | `KIT.procedural.splatCodec.decode` | function | `(bytes, { maxRows = MAX_ROWS, expectedCount } = {})` | [guide](../procedural.md#delivery-of-baked-rows), [source](../../src/splat-codec.js) |
 | `KIT.procedural.splatCodec.encode` | function | `(data, count = data?.length / STRIDE, { maxPositionError = 0.0001, maxCovarianceError = 0.004 } = {})` | [guide](../procedural.md#delivery-of-baked-rows), [source](../../src/splat-codec.js) |
+| `KIT.procedural.splatCodec.maxEncodedBytes` | function | `(count)` | [source](../../src/splat-codec.js) |
 | `KIT.procedural.splatCodec.version` | value | `number = 1` |  |
 
 ## KIT.procedural.splatOrder

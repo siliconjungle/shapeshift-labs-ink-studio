@@ -7678,6 +7678,7 @@
     {"id":"KIT.procedural.splatCodec","kind":"api","apiKind":"namespace","use":"","docs":["docs/reference/api-kit-procedural-n-s.md#kitproceduralsplatcodec"]},
     {"id":"KIT.procedural.splatCodec.decode","kind":"api","apiKind":"function","parameters":"(bytes, { maxRows = MAX_ROWS, expectedCount } = {})","arity":1,"source":"src/splat-codec.js","docs":["docs/reference/api-kit-procedural-n-s.md#kitproceduralsplatcodec","docs/procedural.md#delivery-of-baked-rows"]},
     {"id":"KIT.procedural.splatCodec.encode","kind":"api","apiKind":"function","parameters":"(data, count = data?.length / STRIDE, { maxPositionError = 0.0001, maxCovarianceError = 0.004 } = {})","arity":1,"source":"src/splat-codec.js","docs":["docs/reference/api-kit-procedural-n-s.md#kitproceduralsplatcodec","docs/procedural.md#delivery-of-baked-rows"]},
+    {"id":"KIT.procedural.splatCodec.maxEncodedBytes","kind":"api","apiKind":"function","parameters":"(count)","arity":1,"source":"src/splat-codec.js","docs":["docs/reference/api-kit-procedural-n-s.md#kitproceduralsplatcodec"]},
     {"id":"KIT.procedural.splatCodec.version","kind":"api","apiKind":"value","type":"number","value":1,"use":"number = 1","docs":["docs/reference/api-kit-procedural-n-s.md#kitproceduralsplatcodec"]},
     {"id":"KIT.procedural.splatOrder","kind":"api","apiKind":"namespace","use":"","docs":["docs/reference/api-kit-procedural-n-s.md#kitproceduralsplatorder"]},
     {"id":"KIT.procedural.splatOrder.compile","kind":"api","apiKind":"function","parameters":"(indices, depthAt, behind = never)","arity":2,"source":"src/splat-order.js","docs":["docs/reference/api-kit-procedural-n-s.md#kitproceduralsplatorder"]},
@@ -13308,7 +13309,7 @@
     {"id":"webgpu.decodeGaussianSpz","kind":"api","apiKind":"function","parameters":"(input, { maxPoints = pointLimit, decompress = decompressStream } = {})","arity":1,"source":"src/gaussian-splats.mjs","docs":["docs/reference/api-webgpu.md#webgpu"]},
     {"id":"webgpu.gaussianSplatWorld","kind":"api","apiKind":"function","parameters":"(cloud, {\n  size = 6, up = 'y', viewDirection, colorMode = 'baked', palette = defaultPalette, objectId\n} = {})","arity":1,"source":"src/gaussian-splats.mjs","docs":["docs/reference/api-webgpu.md#webgpu"]},
     {"id":"webgpu.inspectGaussianChunkManifest","kind":"api","apiKind":"function","parameters":"(manifest)","arity":1,"source":"src/gaussian-chunks.mjs","docs":["docs/reference/api-webgpu.md#webgpu"]},
-    {"id":"webgpu.packGaussianChunks","kind":"api","apiKind":"function","parameters":"(world, { cellSize = 2, voxelSizes = [.2, .1, .05, 0], layer = 'main', previousFootprints = [] } = {})","arity":1,"source":"src/gaussian-chunks.mjs","docs":["docs/reference/api-webgpu.md#webgpu"]},
+    {"id":"webgpu.packGaussianChunks","kind":"api","apiKind":"function","parameters":"(world, { cellSize = 2, voxelSizes = [.2, .1, .05, 0], layer = 'main',\n  previousFootprints = [], encoding = 'raw', lossless = false } = {})","arity":1,"source":"src/gaussian-chunks.mjs","docs":["docs/reference/api-webgpu.md#webgpu"]},
     {"id":"webgpu.planWebGPUGraph","kind":"api","apiKind":"function","parameters":"(definition)","arity":1,"source":"src/webgpu/graph.mjs","docs":["docs/reference/api-webgpu.md#webgpu"]}
   ]
 }
