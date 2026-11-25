@@ -885,8 +885,8 @@ Members and callable signatures come from the public entry point. Guide links po
 
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
-| `KIT.rig` | function | `(B, S)` | [guide](../../README.md#animation-and-puppets), [guide](../typography.md#sdf-extrusion-and-materialisation), [source](../../src/kit/k1-stage.js) |
-| `KIT.rig.fromGroups` | function | `(stage, groups)` | [guide](../live-scene-hierarchy.md#geometry), [guide](../live-scene-hierarchy.md#import-existing-rigs-and-prefabs), [guide](../../README.md#animation-and-puppets), [guide](../typography.md#sdf-extrusion-and-materialisation), [source](../../src/kit/k1-stage.js) |
+| `KIT.rig` | function | `(B, S)` | [guide](../../README.md#animation-and-puppets), [guide](../live-sun.md#authored-proxy-shadows-for-moving-rigs), [guide](../typography.md#sdf-extrusion-and-materialisation), [source](../../src/kit/k1-stage.js) |
+| `KIT.rig.fromGroups` | function | `(stage, groups)` | [guide](../live-scene-hierarchy.md#geometry), [guide](../live-scene-hierarchy.md#import-existing-rigs-and-prefabs), [guide](../../README.md#animation-and-puppets), [guide](../live-sun.md#authored-proxy-shadows-for-moving-rigs), [guide](../typography.md#sdf-extrusion-and-materialisation), [source](../../src/kit/k1-stage.js) |
 
 ## KIT.ripple
 

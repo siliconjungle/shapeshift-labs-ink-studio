@@ -4090,6 +4090,10 @@ represented in the baked colour. Dynamic lamps with their own ramp can change
 the output ramp. The CPU stage painter still composes with other painters in
 stage order. The host is responsible for composing its own render passes.
 
+For shadows between moving rig parts, see
+[authored proxy shadows](live-sun.md#authored-proxy-shadows-for-moving-rigs).
+The same `sun.shadows` options work with the stage painter and host pack.
+
 Set `INK_TEST_CHROME` to the Chrome executable and run
 `node --test tests/captured-light.test.js` to verify the GLSL against the CPU
 reference using WebGL2 transform feedback.

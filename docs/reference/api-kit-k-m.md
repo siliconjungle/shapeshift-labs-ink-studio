@@ -34,13 +34,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.light` | namespace |  |  |
-| `KIT.light.capture` | function | `(B, S)` | [guide](../procedural.md#captured-lighting-for-a-host-renderer), [source](../../src/kit/k8-light.js) |
+| `KIT.light.capture` | function | `(B, S)` | [guide](../live-sun.md#authored-proxy-shadows-for-moving-rigs), [guide](../procedural.md#captured-lighting-for-a-host-renderer), [source](../../src/kit/k8-light.js) |
 | `KIT.light.flicker` | function | `(sys, lamp, o)` | [source](../../src/kit/k8-light.js) |
-| `KIT.light.glsl` | value | `string` | [guide](../procedural.md#captured-lighting-for-a-host-renderer) |
-| `KIT.light.pack` | function | `(st, cap, { sun = null } = {})` | [guide](../procedural.md#captured-lighting-for-a-host-renderer), [source](../../src/kit/k8-light.js) |
+| `KIT.light.glsl` | value | `string` | [guide](../live-sun.md#host-shader-wiring), [guide](../procedural.md#captured-lighting-for-a-host-renderer) |
+| `KIT.light.pack` | function | `(st, cap, { sun = null } = {})` | [guide](../live-sun.md#host-shader-wiring), [guide](../procedural.md#captured-lighting-for-a-host-renderer), [source](../../src/kit/k8-light.js) |
+| `KIT.light.proxyFrame` | function | `(packed, matrices)` | [guide](../live-sun.md#host-shader-wiring), [source](../../src/kit/k8-light.js) |
+| `KIT.light.proxyGLSL` | value | `string` | [guide](../live-sun.md#authored-proxy-shadows-for-moving-rigs), [guide](../live-sun.md#host-shader-wiring) |
+| `KIT.light.proxyVisibility` | function | `(frame, mask, position, normal, direction)` | [guide](../live-sun.md#host-shader-wiring), [source](../../src/kit/k8-light-proxies.js) |
 | `KIT.light.shadow` | function | `(st, cap, lamp, sdf, o)` | [guide](../live-sun.md#art-directed-shadows), [source](../../src/kit/k8-light.js) |
-| `KIT.light.step` | function | `(packed, i, [x, y, z], [nx, ny, nz], lights = [], flash = 0)` | [source](../../src/kit/k8-light.js) |
-| `KIT.light.system` | function | `(st, cap, lights, o)` | [guide](../procedural.md#captured-lighting-for-a-host-renderer), [source](../../src/kit/k8-light.js) |
+| `KIT.light.step` | function | `(packed, i, [x, y, z], [nx, ny, nz], lights = [], flash = 0)` | [guide](../live-sun.md#host-shader-wiring), [source](../../src/kit/k8-light.js) |
+| `KIT.light.system` | function | `(st, cap, lights, o)` | [guide](../live-sun.md#authored-proxy-shadows-for-moving-rigs), [guide](../procedural.md#captured-lighting-for-a-host-renderer), [source](../../src/kit/k8-light.js) |
 
 ## KIT.lightCookies
 

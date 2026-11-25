@@ -13,9 +13,10 @@
                                               from this ramp, not its own (a fire's orange on stone)
      st.add(K.light.flicker(lit, lamp, { rate: 9, depth: 0.3 }))   it gutters: its strength wanders, and what it lights follows */
 (function (K) {
-  function sunlight(sun, nx, ny, nz) {
+  function sunlight(sun, nx, ny, nz, visibility = 1) {
     return (
-      sun.amb + sun.sky * (0.5 + 0.5 * ny) + sun.k * Math.max(0, nx * sun.dir[0] + ny * sun.dir[1] + nz * sun.dir[2])
+      sun.amb + sun.sky * (0.5 + 0.5 * ny) +
+      sun.k * Math.max(0, nx * sun.dir[0] + ny * sun.dir[1] + nz * sun.dir[2]) * visibility
     );
   }
 
@@ -35,8 +36,8 @@
     return d2 <= lamp.r * lamp.r ? lampShare(lamp, dx, dy, dz, d2, nx, ny, nz, i) : 0;
   }
 
-  function surfaceLevel(sun, x, y, z, nx, ny, nz, i) {
-    let level = sunlight(sun, nx, ny, nz);
+  function surfaceLevel(sun, x, y, z, nx, ny, nz, i, visibility) {
+    let level = sunlight(sun, nx, ny, nz, visibility);
     if (sun.lights) for (const lamp of sun.lights) level += sampleLamp(lamp, x, y, z, nx, ny, nz, i);
     return level;
   }
@@ -51,11 +52,7 @@
       throw new TypeError('Sun parts must be a list of rig part names');
     for (const name of names) {
       if (typeof name !== 'string' || !name.trim()) throw new TypeError('Sun parts need nonempty rig part names');
-      // rig.part() declares a part on a miss. Guard the lookup so typos cannot change a bound rig.
-      const id = rig?.has?.(name) === false ? undefined : rig?.part?.(name);
-      if (!Number.isSafeInteger(id) || id <= 0 || rig.M && id >= rig.M.length / 12)
-        throw new RangeError('Unknown bound rig part in sun.parts: ' + name);
-      parts.add(id);
+      parts.add(RigShadowProxies.boundPart(rig, name, 'sun.parts'));
     }
     return { keep, delta, parts };
   }
@@ -88,8 +85,33 @@
     return palette.get((st.base ?? st.D)[i * 16 + 7]) ?? fallback;
   }
 
+  const packedProxies = new WeakMap(), shadowMarchRanges = new WeakMap();
+
+  function prepareProxies(st, cap, sun, parts) {
+    const proxies = RigShadowProxies.prepare(st.rig, sun, parts);
+    if (!proxies) return null;
+    const { masks } = proxies.frame;
+    for (const [first, end] of shadowMarchRanges.get(cap) ?? []) {
+      for (let i = first; i < end; i++) {
+        if (masks[st.rig.bid[i]])
+          throw new RangeError(
+            'Proxy shadow receivers were baked with a shadow march. Set S.shSteps = 0 before baking them.'
+          );
+      }
+    }
+    return proxies;
+  }
+  function proxyFrame(packed, matrices) {
+    const proxies = packedProxies.get(packed);
+    if (!proxies) return null;
+    if (matrices !== undefined && matrices?.length !== proxies.rig.M.length)
+      throw new RangeError('Proxy shadow pose palette must match rig.M');
+    return RigShadowProxies.update(proxies, matrices);
+  }
+
   function pack(st, cap, { sun = null } = {}) {
     const settings = sunSettings(st, sun);
+    const proxies = prepareProxies(st, cap, sun, settings.parts);
     const normalLevel = new Float32Array(st.N * 4);
     const rigRamp = new Float32Array(st.N * 4);
     const baked = settings.delta ? new Int32Array(st.N).fill(-1) : null;
@@ -120,7 +142,7 @@
         if (baked) baked[i] = bakedIndex(st, palette, i, cap.ramps[ramp][rampStep(t, cap.ramps[ramp].length)]);
       }
     }
-    return {
+    const packed = {
       count: st.N,
       normalLevel,
       rigRamp,
@@ -129,6 +151,11 @@
       sun,
       delta: settings.delta
     };
+    if (proxies) {
+      packedProxies.set(packed, proxies);
+      proxyFrame(packed);
+    }
+    return packed;
   }
 
   function step(packed, i, [x, y, z], [nx, ny, nz], lights = [], flash = 0) {
@@ -142,7 +169,11 @@
       override;
     if (packed.rigRamp[row + 2]) {
       const sun = packed.sun;
-      const level = surfaceLevel(sun, x, y, z, nx, ny, nz, i);
+      const frame = packedProxies.get(packed)?.frame;
+      const mask = frame?.masks[packed.rigRamp[row + 1]];
+      const visibility =
+        mask && sun.k > 0 ? RigShadowProxies.visibility(frame, mask, [x, y, z], [nx, ny, nz], sun.dir) : 1;
+      const level = surfaceLevel(sun, x, y, z, nx, ny, nz, i, visibility);
       base = surfaceBase(level, sun.shade ? sun.shade(x, y, z) : 1, t, packed.rigRamp[row + 3], packed.delta);
     }
     for (const lamp of lights) {
@@ -170,9 +201,12 @@ float capturedLampShare(vec3 p, vec3 n, vec4 lamp, float strength, float visibil
   float fade = 1.0 - dist / lamp.w;
   return fade * fade * strength * (0.2 + 0.8 * facing) * visibility;
 }
-float capturedSun(vec3 n, vec3 direction, vec3 ambientSkyStrength) {
+float capturedSun(vec3 n, vec3 direction, vec3 ambientSkyStrength, float visibility) {
   return ambientSkyStrength.x + ambientSkyStrength.y * (0.5 + 0.5 * n.y)
-    + ambientSkyStrength.z * max(dot(n, direction), 0.0);
+    + ambientSkyStrength.z * max(dot(n, direction), 0.0) * visibility;
+}
+float capturedSun(vec3 n, vec3 direction, vec3 ambientSkyStrength) {
+  return capturedSun(n, direction, ambientSkyStrength, 1.0);
 }
 float capturedBase(float baked, float liveLevel, float shade, float reference, bool delta) {
   return delta ? baked + (liveLevel * shade - reference) : (liveLevel + reference) * shade;
@@ -192,13 +226,23 @@ bool capturedAtRest(float baked, float base, float additional) {
     pack,
     step,
     glsl,
+    proxyFrame,
+    proxyVisibility: RigShadowProxies.visibility,
+    proxyGLSL: RigShadowProxies.glsl,
     capture(B, S) {
       const cap = { ramp: [], t: [], n: [], ramps: [], ids: new Map() };
+      const marched = [];
+      shadowMarchRanges.set(cap, marched);
       const prior = S.tap;
       S.tap = function (ramp, t, nx, ny, nz, flat) {
         const i = B.count();
         if (prior) prior.apply(this, arguments);
         if (flat) return;
+        if (S.shSteps > 0) {
+          const last = marched[marched.length - 1];
+          if (last && last[1] === i) last[1]++;
+          else marched.push([i, i + 1]);
+        }
         let id = cap.ids.get(ramp);
         if (id === undefined) {
           id = cap.ramps.length;
@@ -213,6 +257,7 @@ bool capturedAtRest(float baked, float base, float additional) {
     },
     system(st, cap, lights, o) {
       const sun = o?.sun ?? null, settings = sunSettings(st, sun);
+      const proxies = prepareProxies(st, cap, sun, settings.parts);
       const N = st.N,
         D = st.D,
         has = new Uint8Array(N),
@@ -280,8 +325,9 @@ bool capturedAtRest(float baked, float base, float additional) {
             version++;
             if (flashT <= 0) flash = 0;
           }
-          if (seen === version && !sys.live) return;
+          if (seen === version && !sys.live && !proxies) return;
           seen = version;
+          const frame = proxies ? RigShadowProxies.update(proxies) : null;
           const rig = st.rig,
             Mx = rig ? rig.M : null,
             bid = rig ? rig.bid : null;
@@ -348,7 +394,10 @@ bool capturedAtRest(float baked, float base, float additional) {
                 ny = b / l;
                 nz = c / l;
               }
-              const level = surfaceLevel(sun, x, y, z, nx, ny, nz, i);
+              const mask = frame?.masks[bid[i]];
+              const visibility =
+                mask && sun.k > 0 ? RigShadowProxies.visibility(frame, mask, [x, y, z], [nx, ny, nz], sun.dir) : 1;
+              const level = surfaceLevel(sun, x, y, z, nx, ny, nz, i, visibility);
               base = surfaceBase(level, sun.shade ? sun.shade(x, y, z) : 1, T[i], fine[i], settings.delta);
             }
             const rp = cap.ramps[RI[i]],
