@@ -5,6 +5,8 @@ const { createInterface } = require('node:readline');
 const { save, graphOutputs } = require('./graph-outputs.js');
 const { readGraphProject } = require('./graph-project.js');
 const { openMaterialGraph, readMaterialGraph, writeMaterialGraph } = require('./material-graph.js');
+const { describeMaterialMetadata } = require('./material-metadata.js');
+const { searchMaterialLibrary, publishMaterialLibrary } = require('./material-library.js');
 const { describeMaterialSubgraph, editMaterialSubgraph, publishMaterialSubgraph } = require('./material-subgraphs.js');
 const { findGraphGroupUsers } = require('./graph-groups.js');
 const { snapshotFormat, diffGraphs } = require('./graph-diff.js');
@@ -26,8 +28,9 @@ const flags = {
 };
 for (const options of Object.values(flags)) options.push('instance','base-context');
 const discoveryFlags = { nodes: ['json'], describe: ['json', 'example'] };
-const analysisFlags = { impact: ['root', 'json'], diff: ['adapters', 'json'], material: ['id', 'out', 'base', 'output-usages'],
-  subgraph: ['out', 'adapters'], 'publish-subgraph': ['out', 'revision', 'adapters'] };
+const analysisFlags = { impact: ['root', 'json'], diff: ['adapters', 'json'], material: ['id', 'out', 'base', 'output-usages', 'metadata'],
+  subgraph: ['out', 'adapters'], 'publish-subgraph': ['out', 'revision', 'adapters'],
+  'material-info': ['audience'], 'material-library': ['audience', 'query', 'tag', 'offset', 'limit', 'out'] };
 const commandOptions = { ...flags, ...discoveryFlags, ...analysisFlags, ...host.commands };
 
 async function sendText(text) {
@@ -129,18 +132,29 @@ async function graphCommand(pos,opt,settings) {
   if (mode==='material') {
     if (pos.length!==2 || Object.entries(opt).some(([key,value])=>
       !analysisFlags.material.includes(key) || typeof value!=='string' || !value.trim()))
-      throw new TypeError('Use graph material <project-or-material.json> [--id ID] [--base settings.json] [--output-usages maps.json] [--out material.json]');
+      throw new TypeError('Use graph material <project-or-material.json> [--id ID] [--base settings.json] [--output-usages maps.json] [--metadata metadata.json] [--out material.json]');
     let document=readMaterialGraph(file,{id:opt.id});
-    for (const [flag,key] of [['base','base'],['output-usages','outputUsages']]) {
+    for (const [flag,key] of [['base','base'],['output-usages','outputUsages'],['metadata','metadata']]) {
       if (opt[flag]===undefined) continue;
       if (opt.out!==undefined && path.resolve(opt[flag])===path.resolve(opt.out))
         throw new TypeError('Choose a material output separate from the '+flag+' settings file');
       const value=JSON.parse(fs.readFileSync(path.resolve(opt[flag]),'utf8'));
-      document=openMaterialGraph({...document,settings:{...document.settings,[key]:value}});
+      document=openMaterialGraph(key==='metadata' ? {...document,metadata:value} :
+        {...document,settings:{...document.settings,[key]:value}});
     }
     if (opt.out===undefined) return send(document);
     const result=writeMaterialGraph(opt.out,document,{baseDir:path.dirname(path.resolve(file))});
     return send({file:path.resolve(opt.out),format:result.format,version:result.version,id:result.id});
+  }
+  if (mode==='material-info' || mode==='material-library') {
+    if (pos.length!==2 || Object.entries(opt).some(([key,value])=>
+      !analysisFlags[mode].includes(key) || typeof value!=='string' || !value.trim()))
+      throw new TypeError('Use graph material-info <material.json> [--audience workspace|publication] or graph material-library <registry.json> [--audience NAME] [--query TEXT] [--tag TAG] [--out directory]');
+    if (mode==='material-info') return send(describeMaterialMetadata(file,{audience:opt.audience}));
+    const {audience,query,tag,out}=opt;
+    const options={kit:settings.kit,audience,query,tag,
+      offset:opt.offset===undefined ? undefined : Number(opt.offset), limit:opt.limit===undefined ? undefined : Number(opt.limit)};
+    return send(out===undefined ? searchMaterialLibrary(file,options) : publishMaterialLibrary(file,{...options,out}));
   }
   if (mode==='subgraph' || mode==='publish-subgraph') {
     const publish=mode==='publish-subgraph';

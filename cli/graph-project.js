@@ -16,6 +16,7 @@ const { estimateGraphMemory } = require('./graph-memory.js');
 const Assets = require('./asset-references.js');
 const { resolveTakeFile } = require('./take-document.js');
 const materialGraph = require('./material-graph.js');
+const MaterialMetadata = require('./material-metadata.js');
 const Base = require('../src/material-base-settings.js');
 const materialImage = require('./material-image-export.js');
 const OutputUsages = require('./material-output-usages.js');
@@ -280,7 +281,12 @@ function cacheReport(frame) {
 
 function createGraphProject(source, { kit=require('../index.js').load(), baseDir=process.cwd(), operations={}, adapters={},
   sourceFile, workerPool, planAssets=false, instance, baseContext }={}) {
-  if (source?.format===materialGraph.format) source=materialGraph.toGraphProject(source,{instance});
+  let materialMetadata;
+  if (source?.format===materialGraph.format) {
+    const authored=source;
+    source=materialGraph.toGraphProject(source,{instance});
+    if (Object.hasOwn(authored,'metadata')) materialMetadata=MaterialMetadata.summary(authored);
+  }
   else if (instance!==undefined) throw new TypeError('Graph instances require a material graph');
   if (workerPool && !workerPool.matches(kit)) throw new TypeError('Graph worker pool and project need the same toolkit');
   const procedural=kit.KIT.procedural, {graph,data,mediaGraph,takeTime}=procedural;
@@ -288,6 +294,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const {broadcast}=graph.arrays;
   const groupOperators=[...graph.arrays.groupOperators,...kit.KIT.procedural.animationGraph.groupOperators];
   const project=data.freeze(data.clone(source));
+  materialMetadata=materialMetadata && data.freeze(structuredClone(materialMetadata));
   const {format:kind,version:revision,groups:definitions={},assets:assetDefinitions={},assetRegistry,exports:exportsSpec={},
     assertions:assertionSpecs=[],time=0,seed:authoredSeed,base:baseSpec,inheritance,primaryInput,outputUsages,...root}=fields(project,
     ['format','version','inputs','nodes','outputs','groups','assets','assetRegistry','exports','assertions','time','seed','base','inheritance','primaryInput','outputUsages'],'graph project');
@@ -565,7 +572,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     return JSON.parse(jsonBytes({format:snapshotFormat,version,projectHash,
       settings:{seed:effective.seed,time:at,...(base && {base:values.materialBase}),
         ...(effective.provenance && {baseProvenance:effective.provenance}),
-        ...(outputUsages!==undefined && {outputUsages})},
+        ...(outputUsages!==undefined && {outputUsages}),...(materialMetadata && {materialMetadata})},
       graph:describeScope(compiled,groupTree.scope,values),
       groups:groupDetails(),
       assets:assetInfo, references:Object.fromEntries(dependencyRows.map(({group,used,...reference})=>[group,reference])),
@@ -848,6 +855,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     describeSubgraph,
     plan(inputs,{memory=false}={}) {
       const plan=data.clone(projectPlan), prepared=inputs===undefined ? undefined : request({inputs});
+      if (materialMetadata) plan.materialMetadata=structuredClone(materialMetadata);
       const resolved=prepared?.inputs;
       if (rules) {
         const effective=prepared ? {base:resolved.materialBase,seed:prepared.seed,provenance:prepared.baseProvenance} : resolveBase({});
