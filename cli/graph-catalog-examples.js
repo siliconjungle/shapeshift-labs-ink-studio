@@ -200,6 +200,9 @@ const dynamic = {
     inputs:{source:link('defined')} },
   'image.shape': { nodes:{library:{op:'shape.library'},badge:{op:'shape.pick',inputs:{source:link('library'),id:'bevel'}}},
     inputs:{source:link('badge'),width:24,height:24,options:{samples:2}} },
+  'image.tileGenerator': { nodes:{stamp:{op:'shape.define',inputs:{definition:{type:'rectangle',size:[1,1],radius:.065}}}},
+    inputs:{width:24,height:20,columns:3,rows:5,stamp:link('stamp'),options:{
+      pattern:'brick',palette:['#ad5b42','#d89558'],background:'#251a22',jitter:{color:.12},samples:2,seed:37}} },
   'image.noise': { nodes:{ clock:{op:'anim.clock',inputs:{options:{range:[0,4]}}} },
     inputs: { family:'ridged',width:16,height:12,time:link('clock'),
     options:{ seed:34,scale:1.25,tileOffset:[.25,0],nonSquareExpansion:true,carrier:'simplex',
