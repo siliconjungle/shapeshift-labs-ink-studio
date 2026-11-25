@@ -44,7 +44,8 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
   const strandLOD = kit.curveSplats.strandLod;
   const retained=i=>options.engraving?.curve(i) || options.restMarks && world.curveRest?.[i*16+3];
   const strands = options.strandLod && strandLOD.coverageFrame(world,artLens,{data,keep,
-    partitionAt:options.geometryCode,forbidden:i=>retained(i) || options.strandForbidden?.(i)});
+    partitionAt:options.geometryCode,protectedLOD:options.protectedLOD,report:options.strandLODFrame,
+    forbidden:i=>retained(i) || options.strandForbidden?.(i)});
   const settings = subdivision.prepare(options.curveSubdivision);
   const detail = subdivision.frame(world,artLens,settings,{ data, planes:options.planes, partitionAt:options.geometryCode,
     keep:i=>keep(i) && !strands?.hidden?.has(i) && !strands?.codes?.has(i) && !strands?.opacity?.has(i) &&

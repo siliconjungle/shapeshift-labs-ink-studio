@@ -1058,13 +1058,13 @@ function renderFrame(world, o, preparedPalettes) {
   const spritePlan = spriteLOD && spriteLOD.resolve(world, {
     eye, back:[V[2],V[6],V[10]], ortho, focal:focal/(o.artGridScale||1),
     setback:depthOffset, time:t, mode:o.spriteReconstruction, impostorBlend:o.impostorBlend,
-    atlasTime:shutterRows?.atlasTime, retainGeometry:SplatFit.editedSubjects(world,fitted)
+    atlasTime:shutterRows?.atlasTime, retainGeometry:SplatFit.editedSubjects(world,fitted), protectedLOD:o.protectedLOD
   });
   const spriteAtlases = AtlasSprites.placements(world.spriteAtlases, o.spriteAtlases);
   const reconstructed = spritePlan?.rows.length ? new Map(spritePlan.rows.map(row => [row.placement,row])) : null;
   if (reconstructed) spriteAtlases.push(...reconstructed.keys());
   const geometryMask = spritePlan?.mask;
-  if (spriteLOD && !reflectionPlane && !probeView) o.spriteReconstructionFrame?.(spritePlan ?? { geometryRows:world.count, states:[] });
+  if (spriteLOD && !reflectionPlane && !probeView && (!o.samples || o.worked)) o.spriteReconstructionFrame?.(spritePlan ?? { geometryRows:world.count, states:[] });
   const deep = DeepComposite.capture(W, H, deepPlan, world.renderMetadata, o[deepReflection], spriteAtlases,
     deepPlan && {view:Array.from(V), focal, ortho, setback:depthOffset});
   const mattes = ObjectMattes.capture(W,H,o[matteScope],world.renderMetadata);
@@ -1768,7 +1768,8 @@ function renderFrame(world, o, preparedPalettes) {
   const strandLod = useCurveLod && !reflectionPlane && !probeView && !cutaway &&
     StrandLod.coverageFrame(world,curveCamera,{data:d,positionAt:i=>[X[i],Y[i],Z[i]],alphaAt:i=>AL[i],scaleAt:i=>SC[i],
       keep:i=>(!qualityRows || qualityRows.keep[i]) && !spriteLOD?.hidden(geometryMask?.codes[i]),
-      partitionAt:geometryMask && (i=>geometryMask.codes[i]),
+      partitionAt:geometryMask && (i=>geometryMask.codes[i]), protectedLOD:o.protectedLOD,
+      report:!o.samples || o.worked ? o.strandLODFrame : undefined,
       forbidden:i=>curveWidthAt?.(i) || optical?.[i*OpticalMaterials.STRIDE+3] });
   if (strandLod) {
     for (const [row,opacity] of strandLod.opacity) AL[row]=opacity;

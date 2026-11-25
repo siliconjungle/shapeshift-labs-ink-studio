@@ -177,8 +177,11 @@
       return {...rows,tier,reason:forced?'override':'screen-size',featurePixels,profilePixels};
     }
 
-    function select(view,override){
-      const report=inspect(view,override), asset=report.tier?mesh(report.tier):null;
+    function select(view,override,protection){
+      const report=inspect(view,override);
+      const features=report.tier && protection?.features(objectId,partId,'relief-'+report.tier);
+      if(features)Object.assign(report,{requestedTier:report.tier,tier:'geometry',reason:'protected-feature',features});
+      const asset=report.tier?mesh(report.tier):null;
       const layer=asset&&Meshes.layer(asset);
       return {asset,report:{...report,triangles:asset?.triangles??0,normalTexels:layer?.normalPixels?
         layer.width*layer.height:0,materialTexels:layer?layer.width*layer.height:0}};
@@ -194,7 +197,8 @@
     need(Array.isArray(plans)&&plans.length<=16&&Array.from(plans).every(plan=>programs.has(plan))&&
       new Set(plans.map(plan=>plan.id)).size===plans.length,'attach up to 16 distinct relief plans');
     const override=mode(settings.reliefLOD??world.look?.reliefLOD);
-    const entries=plans.map(plan=>plan.select(view,override));
+    const protection=ProtectedLOD.active(world,settings.protectedLOD);
+    const entries=plans.map(plan=>plan.select(view,override,protection));
     report?.(entries.map(entry=>entry.report));
     return entries.flatMap(entry=>entry.asset?[entry.asset]:[]);
   }

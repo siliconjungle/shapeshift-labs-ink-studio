@@ -691,6 +691,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.props.starter.with` | function | `(more)` | [guide](../../README.md#rendering-and-command-reference), [source](../../src/kit/kpy-props.js) |
 | `KIT.props.wallBase` | function | `(S, o)` | [guide](../../README.md#rendering-and-command-reference), [source](../../src/kit/kpy-props.js) |
 
+## KIT.protectedLOD
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.protectedLOD` | namespace |  |  |
+| `KIT.protectedLOD.active` | function | `(world, setting)` | [source](../../src/protected-lod.js) |
+| `KIT.protectedLOD.format` | value | `string = "ink-studio/protected-lod-guard"` |  |
+| `KIT.protectedLOD.prepare` | function | `(guard)` | [source](../../src/protected-lod.js) |
+| `KIT.protectedLOD.transitions` | value | `array` |  |
+
 ## KIT.protectedPixels
 
 | Member | Kind | Signature or value | Guides and source |
@@ -1612,7 +1622,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.sprite.reconstruction.hits` | function | `(plan, { origin, direction, maxDistance = 100, pixelAt, clip })` | [guide](../sprite-reconstruction.md), [source](../../src/sprite-reconstruction.js) |
 | `KIT.sprite.reconstruction.labels` | function | `(world)` | [guide](../sprite-reconstruction.md), [source](../../src/sprite-reconstruction.js) |
 | `KIT.sprite.reconstruction.light` | function | `(authored, override, time)` | [guide](../sprite-reconstruction.md), [source](../../src/sprite-reconstruction.js) |
-| `KIT.sprite.reconstruction.resolve` | function | `(world, { eye, back, ortho, focal, time = 0, setback = 0, mode = 'auto', atlasTime, impostorBlend, retainGeometry } = {})` | [guide](../sprite-reconstruction.md), [source](../../src/sprite-reconstruction.js) |
+| `KIT.sprite.reconstruction.resolve` | function | `(world, { eye, back, ortho, focal, time = 0, setback = 0, mode = 'auto', atlasTime, impostorBlend, retainGeometry, protectedLOD } = {})` | [guide](../sprite-reconstruction.md), [source](../../src/sprite-reconstruction.js) |
 | `KIT.sprite.reconstruction.sprite` | function | `(row, x, y)` | [guide](../sprite-reconstruction.md), [source](../../src/sprite-reconstruction.js) |
 | `KIT.sprite.reconstruction.tile` | function | `(row)` | [guide](../sprite-reconstruction.md), [source](../../src/sprite-reconstruction.js) |
 | `KIT.sprite.scanlineBudget` | namespace |  |  |

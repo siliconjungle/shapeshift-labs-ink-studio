@@ -202,9 +202,15 @@ test(
         let stats;
         b.draw(clean, { spriteReconstructionFrame: s => (stats = s) });
         const samples = Object.values(b.sample(screen));
+        let guardedStates;
+        const guarded = { ...sprite, protectedLOD: {format:'ink-studio/protected-lod-guard',version:1,holds:[
+          {object:'signal',part:null,transition:'card',features:['signal-contour']}
+        ]}, spriteReconstructionFrame: plan => { guardedStates = plan.states; } };
+        const guardedColor = draw(world, guarded);
+        const guardedPick = b.pick(world, ray, guarded).solid;
         b.close();
         return {
-          shaded,
+          shaded, guardedColor, guardedTarget:guardedPick?.target.object, guardedStates,
           green,
           blue,
           flatBlue,
@@ -224,6 +230,11 @@ test(
     assert(out.samples.filter(([r, g]) => r > g * 2).length >= 30);
     assert(out.samples.filter(([r, g]) => g > r * 2).length >= 30);
     assert.equal(out.spritePick, 'signal');
+    assert.deepEqual(out.guardedColor,out.blue);
+    assert.equal(out.guardedTarget,'screen');
+    assert.equal(out.guardedStates[0].geometry,1);
+    assert.equal(out.guardedStates[0].requestedSprite,1);
+    assert.deepEqual(out.guardedStates[0].features,['signal-contour']);
     assert.equal(out.geoPick, 'screen');
   }
 );

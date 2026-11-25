@@ -50,6 +50,25 @@ test('strand groups require unresolved width and spacing and keep the authored g
   }
 });
 
+const strandGuard = {format:'ink-studio/protected-lod-guard',version:1,holds:[
+  {object:'ropes',part:'ropes',transition:'strand',features:['weave']}
+]};
+
+test('a strand feature hold keeps individual spans and reports the requested grouping',()=>{
+  const world = fixture(ink.load());
+  world.protectedLOD = strandGuard;
+  let decisions;
+  const guarded=ink.render(world,{...options,strandLODFrame:rows=>{decisions=rows;}});
+  const unguarded=ink.render(world,{...options,protectedLOD:false});
+  const full=ink.render(world,{...options,curveLod:false});
+  assert.equal(guarded.renderStats.curveSegments,full.renderStats.curveSegments);
+  assert.deepEqual(guarded.rgb,full.rgb);
+  assert.equal(unguarded.renderStats.strandLod.grouped,1);
+  assert.deepEqual(decisions.filter(row=>row.reason),[
+    {object:'ropes',part:'ropes',group:24,grouped:0,reason:'protected-feature',features:['weave'],requestedGrouped:1}
+  ]);
+});
+
 test('a coverage-mipped strand card uses projected texel size and keeps the gap',()=>{
   const kit=ink.load();
   const {atlas} = ink.bakeCurves(fixture(kit),{object:'ropes',width:80,height:72,directions:1,ribbon:false,cutoutMipmaps:true});
@@ -72,22 +91,22 @@ test('WebGL and headless choose the same strand masks and card handoffs',
     const {atlas}=ink.bakeCurves(source,{object:'ropes',width:80,height:72,directions:1,ribbon:false,cutoutMipmaps:true});
     const serialized={metadata:atlas.metadata,images:Object.fromEntries(Object.entries(atlas.images)
       .map(([name,bytes])=>[name,Buffer.from(bytes).toString('base64')]))};
-    const result=runWebGL({},fixture,(kit,make,backend,atlas)=>{
+    const result=runWebGL({},fixture,(kit,make,backend,{atlas,strandGuard})=>{
       for (const [name,bytes] of Object.entries(atlas.images)) atlas.images[name]=Uint8Array.from(atob(bytes),c=>c.charCodeAt(0));
       const world=make(kit,atlas), painter=backend(144,96,{width:144,height:96,raw:true,edges:false});
       try {
-        return {frames:[4,5.2,8,12].map(dist=>{
+        return {frames:[4,5.2,8,12,8].map((dist,i)=>{
           let curves,cards;
-          painter.draw(world,{camera:{...world.cam,dist},curveFrame:value=>{curves=value;},
+          painter.draw(world,{camera:{...world.cam,dist},protectedLOD:i===4?strandGuard:undefined,curveFrame:value=>{curves=value;},
             spriteReconstructionFrame:value=>{cards=value.states;}});
           return {curves,cards,rgb:painter.image()};
         })};
       } finally { painter.close(); }
-    },serialized);
+    },{atlas:serialized,strandGuard});
     const world=fixture(kit,atlas);
-    for (const [i,dist] of [4,5.2,8,12].entries()) {
+    for (const [i,dist] of [4,5.2,8,12,8].entries()) {
       let cards;
-      const cpu=ink.render(world,{...options,dist,spriteReconstructionFrame:value=>{cards=value.states;}});
+      const cpu=ink.render(world,{...options,dist,protectedLOD:i===4?strandGuard:undefined,spriteReconstructionFrame:value=>{cards=value.states;}});
       const gpu=result.frames[i];
       assert.deepEqual(gpu.curves.strandLod,cpu.renderStats.strandLod);
       assert.equal(gpu.curves.segments,cpu.renderStats.curveSegments);

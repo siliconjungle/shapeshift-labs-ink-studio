@@ -137,17 +137,24 @@ const CurveLod = (() => {
   function coverageFrame(world, camera, options) {
     const records = world.curveLod?.filter(row=>row.aggregate?.coverage);
     if (!records?.length || posedParts(world)) return;
-    const {keep, partitionAt} = options;
+    const {keep, partitionAt, report} = options;
+    const protection = (typeof ProtectedLOD === 'undefined' ? require('./protected-lod.js') : ProtectedLOD).active(world, options.protectedLOD);
     const measure = measureGroup(world,camera,options);
     const hidden = new Set(), opacity = new Map(), codes = new Map();
     const stats = { groups:0, grouped:0, blending:0, individual:0, proxySpans:0, replacedSpans:0 };
+    const decisions = report && [];
     for (const { aggregate } of records) {
       const [first,end] = aggregate.proxy;
       if (!aggregate.opacity || !keep(first)) continue;
       stats.groups++;
       const code = partitionAt?.(first) ?? 0, {width,spacing} = aggregate.coverage;
       const measured = measure(aggregate,i=>keep(i) && (partitionAt?.(i) ?? 0) === code,width[1],spacing[1]);
-      const step = measured ? Math.round(16*Math.max(detailWeight(width,measured[0]),detailWeight(spacing,measured[1]))) : 16;
+      const requested = measured ? Math.round(16*Math.max(detailWeight(width,measured[0]),detailWeight(spacing,measured[1]))) : 16;
+      const {object,part} = aggregate;
+      const features = requested < 16 && protection?.features(object, part, 'strand');
+      const step = features ? 16 : requested;
+      decisions?.push({object,part,group:first,grouped:1-step/16,
+        ...(features && {reason:'protected-feature',features,requestedGrouped:1-requested/16})});
       if (step === 16) { stats.individual++; continue; }
       stats[step ? 'blending' : 'grouped']++;
       stats.proxySpans += end-first;
@@ -163,6 +170,7 @@ const CurveLod = (() => {
         }
       }
     }
+    report?.(decisions);
     return { hidden, opacity, codes, stats };
   }
 

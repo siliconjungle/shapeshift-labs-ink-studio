@@ -184,6 +184,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   render/clip/atlas --view-poses asset.json|off   load or bypass view-sector pose corrections
   render/clip --volume-scale 3 --volume-reconstruction object|depth|lighting   choose a coarse fog reconstruction
   render/clip --volume-stochastic 4 --volume-stochastic-history 12   trial sparse scattering in one static fog field
+  protected-lod-review <scene> --plan file.json [--out directory] [--fail-on-hold]   verify protected details at approved distances and poses
   render-suite [--scene gatehouse|signal-coil|night] [--profile file.json] [--out directory]   compare matched art-grid renders
   canvas-grid-check [<plan.json>] [--chrome executable] [--hardware] [--out directory] [--fail-on-flags]
     Check pixel widths and slow pans in the browser at several viewport sizes and device pixel ratios.
@@ -674,7 +675,7 @@ aerial options: --aerial-perspective on|off --aerial-start units --aerial-densit
 view options: --surface off (no finish layers) --pbr-materials file.json|off --pbr-shadows on|off --pbr-specular-sampling on|off --facing-colors off --directional-colors off --water off --reflections off --reflection-probes off --transmission off --surface-detail-kits off --atmosphere off --edges off (no edge sprites) --yaw --pitch --zoom 2 --target x,y,z --w 900 --h 620 --px 2 (screen pixels per art pixel) --px1 (native art pixels) --tone stipple|off --raw (no palette) --colored (smooth body-colored contours) --fine (inked detail: colours looked up per pixel) --bounce (bounce light baked in) --focus x,y,z[,near,far,coarse] (uneven detail) --follow [stretch,broad] (dabs along the form) --adaptive-sampling on|off|file.json --clean (remove lone pixels) --camera-shot id --ortho [on|off] (override authored projection) --cols 4 --out file.png --seed n
 socket emitter options: --atmosphere-emitters on|off|file.json
 animated splat options: --splat-fields on|off|file.json
-sprite options: --sprite-atlas on|off|atlas.json --sprite-at x,y,z --sprite-scale n --sprite-atlas-mode card|impostor|scenery --sprite-reconstruction auto|geometry|sprite --impostor-blend nearest|depth-reprojected
+sprite options: --sprite-atlas on|off|atlas.json --sprite-at x,y,z --sprite-scale n --sprite-atlas-mode card|impostor|scenery --sprite-reconstruction auto|geometry|sprite --impostor-blend nearest|depth-reprojected --protected-lod guard.json|off
                 --sprite-cels edits.json|off --sprite-playback once|loop
 shaped fog options: --shaped-atmosphere on|off|file.json --volume-cutouts on|off|file.json
 atmosphere bands: --atmosphere-depth-bands on|off|file.json

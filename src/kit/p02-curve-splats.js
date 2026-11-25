@@ -870,7 +870,8 @@
     }
     let aggregate, shadow;
     if (plan.proxy) aggregate = { ...proxyRange(plan.proxy,plan.lod.simplify), pitch:plan.proxy.pitch,
-      transition:plan.proxy.settings.transition, coverage:plan.proxy.settings.coverage };
+      transition:plan.proxy.settings.transition, coverage:plan.proxy.settings.coverage,
+      object:plan.object, part:plan.target?.part };
     if (plan.shadowProxy) shadow = { ...proxyRange(plan.shadowProxy), maxError:plan.shadowProxy.settings.maxError };
     if (runs.length || aggregate || shadow) {
       record={runs,simplify:plan.lod?.simplify,aggregate,shadow};

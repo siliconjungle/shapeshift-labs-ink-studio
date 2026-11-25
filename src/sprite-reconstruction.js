@@ -158,12 +158,13 @@ bool spriteGeometry(int code, vec2 at) {
     return entries.filter(row=>row.part!==undefined).map(({object,part,material})=>({object,part,material}));
   }
 
-  function resolve(world, { eye, back, ortho, focal, time = 0, setback = 0, mode = 'auto', atlasTime, impostorBlend, retainGeometry } = {}) {
+  function resolve(world, { eye, back, ortho, focal, time = 0, setback = 0, mode = 'auto', atlasTime, impostorBlend, retainGeometry, protectedLOD } = {}) {
     const configuration = world.spriteReconstruction;
     if (!configuration || mode === false || mode === 'geometry') return null;
     if (!['auto', 'sprite'].includes(mode) || !Number.isFinite(time) || !Number.isFinite(setback))
       throw new RangeError('Sprite reconstruction mode must be auto, geometry or sprite');
     atlasAPI.viewBlend(impostorBlend);
+    const protection = (typeof ProtectedLOD === 'undefined' ? require('./protected-lod.js') : ProtectedLOD).active(world, protectedLOD);
     const plan = bindingsFor(world, configuration, retainGeometry),
       rows = [],
       states = [],
@@ -204,9 +205,13 @@ bool spriteGeometry(int code, vec2 at) {
         const x = clamp(value/(high-low));
         step = Math.round(bins*x*x*(3-2*x));
       }
+      const requestedSprite = 1 - step / bins;
+      const features = step < bins && protection?.features(object, part, 'card');
+      if (features) step = bins;
       steps.push(step);
       if (!step) geometryRows -= plan.counts[i];
-      const state = { ...tags, distance, geometry: step / bins, sprite: 1 - step / bins };
+      const state = { ...tags, distance, geometry: step / bins, sprite: 1 - step / bins,
+        ...(features && { reason:'protected-feature', features, requestedSprite }) };
       states.push(state);
       if (step === bins) continue;
       view ??= selectView();

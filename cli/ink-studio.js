@@ -1071,6 +1071,7 @@ const view = extra =>
       simulationMaterialLayers:onOffOption('simulation-material-layers'),
       splatProxyTolerance: num('splat-proxy-tolerance'),
       spriteReconstruction: opt['sprite-reconstruction'],
+      protectedLOD: renderAssetOption('protected-lod'),
       aerialPerspective: aerialOption(),
       volumeLocalLights: onOffOption('volume-local-lights'),
       volumeLocalShadows: onOffOption('volume-local-shadows'),
@@ -1372,6 +1373,7 @@ const CMD = {
         '  render/clip/atlas --view-poses asset.json|off   load or bypass view-sector pose corrections',
         '  render/clip --volume-scale 3 --volume-reconstruction object|depth|lighting   choose a coarse fog reconstruction',
         '  render/clip --volume-stochastic 4 --volume-stochastic-history 12   trial sparse scattering in one static fog field',
+        '  protected-lod-review <scene> --plan file.json [--out directory] [--fail-on-hold]   verify protected details at approved distances and poses',
         '  render-suite [--scene gatehouse|signal-coil|night] [--profile file.json] [--out directory]   compare matched art-grid renders',
         '  canvas-grid-check [<plan.json>] [--chrome executable] [--hardware] [--out directory] [--fail-on-flags]',
         '    Check pixel widths and slow pans in the browser at several viewport sizes and device pixel ratios.',
@@ -1840,7 +1842,7 @@ const CMD = {
         'view options: --surface off (no finish layers) --pbr-materials file.json|off --pbr-shadows on|off --pbr-specular-sampling on|off --facing-colors off --directional-colors off --water off --reflections off --reflection-probes off --transmission off --surface-detail-kits off --atmosphere off --edges off (no edge sprites) --yaw --pitch --zoom 2 --target x,y,z --w 900 --h 620 --px 2 (screen pixels per art pixel) --px1 (native art pixels) --tone stipple|off --raw (no palette) --colored (smooth body-colored contours) --fine (inked detail: colours looked up per pixel) --bounce (bounce light baked in) --focus x,y,z[,near,far,coarse] (uneven detail) --follow [stretch,broad] (dabs along the form) --adaptive-sampling on|off|file.json --clean (remove lone pixels) --camera-shot id --ortho [on|off] (override authored projection) --cols 4 --out file.png --seed n',
         'socket emitter options: --atmosphere-emitters on|off|file.json',
         'animated splat options: --splat-fields on|off|file.json',
-        'sprite options: --sprite-atlas on|off|atlas.json --sprite-at x,y,z --sprite-scale n --sprite-atlas-mode card|impostor|scenery --sprite-reconstruction auto|geometry|sprite --impostor-blend nearest|depth-reprojected',
+        'sprite options: --sprite-atlas on|off|atlas.json --sprite-at x,y,z --sprite-scale n --sprite-atlas-mode card|impostor|scenery --sprite-reconstruction auto|geometry|sprite --impostor-blend nearest|depth-reprojected --protected-lod guard.json|off',
         '                --sprite-cels edits.json|off --sprite-playback once|loop',
         'shaped fog options: --shaped-atmosphere on|off|file.json --volume-cutouts on|off|file.json',
         'atmosphere bands: --atmosphere-depth-bands on|off|file.json',
@@ -3614,6 +3616,21 @@ const CMD = {
     console.log('wrote', directory);
     if (opt['fail-on-flags'] && report.cases.some(result => result.flags.length)) process.exitCode = 2;
   },
+  'protected-lod-review'() {
+    if (pos.length !== 1 || typeof opt.plan !== 'string')
+      die('Use protected-lod-review <scene> --plan file.json [--out directory] [--fail-on-hold]');
+    const directory = outputFile('protected-lod-review');
+    const plan = JSON.parse(fs.readFileSync(path.resolve(opt.plan),'utf8'));
+    const report = require('./protected-lod-review.js').run(() => buildPreview(),plan,{ directory, kit:lib(), render:view() });
+    for (const row of report.firstFailures)
+      console.log(row.pose, row.distance, row.feature, row.request.from, '→', row.request.to, row.status);
+    for (const row of report.untested)
+      console.log(row.feature, row.transition, 'untested');
+    for (const row of report.unresolved)
+      console.log(row.pose, row.distance, row.feature, row.status);
+    console.log(report.guard.holds.length, 'holds, wrote', directory);
+    if (opt['fail-on-hold'] && (report.guard.holds.length || report.unresolved.length)) process.exitCode = 2;
+  },
   'render-suite'() {
     if (pos.length) die('Use render-suite [--scene gatehouse|signal-coil|night] [--profile file.json] [--out directory]');
     const directory = outputFile('render-suite');
@@ -5273,7 +5290,7 @@ async function run() {
     cmd === 'mesh-topology' && pos[0] === 'modifiers' && typeof opt.object === 'string' ? pos.slice(2, 3) :
     cmd === 'mesh-topology' && (pos[0] === 'select' && typeof opt.view === 'string' ||
       ['transform', 'repair', 'cut', 'boolean', 'retopology', 'face-region', 'edge-edit', 'bevel', 'shading'].includes(pos[0]) && typeof opt.object === 'string') ? pos.slice(1, 2) :
-    ['render', 'turn', 'sheet', 'clip', 'atlas', 'passes', 'surface-pixel', 'validate', 'splat-groups', 'splat-redistribute'].includes(cmd) ? pos.slice(0, 1) : [];
+    ['render', 'turn', 'sheet', 'clip', 'atlas', 'passes', 'surface-pixel', 'validate', 'splat-groups', 'splat-redistribute', 'protected-lod-review'].includes(cmd) ? pos.slice(0, 1) : [];
   for (const file of new Set(sceneFiles.filter(file => /\.json$/i.test(file)))) {
     if (!fs.existsSync(file)) continue;
     let source;

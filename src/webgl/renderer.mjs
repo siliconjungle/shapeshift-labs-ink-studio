@@ -1371,7 +1371,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       if (source.spriteReconstruction && !spriteLOD) throw new Error('Sprite reconstruction needs the Ink Studio KIT');
       const spritePlan = source.spriteReconstruction && spriteLOD.resolve(source, {
         eye:camera.eye,back,ortho:camera.ortho,focal:camera.projection[5]*height*.5,
-        setback:camera.setback,time:t,mode:frame.spriteReconstruction,impostorBlend:frame.impostorBlend
+        setback:camera.setback,time:t,mode:frame.spriteReconstruction,impostorBlend:frame.impostorBlend,protectedLOD:frame.protectedLOD
       });
       const spriteMask = spritePlan?.mask, spriteRows = spritePlan?.rows;
       if (spriteMask) {
@@ -1491,6 +1491,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         geometryCode:spriteMask && (i=>spriteMask.codes[i]),
         curveSubdivision:cutaway ? false : frame.curveSubdivision ?? look.curveSubdivision,
         strandLod:(frame.curveLod ?? look.curveLod) !== false && !cutaway && !cover && !reflectionCapture && !clip.slice(0,3).some(Boolean),
+        protectedLOD:frame.protectedLOD,strandLODFrame:!reflectionCapture&&plane===zero ? frame.strandLODFrame : undefined,
         strandForbidden:opticalMaterials ? i=>opticalRows[i*toolkit.KIT.optical.stride+3] : undefined,
         keep:i=>(!selection || selection.keep[i]) && !spriteLOD?.hidden(spriteMask?.codes[i]),
         visible:sampleCoverage && (flags=>sampleCoverage.visible(flags,withdrawal))
@@ -1795,7 +1796,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           finiteCurvePass.draw(curvePlan,filterBuffers.centerMatte,baseOwner,camera,{...curveOptions,filterMatte:true});
         if (filter) {
           const tapCurves = prepareFiniteCurves(toolkit.KIT,world,geometryData,camera,width*2,height*2,
-            {...curveSettings,restMarks:undefined,artScale:2});
+            {...curveSettings,restMarks:undefined,strandLODFrame:undefined,artScale:2});
           if (tapCurves.count) {
             const options={...curveOptions,artScale:2,
               proxy:depthProxy && depthMeshPass.prepare(surfaceFrame,width*2,height*2)};
@@ -2480,7 +2481,7 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
         const view=makeCamera(world,frame,width,height);
         const {eye,back}=cameraPose(view);
         const plan=spriteLOD.resolve(world,{eye,back,ortho:view.ortho,focal:view.projection[5]*height*.5,
-          setback:view.setback,time,mode:frame.spriteReconstruction,impostorBlend:frame.impostorBlend});
+          setback:view.setback,time,mode:frame.spriteReconstruction,impostorBlend:frame.impostorBlend,protectedLOD:frame.protectedLOD});
         if(plan?.mask){
           const {projection,view:m}=view;
           const axial=([x,y,z])=>-(m[2]*x+m[6]*y+m[10]*z+m[14]);

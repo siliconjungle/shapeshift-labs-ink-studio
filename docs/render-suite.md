@@ -121,3 +121,65 @@ original, native edit, and asset replacement. In `clearance.png`, teal
 marks the visible probe before and after the native edit. The output includes the atlas, both
 GLBs, the native patch and receipt, the asset replacement preview, and
 `report.json` with per-view measurements.
+
+## Guard named details during LOD switches
+
+Use the named-detail review alongside the aggregate comparisons. It takes
+a scene and a set of approved poses and distances, then renders three
+matched lanes at 1×. The native lane uses individual strands, geometry
+for relief, and the source parts for cards. The candidate lane uses
+normal LOD selection. The guarded lane repeats that selection with the
+review's holds applied.
+
+```sh
+node cli/ink-studio.js protected-lod-review examples/protected-lod/lockhouse.js \
+  --plan examples/protected-lod/lockhouse.review.json --raw --edges off \
+  --out lod-review
+```
+
+The Tide Lock fixture uses a deliberately coarse set of cards. At
+distance 9, a blended card starts to fill the boat opening, erase the
+brass H, and close the flag notch. The guarded render retains those three
+mesh parts. The reviewed roof cap can still switch to its card.
+
+A version 1 `ink-studio/protected-lod-review` plan defines the native
+`width` and `height`, named `features`, and time-ordered `poses`. Each
+feature identifies its stable `object` and `part` IDs, using `null` for
+an unparted object. The supported transitions are `card`, `strand` for
+coverage-preserving strand grouping, and `relief-normal` and
+`relief-painted` for geometric relief. A pose supplies scene `time` in
+seconds, an orbit camera with `target`, `yaw`, and `pitch`, and views
+in increasing `distance` order. Camera angles and optional `fov` use
+radians. Each view supplies `probes` keyed by feature ID.
+
+- An `opening` or `contour-break` needs at least one `ink` witness
+  on the rim or contour and one `clear` witness in the gap.
+- A `letter` needs at least one `ink` witness with an approved
+  `rgb` value. Add witnesses for separate strokes or the color
+  inside a letter's counter as appropriate.
+- Every witness names a zero-based art cell `at: [x, y]` with
+  `expect: "ink"` or `expect: "clear"`. An ink cell needs the visible
+  surface to belong to the named part and exceed half coverage. A clear
+  cell requires that part to be absent as the visible owner. Add an
+  expected RGB to a clear cell to check what shows through. Optional
+  `tolerance` is the maximum byte difference in any RGB channel.
+
+`report.json` records the first measured failure and the first blocked
+trial for each pose, feature, and transition. Each includes the exact
+distance, requested representation and blend where applicable, and
+failing witness. It also lists unresolved native or guarded witnesses
+separately. The PNGs show each sampled view. Use `--fail-on-hold` to
+return exit status 2 if the review produces a hold or unresolved witness.
+
+Load `guard.json` through the regular render option
+`--protected-lod guard.json`. In JavaScript, assign the parsed guard to
+`world.protectedLOD` or pass it as the headless render option or WebGL
+frame option `protectedLOD`. An explicit `false` or CLI `off` bypasses the
+guard. Node callers can run the review with
+`ink.reviewProtectedLOD(buildWorld, plan, { directory, render })`.
+
+A failed or untested transition holds the named part at its detailed
+representation across the run. This makes the hold independent of small
+camera or distance changes between approved samples. A passing transition
+uses its normal selection thresholds. Review new camera poses, distances,
+art resolutions, or source revisions when their appearance matters.

@@ -1,0 +1,73 @@
+{
+  "format": "ink-studio/protected-lod-review",
+  "version": 1,
+  "width": 176,
+  "height": 112,
+  "features": [
+    {"id":"boat-opening","object":"tide-lock","part":"portal","kind":"opening","transitions":["card"]},
+    {"id":"brass-h","object":"tide-lock","part":"tablet","kind":"letter","transitions":["card"]},
+    {"id":"flag-notch","object":"tide-lock","part":"fin","kind":"contour-break","transitions":["card"]},
+    {"id":"cap-step","object":"tide-lock","part":"cap","kind":"contour-break","transitions":["card"]}
+  ],
+  "poses": [
+    {
+      "id": "front",
+      "time": 0,
+      "camera": {"target":[0,1.36,0],"yaw":0,"pitch":0.04,"fov":0.57},
+      "views": [
+        {
+          "distance": 6,
+          "probes": {
+            "boat-opening": [{"at":[88,60],"expect":"clear"},{"at":[62,62],"expect":"ink"}],
+            "brass-h": [{"at":[89,30],"expect":"ink","rgb":[255,221,160]}],
+            "flag-notch": [{"at":[142,22],"expect":"clear"},{"at":[141,24],"expect":"ink"}],
+            "cap-step": [{"at":[93,15],"expect":"ink"},{"at":[78,14],"expect":"clear"}]
+          }
+        },
+        {
+          "distance": 9,
+          "probes": {
+            "boat-opening": [{"at":[88,60],"expect":"clear"},{"at":[62,62],"expect":"ink"}],
+            "brass-h": [{"at":[87,40],"expect":"ink","rgb":[255,221,160]}],
+            "flag-notch": [{"at":[120,34],"expect":"clear"},{"at":[118,32],"expect":"ink"}],
+            "cap-step": [{"at":[87,29],"expect":"ink"},{"at":[82,26],"expect":"clear"}]
+          }
+        },
+        {
+          "distance": 10.5,
+          "probes": {
+            "boat-opening": [{"at":[88,60],"expect":"clear"},{"at":[67,62],"expect":"ink"}],
+            "brass-h": [{"at":[87,42],"expect":"ink","rgb":[255,221,160]}],
+            "flag-notch": [{"at":[115,35],"expect":"clear"},{"at":[119,34],"expect":"ink"}],
+            "cap-step": [{"at":[85,33],"expect":"ink"},{"at":[82,29],"expect":"clear"}]
+          }
+        }
+      ]
+    },
+    {
+      "id": "raking",
+      "time": 0.6,
+      "camera": {"target":[0,1.36,0],"yaw":0.39269908169872414,"pitch":0.04,"fov":0.57},
+      "views": [
+        {
+          "distance": 9,
+          "probes": {
+            "boat-opening": [{"at":[88,60],"expect":"clear"},{"at":[62,62],"expect":"ink"}],
+            "brass-h": [{"at":[81,40],"expect":"ink","rgb":[255,221,160]}],
+            "flag-notch": [{"at":[117,33],"expect":"clear"},{"at":[115,31],"expect":"ink"}],
+            "cap-step": [{"at":[85,29],"expect":"ink"},{"at":[79,26],"expect":"clear"}]
+          }
+        },
+        {
+          "distance": 10.5,
+          "probes": {
+            "boat-opening": [{"at":[89,60],"expect":"clear"},{"at":[66,62],"expect":"ink"}],
+            "brass-h": [{"at":[83,42],"expect":"ink","rgb":[255,221,160]}],
+            "flag-notch": [{"at":[114,35],"expect":"clear"},{"at":[116,33],"expect":"ink"}],
+            "cap-step": [{"at":[89,32],"expect":"ink"},{"at":[80,30],"expect":"clear"}]
+          }
+        }
+      ]
+    }
+  ]
+}

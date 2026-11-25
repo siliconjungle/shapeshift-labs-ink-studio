@@ -6,6 +6,7 @@ KIT.pixelLighting = PixelLighting;
 KIT.material = MaterialControls;
 KIT.pbr = PbrMaterials;
 KIT.sceneMeshes = SceneMeshes;
+KIT.protectedLOD = ProtectedLOD;
 KIT.artStability = ArtStability;
 KIT.detailBudgets = DetailBudgets;
 KIT.passQuality = PassQuality;

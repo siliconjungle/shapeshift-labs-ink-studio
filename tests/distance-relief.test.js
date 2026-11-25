@@ -50,6 +50,19 @@ test('headless selects the active tier on the native grid, preserves identity an
   assert.equal(coarser.report.tier,'normal');
 });
 
+test('a relief hold keeps geometry for the affected tier and part',()=>{
+  const {world}=fixture(kit);
+  world.protectedLOD={format:'ink-studio/protected-lod-guard',version:1,holds:[
+    {object:'marker',part:'carving',transition:'relief-painted',features:['carved-notch']}
+  ]};
+  assert.deepEqual(distances.map(dist=>render(world,{dist}).report.tier),['geometry','normal','geometry']);
+  const {report}=render(world,{dist:30,reliefLOD:'painted'});
+  assert.equal(report.requestedTier,'painted');
+  assert.equal(report.reason,'protected-feature');
+  assert.deepEqual(report.features,['carved-notch']);
+  assert.equal(render(world,{dist:30,protectedLOD:false}).report.tier,'painted');
+});
+
 test('a grazing view keeps geometry for the projected profile and culls a relief outside the viewport',()=>{
   const {plan,world}=fixture(kit), preview=kit.KIT.procedural.lod.preview;
   const side=plan.inspect(preview.camera(world,{...view,dist:6,yaw:1.56}));

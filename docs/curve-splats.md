@@ -782,6 +782,10 @@ card for the comparison. Read group and span counts from
 node cli/ink-studio.js strand-lod-review --hardware --motion --out out/strand-lod
 ```
 
+Use the [named-detail LOD review](render-suite.md#guard-named-details-during-lod-switches)
+to keep a specific gap or contour on individual strands or native geometry
+when a group or card fails its approved 1× views.
+
 ### Simplify by chord error or pitch
 
 ```json
