@@ -107,8 +107,32 @@ values with HTML output to set the initial selection.
 In Node, call `ink.pickTilesetRectangle(scene, "masonry", { x:48, y:0, width:48, height:16 })`.
 A selection addresses the source image's texels.
 
-Run `node examples/tileset-pick/demo.cjs tileset-pick-demo` for a
-painted gatehouse, a blank tileset, and both ways of selecting the sign crop.
+### Pick a brush of neighboring tiles
+
+Give the picker a tile width and height in texels. This grid starts at the
+top left of the source sheet. The picker selects whole tiles and leaves any
+partial tiles along the right and bottom edges outside the brush.
+
+```sh
+ink-studio tileset pick --scene gatehouse-tiles.json --id masonry \
+  --tile-width 16 --tile-height 8 --x 48 --y 0 --width 48 --height 16 --out sign-brush.json
+ink-studio tileset brush-preview sign-brush.json --scene gatehouse-tiles.json --out sign-1x.png
+```
+
+The numeric bounds use texels and must align to tile boundaries.
+Use `brush-preview` to check the selected block as a 1× PNG.
+The `ink-studio/tileset-brush` record stores the tileset ID, source
+rectangle, tile size, and row and column counts. Tile `[column,row]`
+uses source origin `[x + column * tileWidth, y + row * tileHeight]` and
+the same offset from the brush origin without `x` and `y`. This keeps
+the whole arrangement in one record, including transparent cells.
+
+In Node, call `ink.pickTilesetBlock(scene, "masonry", { x:48, y:0, width:48, height:16 }, { width:16, height:8 })`.
+Use `ink.rasterizeTilesetBrush(scene, brush)` to resolve the saved brush
+to its exact RGBA bytes.
+
+Run `node examples/tileset-pick/demo.cjs tileset-pick-demo` for a painted
+gatehouse, a blank tileset, and the sign selected as a 3×2 tile brush.
 
 ## Edit an authored layout
 

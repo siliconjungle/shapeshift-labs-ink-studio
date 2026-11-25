@@ -297,6 +297,8 @@ module.exports = {
   previewTimeline: require('./cli/animation-timeline.js').previewTimeline,
   readTilesetImage: require('./cli/tileset-image.js').readTilesetImage,
   pickTilesetRectangle: require('./cli/tileset-image.js').pickTilesetRectangle,
+  pickTilesetBlock: require('./cli/tileset-image.js').pickTilesetBlock,
+  rasterizeTilesetBrush: require('./cli/tileset-image.js').rasterizeTilesetBrush,
   createBlankTileset(options) {
     return module.exports.load().KIT.authoring.tilesets.blank(options);
   },

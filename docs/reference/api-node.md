@@ -94,6 +94,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.packProject` | function | `(scene, { out, root, revision, assetPack, paint, attachments } = {})` | [source](../../cli/project-bundle.js) |
 | `node.paletteUsage` | function | `(world,{select,rarePixels=3,rareShare=.001,...view}={})` | [guide](../palette-recipes.md#measure-palette-usage-at-export-size), [source](../../cli/palette-usage.js) |
 | `node.pickSurface` | function | `(passes,x,y)` | [guide](../art-passes.md#shared-opaque-surfaces), [guide](../textured-surfaces.md#inspecting-a-mesh), [guide](../art-passes.md), [source](../../src/art-passes.js) |
+| `node.pickTilesetBlock` | function | `(scene, id, rectangle, tileSize, toolkit = require('..').load())` | [guide](../mesh-uv.md#pick-a-brush-of-neighboring-tiles), [source](../../cli/tileset-image.js) |
 | `node.pickTilesetRectangle` | function | `(scene, id, rectangle, toolkit = require('..').load())` | [guide](../mesh-uv.md#pick-an-exact-texel-rectangle), [source](../../cli/tileset-image.js) |
 | `node.pixelCommandSchema` | function | `()` | [source](../../index.js) |
 | `node.pixelDocumentFromAseprite` | function | `(source, options)` | [source](../../index.js) |
@@ -106,6 +107,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.preflightStoryDocument` | function | `(document, {story} = {})` | [source](../../cli/story-document.js) |
 | `node.prepareModelingBenchmark` | function | `(...args)` | [source](../../index.js) |
 | `node.previewTimeline` | function | `(world, { timeline = world.animationTimeline, width, height, frames, before = false, maps = ['silhouette'], view = {}, yaw, pivot } = {})` | [guide](../animation-timeline.md#library), [guide](../animation-timeline.md), [source](../../cli/animation-timeline.js) |
+| `node.rasterizeTilesetBrush` | function | `(scene, brush, toolkit = require('..').load())` | [guide](../mesh-uv.md#pick-a-brush-of-neighboring-tiles), [source](../../cli/tileset-image.js) |
 | `node.readAsset` | function | `(file, options = {})` | [guide](../headless-authoring.md#glb-cutouts-and-uv-surface-stamps), [guide](../headless-authoring.md#textured-sdf-reconstruction), [source](../../index.js) |
 | `node.readAssetRevisionPart` | function | `(file, instance, placement, { onFile, decodeImage } = {})` | [source](../../cli/gltf-asset.js) |
 | `node.readAudiovisualTake` | function | `(file,{kit=require('../index.js').load(),...options}={})` | [guide](../audiovisual-takes.md#library), [source](../../cli/audiovisual-take.js) |
