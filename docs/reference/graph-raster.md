@@ -54,7 +54,7 @@ Origin: toolkit.
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"channel":{"type":"number\|string","default":0}} |
 | Output | `value` | `raster` | — | {"layout":"Interleaved samples on a positive integer grid","channels":[1,4],"finite":true} |
 
-Guides: [guide](../curve-raster-map.md#coordinates), [guide](../headless-authoring.md#standalone-raster-composition)
+Guides: [guide](../curve-raster-map.md#coordinates), [guide](../headless-authoring.md#standalone-raster-composition), [guide](../material-graph-ports.md)
 
 Get the runnable example with `ink-studio graph describe raster.channel --example > example.json`.
 Run it with `ink-studio graph run example.json`.

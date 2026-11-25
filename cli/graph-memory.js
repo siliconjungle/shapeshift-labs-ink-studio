@@ -79,6 +79,18 @@ function estimateGraphMemory({ graph, groups, assets, overrides, kit, hostOperat
       case 'data.typed': return { outputs: { value: args.value } };
       case 'data.record': return { outputs: { value: args } };
       case 'data.get': return { outputs: { value: args.record?.[args.key] } };
+      case 'material.pack': case 'material.replace': {
+        if (!args.maps || op === 'material.replace' && !source?.channels) return;
+        const channels = { ...source?.channels };
+        for (const [name, map] of Object.entries(args.maps))
+          channels[name] = { raster: map, metadata: args.metadata?.[name] ?? channels[name]?.metadata ?? {} };
+        return { outputs: { value: { channels } } };
+      }
+      case 'material.channel': {
+        if (!source?.channels || !own(source.channels, args.name)) return;
+        const { raster, metadata } = source.channels[args.name];
+        return { outputs: { value: raster, metadata } };
+      }
       case 'data.collect':
         return { outputs: { value: Array.isArray(args.keys) ? args.keys.map(key => args.source?.[key]) : undefined } };
       case 'pngAsset': case 'rasterAsset': case 'indexedPngAsset': {

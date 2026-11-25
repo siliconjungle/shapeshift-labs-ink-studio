@@ -267,6 +267,7 @@
     ...P.drawing2d.operations,
     ...P.motionDeformation.operations,
     ...P.rasterColor.operations,
+    ...P.materialChannels.operations,
     ...P.pixelEffects.operations,
     ...P.signalRecovery.operations,
     ...P.rasterWarp.operations,

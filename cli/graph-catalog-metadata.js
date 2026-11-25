@@ -17,6 +17,7 @@ const types = {
   linearRaster: { channels: [3, 4], finite: true, alpha: [0, 1] },
   cameraGrid: { layout: 'Art-grid dimensions, view matrix, vertical scale, projection and clipping planes' },
   raster: { layout: 'Interleaved samples on a positive integer grid', channels: [1, 4], finite: true },
+  materialChannels: { layout: 'Versioned named raster channels with independent grids and metadata', minItems: 1, maxItems: 64 },
   image: { layout: 'Width, height and image data' },
   palette: { minItems: 1, maxItems: 256, entries: 'RGB integer, #rrggbb or normalized RGB triple' },
   path: { minItems: 2, dimensions: [2, 3], finite: true },

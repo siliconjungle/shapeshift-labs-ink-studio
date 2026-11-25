@@ -151,6 +151,7 @@
     record: value => record(value) && [Object.prototype,null].includes(Object.getPrototypeOf(value)),
     geometry: value => record(value) && ((value.points && value.faces) || (value.pos && value.tri) || value.positions || mesh(value)),
     field: value => typeof value === 'function' || typeof value?.sample === 'function',
+    materialChannels: value => K.procedural.materialChannels.valid(value),
     fieldSpriteMaterial: value => value?.format === 'ink-studio/field-sprite-material' && typeof value.sample === 'function',
     fieldSpriteSurface: value => value?.format === 'ink-studio/field-sprite-surface' &&
       raster(value.value) && raster(value.position) && raster(value.normal) &&
@@ -191,6 +192,7 @@
     'srgb-linear': ['linear sRGB(A)', 'vec3', 'array<number>'],
     displayRaster: ['display RGB(A) raster in byte levels', 'raster', 'image'],
     linearRaster: ['linear RGB(A) raster with unit alpha', 'raster', 'image'],
+    materialChannels: ['material channel packet'],
     cameraGrid: ['camera grid with view and viewport', 'record']
   };
   const description = type => Object.hasOwn(semantics, type) ? semantics[type][0] : type;

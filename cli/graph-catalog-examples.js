@@ -211,7 +211,16 @@ function worldPortsExample(port) {
   const options={pulse:{kind:'arrival'},scalar:{query:'amount',range:[0,4]},record:{query:'account'}};
   return {nodes:{frame:sample},inputs:{source:link('frame'),options:options[port]}};
 }
+const materialSource = { op: 'material.pack', inputs: {
+  maps: { baseColor: rgba, roughness: mask, 'mask.wear': mask },
+  metadata: { baseColor: { colorSpace: 'srgb', texCoord: 0 }, 'mask.wear': { texCoord: 1 } }
+} };
 const specifications = {
+  'material.pack': { inputs: materialSource.inputs },
+  'material.channel': { nodes: { material: materialSource }, inputs: { source: link('material'), name: 'mask.wear' } },
+  'material.replace': { nodes: { material: materialSource }, inputs: {
+    source: link('material'), maps: { roughness: slots }
+  } },
   'coord.pixelToUV': { inputs: { point: [.5, .5], width: 64, height: 48 } },
   'coord.uvToPixel': { inputs: { point: [.5, .5], width: 64, height: 48 } },
   'coord.renderGrid': { nodes: { field: { op: 'sdf.shape' },

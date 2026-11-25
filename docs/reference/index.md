@@ -61,6 +61,7 @@ The keyword search includes the curated features, CLI usages, public API members
 - [input](graph-input.md)
 - [kernel](graph-kernel.md)
 - [layout](graph-layout.md)
+- [material](graph-material.md)
 - [model](graph-model.md)
 - [motion](graph-motion.md)
 - [music](graph-music.md)

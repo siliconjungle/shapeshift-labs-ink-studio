@@ -192,6 +192,7 @@ All checked-in guides, indexed by title and section headings.
 - [Match-cut finder](../match-cut.md)
 - [Consistent material controls](../material-controls.md)
 - [Two-way material conversion](../material-conversion.md)
+- [Multi-channel material ports](../material-graph-ports.md)
 - [Seasonal and wear histories](../material-histories.md)
 - [Material-point passes and impacts](../material-point-impacts.md)
 - [Portable material response recipes](../material-response.md)

@@ -107,6 +107,49 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.procedural.materialBands` | function | `(spec)` | [source](../../src/kit/p16-material-bands.js) |
 
+## KIT.procedural.materialChannels
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.materialChannels` | namespace |  |  |
+| `KIT.procedural.materialChannels.channel` | function | `(source, name)` | [guide](../material-graph-ports.md#read-and-edit-maps), [source](../../src/kit/paq-material-channels.js) |
+| `KIT.procedural.materialChannels.format` | value | `string = "ink-studio/material-channels"` |  |
+| `KIT.procedural.materialChannels.operations` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.channel"]` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.channel"].description` | value | `string = "Read a named raster and its metadata from a material port."` |  |
+| `KIT.procedural.materialChannels.operations["material.channel"].inputs` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.channel"].inputs.name` | value | `string = "string"` |  |
+| `KIT.procedural.materialChannels.operations["material.channel"].inputs.source` | value | `string = "materialChannels"` |  |
+| `KIT.procedural.materialChannels.operations["material.channel"].outputs` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.channel"].outputs.metadata` | value | `string = "record"` |  |
+| `KIT.procedural.materialChannels.operations["material.channel"].outputs.value` | value | `string = "raster"` |  |
+| `KIT.procedural.materialChannels.operations["material.channel"].run` | function | `({ source, name })` | [source](../../src/kit/paq-material-channels.js) |
+| `KIT.procedural.materialChannels.operations["material.pack"]` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.pack"].description` | value | `string = "Bundle named material rasters into one typed port, with independent map sizes and metadata."` |  |
+| `KIT.procedural.materialChannels.operations["material.pack"].inputs` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.pack"].inputs.maps` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.pack"].inputs.maps.description` | value | `string = "Channel names mapped to raster values."` |  |
+| `KIT.procedural.materialChannels.operations["material.pack"].inputs.maps.type` | value | `string = "record"` |  |
+| `KIT.procedural.materialChannels.operations["material.pack"].inputs.metadata` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.pack"].inputs.metadata.default` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.pack"].inputs.metadata.description` | value | `string = "Optional JSON metadata keyed by supplied channel."` |  |
+| `KIT.procedural.materialChannels.operations["material.pack"].inputs.metadata.type` | value | `string = "record"` |  |
+| `KIT.procedural.materialChannels.operations["material.pack"].outputs` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.pack"].outputs.value` | value | `string = "materialChannels"` |  |
+| `KIT.procedural.materialChannels.operations["material.pack"].run` | function | `({ maps, metadata })` | [source](../../src/kit/paq-material-channels.js) |
+| `KIT.procedural.materialChannels.operations["material.replace"]` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.replace"].description` | value | `string = "Replace or add only the supplied material maps. Pass all other channels through."` |  |
+| `KIT.procedural.materialChannels.operations["material.replace"].inputs` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.replace"].inputs.maps` | alias | `Alias of KIT.procedural.materialChannels.operations["material.pack"].inputs.maps` |  |
+| `KIT.procedural.materialChannels.operations["material.replace"].inputs.metadata` | alias | `Alias of KIT.procedural.materialChannels.operations["material.pack"].inputs.metadata` |  |
+| `KIT.procedural.materialChannels.operations["material.replace"].inputs.source` | value | `string = "materialChannels"` |  |
+| `KIT.procedural.materialChannels.operations["material.replace"].outputs` | alias | `Alias of KIT.procedural.materialChannels.operations["material.pack"].outputs` |  |
+| `KIT.procedural.materialChannels.operations["material.replace"].run` | function | `({ source, maps, metadata })` | [source](../../src/kit/paq-material-channels.js) |
+| `KIT.procedural.materialChannels.pack` | function | `(maps, metadata = empty)` | [guide](../material-graph-ports.md#read-and-edit-maps), [source](../../src/kit/paq-material-channels.js) |
+| `KIT.procedural.materialChannels.replace` | function | `(source, maps, metadata = empty)` | [guide](../material-graph-ports.md#read-and-edit-maps), [source](../../src/kit/paq-material-channels.js) |
+| `KIT.procedural.materialChannels.valid` | function | `(value)` | [source](../../src/kit/paq-material-channels.js) |
+| `KIT.procedural.materialChannels.version` | value | `number = 1` |  |
+
 ## KIT.procedural.materials
 
 | Member | Kind | Signature or value | Guides and source |

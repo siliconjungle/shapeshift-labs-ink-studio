@@ -83,6 +83,12 @@ function describe(value, depth = 0) {
   if (value === undefined || typeof value === 'bigint' || typeof value === 'symbol' ||
       typeof value === 'number' && !Number.isFinite(value)) return {kind:'runtime',type:typeof value};
   if (!value || typeof value !== 'object') return value;
+  if (value.format === 'ink-studio/material-channels' && value.version === 1 && record(value.channels) &&
+      Object.values(value.channels).every(entry => record(entry?.raster) && record(entry.metadata))) {
+    return { kind: 'materialChannels', version: value.version, channels: Object.fromEntries(
+      Object.entries(value.channels).map(([name, { raster, metadata }]) =>
+        [name, { width: raster.width, height: raster.height, samples: raster.data?.length, metadata }])) };
+  }
   if (Number.isSafeInteger(value.width) && Number.isSafeInteger(value.height) && value.data)
     return {kind:'image',width:value.width,height:value.height,samples:value.data.length,
       ...(typeof value.colorSpace==='string' && {colorSpace:value.colorSpace})};
