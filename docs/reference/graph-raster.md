@@ -17,7 +17,7 @@ Origin: toolkit.
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
 | Output | `value` | `raster` | — | {"layout":"Interleaved samples on a positive integer grid","channels":[1,4],"finite":true} |
 
-Guides: [guide](../headless-authoring.md#layers-depth-and-height)
+Guides: [guide](../headless-authoring.md#layers-depth-and-height), [guide](../material-image-blend.md)
 
 Get the runnable example with `ink-studio graph describe raster.blend --example > example.json`.
 Run it with `ink-studio graph run example.json`.

@@ -229,6 +229,10 @@ const specifications = {
   'material.base': { inputs: { settings: { size: { width: 8, height: 6 }, seed: 4 } } },
   'material.imageOutput': { nodes: { data: declareData },
     inputs: { source: link('data'), settings: { size: { width: 8, height: 6 } } } },
+  'image.blend': { nodes: { background: declareData, foreground: { op: 'image.uniform', inputs: {
+    value: .35, width: mask.width, height: mask.height, descriptor: { intent: 'data' } } } },
+    inputs: { background: link('background'), foreground: link('foreground'), mode: 'screen', opacity: .65,
+      crop: { left: .25, right: .75 } } },
   'image.toHeight': { nodes: { color: declareColor }, inputs: { source: link('color'), scale: 2 } },
   'image.resize': { nodes: { data: declareData }, inputs: { source: link('data'), width: 8, height: 6 } },
   'image.toDisplay': { nodes: { color: declareColor }, inputs: { source: link('color') } },

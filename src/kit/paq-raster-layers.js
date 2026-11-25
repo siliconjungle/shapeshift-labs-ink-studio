@@ -3,23 +3,11 @@
   const R = P.raster;
   const {dimensions, view, image, pair, byte, unit, aligned, readColor, readAlpha, coverage, remap} = P.rasterSupport;
   const white = [1, 1, 1], maxLayers = 512, maxVisits = 64e6;
-  const multiply = (a, b) => a * b;
-  const screen = (a, b) => a + b - a * b;
-  const overlay = (a, b) => a < .5 ? 2 * a * b : 1 - 2 * (1 - a) * (1 - b);
+  const { copy, multiply, screen, overlay, hardLight, softLight, add, subtract, min, max,
+    difference, exclusion } = RasterBlendModes;
   const blends = {
-    normal: (_, b) => b,
-    multiply,
-    screen,
-    overlay,
-    hardLight: (a, b) => overlay(b, a),
-    softLight: (a, b) => b <= .5 ? a - (1 - 2 * b) * a * (1 - a) :
-      a + (2 * b - 1) * ((a <= .25 ? ((16 * a - 12) * a + 4) * a : Math.sqrt(a)) - a),
-    add: (a, b) => Math.min(1, a + b),
-    subtract: (a, b) => Math.max(0, a - b),
-    darken: Math.min,
-    lighten: Math.max,
-    difference: (a, b) => Math.abs(a - b),
-    exclusion: (a, b) => a + b - 2 * a * b
+    normal: copy, multiply, screen, overlay, hardLight, softLight, darken: min, lighten: max, difference, exclusion,
+    add: (a, b) => Math.min(1, add(a, b)), subtract: (a, b) => Math.max(0, subtract(a, b))
   };
 
   function mapValue(value, width, height) {
