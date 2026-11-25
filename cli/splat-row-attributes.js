@@ -41,23 +41,22 @@ function valuesAt(world,i,overrides) {
 const same = (a,b) => Array.isArray(a) ? Array.isArray(b) && a.length===b.length &&
   a.every((n,j)=>n===b[j]) : a===b;
 
-function apply(world,source,edits) {
+function transport(world, source, edits) {
   const data=world.data.slice(), rest=Provenance.restData(source);
   let renderMetadata, surfaceData, pix, fine, frames;
   const normalsCopied=new Set();
   const layout=Footprints.validate(source);
-  const { M,Q }=kit();
+  const { M }=kit();
   const read = (array,at)=>Array.from(array.subarray(at,at+3));
   const unit = vector=>{
     const len=Math.hypot(...vector);
     return len ? vector.map(n=>n/len) : vector;
   };
-  for (const [i,{opacity,position,scale,orientation}] of edits) {
+  for (const [i,{opacity,position,matrix}] of edits) {
     const q=i*16, n=i*3, s=i*SurfaceLook.STRIDE, p=i*8, f=i*12;
     if (position) data.set(position,q);
     if (opacity!==undefined) data[q+3]=opacity===1 ? Math.max(1,source.data[q+3]) : opacity;
-    if (!scale && !orientation) continue;
-    const matrix=Q.toMatrix(orientation??identity).map((v,j)=>v*(scale??unitScale)[j%3]);
+    if (!matrix) continue;
     const normal=M.tr(M.inv(matrix));
     const covariance=Frames.covariance(source.data,q,matrix,M);
     for (const [offset,value] of [[4,covariance[0]],[5,covariance[1]],[6,covariance[2]],
@@ -99,4 +98,13 @@ function apply(world,source,edits) {
       layout.styles,Uint16Array.from({length:world.count},(_,i)=>layout.indices[i]??0),frames)}) };
 }
 
-module.exports={keys,prepare,valuesAt,transformable,same,apply};
+function apply(world,source,edits) {
+  const { Q }=kit();
+  const transforms = Array.from(edits, ([row,{opacity,position,scale,orientation}]) => [
+    row,{opacity,position,matrix:scale || orientation ?
+      Q.toMatrix(orientation??identity).map((v,j)=>v*(scale??unitScale)[j%3]) : undefined}
+  ]);
+  return transport(world,source,transforms);
+}
+
+module.exports={keys,prepare,valuesAt,transformable,same,apply,transport};

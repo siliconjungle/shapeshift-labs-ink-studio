@@ -2,6 +2,7 @@ const { createHash } = require('node:crypto');
 const RowAssets = require('./render-row-assets.js');
 const RowAttributes = require('./splat-row-attributes.js');
 const Topology = require('./splat-topology.js');
+const Groups = require('./splat-group-deformations.js');
 const Curve = require('../src/curve-splat.js');
 const Optical = require('../src/optical-materials.js');
 const Provenance = require('../src/splat-provenance.js');
@@ -11,6 +12,8 @@ const SurfaceLook = require('../src/surface-look.js');
 const source = Symbol('splat fit source');
 const footprintRows = Symbol('edited footprint rows');
 const rowAttributes = Symbol('edited splat attributes');
+const groupTransforms = Symbol('splat group transforms');
+const carriedGroups = Symbol('materialized splat groups');
 const sourceTopology = Symbol('source splat topology');
 const bakedFit = Symbol('baked splat fit');
 const baseWorld = world => world[source] ?? world;
@@ -241,6 +244,15 @@ function prepare(world, asset) {
       }
     }
   }
+  if (asset.groups!==undefined) {
+    if (!stable) throw new TypeError('Splat groups need a stable splat fit');
+    scales.groups=Groups.prepare(world,asset.groups,{target,attributes:scales.rowAttributes,
+      retired:topology?.retired,eligible:topologyEditable});
+    if (scales.groups.affected.size) {
+      scales.attributeRows ??= new Uint8Array(world.count);
+      for (const row of scales.groups.affected.keys()) editedRows[row]=scales.attributeRows[row]=1;
+    }
+  }
   if (editedRows.some(Boolean)) {
     scales.editedRows=editedRows;
     scales.revision=createHash('sha256').update(JSON.stringify(asset)).digest('hex');
@@ -248,6 +260,26 @@ function prepare(world, asset) {
   cache.set(base,scales);
   return scales;
 }
+
+function planSplatGroups(world, {groups, target, base=world.look?.splatFit} = {}) {
+  const prior=base===false ? undefined : base;
+  if (prior && (prior.version!==2 || prior.format!==format))
+    throw new TypeError('Splat groups can extend a version 2 splat fit');
+  const scope=Targets.prepare(target ?? prior?.target);
+  if (prior && (scope.object!==prior.target.object || scope.part!==prior.target.part))
+    throw new RangeError('Splat groups must keep the base fit target');
+  if (!Array.isArray(groups)) throw new TypeError('Provide the ordered splat group list');
+  const asset={ ...prior,format,version:2,scene:sceneId(world),target:scope,edits:prior?.edits??[],
+    groups:structuredClone(groups) };
+  // Check scene identity before copying a base fit into the new asset.
+  if (prior?.scene!==undefined && prior.scene!==asset.scene)
+    throw new RangeError('Splat fit belongs to a different scene');
+  const fit=prepare(world,asset);
+  return { asset, report:{format:'ink-studio/splat-group-report',version:1,scene:asset.scene,target:scope,
+    changedRows:fit.groups.affected.size,directionalRows:fit.groups.directionalRows??0,groups:fit.groups.report,
+    revision:fit.revision??null} };
+}
+
 
 const sceneId = world => world.spec?.id ?? world.id;
 const rgb24 = value => Number.isSafeInteger(value) && value>=0 && value<=0xffffff;
@@ -304,9 +336,12 @@ function materialProfiles(world) {
 
 function renderWorld(world,fit,{footprints=true,applyAttributes=true} = {}) {
   if (!fit) return world;
+  const carried=world[carriedGroups];
+  if (carried?.fit===fit && carried.footprints===footprints && applyAttributes) return world;
+  world=carried?.input??world;
   const { albedo,renderMetadata,surfaceData,surfaces,roughness } = fit;
   const hasFootprints=footprints && Object.hasOwn(fit,'footprints');
-  if (!albedo && !renderMetadata && !surfaceData && !roughness && !hasFootprints && !fit.rowAttributes && !fit.topology) return world;
+  if (!albedo && !renderMetadata && !surfaceData && !roughness && !hasFootprints && !fit.rowAttributes && !fit.topology && !fit.groups?.affected.size) return world;
   const base=baseWorld(world);
   const rendered={ ...world,...fit.topology?.patch,[source]:base,
     ...(fit.topology && {[sourceTopology]:fit.topology}),
@@ -316,11 +351,21 @@ function renderWorld(world,fit,{footprints=true,applyAttributes=true} = {}) {
     ...(surfaceData && {surfaceData}),
     ...(surfaces && {surfaces}),
     ...(roughness && {splatRoughness:roughness}),
-    ...(fit.rowAttributes && {[rowAttributes]:fit.rowAttributes}) };
-  if (!fit.rowAttributes || !applyAttributes) return rendered;
-  const attributesSource={...sourceWorld(world,fit),...(surfaceData&&{surfaceData}),
-    ...(hasFootprints&&{splatFootprints:fit.footprints})};
-  return RowAttributes.apply(rendered,attributesSource,fit.rowAttributes);
+    ...(fit.rowAttributes && {[rowAttributes]:fit.rowAttributes}),
+    ...(fit.groups?.affected.size && {[groupTransforms]:fit.groups.affected}) };
+  if (!applyAttributes) return rendered;
+  let result=rendered;
+  if (fit.rowAttributes) {
+    const attributesSource={...sourceWorld(world,fit),...(surfaceData&&{surfaceData}),
+      ...(hasFootprints&&{splatFootprints:fit.footprints})};
+    result=RowAttributes.apply(rendered,attributesSource,fit.rowAttributes);
+  }
+  if (fit.groups?.affected.size) {
+    result=RowAttributes.transport(result,result,fit.groups.affected);
+    if (fit.groups.harmonics) result.gaussianHarmonics=fit.groups.harmonics;
+    result[carriedGroups]={fit,footprints,input:world};
+  }
+  return result;
 }
 
 // Materialize a static derivative once before reducing or packing its rows.
@@ -347,7 +392,7 @@ function bake(world,asset=world.look?.splatFit) {
     }
   }
   const {rest, [source]:_, [sourceTopology]:_topology, [rowAttributes]:_attrs,
-    [footprintRows]:_shapes, ...result}=rendered;
+    [footprintRows]:_shapes, [groupTransforms]:_groups, [carriedGroups]:_carried, ...result}=rendered;
   result.data=data;
   const {splatFit,...look}=rendered.look??{};
   result.look=look;
@@ -404,4 +449,5 @@ function lifecycle(world,row) {
 }
 
 const editedAttributes = (world,row) => world[rowAttributes]?.get(row);
-module.exports={format,prepare,bake,editedSubjects,sourceRevision,topologyEditable,sourceWorld,lifecycle,editedAttributes,footprintAt,footprintFor,editedFootprint,eligible,paintable,sceneId,rgb24,unit,pigmentAt,validEmission,roughnessAt,materialProfiles,renderWorld,baseWorld};
+const deformationAt = (world,row) => world[groupTransforms]?.get(row);
+module.exports={format,prepare,bake,planSplatGroups,editedSubjects,sourceRevision,topologyEditable,sourceWorld,lifecycle,editedAttributes,deformationAt,footprintAt,footprintFor,editedFootprint,eligible,paintable,sceneId,rgb24,unit,pigmentAt,validEmission,roughnessAt,materialProfiles,renderWorld,baseWorld};

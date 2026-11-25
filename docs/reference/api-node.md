@@ -93,6 +93,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.pixelDocumentFromAsepriteTiles` | function | `(document, options)` | [source](../../index.js) |
 | `node.pixelDocumentFromLayerDeck` | function | `(source)` | [source](../../index.js) |
 | `node.pixelDocumentFromPNG` | function | `(source)` | [source](../../index.js) |
+| `node.planSplatGroups` | function | `(world, {groups, target, base=world.look?.splatFit} = {})` | [source](../../cli/splat-fit-asset.js) |
 | `node.planSubjectReframe` | function | `(frames, options)` | [guide](../subject-reframe.md), [source](../../cli/subject-reframe.js) |
 | `node.preflightStoryDocument` | function | `(document, {story} = {})` | [source](../../cli/story-document.js) |
 | `node.previewTimeline` | function | `(world, { timeline = world.animationTimeline, width, height, frames, before = false, maps = ['silhouette'], view = {}, yaw, pivot } = {})` | [guide](../animation-timeline.md#library), [guide](../animation-timeline.md), [source](../../cli/animation-timeline.js) |

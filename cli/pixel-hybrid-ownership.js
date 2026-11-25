@@ -28,6 +28,7 @@ function channelsFor(destination, operation, dedicatedDetail) {
     case 'splat-attributes': {
       if (destination.kind === 'splat-attributes' && dedicatedDetail) return ['detail'];
       if (operation?.topology !== undefined) return ['shape', 'pigment', 'coverage', 'detail'];
+      if (operation?.groups !== undefined) return ['shape', 'coverage'];
       const inputs = [operation, operation?.paint, operation?.attributes,
         ...(Array.isArray(operation?.splats) ? operation.splats : []), ...(Array.isArray(operation?.texels) ? operation.texels : [])];
       const active = keys => inputs.some(row => keys.some(key => row?.[key] !== undefined));

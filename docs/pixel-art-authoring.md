@@ -3213,7 +3213,7 @@ and declared destinations. The edit JSON has `revision`, `frame`, `id`, and
 | `shot-correction` | Guarded RGB `edits` and `operation` containing `at`, `anchor`, `fps`, and an inclusive `frames` range | Native shot-correction file for `render --shot-corrections` |
 | `surface-channel` | `operation.stamp` with a rest-UV brush and value or clear mode | Revised JSON diorama with a stamp appended to the chart |
 | `decal-layer` | `operation.type` of `move`, `mask`, `replace`, or `bake` | Revised JSON diorama with the [decal layer](surface-decals.md#edit-a-decal-layer) edited in place |
-| `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and paint, footprint, or transform controls, or an ordered `operation.topology` batch | Splat-fit asset for `render --splat-fit` |
+| `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and paint, footprint, or transform controls, an ordered `operation.topology` batch, or `operation.groups` | Splat-fit asset for `render --splat-fit` |
 | `scan-material` | Explicit `operation.texels` on a registered mesh material | Scan paint asset for `render --scan-paint` |
 | `mesh-topology` | `operation.patch`, [`operation.transform`](mesh-topology.md#transform-and-snap-a-component-selection), [`operation.repair`](mesh-topology.md#inspect-and-repair-local-mesh-health), [`operation.cut`](mesh-topology.md#cut-with-a-plane-or-knife-path), [`operation.faceRegion`](mesh-topology.md#extrude-inset-or-thicken-a-face-region), [`operation.edgeEdit`](mesh-topology.md#edit-edge-loops-and-fill-openings), [`operation.bevel`](mesh-topology.md#bevel-selected-edges), [`operation.shading`](mesh-topology.md#author-corner-normals-and-creases), or [`operation.modifiers`](mesh-topology.md#run-a-non-destructive-mesh-modifier-stack), with optional `operation.projection` | Revised scene mesh with element correspondence, binding review and bake validity in the receipt. [Mesh topology transactions](mesh-topology.md#edit-topology-in-a-scene-transaction) |
 | `sdf-shape` | `operation.brush`, `operation.updateBrush`, `operation.parameters`, a new `operation.modifier`, `operation.updateModifier` with `id` and `patch`, or `operation.protection` | Revised JSON diorama with edited geometry or feature volumes |
@@ -3570,6 +3570,83 @@ rows. Added and cloned rows report their creation edit, and clones
 report the source ID. Undo, redo, and replay use the existing pixel
 editor session. The saved fit renders through `--splat-fit` in the
 software renderer.
+
+### Deform a retained splat group
+
+A version 2 splat fit can retain an ordered list of groups on the same
+object and optional part as its individual edits. Use the stable IDs
+from the scene or from `pixel-art targets`. Each group has an ID,
+a pivot in scene units, explicit members, and a stack of modifiers.
+
+```json
+{
+  "target": { "object": "copper-ribbon" },
+  "groups": [
+    {
+      "id": "curl-the-tip",
+      "pivot": [0, 0, 0],
+      "members": ["ribbon-base", "ribbon-middle", "ribbon-tip"],
+      "mask": [["ribbon-base", 0], ["ribbon-middle", 0.5]],
+      "falloff": { "center": [0, 1, 0], "inner": 0.5, "outer": 2.5 },
+      "modifiers": [
+        { "type": "taper", "axis": [0, 1, 0], "length": 2, "amount": -0.3 },
+        { "type": "bend", "axis": [0, 1, 0], "side": [1, 0, 0], "length": 2, "angle": 55 }
+      ]
+    }
+  ]
+}
+```
+
+- **Bend** curls from the pivot along `axis` toward `side`, over
+  `length` scene units. Use degrees for `angle`. Negative angles bend
+  the other way. Beyond the active span the curve carries on tangentially.
+- **Taper** scales the cross section by `1 - amount` at the base and
+  `1 + amount` at the tip, with a linear change over `length`.
+- **Lattice** moves a patch with a trilinear cage. Give it pivot-relative
+  `bounds` with XYZ `min` and `max`, an XYZ `size` of 2–5 points per axis,
+  and `handles` containing zero-based XYZ `at` indices and XYZ `offset` values.
+  Omitted handles stay at rest. Outside the cage, offsets continue from
+  the closest point on its boundary.
+
+Unspecified mask weights are 1. A weight of 0 pins that member for the
+group. Optional radial falloff multiplies the mask. It stays at full
+strength inside `inner` and smoothly reaches zero at `outer`.
+The falloff center defaults to the pivot and is sampled in source rest
+space. Individual splat edits run first, followed by the authored group
+order. For each group, Ink evaluates its modifier stack and blends the
+result by the combined weight. A member can appear in multiple groups.
+
+```sh
+node cli/ink-studio.js splat-groups ribbon.ply --size 6 --plan groups.json \
+  --out ribbon-fit.json --report groups-report.json
+node cli/ink-studio.js render ribbon.ply --size 6 --splat-fit ribbon-fit.json \
+  --scan-appearance 1 --px 1 --px1 --w 160 --h 112 --out ribbon.png
+```
+
+Use the same import size and up axis when planning and rendering a scan.
+Pass `--base existing-fit.json` to keep the fit's individual changes and
+replace its group list. The report gives member, influenced, pinned,
+and changed row counts, as well as the bounds and minimum local
+deformation determinant for each group. Use the normal splat diagnostics
+command to review the resulting coverage, depth, and contributors. Target inspection reports the deformed center and
+Jacobian alongside the original per-row attribute controls.
+
+In a pixel editor session, send `operation: { groups: [...] }` to the
+existing `splat-attributes` destination. The operation replaces the list
+and supports preview, undo, and replay. Use an empty list to clear all
+groups. Update a group before retiring one of its members. The fit
+supports up to 32 groups, eight modifiers per group, and 32,768
+member entries across the stack. It operates on static source rows, including live Gaussian imports and Ink
+splats with authored footprints. Animated rows, unavailable IDs,
+and locally folded or collapsed deformations are rejected. Fold checks
+sample splat centers.
+
+The deformation carries each splat's covariance, footprint axes,
+and normals. For live scans it rotates directional coefficients with
+the local turn, retaining the base color and appearance in the ordinary
+Gaussian data. The Node API `planSplatGroups(world, { target, groups, base })`
+returns the same fit and report. Pass the fit to `bakeSplatFit` before
+using it as a static world in another renderer or reducing it for LOD.
 
 ### Diagnose an edited splat region
 

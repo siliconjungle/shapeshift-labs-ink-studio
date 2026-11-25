@@ -320,6 +320,36 @@ export function shBasis(direction, degree) {
   return basis;
 }
 
+// Five Gauss–Legendre latitudes and nine equally spaced longitudes
+// integrate products of the real basis through degree four.
+const harmonicSamples = new Map();
+export function gaussianHarmonicRotation(axes, degree) {
+  const terms = (degree+1)**2 - 1;
+  if (!terms || axes.every((axis,i)=>axis.every((v,j)=>Math.abs(v-(i===j ? 1 : 0))<1e-9))) return null;
+  if (!harmonicSamples.has(degree)) {
+    const samples = [], step = 2*Math.PI/9;
+    for (const [z,weight] of [[-.906179845938664,.236926885056189],[-.538469310105683,.478628670499366],
+      [0,.568888888888889],[.538469310105683,.478628670499366],[.906179845938664,.236926885056189]]) {
+      const r = Math.sqrt(1-z*z);
+      for (let k=0;k<9;k++) {
+        const ray=[r*Math.cos(k*step),r*Math.sin(k*step),z];
+        samples.push({ray,projected:shBasis(ray,degree).map(value=>value*weight*step)});
+      }
+    }
+    harmonicSamples.set(degree,samples);
+  }
+  const result = Array.from({length:terms},()=>new Float64Array(terms));
+  for (const {ray,projected} of harmonicSamples.get(degree)) {
+    const local = axes.map(axis=>axis[0]*ray[0]+axis[1]*ray[1]+axis[2]*ray[2]);
+    const basis = shBasis(local,degree);
+    for (let l=1;l<=degree;l++) {
+      const first=l*l-1, end=(l+1)**2-1;
+      for (let i=first;i<end;i++) for (let j=first;j<end;j++) result[i][j]+=projected[i]*basis[j];
+    }
+  }
+  return result;
+}
+
 export const srgbDisplay = value => value <= .0031308 ? value * 12.92 : 1.055 * value ** (1/2.4) - .055;
 
 function colorChannel(dc, sh, index, channel, basis, linear) {
@@ -455,7 +485,7 @@ export function gaussianSplatWorld(cloud, {
     bg: [pal[0] >> 16, pal[0] >> 8 & 255, pal[0] & 255], pal,
     ...(objectId!==undefined && {renderMetadata:{objectIds:new Uint32Array(count).fill(1),objects:[null,objectId]}}),
     ...(colorMode !== 'baked' && { gaussianHarmonics: { count, degree, dc, sh, normals, up, colorMode },
-      gaussianAppearanceDelta }),
+      gaussianAppearanceDelta, gaussianHarmonicRotation }),
     palName: 'Imported Gaussian', dither: 0, fog: { c: 0, start: 1, max: 0 }, outline: { c: 0, edge: 0 },
     cam: { target: [0, 0, 0], yaw: 0, pitch: 0, dist: size * 2.15, sway: 0 }
   };

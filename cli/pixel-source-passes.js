@@ -19,6 +19,7 @@ function splatTargets(world, row=Targets.index(world).row) {
 function rowRevision(world,row) {
   const editedFootprint=SplatFit.editedFootprint(world,row);
   const attributes=SplatFit.editedAttributes(world,row);
+  const deformation=SplatFit.deformationAt(world,row);
   const {created,retired}=SplatFit.lifecycle(world,row);
   world = SplatFit.sourceWorld(world);
   const hash = createHash('sha256');
@@ -36,6 +37,7 @@ function rowRevision(world,row) {
   }
   if (created || retired) hash.update('splat-lifecycle').update(JSON.stringify([created,retired]));
   if (attributes) hash.update('splat-attributes').update(JSON.stringify(attributes));
+  if (deformation) hash.update('splat-group-deformation').update(JSON.stringify(deformation));
   if (editedFootprint!==undefined) {
     if (editedFootprint && !footprintDigests.has(editedFootprint))
       footprintDigests.set(editedFootprint,createHash('sha256').update(JSON.stringify(editedFootprint)).digest('hex'));

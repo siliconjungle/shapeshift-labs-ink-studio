@@ -199,10 +199,36 @@ function fitState(base,binding,bake,canKeepStable) {
       : {format:SplatFit.format,version:1,rows:base.count,signature:bake,edits};
     if (attributes.length) asset.attributes=attributes;
     if (topology) asset.topology=topology;
+    if (prior?.groups?.length) {
+      if (!stable) throw new TypeError('Editing a grouped splat fit requires stable IDs and its existing target');
+      asset.groups=prior.groups;
+    }
     SplatFit.prepare(base,asset);
     return asset;
   }
   return {prior,fitted,world,target,ids,scales,channels,save};
+}
+
+function editSplatGroups(edit,binding,base,onSplat) {
+  const operation=edit.operation;
+  if (!fields(operation,['groups'])) throw new TypeError('A splat group edit replaces the ordered group list');
+  const fitted=SplatFit.prepare(base,base.look?.splatFit), world=SplatFit.sourceWorld(base,fitted);
+  const {asset}=SplatFit.planSplatGroups(base,{target:sceneTarget(binding),groups:operation.groups});
+  if (onSplat) {
+    const ids=Provenance.identities(world), before=fitted?.groups?.affected ?? new Map();
+    const after=SplatFit.prepare(base,asset).groups.affected;
+    for (const index of new Set([...before.keys(),...after.keys()])) {
+      const position=RowAttributes.valuesAt(world,index,fitted?.rowAttributes?.get(index)).position;
+      const a=before.get(index), b=after.get(index);
+      if (RowAttributes.same(a?.position,b?.position) && RowAttributes.same(a?.matrix,b?.matrix)) continue;
+      const id=ids.idAt(index);
+      onSplat({requested:id,id,row:index,attributes:{
+        before:{position:a?.position??position,deformation:a?.matrix??null},
+        after:{position:b?.position??position,deformation:b?.matrix??null}
+      }});
+    }
+  }
+  return asset;
 }
 
 function editTopology(frame,edit,binding,base,bake,onSplat) {
@@ -547,6 +573,7 @@ function apply(frame, edit, route, context, readMarks) {
   if (ownership) context.onOwnership?.(ownership);
   if (isShot) return shot(frame,edit,binding,source.world,marks,context.onSplat);
   if (destination.kind === 'splat-attributes') {
+    if (edit.operation?.groups!==undefined) return editSplatGroups(edit,binding,source.world,context.onSplat);
     const apply=edit.operation?.topology!==undefined ? editTopology : splats;
     return apply(frame,edit,binding,source.world,source.revision,context.onSplat);
   }
@@ -683,9 +710,12 @@ function targets(route, context, limit, query) {
     const describe = (id,i) => {
       const attributes=editing && RowAttributes.valuesAt(sourceRows,i,fit?.rowAttributes?.get(i));
       const {created,retired}=SplatFit.lifecycle(fittedWorld,i);
+      const deformation=editing && SplatFit.deformationAt(fittedWorld,i);
       return { id,...(created && {provenance:created}),...(retired && {retired}),
         ...(editing && sourceRows.gaussianHarmonics?.degree>0 && (!sourceRows.gaussianHarmonics.available ||
-          sourceRows.gaussianHarmonics.available[i]) && {directionalAppearance:true}), at:attributes?.position ?? Array.from(rest.subarray(i*16,i*16+3)),
+          sourceRows.gaussianHarmonics.available[i]) && {directionalAppearance:true}),
+        at:deformation?.position ?? attributes?.position ?? Array.from(rest.subarray(i*16,i*16+3)),
+        ...(deformation && {deformation:deformation.matrix}),
       ...(editing && {attributes,transformable:!retired && SplatFit.topologyEditable(sourceRows,i),pigment:'#'+SplatFit.pigmentAt(sourceRows,i,fit).toString(16).padStart(6,'0'),
         paintable:!retired && SplatFit.paintable(sourceRows,i),material:effectiveRow(i).material,roughness:SplatFit.roughnessAt(fittedWorld,i,fit),
         emission:fit?.emission?.get(i)??[0,0,0],coverage:fit?.coverage?.[i]??1,

@@ -1,6 +1,5 @@
-import { gaussianAppearanceDelta } from './gaussian-splats.mjs';
 // KHR_gaussian_splatting and native triangle primitives share one retained glTF pose.
-import { shBasis, srgbDisplay } from './gaussian-splats.mjs';
+import { gaussianAppearanceDelta, gaussianHarmonicRotation, srgbDisplay } from './gaussian-splats.mjs';
 
 export const gaussianGltfExtension = 'KHR_gaussian_splatting';
 const prefix = gaussianGltfExtension + ':';
@@ -140,26 +139,6 @@ function orientation(matrix) {
   if (Math.abs(a*(e*i-f*h) - b*(d*i-f*g) + c*(d*h-e*g) - 1) > .001)
     throw new RangeError('Gaussian glTF node transform needs orthogonal axes and positive orientation');
   return basis;
-}
-
-// Four Gauss–Legendre latitudes and eight longitudes integrate products of
-// real SH through degree three. Store one rotation per primitive, not per splat.
-function harmonicRotation(axes, degree) {
-  const terms = (degree+1)**2 - 1;
-  if (!terms || axes.every((axis, i) => axis.every((v, j) => Math.abs(v - +(i === j)) < 1e-10))) return null;
-  const result = Array.from({ length: terms }, () => new Float64Array(terms));
-  for (const [z, weight] of [[-.8611363115940526,.3478548451374538],[-.3399810435848563,.6521451548625461],
-    [.3399810435848563,.6521451548625461],[.8611363115940526,.3478548451374538]]) {
-    const r = Math.sqrt(1-z*z);
-    for (let k = 0; k < 8; k++) {
-      const phi = k*Math.PI/4, ray = [r*Math.cos(phi),r*Math.sin(phi),z];
-      const local = axes.map(axis => axis[0]*ray[0] + axis[1]*ray[1] + axis[2]*ray[2]);
-      const a = shBasis(ray, degree), b = shBasis(local, degree);
-      for (let l = 1; l <= degree; l++) for (let i = l*l-1; i < (l+1)**2-1; i++)
-        for (let j = l*l-1; j < (l+1)**2-1; j++) result[i][j] += a[i]*b[j]*weight*Math.PI/4;
-    }
-  }
-  return result;
 }
 
 function packGaussian(data, at, point, matrix, trs, mul, p, i) {
@@ -439,7 +418,7 @@ export async function gaussianGltfWorld(source, { toolkit, scene, clip, time = 0
     const first = next, objectIndex = segments.get(object) ?? objects.length, targetIndex = targets.length;
     if (!segments.has(object)) { segments.set(object,objectIndex); objects.push(object); }
     targets.push({ entity:object, part:id });
-    const axes = orientation(matrix), rotate = harmonicRotation(axes,ellipse.degree);
+    const axes = orientation(matrix), rotate = gaussianHarmonicRotation(axes,ellipse.degree);
     const normal = scanSurface && part.attributes.NORMAL !== undefined &&
       accessor(part.attributes.NORMAL,'VEC3',float,false,'NORMAL');
     if (normal && normal.count !== point.count) throw new RangeError('Scan normals must match POSITION');
@@ -475,7 +454,7 @@ export async function gaussianGltfWorld(source, { toolkit, scene, clip, time = 0
   const target = lo.map((n,k) => (n+hi[k])/2), radius = Math.max(...hi.map((n,k) => n-lo[k]),1e-4);
   const pal = [0x101820,0x334552,0x6f8590,0xbccdd0,0xf4f8f5];
   return { count, data, meshes, ...(scanSurface && {scanSurface:true}), ...(count && { gaussianCloud:true, gaussianSort:'cameraDistance',
-      gaussianHarmonics:{ count, degree, dc, sh, linear, up:'y', colorMode:'rgb' },gaussianAppearanceDelta }),
+      gaussianHarmonics:{ count, degree, dc, sh, linear, up:'y', colorMode:'rgb' },gaussianAppearanceDelta, gaussianHarmonicRotation }),
     gltfParts:{ ...(count && {extension:gaussianGltfExtension}), ...(scanSurface && {scanSurface:true}), scene:scene ?? document.scene ?? (document.scenes?.length ? 0 : null),
       ...(clip !== undefined && { clip,time }), parts },
     renderMetadata:{ objectIds, objects, targetIds, targets, ...(normals && {normals}) },

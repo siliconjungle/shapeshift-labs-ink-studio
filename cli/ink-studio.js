@@ -1356,6 +1356,7 @@ const CMD = {
         '  bounce-probes review <scene> --out directory [--from 0 --to 3 --fps 12 --w 184 --h 112]',
         '  traced-lighting <scene> --out asset.json [--plan settings.json --t 0 --samples 32 --bounces 2]',
         '  splat-fit <scene> --plan approvals.json --out asset.json',
+        '  splat-groups <scene> --plan groups.json --out fit.json [--base fit.json --report report.json]',
         '  render/clip --shot-corrections file.json|off   load or bypass native shot corrections',
         '  render or clip --multiprojection plan.json   use local projection for named mesh surfaces',
         '  path-ink <scene> --plan look.json --out frame.png [--t 0 | --from 0 --to 2 --fps 12]',
@@ -2335,6 +2336,25 @@ const CMD = {
       bounces:num('bounces',settings.bounces),spacing:num('spacing',settings.spacing)});
     require('./asset-files.js').json(file,asset);
     console.log('Baked',asset.stats.litSites,'traced lighting sites to',file);
+  },
+  'splat-groups'() {
+    if (pos.length!==1 || typeof opt.out!=='string' || typeof opt.plan!=='string' ||
+        opt.base!==undefined && typeof opt.base!=='string' || opt.report!==undefined && typeof opt.report!=='string')
+      die('Use splat-groups <scene> --plan groups.json --out fit.json [--base fit.json --report report.json]');
+    const file=outputFile('splat-groups.json'), plan=path.resolve(opt.plan);
+    const reportFile=opt.report===undefined ? undefined : path.resolve(opt.report);
+    const baseFile=opt.base===undefined ? undefined : path.resolve(opt.base);
+    const protectedPaths=[path.resolve(pos[0]),plan,baseFile];
+    if (protectedPaths.includes(file) || reportFile && (protectedPaths.includes(reportFile) || reportFile===file))
+      die('Write splat group outputs separately from inputs and each other');
+    const json=input=>JSON.parse(fs.readFileSync(input,'utf8'));
+    const {target,groups}=json(plan);
+    const {asset,report}=require('../index.js').planSplatGroups(buildPreview(pos[0]),
+      {target,groups,...(baseFile && {base:json(baseFile)})});
+    const files=require('./asset-files.js');
+    files.json(file,asset);
+    if (reportFile) files.json(reportFile,report);
+    console.log('Wrote',report.groups.length,'splat groups affecting',report.changedRows,'rows to',file);
   },
   'splat-fit'() {
     if (pos.length!==1 || typeof opt.out!=='string' || typeof opt.plan!=='string')
@@ -5184,7 +5204,7 @@ async function run() {
     return;
   }
   const pixelInputs=cmd==='pixel-art' ? (['capture','splat-diagnostics'].includes(pos[0]) ? [pos[1]] : [opt.scene]).filter(value=>typeof value==='string') : [];
-  const splatFiles = cmd === 'pixel-art' ? pixelInputs.filter(gaussianFile) : cmd === 'snap' ? pos.filter(gaussianFile) : ['render', 'turn', 'sheet', 'clip', 'atlas'].includes(cmd)
+  const splatFiles = cmd === 'pixel-art' ? pixelInputs.filter(gaussianFile) : cmd === 'snap' ? pos.filter(gaussianFile) : ['render', 'turn', 'sheet', 'clip', 'atlas', 'splat-groups'].includes(cmd)
     ? pos.slice(0, 1).filter(gaussianFile) : [];
   if (splatFiles.length) {
     const ink = require('../index.js');
@@ -5194,7 +5214,7 @@ async function run() {
       const name = path.basename(file), id = name.replace(/\W+/g, '-');
       gaussianScenes.set(file, {
         id, name, seed: 1,
-        build: () => gaussianSplatWorld(cloud, { size: num('size', 6), up: opt.up, colorMode:cmd==='pixel-art'||opt['scan-appearance']!==undefined||opt['splat-fit']!==undefined ? 'rgb':'baked', objectId:'gaussian-cloud' })
+        build: () => gaussianSplatWorld(cloud, { size: num('size', 6), up: opt.up, colorMode:cmd==='pixel-art'||cmd==='splat-groups'||opt['scan-appearance']!==undefined||opt['splat-fit']!==undefined ? 'rgb':'baked', objectId:'gaussian-cloud' })
       });
     }
   }
@@ -5222,7 +5242,7 @@ async function run() {
     cmd === 'mesh-topology' && pos[0] === 'modifiers' && typeof opt.object === 'string' ? pos.slice(2, 3) :
     cmd === 'mesh-topology' && (pos[0] === 'select' && typeof opt.view === 'string' ||
       ['transform', 'repair', 'cut', 'boolean', 'retopology', 'face-region', 'edge-edit', 'bevel', 'shading'].includes(pos[0]) && typeof opt.object === 'string') ? pos.slice(1, 2) :
-    ['render', 'turn', 'sheet', 'clip', 'atlas', 'passes', 'surface-pixel', 'validate'].includes(cmd) ? pos.slice(0, 1) : [];
+    ['render', 'turn', 'sheet', 'clip', 'atlas', 'passes', 'surface-pixel', 'validate', 'splat-groups'].includes(cmd) ? pos.slice(0, 1) : [];
   for (const file of new Set(sceneFiles.filter(file => /\.json$/i.test(file)))) {
     if (!fs.existsSync(file)) continue;
     let source;
@@ -5233,7 +5253,7 @@ async function run() {
     sceneAssetParts.set(path.resolve(file), imported);
   }
   const gltfInputs = cmd === 'pixel-art' ? pixelInputs : cmd === 'snap' ? pos :
-    ['render','turn','sheet','clip','passes','surface-pixel','inspect-gltf'].includes(cmd) ? pos.slice(0,1) : [];
+    ['render','turn','sheet','clip','passes','surface-pixel','inspect-gltf','splat-groups'].includes(cmd) ? pos.slice(0,1) : [];
   for (const file of new Set(gltfInputs.filter(file=>/\.(gltf|glb)$/i.test(file)))) {
     if (opt.scene === true) die('--scene needs a glTF scene index');
     const world = await require('../index.js').readGaussianGltf(file, {

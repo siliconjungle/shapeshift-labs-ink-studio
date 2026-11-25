@@ -58,7 +58,8 @@ function select(world,binding,plan,context) {
   const choice=(id,index)=>({id,index,editable:editable(index)});
   function inRegion(index) {
     if (!region) return true;
-    const position=fit?.rowAttributes?.get(index)?.position ?? rest.subarray(index*16,index*16+3);
+    const position=SplatFit.deformationAt(effective,index)?.position ??
+      fit?.rowAttributes?.get(index)?.position ?? rest.subarray(index*16,index*16+3);
     return region.min.every((low,k)=>position[k]>=low && position[k]<=region.max[k]);
   }
   const selection={query,frame:plan.frame,unstableIds:0};
