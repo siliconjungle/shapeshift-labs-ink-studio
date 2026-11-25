@@ -13,6 +13,17 @@ const meshComponentSnap = (function (K) {
   const index = rows => new Map(rows.map(row => [row.id, row]));
   const other = (ends, id) => ends[ends[0] === id ? 1 : 0];
 
+  const cardinal = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+
+  function cameraBasis(value) {
+    if (!record(value, ['right', 'up', 'back', 'eye']))
+      throw new TypeError('A camera-space transform needs right, up and back camera axes');
+    const { right, up, back } = CameraLens.pose({ eye: [0, 0, 0], ...value });
+    const x = unit(right, 'Camera right');
+    const y = unit(V.mad(up, x, -V.dot(up, x)), 'Camera up');
+    return { camera: { right, up, back }, axes: [x, y, V.cross(x, y)] };
+  }
+
   function operation(raw) {
     if (record(raw, ['kind', 'offset']) && raw.kind === 'move' && vector(raw.offset))
       return (_, weight) => V.mul(raw.offset, weight);
@@ -206,17 +217,23 @@ const meshComponentSnap = (function (K) {
   }
 
   function planTransform(source, request, context = {}) {
-    if (!record(request, ['selection', 'operation', 'space', 'frame', 'pivot', 'planePivot', 'normal', 'tangent', 'pins', 'falloff', 'snap']))
+    if (!record(request, ['selection', 'operation', 'space', 'frame', 'pivot', 'planePivot', 'constructionPlane',
+      'camera', 'normal', 'tangent', 'pins', 'falloff', 'snap']))
       throw new TypeError('Use a component transform request');
     const doc = topology.create(source), run = operation(request.operation);
     const { space = 'local', normal, tangent } = request;
-    if (!['local', 'world', 'normal', 'plane'].includes(space) || space !== 'normal' && (normal !== undefined || tangent !== undefined))
-      throw new TypeError('Use local, world, normal, or plane space, with normal guides only in normal space');
+    if (!['local', 'world', 'normal', 'plane', 'camera'].includes(space) ||
+        space !== 'normal' && (normal !== undefined || tangent !== undefined) || space !== 'camera' && request.camera !== undefined)
+      throw new TypeError('Use local, world, normal, plane, or camera space with guides for the chosen space');
     if (request.planePivot !== undefined && (space !== 'plane' || request.pivot !== undefined))
       throw new TypeError('Use planePivot in plane space, or supply a local XYZ pivot');
     const plane = K.authoring.constructionPlane;
-    const construction = space === 'plane' || request.snap?.kind === 'construction-plane' ?
-      plane.resolve(context.constructionPlane) : undefined;
+    const needsPlane = space === 'plane' || request.snap?.kind === 'construction-plane';
+    if (!needsPlane && request.constructionPlane !== undefined)
+      throw new TypeError('Supply constructionPlane for plane space or construction-plane snapping');
+    const construction = needsPlane ?
+      plane.resolve(request.constructionPlane === undefined ? context.constructionPlane : request.constructionPlane) : undefined;
+    const view = space === 'camera' ? cameraBasis(request.camera === undefined ? context.camera : request.camera) : undefined;
     const selection = topology.select(doc, { from: request.selection });
     const selected = new Set(topology.select(doc, { from: selection, convert: 'vertices' }).ids);
     if (!selected.size) throw new RangeError('Select at least one component to transform');
@@ -228,8 +245,9 @@ const meshComponentSnap = (function (K) {
       request.pivot === undefined ? average([...selected].map(id => vertices.get(id).position)) : request.pivot;
     if (!vector(pivot)) throw new TypeError('The transform pivot needs a local XYZ point');
     const fixed = pins(doc, selection, selected, request.pins), weights = influence(doc, world, selected, fixed, request.falloff);
-    const axes = space === 'plane' ? construction.axes : space === 'normal' ? normalFrame(doc, selection, world, normal, tangent) :
-      [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+    const axes = view ? view.axes : space === 'plane' ? construction.axes :
+      space === 'normal' ? normalFrame(doc, selection, world, normal, tangent) : cardinal;
+    const worldAxes = space === 'local' ? axes.map(axis => M.app(frame.matrix, axis)) : axes;
     const basis = axes.flat(), fromBasis = M.tr(basis);
     function transformed(p, weight) {
       const delta = V.sub(p, pivot);
@@ -261,7 +279,8 @@ const meshComponentSnap = (function (K) {
     return freeze({ document, patch, report: {
       format: 'ink-studio/mesh-component-transform', version: 1, mesh: doc.id,
       beforeRevision: topology.revision(doc), afterRevision: topology.revision(document),
-      selection, space, pivot: pivot.slice(), worldPivot: K.sceneGraph.point(frame, pivot), axes, pinned: [...fixed].sort(),
+      selection, space, pivot: pivot.slice(), worldPivot: K.sceneGraph.point(frame, pivot), axes, worldAxes, pinned: [...fixed].sort(),
+      ...(request.frame !== undefined && { frame }), ...(view && { camera: view.camera }),
       ...(construction && {constructionPlane:construction.plane}),
       ...(gridPivot && {planePivot:gridPivot.slice()}), ...(snapped && { snap: snapped }), vertices: changed
     } });

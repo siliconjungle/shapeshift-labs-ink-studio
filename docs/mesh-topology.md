@@ -427,14 +427,37 @@ Supply `selection` in the request or pass a selection file. A standalone
 topology document can use the same command without `--object`.
 
 A `move` takes an XYZ offset. A `rotate` takes `axis` and `degrees`,
-and a `scale` takes a positive scalar or XYZ `factors`. The pivot uses
-stored vertex coordinates and defaults to the selected vertices' centroid.
-Local transforms use the mesh's stored axes. World transforms use scene
-axes. Standalone meshes can declare a local-to-world affine `frame` using
-the scene graph transform format. Retained scene meshes store positions
-in scene space. In `normal` space, +Z follows the area-weighted selection
-normal and +X follows a tangent. Supply world-space `normal` or `tangent`
-guides to control the orientation.
+and a `scale` takes a positive scalar or XYZ `factors`. The operation
+uses the axes of `space`. A supplied `pivot` uses stored vertex
+coordinates and otherwise defaults to the selected vertices' centroid,
+with the existing plane-space pivot rules for `plane`.
+
+| Space | X, Y and Z |
+| --- | --- |
+| `local` | Stored mesh axes. A prefab member uses its local coordinates and its instance placement maps them to the scene. Standalone meshes can supply a local-to-world affine `frame`. Unplaced scene meshes already store scene coordinates. |
+| `world` | Scene X, Y and Z, in world units. |
+| `plane` | Construction right, up and normal, in world units. Standalone requests can supply a `constructionPlane`. Use `planePivot` for a point on its grid. |
+| `camera` | Image right, image up and toward the camera, in world units. A positive rotation about camera Z turns counterclockwise in the image. |
+| `normal` | Tangent, bitangent and area-weighted selection normal. Supply world-space `normal` or `tangent` guides to control the orientation. |
+
+For camera-space edits, a scene uses its authored camera at time zero
+by default. Use `--view` to take the axes from a native camera sample.
+The view can choose a time, named shot, orbit or explicit camera pose.
+For a standalone mesh or an exact replay, supply
+`camera: { right, up, back }` in the transform request. The kernel
+requires a right-handed orthonormal basis. Its report carries the
+captured camera and `worldAxes`, which are the world vectors for a
+unit step on each requested axis, including any object-local scale.
+
+```sh
+ink-studio mesh-topology transform gatehouse.json camera-move.json \
+  --object gatehouse-portal --view view.json --out revised.json --report evidence.json
+```
+
+The same coordinate spaces work in an
+[isolated prefab edit](scene-editor.md#isolate-a-prefab-instance-for-mesh-edits).
+A preview view can supply the camera-relative axes before applying the
+edit. The active faces and pinned boundaries still constrain the operation.
 
 Pin explicit `vertices`, the open `mesh` boundary, the `selection`
 boundary, or `both` boundaries. The selection boundary is a face
@@ -462,7 +485,8 @@ Use `KIT.meshTopology.planTransform(document, request, context)` for the
 pure planner. A host can resolve extra targets with `context.mesh(id)`
 returning `{ document, frame? }`, `context.socket(instance, binding)`
 returning a world point, or `context.sdf(id)` returning a signed distance
-function. `sceneEditor.planMeshTransform(object, request, options)`
+function. Supply `context.camera` with right, up and back axes when
+the host already has a captured camera. `sceneEditor.planMeshTransform(object, request, options)`
 resolves targets from the scene snapshot and enforces hybrid shape
 ownership for a managed mesh. `transformMeshTopology` uses
 the same plan and writes through the topology transaction. Scene SDF
@@ -477,6 +501,7 @@ replay use the existing journal.
 
 ```sh
 node examples/mesh-component-transforms.cjs component-transform-review
+node examples/tileset-pick/explicit-transform-coordinates-demo.cjs coordinate-review
 ```
 
 The gatehouse demo shifts the left jamb to a construction plane while

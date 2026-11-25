@@ -31,14 +31,15 @@ function select(file, input, rest, opt, meshTopology, build) {
   return meshTopology.select(document, query, { visibility: evidence, object, part: object && rows[object].part });
 }
 
-function transform(file, input, rest, opt, meshTopology, openEditor) {
-  const { object, selection, out, report } = opt;
-  const filenames = [file, input, selection, out, report].filter(value => value !== undefined);
+function transform(file, input, rest, opt, toolkit, openEditor) {
+  const { meshTopology } = toolkit.KIT;
+  const { object, selection, out, report, view } = opt;
+  const filenames = [file, input, selection, out, report, view].filter(value => value !== undefined);
   if (!file || !input || rest.length || filenames.some(name => typeof name !== 'string' || !name.trim()) ||
       object !== undefined && (typeof object !== 'string' || !object.trim()) || report && !out ||
-      ['from', 'view', 'visibility', 'projection', 'lineage', 'match-ids'].some(key => opt[key] !== undefined))
-    throw new TypeError('Use mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--out file] [--report file]');
-  const inputs = [file, input, selection].filter(Boolean).map(name => path.resolve(name));
+      view && !object || ['from', 'visibility', 'projection', 'lineage', 'match-ids'].some(key => opt[key] !== undefined))
+    throw new TypeError('Use mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file] [--out file] [--report file]');
+  const inputs = [file, input, selection, view].filter(Boolean).map(name => path.resolve(name));
   const outputs = [out, report].filter(Boolean).map(name => path.resolve(name));
   if (outputs.some(name => inputs.includes(name)) || new Set(outputs).size !== outputs.length)
     throw new RangeError('Write transform outputs to separate files from the inputs');
@@ -56,6 +57,12 @@ function transform(file, input, rest, opt, meshTopology, openEditor) {
   if (out && path.dirname(path.resolve(file)) !== path.dirname(path.resolve(out)))
     throw new RangeError('Write the revised scene beside its source to preserve relative assets');
   const editor = openEditor(file);
+  if (view) {
+    if (request?.space !== 'camera' || request.camera !== undefined)
+      throw new TypeError('Use --view with a camera-space transform or pin camera axes in the request');
+    const { transformView, captureTransformCamera } = require('./mesh-transform-camera.js');
+    request.camera = captureTransformCamera(editor, transformView(read(view)), toolkit);
+  }
   if (!out) {
     const plan = editor.planMeshTransform(object, request);
     return { patch: plan.patch, evidence: plan.report };
@@ -64,18 +71,21 @@ function transform(file, input, rest, opt, meshTopology, openEditor) {
   return { document: editor.snapshot(), evidence };
 }
 
-function moveVertex(file, input, rest, opt, meshTopology, openEditor) {
-  const {object,part,vertex,by,expect,out,space,align} = opt;
-  const allowed = ['object','part','vertex','by','expect','out','space','align'];
+function moveVertex(file, input, rest, opt, toolkit, openEditor) {
+  const { meshTopology } = toolkit.KIT;
+  const {object,part,vertex,by,expect,out,space,align,view} = opt;
+  const allowed = ['object','part','vertex','by','expect','out','space','align','view'];
   const name = value => typeof value === 'string' && value.trim();
   if (!name(file) || input !== undefined || rest.length || !name(vertex) || part !== undefined && object === undefined ||
-      space !== undefined && !['local','world','plane'].includes(space) ||
+      space !== undefined && !['local','world','plane','camera'].includes(space) ||
+      view !== undefined && (!object || space !== 'camera') ||
       align !== undefined && !['plane','grid'].includes(align) ||
       Object.entries(opt).some(([key,value])=>!allowed.includes(key) || !name(value)))
-    throw new TypeError('Use mesh-topology move <mesh-or-scene.json> [--object id] [--part id] --vertex id --by X,Y,Z [--space local|world|plane] [--align plane|grid] [--expect revision] [--out file.json]');
+    throw new TypeError('Use mesh-topology move <mesh-or-scene.json> [--object id] [--part id] --vertex id --by X,Y,Z [--space local|world|plane|camera] [--view file] [--align plane|grid] [--expect revision] [--out file.json]');
   const offset = require('./construction-plane.js').coordinates(by,3,'--by');
   const source = path.resolve(file), output = out && path.resolve(out);
-  if (output && (!/\.json$/i.test(output) || output === source || object && path.dirname(output) !== path.dirname(source)))
+  if (output && (!/\.json$/i.test(output) || output === source || view && output === path.resolve(view) ||
+      object && path.dirname(output) !== path.dirname(source)))
     throw new RangeError('Write a separate JSON output beside the input for scene edits');
 
   const editor = object && openEditor(source);
@@ -88,6 +98,10 @@ function moveVertex(file, input, rest, opt, meshTopology, openEditor) {
   const operation = {kind:'move',offset};
   const request = {selection,operation,...(space && {space}),
     ...(align && {snap:{kind:'construction-plane',mode:align,anchor:vertex}})};
+  if (view) {
+    const { transformView, captureTransformCamera } = require('./mesh-transform-camera.js');
+    request.camera = captureTransformCamera(editor, transformView(read(view)), toolkit);
+  }
   let report;
   if (editor && output) {
     report = editor.transformMeshTopology(object,request,{part,label:'Move vertex '+vertex}).transform;
@@ -185,7 +199,7 @@ function command([action, file, input, ...rest], opt, toolkit, { build, openEdit
   if (action === 'bevel') return require('./mesh-bevel-preview.js').command(file, input, rest, opt, toolkit, openEditor);
   if (action === 'plane')
     return require('./construction-plane.js').command(file,input === undefined ? rest : [input,...rest],opt,toolkit,openEditor,projectTexelsPerUnit);
-  if (action === 'move') return moveVertex(file,input,rest,opt,meshTopology,openEditor);
+  if (action === 'move') return moveVertex(file,input,rest,opt,toolkit,openEditor);
   if (action === 'overlaps') return overlaps(file,input,rest,opt,meshTopology);
   if (action === 'isolate-prefab')
     return require('./prefab-edit-isolation.js').command(file,input,rest,opt,toolkit,openEditor);
@@ -202,7 +216,7 @@ function command([action, file, input, ...rest], opt, toolkit, { build, openEdit
     return maintenance(action, file, input, rest, opt, meshTopology, openEditor);
   if (opt.pieces !== undefined) throw new TypeError('Use --pieces with mesh-topology cut');
   if (action === 'transform') {
-    const result = transform(file, input, rest, opt, meshTopology, openEditor);
+    const result = transform(file, input, rest, opt, toolkit, openEditor);
     if (out) files.json(path.resolve(out), result.document);
     else process.stdout.write(JSON.stringify({ patch: result.patch, report: result.evidence }, null, 2) + '\n');
     if (report) files.json(path.resolve(report), result.evidence);
