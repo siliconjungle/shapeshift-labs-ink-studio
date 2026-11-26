@@ -14,7 +14,7 @@ const options = {
   edit: ['object','out','view','preview','report','selection','uv-set','channel']
 };
 const imageNames = ['atlas-before.png', 'model-before.png', 'atlas-after.png', 'model-after.png', 'comparison.png'];
-const ink = { seam: '#f391a6', pin: '#ffcb78', selected: '#75e2c8', held: '#a8beff', boundary: '#7393ac',
+const ink = { seam: '#f391a6', pin: '#ffcb78', pivot: '#f0b8ff', selected: '#75e2c8', held: '#a8beff', boundary: '#7393ac',
   continuous: '#456578', 'material-boundary': '#859cad', 'non-manifold': '#ed8c70' };
 const tints = ['#25495a', '#413950', '#574232', '#335344', '#403c57'];
 const name = v => typeof v === 'string' && Boolean(v.trim());
@@ -126,6 +126,11 @@ function atlas(layout, material, selection, settings, kit, paint) {
   }
   for (const highlight of highlights) draw.push(highlight);
   const marks = cornerMarkers(corners.values(),selection,corner=>faces.has(corner.face) ? at(corner.uv) : undefined);
+  const pivot = settings.pivot ?? layout.pivot;
+  if (pivot) {
+    const [x,y] = at(pivot).map(Math.round), r = 6;
+    marks.push(line([[x-r,y],[x+r,y]],ink.pivot),line([[x,y-r],[x,y+r]],ink.pivot));
+  }
   return composite(w, h, layers, draw.concat(marks), kit);
 }
 
@@ -203,6 +208,7 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     layouts[0].faces[0]?.material;
   if (!layouts[0].faces.some(row => row.material === material)) throw new RangeError('Choose an authored UV material');
   const captures = [nativeBefore, nativeAfter], views = [];
+  const useAtlasPaint = selected?.cornerScope || settings.pivot || layouts.some(layout=>layout.pivot);
   let crossHighlight;
   if (selectionOutput) {
     const layout = layouts[0], byId = new Map(layout.faces.map(row => [row.id, row]));
@@ -220,7 +226,7 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     }
     crossHighlight = { sheets, faces: selected.faces.map(id => ({ id, material: byId.get(id).material, visiblePixels: visible.get(id) })) };
   } else for (const [i, layout] of layouts.entries()) {
-    const paint = selected?.cornerScope ? atlasPaint(captures[i].mesh,material,layout,kit) : undefined;
+    const paint = useAtlasPaint ? atlasPaint(captures[i].mesh,material,layout,kit) : undefined;
     views.push(atlas(layout, material, selected, settings, kit, paint), model(layout, captures[i], selected, kit));
   }
   const gap = 6, { w, h } = settings, width = h + w + 3 * gap, height = h * 2 + 64;
@@ -232,9 +238,11 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     if (i % 2 === 0) draw.push(text(rowNames[Math.floor(i / 2)], [x + h / 2, y - 7], '#9fb9c3', 8));
   }
   const scope = selected?.cornerScope;
+  const [pivotBefore,pivotAfter] = layouts.map(layout=>settings.pivot ?? layout.pivot ?? null);
   draw.push(text('Cut seam', [width * .18, height - 8], ink.seam, 8),
     text(scope ? 'Held overlap' : 'Pinned corner', [width * .49, height - 8], scope ? ink.held : ink.pin, 8),
-    text(scope ? 'Move scope' : 'Linked selection', [width * .80, height - 8], ink.selected, 8));
+    text(scope ? 'Move scope' : pivotBefore || pivotAfter ? 'UV pivot' : 'Linked selection', [width * .80, height - 8],
+      !scope && (pivotBefore || pivotAfter) ? ink.pivot : ink.selected, 8));
   views.push(composite(width, height, layers, draw, kit));
   for (const [i, image] of views.entries()) files.write(paths[i], PNG.encode(image.w, image.h, image.rgb));
   const evidence = readability && {
@@ -244,6 +252,7 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
   };
   return { material, grid: [w, h], files: [...imageNames, ...crossHighlight?.sheets.slice(1).map(row => row.file) ?? []],
     ...(scope && {cornerScope:scope}),
+    ...((pivotBefore || pivotAfter) && {pivot:{before:pivotBefore,after:pivotAfter}}),
     ...(crossHighlight && { crossHighlight }), ...(evidence && { readability: evidence }) };
 }
 
@@ -331,7 +340,9 @@ function command([action, file, input, ...rest], opt, kit, openEditor) {
         const budget = [...plan.report.operations].reverse().find(row => row.op === 'texel-budget' && row.evidence?.features);
         const readability = settings.readability ?? (budget && { atlas: budget.evidence.atlas,
           features: budget.evidence.features.map(({ id, faces }) => ({ id, faces })) });
-        result.preview = review(document, plan.document, old, next, selected, settings, kit, paths, readability);
+        const lastTransform = plan.report.operations.findLast(row=>row.op==='transform');
+        const pivot = lastTransform?.evidence.pivotSource === 'island-center' ? undefined : lastTransform?.evidence.pivots[0]?.uv;
+        result.preview = review(document, plan.document, old, next, selected, {...settings,pivot}, kit, paths,readability);
       }
       if (out && plan.report.canCommit) {
         if (editor) result.transaction = editor.editMeshUV(object, request).topology;

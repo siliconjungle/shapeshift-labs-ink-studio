@@ -31,11 +31,21 @@ const MaterialUV = (() => {
     return entries.length ? Object.freeze(Object.fromEntries(entries)) : undefined;
   }
 
+  function pivots(value) {
+    if (value === undefined || value === null) return;
+    if (!record(value) || Object.entries(value).some(([set,point])=>!/^\d+$/.test(set) || String(+set)!==set ||
+        !layout(+set) || !Array.isArray(point) || point.length!==2 ||
+        !Array.from(point).every(n=>Number.isFinite(n) && n>=0 && n<=1)))
+      throw new TypeError('UV pivots need normalized coordinates on layouts 0 to 31');
+    const entries = Object.entries(value);
+    return entries.length ? Object.freeze(Object.fromEntries(entries.map(([set,point])=>[set,Object.freeze(point.slice())]))) : undefined;
+  }
+
   const uv = (corner,set) => set ? corner.attributes?.[key(set)] : corner.uv;
   // Authored mesh UVs span texel centers, starting in the top-left.
   const texel = ([u,v],width,height) => [u*(width-1),v*(height-1)];
   const pinned = (corner,set) => Boolean(set ? corner.uvPins?.[set] : corner.uvPinned);
   const seam = (edge,set) => Boolean(set ? edge.uvSeams?.[set] : edge.uvSeam);
-  return Object.freeze({ channels, layout, channel, key, isKey, setsOf, bindings, resolve, flags, uv, texel, pinned, seam });
+  return Object.freeze({ channels, layout, channel, key, isKey, setsOf, bindings, resolve, flags, pivots, uv, texel, pinned, seam });
 })();
 if (typeof module!=='undefined') module.exports=MaterialUV;

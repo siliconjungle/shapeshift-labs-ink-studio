@@ -678,7 +678,13 @@
       function write() {
         const next = { topologyMeshes: { ...snapshot().topologyMeshes, [object]: definitions===undefined ? row : {...row,materials:definitions} } };
         validate({ ...snapshot(), ...next });
-        document.setEnvironment(next);
+        const clearsPivot = patch?.uvPivots !== undefined && Object.keys(before.document.uvPivots ?? {})
+          .some(set=>!Object.hasOwn(row.document.uvPivots ?? {},set));
+        if (clearsPivot) document.batchSession(()=>{
+          document.setEnvironment({topologyMeshes:{[object]:{document:null}}});
+          document.setEnvironment(next);
+        });
+        else document.setEnvironment(next);
         return freeze(evidence);
       }
       return document.pending() ? write() : document.transact(label ?? 'Edit topology of ' + object, write);

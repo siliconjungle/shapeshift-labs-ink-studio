@@ -102,9 +102,11 @@
       if (resolved) sources.set(id,resolved);
     }
     const toTexel = (face,uv)=>MaterialUV.texel(uv,...sources.get(face).size);
+    const pivot = g.doc.uvPivots?.[g.set];
     return {
       ...sourceInfo(g.doc, 'ink-studio/uv-layout'),
       ...(g.set && {uvSet:g.set}), ...(g.doc.uvBindings && {uvBindings:g.doc.uvBindings}),
+      ...(pivot && {pivot:pivot.slice()}),
       ...(sources.size && {texelCoordinates:{origin:'top-left',units:'texel-centers'}}),
       islands: Array.from(g.islands.values(), row => ({ ...row, faces: row.faces.slice(), bounds: row.bounds.slice() })),
       faces: Array.from(g.faces.values(), face => ({ id: face.id, material: face.material, island: g.atIsland.get(face.id),
@@ -442,6 +444,46 @@
     return order(g.islands.get(id).faces.flatMap(face => g.faces.get(face).corners.map(corner => g.atWeld.get(corner.id))));
   }
 
+  function setPivot(g, operation) {
+    const {target} = operation, before = g.doc.uvPivots?.[g.set] ?? null;
+    if (!fields(operation,['op','target']) || target !== null && !fields(target,['kind','uv','corner','selection']))
+      throw new TypeError('Set a UV pivot from a selection center, point, pinned corner, snapped corner, or null');
+    let after = null, anchor = null;
+    if (target?.kind === 'point' && fields(target,['kind','uv']) && tuple(target.uv,2,unit)) {
+      after = target.uv.slice();
+      anchor = {kind:'point'};
+    } else if (target?.kind === 'selection-center' && fields(target,['kind','selection'])) {
+      const selected = select(g.doc,{domain:target.selection?.domain,uvSet:g.set,from:target.selection});
+      if (!selected.corners.length) throw new RangeError('Choose a nonempty UV selection to center the pivot');
+      const bounds = [Infinity,Infinity,-Infinity,-Infinity];
+      for (const id of selected.corners) for (const [axis,n] of g.corners.get(id).uv.entries()) {
+        bounds[axis] = Math.min(bounds[axis],n);
+        bounds[axis+2] = Math.max(bounds[axis+2],n);
+      }
+      after = bounds.slice(0,2).map((n,i)=>(n+bounds[i+2])*.5);
+      anchor = {kind:target.kind,bounds,corners:selected.corners};
+    } else if (target?.kind === 'pinned' || target?.kind === 'corner') {
+      const {kind,corner,selection:saved} = target;
+      if (!fields(target,['kind','corner','selection']) ||
+          (corner === undefined) === (saved === undefined))
+        throw new TypeError('Choose one UV corner ID or a saved single-corner pick for the pivot');
+      const ids = saved === undefined ? [corner] : select(g.doc,{domain:'corners',uvSet:g.set,from:saved}).ids;
+      if (ids.length !== 1 || !g.corners.has(ids[0])) throw new RangeError('Choose one existing UV corner for the pivot');
+      const found = g.corners.get(ids[0]);
+      if (kind === 'pinned' && !found.uvPinned) throw new RangeError('The pivot corner must be pinned on this UV layout');
+      after = found.uv.slice();
+      anchor = {kind,corner:found.id,face:found.face,pinned:Boolean(found.uvPinned)};
+    } else if (target !== null) throw new TypeError('Unknown UV pivot target');
+
+    const uvPivots = {...g.doc.uvPivots};
+    if (after) uvPivots[g.set] = after;
+    else delete uvPivots[g.set];
+    const changed = before && after ? before.some((n,i)=>n!==after[i]) : before!==after;
+    return {document:changed ? topology.edit(g.doc,{uvPivots}) : g.doc,
+      report:{op:operation.op,ids:[],pointEdits:0,conflictCount:0,conflicts:[],
+        evidence:{before,after,target:anchor,changed}}};
+  }
+
   function transform(g, operation, points) {
     if (!fields(operation, ['op', 'ids', 'selection', 'translate', 'rotation', 'scale', 'pivot']))
       throw new TypeError('Unknown UV transform setting');
@@ -452,15 +494,17 @@
         pivot !== undefined && !tuple(pivot, 2, unit))
       throw new RangeError('UV transform needs a finite translation, radians, nonzero scale, and optional normalized pivot');
     const cos = Math.cos(rotation), sin = Math.sin(rotation);
+    const dedicated = g.doc.uvPivots?.[g.set], pivots = [];
     for (const id of ids) {
-      const [l, t, r, b] = g.islands.get(id).bounds, [u, v] = pivot ?? [(l + r) / 2, (t + b) / 2];
+      const [l, t, r, b] = g.islands.get(id).bounds, [u, v] = pivot ?? dedicated ?? [(l + r) / 2, (t + b) / 2];
+      pivots.push({island:id,uv:[u,v]});
       for (const key of islandWelds(g, id)) {
         const [a, b] = g.corners.get(key).uv, x = (a - u) * sizes[0], y = (b - v) * sizes[1];
         const uv = [u + translate[0] + x * cos - y * sin, v + translate[1] + x * sin + y * cos];
         for (const corner of g.welds.get(key)) points.set(corner, uv);
       }
     }
-    return ids;
+    return {ids,evidence:{pivotSource:pivot ? 'explicit' : dedicated ? 'dedicated' : 'island-center',pivots}};
   }
 
   function overlappingCorners(g,ids) {
@@ -606,9 +650,10 @@
   }
 
   function draft(g, operation) {
+    if (operation?.op === 'set-pivot') return setPivot(g,operation);
     if (!operation || typeof operation !== 'object' ||
         !['cut', 'stitch', 'pin', 'transform', 'move-corners', 'unwrap', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
-      throw new TypeError('Use a UV cut, stitch, pin, transform, corner move, face remap, local solve or texel budget operation');
+      throw new TypeError('Use a UV pivot, cut, stitch, pin, transform, corner move, face remap, local solve or texel budget operation');
     const points = new Map(), edges = new Map(), pins = new Map(), conflicts = [];
     let count = 0;
     function conflict(code, evidence) {
@@ -624,7 +669,7 @@
       evidence = meshUVTexelBudget.assign(g, operation, points, conflict);
       ids = order((evidence.islands ?? []).map(row => row.id));
     } else if (operation.op === 'remap-face') ids = remapFace(g,operation,points,conflict);
-    else if (operation.op === 'transform') ids = transform(g, operation, points);
+    else if (operation.op === 'transform') ({ids,evidence} = transform(g, operation, points));
     else if (operation.op === 'move-corners') ({ids,evidence} = moveCorners(g,operation,points));
     else if (operation.op === 'stitch') ids = stitch(g, operation, points, edges, conflict);
     else if (operation.op === 'cut') {
@@ -728,10 +773,13 @@
     const seamPatch=base.set ? seamChanges.map(({id,uvSeam})=>
       ({id,uvSeams:{...next.doc.edges.find(row=>row.id===id).uvSeams,[base.set]:uvSeam}})) : seamChanges;
     const bindingsChanged=JSON.stringify(document.uvBindings)!==JSON.stringify(base.doc.uvBindings);
+    const pivotBefore = base.doc.uvPivots?.[base.set] ?? null, pivotAfter = document.uvPivots?.[base.set] ?? null;
+    const pivotChanged = JSON.stringify(pivotBefore)!==JSON.stringify(pivotAfter);
     const patch = { ...(faceChanges.length && { faces: faceChanges }), ...(seamPatch.length && { edges: seamPatch }),
-      ...(bindingsChanged && {uvBindings:document.uvBindings}) };
+      ...(bindingsChanged && {uvBindings:document.uvBindings}), ...(pivotChanged && {uvPivots:document.uvPivots ?? {}}) };
     return { document, patch, report: { canCommit, mesh: document.id, revision, outputRevision: topology.revision(document),
       ...(base.set && {uvSet:base.set}), ...(bindingsChanged && {bindingsBefore:base.doc.uvBindings ?? {},bindingsAfter:document.uvBindings}),
+      ...(pivotChanged && {pivot:{before:pivotBefore,after:pivotAfter}}),
       operations, corners: cornerChanges, seams: seamChanges, islandsBefore: base.islands.size, islandsAfter: next.islands.size } };
   }
 
