@@ -1,6 +1,6 @@
 const fs=require('node:fs');
 const path=require('node:path');
-const { assemble, compile, templates, fields, range, sha }=require('./character-rig-assembly.js');
+const { assemble, compile, templates, fields, record, range, sha }=require('./character-rig-assembly.js');
 const { solve, openPose }=require('./character-rig-solve.js');
 const { buildBinding, loadBinding, read }=require('./character-rig-bind.js');
 const files=require('./asset-files.js');
@@ -19,6 +19,7 @@ function inspect(rig, pose, K) {
 function preview(rig, binding, bindingFile, pose, view, output, sources, kit) {
   if (!fields(view,['w','h','camera','raw','proxies']) || !Number.isSafeInteger(view.w ?? 224) ||
       !Number.isSafeInteger(view.h ?? 224) || ![view.w ?? 224,view.h ?? 224].every(n=>range(n,8,1024)) ||
+      view.camera!==undefined && !record(view.camera) ||
       view.raw!==undefined && typeof view.raw!=='boolean' || view.proxies!==undefined && typeof view.proxies!=='boolean')
     throw new TypeError('Character preview needs bounded dimensions and camera options');
   const {w=224,h=224,camera,raw=true,proxies=true}=view;
@@ -101,9 +102,12 @@ function command([mode,...args], options, kit) {
   if (options.out) {
     const file=path.resolve(options.out);
     graphOutputs(documents).protect(fs.statSync(file,{throwIfNoEntry:false}));
+    if (mode==='bind') {
+      files.write(file,Buffer.from(JSON.stringify(result)+'\n'));
+      return emit({file,rig:result.rig,rigHash:result.rigHash,
+        carriers:result.carriers.map(({id,type,mode,weights})=>({id,type,mode,points:weights.length}))});
+    }
     files.json(file,result);
-    if (mode==='bind') return emit({file,rig:result.rig,rigHash:result.rigHash,
-      carriers:result.carriers.map(({id,type,mode,weights})=>({id,type,mode,points:weights.length}))});
   }
   return emit(result);
 }

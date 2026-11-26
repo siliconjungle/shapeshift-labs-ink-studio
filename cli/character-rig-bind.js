@@ -7,7 +7,8 @@ const { pose: poseWorld } = require('./diarama-pose.js');
 const planFormat='ink-studio/character-bind-plan', format='ink-studio/character-binding';
 const maxPoints=140000, maxFile=48*1024**2;
 const label=value=>typeof value==='string' && value.trim() && value.length<=160;
-const relative=value=>label(value)&&!path.isAbsolute(value)&&!path.win32.isAbsolute(value)&&!value.includes('\0');
+const relative=value=>typeof value==='string'&&Boolean(value.trim())&&value.length<=4096&&
+  !path.isAbsolute(value)&&!path.win32.isAbsolute(value)&&!value.includes('\0');
 const color=value=>typeof value==='string'&&/^#[a-f0-9]{6}$/i.test(value) ||
   Number.isSafeInteger(value)&&range(value,0,0xffffff);
 const packed=value=>typeof value==='number'?value:Number.parseInt(value.slice(1),16);
