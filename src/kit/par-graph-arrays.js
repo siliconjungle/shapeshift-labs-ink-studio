@@ -92,7 +92,7 @@
     const type='array<'+(keyed ? 'record' : item)+'>';
     const inputs={items:type,...extra,...(reducing && {initial:accumulator}),
       ...(sorting && {direction:{type:'string',default:'asc'}})};
-    return {inputs,outputs:{value:reducing ? accumulator : 'array<'+(keyed ? 'record' : sorting || filtering ? item : value)+'>'},time:true,workerGroup:true,
+    return {inputs,outputs:{value:reducing ? accumulator : 'array<'+(keyed ? 'record' : sorting || filtering ? item : value)+'>'},time:true,system:group.system,workerGroup:true,
       instantiate() {
         let segment;
         const lanes=[], byId=new Map();
@@ -110,7 +110,7 @@
           truncate(0);
           prune();
         }
-        function run({items,...args},{time,seed,take,sequence,textureCache},workers) {
+        function run({items,...args},{time,seed,take,sequence,textureCache,functionExecution},workers) {
           const cost=Math.max(1,group.expandedNodes??1);
           if (items.length*cost>maxRows) throw new RangeError('Array operation exceeds its '+maxRows+' node visit budget');
           let ids;
@@ -142,7 +142,7 @@
             }
             evaluate??=(lanes[i]??=group.instantiate());
             return evaluate({...args,item,...(index && {index:i}),...(reducing && {accumulator})},
-              {time,take,sequence,textureCache,seed:P.data.hash(String(key),seed)},workers)[resultPort];
+              {time,take,sequence,textureCache,functionExecution,seed:P.data.hash(String(key),seed)},workers)[resultPort];
           };
           try {
             if (reducing) return {value:items.reduce((acc,item,i)=>apply(item,i,acc),start)};
