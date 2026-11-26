@@ -1516,6 +1516,7 @@ const CMD = {
         '  mesh-topology limit-surface <mesh.json> <samples.json> [--out report.json]   sample a quad subdivision limit surface',
         '  mesh-topology boolean <mesh-or-scene.json> <request.json> [--object id] [--operand mesh.json] [--view file] [--preview dir] [--out file] [--report file]   solve and compare mesh or SDF Booleans',
         '  mesh-topology bevel <mesh-or-scene.json> <request.json> [--object id] [--view file] [--preview dir] [--out file] [--report file]   preview or apply an edge bevel with native-grid protection',
+        '  mesh-topology tint <mesh-or-scene.json> <request.json> [--object id] [--part id] [--selection file] [--view file --preview dir] [--expect receipt.json] [--out file]   paint, sample, or erase corner and vertex tint',
         '  mesh-topology shading <mesh-or-scene.json> [request.json] [--object id] [--view file] [--preview dir] [--subdivision level] [--out file] [--report file]   inspect or edit smoothing groups, corner normals, hard edges and subdivision creases',
         '  mesh-topology shape-keys <mesh-or-scene.json> [request.json] [--object id] [--view file --preview dir] [--out file] [--report file]   edit the rest model or capture a named pose correction',
         '  mesh-topology skin <mesh-or-scene.json> [request.json] [--object id] [--view file] [--preview dir] [--out file] [--report file]   inspect, paint, mirror and preview named joint weights',
@@ -5664,7 +5665,7 @@ async function run() {
     cmd === 'mesh-uv' && ['layout', 'guide', 'select', 'edit'].includes(pos[0]) && typeof opt.object === 'string' ? pos.slice(1, 2) :
     cmd === 'mesh-topology' && pos[0] === 'modifiers' && typeof opt.object === 'string' ? pos.slice(2, 3) :
     cmd === 'mesh-topology' && (pos[0] === 'select' && typeof opt.view === 'string' ||
-      ['transform', 'repair', 'cut', 'boolean', 'retopology', 'face-region', 'edge-edit', 'bevel', 'shading', 'skin', 'shape-keys'].includes(pos[0]) && typeof opt.object === 'string') ? pos.slice(1, 2) :
+      ['transform', 'repair', 'cut', 'boolean', 'retopology', 'face-region', 'edge-edit', 'bevel', 'shading', 'skin', 'shape-keys', 'tint'].includes(pos[0]) && typeof opt.object === 'string') ? pos.slice(1, 2) :
     ['render', 'turn', 'sheet', 'clip', 'atlas', 'passes', 'surface-pixel', 'validate', 'splat-groups', 'splat-redistribute', 'protected-lod-review'].includes(cmd) ? pos.slice(0, 1) : [];
   for (const file of new Set(sceneFiles.filter(file => /\.json$/i.test(file)))) {
     if (!fs.existsSync(file)) continue;

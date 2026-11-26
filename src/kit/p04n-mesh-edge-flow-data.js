@@ -115,7 +115,7 @@ const meshEdgeFlowData = (function (K) {
     const channels = new Map();
     for (const { samples } of data) for (const [corner, influence] of samples) {
       if (!influence) continue;
-      for (const [key, value] of Object.entries(corner.attributes ?? {})) {
+      for (const [key, value] of Object.entries(meshCornerTint.generic(corner) ?? {})) {
         if (!channels.has(key)) channels.set(key, new Set());
         channels.get(key).add(Array.isArray(value) ? value.length : 0);
       }
@@ -126,14 +126,16 @@ const meshEdgeFlowData = (function (K) {
     }
     return data.map(({ uv, samples }, i) => {
       const attributes = Object.fromEntries([...channels].map(([key, sizes]) => {
-        const weighted = samples.filter(([row, influence]) => influence && Object.hasOwn(row.attributes ?? {}, key));
+        const weighted = samples.filter(([row, influence]) => influence && Object.hasOwn(meshCornerTint.generic(row) ?? {}, key));
         const sum = weighted.reduce((total, [, influence]) => total + influence, 0);
         const value = axis => sum ? weighted.reduce((total, [row, influence]) => total +
           (axis === undefined ? row.attributes[key] : row.attributes[key][axis]) * influence / sum, 0) : 0;
         const size = sizes.values().next().value;
         return [key, size ? Array.from({ length: size }, (_, axis) => value(axis)) : value()];
       }));
-      return { id: g.fresh('corner'), vertex: vertices[i], uv, ...(channels.size && { attributes }) };
+      const tint = meshCornerTint.sample(samples.map(([row])=>row),samples.map(([,weight])=>weight));
+      if (tint) attributes.tint=tint;
+      return { id: g.fresh('corner'), vertex: vertices[i], uv, ...((channels.size || tint) && { attributes }) };
     });
   }
 
