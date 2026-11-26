@@ -214,4 +214,4 @@ function split({ points, normals: authoredNormals, faces, flipV }, K) {
     regions: [...regions.values()] };
 }
 
-module.exports = { load, split, tileKey, tileLabel };
+module.exports = { load, split, clip, tileKey, tileLabel };

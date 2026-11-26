@@ -1,6 +1,6 @@
 # Bitmap resources
 
-Use a material resource with `format: "bitmap"` to keep an image's source, encoding, interpretation and sampling behavior in the material. Graph projects can declare the same resources in `assets`. A `bitmapAsset` node samples by resource name. It returns a typed image and an `info` record with the requested and resolved frame or tile and a `ready`, `held`, or `blank` status. A literal resource name provides its specific color, unitless grayscale, or height port type. A varying resource name provides `typedImage`.
+Use a material resource with `format: "bitmap"` to keep an image's source, encoding, interpretation and sampling behavior in the material. Graph projects can declare the same resources in `assets`. A `bitmapAsset` node samples by resource name. It returns a typed image and an `info` record with the requested and resolved frame or tile and a `ready`, `held`, or `blank` status. A literal resource name provides its specific color, unitless grayscale, height, or normal port type. A varying resource name provides `typedImage`.
 
 ## Choose the source and interpretation
 
@@ -20,7 +20,7 @@ A linked member uses `{ "file": "textures/plate.png" }`. Paths resolve relative 
 }
 ```
 
-Color inputs use RGBA. Set `colorSpace` to sRGB, linear sRGB, Display P3, or linear Display P3 with the tags `srgb`, `srgb-linear`, `display-p3`, and `display-p3-linear`. The assignment describes the original samples. Use `image.convert` for a conversion, or `image.toDisplay` for an 8-bit sRGB preview. PNG defaults to sRGB and the explicit tag takes precedence over the input file's profile metadata. For `data`, `mask`, or `height`, select `r`, `g`, `b`, or `a` with `channel` (default `r`). Scalar resources use no color space. Height has floating samples and optional physical `units`.
+Color inputs use RGBA. Set `colorSpace` to sRGB, linear sRGB, Display P3, or linear Display P3 with the tags `srgb`, `srgb-linear`, `display-p3`, and `display-p3-linear`. The assignment describes the original samples. Use `image.convert` for a conversion, or `image.toDisplay` for an 8-bit sRGB preview. PNG defaults to sRGB and the explicit tag takes precedence over the input file's profile metadata. For `data`, `mask`, or `height`, select `r`, `g`, `b`, or `a` with `channel` (default `r`). Scalar resources use no color space. Height has floating samples and optional physical `units`. Set `intent: "normal"` for a tangent-space RGB normal map. Use `normalOrientation` of `opengl` (default) or `directx`. Ink keeps its XYZ lanes and precision without applying a color profile.
 
 Ink keeps 8-bit and 16-bit PNG samples, reads classic TIFF and flat scanline OpenEXR, and reads 32-bit grayscale or RGB Portable FloatMaps. Set a TIFF source's zero-based `page` for multi-page files, or an EXR source's `channels` to select one to four named planes in the requested order. The selected member exposes supported file color metadata as `info.profile`. See [material texture file formats](material-texture-formats.md) for the native layouts and deliveries. PFM defaults to linear sRGB, applies the file's scale, reads either endianness, and preserves signed HDR samples. Set `rowOrder: "top-down"` on the source for files authored in that order. [Portable FloatMap specification](https://www.pauldebevec.com/Research/HDR/PFM/)
 
@@ -34,7 +34,7 @@ Use one of `source`, `sequence`, or `tiles`. A resource can contain up to 512 me
 | Sequence | `sequence` takes `frames`, `fps`, an optional first frame number `first` (default 0), and `playback` of `clamp` (default), `loop`, or `pingpong`. Put `null` in an authored gap. The node samples by graph time when `frame` is `-1`, or maps the requested frame number through playback. |
 | Tiles | `tiles` contains rows such as `{ "udim": 1002, "source": { "file": "stone.1002.png" } }`. Use signed integer `uv` pairs for explicitly addressed tiles. UDIM 1001 maps to `[0,0]`, 1002 maps to `[1,0]`, and 1011 maps to `[0,1]`. The node's `tile` input chooses one tile. The interpretation's U/V addressing applies inside that texture. |
 
-Set `missing.policy` to `error` (default), `blank`, or `hold`. Error fails at the missing selection. Blank returns transparent RGBA or a zero-filled scalar image at the shared extent and precision. For fully offline resources use `{ "policy": "blank", "width": 64, "height": 64, "precision": "unorm16" }` to supply the blank contract. Hold applies to sequences and resolves to the nearest earlier numbered available frame or the first available frame for a gap at the start. Corrupt files produce an error.
+Set `missing.policy` to `error` (default), `blank`, or `hold`. Error fails at the missing selection. Blank returns transparent RGBA, a neutral tangent normal, or a zero-filled scalar image at the shared extent and precision. For fully offline resources use `{ "policy": "blank", "width": 64, "height": 64, "precision": "unorm16" }` to supply the blank contract. Hold applies to sequences and resolves to the nearest earlier numbered available frame or the first available frame for a gap at the start. Corrupt files produce an error.
 
 ## Edit without rewiring
 
@@ -48,7 +48,7 @@ Set `missing.policy` to `error` (default), `blank`, or `hold`. Error fails at th
 | `edit` | Set interpretation, missing policy, playback, or label. Supply `pixels` to replace one member's pixel overlay. |
 | `replace` | Supply a new `member` for the selected entry under the same ID. Add pixel edits to the new member if needed. |
 
-For a sequence specify its exact `frame`. For a tile set specify its exact `tile` coordinates. The pixel overlay uses top-left integer `x` and `y` and a `value` array of four RGBA lanes or one scalar. Specify UNORM edits in [0,1] and floating edits in the interpreted units. Use `pixels: []` to clear the overlay. Source files retain their original bytes.
+For a sequence specify its exact `frame`. For a tile set specify its exact `tile` coordinates. The pixel overlay uses top-left integer `x` and `y` and a `value` array of four RGBA lanes, three normal lanes, or one scalar. Specify UNORM edits in [0,1] and floating edits in the interpreted units. Use `pixels: []` to clear the overlay. Source files retain their original bytes.
 
 ```sh
 ink-studio graph material-bitmap glass.material.json lantern

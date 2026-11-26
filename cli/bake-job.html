@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ink Studio · Bake jobs</title>
+<style>
+:root{color-scheme:dark;--base:#171a21;--panel:#222733;--line:#3c4659;--paper:#f0e7d6;--muted:#b8c4d0;--gold:#ecc194;font:14px/1.35 system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--base);color:var(--paper)}main{max-width:1300px;margin:auto;padding:24px clamp(15px,4vw,49px)}
+header{border-bottom:1px solid var(--line);padding-bottom:13px;margin-bottom:13px;display:flex;justify-content:space-between;align-items:end;flex-wrap:wrap;gap:8px}
+h1{font:400 clamp(37px,6vw,63px)/1 Georgia,serif;letter-spacing:-.04em;margin:4px 0 0}h2{font:400 23px/1 Georgia,serif;margin:0 0 10px}
+small,.cap{font:650 11px ui-monospace,monospace;color:var(--gold);text-transform:uppercase;letter-spacing:.12em}
+a{color:var(--gold);text-underline-offset:3px}
+.layout{display:grid;grid-template-columns:minmax(305px,400px) minmax(0,1fr);gap:13px;align-items:start}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:13px;min-width:0}
+.card+.card{margin-top:12px}.stack{min-width:0}
+textarea,input,select,button{background:#1b202b;color:var(--paper);font:inherit;border:1px solid #4a556b;border-radius:3px;padding:4px 8px;min-height:30px}
+input,select{min-width:0;width:100%}input[type=checkbox]{width:auto;min-height:initial;accent-color:var(--gold)}
+button{cursor:pointer;white-space:nowrap}button:hover{background:#354259}button:disabled{opacity:.47;cursor:default}
+button.primary{background:#654d3f;border-color:#aa795a}
+input:focus-visible,button:focus-visible,select:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+.toolbar{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+.form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+label{font-size:12px;color:var(--muted);display:grid;gap:3px}summary{cursor:pointer;color:var(--gold)}
+.targets details{padding:5px 0}.targets textarea{width:100%;resize:vertical}
+.partlist{display:flex;flex-wrap:wrap;gap:4px 7px;margin:6px 0}.partlist label{display:inline-flex;align-items:center;gap:3px}
+#rows{margin-top:10px}
+.map-row{border-top:1px solid var(--line);padding:5px 0}
+.map-main{display:grid;grid-template-columns:24px minmax(80px,1fr) 65px 25px 25px 25px;gap:3px;align-items:center}
+.map-main input{padding:3px;font-size:12px;min-height:25px}.map-main button{padding:2px;font-size:11px;min-height:25px}
+.map-main label{display:block;color:var(--paper)}.map-row .form{padding:6px 0 0 25px}
+p{margin:6px 0;color:var(--muted);font-size:12px}
+progress{width:100%;height:9px;accent-color:var(--gold)}
+.preview{display:grid;place-items:center;margin:11px 0;min-height:270px;height:min(49vw,429px);max-height:463px;border:1px solid var(--line);
+background-color:#242b38;background-image:conic-gradient(#2e3746 25%,transparent 0 50%,#2e3746 0 75%,transparent 0);background-size:24px 24px}
+.preview img{display:block;max-width:100%;max-height:100%;height:100%;width:auto;aspect-ratio:1;image-rendering:pixelated}
+dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 9px;font-size:12px;margin:0;color:var(--muted)}dd{margin:0;color:var(--paper);overflow-wrap:anywhere}
+#refresh div{display:flex;gap:7px;flex-wrap:wrap;justify-content:space-between;border-top:1px solid var(--line);padding:5px 0;font-size:12px}
+#notice{white-space:pre-wrap;overflow-wrap:anywhere;color:#f5bca9;min-height:1.05em}
+[hidden]{display:none!important}
+@media(max-width:770px){.layout{grid-template-columns:1fr}.preview{height:290px}}
+</style>
+<script defer src="data.js"></script><script defer src="live.js"></script>
+</head><body><main>
+<header><div><small>Ink Studio · Bake jobs</small><h1 id="title"></h1></div><a id="report-link" href="report.json">Bake report</a></header>
+<div class="layout">
+<div class="stack">
+<section class="card">
+<h2>Preset</h2>
+<label>Name<input id="preset-name" maxlength="140"></label>
+<div class="form"><label>Default size<input id="size" type="number" min="8" max="1024" placeholder="128"></label>
+<label>Default padding<input id="padding" type="number" min="0" max="32" placeholder="3"></label></div>
+<div class="toolbar"><button id="open-preset" type="button">Load preset</button><button id="save-preset" type="button">Save preset</button></div>
+<input id="preset-file" type="file" accept=".json" hidden>
+<div id="rows"></div>
+</section>
+<section class="card"><h2>Targets</h2><div class="targets" id="targets"></div></section>
+</div>
+<div class="stack">
+<section class="card">
+<h2>Job status</h2><progress id="progress" value="0" max="1"></progress>
+<p id="status" role="status"></p><p id="notice" role="alert"></p>
+<div id="job-controls" class="toolbar" hidden><button class="primary" id="run" type="button">Run bake</button><button id="cancel" type="button" disabled>Cancel</button></div>
+</section>
+<section class="card">
+<h2>Baked map</h2><label>Map, target and tile<select id="result"></select></label>
+<div class="preview"><img id="image" alt="" hidden><p id="empty">Run a bake to preview its maps.</p></div><dl id="details"></dl>
+</section>
+<section class="card" id="refresh-wrap" hidden><h2>Refreshed resources</h2><div id="refresh"></div><a id="material" href="material.material.json" download>Material graph</a></section>
+</div>
+</div></main></body></html>
