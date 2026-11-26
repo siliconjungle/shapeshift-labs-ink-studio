@@ -1324,6 +1324,76 @@ edits.
 Run `node examples/tileset-pick/uv-inset-demo.cjs tile-uv-inset-demo` to see
 an asymmetrically inset relay plate next to its original face.
 
+### Paint gutters and review bleed during motion
+
+Use a UV inset to move a face's sampling positions inward by source texel
+distances. Use a painted gutter to extend edge pigment and alpha into
+unused texels around a chart. A gutter keeps the face's sampling coordinates
+and geometry in place. Space reserved by chart packing must be painted or
+baked before it can supply filtered samples.
+
+```json
+{
+  "tileset": "enamel",
+  "padding": 4,
+  "regions": [
+    { "id": "panel", "rect": [12, 8, 24, 16] },
+    { "id": "trim", "object": "gate", "island": "trim-front" }
+  ]
+}
+```
+
+Use a retained pigment island for its actual UV footprint. Use a rectangle
+to retain the full source crop even when a face has already been inset.
+Ink extends the closest source edge in four-neighbor steps and preserves
+indexed slots and alpha. Other retained chart footprints, retained crop
+rectangles and equally contested texels stay protected. Painting is limited
+to empty texels or pixels with the matching source value by default. Add
+`writable: [[x,y,width,height], ...]` to permit replacing existing paint
+within exact regions. These rectangles still respect protected footprints.
+The receipt lists changed texels, obstructions, and affected bake dependencies.
+
+```sh
+ink-studio tileset gutters gutters.json --scene gate.json
+ink-studio tileset gutters gutters.json --scene gate.json --out padded-gate.json
+```
+
+Use `tileset bleed-review` to compare the original face, an inset, and a
+gutter on the same native camera samples. The review builds each candidate
+in memory and keeps the source scene as supplied.
+
+```json
+{
+  "object": "gate", "face": "panel", "rect": [12, 8, 24, 16],
+  "inset": { "left": 2, "right": 2, "top": 1, "bottom": 1 },
+  "padding": 4,
+  "w": 160, "h": 100,
+  "views": [
+    { "camera": { "yaw": 0.2, "dist": 9 } },
+    { "camera": { "yaw": 0.7, "dist": 22 } }
+  ]
+}
+```
+
+```sh
+ink-studio tileset bleed-review motion.json --scene gate.json --out motion-review
+```
+
+Use up to 24 samples with camera overrides or a `cameraShot` and time.
+The review measures base paint on the selected authored face against the
+same face with its crop edge extended through the reference atlas. Each
+candidate uses its own matched UVs, scene visibility and texture filter.
+Pink marks color differences, amber marks missing coverage, and blue
+marks extra coverage. A sample where the face is hidden is marked
+`unseen`. Review the full native comparison and atlas PNGs alongside
+the report. Active material bakes use the registered bake workflow.
+
+Use `editor.planTilesetGutters` and `editor.editTilesetGutters` for the
+undoable atlas edit. See [registered material baking](registered-material-bake.md)
+for maintaining gutters in baked channels, and run the
+[tileset motion demo](../examples/tileset-pick/uv-gutter-bleed-demo.cjs)
+to compare a UV inset and a painted gutter during an orbit and zoom.
+
 ## Edit an authored layout
 
 A [polygon topology document](mesh-topology.md) keeps stable face, edge and
