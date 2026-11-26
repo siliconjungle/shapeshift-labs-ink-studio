@@ -610,6 +610,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphFunctions.operations["fn.toInteger"].outputs` | namespace |  |  |
 | `KIT.procedural.graphFunctions.operations["fn.toInteger"].outputs.value` | value | `string = "integer"` |  |
 | `KIT.procedural.graphFunctions.operations["fn.toInteger"].run` | function | `(values)` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.operations["fn.valueProcessor"]` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.valueProcessor"].description` | value | `string = "Evaluate a uniform typed program once and expose its named non-image results."` |  |
+| `KIT.procedural.graphFunctions.operations["fn.valueProcessor"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
 | `KIT.procedural.graphFunctions.operations["fn.vector"]` | namespace |  |  |
 | `KIT.procedural.graphFunctions.operations["fn.vector"].description` | value | `string = "Construct, swizzle, and operate on a declared two-, three-, or four-component vector."` |  |
 | `KIT.procedural.graphFunctions.operations["fn.vector"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |

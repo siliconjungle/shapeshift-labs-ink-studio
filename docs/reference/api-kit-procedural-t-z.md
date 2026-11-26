@@ -85,6 +85,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.traversalGraph` | namespace |  |  |
 | `KIT.procedural.traversalGraph.create` | function | `({ tiles, radius = 0.18, height = 0.8, stepUp = 0.3, maxDrop = 1.5, maxClimb = 1.5, canClimb, swimStep, clearance, origin, maxNodes = 50000, maxChecks = 4000000, previous, dirtyBounds } = {})` | [source](../../src/kit/pcw-traversal-graph.js) |
 
+## KIT.procedural.valueProcessor
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.valueProcessor` | namespace |  |  |
+| `KIT.procedural.valueProcessor.compile` | function | `(program)` | [guide](../value-processor.md#evaluate-a-formula), [source](../../src/kit/paq-value-processor.js) |
+| `KIT.procedural.valueProcessor.format` | value | `string = "ink-studio/value-processor"` |  |
+| `KIT.procedural.valueProcessor.specialize` | function | `(node)` | [source](../../src/kit/paq-value-processor.js) |
+| `KIT.procedural.valueProcessor.version` | value | `number = 1` |  |
+
 ## KIT.procedural.verticalSpans
 
 | Member | Kind | Signature or value | Guides and source |
