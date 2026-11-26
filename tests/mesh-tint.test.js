@@ -58,6 +58,11 @@ test('paint a single seam corner, expand a vertex to incident corners, and sampl
   const split = T.subdivide(one.document);
   assert(split.faces.some(face=>face.corners.some(corner=>corner.attributes?.tint?.[1]===.71)));
   assert.deepEqual(T.triangulate(plain).indices,T.triangulate(one.document).indices);
+
+  const legacy = T.edit(plain,{faces:[{...plain.faces[0],corners:plain.faces[0].corners.map(row=>
+    ({...row,attributes:{...row.attributes,tint:[.2,.3]}}))}]});
+  assert.throws(()=>plan(legacy,{tool:'paint',face:'west',color:warm}),/generic attribute/);
+  assert.equal(plan(legacy,{tool:'erase',face:'west'}).document,legacy);
 });
 
 test('accept saved UV-corner and component selections and keep scene attachments, bakes, coverage and atlas registered',()=>{

@@ -50,14 +50,15 @@
       const corners = face.corners.map(corner=>{
         const id = domain==='faces' ? face.id : domain==='vertices' ? corner.vertex : corner.id;
         if (!selected.has(id)) return corner;
-        const {attributes,...rest} = corner, before = attributes?.tint ?? null;
+        const {attributes,...rest} = corner, before = meshCornerTint.read(corner) ?? null;
         const hit = {face:face.id,corner:corner.id,vertex:corner.vertex};
         if (tool==='eyedropper') {
-          const tint = meshCornerTint.read(corner);
-          samples.push({...hit,tint:tint ?? null,color:(tint ?? [1,1,1]).slice(0,3)});
+          samples.push({...hit,tint:before,color:(before ?? [1,1,1]).slice(0,3)});
           return corner;
         }
-        const after = tool==='erase' ? null : before?.length===4 && meshCornerTint.read(corner) ? [...color,before[3]] : color;
+        if (tool==='paint' && attributes?.tint!==undefined && before===null)
+          throw new RangeError('Corner '+corner.id+' uses tint as a generic attribute');
+        const after = tool==='erase' ? null : before?.length===4 ? [...color,before[3]] : color;
         if (JSON.stringify(before)===JSON.stringify(after)) return corner;
         changes.push({...hit,before,after});
         dirty=true;
