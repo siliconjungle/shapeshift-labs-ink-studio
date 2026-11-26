@@ -8,7 +8,7 @@ Members and callable signatures come from the public entry point. Guide links po
 
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
-| `webgpu.createGaussianChunkStream` | function | `(renderer, toolkit, manifest, { url, fetch: fetchFile = globalThis.fetch, budgetBytes, maxSplats, layers, projectedError = {}, guardPixels = 12, startsPerFrame, concurrency } = {})` | [source](../../src/webgpu/gaussian-stream.mjs) |
+| `webgpu.createGaussianChunkStream` | function | `(renderer, toolkit, manifest, { url, fetch: fetchFile = globalThis.fetch, budgetBytes, maxSplats, layers, projectedError = {}, guardPixels = 12, startsPerFrame, concurrency, uploadBytesPerFrame, decodedCacheBytes = 0 } = {})` | [source](../../src/webgpu/gaussian-stream.mjs) |
 | `webgpu.createGaussianContourResolve` | function | `(device, { format = 'rgba8unorm' } = {})` | [source](../../src/webgpu/gaussian-contours.mjs) |
 | `webgpu.createGaussianSplatRenderer` | function | `(device, { format = 'rgba8unorm', pointAdapter, contours = pointAdapter?.contours ?? false } = {})` | [source](../../src/webgpu/gaussian-renderer.mjs) |
 | `webgpu.createWebGPUGraph` | function | `(device, definition)` | [source](../../src/webgpu/graph.mjs) |

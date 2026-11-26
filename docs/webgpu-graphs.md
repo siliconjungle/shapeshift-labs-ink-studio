@@ -325,6 +325,13 @@ report lists reusable projection and sort workspace separately as
 the profiled GPU visible count is at or below that ceiling. The optional
 footprint atlas is reported separately as `stream.footprintBytes`.
 
+Set `uploadBytesPerFrame` to spread uploads from completed loads across
+renders. One oversized chunk can upload alone so it always makes progress.
+Keep rendering while waiting for `ready()` with this option enabled.
+Set `decodedCacheBytes` to retain decoded chunks by revision after GPU
+eviction, so returning to an area can skip fetching and decoding those chunks.
+The stream reports queued uploads and cache usage when enabled.
+
 Refresh a running stream with the newly published manifest. The next
 render uses its revisions to reload changed visible chunks while retaining
 the existing handles for unchanged ones.

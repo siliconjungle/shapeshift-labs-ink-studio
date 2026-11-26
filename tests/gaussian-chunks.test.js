@@ -126,6 +126,65 @@ test('the Gaussian loader fetches on demand, shares GPU handles, and bounds the 
   }
 });
 
+test('Gaussian streaming spreads uploads, cancels stale work and reuses decoded revisions', async t => {
+  const { createGaussianChunkStream } = await import('../webgpu.mjs');
+  const { setImmediate: turn } = require('node:timers/promises');
+  const row = (id, x) => ({ id, layer: 'set', bounds: { min: [x, -.3, -.3], max: [x + .3, .3, .3] },
+    levels: [{ id: 'base', file: id + '.bin', revision: 1, splats: 1, error: 0 }] });
+  const manifest = { schema: 'ink.gaussian-chunks.v1',
+    world: { bg: [0, 0, 0], radius: 8, cam: { target: [0, 0, 0], dist: 8, yaw: 0, pitch: 0 } },
+    chunks: [row('near-a', -.7), row('near-b', 0), row('near-c', .4), row('away', 20)] };
+  const fetched = [], uploads = [];
+  const renderer = { maxSplats: 3, uploadChunk(data, { order }) {
+    uploads.push(order);
+    return { order, bytes: 80, count: 1, cpuMs: 0, dispose() {} };
+  }, renderChunks(_target, _world, handles) { return { input: handles.length }; } };
+  const stream = createGaussianChunkStream(renderer, ink.load().KIT, manifest, {
+    url: 'https://example.invalid/manifest.json', budgetBytes: 240, maxSplats: 3,
+    uploadBytesPerFrame: 64, decodedCacheBytes: 4096, startsPerFrame: 3, concurrency: 3, guardPixels: 0,
+    fetch(url) {
+      fetched.push(url.pathname);
+      return new Response(new Uint8Array(64));
+    }
+  });
+  t.after(() => stream.dispose());
+  const target = { width: 120, height: 100 }, away = { target: [20, 0, 0] };
+  stream.render(target);
+  await turn();
+  assert.equal(uploads.length, 0);
+  for (let i = 0; i < 3; i++) {
+    assert.equal(stream.render(target).stream.queuedUploads, 3 - i);
+    await turn();
+    assert.equal(uploads.length, i + 1);
+  }
+  assert.equal(stream.render(target).input, 3);
+  stream.render(target, away);
+  await turn();
+  assert(fetched.includes('/away.bin'));
+  stream.render(target);
+  await turn();
+  assert.equal(uploads.length, 3);
+  const returning = stream.render(target);
+  assert.equal(returning.stream.decodedCache.byKind.gaussianChunk.hits, 3);
+  assert.equal(returning.stream.queuedUploads, 3);
+  for (let i = 0; i < 3; i++) {
+    stream.render(target);
+    await turn();
+  }
+  assert.equal(uploads.length, 6);
+  assert.equal(fetched.length, 4);
+  const edited = structuredClone(manifest);
+  edited.chunks[0].levels[0].revision++;
+  stream.updateManifest(edited);
+  stream.render(target);
+  await turn();
+  assert.equal(fetched.filter(file => file === '/near-a.bin').length, 2);
+  stream.render(target);
+  await turn();
+  assert.equal(stream.render(target).input, 3);
+  assert.equal(uploads.length, 7);
+});
+
 test('edited Gaussian rows survive repacking and live LOD changes while untouched chunks stay resident', async t => {
   const { mkdtemp, readFile, rm, stat } = require('node:fs/promises');
   const { tmpdir } = require('node:os');
