@@ -386,6 +386,9 @@ module.exports = {
   },
   writeRasterAsset: require('./cli/raster-asset.js').writeRasterAsset,
   renderAssemblyReview: require('./cli/assembly-review.js').renderAssemblyReview,
+  promoteSceneEntities(source, selection, options) {
+    return module.exports.load().KIT.world.entityPromotion.plan(source, selection, options);
+  },
   createSceneEditor(source, options) {
     return module.exports.load().KIT.authoring.sceneEditor.create(source, options);
   },

@@ -1550,6 +1550,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.diorama.kinds.ball.need` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.ball.need.at` | value | `string = "vec3"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.ball.need.r` | value | `string = "num\|vec3"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.kinds["body-shape"]` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.kinds["body-shape"].may` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.kinds["body-shape"].may.bend` | value | `string = "obj"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.kinds["body-shape"].may.collider` | value | `string = "obj"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.kinds["body-shape"].need` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.kinds["body-shape"].need.at` | value | `string = "vec3"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.kinds["body-shape"].need.half` | value | `string = "vec3"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.box` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.box.may` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.box.may.round` | value | `string = "num"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
