@@ -44,7 +44,7 @@ function sampleRgba(pixels,stride,bounds,x,y,linear,opaque,wrap) {
   return result;
 }
 
-function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,sourceBinding=false,captureRestNormal=false,trackMesh,allow,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection,pbr,paintIndex,captureMeshTint}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,sourceBinding=false,captureRestNormal=false,trackMesh,allow,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection,pbr,paintIndex,captureMeshTint,reviewTarget,targetOnly,footprint}) {
   if(!atlas)return [];
   const depth=depthOnly && new Float32Array(W*H).fill(Infinity);
   const blended=[];
@@ -92,7 +92,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
     const lightingMesh=lightingTargets && layer.sceneMeshId;
     const sampleCharts=capture || omitLayer || simulationLayers?.size;
     const semantic=depthOnly ? [] : layer.semanticMipmaps??[];
-    const charts=(allow || sampleCharts || lightingMesh || captureFogOwners || multiprojection || pbr ||
+    const charts=(allow || reviewTarget || sampleCharts || lightingMesh || captureFogOwners || multiprojection || pbr ||
       semantic.some(row=>row.objectTexels)) && layer.surfaceCharts;
     const materials=layer.tilesetMaterials, wraps=layer.tileWraps;
     let rangeIndex=0, filterIndex=0, projectionIndex=0, chartIndex=0, semanticIndex=0, materialIndex=0, wrapIndex=0;
@@ -116,6 +116,8 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
       const affine = style?.affine, linearUV = affine || ortho;
       while(charts?.[chartIndex]?.end<=first)chartIndex++;
       const chart=charts?.[chartIndex]?.first<=first ? charts[chartIndex] : null;
+      const coverageTarget=reviewTarget?.(chart,layer.featureFaces?.[first/3]);
+      if (targetOnly!==undefined && coverageTarget!==targetOnly) continue;
       const pbrMaterial = pbr?.surface(chart);
       const pbrReceives = pbrMaterial && pbr.shadows?.receivesSurface(chart);
       if (allow && !allow({object:chart?.objectId,part:chart?.partId})) continue;
@@ -229,6 +231,10 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             if (z<depth[p] && (!clip || clip([0,1,2].map(k=>row.reduce((s,n,i)=>s+n.p[k]*w[i]/sum,0)))))
               depth[p]=z;
             continue;
+          }
+          if (footprint) {
+            const point=(clip || omitLayer) && [0,1,2].map(k=>row.reduce((s,n,i)=>s+n.p[k]*w[i]/sum,0));
+            if ((!clip || clip(point)) && (!omitLayer || !omit(omitLayer,chart?.materialId,point))) footprint(p,z);
           }
           const previous=fragments[p];
           // Preserve decal order when independent triangles differ only by depth roundoff.
@@ -375,6 +381,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             })};
           }
           const fragment={p,z,alpha,color:material?.color ?? tinted,position,
+            ...(coverageTarget!==undefined && {coverageTarget}),
             ...(settings && {tilesetMaterial:settings}),
             ...(pbrMaterial && {pbrMaterial,pbrReceives,pbrTangent:axes?.right}),
             ...(material && {semantic:material,semanticRule:mip.chain.rule,scan:mip.chain.scan,objectTexels:mip.objectTexels,liveLight:mip.liveLight,
