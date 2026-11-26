@@ -547,7 +547,7 @@ Members and callable signatures come from the public entry point. Guide links po
 
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
-| `KIT.pool` | function | `(B, n)` | [guide](../../README.md#particles-and-interaction), [source](../../src/kit/k1-stage.js) |
+| `KIT.pool` | function | `(B, n, flags)` | [guide](../../README.md#particles-and-interaction), [source](../../src/kit/k1-stage.js) |
 
 ## KIT.poseCorrectives
 
