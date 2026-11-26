@@ -1637,6 +1637,8 @@ const CMD = {
         '  pixel-art session export <directory> --artifact preset --preset preset.json --out directory',
         '  lint <id ...> [--map]              pixel-art lint: orphans, doubles, jaggies, banding, pillow shading, noise, colours',
         '  review <id> [--ref pic --px 2]     a sheet of fixed shots (four sides, top, low, far, near, close), beside the last one',
+        '  tasks plan <plan.json>   validate native artifact tasks and show dependency order',
+        '  tasks run <plan.json> --out directory [--resume]   execute and cache native artifact tasks',
         '  sweep <scene> <plan.json> --out directory   render still and clip contact sheets across settings and seeds',
         '  sweep pin <report-or-directory> <run-id|sample-id|tile> --out pin.json   save one exact case',
         '  sweep compare <report> <left> <right> --out directory   export matched view differences',
@@ -3233,6 +3235,23 @@ const CMD = {
     const file = save(w.id + '.png', R.upscale(finishOutput(im), opt.px1 ? 1 : im.px));
     diagnostics?.write(file, { times: [t] });
     shot?.finish(file,{suffixes});
+  },
+  tasks() {
+    const [mode, file] = pos;
+    if (pos.length !== 2 || !['plan', 'run'].includes(mode) ||
+        Object.keys(opt).some(key => mode !== 'run' || !['out', 'resume'].includes(key)) ||
+        mode === 'run' && (typeof opt.out !== 'string' || opt.resume !== undefined && opt.resume !== true))
+      die('Use tasks plan <plan.json> or tasks run <plan.json> --out directory [--resume]');
+    const graph = require('./task-graph.js');
+    const plan = graph.prepare(file);
+    if (mode === 'plan') {
+      console.log(JSON.stringify(plan.order.map(id => ({ id, dependencies: plan.tasks.get(id).dependencies })), null, 2));
+      return;
+    }
+    const out = path.resolve(opt.out);
+    const report = graph.run(plan, out, { kit:lib(), entry:__filename, resume:opt.resume === true });
+    console.log('wrote', path.join(out, 'report.json'));
+    if (!report.passed) process.exitCode = 2;
   },
   sweep() {
     const sweeps = require('./visual-sweep.js');

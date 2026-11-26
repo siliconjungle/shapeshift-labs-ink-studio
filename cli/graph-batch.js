@@ -12,7 +12,7 @@ const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const sha256 = /^[a-f0-9]{64}$/;
 const artifactPath = /^artifacts\/[\w.-]+(?:\/[\w.-]+)*$/;
 
-function claim(directory) {
+function claim(directory, label = 'graph batch') {
   const root = path.join(directory, '.ink-batch');
   fs.mkdirSync(root, { recursive: true });
   const name = 'writer-' + process.pid + '-' + randomUUID();
@@ -32,7 +32,7 @@ function claim(directory) {
           continue;
         }
       }
-      if (fs.existsSync(previous)) throw new Error('Another graph batch is writing to ' + directory);
+      if (fs.existsSync(previous)) throw new Error('Another ' + label + ' is writing to ' + directory);
     }
     return release;
   } catch (error) {
@@ -169,4 +169,4 @@ async function runBatch(project, batch, options) {
   }
 }
 
-module.exports = { runBatch };
+module.exports = { runBatch, claim };
