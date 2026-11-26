@@ -54,6 +54,9 @@ test('full and upright axes face the camera direction or the eye with explicit s
 
   const nearby = Lens.orbitPose(41 * Math.PI/180,31 * Math.PI/180,6,[0,0,0]);
   assert.deepEqual(P.placements(instances,{camera:nearby}).get('snap').mesh,facing.get('snap').mesh);
+  const custom = P.placements({ sign:{billboard:settings('full','direction',70)} },
+    { camera:Lens.orbitPose(175 * Math.PI/180,87 * Math.PI/180,6,[0,0,0]) }).get('sign');
+  near(custom.direction(front),Lens.orbitPose(140 * Math.PI/180,70 * Math.PI/180,1,[0,0,0]).back);
   const pole = Lens.orbitPose(1,Math.PI/2,6,[0,0,0]);
   near(P.placements(instances,{camera:pole}).get('upright').direction(up),up);
   assert.throws(() => P.placements({sign:{billboard:{snapDegrees:0}}}),/0.001 to 180/);

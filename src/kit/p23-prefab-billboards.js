@@ -25,11 +25,13 @@
     if (rule.mode === 'upright' || rule.snapDegrees !== undefined) {
       let yaw = Math.atan2(level[0], level[2]), pitch = rule.mode === 'upright' ? 0 : Math.asin(Math.max(-1, Math.min(1, aim[1])));
       if (rule.snapDegrees !== undefined) {
-        const step = rule.snapDegrees * (Math.PI / 180);
-        const snap = angle => Math.round(angle / step) * step;
-        const regular = snap(yaw), seam = Math.sign(yaw) * Math.PI;
-        yaw = Math.abs(yaw - regular) <= Math.abs(yaw - seam) && Math.abs(regular) <= Math.PI ? regular : seam;
-        pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, snap(pitch)));
+        const radians = Math.PI / 180, step = rule.snapDegrees;
+        const snap = (angle, limit) => {
+          const steps = Math.floor(limit / step), index = Math.round(angle / radians / step);
+          return Math.max(-steps, Math.min(steps, index)) * step * radians;
+        };
+        yaw = snap(yaw, 180);
+        pitch = snap(pitch, 90);
       }
       const c = Math.cos(pitch);
       back = [Math.sin(yaw) * c, Math.sin(pitch), Math.cos(yaw) * c];
