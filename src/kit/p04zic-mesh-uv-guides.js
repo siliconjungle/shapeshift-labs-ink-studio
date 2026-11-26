@@ -96,7 +96,7 @@ const meshUVGuides = (() => {
         corners.map(id=>MaterialUV.texel(g.corners.get(id).uv,...size).map((n,i)=>n-crop[i])));
       const raster = MeshUV.texelMask(triangles,width,height);
       scanlines = raster.scanlines;
-      const paint = fill.mode==='checker' ? (x,y)=>fill.swatches[(Math.floor((x+left)/fill.size)+Math.floor((y+top)/fill.size))%2] :
+      const paint = fill.mode==='checker' ? (x,y)=>fill.swatches[PixelPaintTools.checkerIndex(x+left,y+top,fill.size)] :
         ()=>fill.swatch;
       layers.push(layer('uv-fill','UV chart fill',raster.mask,width,paint));
     }

@@ -134,7 +134,7 @@ function pixelValues(stamp) {
     {value:colors[slot]*256+(stamp.alpha?.[i] ?? 255),slot:stamp.swatchIds[slot]});
 }
 
-function revisedAsset(asset, rect, pixels) {
+function revisedAsset(asset, rect, pixels, changedMask) {
   const data = Buffer.from(asset.data,'base64'), indexed = asset.encoding==='indexed8';
   const palette = asset.palette?.slice(), alpha = asset.alpha?.slice() ?? [], slots = new Map();
   const valueAt = slot=>palette[slot]*256+(alpha[slot] ?? 255);
@@ -146,8 +146,11 @@ function revisedAsset(asset, rect, pixels) {
   }
   let changedTexels = 0, paletteFull = false;
   const samples = [], [x,y,width] = rect;
+  const pixelAt = typeof pixels==='function' ? pixels : i=>pixels[i];
   visitRect(asset,rect,(i,at)=>{
-    const {value,slot} = pixels[i];
+    const pixel = pixelAt(i);
+    if (!pixel) return;
+    const {value,slot} = pixel;
     let after = value;
     let before;
     if (indexed) {
@@ -180,6 +183,7 @@ function revisedAsset(asset, rect, pixels) {
       data.writeUInt32BE(after,at*4);
     }
     changedTexels++;
+    if (changedMask) changedMask[i] = 1;
     if (samples.length<32) samples.push({at:[x+i%width,y+Math.floor(i/width)],before,after});
   });
   return {asset:changedTexels ? {...asset,data:data.toString('base64'),
@@ -211,8 +215,8 @@ function write(editor, binding, document, {apply=false} = {}, kit = require('..'
   return {...report,...planned.detail};
 }
 
-function paintPixels(before, rect, pixels) {
-  const {asset,changedTexels,samples,paletteFull} = revisedAsset(before,rect,pixels);
+function paintPixels(before, rect, pixels, changedMask) {
+  const {asset,changedTexels,samples,paletteFull} = revisedAsset(before,rect,pixels,changedMask);
   if (paletteFull) return;
   const detail = {encoding:asset.encoding,changedTexels,samples,
     sampleUnits:asset.encoding==='indexed8' ? 'palette-slot' : 'rgba32',
@@ -220,8 +224,8 @@ function paintPixels(before, rect, pixels) {
   return {asset,detail};
 }
 
-function planPixels(editor, tileset, before, rect, pixels) {
-  const painted = paintPixels(before,rect,pixels);
+function planPixels(editor, tileset, before, rect, pixels, changedMask) {
+  const painted = paintPixels(before,rect,pixels,changedMask);
   if (!painted) return {};
   const {asset,detail} = painted;
   if (!detail.changedTexels) return {detail:{...detail,canCommit:true,conflicts:[]}};

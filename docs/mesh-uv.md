@@ -1452,6 +1452,50 @@ bytes. A missing channel returns a conflict.
 Run `node examples/tileset-pick/bound-tile-tools-demo.cjs bound-tile-tools-demo`
 to sample a placed sign, pencil a texel, and erase it in a local variant.
 
+### Fill color on a bound face
+
+Set `tool` to `"fill"` and use the same visible face hit and preview
+commands. The hit seeds a selection in the face's pigment UV footprint.
+`connected` follows four-way neighbors with matching source RGBA.
+`matching-color` finds disconnected matches anywhere on that footprint.
+Set `tolerance` to widen the per-channel match by up to 255 bytes.
+
+```json
+{
+  "tool": "fill",
+  "fill": {
+    "area": "connected",
+    "colors": [{ "color": "#f2bd7c" }]
+  }
+}
+```
+
+Solid fill takes one color. Checker fill takes two colors and uses
+atlas-aligned squares. Set `size` in source texels per square.
+Each color accepts the same fields as the pencil, including independent
+alpha and exact indexed slots.
+
+```json
+{
+  "tool": "fill",
+  "fill": {
+    "area": "matching-color",
+    "pattern": "checker",
+    "size": 1,
+    "colors": [{ "color": "#f2bd7c" }, { "color": "#ef785f" }]
+  }
+}
+```
+
+The preview includes `texels.png`, a source-grid mask whose origin is
+`fill.rect`. Gold marks changed texels and teal marks selected texels
+that already match the fill. The receipt lists the numbers selected
+and changed, sample edits, and other faces that use the changed texels.
+Both shared and local fills commit as a single undoable edit.
+
+Run `node examples/tileset-pick/bound-tile-fill-demo.cjs bound-tile-fill-demo`
+to compare a connected solid fill with a matching-color checker fill.
+
 In Node, use `ink.openTilesetPaint(editor, request)` and
 `ink.writeTilesetPaint(editor, binding, document, { apply: true })`.
 Omit `apply` to preview the write. One scene undo restores the atlas
