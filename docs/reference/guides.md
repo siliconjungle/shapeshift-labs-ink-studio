@@ -48,6 +48,7 @@ All checked-in guides, indexed by title and section headings.
 - [Bake jobs and presets](../bake-jobs.md)
 - [Normal and height bakes](../bake-normal-height.md)
 - [Ambient occlusion, bent normals and direction bakes](../bake-occlusion.md)
+- [Position and ID bakes](../bake-position-id.md)
 - [Bake projection controls](../bake-projection.md)
 - [Thickness bakes](../bake-thickness.md)
 - [Batch spatial queries and occupancy](../batch-spatial-queries.md)

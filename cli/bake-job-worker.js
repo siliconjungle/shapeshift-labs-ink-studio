@@ -12,6 +12,7 @@ const Surface=require('./bake-job-surface.js');
 const Occlusion=require('./bake-job-occlusion.js');
 const Thickness=require('./thickness.js');
 const Curvature=require('./bake-job-curvature.js');
+const Attributes=require('./bake-job-attributes.js');
 const Geometry=require('./geometry-masks.js');
 const UV=require('./material-preview-geometry.js');
 const bake=require('./glb-bake.js');
@@ -35,6 +36,8 @@ function interpretation(row) {
     ...(row.output.range&&{heightRange:row.output.range})};
   if(row.output?.kind==='thickness'&&row.output.encoding!=='png8')return {intent:'height',units:row.output.units,
     ...(row.output.range&&{heightRange:row.output.range})};
+  if(row.output?.kind==='position')return {intent:'data',layout:'xyz',vectorDomain:'raw',units:row.output.units};
+  if(row.output?.kind==='id')return {intent:'data',units:'id',sampling:'nearest'};
   if(row.output?.kind==='direction')return {intent:'data',layout:'xyz'};
   if(row.output?.kind==='curvature')return {intent:'data',units:row.output.units,
     ...(row.output.range&&{valueRange:row.output.range})};
@@ -50,7 +53,9 @@ function sameInterpretation(prior,fresh) {
   if(intent==='height')return (prior.units??'shape-units')===fresh.units&&
     JSON.stringify(prior.heightRange??null)===JSON.stringify(fresh.heightRange??null);
   if(intent==='data')return prior.layout===fresh.layout&&(prior.units??'unitless')===(fresh.units??'unitless')&&
-    JSON.stringify(prior.valueRange??null)===JSON.stringify(fresh.valueRange??null);
+    JSON.stringify(prior.valueRange??null)===JSON.stringify(fresh.valueRange??null)&&
+    (prior.vectorDomain??'signed-unit')===(fresh.vectorDomain??'signed-unit')&&
+    (!fresh.sampling||(prior.sampling??'nearest')===fresh.sampling);
   return intent!=='color'||!prior.colorSpace||prior.colorSpace===fresh.colorSpace;
 }
 
@@ -185,6 +190,7 @@ function renderTasks(tasks,model,receivers,normalInputs,onInput,K) {
   const shared=new Map(), details=new Map(), heightTasks=new Map(), heightGroups=new Map();
   const occlusion=receivers&&renderOcclusion(tasks,Occlusion.scene(model,receivers,K),K);
   const curvature=Curvature.render(tasks,normalInputs,onInput,K);
+  const attributes=Attributes.render(tasks,model,K);
   const rasterKey=({authored,tile,settings})=>JSON.stringify([authored.id,tile.tile,settings.size,settings.padding]);
   for(const task of tasks) {
     const {map,settings,authored}=task, key=rasterKey(task);
@@ -215,6 +221,7 @@ function renderTasks(tasks,model,receivers,normalInputs,onInput,K) {
     const {map,settings,authored}=task;
     if(settings.occlusion)return occlusion(task);
     if(settings.curvature)return curvature(task);
+    if(settings.attribute)return attributes(task);
     if(settings.geometry)return renderGeometry(task,K);
     if(map==='height') {
       if(!heightGroups.has(authored.id)) {

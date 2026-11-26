@@ -89,3 +89,7 @@ See [thickness bakes](bake-thickness.md) for search range, inward ray directions
 ## Bake convex and concave curvature
 
 See [curvature bakes](bake-curvature.md) for mesh and normal-input curvature, edge policies, scale, normalized maps, and signed float output. Use the cavity map independently for short-range occlusion.
+
+## Bake positions and IDs
+
+See [position and ID bakes](bake-position-id.md) for object, world, and normalized coordinates, stable receiver vertex, material, and part labels, and deterministic swatches.
