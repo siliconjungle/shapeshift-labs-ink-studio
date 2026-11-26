@@ -1992,6 +1992,7 @@ const CMD = {
         '  graph lighting-room <project.json> <plan.json> --out directory   review a material under HDRI and reusable camera rigs',
         '  graph displacement-preview <project.json> <plan.json> --out directory   compare flat, parallax and tessellated graph height',
         '  graph material-preview <project.json> <plan.json> --out directory   link a native material carrier to its UV maps',
+        '  graph validate-material <project.json> [--output NAME | --node PATH --port NAME] [--channel NAME] [--profile profile.json] [--out directory]',
         '  graph inspect <project.json> [--output NAME | --node PATH --port NAME | --map ID [--component r|g|b|a]] [--out directory]',
         '  graph geometry <project.json> [--inputs values.json --at seconds --seed N --capture NODE[:PORT],... --out directory]   inspect typed geometry and node work',
         '  graph evaluate <project.json> [--inputs values.json --at seconds --seed N --capture NODE[:PORT],... --out directory]   evaluate in software and record texture and port work',
