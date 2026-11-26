@@ -1,5 +1,5 @@
 const C = require('./texture-common.js');
-const { cstring, int, float, attribute, zips, unzip } = require('./exr-bytes.js');
+const { cstring, int, float, attribute, zips, unzip, readHeader } = require('./exr-bytes.js');
 
 const magic=20000630, HALF=1, FLOAT=2;
 const compressors={none:0,zips:2,zip:3}, linesPerBlock={0:1,2:1,3:16};
@@ -21,33 +21,7 @@ function fromHalf(bits) {
 }
 
 function header(file) {
-  const bytes=C.input(file), version=bytes.readUInt32LE(4);
-  if (bytes.readInt32LE(0)!==magic || ![2,0x402].includes(version))
-    throw new TypeError('Expected single-part flat scanline OpenEXR');
-  const limit=version&0x400?255:31;
-  let at=8;
-  function word(source,offset) {
-    const end=source.indexOf(0,offset);
-    if(end<offset || end-offset>limit) throw new TypeError('Invalid OpenEXR name');
-    const value=source.toString('latin1',offset,end);
-    if(value && !validName(value,limit)) throw new TypeError('Invalid OpenEXR name');
-    return [value,end+1];
-  }
-  const attrs=new Map();
-  while(true) {
-    const [name,next]=word(bytes,at); at=next;
-    if(!name) break;
-    const [type,body]=word(bytes,at), size=C.slice(bytes,body,4).readInt32LE();
-    if(attrs.has(name)||attrs.size>=128||body+4+size>4*1024**2) throw new RangeError('OpenEXR metadata exceeds its budget');
-    attrs.set(name,{type,data:C.slice(bytes,body+4,size)});
-    at=body+4+size;
-  }
-  function get(name,type,length) {
-    const row=attrs.get(name);
-    if(!row || row.type!==type || length!==undefined && row.data.length!==length)
-      throw new TypeError('Invalid OpenEXR attribute '+name);
-    return row.data;
-  }
+  const { bytes, at, attrs, word, get } = readHeader(file, [2,0x402], 'Expected single-part flat scanline OpenEXR');
   const box=get('dataWindow','box2i',16), window=Array.from({length:4},(_,i)=>box.readInt32LE(4*i));
   const [x,y,xmax,ymax]=window, width=xmax-x+1, height=ymax-y+1;
   const compression=get('compression','compression',1)[0], lines=linesPerBlock[compression];
