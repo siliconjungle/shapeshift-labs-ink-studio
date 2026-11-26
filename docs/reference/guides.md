@@ -144,6 +144,7 @@ All checked-in guides, indexed by title and section headings.
 - [Bounded 3D fractal forms](../fractal-forms.md)
 - [Variables and execution control](../function-control.md)
 - [Texture sampling inside functions](../function-texture-sampling.md)
+- [FX Map](../fx-map.md)
 - [Gameplay state and events](../gameplay-state.md)
 - [Gaussian glTF import](../gaussian-gltf.md)
 - [Painted materials for imported Gaussian splats](../gaussian-materials.md)

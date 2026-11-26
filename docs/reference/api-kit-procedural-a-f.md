@@ -1017,3 +1017,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.freeformSculpt.reflect` | function | `(row, mirror)` | [source](../../src/kit/p59d-freeform-sculpt.js) |
 | `KIT.procedural.freeformSculpt.settings` | function | `(mode, raw)` | [source](../../src/kit/p59d-freeform-sculpt.js) |
 | `KIT.procedural.freeformSculpt.solid` | function | `(S,base,program,options)` | [source](../../src/kit/p59d-freeform-sculpt.js) |
+
+## KIT.procedural.fxMap
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.fxMap` | namespace |  |  |
+| `KIT.procedural.fxMap.compile` | function | `(source)` | [guide](../fx-map.md#vary-a-branch-or-stamp), [source](../../src/kit/par-fx-map.js) |
+| `KIT.procedural.fxMap.format` | value | `string = "ink-studio/fx-map"` |  |
+| `KIT.procedural.fxMap.operations` | namespace |  |  |
+| `KIT.procedural.fxMap.operations["image.fxMap"]` | namespace |  |  |
+| `KIT.procedural.fxMap.operations["image.fxMap"].description` | value | `string = "Draw hierarchical signed and image patterns with Quadrant, Iterate, Switch, and seeded local programs."` |  |
+| `KIT.procedural.fxMap.operations["image.fxMap"].specialize` | function | `(node)` | [source](../../src/kit/par-fx-map.js) |
+| `KIT.procedural.fxMap.version` | value | `number = 1` |  |
