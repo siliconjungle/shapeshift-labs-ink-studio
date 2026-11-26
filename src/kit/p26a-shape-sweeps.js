@@ -137,7 +137,7 @@
       sd: (x, y, z) => distance(root, x, y, z, Infinity) };
   }
 
-  function stampedSweep(brush, guide, step, blendRadius, pressureResponse, looseness) {
+  function stampedSweep(brush, guide, step, blendRadius, pressureResponse, looseness, orient) {
     const api = P.paintLooseness, opacity = hasOpacity(pressureResponse);
     let rows, cost, spacing;
     if (brush?.kind === 'mark-profile') {
@@ -156,7 +156,8 @@
       const scale = pressureResponse === undefined ? pose.pressure : responseAt(pressureResponse.width ?? [1, 1], pose.pressure);
       if (scale <= 0) return [];
       const alpha = opacity ? responseAt(pressureResponse.opacity, pose.pressure) : 1;
-      const width = scale * size, placed = transform(bounds, { ...pose, pressure: width });
+      const aligned = orient ? orient(pose, dab.ordinal, family) : pose;
+      const width = scale * size, placed = transform(bounds, { ...aligned, pressure: width });
       return [{ bounds: placed.bounds, sample: (x, y, z) => placed.local(x, y, z, sd),
         ...(opacityAt || alpha < 1 ? { alphaAt: opacityAt ? (x, y, z) => alpha * placed.local(x, y, z, opacityAt) / width
           : () => alpha } : {}) }];
@@ -202,7 +203,7 @@
     };
   }
 
-  function prepare({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse, looseness }) {
+  function prepare({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse, looseness }, { orient } = {}) {
     if (!Array.isArray(poses) || poses.length < 1 || poses.length > 1024 ||
         !finite(blendRadius) || blendRadius < 0 ||
         (step !== undefined && (!positive(step) || step > 1)))
@@ -213,8 +214,8 @@
         pressureResponse.opacity !== undefined && !range(pressureResponse.opacity, 1)))
       throw new TypeError('Pressure response needs [at zero, at one] ranges for width (0–4) or opacity (0–1)');
     const input = Array.from(poses, poseSource), guide = path === 'ruled' ? ruled(input) : input;
-    if (brush?.kind === 'mark-profile' || looseness !== undefined)
-      return stampedSweep(brush, guide, step, blendRadius, pressureResponse, P.paintLooseness.prepare(looseness));
+    if (brush?.kind === 'mark-profile' || looseness !== undefined || orient)
+      return stampedSweep(brush, guide, step, blendRadius, pressureResponse, P.paintLooseness.prepare(looseness), orient);
     const source = brushSource(brush);
     const authored = pressureResponse === undefined ? guide : guide.map(pose => ({
       ...pose, pressure: responseAt(pressureResponse.width ?? [1, 1], pose.pressure)

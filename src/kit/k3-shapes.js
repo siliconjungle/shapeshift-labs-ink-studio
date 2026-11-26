@@ -421,7 +421,7 @@
         inv = q => {
           const dx = q[0] - c[0],
             dy = R - (q[1] - c[1]),
-            a = Math.atan2(dx, dy * Math.sign(R));
+            a = Math.atan2(dx * Math.sign(R), dy * Math.sign(R));
           return [c[0] + a / k, c[1] + R - Math.hypot(dx, dy) * Math.sign(R), q[2]];
         };
         lip = 1 + Math.abs(k) * (spec.thick || 1);
@@ -477,6 +477,9 @@
             }
           }
         };
+      const prior = p0.markWarp;
+      p.markWarp = prior ? { base: prior.base, forward: point => fwd(prior.forward(point)),
+        inverse: point => prior.inverse(inv(point)) } : { base: { ...p0 }, forward: fwd, inverse: inv };
       const mat = o.mat?.surfaceState ? o.mat : S.mapSurfaceState(
         o.mat && p0.mat.surfaceState ? { ...o.mat, surfaceState: p0.mat.surfaceState } : o.mat || p0.mat,
         inv, (normal, rest) => V.norm(K.M.app(K.M.tr(K.deform.jac(fwd, rest)), normal), normal));
