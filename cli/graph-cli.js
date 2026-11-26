@@ -37,7 +37,7 @@ const flags = {
   run:['inputs','at','seed','out','json',...executionFlags],
   batch:['inputs','at','seed','out','json','resume','progress',...executionFlags],
   session:['protocol','out','workers'],
-  clip:['inputs','seed','out','output','from','to','fps','warmup','cuts','clock','format','render-options','capture-options','json',...executionFlags]
+  clip:['inputs','seed','out','output','from','to','fps','warmup','cuts','clock','format','render-options','capture-options','controls','controls-input','json',...executionFlags]
 };
 for (const options of Object.values(flags)) options.push('instance','base-context');
 const discoveryFlags = { nodes: ['json'], describe: ['json', 'example'] };
@@ -324,6 +324,7 @@ async function graphCommand(pos,opt,settings) {
   if (opt.cache===undefined && cacheFlags.slice(1).some(flag=>opt[flag]!==undefined))
     throw new TypeError('Graph cache limits need --cache directory');
   if (opt.resume && opt.out===undefined) throw new TypeError('Graph batch --resume needs --out directory');
+  if (opt['controls-input']!==undefined && opt.controls===undefined) throw new TypeError('Graph --controls-input needs a saved route');
   settings=await host.adapters(opt.adapters,settings);
   const workerPool=opt.workers===undefined ? undefined : createGraphWorkers(Number(opt.workers), {kit:settings.kit});
   try { return await projectCommand(mode,file,caseFile,opt,{...settings,workerPool}); }
@@ -384,7 +385,18 @@ async function projectCommand(mode,file,caseFile,opt,settings) {
   const execute=(settings,work)=>cache ? cache(mode,project.artifactIdentity(),settings,work) : work();
   if (mode==='clip') {
     const options={...run,...clipOptions(opt,sources,project.takeClock)};
-    result=execute(options,()=>project.clip(options));
+    if (opt.controls===undefined) result=execute(options,()=>project.clip(options));
+    else {
+      const file=path.resolve(opt.controls);
+      sources.push(file);
+      const {frameInputs,report}=require('./channel-tools.js').frameControls(file,opt['controls-input'] ?? 'controls',
+        options,project,settings.kit.KIT);
+      result=execute({options,controlRoute:report},()=>{
+        const clip=project.clip(options,{frameInputs});
+        clip.report.controlRoute=report;
+        return clip;
+      });
+    }
   } else if (mode==='inspect') {
     const target={output:opt.output,node:opt.node,port:opt.port,map:opt.map,component:opt.component};
     result=execute([target,run],()=>project.inspect(target,run));
