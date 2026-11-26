@@ -255,6 +255,20 @@ const CameraLens = (() => {
       setback, aspect, tangent, ortho, clipNear: Math.max(.4, .15 * dist), clipFar: 400 };
   }
 
+  // Native raster coordinates measured from pixel edges, with positive axial depth.
+  function rasterProjector({ view, focal, ortho, width, height }) {
+    const viewPoint = ([x, y, z]) => [
+      view[0] * x + view[4] * y + view[8] * z + view[12],
+      view[1] * x + view[5] * y + view[9] * z + view[13],
+      -(view[2] * x + view[6] * y + view[10] * z + view[14])
+    ];
+    function project([x, y, depth]) {
+      const scale = focal / (ortho ? 1 : depth);
+      return [width * .5 + x * scale, height * .5 - y * scale];
+    }
+    return { viewPoint, project };
+  }
+
   function rays(view, eye, W, H, focal, ortho) {
     const origin = eye.slice(),
       direction = [0, 0, 0];
@@ -274,6 +288,7 @@ const CameraLens = (() => {
   }
   return Object.freeze({
     rays,
+    rasterProjector,
     defaultFov,
     defaultSensorHeight,
     fieldOfView,

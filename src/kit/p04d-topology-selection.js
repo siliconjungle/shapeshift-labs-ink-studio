@@ -348,15 +348,7 @@
     if (view?.length !== 16 || !Array.from(view).every(Number.isFinite) ||
         ![focal, clipNear, clipFar].every(Number.isFinite) || focal <= 0 || clipNear <= 0 || clipFar <= clipNear)
       throw new TypeError('Mesh visibility needs the native raster camera and focal length');
-    const viewPoint = ([x, y, z]) => [
-      view[0] * x + view[4] * y + view[8] * z + view[12],
-      view[1] * x + view[5] * y + view[9] * z + view[13],
-      -(view[2] * x + view[6] * y + view[10] * z + view[14])
-    ];
-    function project([x, y, z]) {
-      const scale = focal / (ortho ? 1 : z);
-      return [w * .5 + x * scale, h * .5 - y * scale];
-    }
+    const { viewPoint, project } = CameraLens.rasterProjector({view, focal, ortho, width:w, height:h});
     function point(value) {
       return value[2] >= clipNear && value[2] <= clipFar ? project(value) : null;
     }

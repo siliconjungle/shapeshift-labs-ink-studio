@@ -59,12 +59,16 @@ function composite(w, h, layers, draw, kit) {
 
 function view(input, standalone) {
   if (!input || Object.getPrototypeOf(input) !== Object.prototype ||
-      Object.keys(input).some(key => !['w', 'h', 't', 'camera', 'raw', 'materials', 'material', 'readability', 'afterMaterials'].includes(key)) ||
+      Object.keys(input).some(key => !['w', 'h', 't', 'camera', 'cameraShot', 'cameraTime', 'lockCamera', 'raw', 'materials', 'material', 'readability', 'afterMaterials'].includes(key)) ||
+      input.cameraShot !== undefined && (standalone || !name(input.cameraShot)) ||
+      input.cameraTime !== undefined && (!Number.isFinite(input.cameraTime) || input.cameraTime < 0) ||
+      input.lockCamera !== undefined && typeof input.lockCamera !== 'boolean' ||
       input.material !== undefined && !name(input.material) ||
       input.afterMaterials !== undefined && (!standalone || !Array.isArray(input.afterMaterials)))
     throw new TypeError('Use UV review camera, grid and optional atlas material settings');
-  return { ...viewSettings({ w: 220, h: 180, raw: true, ...input }, standalone), material: input.material,
-    readability: input.readability, afterMaterials: input.afterMaterials };
+  const {w=220,h=180,t,raw,camera,materials,cameraShot,cameraTime,lockCamera,material,readability,afterMaterials} = input;
+  return {...viewSettings({w,h,t,raw,camera,materials},standalone),
+    cameraShot,cameraTime,lockCamera,material,readability,afterMaterials};
 }
 
 function capture(document, settings, kit, editor, object) {
@@ -82,15 +86,24 @@ function capture(document, settings, kit, editor, object) {
   }
   require('./diarama-pose.js').pose(world, settings.t, { kit, maxSteps: 7200 });
   let camera;
-  const { w, h, t, raw } = settings;
-  const frame = R.render(world, { w, h, t, raw, px: 1, camera: settings.camera, passes: ['sourceSurface'],
+  const { w, h, t, raw, cameraShot, cameraTime, lockCamera } = settings;
+  if (cameraShot !== undefined && !world.cameraRig) throw new RangeError('Choose a shot from an authored camera rig');
+  const frame = R.render(world, { w, h, t, raw, px: 1, camera: settings.camera, cameraShot, cameraTime, lockCamera, passes: ['sourceSurface'],
     edges: false, composite: false, renderGraph: false, renderGrid: false, inspection: false, shutter: false, cameraGuides: false,
     ...R.cameraCapture(null, (raster, sample) => {
-      if (raster.width === w && raster.height === h) camera = { ...raster, focal: sample.focal };
+      if (raster.width === w && raster.height === h)
+        camera = {...raster,focal:sample.focal,sample:{...sample.frame,...(cameraShot && {shot:cameraShot})}};
     }) });
   if (!camera || frame.w !== w || frame.h !== h)
     throw new RangeError('UV review needs a native camera and matching source pixel passes');
   return { frame, mesh, camera };
+}
+
+function sourcePositions(mesh, K) {
+  const {positions} = K.sceneMeshes.geometry(mesh), result = new Map();
+  for (let i = 0; i < mesh.vertices; i++)
+    result.set(K.meshTopology.sourceVertex(mesh,i),positions.subarray(i*3,i*3+3));
+  return result;
 }
 
 function atlas(layout, material, selection, settings, kit, paint) {
@@ -165,12 +178,11 @@ function model(layout, { frame, mesh, camera }, selection, kit, visiblePixels) {
     for (const [channel, n] of tint.entries())
       rgb[i * 3 + channel] = outline ? n : Math.round((rgb[i * 3 + channel] * 2 + n) / 3);
   }
-  const { eye, right, up, back } = kit.CameraLens.fromView(camera.view);
-  function project(p) {
-    const relative = K.V.sub(p, eye), depth = -K.V.dot(relative, back);
+  const projector = kit.CameraLens.rasterProjector(camera);
+  function project(position) {
+    const point = projector.viewPoint(position), depth = point[2];
     if (depth < camera.clipNear || depth > camera.clipFar) return;
-    const scale = camera.focal / (camera.ortho ? 1 : depth);
-    return [w / 2 + K.V.dot(relative, right) * scale - .5, h / 2 - K.V.dot(relative, up) * scale - .5];
+    return projector.project(point).map(n=>n-.5);
   }
   function visible(x, y, faces) {
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
@@ -180,7 +192,7 @@ function model(layout, { frame, mesh, camera }, selection, kit, visiblePixels) {
     }
     return false;
   }
-  const points = new Map(K.meshTopology.sourceDocument(mesh).vertices.map(row => [row.id, project(row.position)]));
+  const points = new Map([...sourcePositions(mesh,K)].map(([id,position])=>[id,project(position)]));
   const selectedEdges = new Set(selection?.domain === 'edges' ? selection.edges : []);
   const selectedSides = sideSelection(selection);
   const cuts = new Set(selection?.unwrap?.cuts);
@@ -201,6 +213,9 @@ function model(layout, { frame, mesh, camera }, selection, kit, visiblePixels) {
     const p = points.get(corner.vertex);
     return p && visible(Math.round(p[0]),Math.round(p[1]),[corner.face]) ? p : undefined;
   });
+  for (const {pixel,status} of selection?.projection?.corners ?? []) {
+    if (status === 'projected') draw.push(rect(center(pixel.map(n=>n-.5),1),ink.snap));
+  }
   return composite(w, h, [{ source: { w, h, rgb } }], draw, kit);
 }
 
@@ -230,7 +245,7 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
   const assignment = selected?.assignment;
   const materialAfter = captures[0]===captures[1] ? material :
     assignment?.faces.find(row=>row.before.material===material)?.after.material ?? material;
-  const useAtlasPaint = basis || unwrap || selected?.cornerScope || selected?.snapGuides || settings.pivot || layouts.some(layout=>layout.pivot);
+  const useAtlasPaint = basis || unwrap || selected?.projection || selected?.cornerScope || selected?.snapGuides || settings.pivot || layouts.some(layout=>layout.pivot);
   let crossHighlight;
   if (selectionOutput) {
     const layout = layouts[0], byId = new Map(layout.faces.map(row => [row.id, row]));
@@ -264,7 +279,8 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
   const [pivotBefore,pivotAfter] = layouts.map(layout=>basis ? null : settings.pivot ?? layout.pivot ?? null);
   const hasPivot = basis || pivotBefore || pivotAfter;
   const snapGuide = scaling?.snapBounds ? 'Snapped bounds' : normalization ? 'UV reference' :
-    assignment ? 'Assigned region' : flatten ? 'Flattened bounds' : selected?.snapGuides && 'Snap target';
+    assignment ? 'Assigned region' : flatten ? 'Flattened bounds' : selected?.projection ? 'Projected corner' :
+    selected?.snapGuides && 'Snap target';
   draw.push(text(snapGuide || 'Cut seam', [width * .18, height - 8], snapGuide ? ink.snap : ink.seam, 8));
   if (assignment) {
     const stretch = assignment.faces.reduce((max,row)=>Math.max(max,row.after.metrics.maxStretch ?? 0),0);
@@ -308,6 +324,7 @@ function assignmentReview(editor,revised,report,input,kit,directory,inputs) {
 
 function editSelection(UV,document,plan,selectionFile) {
   const uvSet = plan.report.uvSet ?? 0;
+  const projection = plan.report.operations.findLast(row=>row.op==='project-camera')?.evidence;
   const normalized = plan.report.operations.findLast(row=>row.op==='normalize-orientation')?.evidence;
   const flatten = plan.report.operations.findLast(row=>row.op==='flatten')?.evidence;
   const unwrap = plan.report.operations.findLast(row=>row.op==='unwrap' && row.evidence?.across==='geometry')?.evidence;
@@ -322,6 +339,7 @@ function editSelection(UV,document,plan,selectionFile) {
   const applied = basis?.evidence;
   const inspection = {...(guides.length && {snapGuides:guides}),
     ...(flatten && {flatten}),
+    ...(projection && {projection}),
     ...(unwrap && {unwrap}),
     ...(normalized && {normalization:{axis:normalized.axis,method:normalized.method,reference:normalized.reference,faces:normalized.faces}}),
     ...(applied && {[basis.op==='orient' ? 'orientation' : 'scaling']:{
@@ -341,7 +359,7 @@ function editSelection(UV,document,plan,selectionFile) {
   }
   const ids = [...new Set([...plan.report.corners.map(row=>row.face),...applied?.faces ?? [],
     ...normalized?.faces.map(row=>row.face) ?? [],...flatten?.faces.map(row=>row.face) ?? [],
-    ...unwrap?.components.flatMap(row=>row.faces) ?? []])];
+    ...unwrap?.components.flatMap(row=>row.faces) ?? [],...projection?.faces ?? []])];
   return {...UV.select(document,{domain:'faces',uvSet,ids}),...inspection};
 }
 
@@ -386,7 +404,11 @@ function command([action, file, input, ...rest], opt, kit, openEditor, {projectT
       throw new TypeError('Choose a UV layout in the request or on the command line');
     const request=selector===undefined ? authored : {...authored,uvSet:selector};
     const settings = view(opt.view ? read(opt.view) : {}, !editor);
-    const old = (preview || action === 'select' && request?.model !== undefined) && capture(document, settings, kit, editor, object);
+    const projecting = action === 'edit' && Array.isArray(request?.operations) &&
+      request.operations.some(op=>op?.op==='project-camera');
+    if (projecting && !opt.view) throw new TypeError('Camera UV projection needs an approved --view file');
+    const old = (projecting || preview || action === 'select' && request?.model !== undefined) &&
+      capture(document, settings, kit, editor, object);
     if (action === 'select') {
       if (request?.model !== undefined) {
         if (!request.model || Object.keys(request).some(key => !['domain', 'model','uvSet'].includes(key)) ||
@@ -402,8 +424,10 @@ function command([action, file, input, ...rest], opt, kit, openEditor, {projectT
         files.publishJson(path.resolve(topologyOut), selection, 'A different topology selection already exists at ' + topologyOut);
       }
     } else {
-      const plan = editor ? editor.planMeshUV(object,request,{projectTexelsPerUnit}) :
-        UV.plan(document,request,{texelsPerUnit:projectTexelsPerUnit});
+      const cameraProjection = projecting && {camera:old.camera,projectionPositions:sourcePositions(old.mesh,kit.KIT)};
+      const editOptions = {projectTexelsPerUnit,...cameraProjection};
+      const plan = editor ? editor.planMeshUV(object,request,editOptions) :
+        UV.plan(document,request,{texelsPerUnit:projectTexelsPerUnit,...cameraProjection});
       result = { ...plan.report };
       if (preview) {
         const selected = editSelection(UV,document,plan,opt.selection);
@@ -419,7 +443,7 @@ function command([action, file, input, ...rest], opt, kit, openEditor, {projectT
         result.preview = review(document, plan.document, old, next, selected, {...settings,pivot}, kit, paths,readability);
       }
       if (out && plan.report.canCommit) {
-        if (editor) result.transaction = editor.editMeshUV(object,request,{projectTexelsPerUnit}).topology;
+        if (editor) result.transaction = editor.editMeshUV(object,request,editOptions).topology;
         value = editor ? editor.snapshot() : plan.document;
       }
     }

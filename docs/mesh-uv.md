@@ -2060,6 +2060,71 @@ ink-studio mesh-uv edit facade.json connected.json --object facade --out unwrapp
 node examples/tileset-pick/uv-connected-unwrap-demo.cjs uv-connected-unwrap-demo
 ```
 
+## Project UVs from an approved camera
+
+Use a reviewed native view to register a face selection to a reference image or
+painted atlas. Save the exact art grid and shot in the view file. Here
+`approved-view.json` samples the authored `inspection` shot at one second.
+
+```json
+{
+  "w": 240, "h": 160, "t": 1,
+  "cameraShot": "inspection",
+  "raw": true
+}
+```
+
+The shot can be orthographic or perspective. To approve an explicit camera,
+use a `camera` object in the view file with fields such as `target`, `yaw`,
+`pitch`, `dist`, `fov` in radians, and `projection` set to `orthographic`
+or `perspective`. You can use `cameraTime` to sample the lens and camera rig
+at a different time from the geometry pose. The view file works with an
+editable scene or a standalone topology document. Named shots use the
+scene's camera rig.
+
+In `project.json`, select retained face IDs or supply a revision-checked UV
+selection of faces or islands. By default the view fills the entire UV
+layout. Set `rect: [u, v, width, height]` to place the view in a normalized
+atlas subregion, as shown here.
+
+```json
+{
+  "operations": [
+    { "op": "project-camera", "ids": ["front", "return"], "rect": [0.25, 0, 0.5, 1] }
+  ]
+}
+```
+
+```sh
+ink-studio mesh-uv edit panel.json project.json --object panel --view approved-view.json --preview camera-review
+ink-studio mesh-uv edit panel.json project.json --object panel --view approved-view.json --out projected.json --report projected-receipt.json
+```
+
+The report records the column-major view matrix, focal scale, native
+viewport, depth interval, sampled times and requested shot, and each
+selected corner's source position, camera depth, projected pixel, and
+proposed UV. Pixel coordinates run from the top-left pixel edge to the
+bottom-right edge. The review marks projected corners on the native model
+and shows the resulting UV footprint on the atlas. A corner outside the
+frame or the depth interval, a collapsed projected triangle, or a changed
+pinned UV blocks the edit. Unselected corners, authored seams, material
+assignments, and geometry are retained. New inferred seams are listed
+under `edgeChanges`.
+
+Projection applies to all selected faces, including hidden ones. The edit
+writes ordinary corner UVs. In a perspective view the corners match the
+approved camera, and the renderer uses its ordinary texture interpolation
+within each triangle. Use additional topology where you need a closer
+interior match on a face with substantial depth variation.
+
+In the SDK, pass `{ camera }` to `meshTopology.uv.plan`,
+`editor.planMeshUV`, or `editor.editMeshUV`. The `camera` object can be
+taken from the operation receipt's `evidence.camera`. Its matrix must use
+the same coordinate space as the mesh. When projecting a placed or posed
+mesh against a scene camera, also pass `projectionPositions`, a
+`Map` from stable vertex IDs to positions in that camera's world space.
+The CLI supplies those positions from the captured authored mesh.
+
 ## Allocate texels for a shot
 
 A `texel-budget` operation redistributes space among named features on one
