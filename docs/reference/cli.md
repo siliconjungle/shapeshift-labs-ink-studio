@@ -396,6 +396,10 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   material-bake preset <review|compact|indexed> [--out file.json]   export a reusable native bake preset
     --rebake-from <material-bake.json> [--chart-edits <plan.json>] [--rebake-report <file.json>]   update selected or changed UV charts
   interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets
+  materialx inspect|validate <file.mtlx> [--material name --color-settings file.json --python path]
+  materialx import <file.mtlx> --out directory [--material name --color-settings file.json --strict --python path]
+  materialx export <graph.json> --output name --out file.mtlx [--strict --python path]
+  materialx migration <file.mdl|file.mi|file.iray>
   scene-resource inspect|validate <scene> [--python path --blender path]
   scene-resource convert <scene> --out <file> [--materialx look.mtlx --python path --blender path]
   bake-job inspect|run|serve|preset <job.json> [--out directory --preset preset.json --port 0]

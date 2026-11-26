@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pier Relay · MaterialX in Ink Studio</title>
+<style>
+:root{color-scheme:dark;background:#141b20;color:#eee7d8;font:15px/1.5 system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:auto;max-width:1260px;padding:35px 32px 44px}
+header{display:flex;justify-content:space-between;align-items:end;margin-bottom:18px;gap:16px}
+h1{font:normal clamp(38px,6vw,72px)/1 Georgia,serif;margin:0;letter-spacing:-.047em}
+header p{margin:6px 0 0;color:#a6bdc1}
+header small{color:#a6bdc1;text-align:right}
+main{display:grid;grid-template-columns:minmax(0,2.08fr) minmax(245px,1fr);gap:22px}
+figure{margin:0;background:#0b141a;border:1px solid #405259;border-radius:8px;overflow:hidden}
+.layer{display:grid;position:relative}
+img{display:block;grid-area:1/1;width:100%;image-rendering:pixelated}
+img[hidden]{display:none}
+figcaption{display:flex;align-items:center;min-height:53px;gap:12px;padding:10px 13px;color:#b5c8c8}
+label{display:flex;gap:8px;align-items:center}
+input[type=range]{width:clamp(90px,14vw,190px);accent-color:#edba84}
+footer{display:flex;flex-wrap:wrap;gap:14px;margin-top:16px}
+a{color:#f0c38d;text-underline-offset:3px}
+aside{border-top:1px solid #496063;padding-top:12px}
+nav,.row{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px}
+button{font:inherit;cursor:pointer;color:#ede5d4;background:#233038;border:1px solid #4e626a;border-radius:5px;padding:5px 8px}
+button[aria-pressed=true]{color:#251c14;background:#efbf85;border-color:#efbf85}
+h2{font-size:1rem;margin:10px 0 5px}
+p{margin:7px 0}
+table{width:100%;border-collapse:collapse;font-size:.82rem}
+th,td{padding:5px 0;border-bottom:1px solid #34454b;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+th{color:#b3cacf;padding-right:7px}
+small,.quiet{color:#abc0c4}
+code{font-size:.9em;overflow-wrap:anywhere}
+[hidden]{display:none!important}
+@media(max-width:675px){body{padding:20px 13px}main{grid-template-columns:1fr}header small{display:none}}
+</style>
+<header><div><h1>Pier Relay</h1><p>Editable Ink material through MaterialX and back</p></div><small id="library"></small></header>
+<main>
+  <div>
+    <figure>
+      <div class="layer">
+        <img id="original" src="source/denoised.png" alt="Pier Relay rendered from the original Ink graph">
+        <img id="reimported" src="reopened/denoised.png" alt="Pier Relay rendered from the imported MaterialX graph">
+        <img id="difference" src="difference.png" alt="Exaggerated RGB render difference" hidden>
+      </div>
+      <figcaption><label id="split-label" for="split">Split <input type="range" id="split" min="0" max="100" value="50"></label>
+        <span id="caption"></span></figcaption>
+    </figure>
+    <footer>
+      <a href="pier-relay.mtlx">MaterialX document</a>
+      <a id="native">Reopened Ink graph</a>
+      <a href="comparison.json">Complete report</a>
+      <a href="live-weather.mtlx">Source with unsupported node</a>
+    </footer>
+  </div>
+  <aside>
+    <nav id="views" aria-label="Image comparison"></nav>
+    <div id="reports" class="row" aria-label="Interchange reports"></div>
+    <h2 id="title"></h2><p class="quiet" id="summary"></p>
+    <table><tbody id="records"></tbody></table>
+  </aside>
+</main>
+<script>
+const data=/*PIER_REPORT*/;
+const $=id=>document.getElementById(id);
+let view='split', report='round';
+const views={split:'Split',source:'Source',reopen:'Reopened',diff:'Difference'};
+const captions={split:'Original Ink on the left, reopened MaterialX on the right.',
+  source:'Rendered from the original editable Ink material.',reopen:'Rendered from the material reimported from MaterialX.',
+  diff:'Absolute RGB difference amplified 16×.'};
+$('library').textContent='Library '+data.exported.library.version+' · '+data.render.width+' × '+data.render.height;
+$('native').href='imported/'+data.imported.files[0].file;
+function button(list,name,active,onClick){
+  const tag=document.createElement('button');tag.type='button';tag.textContent=name;tag.active=active;
+  tag.onclick=()=>{onClick();draw()};list.append(tag);
+}
+for(const [id,label] of Object.entries(views)) button($('views'),label,()=>view===id,()=>view=id);
+for(const [id,label] of [['round','Verified round trip'],['loss','Loss example']])
+  button($('reports'),label,()=>report===id,()=>report=id);
+function row(name,value){
+  const tr=document.createElement('tr'), th=document.createElement('th'), td=document.createElement('td');
+  th.scope='row';th.textContent=name;td.textContent=value;tr.append(th,td);return tr;
+}
+function split(){
+  $('reimported').style.clipPath=view==='split'?`inset(0 0 0 ${$('split').value}%)`:'none';
+}
+$('split').addEventListener('input',split);
+function draw(){
+  for(const tag of document.querySelectorAll('button'))tag.setAttribute('aria-pressed',tag.active());
+  $('original').hidden=!['split','source'].includes(view);
+  $('reimported').hidden=!['split','reopen'].includes(view);
+  $('difference').hidden=view!=='diff';$('split-label').hidden=view!=='split';$('caption').textContent=captions[view];split();
+  if(report==='round'){
+    $('title').textContent='Reopened material';
+    $('summary').textContent=data.exported.roundTrip.uniforms.filter(v=>v.equal).length+' matching uniforms and '+
+      data.exported.roundTrip.maps.length+' verified maps. '+data.render.changed.toLocaleString()+' changed display pixels.';
+    $('records').replaceChildren(...data.exported.roundTrip.maps.map(r=>row(r.input,r.binding&&r.sameTexture?'Matched':'Changed')));
+  }else{
+    $('title').textContent='Unsupported source connection';
+    $('summary').textContent='MaterialX validation passed. Strict import blocked publication.';
+    $('records').replaceChildren(...data.partial.entries.filter(r=>r.status==='dropped').map(r=>row(r.input??r.path,r.reason)));
+  }
+}
+draw();
+</script>
+</html>

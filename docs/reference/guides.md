@@ -256,6 +256,7 @@ All checked-in guides, indexed by title and section headings.
 - [Map-driven Tile Sampler](../material-tile-sampler.md)
 - [Material validation](../material-validation.md)
 - [Surface materialisation](../materialisation.md)
+- [MaterialX and shader interchange](../materialx-interchange.md)
 - [Procedural math fields](../math-fields.md)
 - [Measured materials from planar captures](../measured-materials.md)
 - [Editable mesh topology](../mesh-topology.md)
