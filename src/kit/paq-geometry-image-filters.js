@@ -175,6 +175,15 @@ const TypedImageNormals = ({ requireImage, declare, descriptor, wrap, pack, stor
     return V.sub(V.mul(t, gain), u);
   }
 
+  function mixVectors(base, detail, method, weight) {
+    const n = normalize(base);
+    if (!weight) return n;
+    const b = normalize(detail);
+    const combined = method === 'rnm' ? reorient(n, b) : method === 'whiteout' ?
+      [n[0] + b[0], n[1] + b[1], n[2] * b[2]] : b;
+    return normalize(V.lerp(n, normalize(combined, n), weight), n);
+  }
+
   function normalCombine(baseSource, detailSource, options = {}, mask = null) {
     settings(options, ['method', 'amount', 'precision']);
     const base = requireImage(baseSource, 'normal'), detail = requireImage(detailSource, 'normal');
@@ -183,15 +192,11 @@ const TypedImageNormals = ({ requireImage, declare, descriptor, wrap, pack, stor
     if (!alignedGrid(base, detail, true) || spec.units !== detail.descriptor.units || spaceOf(spec) !== spaceOf(detail.descriptor) ||
         !['rnm', 'whiteout', 'lerp'].includes(method) || method !== 'lerp' && spaceOf(spec) !== 'tangent' || !unit(amount))
       throw new RangeError('Normal combine needs aligned maps in the same space, a valid method and amount in [0, 1]');
-    const combine = method === 'rnm' ? reorient : method === 'whiteout' ?
-      (a, b) => [a[0] + b[0], a[1] + b[1], a[2] * b[2]] : (_a, b) => b;
     const readDetail = reader(detail), gate = weights(base, mask), other = [0, 0, 0];
     return apply(base, { precision }, (vector, p) => {
-      const n = normalize(vector);
-      const fourth = readDetail(p, other), weight = gate(p) * amount * (detail.descriptor.alpha === 'none' ? 1 : fourth);
-      if (!weight) return n;
-      const added = normalize(combine(n, normalize(other)), n);
-      return normalize(V.lerp(n, added, weight), n);
+      const fourth = readDetail(p, other);
+      const weight = gate(p) * amount * (detail.descriptor.alpha === 'none' ? 1 : fourth);
+      return mixVectors(vector, other, method, weight);
     });
   }
 
@@ -287,5 +292,5 @@ const TypedImageNormals = ({ requireImage, declare, descriptor, wrap, pack, stor
   }
 
   return Object.freeze({ heightToNormal, normalDecode, normalNormalize, normalInvert, normalRotate, normalOrientation,
-    normalCombine, normalSpace, heightBlend, reencode });
+    normalCombine, normalSpace, heightBlend, reencode, reader, encode, mixVectors });
 };

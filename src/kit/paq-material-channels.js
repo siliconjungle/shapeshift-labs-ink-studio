@@ -82,6 +82,12 @@
     return withMaps(source.channels, maps, metadata);
   }
 
+  function layer(base, source, options = empty, mask = null) {
+    if (!valid(base) || !valid(source)) throw new TypeError('Material layering needs two version 1 material channel packets');
+    const { maps, metadata } = P.graphImages.layerMaterials(base.channels, source.channels, options, mask);
+    return Object.keys(maps).length ? withMaps(base.channels, maps, metadata) : base;
+  }
+
   const packetPort = { value: 'materialChannels' };
   const mapsPort = { maps: { type: 'record', description: 'Channel names mapped to raster values.' },
     metadata: { type: 'record', default: empty, description: 'Optional JSON metadata keyed by supplied channel.' } };
@@ -113,8 +119,18 @@
       description: 'Replace or add only the supplied material maps. Pass all other channels through.',
       inputs: { source: 'materialChannels', ...mapsPort }, outputs: packetPort,
       run({ source, maps, metadata }) { return { value: withMaps(source.channels, maps, metadata) }; }
+    },
+    'material.layer': {
+      description: 'Layer typed material maps with shared UV placement, coverage and height dominance, and per-channel blend rules.',
+      inputs: {
+        base: 'materialChannels', layer: 'materialChannels',
+        options: { type: 'record', default: empty, description: 'Opacity, channel rules, UV transform, mask space and height dominance.' },
+        mask: { type: 'any', default: null, description: 'Normalized grayscale coverage in layer or base UV space.' }
+      },
+      outputs: packetPort,
+      run({ base, layer: source, options, mask }) { return { value: layer(base, source, options, mask) }; }
     }
   });
 
-  P.materialChannels = Object.freeze({ format, version, valid, validMap, pack, channel, replace, operations });
+  P.materialChannels = Object.freeze({ format, version, valid, validMap, pack, channel, replace, layer, operations });
 })(KIT);

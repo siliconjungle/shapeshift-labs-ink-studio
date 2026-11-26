@@ -671,6 +671,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.filters.variableBlur` | function | `(source, radiusMap, options = {})` | [source](../../src/kit/paq-filter-images.js) |
 | `KIT.procedural.graphImages.format` | value | `string = "ink-studio/graph-image"` |  |
 | `KIT.procedural.graphImages.inspect` | function | `(source)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.layerMaterials` | function | `(base, layer, options, mask)` | [source](../../src/kit/paq-graph-image-layering.js) |
 | `KIT.procedural.graphImages.morphology` | namespace |  |  |
 | `KIT.procedural.graphImages.morphology.dilate` | function | `(source, options = {})` | [source](../../src/kit/paq-distance-images.js) |
 | `KIT.procedural.graphImages.morphology.distance` | function | `(source, options = {})` | [source](../../src/kit/paq-distance-images.js) |
@@ -681,8 +682,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.morphology.signedDistance` | function | `(source, options = {})` | [source](../../src/kit/paq-distance-images.js) |
 | `KIT.procedural.graphImages.noise` | function | `(family, width, height, options = {}, graphSeed = 0, time = 0)` | [source](../../src/kit/paq-generator-noise.js) |
 | `KIT.procedural.graphImages.normals` | namespace |  |  |
+| `KIT.procedural.graphImages.normals.encode` | function | `(target, data, p, vector, fourth, policy = 'clamp')` | [source](../../src/kit/paq-geometry-image-filters.js) |
 | `KIT.procedural.graphImages.normals.heightBlend` | function | `(baseSource, layerSource, options = {}, mask = null)` | [source](../../src/kit/paq-geometry-image-filters.js) |
 | `KIT.procedural.graphImages.normals.heightToNormal` | function | `(source, options = {})` | [source](../../src/kit/paq-geometry-image-filters.js) |
+| `KIT.procedural.graphImages.normals.mixVectors` | function | `(base, detail, method, weight)` | [source](../../src/kit/paq-geometry-image-filters.js) |
 | `KIT.procedural.graphImages.normals.normalCombine` | function | `(baseSource, detailSource, options = {}, mask = null)` | [source](../../src/kit/paq-geometry-image-filters.js) |
 | `KIT.procedural.graphImages.normals.normalDecode` | function | `(source, options = {})` | [source](../../src/kit/paq-geometry-image-filters.js) |
 | `KIT.procedural.graphImages.normals.normalInvert` | function | `(source, options = {})` | [source](../../src/kit/paq-geometry-image-filters.js) |
@@ -690,6 +693,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.normals.normalOrientation` | function | `(source, options = {})` | [source](../../src/kit/paq-geometry-image-filters.js) |
 | `KIT.procedural.graphImages.normals.normalRotate` | function | `(source, options = {})` | [source](../../src/kit/paq-geometry-image-filters.js) |
 | `KIT.procedural.graphImages.normals.normalSpace` | function | `(source, options = {}, surface = null, tangentMap = null, handednessMap = null)` | [source](../../src/kit/paq-geometry-image-filters.js) |
+| `KIT.procedural.graphImages.normals.reader` | function | `(image)` | [source](../../src/kit/paq-geometry-image-filters.js) |
 | `KIT.procedural.graphImages.normals.reencode` | function | `(image, precision, policy)` | [source](../../src/kit/paq-geometry-image-filters.js) |
 | `KIT.procedural.graphImages.operations` | namespace |  |  |
 | `KIT.procedural.graphImages.operations["image.anisotropicBlur"]` | namespace |  |  |

@@ -476,6 +476,16 @@ const specifications = {
     inputs: { captures: link('captures'), settings: { width: 4, height: 4, pixelPitchMm: [.3, .3] } }
   },
   'material.pack': { inputs: materialSource.inputs },
+  'material.layer': { nodes: {
+    baseRoughness: { op: 'image.uniform', inputs: { value: .67, width: 8, height: 6, descriptor: { intent: 'data' } } },
+    coverage: { op: 'image.uniform', inputs: { value: .75, width: 4, height: 4, descriptor: { intent: 'mask' } } },
+    layerRoughness: { op: 'image.uniform', inputs: { value: .23, width: 4, height: 4, descriptor: { intent: 'data' } } },
+    baseMaps: { op: 'data.record', inputs: { roughness: link('baseRoughness') } },
+    layerMaps: { op: 'data.record', inputs: { roughness: link('layerRoughness') } },
+    base: { op: 'material.pack', inputs: { maps: link('baseMaps') } },
+    coat: { op: 'material.pack', inputs: { maps: link('layerMaps') } }
+  }, inputs: { base: link('base'), layer: link('coat'), mask: link('coverage'),
+    options: { opacity: .8, defaultMode: 'keep', channels: { roughness: { mode: 'copy' } } } } },
   'material.channel': { nodes: { material: materialSource }, inputs: { source: link('material'), name: 'mask.wear' } },
   'material.replace': { nodes: { material: materialSource }, inputs: {
     source: link('material'), maps: { roughness: slots }

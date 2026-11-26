@@ -611,7 +611,7 @@
   const morphology = TypedImageMorphology({
     requireImage, descriptor, wrap, storage, integerMax, measure, fields, geometry: P.geometry
   });
-  const { spatial, resample, sampler: spatialSampler, borders, workingSamples, textureSampling } = TypedImageSpatial({
+  const { spatial, resample, sampler: spatialSampler, borders, workingSamples, textureSampling, mappedSampler } = TypedImageSpatial({
     requireImage, validImage:valid, grayDescriptor, descriptor, wrap, storage, pack, integerMax, alphaAt, convertColor, dimensions, fields
   });
   const warps = TypedImageDisplacement({
@@ -620,6 +620,9 @@
   const normals = TypedImageNormals({
     requireImage, declare, descriptor, wrap, pack, storage, integerMax, precisionOf, raster, fields, alignedGrid, borders,
     V: KIT.V, M: KIT.M
+  });
+  const layerMaterials = TypedMaterialLayering({
+    fields, record, valid, validGray, descriptor, wrap, storage, pack, integerMax, convertColor, mappedSampler, borders, normals
   });
   const regions = TypedImageRegions({
     measure, validImage: valid, descriptor, wrap, fields, borders, alignedGrid, resample, hash01: P.data.hash01
@@ -1077,5 +1080,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, validGray, textureSampling, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, regions, advancedHeight, advancedTexture, shape:bakeShape, tileGenerator:tileGenerator.generate, tileSampler:tileSampler.sample, shapeSplatter, scatterMappers, noise:makeNoise, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, validGray, textureSampling, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, layerMaterials, corrections, transfers, filters, morphology, spatial, warps, normals, regions, advancedHeight, advancedTexture, shape:bakeShape, tileGenerator:tileGenerator.generate, tileSampler:tileSampler.sample, shapeSplatter, scatterMappers, noise:makeNoise, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);
