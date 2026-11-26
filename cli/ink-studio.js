@@ -1324,6 +1324,9 @@ const CMD = {
         '  solver-network inspect <network.json> [--out report.json]   inspect reusable stages, typed ports and execution order',
         '  solver-network compile <network.json> [--out model.json]   lower authored stages to a native simulation model',
         '  solver-network run <run.json> [--out directory]   checkpoint frame branches and capture fields, particles and contacts',
+        '  fracture prepare <plan.json> [--out preparation.json]   fit feature-guided cells, hierarchy and seam constraints',
+        '  fracture compile <plan.json> [--out world.json]   compile a portable native failure scene',
+        '  fracture run <plan.json> [--out directory]   replay progressive failure and save native handoffs and checkpoints',
         '    sim run|resume|fork <file> [--branch ID]   name the branch in committed events',
         '    sim run <world> --workers N [--profile]   advance eligible systems in deterministic Node worker partitions',
         '    sim run <world> --record file.json [--observations plan.json]   retain reproducible execution evidence',
@@ -1514,6 +1517,7 @@ const CMD = {
         '  mesh-topology transform <mesh-or-scene.json> <random-receipt.json> --replay [--object id] [--out file] [--report file]   replay recorded positions on the source revision',
         '  mesh-topology health <mesh-or-scene.json> [settings.json] [--object id] [--out report.json]   locate local topology and geometry problems',
         '  mesh-topology overlaps <mesh-or-scene.json> [settings.json] [--object id] [--part id] [--out report.json | --selection-out faces.json]   review same-facing coincident polygons',
+        '  mesh-topology combine-prefab <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   combine linked placements into a reusable prefab',
         '  mesh-topology array-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   duplicate a linked prefab on a retained XYZ array',
         '  mesh-topology replace-prefab <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   replace selected visual prefab placements and review carried anchors and overrides',
         '  mesh-topology variant-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   fork a linked prefab or detach one instance into editable members',
@@ -3674,6 +3678,9 @@ const CMD = {
   },
   'solver-network'() {
     return require('./solver-network.js').command(pos,opt,lib());
+  },
+  fracture() {
+    return require('./fracture.js').command(pos,opt,lib());
   },
   'skinned-crowd'() {
     return require('./skinned-crowd.js').command(pos,opt,lib());

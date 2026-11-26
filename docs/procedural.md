@@ -2594,6 +2594,9 @@ receipts for the matched captures.
 
 ### Implicit fracture and crack paths
 
+Use [Progressive fracture](progressive-fracture.md) for authored convex cells,
+material-specific failure, and headless rigid handoff.
+
 `fracture.power({host, seeds, stretch, rotation, gap, cell, bond})`
 partitions a signed host into weighted, negative-inside fragments. A site
 is `{id, point, weight}`, and raising its weight grows its power cell.
