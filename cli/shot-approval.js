@@ -109,7 +109,7 @@ function transitionImage(image, matte) {
 }
 
 function approveShot(world, {
-  plan = world.shotApproval, view = {}, frame: focus, camera, pose, kit = require('../index.js').load()
+  plan = world.shotApproval, view = {}, frame: focus, camera, pose, capture, kit = require('../index.js').load()
 } = {}) {
   const prepared = prepare(plan, view, kit, focus);
   const { from, frames, count, warmup, w, h, px, clock, matte, subjectReview, subjectChecks, comparison, budgets } = prepared;
@@ -186,6 +186,7 @@ function approveShot(world, {
         if (measured[metric] > max) record('performance', metric, timing.shot ?? 'frame renderer',
           { metric, value: measured[metric], max, ...(metric === 'frameMs' && { hostDependent: true }) });
     }
+    capture?.(image, location);
     samples.push(frame);
     findings.push(...rows);
     if (focus === index || focus === undefined && !evidence && (rows.length || index === count - 1)) {

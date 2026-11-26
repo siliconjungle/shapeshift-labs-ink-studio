@@ -11,7 +11,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.EXPORTS` | value | `string` | [guide](../../README.md#embedding-and-custom-scene-collections) |
 | `node.allocateSequencePalette` | function | `(shots, options = {})` | [guide](../palette-recipes.md#allocate-a-palette-across-a-sequence), [source](../../cli/sequence-palette.js) |
 | `node.approveRelief` | function | `(report,choices,{kit=require('..').load()}={})` | [guide](../render-suite.md#apply-a-reviewed-choice), [source](../../cli/relief-review.js) |
-| `node.approveShot` | function | `(world, { plan = world.shotApproval, view = {}, frame: focus, camera, pose, kit = require('../index.js').load() } = {})` | [guide](../shot-approval.md#reproduce-a-finding), [guide](../shot-approval.md), [source](../../cli/shot-approval.js) |
+| `node.approveShot` | function | `(world, { plan = world.shotApproval, view = {}, frame: focus, camera, pose, capture, kit = require('../index.js').load() } = {})` | [guide](../shot-approval.md#reproduce-a-finding), [guide](../shot-approval.md), [source](../../cli/shot-approval.js) |
 | `node.bakeBounceProbes` | function | `(world, settings)` | [source](../../index.js) |
 | `node.bakeCurves` | function | `(world, { object, part, width = 96, height = 96, directions = 8, yaw = world?.cam?.yaw ?? 0, pitches = [world?.cam?.pitch ?? 0], pivot, padding = 3, time = 0, normals = false, ribbon = true, cutoutMipmaps } = {})` | [guide](../curve-bake.md#use-the-ribbon-as-native-geometry), [guide](../curve-splats.md#group-unresolved-strands-and-hand-off-to-cards), [guide](../curve-bake.md), [source](../../cli/curve-bake.js) |
 | `node.bakeSplatFit` | function | `(world,asset=world.look?.splatFit)` | [source](../../cli/splat-fit-asset.js) |

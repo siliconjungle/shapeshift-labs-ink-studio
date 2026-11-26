@@ -44,6 +44,76 @@ Omit `clip` for a still-only sweep. Omit `at` to use the first clip
 sample or scene time zero. If seeds are omitted, the scene's authored
 seed is used, with zero as the fallback.
 
+### Compare fixed views
+
+List named fixed cameras in a scene plan's `visual.views`. Each camera
+specifies `target`, `yaw` and `pitch` in radians, positive `dist`, and
+`ortho`. Optional `fov` is in radians. Explicit view cameras hold
+framing across candidates regardless of the scene camera or animation.
+
+```sh
+ink-studio sweep examples/moss-bear-sweep.js examples/moss-bear-sweep.plan.json --out moss-bear-review
+ink-studio sweep pin moss-bear-review 5 --out bear-pin.json
+ink-studio sweep replay bear-pin.json --out moss-bear-pinned
+```
+
+Each row is one candidate. Columns follow the camera order, with up to
+eight cameras. The report lists each view's camera and artifact paths
+under its candidate. A pin retains all views. Clip frames pose each
+candidate once per sample and render each camera with independent
+history. A poster outside the clip samples starts from a fresh scene.
+The existing sheet budget applies across all views. Plans without
+`views` retain the original layout and filenames.
+
+### Approve every candidate and view
+
+Set `approval.checks` to [shot approval](shot-approval.md) checks. An
+optional `approval.views` map supplies overrides keyed by the fixed
+camera ID. An override replaces the named category or setting from
+`checks`. Without named cameras, the view ID is `default`.
+
+Approval takes its dimensions, start, frame count, and cadence from the
+visual plan. A still-only plan checks the poster. A clip plan checks its
+visible frames, and the contact sheet and clips use those approved
+render samples. An off-schedule poster is a separate preview. Each
+approval lane starts with fresh scene state and independent history.
+Use the shot plan's `warmup` and `cuts` to initialize temporal checks.
+
+```sh
+ink-studio sweep examples/moss-bear-sweep.js examples/moss-bear-approval.plan.json --out bear-approval
+```
+
+Find the result and approval report path for every view in
+`report.json`. A failed check writes the first failing frame and its
+available previous and marked images. Every candidate is published
+before the command returns exit code 2 for a failed check. A render or
+configuration error returns exit code 1.
+
+### Sample ranges with constraints
+
+A parameter can define `range: { "min": 0, "max": 1, "steps": 5 }`
+in place of `values`. Without `sampling`, this produces five evenly
+spaced settings including both endpoints. With `sampling: { "seed": 42,
+"count": 8 }`, each accepted combination is drawn from independent,
+named parameter streams. Explicit values and stepped ranges are
+sampled discretely. A range without `steps` is sampled continuously
+and requires `sampling`. The sampling seed is independent of scene seeds.
+
+A constraint such as `{ "left": "jaw", "op": "lte", "right":
+{ "parameter": "overlap" } }` compares one named control to another.
+Use `{ "value": 1 }` for a literal. Valid comparisons are `eq`, `ne`,
+`lt`, `lte`, `gt`, and `gte`. Ordering comparisons require numbers.
+All constraints must pass. `runBudget` caps accepted runs after multiplying
+by the authored cases and seeds. An empty grid or an unfillable random
+request is an error. The sweep report records the exact accepted values.
+A pin stores those values directly and remains compatible with nearby
+exploration. This plan syntax also works for numeric and visual simulation
+sweeps.
+
+```sh
+ink-studio sweep examples/visual-sweep-attractor.js examples/visual-sweep-sampling.plan.json --out sampled-attractors
+```
+
 ## Sweep runtime worlds
 
 Add a `visual` object to the existing [observation sweep plan](headless-worlds.md#scheduled-observations-and-parameter-sweeps).
@@ -74,6 +144,29 @@ starts at the world or checkpoint's starting tick. A checkpoint or
 recording uses its saved seed and permits variation through scheduled
 actions and inputs. Visual output takes a new or empty directory.
 Numeric-only sweeps still take a report filename.
+
+## Review and apply a candidate
+
+Run `sweep compare` with two tile numbers or run IDs to write matched
+still comparisons and signed differences per view. Its report gives
+changed pixel counts and RGB RMS error on the exported image grid.
+`sweep rank` lists passed candidates first, then candidates with failed
+checks, then unchecked candidates. Fewer recorded findings break ties
+among failures. Ranking measures the declared checks.
+
+```sh
+ink-studio sweep compare bear-approval 1 6 --out bear-compare
+ink-studio sweep rank bear-approval --out bear-ranking.json
+ink-studio sweep pin bear-approval 5 --note "Keep the eyes and jaw clear" --out bear-choice.json
+ink-studio sweep apply bear-choice.json --out bear-controls.json
+```
+
+For a JSON scene that declares the selected controls, append `--scene`
+to write a revised scene beside the source so relative asset paths
+resolve as before. A JavaScript scene uses the controls document with
+`--params`. Replay and apply verify the scene file's hash and those
+of any extra source-relative files named in the plan's `dependencies`
+array. Include any local file reads your JavaScript scene relies on.
 
 ## Pin and explore
 
