@@ -151,6 +151,31 @@ test('a fixed-view sweep reuses each candidate pose, and pins every camera lane'
     assert.deepEqual(f.bytes('fixed-replay',view.image), f.bytes('fixed-review',original.image));
     assert.deepEqual(f.bytes('fixed-replay',view.clip), f.bytes('fixed-review',original.clip));
   }
+  cli('sweep','compare',f.out('fixed-review'),'1','2','--out',f.out('fixed-comparison'));
+  const compared = f.report('fixed-comparison');
+  assert.deepEqual(compared.samples,review.samples);
+  for (const [i, { clip }] of compared.views.entries()) {
+    assert.deepEqual(clip.frames.map(frame => frame.sample),review.samples.frames);
+    assert.ok(clip.frames.every(frame => frame.changedPixels > 0));
+    const original = review.tiles.map(tile => PNG.readFullFrameAnimation(
+      f.out('fixed-review/' + tile.views[i].clip),{w:96,h:64,count:4,fps:4}));
+    const playback = PNG.readFullFrameAnimation(f.out('fixed-comparison/' + clip.sideBySide),
+      {w:192,h:64,count:4,fps:4});
+    for (const [j, frame] of playback.entries()) {
+      const pixels = PNG.read(PNG.encodeFrame(frame)).rgb;
+      const originals = original.map(sequence => PNG.read(PNG.encodeFrame(sequence[j])).rgb);
+      for (const [lane, rgb] of originals.entries()) for (let row = 0; row < 64; row++) {
+        const start = (row * 192 + lane * 96) * 3;
+        assert.deepEqual(pixels.subarray(start,start+96*3),rgb.subarray(row*96*3,(row+1)*96*3));
+      }
+    }
+  }
+  const tampered = f.out('fixed-review/' + review.tiles[0].views[0].clip);
+  const bytes = fs.readFileSync(tampered), control = bytes.indexOf('fcTL');
+  bytes.writeUInt16BE(5,control+4+22);
+  fs.writeFileSync(tampered,bytes);
+  assert.match(run('sweep','compare',f.out('fixed-review'),'1','2','--out',f.out('clip-mismatch')).stderr,/matching frames, dimensions, and cadence/);
+  assert.ok(!fs.existsSync(f.out('clip-mismatch')));
   const invalid = f.write('duplicate.json', { ...source, visual:{ ...settings, views:[settings.views[0],settings.views[0]] } });
   assert.match(run('sweep',scene,invalid,'--out',f.out('duplicate')).stderr,/distinct IDs/);
   assert.ok(!fs.existsSync(f.out('duplicate')));
@@ -221,6 +246,30 @@ test('headless candidate review compares views, ranks checks and reapplies verif
   fs.writeFileSync(declared,'changed resource');
   assert.match(run('sweep','replay',f.out('chosen.json'),'--out',f.out('stale')).stderr,/dependency changed/);
   assert.ok(!fs.existsSync(f.out('stale')));
+});
+
+test('applying a pin writes scoped defaults to a separate editable scene', t => {
+  const f = fixtures(t), original = {
+    id:'apply-review', seed:5, camera:{target:[0,0,0],dist:5,yaw:0,pitch:.18},
+    solids:[{ id:'panel', kind:'box', at:[0,0,0], half:[.3,.35,.2], mat:'stone', res:.09 }],
+    parameterBindings:{controls:{width:.3,paint:'stone'},bindings:[
+      {path:'/solids/0/half/0',parameter:'width'},{path:'/solids/0/mat',parameter:'paint'}
+    ]}
+  };
+  const scene = f.write('original.json',original), selected = f.out('chosen.json'), revised = f.out('revised.json');
+  const plan = f.write('plan.json',{
+    seeds:[9],parameters:{width:{values:[.3,.65]}},visual:{width:96,height:64,pixelSize:1}
+  });
+  cli('sweep',scene,plan,'--out',f.out('candidates'));
+  cli('sweep','pin',f.out('candidates'),'2','--out',selected);
+  cli('sweep','apply',selected,'--scene','--out',revised);
+  assert.deepEqual(JSON.parse(fs.readFileSync(scene)),original);
+  assert.deepEqual(JSON.parse(fs.readFileSync(revised)),{
+    ...original,seed:9,parameterBindings:{...original.parameterBindings,controls:{width:.65,paint:'stone'}}
+  });
+  const defaults = f.write('defaults.json',{visual:{width:96,height:64,pixelSize:1}});
+  cli('sweep',revised,defaults,'--out',f.out('applied'));
+  assert.deepEqual(f.bytes('applied','cases/001.png'),f.bytes('candidates','cases/002.png'));
 });
 
 test('ranges and seeded sampling honor cross-control constraints and replay selected values', t => {

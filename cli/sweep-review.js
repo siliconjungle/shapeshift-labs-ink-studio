@@ -21,40 +21,65 @@ function open(source) {
   return { report, asset };
 }
 
+function difference(first, second) {
+  if (first.w !== second.w || first.h !== second.h) throw new RangeError('Candidate image grids differ');
+  let changed = 0, squared = 0;
+  for (let i = 0; i < first.rgb.length; i += 3) {
+    const delta = (first.rgb[i] - second.rgb[i]) ** 2 +
+      (first.rgb[i + 1] - second.rgb[i + 1]) ** 2 + (first.rgb[i + 2] - second.rgb[i + 2]) ** 2;
+    changed += Number(delta !== 0);
+    squared += delta;
+  }
+  return { changedPixels: changed, rgbRms: Math.sqrt(squared / first.rgb.length) };
+}
+
+function clips(kit, temp, asset, reference, candidate, still, timing) {
+  const { fps, frames: samples } = timing;
+  const settings = { w: still.w, h: still.h, count: samples.length, fps };
+  const left = PNG.readFullFrameAnimation(asset(reference.clip), settings);
+  const right = PNG.readFullFrameAnimation(asset(candidate.clip), settings);
+  const sideBySide = reference.id + '-comparison.apng', signedDifference = reference.id + '-difference.apng';
+  const paired = [], deltas = [];
+  const frames = samples.map((sample, i) => {
+    const a = PNG.read(PNG.encodeFrame(left[i])), b = PNG.read(PNG.encodeFrame(right[i]));
+    paired.push(PNG.packFrame(kit.comparison.compose(a, b, { mode: 'side-by-side' })));
+    deltas.push(PNG.packFrame(kit.comparison.compose(a, b, { mode: 'difference' })));
+    return { frame: i, sample, ...difference(a,b) };
+  });
+  fs.writeFileSync(path.join(temp,sideBySide),PNG.encodeAnimation(paired,fps));
+  fs.writeFileSync(path.join(temp,signedDifference),PNG.encodeAnimation(deltas,fps));
+  return { sideBySide, difference: signedDifference, frames };
+}
+
 function compare(kit, source, left, right, out) {
   const { report, asset } = open(source);
   const select = value => report.tiles.find(tile => tile.id === value || String(tile.tile) === value);
-  const a = select(left), b = select(right);
+  const a = select(left), b = select(right), timing = report.samples;
   if (!a || !b) throw new RangeError('Both comparison candidates must exist');
-  const views = tile => tile.views ?? [{ id: 'default', image: tile.image }];
-  const candidates = views(b);
-  const frames = views(a).map((reference, i) => {
-    const candidate = candidates[i];
-    if (reference.id !== candidate?.id || !kit.world.data.equal(reference.camera, candidate.camera))
-      throw new RangeError('Candidates need matching view cameras');
-    if (!kit.world.data.id(reference.id)) throw new TypeError('Invalid sweep view ID');
-    const first = PNG.read(asset(reference.image)), second = PNG.read(asset(candidate.image));
-    if (first.w !== second.w || first.h !== second.h) throw new RangeError('Candidate image grids differ');
-    let changed = 0, squared = 0;
-    for (let i = 0; i < first.rgb.length; i += 3) {
-      const delta = (first.rgb[i] - second.rgb[i]) ** 2 +
-        (first.rgb[i + 1] - second.rgb[i + 1]) ** 2 + (first.rgb[i + 2] - second.rgb[i + 2]) ** 2;
-      changed += Number(delta !== 0);
-      squared += delta;
-    }
-    return { id: reference.id, first, second, changed, rgbRms: Math.sqrt(squared / first.rgb.length) };
-  });
-  const rows = frames.map(({ id, changed, rgbRms }) => ({ view: id, changedPixels: changed, rgbRms,
-    sideBySide: id + '-comparison.png', difference: id + '-difference.png' }));
+  const views = tile => tile.views ?? [{ id: 'default', image: tile.image, clip: tile.clip }];
+  const referenceViews = views(a), candidates = views(b);
+  if (referenceViews.length !== candidates.length) throw new RangeError('Candidates need matching view cameras');
+  const animated = timing?.frames !== undefined;
+  if (animated && (!Array.isArray(timing.frames) || !['seconds', 'ticks'].includes(timing.units) ||
+      !timing.frames.every((sample,i) => Number.isFinite(sample) && (!i || sample > timing.frames[i-1]))))
+    throw new RangeError('Sweep clip needs a valid sample schedule');
   Sweep.publish(out, temp => {
-    for (const [i, { first, second }] of frames.entries()) {
-      for (const [file, mode] of [[rows[i].sideBySide, 'side-by-side'], [rows[i].difference, 'difference']]) {
+    const rows = referenceViews.map((reference, i) => {
+      const candidate = candidates[i], id = reference.id;
+      if (id !== candidate?.id || !kit.world.data.equal(reference.camera, candidate.camera))
+        throw new RangeError('Candidates need matching view cameras');
+      if (!kit.world.data.id(id)) throw new TypeError('Invalid sweep view ID');
+      const first = PNG.read(asset(reference.image)), second = PNG.read(asset(candidate.image));
+      const metrics = difference(first,second), sideBySide = id + '-comparison.png', signedDifference = id + '-difference.png';
+      for (const [file, mode] of [[sideBySide, 'side-by-side'], [signedDifference, 'difference']]) {
         const { w, h, rgb } = kit.comparison.compose(first, second, { mode });
         PNG.write(path.join(temp, file), w, h, rgb);
       }
-    }
+      const clip = animated ? clips(kit,temp,asset,reference,candidate,first,timing) : undefined;
+      return { view: id, ...metrics, sideBySide, difference: signedDifference, ...(clip && { clip }) };
+    });
     Assets.json(path.join(temp, 'report.json'), { format: 'ink-studio/sweep-comparison', version: 1,
-      left: a.id, right: b.id, views: rows });
+      left: a.id, right: b.id, ...(animated && { samples: timing }), views: rows });
   });
 }
 
