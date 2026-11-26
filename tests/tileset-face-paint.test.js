@@ -193,3 +193,209 @@ test('reject an instance-local paint slot that a modifier would duplicate',()=>{
   assert(report.variantEdit.faces.length>=2);
   assert.deepEqual(editor.snapshot(),scene);
 });
+
+test('use bound pencil, eraser, and pigment eyedropper with independent alpha and exact indexed slots',()=>{
+  const scene = fixture(true), image = scene.tilesets.enamel, i = 6*width+9;
+  const indices = Buffer.from(image.data,'base64');
+  indices[i] = indices[i+1] = 1;
+  Object.assign(image,{data:indices.toString('base64'),palette:[0x476959,0x476959,0x224466],alpha:[219,219,0]});
+  scene.topologyMeshes.east.materials[0].color = 0x888888;
+  const editor = ink.createSceneEditor(scene), {rgba,...target} = stroke;
+  const run = (op,options)=>ink.paintTilesetFace(editor,{...target,...op},options).report;
+  const color = run({tool:'eyedropper',sample:'color'});
+  assert.equal(color.sampled,true);
+  assert.equal(color.canCommit,false);
+  assert.deepEqual(color.sample,{mode:'color',at:[9,6],uv:color.source.uv,units:'rgb-hex',value:'#476959',
+    rgba:[71,105,89,219],paletteSlot:1,provenance:{kind:'tileset',id:'enamel'}});
+  assert.equal(run({tool:'eyedropper',sample:'alpha'}).sample.value,219);
+  assert.deepEqual(run({tool:'eyedropper',sample:'source',channel:'pigment'}).sample.value,[71,105,89,219]);
+  assert.throws(()=>run({tool:'eyedropper',sample:'color'},{apply:true}),/reads a source/);
+  assert.deepEqual(editor.snapshot(),scene);
+
+  const pigment = run({tool:'pencil',color:'#B35B2E'});
+  assert.deepEqual(pigment.rgba,[179,91,46,219]);
+  assert.equal(run({tool:'pencil',color:'#b35b2e'},{apply:true,expect:pigment.previewRevision}).changedTexels,1);
+  assert.equal(run({tool:'eyedropper',sample:'alpha'}).sample.value,219);
+  const opacity = run({tool:'pencil',alpha:151},{apply:true});
+  assert.deepEqual(opacity.rgba,[179,91,46,151]);
+  assert.equal(run({tool:'eyedropper',sample:'color'}).sample.value,'#b35b2e');
+  assert.equal(run({tool:'eyedropper',sample:'alpha'}).sample.value,151);
+  assert(editor.undo());
+  assert(editor.undo());
+  assert.deepEqual(editor.snapshot(),scene);
+
+  const exact = run({tool:'pencil',slot:0},{apply:true});
+  assert.equal(exact.changedPixels,0);
+  assert.deepEqual(exact.samples,[{at:[9,6],before:1,after:0}]);
+  assert.equal(run({tool:'eyedropper',sample:'color'}).sample.paletteSlot,0);
+  assert.equal(run({tool:'pencil',slot:3}).conflicts[0].code,'palette-slot-unavailable');
+  assert(editor.undo());
+
+  const transparentBlack = run({tool:'pencil',color:'#000000',alpha:0},{apply:true});
+  assert.equal(transparentBlack.paletteAdded,1);
+  assert.deepEqual(transparentBlack.samples,[{at:[9,6],before:1,after:3}]);
+  assert.equal(editor.snapshot().tilesets.enamel.palette[3],0);
+  assert.equal(editor.snapshot().tilesets.enamel.alpha[3],0);
+  assert(editor.undo());
+
+  const eraser = {tool:'eraser',sharing:'make-local-variant',variant:'east-cutout'};
+  const preview = run(eraser);
+  assert.equal(preview.tool,'eraser');
+  assert(preview.changedPixels>0);
+  assert.deepEqual(preview.uses.map(row=>row.object),['east']);
+  assert.deepEqual(preview.samples,[{at:[9,6],before:1,after:2}]);
+  assert.equal(preview.paletteAdded,0);
+  assert.equal(run({...eraser,variant:'other-cutout'},{apply:true,expect:preview.previewRevision}).conflicts[0].code,'stale-preview');
+  assert.deepEqual(run(eraser,{apply:true,expect:preview.previewRevision}),preview);
+  const after = editor.snapshot(), copy = after.tilesets['east-cutout'];
+  assert.deepEqual(after.tilesets.enamel,image);
+  assert.deepEqual([...Buffer.from(copy.data,'base64').subarray(i,i+2)],[2,1]);
+  assert.deepEqual(copy.alpha,image.alpha);
+  assert(editor.undo());
+  assert.deepEqual(editor.snapshot(),scene);
+});
+
+test('read registered source channels by their own UV sets and report a missing map',()=>{
+  const scene = fixture(), row = scene.topologyMeshes.east;
+  const {id:material} = row.materials[0];
+  row.document.uvBindings = {normal:2,metallicRoughness:3,emission:4};
+  for (const corner of row.document.faces[0].corners) corner.attributes =
+    {'uv/2':[1,0],'uv/3':[0,1],'uv/4':[.25,.25]};
+  const pixels = width*height, normal = Array.from({length:pixels},()=>[128,128,255,255]).flat();
+  normal.splice((width-1)*4,4,154,96,230,192);
+  const metalness = Array(pixels).fill(0);
+  metalness[(height-1)*width] = 178;
+  const emission = Array(pixels*3).fill(0);
+  emission.splice((5*width+9)*3,3,16,44,71);
+  row.materials[0] = {...row.materials[0],normal,metalness,emission};
+  row.bakes = [{id:'finish',material,maps:{roughness:.37}}];
+  const editor = ink.createSceneEditor(scene), {rgba,...target} = stroke;
+  const read = channel=>ink.paintTilesetFace(editor,{...target,tool:'eyedropper',sample:'source',channel}).report;
+  const n = read('normal');
+  assert(n.sampled,JSON.stringify(n));
+  assert.deepEqual(n.source.at,[9,6]);
+  assert.equal(n.sample.uvSet,2);
+  assert.deepEqual(n.sample.at,[37,0]);
+  assert.deepEqual(n.sample.value,[154,96,230,192]);
+  const m = read('metalness').sample;
+  assert.deepEqual([m.uvSet,m.at,m.byte,m.value],[3,[0,20],178,178/255]);
+  const e = read('emission').sample;
+  assert.deepEqual([e.uvSet,e.at,e.units,e.value],[4,[9,5],'rgb8',[16,44,71]]);
+  const r = read('roughness').sample;
+  assert.deepEqual([r.value,r.units,r.provenance],[.37,'unit',{kind:'material-bake',bake:'finish'}]);
+  assert.deepEqual(editor.snapshot(),scene);
+
+  const missing = ink.paintTilesetFace(ink.createSceneEditor(fixture()),{...target,tool:'eyedropper',sample:'source',channel:'normal'}).report;
+  assert.equal(missing.sampled,false);
+  assert.equal(missing.conflicts[0].code,'missing-source-channel');
+});
+
+test('sample bound color through the CLI and feed it into a different face pencil',t=>{
+  const scene = fixture(), dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-bound-tile-tools-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const file = name=>path.join(dir,name);
+  const write = (name,value)=>fs.writeFileSync(file(name),JSON.stringify(value));
+  const run = args=>execFileSync(process.execPath,[cli,'tileset','paint','face',...args,'--scene','scene.json'],{cwd:dir,encoding:'utf8'});
+  write('scene.json',scene);
+  const {rgba,...target} = stroke;
+  write('pick.json',{...target,tool:'eyedropper',sample:'color'});
+  const report = JSON.parse(run(['pick.json']));
+  assert.equal(report.sample.value,'#476959');
+  write('pencil.json',{...target,object:'west',at:[62,46],tool:'pencil',color:report.sample.value,alpha:175});
+  const committed = JSON.parse(run(['pencil.json','--out','painted.json']));
+  assert.deepEqual(committed.rgba,[71,105,89,175]);
+  assert.equal(committed.changedTexels,1);
+  const reject = spawnSync(process.execPath,[cli,'tileset','paint','face','pick.json','--scene','scene.json','--out','blocked.json'],
+    {cwd:dir,encoding:'utf8'});
+  assert.equal(reject.status,1);
+  assert(!fs.existsSync(file('blocked.json')));
+});
+
+function fillFixture() {
+  const scene = fixture(true);
+  const cells = new Uint8Array(width*height);
+  for (const [x,y,slot] of [[8,6,2],[9,6,1],[9,7,1],[10,8,1],[15,13,1],[16,13,2],[18,6,1],[20,6,1],[10,6,3]])
+    cells[y*width+x] = slot;
+  scene.tilesets.enamel = {...scene.tilesets.enamel,data:Buffer.from(cells).toString('base64'),
+    palette:[0x263d49,0x769780,0x769780,0x789881],alpha:[255,255,255,253]};
+  const editor = ink.createSceneEditor(scene);
+  const mount = (object,x,y)=>editor.placeTilesetFace({object,face:'window',origin:[20,0,0],worldSize:[1,1],
+    selection:ink.pickTilesetRectangle(scene,'enamel',{x,y,width:1,height:1})});
+  mount('offscreen-match',16,13);
+  mount('offscreen-held',15,13);
+  return structuredClone(editor.snapshot());
+}
+
+test('fill four-connected color through the exact bound tile and reuse the wand tolerance',()=>{
+  const scene = fillFixture(), editor = ink.createSceneEditor(scene);
+  const {rgba,...hit} = stroke, request = {...hit,tool:'fill',fill:{colors:[{color:'#ffab57'}]}};
+  const {report,images} = ink.paintTilesetFace(editor,request);
+  assert(report.canCommit,JSON.stringify(report.conflicts));
+  assert.deepEqual(report.fill.rect,[3,3,15,15]);
+  assert.equal(report.fill.selectedTexels,3);
+  assert.deepEqual(report.samples.map(row=>row.at),[[8,6],[9,6],[9,7]]);
+  assert.deepEqual(report.uses.map(use=>use.object).sort(),['east','west']);
+  assert.equal(images.texels.rgb.filter((n,i)=>i%3===0 && n).length,3);
+  assert.deepEqual(editor.snapshot(),scene);
+  const close = {...request,fill:{...request.fill,tolerance:2}};
+  const expanded = ink.paintTilesetFace(editor,close).report;
+  assert.equal(expanded.fill.selectedTexels,4);
+  assert.deepEqual(expanded.samples.map(row=>row.at),[[8,6],[9,6],[10,6],[9,7]]);
+  assert.equal(ink.paintTilesetFace(editor,close,{apply:true,expect:report.previewRevision}).report.conflicts[0].code,'stale-preview');
+  assert.deepEqual(ink.paintTilesetFace(editor,request,{apply:true,expect:report.previewRevision}).report,report);
+  const slots = Buffer.from(editor.snapshot().tilesets.enamel.data,'base64');
+  assert.equal(slots[8*width+10],1);
+  assert.equal(slots[6*width+18],1);
+  assert.equal(slots[6*width+20],1);
+  assert(editor.undo());
+  assert.deepEqual(editor.snapshot(),scene);
+});
+
+test('fill disconnected matches with an atlas-aligned checker and trace only the changed footprint',()=>{
+  const scene = fillFixture(), editor = ink.createSceneEditor(scene), {rgba,...hit} = stroke;
+  const request = {...hit,tool:'fill',fill:{area:'matching-color',pattern:'checker',size:1,
+    colors:[{slot:1},{color:'#eb9c57',alpha:192}]}};
+  const {report,images} = ink.paintTilesetFace(editor,request);
+  assert(report.canCommit,JSON.stringify(report.conflicts));
+  assert.equal(report.fill.selectedTexels,6);
+  assert.deepEqual(report.samples.map(row=>row.at),[[8,6],[9,6],[16,13]]);
+  assert.deepEqual(report.uses.map(row=>row.object).sort(),['east','offscreen-match','west']);
+  assert.equal(images.texels.rgb.filter((n,i)=>i%3===0 && n===250).length,3);
+  assert.equal(images.texels.rgb.filter((n,i)=>i%3===0 && n===111).length,3);
+  assert.equal(report.uses.find(use=>use.object==='offscreen-match').visiblePixels,0);
+  const local = {...request,sharing:'make-local-variant',variant:'checker-east'};
+  const commit = ink.paintTilesetFace(editor,local,{apply:true}).report;
+  assert(commit.canCommit,JSON.stringify(commit.conflicts));
+  assert.deepEqual(commit.uses.map(row=>row.object),['east']);
+  assert.deepEqual(commit.sharedPaintUses.map(row=>row.object).sort(),['offscreen-match','west']);
+  const after = editor.snapshot(), variant = after.tilesets['checker-east'];
+  assert.deepEqual(after.tilesets.enamel,scene.tilesets.enamel);
+  const slots = Buffer.from(variant.data,'base64');
+  assert.deepEqual([[8,6],[9,6],[9,7],[10,8],[15,13],[16,13]].map(([x,y])=>slots[y*width+x]),[1,4,1,1,1,4]);
+  assert.equal(variant.alpha[4],192);
+  assert(editor.undo());
+  assert.deepEqual(editor.snapshot(),scene);
+});
+
+test('limit matching fill to a nonrectangular polygon UV footprint',()=>{
+  const scene = fixture(), doc = scene.topologyMeshes.east.document, viewFace = doc.faces[0];
+  const removed = viewFace.corners.pop().uv.map((n,i)=>Math.round(n*[width-1,height-1][i]));
+  delete doc.edges;
+  const editor = ink.createSceneEditor(scene), {rgba,...hit} = stroke;
+  const {report} = ink.paintTilesetFace(editor,{...hit,tool:'fill',fill:{area:'matching-color',colors:[{color:'#ffab57'}]}},{apply:true});
+  assert(report.canCommit,JSON.stringify(report.conflicts));
+  assert(report.fill.selectedTexels>0 && report.fill.selectedTexels<15*15);
+  const at = (removed[1]*width+removed[0])*4;
+  const bytes = Buffer.from(editor.snapshot().tilesets.enamel.data,'base64');
+  assert.deepEqual([...bytes.subarray(at,at+4)],[71,105,89,255]);
+});
+
+test('leave the atlas and local binding intact if a checker exceeds the indexed palette',()=>{
+  const scene = fillFixture(), asset = scene.tilesets.enamel;
+  asset.palette.push(...Array.from({length:251},(_,i)=>i));
+  const editor = ink.createSceneEditor(scene), {rgba,...hit} = stroke;
+  const {report} = ink.paintTilesetFace(editor,{...hit,tool:'fill',sharing:'make-local-variant',variant:'full-checker',
+    fill:{pattern:'checker',colors:[{color:'#ea572d'},{color:'#ffa87d'}]}},{apply:true});
+  assert.equal(report.conflicts[0].code,'indexed-palette-full');
+  assert.deepEqual(editor.snapshot(),scene);
+});

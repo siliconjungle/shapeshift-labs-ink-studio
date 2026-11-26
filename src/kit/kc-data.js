@@ -177,8 +177,8 @@
   }));
   modifierKinds.fold.may = { ...modifierKinds.fold.may, axis: ['x', 'y', 'z'] };
   modifierKinds.warp.may = { ...modifierKinds.warp.may, taper: 'vec2' };
-  modifierKinds.join = { need: { how: 'join', shape: 'solid' }, may: DIO.kinds.join.may };
-  modifierKinds.mask = { need: { mode: ['keep', 'cut'], shape: 'solid' }, may: { cutSurface: 'obj' } };
+  modifierKinds.join = { need: { how: 'join', shape: 'solid' }, may: { ...DIO.kinds.join.may, snap: 'obj' } };
+  modifierKinds.mask = { need: { mode: ['keep', 'cut'], shape: 'solid' }, may: { cutSurface: 'obj', snap: 'obj' } };
   modifierKinds['grid-brush'] = { need: { mode: ['add', 'cut', 'carve', 'through-cut', 'raise', 'fill', 'smooth', 'grab', 'flatten', 'scrape', 'crease', 'pinch'], brush: 1 } };
   const builtKinds = ['pillar', 'arch', 'stairs', 'fence', 'pipe'];
   const activeModifiers = solid => (solid.modifiers ?? []).filter(modifier => modifier.enabled !== false);
@@ -1181,6 +1181,10 @@
         const def = modifierKinds[kind];
         fields(modifier, at, def, { id: 'str', label: 'str', enabled: 'bool' });
         if (Object.hasOwn(modifier, 'do')) bad(at + '.do', 'a sculpt modifier uses kind');
+        if (modifier.snap !== undefined && (kind === 'join' || kind === 'mask')) {
+          try { K.procedural.sweepSnap.check(modifier.snap, modifier.shape); }
+          catch (error) { bad(at + '.snap', error.message); }
+        }
         if (kind === 'mask' && modifier.cutSurface && !Array.isArray(modifier.cutSurface)) {
           keys(modifier.cutSurface, at + '.cutSurface', { material: 1 });
           matOk(modifier.cutSurface.material, at + '.cutSurface.material');
@@ -2002,7 +2006,7 @@
           for (const modifier of modifiers) {
             const options = { hold: true };
             const before = trace && { ...p };
-            let reach = p.reach, tool, operand;
+            let reach = p.reach, tool, operand, snapped;
             if (modifier.kind === 'grid-brush' && modifier.brush.version===3) {
               const api=K.procedural.freeformSculpt, {mode,brush:{stamps,settings}}=modifier;
               const form = api.prepare({mode,stamps,strength:settings.strength,depth:settings.depth});
@@ -2022,7 +2026,17 @@
                 if (surface) p.mat={ ...p.mat,sdfNewSurface:surface };
               }
             } else if (modifier.kind === 'join' || modifier.kind === 'mask') {
-              operand = sub(modifier.shape);
+              let shape = modifier.shape;
+              if (modifier.snap !== undefined) {
+                const carrier = p;
+                try {
+                  snapped = K.procedural.sweepSnap.resolve(shape, modifier.snap, (...point) => S.psd(carrier, ...point));
+                } catch (error) {
+                  throw new RangeError('Sculpt snap ' + (s.id ?? s.kind) + '/' + modifier.id + ': ' + error.message, { cause: error });
+                }
+                shape = { ...shape, poses: snapped.poses };
+              }
+              operand = sub(shape);
               if (trace) tool = operand.geometryBounds ?? traceBounds(operand);
               reach = Math.max(reach, operand.reach);
               if (modifier.kind === 'join') {
@@ -2046,7 +2060,7 @@
               }
             } else p = deform(p, modifier, options);
             p.reach += reach;
-            if (trace) trace.stages.set(modifier.id, { before, after: { ...p }, tool, operand });
+            if (trace) trace.stages.set(modifier.id, { before, after: { ...p }, tool, operand, ...(snapped && { snapped }) });
           }
           p = S.add(p, p.mat, { ...o, res, bump: undefined, reach: p.reach });
         }

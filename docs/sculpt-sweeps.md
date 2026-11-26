@@ -19,6 +19,9 @@ material on the cut. Targeted poses are in the host's rest coordinates,
 before its scene transform or rig motion. On a standalone sweep they
 are in the sweep's own rest coordinates.
 
+Use [stroke snapping](sculpt-snaps.md) to follow a surface with a
+whole sweep or attach the root of a free sweep.
+
 Both operations take the same request. This custom three-point profile
 makes a tapered groove. The profile lies in local XY and its depth
 runs along local Z. The poses below rotate that Z axis along the path.

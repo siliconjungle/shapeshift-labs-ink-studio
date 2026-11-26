@@ -113,7 +113,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.openMaterialGraph` | function | `(source, { id } = {})` | [guide](../editable-material-graph.md#open-edit-and-save), [source](../../cli/material-graph.js) |
 | `node.openPixelEditorSession` | function | `(directory, options)` | [source](../../index.js) |
 | `node.openSampleLibrary` | function | `(directory, {kit = require('../index.js').load()} = {})` | [guide](../sample-capture.md#use-the-tools-from-code-or-a-graph), [source](../../cli/sample-library.js) |
-| `node.openTilesetPaint` | function | `(editor, request)` | [guide](../mesh-uv.md#choose-shared-paint-or-a-local-face-variant), [source](../../index.js) |
+| `node.openTilesetPaint` | function | `(editor, request)` | [guide](../mesh-uv.md#fill-color-on-a-bound-face), [source](../../index.js) |
 | `node.packProject` | function | `(scene, { out, root, revision, assetPack, paint, attachments } = {})` | [source](../../cli/project-bundle.js) |
 | `node.paintTilesetFace` | function | `(editor, request, options)` | [source](../../index.js) |
 | `node.paletteUsage` | function | `(world,{select,rarePixels=3,rareShare=.001,...view}={})` | [guide](../palette-recipes.md#measure-palette-usage-at-export-size), [source](../../cli/palette-usage.js) |
@@ -232,4 +232,4 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.writeRasterAsset` | function | `(source, { out } = {})` | [source](../../cli/raster-asset.js) |
 | `node.writeSceneEmbed` | function | `(document, { out, settings } = {})` | [source](../../cli/scene-replay.js) |
 | `node.writeSpriteAtlas` | function | `(source, { out } = {})` | [source](../../cli/sprite-atlas.js) |
-| `node.writeTilesetPaint` | function | `(editor, binding, document, options)` | [guide](../mesh-uv.md#choose-shared-paint-or-a-local-face-variant), [source](../../index.js) |
+| `node.writeTilesetPaint` | function | `(editor, binding, document, options)` | [guide](../mesh-uv.md#fill-color-on-a-bound-face), [source](../../index.js) |

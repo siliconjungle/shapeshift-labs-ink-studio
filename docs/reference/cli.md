@@ -184,6 +184,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   sculpt-split plan <scene.json> <split.json>   report a complementary sculpt split
   sculpt-split apply <scene.json> <split.json> --out scene.json   save separate sculpt pieces
   sculpt-stamp place <scene.json> <stamp.json> <placement.json> --out scene.json   add and carve one compound stamp
+  sculpt-snap plan <scene.json> <stroke.json>   preview a surface or root stroke snap
+  sculpt-snap apply <scene.json> <stroke.json> --out scene.json   write a retained snapped stroke
+  sculpt-snap inspect <scene.json> --target solid --id stroke   sample the live attachment
   sculpt-sweep add <scene.json> <sweep.json> [--target solid] --out scene.json   add a retained shaped sweep
   sculpt-sweep cut <scene.json> <sweep.json> --target solid --out scene.json   carve a retained sweep into a solid
   sculpt-sweep update <scene.json> <edit.json> [--target solid] --out scene.json   revise a saved sweep
@@ -319,7 +322,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   tileset reskin --scene <scene.json> --object <mesh-id> --face <face-id> --mode crop|tileset|relative (--selection <pick.json> | --id <tileset-id>) [--part ID] [--column N --row N] [--out <new-scene.json>]   change the paint on an existing mesh face
   tileset paint open <request.json> --scene <scene.json> [--selection <pick.json>] --out directory   open a crop or sheet in the native pixel editor with optional reference overlays
   tileset paint write <binding.json> <edited.json> --scene <scene.json> [--out <new-scene.json>]   preview or write edited pixels back to their registered tileset
-  tileset paint face <request.json> --scene <scene.json> [--preview directory] [--expect receipt.json] [--out <new-scene.json>]   paint a visible texel with shared or instance-local paint
+  tileset paint face <request.json> --scene <scene.json> [--preview directory] [--expect receipt.json] [--out <new-scene.json>]   pencil, erase, fill or sample a bound tile on a visible face
   tileset gutters <request.json> --scene <scene.json> [--out <new-scene.json>]   copy exterior gutter pixels for tile rectangles or UV islands without moving UVs
   tileset bleed-review <request.json> --scene <scene.json> --out directory   compare an inset and painted gutters over matched native camera samples
   tileset assign <request.json> --scene <scene.json> [--preview dir] [--view view.json] [--out <new-scene.json>]   fit selected UVs to a tile or sheet, or preserve texel scale with an optional clamp
