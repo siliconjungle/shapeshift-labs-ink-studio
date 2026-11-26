@@ -9,6 +9,7 @@ const R = require('./render.js');
 const files = require('./asset-files.js');
 const { graphOutputs } = require('./graph-outputs.js');
 const { pose } = require('./diarama-pose.js');
+const paintingCelBoil = require('./painting-cel-boil.js');
 
 const format = 'ink-studio/painting-cels';
 const editFormat = 'ink-studio/painting-cel-edit';
@@ -29,7 +30,7 @@ const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const report = value => console.log(JSON.stringify(value, null, 2));
 const solidId = (placement, mark) => 'paint.' + placement + '.' + mark;
 
-function open(document, paintingFormat) {
+function open(document, K) {
   if (!fields(document, ['format', 'version', 'placement', 'fps', 'playback', 'cels']) ||
       document.format !== format || document.version !== 1 ||
       !integer(document.fps, 1, 120) || !['once', 'loop'].includes(document.playback) ||
@@ -39,7 +40,8 @@ function open(document, paintingFormat) {
   if (!fields(placement, ['id', 'bindings', 'transform', 'painting']) || !name(placement.id) ||
       placement.bindings !== undefined && !record(placement.bindings) ||
       !fields(placement.painting, ['format', 'version', 'id', 'profiles', 'flowMaps', 'presets']) ||
-      placement.painting.format !== paintingFormat || placement.painting.version !== 1 || !name(placement.painting.id))
+      placement.painting.format !== K.authoring.paintings3d.format ||
+      placement.painting.version !== 1 || !name(placement.painting.id))
     throw new TypeError('A painting clip needs one shared 3D painting placement and its resources');
   let ticks = 0, markCount = 0;
   const ids = new Set();
@@ -55,12 +57,13 @@ function open(document, paintingFormat) {
       marks.add(mark.id);
     }
     markCount += row.marks.length;
-    const time = ticks / fps;
+    const tick = ticks, time = tick / fps;
     ticks += row.hold;
-    return { ...row, frame, time, duration: row.hold / fps };
+    return { ...row, frame, tick, time, duration: row.hold / fps };
   });
   if (markCount > 8192) throw new RangeError('Painting clip exceeds its retained mark budget');
-  return { document, entries, duration: ticks / fps, frameAt: SpriteCels.playback(entries, fps, playback) };
+  const boil = paintingCelBoil(entries, document, ticks, K.procedural.paintBoil);
+  return { document, entries, duration: ticks / fps, frameAt: SpriteCels.playback(entries, fps, playback), boil };
 }
 
 function find(cels, id) {
@@ -77,8 +80,12 @@ function select(clip, flags) {
     throw new RangeError('Painting sample time must be finite and nonnegative');
   const at = flags.at === undefined ? undefined : Number(flags.at), { entries } = clip;
   const index = flags.frame !== undefined ? find(entries, flags.frame) : clip.frameAt(at ?? 0);
-  return { entry: entries[index], time: at ?? entries[index].time };
+  const entry = entries[index], time = at ?? entry.time;
+  return clip.boil ? clip.boil.at(entry, time) : still(entry, time);
 }
+
+const still = (entry, time = entry.time) => ({ entry, time, hold: entry.hold, marks: entry.marks, drawings: [] });
+const start = (clip, entry) => clip.boil?.start(entry) ?? still(entry);
 
 function placed(placement, marks) {
   const slots = new Set(marks.map(row => row.attachment?.slot));
@@ -86,11 +93,12 @@ function placed(placement, marks) {
   return { ...placement, bindings, painting: { ...placement.painting, marks } };
 }
 
-function edit(clip, request, api) {
+function edit(clip, request, K) {
   if (!fields(request, ['format', 'version', 'fps', 'playback', 'operations']) || request.format !== editFormat ||
       request.version !== 1 || !Array.isArray(request.operations) || request.operations.length > 128 ||
       !request.operations.length && request.fps === undefined && request.playback === undefined)
     throw new TypeError('Use a version 1 painting cel edit with timing settings or up to 128 operations');
+  const api = K.authoring.paintings3d;
   const { placement } = clip.document, cels = clip.document.cels.slice(), original = new Set(cels);
   for (const change of request.operations) {
     if (!record(change) || !name(change.id)) throw new TypeError('A painting cel edit needs an operation and cel ID');
@@ -116,14 +124,15 @@ function edit(clip, request, api) {
     } else throw new TypeError('Use insert, remove, move, set-hold or edit-marks for a painting cel');
   }
   const { fps = clip.document.fps, playback = clip.document.playback } = request;
-  const revised = open({ ...clip.document, fps, playback, cels }, api.format);
+  const revised = open({ ...clip.document, fps, playback, cels }, K);
   return { revised, changed: cels.filter(row => !original.has(row)) };
 }
 
-function manifest(clip, entry) {
+function manifest(clip, entry, exposure = start(clip, entry)) {
   const placement = clip.document.placement.id;
   return { id: entry.id, frame: entry.frame, time: entry.time, hold: entry.hold, duration: entry.duration,
-    marks: entry.marks.map(mark => ({ id: mark.id, solid: solidId(placement, mark.id), enabled: mark.enabled ?? true })) };
+    marks: entry.marks.map(mark => ({ id: mark.id, solid: solidId(placement, mark.id), enabled: mark.enabled ?? true })),
+    ...(exposure.drawings.length && { boil: exposure.drawings }) };
 }
 
 function sceneWith(source, placement) {
@@ -143,18 +152,20 @@ function viewOptions(settings) {
   return { w, h, camera, raw, opacity };
 }
 
-function shots(clip, source, view, time, cameraEntry, build, kit) {
+function shots(clip, source, view, active, build, kit) {
   const { placement } = clip.document, { w, h, raw } = view;
   const rest = { ...source, paintings3d: (source.paintings3d ?? []).filter(row => row.id !== placement.id) };
-  const celScene = entry => sceneWith(source, placed(placement, entry.marks));
+  const celScene = sample => sceneWith(source, placed(placement, sample.marks));
   const worldAt = (scene, at) => {
     const world = build(scene, at);
     pose(world, at, { kit, maxSteps: 7200 });
     return world;
   };
-  const first = worldAt(celScene(cameraEntry), time);
+  const cameraSample = clip.boil && (active.entry !== clip.entries[0] || active.time !== 0)
+    ? start(clip, clip.entries[0]) : active;
+  const first = worldAt(celScene(cameraSample), cameraSample.time);
   const lensOptions = { camera: view.camera === undefined ? undefined : kit.KIT.procedural.sceneGraph.camera(view.camera),
-    t: time, lockCamera: true };
+    t: cameraSample.time, lockCamera: true };
   const projection = kit.CameraLens.frame(first, lensOptions, w, h, {
     orbit: kit.KIT.cameraStaging.prepare(first.look?.cameraStaging)?.orbit
   });
@@ -167,8 +178,9 @@ function shots(clip, source, view, time, cameraEntry, build, kit) {
       throw new RangeError('Painting cels need a matching native-grid color capture');
     return result;
   };
-  return { camera, baseline: () => draw(worldAt(rest, time), time),
-    frame: (entry, at, ownership) => draw(entry === cameraEntry && at === time ? first : worldAt(celScene(entry), at), at, ownership) };
+  return { camera, baseline: () => draw(worldAt(rest, active.time), active.time),
+    frame: (sample, at = sample.time, ownership) => draw(
+      sample === cameraSample && at === sample.time ? first : worldAt(celScene(sample), at), at, ownership) };
 }
 
 const ghosts = [
@@ -204,19 +216,23 @@ function onion(active, base, neighbors, opacity) {
   return { w: active.w, h: active.h, rgb };
 }
 
-function renderPreview(clip, entry, source, view, time, build, kit, output) {
+function renderPreview(clip, sample, source, view, build, kit, output) {
+  const { entry, time } = sample;
   const { entries } = clip, total = entries.length;
   const { placement } = clip.document;
-  const capture = shots(clip, source, view, time, entry, build, kit);
-  const active = capture.frame(entry, time), ids = new Map(entry.marks.map((mark, order) => [mark.id, {mark, order}]));
+  const capture = shots(clip, source, view, sample, build, kit);
+  const active = capture.frame(sample), ids = new Map(entry.marks.map((mark, order) => [mark.id, {mark, order}]));
+  const activeDrawings = new Map(sample.drawings.map(row => [row.id, row.drawing]));
   const neighbors = ghosts.flatMap(ghost => {
     let i = entry.frame + ghost.offset;
     if (clip.document.playback === 'loop') i = (i + total) % total;
     if (i === entry.frame || i < 0 || i >= total) return [];
-    const cel = entries[i], shared = cel.marks.filter(mark => ids.has(mark.id));
+    const cel = entries[i], neighbor = start(clip, cel), shared = cel.marks.filter(mark => ids.has(mark.id));
+    const neighborDrawings = new Map(neighbor.drawings.map(row => [row.id, row.drawing]));
     const changed = cel.marks.filter((mark, order) => {
       const prior = ids.get(mark.id);
-      return !prior || prior.order !== order || !isDeepStrictEqual(prior.mark, mark);
+      return !prior || prior.order !== order || !isDeepStrictEqual(prior.mark, mark) ||
+        activeDrawings.get(mark.id) !== neighborDrawings.get(mark.id);
     });
     const targets = new Set();
     for (const mark of changed) {
@@ -226,14 +242,14 @@ function renderPreview(clip, entry, source, view, time, build, kit, output) {
       const receiver = mark.attachment?.kind === 'surface' && placement.bindings?.[mark.attachment.slot];
       if (receiver) targets.add(receiver);
     }
-    const frame = capture.frame(cel, time, true), { objects } = frame.passes;
+    const frame = capture.frame(neighbor, time, true), { objects } = frame.passes;
     const owners = new Set(objects.flatMap((object, index) => targets.has(object) ? [index] : []));
     return [{ ...ghost, id: cel.id, shared: shared.map(mark => mark.id),
       changed: changed.filter(mark => ids.has(mark.id)).map(mark => mark.id), frame, owners, pixels: 0 }];
   });
   const combined = neighbors.length ? onion(active, capture.baseline(), neighbors, view.opacity) : active;
   const image = (file, frame) => ({ file, bytes: PNG.encodeFrame(PNG.packFrame(frame)) });
-  const receipt = { format: 'ink-studio/painting-cel-preview', version: 1, active: manifest(clip, entry), time,
+  const receipt = { format: 'ink-studio/painting-cel-preview', version: 1, active: manifest(clip, entry, sample), time,
     camera: capture.camera, image: 'onion.png', neighbors: neighbors.map(({ side, id, shared, changed, pixels }) =>
       ({ side, id, shared, changed, pixels, image: side + '.png' })) };
   output([image('active.png', active), image('onion.png', combined),
@@ -242,16 +258,19 @@ function renderPreview(clip, entry, source, view, time, build, kit, output) {
 }
 
 function renderExport(clip, source, view, build, kit, output) {
-  if (view.w * view.h * clip.entries.length > 16e6) throw new RangeError('Painting export exceeds its frame pixel budget');
-  const capture = shots(clip, source, view, 0, clip.entries[0], build, kit);
-  const frames = clip.entries.map(entry => PNG.packFrame(capture.frame(entry, entry.time)));
-  const cels = clip.entries.map(entry => ({ ...manifest(clip, entry),
-    image: 'frames/' + String(entry.frame + 1).padStart(3, '0') + '-' + entry.id + '.png' }));
+  const samples = clip.boil?.frames() ?? clip.entries.map(entry => still(entry));
+  if (view.w * view.h * samples.length > 16e6) throw new RangeError('Painting export exceeds its frame pixel budget');
+  const capture = shots(clip, source, view, samples[0], build, kit);
+  const frames = samples.map(sample => PNG.packFrame(capture.frame(sample)));
+  const rows = samples.map(({ entry, time, hold, drawings }, i) => ({ cel: entry.id, time, hold,
+    ...(drawings.length && { boil: drawings }), image: 'frames/' + String(i + 1).padStart(3, '0') + '-' + entry.id + '.png' }));
+  const firstImages = new Map(rows.slice().reverse().map(row => [row.cel, row.image]));
+  const cels = clip.entries.map(entry => ({ ...manifest(clip, entry), image: firstImages.get(entry.id) }));
   const { fps, playback } = clip.document;
   const receipt = { format: 'ink-studio/painting-cel-export', version: 1, fps, playback,
-    duration: clip.duration, camera: capture.camera, cels, animation: 'painting.png' };
-  output([...cels.map((entry, i) => ({ file: entry.image, bytes: PNG.encodeFrame(frames[i]) })),
-    { file: receipt.animation, bytes: PNG.encodeAnimation(frames, fps, { holds: cels.map(row => row.hold), loop: playback === 'loop' }) },
+    duration: clip.duration, camera: capture.camera, cels, ...(clip.boil && { frames: rows }), animation: 'painting.png' };
+  output([...rows.map((entry, i) => ({ file: entry.image, bytes: PNG.encodeFrame(frames[i]) })),
+    { file: receipt.animation, bytes: PNG.encodeAnimation(frames, fps, { holds: rows.map(row => row.hold), loop: playback === 'loop' }) },
     { file: 'export.json', document: receipt }]);
   return receipt;
 }
@@ -264,9 +283,9 @@ module.exports = function paintingCels([verb, ...args], flags, kit, loadScene) {
       (['init', 'edit', 'sample'].includes(verb) && !jsonPath(out)) ||
       (view !== undefined && !jsonPath(view)))
     throw new TypeError('Use painting-cels init|inspect|edit|sample|preview|export. See ink-studio help for syntax');
-  const api = kit.KIT.authoring.paintings3d;
+  const K = kit.KIT;
   if (verb === 'inspect') {
-    const clip = open(read(args[0]), api.format);
+    const clip = open(read(args[0]), K);
     const { fps, playback, placement } = clip.document;
     return report({ fps, playback, placement: placement.id, duration: clip.duration, cels: clip.entries.map(row => manifest(clip, row)) });
   }
@@ -287,11 +306,11 @@ module.exports = function paintingCels([verb, ...args], flags, kit, loadScene) {
     editor.inspectPaintings3d();
     const { painting: { marks, ...painting }, ...placement } = existing;
     const created = open({ format, version: 1, fps: flags.fps === undefined ? 12 : Number(flags.fps),
-      playback: flags.playback ?? 'loop', placement: { ...placement, painting }, cels: [{ id: 'cel-1', hold: 1, marks }] }, api.format);
+      playback: flags.playback ?? 'loop', placement: { ...placement, painting }, cels: [{ id: 'cel-1', hold: 1, marks }] }, K);
     save(created.document);
     return report({ out, cel: manifest(created, created.entries[0]) });
   }
-  const clip = open(read(clipFile), api.format), { placement } = clip.document;
+  const clip = open(read(clipFile), K), { placement } = clip.document;
   const update = source.paintings3d?.some(row => row.id === placement.id) ?? false;
   const validate = marks => {
     const request = placed(placement, marks);
@@ -299,7 +318,7 @@ module.exports = function paintingCels([verb, ...args], flags, kit, loadScene) {
     return { ...source, paintings3d: plan.paintings3d };
   };
   if (verb === 'edit') {
-    const { revised, changed } = edit(clip, read(editFile), api);
+    const { revised, changed } = edit(clip, read(editFile), K);
     for (const row of changed) validate(row.marks);
     save(revised.document);
     return report({ out, duration: revised.duration, cels: revised.entries.map(row => manifest(revised, row)) });
@@ -307,14 +326,13 @@ module.exports = function paintingCels([verb, ...args], flags, kit, loadScene) {
   if (verb === 'sample') {
     if (path.dirname(path.resolve(out)) !== path.dirname(path.resolve(scene)))
       throw new RangeError('Write the sampled scene beside its source to preserve relative assets');
-    const { entry, time } = select(clip, flags);
-    save(validate(entry.marks));
-    return report({ out, time, cel: manifest(clip, entry) });
+    const sample = select(clip, flags), { entry, time } = sample;
+    save(validate(sample.marks));
+    return report({ out, time, cel: manifest(clip, entry, sample) });
   }
   const options = viewOptions(view ? read(view) : {});
   const build = (snapshot, time) => loadScene(scene, snapshot).build(undefined, { parameterInputs: { time } });
   const output = artifacts => destinations.write(path.resolve(out), artifacts);
   if (verb === 'export') return report(renderExport(clip, source, options, build, kit, output));
-  const { entry, time } = select(clip, flags);
-  return report(renderPreview(clip, entry, source, options, time, build, kit, output));
+  return report(renderPreview(clip, select(clip, flags), source, options, build, kit, output));
 };

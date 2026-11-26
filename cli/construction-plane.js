@@ -24,7 +24,7 @@ function command(file, extra, options, toolkit, openEditor, projectTexelsPerUnit
   const cameraFlags = ['yaw','pitch','at','camera-shot'];
   const edgeFlags = ['edge-object','edge','edge-from','edge-at','tilt','reference-up'];
   const switches = ['from-camera','detach-edge'];
-  const snapFields = {object:'object',vertex:'vertex',instance:'instance','instance-kind':'instanceKind'};
+  const snapFields = {object:'object',vertex:'vertex',instance:'instance','instance-kind':'instanceKind','point-id':'id',anchor:'anchor'};
   const snapFlags = ['snap-origin','selection',...Object.keys(snapFields)];
   const allowed = [...axes,'grid','rounding','grid-preset','grid-tileset','module-size','out','lock',
     ...switches,...cameraFlags,...edgeFlags,...snapFlags];
@@ -44,9 +44,9 @@ function command(file, extra, options, toolkit, openEditor, projectTexelsPerUnit
       size !== undefined && preset !== 'module' ||
       cameraPick && ['right','up'].some(key=>options[key] !== undefined) ||
       snapKind === undefined && snapFlags.some(key=>options[key] !== undefined) ||
-      snapKind !== undefined && (options.origin !== undefined || !['vertex','instance','bounds','average'].includes(snapKind)) ||
+      snapKind !== undefined && (options.origin !== undefined || !['vertex','instance','object-point','bounds','average'].includes(snapKind)) ||
       edgePick && (cameraPick || detach || lock !== undefined || snapKind !== undefined || axes.some(key=>options[key] !== undefined)))
-    throw new TypeError('Use mesh-topology plane <scene.json> with an explicit frame, --from-camera, --edge with --tilt, or --snap-origin vertex|instance|bounds|average');
+    throw new TypeError('Use mesh-topology plane <scene.json> with an explicit frame, --from-camera, --edge with --tilt, or --snap-origin vertex|instance|object-point|bounds|average');
   const input = path.resolve(file), output = out && path.resolve(out);
   if (output && (!/\.json$/i.test(output) || output === input || path.dirname(output) !== path.dirname(input) ||
       selection !== undefined && output === path.resolve(selection)))
@@ -91,7 +91,7 @@ function command(file, extra, options, toolkit, openEditor, projectTexelsPerUnit
     const request = {kind:snapKind,...Object.fromEntries(Object.entries(snapFields).flatMap(([flag,key])=>
       options[flag] === undefined ? [] : [[key,options[flag]]]))};
     if (selection !== undefined) request.selection = JSON.parse(fs.readFileSync(path.resolve(selection),'utf8'));
-    result = plane.snapOrigin({...scene,constructionPlane:result.plane},request);
+    result = editor.planConstructionOrigin(request,{constructionPlane:result.plane});
   }
   const {plane:after,axes:basis,snap} = result;
   if (output) {

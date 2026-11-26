@@ -51,7 +51,8 @@
   function anchor(scene, env, { instance, instanceKind, anchor }) {
     const row = select(scene, { kind: instanceKind, ids: [instance] })[0];
     if (anchor === undefined) return row;
-    const target = row.instanceKind === 'asset-part' && assetSocket(scene, env, instance, anchor);
+    const target = row.instanceKind === 'asset-part' ? assetSocket(scene, env, instance, anchor) :
+      A.objectPoints.resolve(scene,env,{kind:'object-point',instance,id:anchor}).target;
     if (!target) throw new RangeError('No bound instance socket ' + instance + '/' + anchor);
     return { ...row, target };
   }

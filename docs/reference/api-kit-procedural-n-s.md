@@ -50,6 +50,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.packing` | namespace |  |  |
 | `KIT.procedural.packing.apollonian` | function | `({ depth = 7, center = [0, 0], radius = 1, rotation = 0, seeds = regular(), minRadius = .001, maxCircles = 6000 } = {})` | [guide](../hyperbolic-mosaics.md), [guide](../hyperbolic-mosaics.md#apollonian-packing), [source](../../src/kit/p42-apollonian-packing.js) |
 
+## KIT.procedural.paintBoil
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.paintBoil` | namespace |  |  |
+| `KIT.procedural.paintBoil.apply` | function | `(form, plan, mark, drawing)` | [source](../../src/kit/p26i-paint-boil.js) |
+| `KIT.procedural.paintBoil.prepare` | function | `(raw)` | [source](../../src/kit/p26i-paint-boil.js) |
+| `KIT.procedural.paintBoil.state` | function | `(plan, time = 0, celTime)` | [source](../../src/kit/p26i-paint-boil.js) |
+
 ## KIT.procedural.paintLooseness
 
 | Member | Kind | Signature or value | Guides and source |

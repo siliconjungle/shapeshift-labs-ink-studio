@@ -14,7 +14,7 @@ Tangent normals default to the calibrated surface frame. Set `normalFrame:"image
 
 Supply scalar or linear RGB `illumination` on the same source grid as pigment. Ink divides out calibrated illumination at each source sample before blending the registered pigment. Set `deLight.strength` to vary the correction and `deLight.minimumLight` to reject samples too dark to divide stably. Use a measured flat-field or a light estimate from a calibrated capture. Height, normals and roughness retain their independent data through this stage.
 
-Connect a target-space `defects` mask and an optional `validity` record of source-space grayscale masks keyed by channel. `repair.threshold` sets how strongly the defect mask must mark a sample. `repair.minimumCoverage` controls the minimum fraction of usable source evidence. The repair copies all material channels from the same nearest clean donor within `repair.radius` target pixels. Set the radius to zero to inspect missing or damaged samples before repairing. This repair is suited to small scan defects and localized missing data.
+Connect a target-space `defects` mask and an optional `validity` record of source-space grayscale masks keyed by channel. `repair.threshold` sets how strongly the defect mask must mark a sample. `repair.minimumCoverage` controls the minimum fraction of usable source evidence. Use `repair.padding` to expand defects before choosing donors and clear the fringe left by subpixel alignment. The repair copies all material channels from the same nearest clean donor within `repair.radius` target pixels. Set the radius to zero to inspect missing or damaged samples before repairing. This repair is suited to small scan defects and localized missing data.
 
 ## Make a repeat
 

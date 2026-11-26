@@ -223,7 +223,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   sculpt-guide inspect <scene.json>   report generated copies and placements
   painting-3d plan <scene.json> <placement.json>   validate attachment slots and mark contacts
   painting-3d apply <scene.json> <placement.json> --out scene.json   retain a 3D painting
-  painting-3d update <scene.json> <edit.json> --out scene.json   edit marks, profiles, erasers, order or placement
+  painting-3d update <scene.json> <edit.json> --out scene.json   edit marks, profiles, erasers, boil, order or placement
   painting-3d inspect <scene.json>   report marks and resolved attachments
   painting-3d extract <scene.json> --id painting --out painting.json   export a reusable painting
   painting-cels init <scene.json> --id painting --out clip.json [--fps 12 --playback loop]   start with an editable 3D painting
@@ -231,7 +231,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   painting-cels edit <scene.json> <clip.json> <edit.json> --out clip.json   insert, retime, or edit retained cels
   painting-cels sample <scene.json> <clip.json> --out scene.json [--frame cel-1 | --at seconds]   write one editable cel into the scene
   painting-cels preview <scene.json> <clip.json> --out directory [--frame cel-1 | --at seconds] [--view view.json]   render neighboring poses in one camera
-  painting-cels export <scene.json> <clip.json> --out directory [--view view.json]   render numbered cels and animated PNG
+  painting-cels export <scene.json> <clip.json> --out directory [--view view.json]   render held exposures and animated PNG
   paint-survival review <scene.json> <plan.json> --out directory   compare painted fallbacks across native grids and angles
   paint-survival apply <scene.json> <plan.json> <review.json> --case angle/resolution --out scene.json   accept one reviewed paint variant
   sculpt-spray plan <scene.json> <brush.json>   capture receivers for a volumetric paint brush
@@ -306,7 +306,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology plane <scene.json> --edge-object ID --edge ID --tilt DEGREES [--edge-from VERTEX] [--edge-at T] [--reference-up X,Y,Z] [--grid N|U,V] [--out file.json]   hinge the working plane on an authored edge
   mesh-topology plane <scene.json> (--tilt DEGREES | --detach-edge) [--out file.json]   adjust or detach the retained edge anchor
   mesh-topology plane <scene.json> --snap-origin vertex --object ID --vertex ID [--detach-edge] [--out file.json]   snap the working origin to a scene vertex
-  mesh-topology plane <scene.json> --snap-origin instance --instance ID [--instance-kind prefab|asset-part] [--detach-edge] [--out file.json]   snap the working origin to an instance frame
+  mesh-topology plane <scene.json> --snap-origin instance --instance ID [--instance-kind prefab|asset-part] [--anchor ID] [--detach-edge] [--out file.json]   snap the working origin to an instance frame
+  mesh-topology plane <scene.json> --snap-origin object-point --point-id ID [--object ID | --instance ID] [--detach-edge] [--out file.json]   snap the working origin to a named point
   mesh-topology plane <scene.json> --snap-origin bounds|average --object ID --selection selection.json [--detach-edge] [--out file.json]   snap the working origin to a selected center
   mesh-topology move <mesh-or-scene.json> [--object id] [--part id] --vertex id --by X,Y,Z [--space local|world|plane|camera] [--view file] [--align plane|grid] [--coincident [--coincident-distance N]] [--expect revision] [--out file.json]   move a vertex and optionally its coincident copies
   mesh-topology pivot <mesh-or-scene.json> [request.json] [--object id] [--part id] [--selection file] [--out file.json]   place an independent transform pivot
@@ -391,6 +392,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   tileset select-atlas <pick.json> --scene <scene.json> --object <mesh-id> [--part <part-id>] [--mode match|inside|touch] [--out <selection.json>]   select faces by pigment UV coverage of a tileset rectangle
   tileset eyedrop --scene <scene.json> --object <mesh-id> --face <face-id> [--part ID] [--brush-size] [--out <pick.json>]   recover a reusable painted face pick for stamp --selection
   tileset reskin --scene <scene.json> --object <mesh-id> --face <face-id> --mode crop|tileset|relative (--selection <pick.json> | --id <tileset-id>) [--part ID] [--column N --row N] [--out <new-scene.json>]   change the paint on an existing mesh face
+  tileset object-points <request.json> --scene <scene.json> [--out <new-scene.json>]   inspect or edit named mesh and prefab points
   tileset stamp-prefab <request.json> --scene <scene.json> [--out <new-scene.json>]   stamp linked prefab placements on the construction plane
   tileset promote-prefab <request.json> --scene <scene.json> [--selection faces.json] [--out new-scene.json]   promote selected tile faces into a linked visual prefab
   tileset coverage-review <review.json> --scene <scene.json> --out <directory>   inspect opaque, cutout, and blended coverage across native camera samples

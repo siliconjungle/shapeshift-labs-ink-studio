@@ -5,7 +5,11 @@
   const record = row => row && Object.getPrototypeOf(row) === Object.prototype;
   const fields = (row, keys) => record(row) && Object.keys(row).every(key => keys.includes(key));
 
-  function resolveOrigin(scene, origin) {
+  function resolveOrigin(scene, origin, env) {
+    if (origin?.kind === 'object-point') {
+      const {target,local,world,...evidence} = A.objectPoints.resolve(scene,env,origin);
+      return {...evidence,at:target};
+    }
     if (fields(origin,['kind']) && origin.kind === 'plane')
       return {kind:'plane',at:A.constructionPlane.forScene(scene).plane.origin};
     if (fields(origin,['kind','id','at']) && origin.kind === 'point' && K.world.data.id(origin.id) && meshPivot.xyz(origin.at))
@@ -14,7 +18,7 @@
       const {object,vertex,target} = A.constructionPlane.originTarget(scene,origin);
       return {kind:'vertex',object,vertex,at:target};
     }
-    throw new TypeError('Choose the construction plane, a named XYZ point, or a named scene vertex as the prefab origin');
+    throw new TypeError('Choose the construction plane, an object point, named XYZ point, or named scene vertex as the prefab origin');
   }
 
   function subset(row, doc, faces, edges, vertices, bindings, origin) {
@@ -24,7 +28,9 @@
       ...(row.bindings && {bindings}),
       ...(origin && row.materials && {materials:row.materials.filter(material => used.has(material.id))}),
       ...(origin && row.bakes && {bakes:row.bakes.filter(bake => used.has(bake.material))}),
-      ...(origin && row.pivot && {pivot:V.sub(row.pivot,origin)})};
+      ...(origin && row.pivot && {pivot:V.sub(row.pivot,origin)}),
+      ...(origin && row.points && {points:Object.fromEntries(Object.entries(row.points).map(([id,point]) =>
+        [id,{...point,position:V.sub(point.position,origin)}]))})};
   }
 
   function partition(row, doc, selected, origin) {
@@ -68,7 +74,7 @@
     if (!fields(request,['prefab','instance','faces','origin']) || !id(prefab) || !id(instance) ||
         !record(faces) || !Object.keys(faces).length)
       throw new TypeError('Prefab promotion needs a new prefab ID and selected tile faces by editable object');
-    const frame = resolveOrigin(scene,origin), conflicts = [], sources = [], decals = [], uses = new Set();
+    const frame = resolveOrigin(scene,origin,env), conflicts = [], sources = [], decals = [], uses = new Set();
     const report = {format:'ink-studio/tileset-prefab-promotion',version:1,prefab,instance,origin:frame,
       canCommit:false,sources,decals,conflicts};
     const {spec} = A.scenePrefabs.expand(scene,env);

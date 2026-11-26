@@ -766,13 +766,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.constructionPlane` | namespace |  |  |
 | `KIT.authoring.constructionPlane.forScene` | function | `(scene)` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.gridPreset` | function | `(scene, request, {projectTexelsPerUnit} = {})` | [guide](../mesh-topology.md#set-grid-increments-and-rounding), [source](../../src/kit/p23-construction-plane.js) |
-| `KIT.authoring.constructionPlane.originTarget` | function | `(scene, request)` | [source](../../src/kit/p23-construction-plane.js) |
+| `KIT.authoring.constructionPlane.originTarget` | function | `(scene, request, env = {})` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.pick` | function | `(raw, pose, {lock} = {})` | [guide](../mesh-topology.md#pick-and-lock-a-plane-from-the-camera), [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.point` | function | `(frame, at)` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.project` | function | `(frame, position, mode = 'plane')` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.quantize` | function | `(frame, at, worldMagnitude = 0)` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.resolve` | function | `(raw = {})` | [source](../../src/kit/p23-construction-plane.js) |
-| `KIT.authoring.constructionPlane.snapOrigin` | function | `(scene, request, {detachEdge = false} = {})` | [source](../../src/kit/p23-construction-plane.js) |
+| `KIT.authoring.constructionPlane.snapOrigin` | function | `(scene, request, {detachEdge = false} = {}, env)` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.tilt` | function | `(scene, options)` | [guide](../mesh-topology.md#tilt-a-plane-from-an-existing-edge), [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.context` | function | `(doc, options)` | [guide](../../README.md#retained-authoring), [guide](../procedural.md#optional-retained-authoring), [source](../../src/kit/p24-authoring-context.js) |
 | `KIT.authoring.data` | namespace |  |  |
@@ -839,8 +839,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.meshTopologyScene.revise` | function | `(row, patch, { projection, flatten=[], atlasForFlatten, ...transitionOptions } = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.transferAttachments` | function | `(row, patch, settings, projection)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.uvAtlases` | function | `(scene,row,selector,{tileGrid=false} = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
+| `KIT.authoring.objectPoints` | namespace |  |  |
+| `KIT.authoring.objectPoints.plan` | function | `(scene, env, request)` | [source](../../src/kit/p23-object-points.js) |
+| `KIT.authoring.objectPoints.read` | function | `(points = {})` | [source](../../src/kit/p23-object-points.js) |
+| `KIT.authoring.objectPoints.resolve` | function | `(scene, env, raw)` | [guide](../scene-editor.md#name-object-points-for-placement-and-alignment), [source](../../src/kit/p23-object-points.js) |
+| `KIT.authoring.objectPoints.socketFrames` | function | `(points)` | [source](../../src/kit/p23-object-points.js) |
+| `KIT.authoring.objectPoints.transform` | function | `(row, frame)` | [source](../../src/kit/p23-object-points.js) |
 | `KIT.authoring.paintings3d` | namespace |  |  |
-| `KIT.authoring.paintings3d.expand` | function | `(source)` | [source](../../src/kit/p23a-paintings-3d.js) |
+| `KIT.authoring.paintings3d.expand` | function | `(source, time = 0)` | [source](../../src/kit/p23a-paintings-3d.js) |
 | `KIT.authoring.paintings3d.extract` | function | `(scene, id)` | [source](../../src/kit/p23a-paintings-3d.js) |
 | `KIT.authoring.paintings3d.format` | value | `string = "ink-studio/painting-3d"` |  |
 | `KIT.authoring.paintings3d.revise` | function | `(scene, input, update = false)` | [source](../../src/kit/p23a-paintings-3d.js) |

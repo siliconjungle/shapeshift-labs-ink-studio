@@ -51,6 +51,8 @@ A hold is an integer number of ticks at the clip's `fps`. For example, three tic
 
 An edit request can also set the clip's `fps` or `playback`. A clip accepts up to 120 cels at 1–120 fps. Each cel can hold for 1–65,535 ticks. Use `inspect` to read the ordered IDs, start times, holds, and resolved mark IDs.
 
+[Boiled marks](painting-boil.md#preview-or-export-a-painting-clip) can keep one seeded drawing per cel or redraw within a held pose. A boiled export records each resolved exposure and its exact hold.
+
 ## Review neighboring poses
 
 ```sh
@@ -60,7 +62,7 @@ ink-studio painting-cels export scene.json clip.json --view view.json --out flip
 
 The preview includes the active frame, available neighboring frames, and `onion.png`. Pink marks the previous cel and mint marks the next. The renderer uses the active scene time and one locked camera for all three. It compares changed strokes and their surface receivers with the unpainted scene. Shared pixels stay clear, and changed neighbors fade over the active stroke where they overlap. The preview receipt lists shared and changed mark IDs and the camera. Neighbors wrap in loop mode.
 
-The optional view JSON sets `w`, `h`, `camera`, `raw`, and onion `opacity`. Camera settings use Ink's regular orbit or authored camera fields. The export renders each cel at its start time with one camera, writes one numbered PNG per cel, and packs the images into an animated PNG with the original holds and playback mode. `export.json` maps each file to its cel, marks, and timing.
+The optional view JSON sets `w`, `h`, `camera`, `raw`, and onion `opacity`. Camera settings use Ink's regular orbit or authored camera fields. The export renders each exposure at its start time with one camera, writes numbered PNGs, and packs the images into an animated PNG with their holds and playback mode. `export.json` maps each file to its cel, marks, and timing.
 
 ```sh
 node examples/painting-cels-demo.cjs /tmp/ink-painting-cels

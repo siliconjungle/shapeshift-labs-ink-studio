@@ -25,7 +25,7 @@
       throw new TypeError('Unknown scan processing option');
     const { align = {}, repair = {}, tile = null, deLight = {} } = options;
     if (!fields(align, ['width', 'height', 'pixelPitchMm', 'pivot', 'landmarks', 'perChannel', 'tolerance', 'filter', 'normalFrame']) ||
-        !fields(repair, ['radius', 'threshold', 'minimumCoverage']) || !fields(deLight, ['strength', 'minimumLight']))
+        !fields(repair, ['radius', 'padding', 'threshold', 'minimumCoverage']) || !fields(deLight, ['strength', 'minimumLight']))
       throw new TypeError('Invalid scan alignment, repair or de-light options');
     const base = source.channels.baseColor.raster;
     if (!I.valid(base, 'color')) throw new TypeError('Scan pigment needs a typed color image');
@@ -33,18 +33,18 @@
     const { width = baseGrid.width, height = baseGrid.height, pivot = baseGrid.pivot, landmarks,
       pixelPitchMm = baseSpec.pixelPitchMm ?? source.channels.height?.raster.descriptor?.pixelPitchMm,
       perChannel = {}, tolerance = 1, filter = 'linear', normalFrame = 'surface' } = align;
-    const { radius = 12, threshold = .5, minimumCoverage = .5 } = repair;
+    const { radius = 12, padding = 0, threshold = .5, minimumCoverage = .5 } = repair;
     const { strength = 1, minimumLight = .06 } = deLight;
     if (![width, height].every(n => integer(n) && n >= 2 && n <= 8192) || width * height > maxPixels ||
         pixelPitchMm !== undefined && !tuple(pixelPitchMm, 2, n => bounded(n, 1e-6, 1e6)) ||
         pivot !== undefined && !tuple(pivot, 2) || !record(perChannel) ||
         Object.keys(perChannel).some(name => !Object.hasOwn(source.channels, name)) ||
         !bounded(tolerance, .001, 64) || !['nearest', 'linear'].includes(filter) || !['surface', 'image'].includes(normalFrame) ||
-        !bounded(radius, 0, 512) || !bounded(threshold, .001, 1) || !bounded(minimumCoverage, .001, 1) ||
+        !bounded(radius, 0, 512) || !bounded(padding, 0, 64) || !bounded(threshold, .001, 1) || !bounded(minimumCoverage, .001, 1) ||
         !validUnit(strength) || !bounded(minimumLight, .0001, 32))
       throw new RangeError('Invalid scan grid, registration, repair radius or illumination controls');
     return { width, height, pivot, pixelPitchMm, landmarks, perChannel, tolerance, filter, normalFrame,
-      minimumCoverage, threshold, radius, tile: tileOptions(tile, width, height), strength, minimumLight };
+      minimumCoverage, threshold, radius, padding, tile: tileOptions(tile, width, height), strength, minimumLight };
   }
 
   function tileOptions(tile, width, height) {
@@ -198,12 +198,23 @@
   }
 
   function donors(support, defects, settings) {
-    const { width, height, minimumCoverage, threshold, radius } = settings;
+    const { width, height, minimumCoverage, threshold, radius, padding } = settings;
     const clean = Uint8Array.from(support, (n, p) => Number(n >= minimumCoverage && defects(p) < threshold));
-    const count = clean.reduce((sum, n) => sum + n, 0), damaged = clean.length - count;
+    const size = [width, height];
+    let count = clean.reduce((sum, n) => sum + n, 0);
+    if (padding && count > 0 && count < clean.length) {
+      const marked = Uint8Array.from(clean, n => 1 - n);
+      const { distance } = P.geometry.distanceTransform(marked, { size, indices: false });
+      count = 0;
+      for (let p = 0; p < clean.length; p++) {
+        clean[p] = Number(distance[p] > padding);
+        count += clean[p];
+      }
+    }
+    const damaged = clean.length - count;
     const repaired = new Float32Array(clean.length), unresolved = new Float32Array(clean.length);
     if (!damaged) return { repaired, unresolved, damaged, count: 0 };
-    const transform = !count || !radius ? null : P.geometry.distanceTransform(clean, { size: [width, height], indices: true });
+    const transform = !count || !radius ? null : P.geometry.distanceTransform(clean, { size, indices: true });
     let fixed = 0;
     for (let p = 0; p < clean.length; p++) if (!clean[p]) {
       if (transform && transform.nearest[p] >= 0 && transform.distance[p] <= radius) { repaired[p] = 1; fixed++; }
@@ -320,7 +331,8 @@
     const value = tile ? M.replace(repaired, tile.maps) : repaired;
     return { value, aligned, delit: deLit, repaired, repairedMask: plane(plan.repaired), unresolved, support: plane(support),
       report: { width, height, pixelPitchMm: pixelPitchMm ?? null, alignment,
-        repair: { damaged: plan.damaged, repaired: plan.count, unresolved: plan.damaged - plan.count, radius: settings.radius },
+        repair: { damaged: plan.damaged, repaired: plan.count, unresolved: plan.damaged - plan.count,
+          radius: settings.radius, padding: settings.padding },
         deLight: { strength: delit ? settings.strength : 0, skipped: skippedLight, minimumLight: settings.minimumLight },
         tile: tile?.report ?? null } };
   }

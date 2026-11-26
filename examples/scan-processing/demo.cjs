@@ -34,7 +34,7 @@ nodes.packet = op('material.pack', { maps: ref('maps') });
 nodes.validity = op('data.record', { height: ref('validHeight') });
 const options = {
   align: { width, height, pixelPitchMm: [pitch, pitch], perChannel: settings },
-  repair: { radius: 12 },
+  repair: { radius: 12, padding: 2 },
   tile: { crop: [4, 4, 120, 120], axes: 'both', band: 10 }
 };
 nodes.scan = op('material.scanProcess', { source: ref('packet'), options: { input: 'processing' },
@@ -56,21 +56,28 @@ saved.settings.outputUsages = Object.fromEntries(channels.map((name, order) => [
 Ink.writeMaterialGraph(at('juniper-kiln.material.json'), saved);
 const result = Ink.readGraphProject(at('juniper-kiln.material.json')).run();
 for (const artifact of result.artifacts) files.write(at('delivery/' + artifact.file), artifact.bytes);
-const { report, aligned, delit, repairedMask, value } = result.outputs;
+const { report, aligned, delit, repaired, repairedMask, value } = result.outputs;
 
-let before = 0, after = 0, n = 0;
+let before = 0, after = 0, n = 0, dirtyError = 0, repairedError = 0;
 const raw = aligned.channels.baseColor.raster.raster, corrected = delit.channels.baseColor.raster.raster;
+const fixed = repaired.channels.baseColor.raster.raster;
 for (let y = 0, p = 0; y < height; y++) for (let x = 0; x < width; x++, p++) {
-  if (broken(x, y) || punch(x, y) || repairedMask.raster.data[p]) continue;
   const truth = finish(x, y).pigment;
   for (let c = 0; c < 3; c++) {
-    before += (raw.data[raw.channels * p + c] - truth[c]) ** 2;
-    after += (corrected.data[corrected.channels * p + c] - truth[c]) ** 2;
-    n++;
+    const lit = raw.data[raw.channels * p + c], unlit = corrected.data[corrected.channels * p + c];
+    if (repairedMask.raster.data[p]) {
+      dirtyError += (unlit - truth[c]) ** 2;
+      repairedError += (fixed.data[fixed.channels * p + c] - truth[c]) ** 2;
+    } else if (!broken(x, y) && !punch(x, y)) {
+      before += (lit - truth[c]) ** 2;
+      after += (unlit - truth[c]) ** 2;
+      n++;
+    }
   }
 }
 const error = { captured: Math.sqrt(before / n), corrected: Math.sqrt(after / n) };
 assert(error.corrected < error.captured * .45, JSON.stringify(error));
+assert(repairedError < dirtyError * .35, JSON.stringify({ dirtyError, repairedError }));
 assert(report.repair.repaired > 90 && report.repair.unresolved === 0, JSON.stringify(report.repair));
 for (const name of ['baseColor', 'height', 'roughness']) assert(report.tile.seams[name].after < .000001);
 assert.equal(report.tile.normalMode, 'height-detail');

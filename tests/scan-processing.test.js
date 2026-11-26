@@ -81,6 +81,10 @@ test('defects and missing light use one repair donor for pigment, relief, normal
   }
   assert.equal(result.repairedMask.raster.data[4], 1);
   assert.equal(result.support.raster.data[8], 0);
+  const padded = S.process(source, { repair: { padding: 1 } }, defects, illumination);
+  assert.equal(padded.report.repair.repaired, 6);
+  assert.equal(padded.repairedMask.raster.data[1], 1);
+  assert.equal(padded.repairedMask.raster.data[0], 0);
   assert.throws(() => S.process(source, { repair: { radius: 0 }, tile: {} }, defects, illumination), /unresolved defects/);
   const retained = S.process(source, { repair: { radius: 0 }, tile: { crop: [0, 0, 3, 2] } }, null, illumination);
   assert.equal(retained.value.channels.roughness.raster.raster.height, 2);

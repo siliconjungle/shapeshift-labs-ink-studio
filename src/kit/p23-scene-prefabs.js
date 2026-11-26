@@ -1,7 +1,7 @@
 /* Expand linked visual recipes into the native diorama schema at build time. */
 (function (K) {
   const A = K.authoring, DIO = K.diorama, { M,V } = K;
-  const tables = ['solids', 'parts', 'groups', 'motion', 'effects', 'topologyMeshes'];
+  const tables = ['solids', 'parts', 'groups', 'motion', 'effects', 'topologyMeshes', 'points'];
   const { authored, compose, inverse, reflection, transform } = DIO.solidFrames;
 
   function scopedSolid(solid, name, tasks, { primary, key, placement, prefab }) {
@@ -245,6 +245,7 @@
         for (const source of sources) checkProvenance(source);
         check(new Set(sources.map(row => row.instance)).size===sources.length,'Combined prefab source IDs must be distinct');
       } else if (def.provenance !== undefined) checkProvenance(def.provenance);
+      A.objectPoints.read(def.points);
       K.procedural.model.validate(def, 'visual');
       available.set(key, {definition:def,frames:memberFrames(def)});
     }
@@ -267,7 +268,7 @@
         check(Array.isArray(edits), 'Prefab overrides must be an ordered edit list');
         for (const edit of edits) {
           const path = selector(edit?.path);
-          check(tables.includes(path[0]) && path.length >= 2 && id(path[1]) &&
+          check(tables.includes(path[0]) && path[0] !== 'points' && path.length >= 2 && id(path[1]) &&
             !(path[0] === 'solids' && path[2] === 'id') && ['set', 'merge', 'remove', 'test'].includes(edit.op),
           'Prefab overrides must address local records without changing their IDs');
         }
@@ -284,6 +285,7 @@
           }
         }
         const resolved = W.apply(baseline, edits, { validate: null }).world;
+        A.objectPoints.read(resolved.points);
         const meshOverrides = instance.meshOverrides ?? {};
         check(record(meshOverrides), 'Expected a map of prefab mesh overrides');
         for (const [member, override] of Object.entries(meshOverrides)) {
