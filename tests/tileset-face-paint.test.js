@@ -310,3 +310,92 @@ test('sample bound color through the CLI and feed it into a different face penci
   assert.equal(reject.status,1);
   assert(!fs.existsSync(file('blocked.json')));
 });
+
+function fillFixture() {
+  const scene = fixture(true);
+  const cells = new Uint8Array(width*height);
+  for (const [x,y,slot] of [[8,6,2],[9,6,1],[9,7,1],[10,8,1],[15,13,1],[16,13,2],[18,6,1],[20,6,1],[10,6,3]])
+    cells[y*width+x] = slot;
+  scene.tilesets.enamel = {...scene.tilesets.enamel,data:Buffer.from(cells).toString('base64'),
+    palette:[0x263d49,0x769780,0x769780,0x789881],alpha:[255,255,255,253]};
+  const editor = ink.createSceneEditor(scene);
+  const mount = (object,x,y)=>editor.placeTilesetFace({object,face:'window',origin:[20,0,0],worldSize:[1,1],
+    selection:ink.pickTilesetRectangle(scene,'enamel',{x,y,width:1,height:1})});
+  mount('offscreen-match',16,13);
+  mount('offscreen-held',15,13);
+  return structuredClone(editor.snapshot());
+}
+
+test('fill four-connected color through the exact bound tile and reuse the wand tolerance',()=>{
+  const scene = fillFixture(), editor = ink.createSceneEditor(scene);
+  const {rgba,...hit} = stroke, request = {...hit,tool:'fill',fill:{colors:[{color:'#ffab57'}]}};
+  const {report,images} = ink.paintTilesetFace(editor,request);
+  assert(report.canCommit,JSON.stringify(report.conflicts));
+  assert.deepEqual(report.fill.rect,[3,3,15,15]);
+  assert.equal(report.fill.selectedTexels,3);
+  assert.deepEqual(report.samples.map(row=>row.at),[[8,6],[9,6],[9,7]]);
+  assert.deepEqual(report.uses.map(use=>use.object).sort(),['east','west']);
+  assert.equal(images.texels.rgb.filter((n,i)=>i%3===0 && n).length,3);
+  assert.deepEqual(editor.snapshot(),scene);
+  const close = {...request,fill:{...request.fill,tolerance:2}};
+  const expanded = ink.paintTilesetFace(editor,close).report;
+  assert.equal(expanded.fill.selectedTexels,4);
+  assert.deepEqual(expanded.samples.map(row=>row.at),[[8,6],[9,6],[10,6],[9,7]]);
+  assert.equal(ink.paintTilesetFace(editor,close,{apply:true,expect:report.previewRevision}).report.conflicts[0].code,'stale-preview');
+  assert.deepEqual(ink.paintTilesetFace(editor,request,{apply:true,expect:report.previewRevision}).report,report);
+  const slots = Buffer.from(editor.snapshot().tilesets.enamel.data,'base64');
+  assert.equal(slots[8*width+10],1);
+  assert.equal(slots[6*width+18],1);
+  assert.equal(slots[6*width+20],1);
+  assert(editor.undo());
+  assert.deepEqual(editor.snapshot(),scene);
+});
+
+test('fill disconnected matches with an atlas-aligned checker and trace only the changed footprint',()=>{
+  const scene = fillFixture(), editor = ink.createSceneEditor(scene), {rgba,...hit} = stroke;
+  const request = {...hit,tool:'fill',fill:{area:'matching-color',pattern:'checker',size:1,
+    colors:[{slot:1},{color:'#eb9c57',alpha:192}]}};
+  const {report,images} = ink.paintTilesetFace(editor,request);
+  assert(report.canCommit,JSON.stringify(report.conflicts));
+  assert.equal(report.fill.selectedTexels,6);
+  assert.deepEqual(report.samples.map(row=>row.at),[[8,6],[9,6],[16,13]]);
+  assert.deepEqual(report.uses.map(row=>row.object).sort(),['east','offscreen-match','west']);
+  assert.equal(images.texels.rgb.filter((n,i)=>i%3===0 && n===250).length,3);
+  assert.equal(images.texels.rgb.filter((n,i)=>i%3===0 && n===111).length,3);
+  assert.equal(report.uses.find(use=>use.object==='offscreen-match').visiblePixels,0);
+  const local = {...request,sharing:'make-local-variant',variant:'checker-east'};
+  const commit = ink.paintTilesetFace(editor,local,{apply:true}).report;
+  assert(commit.canCommit,JSON.stringify(commit.conflicts));
+  assert.deepEqual(commit.uses.map(row=>row.object),['east']);
+  assert.deepEqual(commit.sharedPaintUses.map(row=>row.object).sort(),['offscreen-match','west']);
+  const after = editor.snapshot(), variant = after.tilesets['checker-east'];
+  assert.deepEqual(after.tilesets.enamel,scene.tilesets.enamel);
+  const slots = Buffer.from(variant.data,'base64');
+  assert.deepEqual([[8,6],[9,6],[9,7],[10,8],[15,13],[16,13]].map(([x,y])=>slots[y*width+x]),[1,4,1,1,1,4]);
+  assert.equal(variant.alpha[4],192);
+  assert(editor.undo());
+  assert.deepEqual(editor.snapshot(),scene);
+});
+
+test('limit matching fill to a nonrectangular polygon UV footprint',()=>{
+  const scene = fixture(), doc = scene.topologyMeshes.east.document, viewFace = doc.faces[0];
+  const removed = viewFace.corners.pop().uv.map((n,i)=>Math.round(n*[width-1,height-1][i]));
+  delete doc.edges;
+  const editor = ink.createSceneEditor(scene), {rgba,...hit} = stroke;
+  const {report} = ink.paintTilesetFace(editor,{...hit,tool:'fill',fill:{area:'matching-color',colors:[{color:'#ffab57'}]}},{apply:true});
+  assert(report.canCommit,JSON.stringify(report.conflicts));
+  assert(report.fill.selectedTexels>0 && report.fill.selectedTexels<15*15);
+  const at = (removed[1]*width+removed[0])*4;
+  const bytes = Buffer.from(editor.snapshot().tilesets.enamel.data,'base64');
+  assert.deepEqual([...bytes.subarray(at,at+4)],[71,105,89,255]);
+});
+
+test('leave the atlas and local binding intact if a checker exceeds the indexed palette',()=>{
+  const scene = fillFixture(), asset = scene.tilesets.enamel;
+  asset.palette.push(...Array.from({length:251},(_,i)=>i));
+  const editor = ink.createSceneEditor(scene), {rgba,...hit} = stroke;
+  const {report} = ink.paintTilesetFace(editor,{...hit,tool:'fill',sharing:'make-local-variant',variant:'full-checker',
+    fill:{pattern:'checker',colors:[{color:'#ea572d'},{color:'#ffa87d'}]}},{apply:true});
+  assert.equal(report.conflicts[0].code,'indexed-palette-full');
+  assert.deepEqual(editor.snapshot(),scene);
+});

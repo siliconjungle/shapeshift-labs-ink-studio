@@ -227,7 +227,8 @@ const PixelPaintTools = (() => {
     return spans;
   }
 
-  return Object.freeze({ four,eight,visit,labelComponents,region,dimensions,drawingGrid,fillPixels,segment,freehand,runs,insideEllipse,staircase });
+  const checkerIndex = (x,y,size) => (Math.floor(x/size)+Math.floor(y/size))%2;
+  return Object.freeze({ four,eight,visit,labelComponents,region,dimensions,drawingGrid,fillPixels,segment,freehand,runs,insideEllipse,staircase,checkerIndex });
 })();
 
 if (typeof module !== 'undefined') module.exports = PixelPaintTools;
