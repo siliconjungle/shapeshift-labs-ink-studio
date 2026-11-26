@@ -19,7 +19,7 @@ const argv = process.argv.slice(2),
   cmd = argv[0] || 'help',
   pos = [],
   opt = {};
-const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' || cmd === 'effect-recipe' ? ['json'] :
+const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' || cmd === 'effect-recipe' || cmd === 'physical-reference' ? ['json'] :
   cmd === 'tasks' ? ['resume', 'progress', 'wait'] :
   cmd === 'modeling-benchmark' ? ['repairs-complete'] : cmd === 'mesh-topology' ? ['from-camera', 'detach-edge', 'coincident', 'replay'] : cmd === 'tileset' ? ['brush', 'clear', 'accept-external', 'snap-grid', 'paint-flip-x', 'paint-flip-y', 'brush-size'] : [];
 for (let i = 1; i < argv.length; i++) {
@@ -1402,6 +1402,7 @@ const CMD = {
         '  render or clip --multiprojection plan.json   use local projection for named mesh surfaces',
         '  path-ink <scene> --plan look.json --out frame.png [--t 0 | --from 0 --to 2 --fps 12]',
         '  sdf-reference <scene> --out directory [--t 0,1.2 --w 192 --h 120 --samples 32 --bounces 3]',
+        '  physical-reference <plan.json> --out directory [--quality studio --samples 32 --bounces 4 --batch 16 --denoise gentle --resume accumulation.bin]',
         '  hybrid-cage <scene.js> --plan file.json [--out directory --w pixels --h pixels --raw]   preview a shared mesh, strand, and splat deformation',
         '  sculpt-detail <scene> --plan file.json [--out directory --object id --t 1.2]   review and reproject sculpt relief',
         '  sculpt-contribution list <scene.json> --solid id   list retained contributions in order',
@@ -2625,6 +2626,20 @@ const CMD = {
     require('./asset-files.js').json(reportFile,{format:'ink-studio/path-ink',version:1,settings,
       ...(sequence && {fps}),frames:report});
     console.log('Wrote',n,'path ink frame(s) to',file);
+  },
+  async 'physical-reference'() {
+    const flags={w:'width',h:'height',samples:'samples',bounces:'bounces',batch:'batch',seed:'seed',exposure:'exposure'};
+    const names=['out','quality','denoise','resume',...Object.keys(flags)];
+    if(pos.length!==1||typeof opt.out!=='string'||Object.entries(opt).some(([key,value])=>
+      key==='json'?value!==true:!names.includes(key)||typeof value!=='string'||!value.trim()))
+      die('Use physical-reference <plan.json> --out directory [--quality draft|studio|final --samples n --bounces n --batch n --denoise off|gentle|strong --resume file]');
+    const choices=Object.fromEntries(Object.entries(flags).filter(([key])=>opt[key]!==undefined)
+      .map(([key,name])=>[name,num(key)]));
+    for(const key of ['quality','denoise','resume']) if(opt[key]!==undefined) choices[key]=opt[key];
+    const result=await require('./physical-reference.js').writePhysicalReference(pos[0],
+      {...choices,directory:outputFile('physical-reference'),toolkit:lib()});
+    if(opt.json) console.log(JSON.stringify(result));
+    else console.log('Traced',result.totalSamples,'samples per pixel. Wrote',result.file);
   },
   'sdf-reference'() {
     if (pos.length !== 1 || typeof opt.out !== 'string' ||
