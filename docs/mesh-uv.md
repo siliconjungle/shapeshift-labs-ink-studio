@@ -1772,6 +1772,52 @@ ink-studio tileset assign assignment.json --scene siding.json --out assigned.jso
 node examples/tileset-pick/uv-assignment-demo.cjs uv-assignment-demo
 ```
 
+### Reassign a sheet at the same texel scale
+
+Use `mapping: "preserve-texels"` with a sheet assignment to carry
+existing pigment corners across sheet sizes. Coordinates are measured
+from the top-left texel center of each face's current pigment image.
+For example, texel `[16, 24]` on a 64×64 sheet remains `[16, 24]`
+on a 96×80 sheet. The normalized UV changes to address the same
+coordinates, and the face keeps its texel density and paint orientation.
+
+```json
+{
+  "object": "sign",
+  "ids": ["panel", "return"],
+  "mode": "sheet",
+  "tileset": "alternate-enamel",
+  "mapping": "preserve-texels"
+}
+```
+
+```sh
+ink-studio tileset assign reassign.json --scene sign.json --preview sheet-review
+ink-studio tileset assign reassign.json --scene sign.json --out reassigned.json
+```
+
+If a coordinate is outside the destination, the preview marks the
+affected corners in pink and shows where clamping would put them.
+The model in a blocked preview stays on its current sheet. Add
+`"clamp": true` to authorize the edge clamp and review the resulting
+model. Clamped faces can lose texel density or stretch along the affected
+axis. Ink blocks clamps that collapse or flip a triangle's existing
+UV area. A change to a pinned UV or incompatible material maps also
+blocks the commit.
+
+The report gives the old and new sheet dimensions, before and after
+texel bounds and density, and each affected corner's source and
+candidate coordinates. UV coordinates select paint from the new sheet.
+Provide corresponding artwork at those coordinates when the face
+should keep the same appearance. Commits update the selected faces'
+material variants and source bindings together. One undo restores
+the original assignment.
+
+The same request works with `editor.planTilesetAssignment` and
+`editor.applyTilesetAssignment`. Run
+`node examples/tileset-pick/uv-reassign-texels-demo.cjs out/texel-reassignment`
+to compare larger and smaller destination sheets.
+
 ### Flatten faces at the project texel density
 
 Use `flatten` with face IDs or a saved face or island selection.
