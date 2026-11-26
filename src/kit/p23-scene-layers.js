@@ -67,11 +67,14 @@
   function plan(scene, env, request = {}) {
     const {id,own,equal} = K.world.data;
     const {action='inspect',layer,parent,label,visible,from} = request ?? {};
-    const options = {inspect:[],set:['layer','parent','label','visible'],insertion:['layer'],
-      move:['layer','from','instances','selection']};
+    const scoped = layer !== undefined && ['inspect','center','set-origins'].includes(action);
+    const options = {inspect:['layer','includeHidden'],set:['layer','parent','label','visible'],insertion:['layer'],
+      move:['layer','from','instances','selection'],center:['layer','includeHidden','basis','detachEdge'],
+      'set-origins':['layer','includeHidden','target']};
     if (!own(options,action) || !fields(request,['action',...options[action]]) ||
-        (action !== 'inspect' && !(id(layer) || layer === null && action !== 'set')))
-      throw new TypeError('Inspect scene layers, set a layer, choose an insertion layer, or move a prefab population');
+        ((action !== 'inspect' || scoped) && !(id(layer) || layer === null && action !== 'set')) ||
+        (request.includeHidden !== undefined && (!scoped || typeof request.includeHidden !== 'boolean')))
+      throw new TypeError('Inspect, organize, center, or set origins for a scene layer');
     const previous = prepare(scene), before = scene.sceneLayers ?? {}, conflicts = [];
     const next = {...before,layers:{...before.layers},members:{...before.members}};
     const report = {format:'ink-studio/scene-layers',version:1,scene:scene.id,action,
@@ -83,7 +86,7 @@
       if (parent === null) delete row.parent;
       else if (parent !== undefined) row.parent = parent;
       next.layers[layer] = row;
-    } else if (action!=='inspect' && layer !== null && !previous.branches.has(layer)) {
+    } else if ((action!=='inspect' || scoped) && layer !== null && !previous.branches.has(layer)) {
       conflicts.push({reason:'unknown-layer',layer});
       return finish();
     } else if (action==='insertion') {
@@ -103,8 +106,11 @@
       conflicts.push({reason:'invalid-layers',problem:error.message});
       return finish();
     }
-    const {instances} = A.scenePrefabs.expand(scene,env);
+    const expanded = A.scenePrefabs.expand(scene,env), {instances} = expanded;
+    const population = scoped ? previous.branch(layer,{includeHidden:request.includeHidden}) : undefined;
+    const scope = scoped ? new Set(population) : undefined;
     for (const [id,link] of instances) {
+      if (scope && !scope.has(id)) continue;
       const beforeLayer = previous.layerOf(id), afterLayer = current.layerOf(id);
       const beforeVisible = previous.isVisible(id), afterVisible = current.isVisible(id);
       report.instances.push({instance:id,beforeLayer,layer:afterLayer,beforeVisible,visible:afterVisible,
@@ -112,6 +118,19 @@
     }
     report.layers = [...current.branches.values()];
     report.insertion = current.insertion ?? null;
+    if (scoped) {
+      report.includeHidden = request.includeHidden ?? true;
+      report.measurement = A.sceneLayerFrames.measure(scene,env,expanded,population);
+      if (action === 'inspect') {
+        report.canCommit = true;
+        return finish({});
+      }
+      const {patch,conflicts:problems=[],changed=false,...evidence} =
+        A.sceneLayerFrames.plan(scene,env,request,expanded,report.measurement);
+      Object.assign(report,evidence,{changed:changed && Boolean(patch),canCommit:Boolean(patch)});
+      conflicts.push(...problems);
+      return finish(patch);
+    }
     report.changed = action!=='inspect' && !equal(next,{...before,layers:before.layers ?? {},members:before.members ?? {}});
     report.canCommit = true;
     return finish(report.changed ? {sceneLayers:next} : {});

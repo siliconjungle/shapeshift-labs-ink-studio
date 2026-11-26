@@ -65,7 +65,7 @@
     if (selection.length<2) throw new RangeError('Choose at least two linked prefab placements');
     const before = A.scenePrefabs.expand(scene,env), ids = new Set(selection.map(row => row.instance));
     const links = [...before.instances].filter(([id]) => ids.has(id));
-    const origin = point?.slice() ?? links[0][1].frame?.position ?? [0,0,0];
+    const origin = point?.slice() ?? links[0][1].origin;
     const provenance = links.map(([instance,link]) => ({instance,prefab:link.instance.prefab,revision:link.revision,
       ...(!own(scene.prefabs,link.instance.prefab) && scene.prefabLibrary && {library:scene.prefabLibrary})}));
     const report = {format:'ink-studio/prefab-combination',version:1,scene:scene.id,prefab,mode,origin,

@@ -325,7 +325,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology transform <mesh-or-scene.json> <random-receipt.json> --replay [--object id] [--out file] [--report file]   replay recorded positions on the source revision
   mesh-topology health <mesh-or-scene.json> [settings.json] [--object id] [--out report.json]   locate local topology and geometry problems
   mesh-topology overlaps <mesh-or-scene.json> [settings.json] [--object id] [--part id] [--out report.json | --selection-out faces.json]   review same-facing coincident polygons
-  mesh-topology scene-layer <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   organize placed prefabs in nested scene layers
+  mesh-topology scene-layer <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   organize placed prefabs, inspect bounds, and set layer origins
   mesh-topology mirror-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   link or commit a mirrored visual prefab placement
   mesh-topology reparent-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   change a visual prefab parent and hold world placement
   mesh-topology combine-prefab <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   combine linked placements into a reusable prefab

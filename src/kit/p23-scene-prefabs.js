@@ -93,6 +93,11 @@
     return {transform:raw,...(flip && {flipX:true})};
   }
 
+  function placedOrigin(instance, frame) {
+    const local = instance?.origin ?? [0,0,0];
+    return frame ? frame.point(local) : local.slice();
+  }
+
   function placements(instances = {}) {
     const {check,id,own,record} = K.world.data;
     check(record(instances),'Expected an instance map');
@@ -117,6 +122,7 @@
       }
       try {
         check(entry.flipX === undefined || entry.flipX === true,'An independent reflected placement uses flipX: true');
+        check(entry.origin === undefined || meshPivot.xyz(entry.origin),'A prefab origin needs a finite local XYZ position');
         const local = entry.transform === undefined ? null : authored(entry.transform);
         locals.set(key,entry.flipX ? (local ? compose(local,flipX()) : flipX()) : local);
       } catch (error) {
@@ -257,9 +263,10 @@
       if (only && !only.has(key)) continue;
       try {
         const seed = raw.mirror && instances[raw.mirror.source];
-        const instance = seed ? {prefab:seed.prefab,overrides:seed.overrides,meshOverrides:seed.meshOverrides} : raw;
+        const instance = seed ? {prefab:seed.prefab,overrides:seed.overrides,meshOverrides:seed.meshOverrides,
+          ...(seed.origin && {origin:seed.origin})} : raw;
         check(id(key) && record(instance) &&
-          Object.keys(instance).every(field => ['prefab', 'parent', 'transform', 'overrides', 'meshOverrides','flipX'].includes(field)) &&
+          Object.keys(instance).every(field => ['prefab', 'parent', 'transform', 'overrides', 'meshOverrides','flipX','origin'].includes(field)) &&
           available.has(instance.prefab), 'Unknown visual prefab or invalid instance');
         const {definition,frames} = available.get(instance.prefab);
         for (const sheet of definition.usesTilesets ?? [])
@@ -298,6 +305,8 @@
         const name = local => key + '.' + local;
         const frame = framesByInstance.get(key);
         const placement = offset && frame ? compose(offset,frame) : offset ?? frame;
+        const objectOrigin = placedOrigin(instance,placement);
+        check(meshPivot.xyz(objectOrigin),'Prefab origin exceeds world coordinate precision');
         const ids = [], meshes = new Map(), effectIndices = [];
         for (const [local, solid] of Object.entries(resolved.solids)) {
           check(record(solid), 'Expected a solid at ' + local);
@@ -354,7 +363,7 @@
           effectIndices.push(spec.effects.length);
           spec.effects.push(next);
         }
-        links.set(key, { instance, definition, resolved, revision: definition.revision, solids: ids, meshes, effectIndices, placement, frame: placement?.mesh, ...(raw.mirror && {mirror:raw.mirror}) });
+        links.set(key, { instance, definition, resolved, revision: definition.revision, solids: ids, meshes, effectIndices, placement, frame: placement?.mesh, origin:objectOrigin, ...(raw.mirror && {mirror:raw.mirror}) });
       } catch (error) {
         throw placementError(key,null,error.message);
       }
@@ -386,8 +395,8 @@
       report.plane = guide;
     } else {
       if (!current?.mirror) return block('instance-is-not-a-live-mirror');
-      const {prefab,overrides,meshOverrides} = current.instance;
-      rows[instance] = {prefab,...savedPlacement(current.placement),
+      const {prefab,overrides,meshOverrides,origin} = current.instance;
+      rows[instance] = {prefab,...savedPlacement(current.placement),...(origin && {origin}),
         ...(overrides && {overrides}),...(meshOverrides && {meshOverrides})};
       report.plane = clone(current.mirror.plane);
     }
@@ -452,5 +461,5 @@
     return authored(transform).point([0, 0, 0]);
   }
 
-  A.scenePrefabs = Object.freeze({ expand, placements, planReparent, planMirror, review, origin, checkProvenance, tilesetRequirements, indexedTargets });
+  A.scenePrefabs = Object.freeze({ expand, placements, planReparent, planMirror, review, origin, placedOrigin, checkProvenance, tilesetRequirements, indexedTargets });
 })(KIT);

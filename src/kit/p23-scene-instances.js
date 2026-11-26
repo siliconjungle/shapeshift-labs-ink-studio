@@ -7,7 +7,8 @@
     const sources = [
       ['prefab',scene.instances ?? {},(_,id) => {
         placements ??= A.scenePrefabs.placements(scene.instances);
-        return placements.get(id)?.mesh.position ?? [0,0,0];
+        const entry = scene.instances[id], origin = entry.mirror ? scene.instances[entry.mirror.source] : entry;
+        return A.scenePrefabs.placedOrigin(origin,placements.get(id));
       }],
       ['asset-part',scene.assetParts ?? {},transform=>K.sceneGraph.transform(transform).position]
     ];
