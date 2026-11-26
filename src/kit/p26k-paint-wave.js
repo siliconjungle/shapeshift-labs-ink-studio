@@ -150,14 +150,15 @@
     return {geometry,paints,reports,animated};
   }
 
-  function stroke(shape, frame, {plan,map}) {
+  function stroke(shape, frame, {plan,map}, gain) {
     if (!plan.amplitude) return shape;
     const graph=K.sceneGraph, inverse=graph.inverse(frame);
     const guide=P.shapeSweeps.guidePoses(shape.poses,shape.path);
     const placed=guide.map(row=>({...row,point:graph.point(frame,row.point)})), poses=[];
     let changed=false;
     function add(row) {
-      const moved=map.fwd(row.point);
+      const next=map.fwd(row.point);
+      const moved=gain?V.lerp(row.point,next,gain(row.point)):next;
       changed ||= V.dist(moved,row.point)>1e-12;
       poses.push({...row,point:graph.point(inverse,moved)});
       if (poses.length>1024) throw new RangeError('Wave exceeds 1024 step poses. Increase spacing');

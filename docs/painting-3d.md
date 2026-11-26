@@ -75,6 +75,8 @@ Marks use native [sweep brushes and pressure poses](sculpt-sweeps.md). They rend
 
 [Paint throb](paint-throb.md) pulses width, relief height, coverage and emission from separate cue, oscillator or audio drivers.
 
+[Paint effects tracks](paint-effects.md) blend all five animated effects on one cue clock and bake the result.
+
 ## Dabs, pressure, and ruled strokes
 
 Use one pose for a precise dab or multiple poses for a stroke. Both use the same brush, quaternion orientation, pressure, and edit operations. Set `path: "ruled"` to lay the recorded poses along a straight line between the first and last points. Ink distributes the poses along the line by their original spacing along the stroke. A surface-bound mark rules the guide before projecting it onto the receiver.

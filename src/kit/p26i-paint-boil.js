@@ -50,7 +50,7 @@
       next: held ? Infinity : (cycle * total + ends[index] - phase) / fps };
   }
 
-  function apply(form, plan, mark, drawing) {
+  function apply(form, plan, mark, drawing, gain) {
     const span = plan.axes.map(n => n * plan.amplitude);
     const lanes = span.map((n, axis) => n && P.fields.simplex({
       seed: P.data.hash(mark + '/' + drawing + '/' + axis, plan.seed)
@@ -58,7 +58,7 @@
     const { bounds, sd, opacityAt, cost } = form;
     const frequency = 1 / plan.scale;
     function sample(fn, x, y, z) {
-      const point = [x, y, z], weight = plan.mask?.remaining('paint', point) ?? 1;
+      const point = [x, y, z], weight = (plan.mask?.remaining('paint', point) ?? 1) * (gain?.(point) ?? 1);
       if (!weight) return fn(x, y, z);
       const u = x * frequency + 1.731, v = y * frequency + 4.182, w = z * frequency + 7.521;
       for (let axis = 0; axis < 3; axis++) if (lanes[axis])
