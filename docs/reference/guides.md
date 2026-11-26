@@ -470,6 +470,7 @@ All checked-in guides, indexed by title and section headings.
 - [Fit geometry from turntable edits](../turntable-shape.md)
 - [Typed data inputs](../typed-data-inputs.md)
 - [Typography as geometry and animation](../typography.md)
+- [Value Processor](../value-processor.md)
 - [Vector-field painting](../vector-field-painting.md)
 - [Vector operations and casts](../vector-operations.md)
 - [Approve a video codec round trip](../video-round-trip.md)
