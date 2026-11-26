@@ -2566,6 +2566,12 @@ element IDs and stays compatible with Ink's attribute transfer tools.
 The SDK exposes these commands through
 `KIT.procedural.attributeAuthoring`.
 
+## Sparse volume exchange
+
+Use [Sparse volume exchange](sparse-volumes.md) to inspect, combine, resample,
+and export density, temperature, velocity, and signed-distance fields through
+the `volume` command.
+
 ## Materials, artwork and animation signals
 
 `graph.material({ height, wetness, ink, palette })` returns coordinated sample functions for height, normal, wetness, ink and palette roles. Connect individual outputs to masks, finishes or layered materials. `graph.tiles({ bounds, cell, mask, vector, scale, seed })` uses stable tile IDs and per-tile sampling to vary density, alignment and size.
