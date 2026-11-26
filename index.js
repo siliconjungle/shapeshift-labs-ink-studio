@@ -335,6 +335,8 @@ module.exports = {
     return module.exports.load().KIT.authoring.tilesetAtlasSelection.select(scene,request);
   },
   sizeTilesetBrush: require('./cli/tileset-image.js').sizeTilesetBrush,
+  openTilesetPaint: require('./cli/tileset-paint.js').open,
+  writeTilesetPaint: require('./cli/tileset-paint.js').write,
   tilesetBrushUV: require('./cli/tileset-image.js').tilesetBrushUV,
   tilesetBrushCellUV: require('./cli/tileset-image.js').tilesetBrushCellUV,
   rasterizeTilesetBrush: require('./cli/tileset-image.js').rasterizeTilesetBrush,
