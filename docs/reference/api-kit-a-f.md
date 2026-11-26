@@ -890,9 +890,11 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.sceneLibrary.create` | function | `(storage, { key, backups = 8, prepareSnapshot } = {})` | [guide](../procedural.md#named-scene-library), [source](../../src/kit/p88-scene-library.js) |
 | `KIT.authoring.scenePrefabs` | namespace |  |  |
 | `KIT.authoring.scenePrefabs.checkProvenance` | function | `(row, mesh = false)` | [source](../../src/kit/p23-scene-prefabs.js) |
-| `KIT.authoring.scenePrefabs.expand` | function | `(source, { prefabs: external } = {})` | [source](../../src/kit/p23-scene-prefabs.js) |
+| `KIT.authoring.scenePrefabs.expand` | function | `(source, { prefabs: external } = {}, {only, origin} = {})` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.indexedTargets` | function | `(scene,before,after,mapAddress = (instance,table,name) => [instance,name])` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.origin` | function | `(transform)` | [source](../../src/kit/p23-scene-prefabs.js) |
+| `KIT.authoring.scenePrefabs.placements` | function | `(instances = {})` | [source](../../src/kit/p23-scene-prefabs.js) |
+| `KIT.authoring.scenePrefabs.planReparent` | function | `(scene, env, request)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.review` | function | `(source, before, after)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.tilesetRequirements` | function | `(definition, meshes)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.sculptContributions` | namespace |  |  |

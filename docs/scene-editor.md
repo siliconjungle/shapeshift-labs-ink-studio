@@ -161,7 +161,7 @@ An instance requires those sheets in its scene. Tileset revision previews
 also report requirements from unused definitions, including definitions in
 the shared library. See [tileset revisions](mesh-uv.md#manage-tileset-revisions).
 
-The scene's `instances` map stores each placement. An instance names its `prefab`, an optional `transform`, and an optional ordered array of `overrides`. A transform places the complete assembly, including its joints and effect positions. Overrides use the existing `set`, `merge`, `remove`, and `test` edits and address named records in the definition. Override a solid's material or transform, a motion track, or an effect field by its local path. Other fields inherit the shared definition. An override that refers to a retired record raises a validation error.
+The scene's `instances` map stores each placement. An instance names its `prefab`, an optional `parent` and `transform`, and an optional ordered array of `overrides`. A transform places the complete assembly, including its joints and effect positions. Overrides use the existing `set`, `merge`, `remove`, and `test` edits and address named records in the definition. Override a solid's material or transform, a motion track, or an effect field by its local path. Other fields inherit the shared definition. An override that refers to a retired record raises a validation error.
 
 In Node, pass the shared map as `env.prefabs`. `setPrefabInstance(id, record)` creates or replaces an instance and accepts `null` to remove it. Instances appear in the scene tree and can be picked by ray. Use `refreshPrefabs(prefabs, { assets })` to load a replacement library without rewriting the scene. The editor validates local overrides before accepting the new library. The CLI reads the shared library each time it loads a diorama.
 
@@ -632,3 +632,36 @@ bypassing it. `build()` draws the evaluated mesh and `snapshot()` stores
 the editable cage and ordered stack. Use `planApplyMeshModifiers` to
 review changed bindings and bakes before `applyMeshModifiers` writes
 the selected prefix to topology. See [mesh modifier stacks](mesh-topology.md#run-a-non-destructive-mesh-modifier-stack).
+
+### Nest and reparent placed instances
+
+Set an instance's `parent` to the ID of another visual prefab instance
+in the same scene. Its `transform` is relative to that parent. Omit
+`transform` to inherit the parent's frame, or omit `parent` to place the
+instance in world coordinates. Scene tree entries and rendered member
+IDs such as `sign.panel` keep their names as the hierarchy changes.
+
+Use `mesh-topology reparent-prefab` to change the parent while keeping
+the instance and its descendants in place. Pass `null` to move it to
+the scene root. Later edits to a parent carry the entire subtree.
+
+```json
+{"instance":"sign","parent":"gantry"}
+```
+
+```sh
+ink-studio mesh-topology reparent-prefab station.json nest.json --preview review --view view.json
+ink-studio mesh-topology reparent-prefab station.json nest.json --out nested.json
+```
+
+The receipt records the old and new parents, local transforms, and
+world frames. The native-grid preview includes affected members for
+each descendant. Missing parents, cycles, and a required local scale
+outside Ink's transform range of 0.02 to 20 block the edit. Move the
+remaining children before removing their parent, detaching its members,
+or replacing it with a combined module.
+
+In the SDK, use `planPrefabReparent`, `previewPrefabReparent`, and
+`reparentPrefab`. One undo restores the old link and its local transform.
+Run `node examples/tileset-pick/prefab-reparent-demo.cjs nested-bays`
+to compare a keep-world reparent with the subsequent motion of the parent.

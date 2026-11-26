@@ -16,9 +16,9 @@
       Object.entries(link.definition.meshFrames).filter(([member]) => Object.hasOwn(topologyMeshes,member)));
     const sheets = A.scenePrefabs.tilesetRequirements(link.definition,topologyMeshes);
     if (sheets !== undefined) definition.usesTilesets = sheets;
-    const {transform} = link.instance;
+    const {transform,parent} = link.instance;
     return {prefabs:{...scene.prefabs,[variant]:definition},
-      instances:{...scene.instances,[instance]:{prefab:variant,...(transform !== undefined && {transform})}}};
+      instances:{...scene.instances,[instance]:{prefab:variant,...(parent !== undefined && {parent}),...(transform !== undefined && {transform})}}};
   }
 
   function hasPlacement(frame) {
@@ -38,6 +38,9 @@
 
   function detach(scene, spec, meshPlacements, link, report) {
     const {instance,provenance,conflicts} = report;
+    for (const [child,row] of Object.entries(scene.instances))
+      if (row.parent === instance) conflicts.push({reason:'child-needs-reparent',instance:child,parent:instance});
+    if (conflicts.length) return;
     const instances = {...scene.instances};
     delete instances[instance];
     const topologyMeshes = {...scene.topologyMeshes};
@@ -45,7 +48,7 @@
       const frame = meshPlacements.get(object);
       if (!hasPlacement(frame)) return;
       if (!Object.hasOwn(link.definition.meshFrames ?? {},member))
-        return K.diorama.solidFrames.authored(link.instance.transform);
+        return link.placement;
       const scale = K.V.len([frame.matrix[0],frame.matrix[3],frame.matrix[6]]);
       return {scale,point:value => K.sceneGraph.point(frame,value),
         direction:value => K.V.mul(K.M.app(frame.matrix,value),1/scale)};
@@ -95,7 +98,7 @@
     if (!own(scene.instances,instance)) throw new RangeError('Unknown visual prefab instance '+instance);
     const entry = scene.instances[instance];
     const {spec,instances,meshPlacements} = A.scenePrefabs.expand({prefabs:scene.prefabs,tilesets:scene.tilesets,
-      prefabLibrary:scene.prefabLibrary,instances:{[instance]:entry}},env);
+      prefabLibrary:scene.prefabLibrary,instances:scene.instances},env,{only:new Set([instance])});
     const link = instances.get(instance), {prefab} = entry;
     if (revision !== undefined && revision !== link.revision) throw new RangeError('Stale prefab variant revision');
     const provenance = {instance,prefab,revision:link.revision,
