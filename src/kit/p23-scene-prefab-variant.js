@@ -12,6 +12,8 @@
     const definition = {revision:1,solids:taggedSolids,topologyMeshes,provenance};
     for (const table of ['parts','groups','motion','effects'])
       if (Object.keys(resolved[table]).length) definition[table] = resolved[table];
+    if (link.definition.meshFrames) definition.meshFrames = Object.fromEntries(
+      Object.entries(link.definition.meshFrames).filter(([member]) => Object.hasOwn(topologyMeshes,member)));
     const sheets = A.scenePrefabs.tilesetRequirements(link.definition,topologyMeshes);
     if (sheets !== undefined) definition.usesTilesets = sheets;
     const {transform} = link.instance;
@@ -34,16 +36,23 @@
       ...(bindings && {bindings}),...(row.pivot && {pivot:placement.point(row.pivot)})};
   }
 
-  function detach(scene, spec, link, report) {
+  function detach(scene, spec, meshPlacements, link, report) {
     const {instance,provenance,conflicts} = report;
     const instances = {...scene.instances};
     delete instances[instance];
     const topologyMeshes = {...scene.topologyMeshes};
-    const transformed = hasPlacement(link.frame);
-    const placement = transformed && K.diorama.solidFrames.authored(link.instance.transform);
+    function placedFrame(member,object) {
+      const frame = meshPlacements.get(object);
+      if (!hasPlacement(frame)) return;
+      if (!Object.hasOwn(link.definition.meshFrames ?? {},member))
+        return K.diorama.solidFrames.authored(link.instance.transform);
+      const scale = K.V.len([frame.matrix[0],frame.matrix[3],frame.matrix[6]]);
+      return {scale,point:value => K.sceneGraph.point(frame,value),
+        direction:value => K.V.mul(K.M.app(frame.matrix,value),1/scale)};
+    }
     const expanded = spec.topologyMeshes ?? {};
     for (const [member, {object}] of link.meshes) {
-      const row = expanded[object], doc = T.create(row.document);
+      const row = expanded[object], doc = T.create(row.document), placement = placedFrame(member,object);
       const dependent = [...(doc.skin ? ['skin'] : []),...(row.shapeKeys ? ['shapeKeys'] : []),
         ...(row.attachments ? ['attachments'] : []),
         ...(row.modifiers?.some(op => op.enabled !== false) ? ['modifiers'] : [])];
@@ -85,7 +94,7 @@
       throw new TypeError('Choose a prefab instance and fork to a new prefab ID or detach into editable scene members');
     if (!own(scene.instances,instance)) throw new RangeError('Unknown visual prefab instance '+instance);
     const entry = scene.instances[instance];
-    const {spec,instances} = A.scenePrefabs.expand({prefabs:scene.prefabs,tilesets:scene.tilesets,
+    const {spec,instances,meshPlacements} = A.scenePrefabs.expand({prefabs:scene.prefabs,tilesets:scene.tilesets,
       prefabLibrary:scene.prefabLibrary,instances:{[instance]:entry}},env);
     const link = instances.get(instance), {prefab} = entry;
     if (revision !== undefined && revision !== link.revision) throw new RangeError('Stale prefab variant revision');
@@ -106,7 +115,7 @@
       if (own(scene.prefabs,variant) || own(env.prefabs,variant)) report.conflicts.push({reason:'prefab-in-use',prefab:variant});
       else patch = fork(scene,link,report);
     } else {
-      patch = detach(scene,spec,link,report);
+      patch = detach(scene,spec,meshPlacements,link,report);
       if (patch) checkIndexedTargets(scene,patch,env,report.conflicts);
     }
     if (report.conflicts.length) patch = undefined;

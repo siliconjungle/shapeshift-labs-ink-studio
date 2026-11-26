@@ -300,6 +300,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology transform <mesh-or-scene.json> <random-receipt.json> --replay [--object id] [--out file] [--report file]   replay recorded positions on the source revision
   mesh-topology health <mesh-or-scene.json> [settings.json] [--object id] [--out report.json]   locate local topology and geometry problems
   mesh-topology overlaps <mesh-or-scene.json> [settings.json] [--object id] [--part id] [--out report.json | --selection-out faces.json]   review same-facing coincident polygons
+  mesh-topology combine-prefab <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   combine linked placements into a reusable prefab
   mesh-topology array-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   duplicate a linked prefab on a retained XYZ array
   mesh-topology replace-prefab <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   replace selected visual prefab placements and review carried anchors and overrides
   mesh-topology variant-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   fork a linked prefab or detach one instance into editable members

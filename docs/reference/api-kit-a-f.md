@@ -849,6 +849,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.physicalMaterials.checkStructural` | function | `(key,value,wet=true)` | [source](../../src/kit/p90-asset-materials.js) |
 | `KIT.authoring.physicalMaterials.definition` | function | `(input,pack)` | [source](../../src/kit/p90-asset-materials.js) |
 | `KIT.authoring.physicalMaterials.profile` | function | `(entry,wetness=0)` | [source](../../src/kit/p90-asset-materials.js) |
+| `KIT.authoring.prefabCombination` | namespace |  |  |
+| `KIT.authoring.prefabCombination.plan` | function | `(scene,env,request)` | [source](../../src/kit/p23-scene-prefab-combine.js) |
 | `KIT.authoring.prefabInstanceArray` | namespace |  |  |
 | `KIT.authoring.prefabInstanceArray.check` | function | `(arrays)` | [source](../../src/kit/p23-scene-prefab-array.js) |
 | `KIT.authoring.prefabInstanceArray.plan` | function | `(scene,env,request)` | [source](../../src/kit/p23-scene-prefab-array.js) |
@@ -882,13 +884,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.sceneInstances` | namespace |  |  |
 | `KIT.authoring.sceneInstances.anchor` | function | `(scene, env, { instance, instanceKind, anchor })` | [source](../../src/kit/p23-scene-instances.js) |
 | `KIT.authoring.sceneInstances.assetSocket` | function | `(scene, env, instance, binding)` | [source](../../src/kit/p23-scene-instances.js) |
+| `KIT.authoring.sceneInstances.prefabSelection` | function | `(scene, request)` | [source](../../src/kit/p23-scene-instances.js) |
 | `KIT.authoring.sceneInstances.select` | function | `(scene, {kind,ids} = {})` | [source](../../src/kit/p23-scene-instances.js) |
 | `KIT.authoring.sceneLibrary` | namespace |  |  |
 | `KIT.authoring.sceneLibrary.create` | function | `(storage, { key, backups = 8, prepareSnapshot } = {})` | [guide](../procedural.md#named-scene-library), [source](../../src/kit/p88-scene-library.js) |
 | `KIT.authoring.scenePrefabs` | namespace |  |  |
 | `KIT.authoring.scenePrefabs.checkProvenance` | function | `(row, mesh = false)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.expand` | function | `(source, { prefabs: external } = {})` | [source](../../src/kit/p23-scene-prefabs.js) |
-| `KIT.authoring.scenePrefabs.indexedTargets` | function | `(scene,before,after,mapMember = (instance,table,name) => name)` | [source](../../src/kit/p23-scene-prefabs.js) |
+| `KIT.authoring.scenePrefabs.indexedTargets` | function | `(scene,before,after,mapAddress = (instance,table,name) => [instance,name])` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.origin` | function | `(transform)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.review` | function | `(source, before, after)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.tilesetRequirements` | function | `(definition, meshes)` | [source](../../src/kit/p23-scene-prefabs.js) |

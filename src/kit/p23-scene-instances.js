@@ -24,6 +24,19 @@
     });
   }
 
+  function prefabSelection(scene, request) {
+    const {id} = K.world.data;
+    const saved = request.selection;
+    if (saved !== undefined && (request.instances !== undefined ||
+        saved?.format !== 'ink-studio/tileset-component-selection' || saved.version !== 1 || saved.domain !== 'instances' ||
+        !Array.isArray(saved.instances) || !Array.from(saved.instances).every(row => row?.instanceKind === 'prefab' && id(row.instance))))
+      throw new TypeError('Choose a saved prefab instance selection or an explicit list of instances');
+    const ids = saved === undefined ? request.instances : saved.instances.map(row => row.instance);
+    if (!Array.isArray(ids) || ids.length < 1 || ids.length > 512 || !Array.from(ids).every(id) || new Set(ids).size !== ids.length)
+      throw new TypeError('Select 1–512 distinct prefab instance IDs');
+    return select(scene,{kind:'prefab',ids});
+  }
+
   function assetSocket(scene, env, instance, binding) {
     if (!Object.hasOwn(scene.assetParts ?? {}, instance)) return;
     const bindings = env?.assetPartImports?.[instance]?.part?.bindings ?? {};
@@ -39,5 +52,5 @@
     return { ...row, target };
   }
 
-  A.sceneInstances = Object.freeze({select,assetSocket,anchor});
+  A.sceneInstances = Object.freeze({select,prefabSelection,assetSocket,anchor});
 })(KIT);

@@ -1,6 +1,6 @@
 /* Expand linked visual recipes into the native diorama schema at build time. */
 (function (K) {
-  const A = K.authoring, DIO = K.diorama, { V } = K;
+  const A = K.authoring, DIO = K.diorama, { M,V } = K;
   const tables = ['solids', 'parts', 'groups', 'motion', 'effects', 'topologyMeshes'];
   const { authored, compose, transform } = DIO.solidFrames;
 
@@ -46,6 +46,22 @@
     'Invalid prefab source provenance');
   }
 
+  function memberFrames(definition) {
+    const {check,record,own} = K.world.data;
+    if (definition.meshFrames === undefined) return;
+    check(record(definition.meshFrames),'Prefab mesh frames need a named map');
+    return Object.fromEntries(Object.entries(definition.meshFrames).map(([member,raw]) => {
+      check(own(definition.topologyMeshes,member),'Frame refers to missing prefab mesh '+member);
+      const frame = K.sceneGraph.transform(raw), columns = M.tr(frame.matrix);
+      const axes = [columns.slice(0,3),columns.slice(3,6),columns.slice(6,9)];
+      const scale = V.len(axes[0]), epsilon = scale*scale*1e-8;
+      check(M.det(frame.matrix)>0 && axes.every((axis,i) => axes.every((other,j) =>
+        Math.abs(V.dot(axis,other)-(i===j ? scale*scale : 0))<=epsilon)),
+      'Prefab mesh frame needs a rigid orientation and uniform scale on '+member);
+      return [member,frame];
+    }));
+  }
+
   function expand(source, { prefabs: external } = {}) {
     if (!source || source.prefabs === undefined && source.instances === undefined && source.prefabLibrary === undefined)
       return { spec: source, instances: new Map(), meshPlacements: new Map() };
@@ -57,7 +73,7 @@
     const available = new Map();
     for (const [key, def] of [...Object.entries(external ?? {}), ...Object.entries(prefabs)]) {
       check(id(key) && record(def) && !available.has(key) && Number.isSafeInteger(def.revision) && def.revision >= 1 &&
-        Object.keys(def).every(field => field === 'revision' || field === 'generation' || field === 'provenance' || field === 'usesTilesets' || tables.includes(field)) && record(def.solids),
+        Object.keys(def).every(field => field === 'revision' || field === 'generation' || field === 'provenance' || field === 'usesTilesets' || field === 'meshFrames' || tables.includes(field)) && record(def.solids),
       'Invalid or duplicate visual prefab ' + key);
       for (const field of tables)
         check(def[field] === undefined || record(def[field]) && Object.entries(def[field]).every(([key, row]) => id(key) && record(row)),
@@ -67,9 +83,14 @@
         check(Array.isArray(uses) && Array.from(uses).every(A.tilesets.validId) && new Set(uses).size === uses.length,
           'Expected distinct tileset requirements in prefab ' + key);
       }
-      if (def.provenance !== undefined) checkProvenance(def.provenance);
+      if (Array.isArray(def.provenance)) {
+        check(def.provenance.length>=2 && def.provenance.length<=512,'Combined prefab provenance needs two or more placements');
+        const sources = Array.from(def.provenance);
+        for (const source of sources) checkProvenance(source);
+        check(new Set(sources.map(row => row.instance)).size===sources.length,'Combined prefab source IDs must be distinct');
+      } else if (def.provenance !== undefined) checkProvenance(def.provenance);
       K.procedural.model.validate(def, 'visual');
-      available.set(key, def);
+      available.set(key, {definition:def,frames:memberFrames(def)});
     }
     const spec = { ...rest, solids: [...(rest.solids ?? [])], parts: { ...rest.parts }, groups: { ...rest.groups },
       motion: [...(rest.motion ?? [])], effects: [...(rest.effects ?? [])] };
@@ -79,7 +100,7 @@
         check(id(key) && record(instance) &&
           Object.keys(instance).every(field => ['prefab', 'transform', 'overrides', 'meshOverrides'].includes(field)) &&
           available.has(instance.prefab), 'Unknown visual prefab or invalid instance');
-        const definition = available.get(instance.prefab);
+        const {definition,frames} = available.get(instance.prefab);
         for (const sheet of definition.usesTilesets ?? [])
           check(own(source.tilesets ?? {},sheet), 'Visual prefab ' + instance.prefab + ' requires tileset ' + sheet);
         const edits = instance.overrides ?? [];
@@ -134,7 +155,9 @@
             ...(row.part !== undefined && { part: name(row.part) }),
             ...(Array.isArray(row.modifiers) && { modifiers: row.modifiers.map(op =>
               op?.kind === 'projection' && own(resolved.topologyMeshes, op.target) ? { ...op, target: name(op.target) } : op) }) } };
-          if (placement) meshPlacements.set(object, placement.mesh);
+          const frame = own(frames,local) ? frames[local] : undefined;
+          if (frame && placement) meshPlacements.set(object,K.sceneGraph.compose(placement.mesh,frame));
+          else if (frame || placement) meshPlacements.set(object,frame ?? placement.mesh);
         }
         for (const [local, row] of Object.entries(resolved.groups)) {
           check(!own(spec.groups, name(local)), 'Group ID is already in use: ' + name(local));
@@ -196,13 +219,13 @@
     });
   }
 
-  function indexedTargets(scene,before,after,mapMember = (instance,table,name) => name) {
+  function indexedTargets(scene,before,after,mapAddress = (instance,table,name) => [instance,name]) {
     if (scene.parameterBindings === undefined) return [];
     const indexed = ['solids','motion','effects'], conflicts = [];
     const order = (links,table,remap) => [
       ...(scene[table] ?? []).map((_,index) => [null,index]),
       ...[...links].flatMap(([instance,link]) => Object.keys(link.resolved[table]).map(name =>
-        [instance,remap ? mapMember(instance,table,name) : name]))
+        remap ? mapAddress(instance,table,name) : [instance,name]))
     ];
     const candidates = K.parameters.prepare(scene.parameterBindings).targets.filter(({path:[table,index]}) =>
       indexed.includes(table) && /^(0|[1-9][0-9]*)$/.test(index));

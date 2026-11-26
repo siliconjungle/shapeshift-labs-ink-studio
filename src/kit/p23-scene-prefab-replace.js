@@ -5,19 +5,6 @@
   const record = value => value && Object.getPrototypeOf(value) === Object.prototype;
   const fields = (row,keys) => record(row) && Object.keys(row).every(key => keys.includes(key));
 
-  function selection(scene, request) {
-    const {id} = K.world.data;
-    const saved = request.selection;
-    if (saved !== undefined && (request.instances !== undefined ||
-        saved?.format !== 'ink-studio/tileset-component-selection' || saved.version !== 1 || saved.domain !== 'instances' ||
-        !Array.isArray(saved.instances) || !Array.from(saved.instances).every(row => row?.instanceKind === 'prefab' && id(row.instance))))
-      throw new TypeError('Choose a saved prefab instance selection or an explicit list of instances');
-    const ids = saved === undefined ? request.instances : saved.instances.map(row => row.instance);
-    if (!Array.isArray(ids) || ids.length < 1 || ids.length > 512 || !Array.from(ids).every(id) || new Set(ids).size !== ids.length)
-      throw new TypeError('Select 1–512 distinct prefab instance IDs');
-    return A.sceneInstances.select(scene,{kind:'prefab',ids});
-  }
-
   function migration(raw, from, to) {
     const {id,own} = K.world.data;
     if (raw !== undefined && (!fields(raw,['revision','members','faces']) ||
@@ -74,7 +61,7 @@
     if (!fields(request,['instances','selection','to','revision','migrations']) || !id(to) || !record(migrations) ||
         revision !== undefined && (!Number.isSafeInteger(revision) || revision < 1))
       throw new TypeError('Choose a target prefab and optional revision, with selected prefab instances');
-    const selected = selection(scene,request);
+    const selected = A.sceneInstances.prefabSelection(scene,request);
     const target = own(scene.prefabs,to) ? scene.prefabs[to] : own(env.prefabs,to) ? env.prefabs[to] : undefined;
     if (!target) throw new RangeError('Unknown replacement visual prefab '+to);
     if (revision !== undefined && revision !== target.revision) throw new RangeError('Stale replacement prefab revision');
@@ -123,7 +110,7 @@
     } catch (error) {
       return {report:freeze({...report,canCommit:false,problems:error.problems ?? [{level:'error',problem:error.message}]})};
     }
-    report.conflicts.push(...A.scenePrefabs.indexedTargets(scene,before,after,(instance,table,name) => moves.get(instance)?.member(table,name) ?? name));
+    report.conflicts.push(...A.scenePrefabs.indexedTargets(scene,before,after,(instance,table,name) => [instance,moves.get(instance)?.member(table,name) ?? name]));
     for (const row of report.instances) for (const names of row.meshMembers ?? []) {
       const old = before.instances.get(row.instance).meshes.get(names.from);
       const targetLink = after.instances.get(row.instance);

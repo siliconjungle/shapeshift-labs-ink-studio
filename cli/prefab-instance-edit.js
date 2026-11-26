@@ -8,16 +8,17 @@ const read = file => JSON.parse(fs.readFileSync(file,'utf8'));
 const name = value => typeof value === 'string' && value.trim();
 
 const commands = {
+  'combine-prefab': ['planPrefabCombination','previewPrefabCombination','combinePrefabs'],
   'array-prefab': ['planPrefabArray','previewPrefabArray','applyPrefabArray'],
   'variant-prefab': ['planPrefabVariant','previewPrefabVariant','applyPrefabVariant'],
   'replace-prefab': ['planPrefabReplacement','previewPrefabReplacement','replacePrefabs']
 };
 
 function command(action,file,input,rest,opt,kit,openEditor) {
-  const {out,preview,view,selection} = opt, replace = action === 'replace-prefab';
+  const {out,preview,view,selection} = opt, acceptsSelection = ['combine-prefab','replace-prefab'].includes(action);
   const [plan,review,apply] = commands[action];
   if (rest.length || ![file,input,...Object.values(opt)].every(name) ||
-      Object.keys(opt).some(key => !['out','preview','view',...(replace ? ['selection'] : [])].includes(key)) ||
+      Object.keys(opt).some(key => !['out','preview','view',...(acceptsSelection ? ['selection'] : [])].includes(key)) ||
       out && !/\.json$/i.test(out) || view && !preview)
     throw new TypeError('Use mesh-topology '+action+' <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]');
   const source = path.resolve(file), output = out && path.resolve(out), editor = openEditor(source);
@@ -40,13 +41,14 @@ function command(action,file,input,rest,opt,kit,openEditor) {
   const evidence = result && capture(result,settings,path.resolve(preview),kit);
   if (output && report.canCommit) {
     editor[apply](request);
-    const variant = action === 'variant-prefab';
-    const scene = variant ? structuredClone(editor.snapshot()) : editor.snapshot();
+    const variant = action === 'variant-prefab', combine = action === 'combine-prefab';
+    const scene = variant || combine ? structuredClone(editor.snapshot()) : editor.snapshot();
     if (variant) {
       const solids = report.mode === 'fork' ? Object.values(scene.prefabs[report.variant].solids) :
         scene.solids.filter(solid => report.solids.includes(solid.id));
       relativeSolidAssets(solids,path.dirname(output),kit);
     }
+    if (combine) relativeSolidAssets(Object.values(scene.prefabs[report.prefab].solids),path.dirname(output),kit);
     publishJson(output,scene,'A different prefab edit already exists at '+output);
   } else if (output) process.exitCode = 1;
   process.stdout.write(JSON.stringify({...report,...(evidence && {preview:evidence})},null,2)+'\n');
