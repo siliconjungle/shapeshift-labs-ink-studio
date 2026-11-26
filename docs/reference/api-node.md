@@ -78,6 +78,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.exportGlb` | function | `(modelOrFile, { out, uvMargin = 0.008, textureSize, bakeDir, paintViews, capturePaint, rebakeFrom, chartEdits, geometryMasks, cageBake, registeredPages, onModelingWork } = {})` | [guide](../registered-material-bake.md#project-approved-paint-from-several-views), [guide](../registered-material-bake.md#bake-geometry-masks), [source](../../cli/export-glb.js) |
 | `node.exportLayers` | function | `(world, { out, view = {}, times = [view.time ?? view.t ?? world?.lookSnapshot?.time ?? 0], native = false, pose, replay, partMotion = false, strandPasses = false, compositing } = {})` | [source](../../cli/export-layers.js) |
 | `node.exportMaterialPresets` | function | `(source, { ids, kit = require('../index.js').load() } = {})` | [guide](../editable-material-graph.md#save-and-apply-material-presets), [source](../../cli/material-presets.js) |
+| `node.exportMaterialX` | function | `(input,{out,output,python,strict=false,toolkit=require('../index.js').load()}={})` | [guide](../materialx-interchange.md), [source](../../cli/materialx-interchange.js) |
 | `node.exportScene` | function | `(createCapture, { out, formats = products, width = 640, height = 360, fps = 12, from = 0, to, stillScale = 2, stillTime = from, embed, loopJoin = false, audio, mux, kit } = {})` | [guide](../browser-renderer.md#review-compatibility-before-export), [guide](../scene-audio.md#optional-video-adapter), [source](../../cli/scene-export.js) |
 | `node.files` | function | `()` | [source](../../index.js) |
 | `node.findGraphGroupUsers` | function | `(groupFile, { root = process.cwd() } = {})` | [source](../../cli/graph-groups.js) |
@@ -92,6 +93,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.graphRenderPass` | function | `(frame, channel, { emptyDepth = 1e9, kit } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../cli/graph-render.js) |
 | `node.httpJsonAdapter` | function | `(location, { maxBytes = 1048576, timeout = 5000, headers = {} } = {})` | [guide](../graph-media.md#optional-host-adapters), [source](../../cli/graph-host.js) |
 | `node.importAxF` | function | `(bytes, options)` | [guide](../measured-materials.md#optional-axf-exchange), [source](../../cli/axf-material-adapter.js) |
+| `node.importMaterialX` | function | `(input,{directory,strict=false,...options}={})` | [guide](../materialx-interchange.md), [source](../../cli/materialx-interchange.js) |
 | `node.inspectBakeJob` | function | `(file,{signal=new AbortController().signal,...settings}={})` | [guide](../bake-jobs.md), [source](../../cli/bake-jobs.js) |
 | `node.inspectDeepPlate` | function | `(file, { pixel } = {})` | [guide](../deep-shot.md), [source](../../cli/deep-shot.js) |
 | `node.inspectEffectPixel` | function | `(world, { at, ...view } = {})` | [guide](../material-response.md#inspect-a-pixel), [source](../../cli/render.js) |
@@ -99,6 +101,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.inspectMaterialParameters` | function | `(source, { inputs, instance, kit = require('../index.js').load() } = {})` | [guide](../editable-material-graph.md#expose-and-reset-material-parameters), [source](../../cli/material-parameters.js) |
 | `node.inspectMaterialPresets` | function | `(source, { instance, kit = require('../index.js').load() } = {})` | [guide](../editable-material-graph.md#save-and-apply-material-presets), [source](../../cli/material-presets.js) |
 | `node.inspectMaterialVisibility` | function | `(source, { inputs = {}, instance, scope = [], kit = require('../index.js').load() } = {})` | [guide](../editable-material-graph.md#show-controls-and-ports-conditionally), [source](../../cli/material-visibility.js) |
+| `node.inspectMaterialX` | function | `(input,options)` | [guide](../materialx-interchange.md), [source](../../cli/materialx-interchange.js) |
 | `node.inspectPalettePixel` | function | `(world, { at, ...view } = {})` | [guide](../palette-recipes.md#inspect-the-palette-at-a-pixel), [source](../../cli/palette-pixel.js) |
 | `node.inspectPxc` | function | `(source, { image = false, tolerateArt = false } = {})` | [source](../../cli/pxc.js) |
 | `node.inspectSceneResource` | function | `(filename,controls)` | [guide](../scene-resources.md), [source](../../cli/scene-resources.js) |
@@ -112,6 +115,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.listGraphNodes` | function | `(settings = {})` | [guide](../headless-authoring.md#discover-registered-nodes), [source](../../cli/graph-catalog.js) |
 | `node.load` | function | `()` | [guide](../../README.md#using-the-library-in-node), [guide](../../README.md#importing-meshes), [guide](../animation-timeline.md#library), [guide](../art-passes.md#art-pixel-effects), [guide](../bounce-probes.md#use-bounce-in-a-palette-or-shot), [source](../../index.js) |
 | `node.loadSoundPack` | function | `(id)` | [source](../../cli/music-sound-library.js) |
+| `node.materialMigration` | function | `(input)` | [guide](../materialx-interchange.md), [source](../../cli/materialx-interchange.js) |
 | `node.measureQuantizationError` | function | `(capture, { passes, threshold = .06, heatmapMax = .20, regionLimit = 20 } = {})` | [guide](../palette-recipes.md#review-quantization-error), [source](../../cli/palette-error.js) |
 | `node.nodeBundlePath` | function | `()` | [source](../../index.js) |
 | `node.nodeToolkitHash` | function | `()` | [source](../../index.js) |

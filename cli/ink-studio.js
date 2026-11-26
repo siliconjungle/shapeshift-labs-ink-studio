@@ -21,6 +21,7 @@ const argv = process.argv.slice(2),
   opt = {};
 const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' || cmd === 'effect-recipe' || cmd === 'physical-reference' || cmd === 'color-management' ? ['json'] :
   cmd === 'tasks' ? ['resume', 'progress', 'wait'] :
+  cmd === 'materialx' ? ['strict'] :
   cmd === 'modeling-benchmark' ? ['repairs-complete'] : cmd === 'mesh-topology' ? ['from-camera', 'detach-edge', 'coincident', 'replay'] : cmd === 'tileset' ? ['brush', 'clear', 'accept-external', 'snap-grid', 'paint-flip-x', 'paint-flip-y', 'brush-size'] : [];
 for (let i = 1; i < argv.length; i++) {
   const a = argv[i];
@@ -1630,6 +1631,10 @@ const CMD = {
         '  material-bake preset <review|compact|indexed> [--out file.json]   export a reusable native bake preset',
         '    --rebake-from <material-bake.json> [--chart-edits <plan.json>] [--rebake-report <file.json>]   update selected or changed UV charts',
         '  interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets',
+        '  materialx inspect|validate <file.mtlx> [--material name --color-settings file.json --python path]',
+        '  materialx import <file.mtlx> --out directory [--material name --color-settings file.json --strict --python path]',
+        '  materialx export <graph.json> --output name --out file.mtlx [--strict --python path]',
+        '  materialx migration <file.mdl|file.mi|file.iray>',
         '  scene-resource inspect|validate <scene> [--python path --blender path]',
         '  scene-resource convert <scene> --out <file> [--materialx look.mtlx --python path --blender path]',
         '  bake-job inspect|run|serve|preset <job.json> [--out directory --preset preset.json --port 0]',
@@ -3167,6 +3172,29 @@ const CMD = {
     } finally {
       process.removeListener('SIGINT',stop);process.removeListener('SIGTERM',stop);
     }
+  },
+  async materialx() {
+    const [action,input]=pos;
+    const catalog={
+      inspect:['python','material','color-settings'],
+      validate:['python','material','color-settings','strict'],
+      import:['python','out','material','color-settings','strict'],
+      export:['python','out','output','strict'],
+      migration:[]
+    };
+    const allowed=Object.hasOwn(catalog,action)&&catalog[action];
+    if(pos.length!==2||!allowed||Object.entries(opt).some(([key,value])=>!allowed.includes(key)||
+      (key==='strict'?value!==true:typeof value!=='string'))||
+      ['import','export'].includes(action)&&typeof opt.out!=='string')
+      die('Use materialx inspect|validate|import <file.mtlx> or materialx export <graph.json> or materialx migration <legacy-file>');
+    const api=require('./materialx-interchange.js');
+    const options={python:opt.python,strict:!!opt.strict,material:opt.material,colorSettings:opt['color-settings'],toolkit:lib()};
+    const result=action==='migration'?api.materialMigration(input):
+      action==='export'?await api.exportMaterialX(input,{...options,out:opt.out,output:opt.output}):
+      action==='import'?api.importMaterialX(input,{...options,directory:opt.out}):api.inspectMaterialX(input,options);
+    console.log(JSON.stringify(result,null,2));
+    if(result.status==='blocked'||result.library&&!result.library.valid ||
+      action==='validate'&&opt.strict&&(result.summary.dropped||result.summary.approximated)) process.exitCode=2;
   },
   'scene-resource'() {
     const [action,input]=pos, {out,materialx,python,blender}=opt;

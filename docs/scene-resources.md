@@ -21,6 +21,8 @@ Conversion reopens the staged file before publishing. Its `roundTrip` entries co
 
 ## MaterialX looks
 
+Use [material interchange](materialx-interchange.md) for editable OpenPBR material graphs, loss reports, and materials without geometry.
+
 ```sh
 ink-studio scene-resource convert source.glb --out review/look.mtlx
 ink-studio scene-resource validate review/look.mtlx
