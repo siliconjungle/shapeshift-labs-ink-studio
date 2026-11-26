@@ -5,6 +5,7 @@ const { isDeepStrictEqual } = require('node:util');
 const PNG = require('./png.js');
 const Bitmap = require('../src/bitmap-resources.js');
 const bitmapFiles = require('./bitmap-resources.js');
+const vectorFiles = require('./vector-resources.js');
 const { literal } = require('../src/graph-control-references.js');
 const WAV = require('./wav.js');
 const Sound = require('./sound-source.js');
@@ -225,6 +226,7 @@ function nativeOperations(kit, assets) {
     time:{time:true,outputs:{value:'seconds'},run(_,ctx){return {value:ctx.time};}},
     random:{outputs:{value:'number'},seed:true,run(_,ctx){return {value:kit.KIT.grow.dice(ctx.seed)()};}},
     ...require('./graph-render.js').graph3DOperations(kit),
+    svgAsset:asset('vectorDocument', entry => entry.format===vectorFiles.format),
     pngAsset:asset('image', entry => entry.format==='png'),
     indexedPngAsset:{
       inputs:{name:'string'},outputs:{value:'raster',palette:'palette',alpha:'raster'},asset:'name',workerLocal:true,
@@ -347,6 +349,10 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const groupTree=loadGraphGroups(definitions,baseDir,{onFile:file=>paths.add(file),inspectors:groupInspectors});
   const groupSpecs=new Map(groupTree.entries.map(group=>[group,graphSpec(group.spec,'group '+group.alias,groupOperators,typedOperations)]));
   const assets=new Map(named(assetDefinitions,'assets').map(([name,definition])=>{
+    if (definition?.format === vectorFiles.format) {
+      const { info, value, sha256 } = vectorFiles.load(definition, { baseDir, onFile: file => paths.add(file) });
+      return [name, { format: vectorFiles.format, type: 'vectorDocument', info, value, sha256 }];
+    }
     if (definition?.format === Bitmap.format) {
       const { info, select, sha256 } = bitmapFiles.load(definition, {
         baseDir, declare: planAssets ? undefined : procedural.graphImages.declare, onFile: file => paths.add(file)
@@ -416,7 +422,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     if (expandedNodes>maxNodes) throw new RangeError('Expanded graph exceeds its '+maxNodes+' node budget');
     const compiled=graph.create(spec,{operations:ops,groups:operationsIn(scope),planOnly:true}), plan=compiled.plan();
     for (const {id,op,inputs} of plan.nodes) {
-      if (ops[op]!==stock[op] || !['pngAsset','indexedPngAsset','jsonAsset','audioAsset','rasterAsset','inputAsset','bitmapAsset'].includes(op) ||
+      if (ops[op]!==stock[op] || !['pngAsset','indexedPngAsset','jsonAsset','audioAsset','rasterAsset','inputAsset','bitmapAsset','svgAsset'].includes(op) ||
           inputs.name.source.kind!=='value') continue;
       const node=spec.nodes[id], definition=node.inputs?.name ?? node.params?.name;
       const name=record(definition) ? definition.value : definition;
@@ -449,8 +455,8 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     const {output,format,encoding,type,codec,options}=fields(definition,definition?.format==='wav' ?
       ['output','format','encoding'] : definition?.format==='codec' ? ['output','format','type','codec','options'] :
       ['output','format'],'graph export '+name);
-    if (!id(output) || !Object.hasOwn(rootPlan.outputs,output) || !['png','json','atlas','wav','codec','material-image'].includes(format))
-      throw new TypeError('Graph export '+name+' needs a known output and png, json, atlas, wav, codec or material-image format');
+    if (!id(output) || !Object.hasOwn(rootPlan.outputs,output) || !['png','json','atlas','wav','codec','material-image','svg'].includes(format))
+      throw new TypeError('Graph export '+name+' needs a known output and png, json, atlas, wav, codec, material-image or svg format');
     const port=rootPlan.outputs[output].type, compatible=kit.KIT.procedural.graphTypes.compatible;
     if (format==='material-image' && (!base || !['typedImage','colorImage','grayImage','heightImage'].includes(port)))
       throw new TypeError('Material image export '+name+' needs shared base settings and a typed image output');
@@ -459,6 +465,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     if ((format==='png' || format==='codec' && type==='raster') && ['typedImage','colorImage','grayImage','heightImage','normalImage'].includes(port))
       throw new TypeError('Graph image export '+name+' needs a display raster. Use image.toDisplay for color or export the typed image as JSON.');
     if (format==='png' && !compatible(port,'raster')) throw new TypeError('Graph PNG export '+name+' needs an image output');
+    if (format==='svg' && !compatible(port,'vectorDocument')) throw new TypeError('Graph SVG export '+name+' needs a vector document');
     if (format==='atlas' && !compatible(port,'atlas')) throw new TypeError('Graph atlas export '+name+' needs an atlas output');
     if (format==='wav' && (!compatible(port,'audio') || encoding!==undefined && !WAV.encodings.includes(encoding)))
       throw new TypeError('Graph WAV export '+name+' needs audio and a supported PCM encoding');
@@ -697,7 +704,8 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   function encode(name,value,format,settings={}) {
     const result=format==='codec' ? host.encode(settings.codec,value,settings) : undefined;
     const bytes=result?.bytes ?? (format==='png' ? imageBytes(value,settings.grayscale) :
-      format==='wav' ? WAV.encode(value,settings) : jsonBytes(value));
+      format==='wav' ? WAV.encode(value,settings) : format==='svg' ?
+        Buffer.from(procedural.vectorResources.exportSVG(value)) : jsonBytes(value));
     return {file:'artifacts/'+name+'.'+(result?.extension ?? format),format,sha256:sha256(bytes),bytes};
   }
 

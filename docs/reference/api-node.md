@@ -54,12 +54,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.describeMaterialBitmap` | function | `(document, id, settings)` | [guide](../bitmap-resources.md#edit-without-rewiring), [source](../../cli/material-bitmaps.js) |
 | `node.describeMaterialMetadata` | function | `(file, { audience = 'workspace' } = {})` | [guide](../editable-material-graph.md#describe-and-publish-material-metadata), [source](../../cli/material-metadata.js) |
 | `node.describeMaterialSubgraph` | function | `(source, target, options)` | [guide](../editable-material-graph.md#publish-and-edit-reusable-subgraphs), [guide](../editable-material-graph.md#show-controls-and-ports-conditionally), [source](../../cli/material-subgraphs.js) |
+| `node.describeMaterialVector` | function | `(source, name, options)` | [source](../../cli/material-vectors.js) |
 | `node.describeRenderFrame` | function | `(world, frame)` | [guide](../browser-renderer.md#shared-rendering-contract), [guide](../browser-renderer.md#review-compatibility-before-export), [source](../../index.js) |
 | `node.diffGraphs` | function | `(before, after)` | [source](../../cli/graph-diff.js) |
 | `node.editMaterialBitmap` | function | `(source, request, settings)` | [guide](../bitmap-resources.md#edit-without-rewiring), [source](../../cli/material-bitmaps.js) |
 | `node.editMaterialParameters` | function | `(source, request, { kit = require('../index.js').load(), sourceFile, baseDir = sourceFile && path.dirname(path.resolve(sourceFile)), ...options } = {})` | [guide](../editable-material-graph.md#expose-and-reset-material-parameters), [source](../../cli/material-parameters.js) |
 | `node.editMaterialPresets` | function | `(source, request, { kit = require('../index.js').load() } = {})` | [guide](../editable-material-graph.md#save-and-apply-material-presets), [source](../../cli/material-presets.js) |
 | `node.editMaterialSubgraph` | function | `(source, edit, options = {})` | [guide](../editable-material-graph.md#publish-and-edit-reusable-subgraphs), [source](../../cli/material-subgraphs.js) |
+| `node.editMaterialVector` | function | `(source, request, { baseDir = process.cwd() } = {})` | [source](../../cli/material-vectors.js) |
 | `node.encodeDeepEXR` | function | `(frame, options)` | [guide](../deep-openexr.md#node-api), [guide](../deep-openexr.md), [source](../../cli/deep-openexr.js) |
 | `node.encodeSceneryPack` | function | `(id, meshes)` | [source](../../cli/scenery-delivery.js) |
 | `node.encodeWav` | function | `(source, { encoding = 'pcm16', bwf } = {})` | [guide](../graph-media.md#wav-and-frame-analysis), [source](../../cli/wav.js) |

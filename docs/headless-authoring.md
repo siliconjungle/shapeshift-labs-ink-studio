@@ -728,6 +728,8 @@ multiple closed contours from one `d` string. `draw.ribbon` accepts a
 typed `source` and returns a polygon command ready to draw. Assemble
 linked commands in explicit order with `data.record` and `data.collect`.
 
+Use [SVG and vector resources](vector-resources.md) to edit retained curves, sample a selected contour, or export a standalone SVG.
+
 `draw.text` generates a standalone bitmap raster and `metrics` with
 its width, height, line count and scale. It uses Ink's 6×8 glyphs,
 with integer `scale`, `tracking`, and `leading`, optional `columns`

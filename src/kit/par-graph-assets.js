@@ -270,6 +270,7 @@
     ...P.rasterColor.operations,
     ...P.materialChannels.operations,
     ...P.materialPaint.operations,
+    ...P.vectorResources.operations,
     ...P.materialBase.operations,
     ...P.graphImages.operations,
     ...P.pixelProcessor.operations,

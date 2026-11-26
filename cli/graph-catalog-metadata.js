@@ -22,6 +22,7 @@ const types = {
   raster: { layout: 'Interleaved samples on a positive integer grid', channels: [1, 4], finite: true },
   scalarRaster: { layout: 'Single numeric channel with no color space tag' },
   typedImage: { layout: 'Versioned raster and declared image contract' },
+  vectorDocument: { layout: 'Versioned SVG hierarchy and retained editable path segments' },
   colorImage: { layout: 'Typed RGB or RGBA image' },
   grayImage: { layout: 'Typed unitless single-channel data or mask' },
   heightImage: { layout: 'Typed floating-point height with units' },
@@ -800,6 +801,9 @@ const specialization = {
   'anim.retime': { field: 'group', description: 'Uses the group’s inputs and outputs and adds a timing record. The group cannot declare timing.' }
 };
 const notes = {
+  'vector.path': ['Returns one sampled contour and all sampled contours separately. Sampling is independent of the retained SVG path data.'],
+  'vector.fillMask': ['Bake one selected shape using its inherited winding rule and the chosen viewport.',
+    'The mask describes geometric fill coverage. Use SVG export for stroke, gradient and clip styling.'],
   'material.paint': ['A session affects only the channels it paints or explicitly converts.',
     'Blend color in linear light. Preserve native float height and flow samples and allow HDR color in a floating linear canvas.',
     'Paint in texel, top-left UV, world or rest space. Named masks, chart projections, and native flow maps can come from upstream nodes.'],

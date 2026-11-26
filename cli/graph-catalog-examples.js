@@ -327,7 +327,16 @@ const materialSource = { op: 'material.pack', inputs: {
   maps: { baseColor: rgba, roughness: mask, 'mask.wear': mask },
   metadata: { baseColor: { colorSpace: 'srgb', texCoord: 0 }, 'mask.wear': { texCoord: 1 } }
 } };
+const svgExample = '<svg viewBox="0 0 20 16"><g transform="translate(2 1)" fill-rule="evenodd">' +
+  '<path id="petal" d="M0 10 C2 0 13 0 16 10 Z M7 8 Q8 3 10 8 Z" fill="#e29d78"/></g></svg>';
+const vectorExample = { op: 'vector.import', inputs: { svg: svgExample } };
 const specifications = {
+  'vector.import': { inputs: vectorExample.inputs },
+  'vector.path': { nodes:{vector:vectorExample}, inputs:{source:link('vector'),key:'petal'} },
+  'vector.fillMask': { nodes:{vector:vectorExample}, inputs:{source:link('vector'),key:'petal',options:{width:20,height:16}} },
+  'vector.export': { nodes:{vector:vectorExample}, inputs:{source:link('vector')} },
+  'vector.edit': { nodes:{vector:vectorExample}, inputs:{source:link('vector'),
+    edits:[{kind:'point',key:'petal',segment:1,handle:'c1',at:[2,3]}]} },
   'material.inherit': { inputs: { rules: { size: { mode: 'parent', scale: [0.5, 1] } },
     context: { parent: { id: 'sheet', settings: { size: { width: 32, height: 16 } } } } } },
   'material.base': { inputs: { settings: { size: { width: 8, height: 6 }, seed: 4 } } },
@@ -1068,6 +1077,11 @@ function runtimeExample(id, { inputs, output = 'value', type = 'field', factory 
 
 function exampleFor(id, operation, kit) {
   if (Object.hasOwn(runtime, id)) return runtimeExample(id, runtime[id]);
+  if (id === 'svgAsset') {
+    const document = require('../src/vector-resources.js').parse(svgExample);
+    return { kind: 'graph', project: project({ op: id, inputs: { name: 'sample' } }, 'value',
+      { assets: { sample: { format: 'svg', document } } }) };
+  }
   if (id === 'bitmapAsset') {
     const source = { file: path.join(__dirname, 'graph-catalog-assets', 'swatch.png') };
     return { kind: 'graph', project: project({ op: id, inputs: { name: 'sample' } }, 'value',

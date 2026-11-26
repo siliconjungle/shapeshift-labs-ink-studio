@@ -362,6 +362,20 @@ Samples the graph clock.
 Get the runnable example with `ink-studio graph describe rasterLayer --example > example.cjs`.
 Run it with `node example.cjs`.
 
+### svgAsset
+
+
+
+Origin: headless.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `name` | `string` | Required |  |
+| Output | `value` | `vectorDocument` | — | {"layout":"Versioned SVG hierarchy and retained editable path segments"} |
+
+Get the runnable example with `ink-studio graph describe svgAsset --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### tiles
 
 

@@ -80,5 +80,6 @@ The keyword search includes the curated features, CLI usages, public API members
 - [sim](graph-sim.md)
 - [textile](graph-textile.md)
 - [time](graph-time.md)
+- [vector](graph-vector.md)
 - [voxels](graph-voxels.md)
 - [warp](graph-warp.md)
