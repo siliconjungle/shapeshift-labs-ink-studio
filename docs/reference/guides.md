@@ -142,6 +142,7 @@ All checked-in guides, indexed by title and section headings.
 - [Foley and perspective](../foley-perspective.md)
 - [4D projections and slices](../four-dimensional.md)
 - [Bounded 3D fractal forms](../fractal-forms.md)
+- [Texture sampling inside functions](../function-texture-sampling.md)
 - [Gameplay state and events](../gameplay-state.md)
 - [Gaussian glTF import](../gaussian-gltf.md)
 - [Painted materials for imported Gaussian splats](../gaussian-materials.md)

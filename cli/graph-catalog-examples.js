@@ -193,6 +193,8 @@ const declareHeight = { op: 'image.toHeight', inputs: { source: link('data'), sc
 const uniformNormal = { op: 'image.uniform', inputs: {
   value: [.6, 0, .8], width: mask.width, height: mask.height, descriptor: { intent: 'normal' } } };
 const dynamic = {
+  'fn.sampleColor':{ nodes:{color:declareColor},inputs:{source:link('color'),uv:[1.25,.65],wrapU:'wrap',filter:'linear',mip:1.25} },
+  'fn.sampleGray':{ nodes:{gray:declareData},inputs:{source:link('gray'),uv:[.4,.3],filter:'linear'} },
   'fn.math': { type:'integer',inputs:{operation:'multiply',a:6,b:7} },
   'fn.compare': { type:'string',inputs:{operation:'eq',a:'satin',b:'gloss'} },
   'fn.logic': { inputs:{operation:'xor',a:true,b:false} },

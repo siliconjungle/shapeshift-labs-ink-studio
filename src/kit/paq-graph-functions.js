@@ -6,6 +6,8 @@
   const colorTypes = ['srgb', 'srgb-linear'];
   const types = Object.freeze([...scalarTypes, ...vectorTypes, ...colorTypes, 'unitScalar', 'boolean', 'string']);
   const validType = type => types.includes(type);
+  const textureType = type => type === 'colorImage' || type === 'grayImage';
+  const validInputType = type => validType(type) || textureType(type);
   const compatible = (from, to) => from === to ||
     to === 'number' && ['integer','unitScalar'].includes(from) ||
     to === 'unitScalar' && scalarTypes.includes(from);
@@ -294,10 +296,28 @@
     }
   };
 
+  function sampleTexture(type, read, result, description) {
+    const inherit = { type:'string', default:'image' };
+    return {
+      description,
+      inputs:{source:type,uv:'vec2',filter:inherit,wrapU:inherit,wrapV:inherit,
+        mip:{type:'number',default:0},mipFilter:{type:'string',default:'linear'}},
+      outputs:{value:result},
+      run({source,uv,...options},context) {
+        const value = P.graphImages.textureSampling[read](source,uv,options,context?.textureCache?.());
+        return { value };
+      }
+    };
+  }
+
   const operations = Object.freeze({
     'fn.math': math, 'fn.toInteger': integer, 'fn.cast': cast, 'fn.compare': compare, 'fn.logic': logic,
-    'fn.select': select, 'fn.vector': vector, 'fn.color': color, 'fn.text': text
+    'fn.select': select, 'fn.vector': vector, 'fn.color': color, 'fn.text': text,
+    'fn.sampleColor': sampleTexture('colorImage','sampleColor','srgb-linear',
+      'Sample a typed color texture at explicit UVs and return straight linear sRGB RGBA.'),
+    'fn.sampleGray': sampleTexture('grayImage','sampleGray','number',
+      'Sample a typed unitless grayscale texture or mask at explicit UVs.')
   });
   const typedOperations = Object.freeze(['fn.math','fn.cast','fn.compare','fn.select','fn.vector','fn.color']);
-  P.graphFunctions = Object.freeze({ types, validType, compatible, operations, typedOperations });
+  P.graphFunctions = Object.freeze({ types, validType, validInputType, textureType, compatible, operations, typedOperations });
 })(KIT);

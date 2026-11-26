@@ -109,6 +109,56 @@ Guides: [guide](../reusable-function-graphs.md#value-nodes)
 Get the runnable example with `ink-studio graph describe fn.math --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### fn.sampleColor
+
+Sample a typed color texture at explicit UVs and return straight linear sRGB RGBA.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `colorImage` | Required | {"layout":"Typed RGB or RGBA image"} |
+| Input | `uv` | `vec2` | Required | normalized UV · {"dimensions":2,"finite":true,"origin":"top-left edge"} |
+| Input | `filter` | `string` | `"image"` | {"choices":["image","nearest","linear"]} |
+| Input | `wrapU` | `string` | `"image"` | {"choices":["image","clamp","wrap","mirror","transparent"]} |
+| Input | `wrapV` | `string` | `"image"` | {"choices":["image","clamp","wrap","mirror","transparent"]} |
+| Input | `mip` | `number` | `0` | mip levels · {"finite":true,"min":0} |
+| Input | `mipFilter` | `string` | `"linear"` | {"choices":["nearest","linear"]} |
+| Output | `value` | `srgb-linear` | — | linear sRGB · {"lengths":[3,4],"finite":true,"alpha":[0,1]} |
+
+- Samples use top-left UVs and straight linear sRGB RGBA output. Filtering works in coverage-associated linear light.
+- Explicit mip levels clamp to the available chain. Fractional levels blend unless mipFilter is nearest.
+
+Guides: [guide](../function-texture-sampling.md), [guide](../reusable-function-graphs.md#value-nodes)
+
+Get the runnable example with `ink-studio graph describe fn.sampleColor --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### fn.sampleGray
+
+Sample a typed unitless grayscale texture or mask at explicit UVs.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `grayImage` | Required | {"layout":"Typed unitless single-channel data or mask"} |
+| Input | `uv` | `vec2` | Required | normalized UV · {"dimensions":2,"finite":true,"origin":"top-left edge"} |
+| Input | `filter` | `string` | `"image"` | {"choices":["image","nearest","linear"]} |
+| Input | `wrapU` | `string` | `"image"` | {"choices":["image","clamp","wrap","mirror","transparent"]} |
+| Input | `wrapV` | `string` | `"image"` | {"choices":["image","clamp","wrap","mirror","transparent"]} |
+| Input | `mip` | `number` | `0` | mip levels · {"finite":true,"min":0} |
+| Input | `mipFilter` | `string` | `"linear"` | {"choices":["nearest","linear"]} |
+| Output | `value` | `number` | — | {"finite":true} |
+
+- Read a unitless one-channel data or mask texture. UNORM samples decode to unit values. Floating-point data retains signed and over-one values.
+- Use explicit UVs and a numeric mip level. The same settings can be shared across several bound textures.
+
+Guides: [guide](../function-texture-sampling.md), [guide](../reusable-function-graphs.md#value-nodes)
+
+Get the runnable example with `ink-studio graph describe fn.sampleGray --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### fn.select
 
 Choose one of two computed values that have the same declared type.
