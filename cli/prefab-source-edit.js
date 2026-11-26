@@ -25,9 +25,16 @@ function capture({before,after,report},settings,directory,kit) {
     return result;
   }
   const source = frame(before,images[0]);
+  if (report.format === 'ink-studio/construction-light-edit')
+    evidence.lights = {before:before.constructionLights?.inspect() ?? []};
   if (!after) return evidence;
   const draft = frame(after,images[1]), owners = new Map();
-  for (const row of report.instances) {
+  const compareLighting = evidence.lights !== undefined;
+  if (compareLighting) {
+    evidence.lights.after = after.constructionLights?.inspect() ?? [];
+    evidence.changedPixels = 0;
+  }
+  for (const row of report.instances ?? []) {
     const counts = {instance:row.instance,beforePixels:0,afterPixels:0,changedPixels:0};
     evidence.instances.push(counts);
     for (const object of row.objects ?? []) owners.set(object,counts);
@@ -41,9 +48,10 @@ function capture({before,after,report},settings,directory,kit) {
     if (next) next.afterPixels++;
     const u = i*3;
     const changed = [0,1,2].some(k => source.rgb[u+k] !== draft.rgb[u+k]);
+    if (changed && compareLighting) evidence.changedPixels++;
     if (changed && prior) prior.changedPixels++;
     if (changed && next && next !== prior) next.changedPixels++;
-    for (let k=0; k<3; k++) overlay[u+k] = changed && (prior || next) ? [255,191,91][k] : Math.round(draft.rgb[u+k]*.24);
+    for (let k=0; k<3; k++) overlay[u+k] = changed && (compareLighting || prior || next) ? [255,191,91][k] : Math.round(draft.rgb[u+k]*.24);
   }
   files.write(path.join(directory,images[2]),PNG.encode(w,h,overlay));
   evidence.files.push(images[2]);
