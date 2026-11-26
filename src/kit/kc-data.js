@@ -246,6 +246,7 @@
     paintingWaves: 'list',
     paintEvaporations: 'list',
     paintThrobs: 'list',
+    paintEffects: 'obj',
     constructionPlane: 'obj',
     constructionLights: 'obj',
     tilesets: 'obj',
@@ -502,8 +503,16 @@
       error.problems = [{ level: 'error', path: 'paintThrobs', problem: error.message, hint: '' }];
       throw error;
     }
+    let paintEffects;
     try {
-      return { ...K.authoring.paintings3d.expand(spec, time, waves.paints, throbs.targets), waves, evaporation, throbs };
+      paintEffects = K.procedural.paintEffects.scene(spec, time);
+    } catch (error) {
+      error.problems = [{ level: 'error', path: 'paintEffects', problem: error.message, hint: '' }];
+      throw error;
+    }
+    try {
+      return { ...K.authoring.paintings3d.expand(paintEffects.spec, time, waves.paints, throbs.targets, paintEffects),
+        waves, evaporation, throbs, paintEffects };
     } catch (error) {
       error.problems = [{ level: 'error', path: 'paintings3d', problem: error.message, hint: '' }];
       throw error;
@@ -1833,7 +1842,7 @@
       e.problems = problems;
       throw e;
     }
-    const review = env.assemblyReview, { dataInputs, anchors, layers, looseness, boils, reports, waves, evaporation, throbs, customProperties } = resolved;
+    const review = env.assemblyReview, { dataInputs, anchors, layers, looseness, boils, reports, waves, evaporation, throbs, paintEffects, customProperties } = resolved;
     const hidden = modelOptions?.[brushField] ? undefined : resolved.hidden;
     const visibleEffect = (_,index) => !hidden?.effects.has(index);
     let { spec } = resolved;
@@ -1998,7 +2007,12 @@
       recesses = new Map();
       const measureBounds = modelOptions?.[brushField]?.measureBounds;
       S = K.sculpt((env.makeSculpt || makeSculpt)(B, measureBounds ? { measureBounds } : undefined));
-      S.capturePaint = env.paintEvaporationCapture;
+      const capture=env.paintEvaporationCapture;
+      S.capturePaint = capture&&paintEffects.origins.size ? {
+        sources:new Set([...capture.sources,...Array.from(paintEffects.origins)
+          .filter(([,id])=>capture.sources.has(id)).map(([id])=>id)]),
+        sample:row=>capture.sample({...row,source:paintEffects.origins.get(row.source)??row.source})
+      } : capture;
       S.sun = B.norm(st0.sun);
       if (st0.disableSun) S.sunK = 0;
       if (st0.finish.look?.pixel) S.pixel = true;
@@ -2240,20 +2254,40 @@
         else if (k === 'torus') p = S.torus(s.at, s.R, s.r, m, baseOptions);
         else if (k === 'sweep') {
           const relief = guard?.relief, volume = relief?.mode === 'volume', recess = volume && relief.height < 0;
-          const pulse=throbs.targets.get(s.id), coverageScale=pulse?.coverage??1;
+          const sourceId=paintEffects.origins.get(s.id)??s.id, edits=paintEffects.marks.get(sourceId)??[];
+          const pulse=throbs.targets.get(sourceId), coverageScale=pulse?.coverage??1;
+          const space=edits.length?affineSolidSpace(s.restAffine):undefined;
+          const pulses=edits.filter(row=>row.kind==='throb');
+          const lane=(channel,base=1,lo=0,hi=4)=>pulses.some(row=>row.values[channel]!==undefined)?
+            (point=>K.clamp(pulses.reduce((value,{values,gain})=>
+              values[channel]===undefined?value:value*K.mix(1,values[channel],gain(point)),base),lo,hi)):undefined;
+          const width=lane('width',pulse?.width??1,.05), height=lane('height',1,.05);
+          const coverageLane=lane('coverage',coverageScale,0,1), emission=lane('emission',1,0,8);
           const band = volume && (recess ? [relief.height, relief.seat] : [-relief.seat, relief.height]);
+          const bandAt=volume&&height ? (point=>{
+            const lift=relief.height*height(space.point(point));
+            return recess?[lift,relief.seat]:[-relief.seat,lift];
+          }):undefined;
           const sweep = K.procedural.shapeSweeps.prepare(style ? { ...s, looseness: style } : s,
-            { orient, band, width: pulse?.width, loosenessAt: guard?.loosenessAt });
+            { orient, band, width: pulse?.width, loosenessAt: guard?.loosenessAt,
+              widthAt: width&&(point=>width(space.point(point))), bandAt });
           const boil = boils.get(s.id);
-          const form = boil ? K.procedural.paintBoil.apply(sweep, boil.plan, s.id, boil.drawing) : sweep;
-          const opacity=coverageScale===1 ? form.opacityAt :
-            ((x,y,z)=>(form.opacityAt?.(x,y,z)??1)*coverageScale);
-          const paintOverlay = guard?.pigmentOnly || recess || !volume && (style || opacity) &&
+          let form = boil ? K.procedural.paintBoil.apply(sweep, boil.plan, s.id, boil.drawing) : sweep;
+          for (const row of edits) if (row.kind==='boil') form=K.procedural.paintBoil.apply(form,row.plan,sourceId,row.drawing,
+            point=>row.gain(space.point(point)));
+          const opacity=!coverageLane&&coverageScale===1 ? form.opacityAt : (x,y,z)=>{
+            const source=form.opacityAt?.(x,y,z), weight=coverageLane?coverageLane(space.point([x,y,z])):coverageScale;
+            return weight===1?source:(source??1)*weight;
+          };
+          const paintOverlay = guard?.pigmentOnly || recess || !volume && (style || form.opacityAt || coverageScale<1) &&
             !held && !s.hold && !s.carve && !s.ghost && !s.group && !modifiers.length;
           const material = opacity ? { ...m, opacityAt: opacity } : m;
-          const removed = evaporation.targets.get(s.id);
-          const placement = removed && affineSolidSpace(s.restAffine);
-          const remaining = removed && (point => removed(point) > 0 ? 1 : 0);
+          const detached = evaporation.targets.get(sourceId), releases=edits.filter(row=>row.kind==='evaporate');
+          const removed=releases.length?(point=>releases.reduce((nearest,row)=>
+            Math.min(nearest,Math.max(row.removed(point),.5-row.gain(point))),detached?.(point)??Infinity)):detached;
+          const placement = removed && (space??affineSolidSpace(s.restAffine));
+          const remaining = removed && (point => detached && detached(point)<=0 ? 0 :
+            releases.reduce((value,row)=>value*(row.removed(point)<=0?1-row.gain(point):1),1));
           if (guard?.pigmentOnly) {
             const { inverse } = affineSolidSpace(s.restAffine);
             const coverage = (point, normal) => {
@@ -2261,9 +2295,10 @@
               if (local.some((n, i) => n < form.bounds.min[i] - 1e-6 || n > form.bounds.max[i] + 1e-6)) return;
               if (form.sd(...local) > 1e-6 || remaining && !remaining(point)) return;
               if (guard.accepts && !guard.accepts(point, normal)) return;
-              return opacity?.(...local) ?? 1;
+              return (opacity?.(...local) ?? 1)*(remaining?.(point)??1);
             };
-            if (guard.finish) S.addPaintFinish(guard.entity, s.id, guard.finish, coverage, guard.finishMask);
+            if (guard.finish) S.addPaintFinish(guard.entity, s.id, guard.finish, coverage, emission?
+              ((channel,point)=>(guard.finishMask ? guard.finishMask(channel,point) : 1)*(channel==='emission'?emission(point):1)):guard.finishMask);
             else if (relief?.tint !== false) {
               const color = B.P[m.r[Math.floor(m.r.length / 2)]].map(n => n / 255);
               S.addSurfacePigment(guard.entity, s.id, (point, normal, onHit) => {
@@ -2280,7 +2315,7 @@
           }
           if (relief?.mode === 'shading') S.addSurfaceRelief(guard.entity,
             K.procedural.paintRelief.gradient(relief, form, affineSolidSpace(s.restAffine), guard.accepts,
-              remaining ? (point => remaining(point) * (guard.reliefMask?.(point) ?? 1)) : guard.reliefMask));
+              remaining ? (point => remaining(point) * (guard.reliefMask?.(point) ?? 1)) : guard.reliefMask, height));
           let clipped = guard?.signed ? { ...form, sd: (x, y, z) => Math.max(form.sd(x, y, z), guard.signed(x, y, z)) } : form;
           if (removed && !guard?.pigmentOnly) {
             const {sd}=clipped;
@@ -2552,7 +2587,7 @@
       return { meshes, joints, animations, ...(helpers.length && { helpers }) };
     }
     const moving = spec.solids.filter(s => s.part), authoredBounds = new Map();
-    const staticBake = cache && !env.paintEvaporationCapture && !evaporation.layers.length && !throbs.targets.size && !anchors.size && !looseness.size && !boils.size && !waves.geometry.size &&
+    const staticBake = cache && !env.paintEvaporationCapture && !evaporation.layers.length && !throbs.targets.size && !paintEffects.reports && !anchors.size && !looseness.size && !boils.size && !waves.geometry.size &&
       !moving.length && !effects.length && !spec.tap && !marks &&
       !presentation.breakables && !S.keepRenderSdf && !st0.finish.paint && !globalThis.INK_DECAL_NEXT &&
       !globalThis.INK_RETAIN_RENDER_SDF && !globalThis.INK_RETAIN_REFERENCE_SDF && !globalThis.INK_RAMPS;
@@ -2604,7 +2639,11 @@
       if (recesses.size) S.applyPaintRecesses(recesses);
       S.bake();
     }
-    const paintParticles = K.procedural.paintEvaporation.reserve(B, evaporation.layers);
+    const particleLayers=[...evaporation.layers,...paintEffects.layers];
+    if (new Set(particleLayers.map(row=>row.plan.id)).size!==particleLayers.length ||
+        particleLayers.reduce((count,row)=>count+row.particles.length,0)>4096)
+      throw new RangeError('Paint particles need unique layer IDs and at most 4096 samples');
+    const paintParticles = K.procedural.paintEvaporation.reserve(B, particleLayers);
     const firstMark = marks && K.dataMarks.stamp(B, marks, { reserve: dataMarks.dynamic });
     const pool = loose ? K.pool(B, spec.spare || 600) : null,
       lo = [1e9, 1e9, 1e9],
@@ -2654,11 +2693,13 @@
     };
     if (waves.reports.length) W.paintWaveReport = waves.reports;
     if (waves.animated) W.paintWave = env.parameterInputs?.time ?? 0;
+    if (paintEffects.reports) W.paintEffects={time:paintEffects.time,animated:paintEffects.animated,
+      duration:paintEffects.duration,clips:paintEffects.reports};
     if (throbs.targets.size) W.paintThrob={at:throbs.at,key:throbs.key,duration:throbs.duration};
-    if (paintParticles.length) {
-      const plans=paintParticles.map(row=>row.plan), at=time=>JSON.stringify(plans.map(plan=>plan.key(time)));
+    if (evaporation.layers.length) {
+      const plans=evaporation.layers.map(row=>row.plan), at=time=>JSON.stringify(plans.map(plan=>plan.key(time)));
       W.paintEvaporation={at,key:at(resolved.inputs?.time ?? env.parameterInputs?.time ?? 0),
-        duration:Math.max(...plans.map(plan=>plan.end+plan.life))};
+        duration:Math.max(0,...plans.map(plan=>plan.end+plan.life))};
     }
     if (env.resolveSpriteAtlas && Array.isArray(W.spriteAtlases))
       W.spriteAtlases = W.spriteAtlases.map(placement => typeof placement?.atlas === 'string' ?

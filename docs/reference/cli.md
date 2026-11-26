@@ -221,6 +221,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   render or clip --multiprojection plan.json   use local projection for named mesh surfaces
   path-ink <scene> --plan look.json --out frame.png [--t 0 | --from 0 --to 2 --fps 12]
   sdf-reference <scene> --out directory [--t 0,1.2 --w 192 --h 120 --samples 32 --bounces 3]
+  color-management <plan.json> --out directory [--json]
   physical-reference <plan.json> --out directory [--quality studio --samples 32 --bounces 4 --batch 16 --denoise gentle --resume accumulation.bin]
   hybrid-cage <scene.js> --plan file.json [--out directory --w pixels --h pixels --raw]   preview a shared mesh, strand, and splat deformation
   sculpt-detail <scene> --plan file.json [--out directory --object id --t 1.2]   review and reproject sculpt relief
@@ -252,6 +253,11 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   painting-cels export <scene.json> <clip.json> --out directory [--view view.json]   render held exposures and animated PNG
   painting-flow sample <scene.json> <plan.json> [--at seconds] --out scene.json   advect retained marks through a painted field
   painting-flow bake <scene.json> <plan.json> [--from seconds --fps 12 --frames 24 --playback once] --out clip.json   bake editable flow poses into cels
+  paint-effects apply <scene.json> <track.json> --out scene.json   add a shared paint effects track
+  paint-effects inspect <scene.json> [--at seconds] [--point x,y,z]   sample cue windows and mask influence
+  paint-effects erase <scene.json> <clip id> <brush.json> --out scene.json   edit local effect erasure
+  paint-effects sample <scene.json> --at seconds --out scene.json   hold the effect track at one pose
+  paint-effects bake <scene.json> --out directory [--from seconds --fps n --frames n --w n --h n --raw --ortho --flipbook]   export frames and an optional animated PNG
   paint-throb apply <scene.json> <plan.json> --out scene.json   retain independent paint pulses and embed WAV envelopes
   paint-throb inspect <scene.json> [--at seconds] [--pulse id]   sample paint pulse drivers and channel multipliers
   paint-evaporation apply <scene.json> <plan.json> [--at seconds] --out scene.json   bake a painted region into a particle layer

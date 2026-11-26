@@ -19,7 +19,7 @@ const argv = process.argv.slice(2),
   cmd = argv[0] || 'help',
   pos = [],
   opt = {};
-const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' || cmd === 'effect-recipe' || cmd === 'physical-reference' ? ['json'] :
+const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' || cmd === 'effect-recipe' || cmd === 'physical-reference' || cmd === 'color-management' ? ['json'] :
   cmd === 'tasks' ? ['resume', 'progress', 'wait'] :
   cmd === 'modeling-benchmark' ? ['repairs-complete'] : cmd === 'mesh-topology' ? ['from-camera', 'detach-edge', 'coincident', 'replay'] : cmd === 'tileset' ? ['brush', 'clear', 'accept-external', 'snap-grid', 'paint-flip-x', 'paint-flip-y', 'brush-size'] : [];
 for (let i = 1; i < argv.length; i++) {
@@ -1441,6 +1441,7 @@ const CMD = {
         '  render or clip --multiprojection plan.json   use local projection for named mesh surfaces',
         '  path-ink <scene> --plan look.json --out frame.png [--t 0 | --from 0 --to 2 --fps 12]',
         '  sdf-reference <scene> --out directory [--t 0,1.2 --w 192 --h 120 --samples 32 --bounces 3]',
+        '  color-management <plan.json> --out directory [--json]',
         '  physical-reference <plan.json> --out directory [--quality studio --samples 32 --bounces 4 --batch 16 --denoise gentle --resume accumulation.bin]',
         '  hybrid-cage <scene.js> --plan file.json [--out directory --w pixels --h pixels --raw]   preview a shared mesh, strand, and splat deformation',
         '  sculpt-detail <scene> --plan file.json [--out directory --object id --t 1.2]   review and reproject sculpt relief',
@@ -1472,6 +1473,11 @@ const CMD = {
         '  painting-cels export <scene.json> <clip.json> --out directory [--view view.json]   render held exposures and animated PNG',
         '  painting-flow sample <scene.json> <plan.json> [--at seconds] --out scene.json   advect retained marks through a painted field',
         '  painting-flow bake <scene.json> <plan.json> [--from seconds --fps 12 --frames 24 --playback once] --out clip.json   bake editable flow poses into cels',
+        '  paint-effects apply <scene.json> <track.json> --out scene.json   add a shared paint effects track',
+        '  paint-effects inspect <scene.json> [--at seconds] [--point x,y,z]   sample cue windows and mask influence',
+        '  paint-effects erase <scene.json> <clip id> <brush.json> --out scene.json   edit local effect erasure',
+        '  paint-effects sample <scene.json> --at seconds --out scene.json   hold the effect track at one pose',
+        '  paint-effects bake <scene.json> --out directory [--from seconds --fps n --frames n --w n --h n --raw --ortho --flipbook]   export frames and an optional animated PNG',
         '  paint-throb apply <scene.json> <plan.json> --out scene.json   retain independent paint pulses and embed WAV envelopes',
         '  paint-throb inspect <scene.json> [--at seconds] [--pulse id]   sample paint pulse drivers and channel multipliers',
         '  paint-evaporation apply <scene.json> <plan.json> [--at seconds] --out scene.json   bake a painted region into a particle layer',
@@ -2762,6 +2768,12 @@ const CMD = {
       ...(sequence && {fps}),frames:report});
     console.log('Wrote',n,'path ink frame(s) to',file);
   },
+  'color-management'() {
+    if (pos.length!==1 || typeof opt.out!=='string' || Object.keys(opt).some(key=>!['out','json'].includes(key)))
+      die('Use color-management <plan.json> --out directory [--json]');
+    const result=require('./color-management-review.js').writeColorReview(pos[0],{directory:outputFile('color-management'),toolkit:lib()});
+    console.log(opt.json?JSON.stringify(result,null,2):'Wrote '+result.views.length+' managed views to '+result.file);
+  },
   async 'physical-reference'() {
     const flags={w:'width',h:'height',samples:'samples',bounces:'bounces',batch:'batch',seed:'seed',exposure:'exposure'};
     const names=['out','quality','denoise','resume',...Object.keys(flags)];
@@ -2869,6 +2881,10 @@ const CMD = {
       if (!descriptor.openEditor) throw new TypeError('Paint flow needs a plain editable JSON scene');
       return descriptor.openEditor({ historyLimit: 0 });
     });
+  },
+  'paint-effects'() {
+    return require('./paint-effects.js')(pos,opt,lib(),
+      (file,source)=>dataScene(file,source,{refreshTilesets:false}));
   },
   'paint-throb'() {
     return require('./paint-throb.js')(pos,opt,lib(),
@@ -4794,7 +4810,7 @@ const CMD = {
       fps = num('fps', 12),
       from = num('from', 0),
       duration = Math.max(w.timeline?.duration ?? 0, w.cameraRig?.duration ?? 0, w.materialResponse?.duration ?? 0,
-        w.paintEvaporation?.duration ?? 0, w.paintThrob?.duration ?? 0),
+        w.paintEvaporation?.duration ?? 0, w.paintThrob?.duration ?? 0, w.paintEffects?.duration ?? 0),
       to = num('to', duration > from ? duration : 6),
       n = Math.max(2, Math.round((to - from) * fps)),
       frames = [], ts = [], camera = clipCamera(w),
@@ -4815,12 +4831,13 @@ const CMD = {
     const replay = feedbackReplay(w, from, view(frame));
     let exposure = w;
     function sampleWorld(t) {
-      if (!w.paintBoil && w.paintWave===undefined && !w.paintEvaporation && !w.paintThrob) return w;
+      if (!w.paintBoil && w.paintWave===undefined && !w.paintEvaporation && !w.paintThrob && !w.paintEffects?.animated) return w;
       const time = num('parameter-time', t);
       if (w.paintBoil && exposure.paintBoil?.key !== w.paintBoil.at(time) ||
           w.paintWave!==undefined && exposure.paintWave!==time ||
           w.paintEvaporation && exposure.paintEvaporation?.key!==w.paintEvaporation.at(time) ||
           w.paintThrob && exposure.paintThrob?.key!==w.paintThrob.at(time) ||
+          w.paintEffects?.animated && exposure.paintEffects?.time!==time ||
           exposure.anim?.stateful && t < exposure.clock)
         exposure = buildPreview(pos[0], { parameterInputs: { time } });
       return exposure;

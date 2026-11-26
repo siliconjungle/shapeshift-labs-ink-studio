@@ -236,6 +236,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.verifyProjectExperiment` | function | `(...args)` | [source](../../index.js) |
 | `node.verifyStoryBundle` | function | `(file, options)` | [source](../../index.js) |
 | `node.version` | value | `string = "0.1.0"` |  |
+| `node.writeColorReview` | function | `(filenameInput,{directory,toolkit=require('../index.js').load()}={})` | [source](../../cli/color-management-review.js) |
 | `node.writeCurveBake` | function | `(directory, { atlas,coverage })` | [guide](../curve-bake.md), [source](../../cli/curve-bake.js) |
 | `node.writeCurveComparison` | function | `(world, options, directory)` | [source](../../cli/curve-compare.js) |
 | `node.writeCurveQualityReview` | function | `(world, options, directory)` | [source](../../cli/curve-quality-review.js) |

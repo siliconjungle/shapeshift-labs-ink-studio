@@ -246,7 +246,7 @@ function points(rows=[]) {
 }
 
 async function prepare(plan,override,baseDir,toolkit,onFile) {
-  if(!fields(plan,['format','version','label','view','settings','camera','meshes','materials','environment','lights','metersPerUnit'])||
+  if(!fields(plan,['format','version','label','view','settings','camera','meshes','materials','environment','lights','metersPerUnit','colorManagement'])||
     plan.format!==format||plan.version!==1||!text(plan.label))
     throw new TypeError('Expected a labeled version 1 physical reference plan');
   const metersPerUnit=plan.metersPerUnit??.01;

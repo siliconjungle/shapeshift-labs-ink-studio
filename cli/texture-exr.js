@@ -50,6 +50,9 @@ function header(file) {
     profile.chromaticities=Array.from({length:8},(_,i)=>chroma.readFloatLE(4*i));
     if (!profile.chromaticities.every(Number.isFinite)) throw new RangeError('OpenEXR chromaticities must be finite');
   }
+  if(attrs.has('whiteLuminance')) profile.whiteLuminance=get('whiteLuminance','float',4).readFloatLE(0);
+  if(attrs.has('ocioColorSpace')) profile.ocioColorSpace=get('ocioColorSpace','string').toString('utf8');
+  C.profile(profile);
   const association=attrs.has('inkAlphaAssociation')?get('inkAlphaAssociation','string').toString('ascii'):undefined;
   if(association!==undefined && !['none','straight','premultiplied'].includes(association))
     throw new TypeError('Invalid OpenEXR alpha association');
@@ -120,8 +123,8 @@ function write({width,height,planes,alpha='none'}, {bitDepth=32,compression='zip
       !['none','straight','premultiplied'].includes(alpha) || Object.hasOwn(planes,'A')===(alpha==='none'))
     throw new TypeError('OpenEXR texture planes need aligned finite samples and a matching alpha convention');
   C.extent(width,height,names.length*bps);
-  const {bytes:icc,name,gamma,srgb,chromaticities}=C.profile(profile);
-  if(icc||name!==undefined||gamma!==undefined||srgb!==undefined)
+  const {bytes:icc,name,gamma,srgb,chromaticities,whiteLuminance,ocioColorSpace,cicp,mastering,lightLevels}=C.profile(profile);
+  if(icc||name!==undefined||gamma!==undefined||srgb!==undefined||cicp||mastering||lightLevels)
     throw new TypeError('OpenEXR texture profiles use linear data and chromaticities');
   const compressionId=compressors[compression], lines=linesPerBlock[compressionId];
   const box=int(0,0,width-1,height-1), end=Buffer.from([0]), kind=bitDepth===16?HALF:FLOAT;
@@ -134,6 +137,8 @@ function write({width,height,planes,alpha='none'}, {bitDepth=32,compression='zip
     attribute('inkAlphaAssociation','string',Buffer.from(alpha))
   ];
   if(chromaticities) attrs.push(attribute('chromaticities','chromaticities',float(...chromaticities)));
+  if(whiteLuminance!==undefined) attrs.push(attribute('whiteLuminance','float',float(whiteLuminance)));
+  if(ocioColorSpace!==undefined) attrs.push(attribute('ocioColorSpace','string',Buffer.from(ocioColorSpace,'utf8')));
   const head=Buffer.concat([int(magic,names.some(name=>name.length>31)?0x402:2),...attrs,end]);
   const table=Buffer.alloc(Math.ceil(height/lines)*8), blocks=[];
   let offset=head.length+table.length;

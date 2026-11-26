@@ -28,7 +28,7 @@
     throw new TypeError('Choose flat paint, shading relief, or volume relief with settings for that mode');
   }
 
-  function gradient(relief, form, space, accepts, remaining) {
+  function gradient(relief, form, space, accepts, remaining, heightAt) {
     const { feather, height } = relief, { min, max } = form.bounds;
     const h = Math.min(.01, feather * space.scale * .25);
     function rise(point) {
@@ -36,7 +36,7 @@
       if (at.some((n, i) => n < min[i] || n > max[i])) return 0;
       const t = K.clamp(-form.sd(...at) / feather, 0, 1);
       return t === 0 ? 0 : height * space.scale * t * t * (3 - 2 * t) *
-        (form.opacityAt?.(...at) ?? 1) * (remaining?.(point) ?? 1);
+        (form.opacityAt?.(...at) ?? 1) * (remaining?.(point) ?? 1) * (heightAt?.(point) ?? 1);
     }
     return (point, normal) => {
       const at = space.inverse(point), pad = h / space.scale;

@@ -95,6 +95,27 @@ Guides: [guide](../headless-authoring.md#apply-a-look-map-a-gradient-or-edit-col
 Get the runnable example with `ink-studio graph describe color.look --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### color.paletteInput
+
+Convert a scene-linear image to straight sRGB bytes at the palette boundary using the project display view.
+
+Origin: headless.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `colorImage` | Required | {"layout":"Typed RGB or RGBA image"} |
+| Input | `exposure` | `number` | `0` | {"finite":true} |
+| Output | `value` | `raster` | — | {"layout":"Interleaved samples on a positive integer grid","channels":[1,4],"finite":true} |
+| Output | `report` | `record` | — | {"layout":"Plain named object"} |
+
+- Accepts a scene-linear color image. Applies the project OCIO view and normalizes the palette input to straight sRGB bytes.
+- A project using an HDR display must declare an SDR palette proof. Run palette.resolve after this node.
+
+Guides: [guide](../color-management.md#resolve-the-palette-after-viewing)
+
+Get the runnable example with `ink-studio graph describe color.paletteInput --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### color.posterize
 
 Assign pixels to the nearest ordered RGB swatch with an optional swatch alpha policy.

@@ -148,7 +148,7 @@
       sd: (x, y, z) => distance(root, x, y, z, Infinity) };
   }
 
-  function stampedSweep(brush, guide, step, blendRadius, pressureResponse, looseness, { orient, band, loosenessAt, width }) {
+  function stampedSweep(brush, guide, step, blendRadius, pressureResponse, looseness, { orient, band, loosenessAt, width, widthAt, bandAt }) {
     const api = P.paintLooseness, opacity = hasOpacity(pressureResponse);
     let rows, cost, spacing;
     if (brush?.kind === 'mark-profile') {
@@ -168,7 +168,8 @@
       if (scale <= 0) return [];
       const alpha = opacity ? responseAt(pressureResponse.opacity, pose.pressure) : 1;
       const aligned = orient ? orient(pose, dab.ordinal, family) : pose;
-      const placed = transform(bounds, { ...aligned, pressure: scale * size }, band, width);
+      const placed = transform(bounds, { ...aligned, pressure: scale * size },
+        bandAt?.(aligned.point)??band, widthAt?.(aligned.point)??width);
       return [{ bounds: placed.bounds, sample: (x, y, z) => placed.local(x, y, z, sd) * placed.metric,
         ...(opacityAt || alpha < 1 ? { alphaAt: opacityAt ? (x, y, z) => alpha * placed.local(x, y, z, opacityAt)
           : () => alpha } : {}) }];
@@ -233,7 +234,7 @@
         pressureResponse.opacity !== undefined && !range(pressureResponse.opacity, 1)))
       throw new TypeError('Pressure response needs [at zero, at one] ranges for width (0–4) or opacity (0–1)');
     const guide = guidePoses(poses, path);
-    if (brush?.kind === 'mark-profile' || looseness !== undefined || settings.orient || settings.band)
+    if (brush?.kind === 'mark-profile' || looseness !== undefined || settings.orient || settings.band || settings.bandAt)
       return stampedSweep(brush, guide, step, blendRadius, pressureResponse, P.paintLooseness.prepare(looseness), settings);
     const source = brushSource(brush);
     const authored = pressureResponse === undefined ? guide : guide.map(pose => ({
@@ -260,7 +261,7 @@
       stations.push(b);
     }
     const rows = stations.map(pose => {
-      const { bounds, local, metric } = transform(source.bounds, pose, undefined, settings.width);
+      const { bounds, local, metric } = transform(source.bounds, pose, undefined, settings.widthAt?.(pose.point)??settings.width);
       return { bounds, sample: (x, y, z) => local(x, y, z, source.sd) * metric };
     });
     // Blend neighboring stations independently so overlap never compounds with step density.
