@@ -82,6 +82,8 @@ const texturePointPorts = {
 };
 const systemVariableNames = oneOf('position','size','time','seed','context');
 const ports = {
+  'image.fxMap':{map:{constraints:{format:'ink-studio/fx-map',version:1,literal:true}},
+    width:dimension,height:dimension},
   'fn.valueProcessor': {program:{constraints:{format:'ink-studio/value-processor',version:1,precision:'f32',literal:true}}},
   'image.pixelProcessor':{width:dimension,height:dimension,program:{constraints:{
     format:'ink-studio/pixel-processor',version:1,precision:'f32',literal:true
@@ -767,6 +769,7 @@ const specialization = {
   'image.split': { field: 'channels', description: 'The literal selector keys become typed scalar output ports.' },
   'image.shuffle': { field: 'descriptor', description: 'The optional literal descriptor selects the output image type.' },
   'image.pack': { field: 'descriptor', description: 'The optional literal descriptor selects the output image type.' },
+  'image.fxMap': {field:'map',description:'A literal FX Map selects a color or gray output and declares named image and parameter inputs.'},
   'image.pixelProcessor': {field:'program',description:'The literal program declares image resource, uniform parameter and output sockets.'},
   'image.declare': { field: 'descriptor', description: 'A literal image intent selects the output type and the source raster contract.' },
   'array.map': { field: 'group', description: 'The group declares item, optional numeric index and value. Extra group inputs become ports.' },
@@ -779,6 +782,9 @@ const specialization = {
   'anim.retime': { field: 'group', description: 'Uses the group’s inputs and outputs and adds a timing record. The group cannot declare timing.' }
 };
 const notes = {
+  'image.fxMap': ['Quadrants subdivide local space. Iterate repeats in place with optional state and transforms. Switch visits one branch.',
+    'Image stamps use source, ignored, or luminance alpha with nearest or linear filtering in premultiplied linear light.',
+    'Coverage excludes the background. Stamp IDs identify the top contributor at the texel center and resolve to paths in layout.'],
   'fn.valueProcessor': ['A single uniform evaluation returns up to 16 named values.',
     'Use an i32 pixelCount port for derived dimensions, a unitScalar for a normalized score, or vec2 for a range.',
     'Shares the expressions, local scopes, and bounded control flow of the Pixel Processor. Time and seed are uniform.'],

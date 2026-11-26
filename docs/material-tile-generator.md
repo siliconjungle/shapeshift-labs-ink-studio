@@ -38,3 +38,5 @@ ink-studio graph run /tmp/ink-kiln-and-course/kiln-and-course.material.json --ou
 ```
 
 Open `index.html` to edit a seven-course terracotta bond. Switch to the course view to see where the same IDs cross the seams. Choose the seam crop to sample a small window centered on the corner where four periods meet.
+
+Use [FX Map](fx-map.md) for hierarchical stamps with local coordinates and repeated or conditional branches.

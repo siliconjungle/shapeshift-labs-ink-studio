@@ -209,7 +209,13 @@ const valueExample={format:'ink-studio/value-processor',version:1,precision:'f32
   body:[{let:'columns',value:['div',['param','requested'],['i32',8]]}],
   result:{value:['mul',['get','columns'],['i32',8]],
     size:['vec2',['toF32',['mul',['get','columns'],['i32',8]]],96]}};
+const quadrantExample={format:'ink-studio/fx-map',version:1,root:'divide',
+  patterns:{disc:{shape:{type:'disc',radius:.44}}},
+  nodes:{divide:{kind:'quadrant',children:'cell'},
+    cell:{kind:'iterate',body:'dab',count:2,step:[.05,.05],turn:7,limit:4},
+    dab:{kind:'quadrant',stamps:[{id:'ink',pattern:'disc',color:'#d68c71',size:[.8,.8],opacity:.7}]}}};
 const dynamic = {
+  'image.fxMap': {inputs:{map:quadrantExample,width:12,height:12,options:{seed:42}}},
   'fn.valueProcessor': {inputs:{program:valueExample}},
   'image.pixelProcessor': {nodes:{grain:{op:'image.uniform',inputs:{width:3,height:2,value:.375,descriptor:processorData}}},
     inputs:{width:3,height:2,program:processorExample,grain:link('grain')}},

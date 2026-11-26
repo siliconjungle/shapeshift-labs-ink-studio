@@ -272,6 +272,7 @@
     ...P.materialBase.operations,
     ...P.graphImages.operations,
     ...P.pixelProcessor.operations,
+    ...P.fxMap.operations,
     ...P.shapeLibrary.operations,
     ...P.pixelEffects.operations,
     ...P.signalRecovery.operations,

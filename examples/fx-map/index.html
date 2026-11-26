@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ember Brocade · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--bg:#1a202c;--panel:#272938;--edge:#514755;--paper:#f5e5d5;--muted:#c3b9c3;--sand:#eab38d;--mint:#b6d3c8}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:var(--paper);background:radial-gradient(ellipse at 35% -15%,#493848,transparent 63%),var(--bg);font:14px system-ui,sans-serif}
+main{max-width:1130px;margin:auto;padding:clamp(20px,3.5vw,43px) clamp(15px,3.4vw,41px) 25px}
+header{margin:0 0 18px}h1,h2,p{margin:0}
+h1{font:400 clamp(49px,6.3vw,81px)/.96 Georgia,serif;letter-spacing:-.068em;margin:4px 0 8px}
+h2{font:400 22px/1.1 Georgia,serif;letter-spacing:-.028em}
+p{color:var(--muted);line-height:1.44}
+.label,.readout,output{font:11px ui-monospace,monospace;letter-spacing:.052em}
+.label{color:var(--sand);text-transform:uppercase}.readout,output{color:var(--mint)}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(281px,354px);gap:13px;align-items:start}
+figure,aside,details{border:1px solid var(--edge);border-radius:9px;margin:0;background:var(--panel);overflow:hidden}
+.stage{position:relative;margin:auto;max-width:576px}
+canvas{image-rendering:pixelated}#weave{display:block;width:100%;height:auto;cursor:crosshair}
+#marker{position:absolute;width:11px;height:11px;border:1px solid #ffe9c1;box-shadow:0 0 0 1px #24324a;transform:translate(-50%,-50%);pointer-events:none}
+.frame{background:#181e31}
+figcaption{padding:10px 12px;display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+.toggle{display:flex;gap:4px;flex-wrap:wrap}.toggle button{font-size:11px;padding:4px 7px}
+.toggle button[aria-pressed=true]{color:#212931;background:var(--mint);border-color:var(--mint)}
+aside{padding:13px}
+aside section+section{margin-top:12px;padding-top:12px;border-top:1px solid var(--edge)}
+#controls{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;margin-top:9px}
+.field{display:grid;grid-template-columns:1fr auto;align-items:center;gap:3px 5px;min-width:0}
+.field label,.stats dt{color:var(--muted);font-size:11px}
+.field input,.field select{grid-column:1/-1;width:100%;min-width:0;margin:0}
+button,input,select,textarea{font:inherit;accent-color:var(--sand)}
+button,select{color:var(--paper);background:#383448;border:1px solid #65566b;border-radius:5px;cursor:pointer;padding:5px 8px}
+button:hover,select:hover{border-color:var(--sand)}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--mint);outline-offset:2px}
+.source{margin-top:9px;display:grid;grid-template-columns:45px 1fr;gap:8px;align-items:center}
+#petalPreview{width:42px;height:60px;object-fit:contain;background:#191f33;border-radius:5px}
+.source p{font-size:11px}.source select{font-size:11px;margin-top:4px}
+.stats{display:grid;gap:6px;margin:9px 0 0}
+.stats div{display:flex;gap:7px;justify-content:space-between}
+.stats dd{margin:0;text-align:right}.path{font-size:10px;overflow-wrap:anywhere;margin:8px 0 0}
+.actions{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;padding-top:10px;margin-top:12px;border-top:1px solid var(--edge)}
+.actions a,.actions button{font-size:11px}.actions a{color:var(--sand);text-underline-offset:3px}
+#save{color:#272131;background:var(--sand);border-color:var(--sand);font-weight:650}
+details{margin-top:12px;padding:9px 12px}summary{cursor:pointer}
+textarea{display:block;width:100%;margin:9px 0;min-height:250px;padding:8px;resize:vertical;color:var(--mint);background:#171c2b;border:1px solid var(--edge);font:12px/1.46 ui-monospace,monospace}
+.error{color:#ffb9ac;font-size:12px;margin-top:6px}.error:empty{display:none}
+@media(max-width:800px){.layout{grid-template-columns:1fr}header{margin-bottom:14px}main{padding-top:23px}}
+</style>
+</head>
+<body>
+<main>
+  <header><span class="label">Ink Studio · FX Map</span>
+    <h1>Ember Brocade</h1><p>Four quadrants share one bloom. Each iteration places a petal with its own position, rotation, and seed.</p>
+  </header>
+  <div class="layout">
+    <figure>
+      <div class="frame"><div class="stage">
+        <canvas id="weave" width="176" height="176" aria-label="Brocade preview. Click to inspect a stamp."></canvas>
+        <span id="marker" hidden></span>
+      </div></div>
+      <figcaption>
+        <div class="toggle" aria-label="Preview layer">
+          <button type="button" data-view="color" aria-pressed="true">Color</button>
+          <button type="button" data-view="coverage" aria-pressed="false">Coverage</button>
+          <button type="button" data-view="ids" aria-pressed="false">Stamp IDs</button>
+        </div>
+        <div class="toggle" aria-label="Tile repeat">
+          <button type="button" data-repeat="1" aria-pressed="true">One tile</button>
+          <button type="button" data-repeat="2" aria-pressed="false">2 × 2 repeat</button>
+        </div>
+      </figcaption>
+    </figure>
+    <aside aria-label="Pattern settings and stamp inspector">
+      <section>
+        <h2>Pattern settings</h2><div id="controls"></div>
+        <div class="source">
+          <canvas id="petalPreview" width="24" height="36" aria-label="Painted petal image input"></canvas>
+          <div><p><label for="filter">Painted image filter</label></p>
+            <select id="filter"><option value="nearest">Nearest</option><option value="linear">Linear</option><option value="image">Image default</option></select></div>
+        </div>
+      </section>
+      <section>
+        <h2>Stamp inspector</h2>
+        <dl class="stats">
+          <div><dt>Placed stamps</dt><dd class="readout" id="count"></dd></div>
+          <div><dt>Branch visits</dt><dd class="readout" id="visits"></dd></div>
+          <div><dt>Pattern</dt><dd class="readout" id="selected"></dd></div>
+          <div><dt>Depth · quadrant · iteration</dt><dd class="readout" id="scope"></dd></div>
+          <div><dt>Stamp seed</dt><dd class="readout" id="stampSeed"></dd></div>
+        </dl>
+        <p class="readout path" id="path"></p>
+        <p class="error" id="error" role="alert"></p>
+      </section>
+      <div class="actions">
+        <a href="ember-brocade.material.json" download>Original material</a>
+        <button id="reset" type="button">Reset</button>
+        <button id="save" type="button">Save material</button>
+      </div>
+    </aside>
+  </div>
+  <details>
+    <summary>Edit FX Map</summary>
+    <textarea id="code" aria-label="Editable FX Map JSON" spellcheck="false"></textarea>
+    <button id="apply" type="button">Apply map</button>
+    <p class="error" id="codeError" role="alert"></p>
+  </details>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="data.js"></script>
+<script src="live.js"></script>
+</body>
+</html>

@@ -421,6 +421,34 @@ Guides: [guide](../material-flood-region-maps.md)
 Get the runnable example with `ink-studio graph describe image.floodRegions --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.fxMap
+
+Draw hierarchical signed and image patterns with Quadrant, Iterate, Switch, and seeded local programs.
+
+Origin: toolkit.
+A literal FX Map selects a color or gray output and declares named image and parameter inputs.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `map` | `record` | Required | {"layout":"Plain named object","format":"ink-studio/fx-map","version":1,"literal":true} |
+| Input | `width` | `pixelCount` | Required | pixels · {"integer":true,"min":1,"max":8192} |
+| Input | `height` | `pixelCount` | Required | pixels · {"integer":true,"min":1,"max":8192} |
+| Input | `background` | `any` | `null` |  |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
+| Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
+| Output | `coverage` | `grayImage` | — | {"layout":"Typed unitless single-channel data or mask"} |
+| Output | `stampId` | `grayImage` | — | {"layout":"Typed unitless single-channel data or mask"} |
+| Output | `layout` | `record` | — | {"layout":"Plain named object"} |
+
+- Quadrants subdivide local space. Iterate repeats in place with optional state and transforms. Switch visits one branch.
+- Image stamps use source, ignored, or luminance alpha with nearest or linear filtering in premultiplied linear light.
+- Coverage excludes the background. Stamp IDs identify the top contributor at the texel center and resolve to paths in layout.
+
+Guides: [guide](../fx-map.md)
+
+Get the runnable example with `ink-studio graph describe image.fxMap --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.gaussianBlur
 
 Blur a typed material image with a separable Gaussian kernel.
