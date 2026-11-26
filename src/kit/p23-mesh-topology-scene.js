@@ -92,11 +92,12 @@
   }
 
   function prepareRow(object, row, evaluation, tilesets, frame, reviewMaterial) {
-    if (!TargetSelectors.name(object) || !fields(row, ['document', 'part', 'label', 'materials', 'bindings', 'bakes', 'modifiers', 'attachments', 'shapeKeys', 'pivot', 'provenance']) ||
+    if (!TargetSelectors.name(object) || !fields(row, ['document', 'part', 'label', 'materials', 'bindings', 'bakes', 'modifiers', 'attachments', 'shapeKeys', 'pivot', 'points', 'provenance']) ||
         (row.part !== undefined && !TargetSelectors.name(row.part)) || (row.label !== undefined && !name(row.label)))
       throw new TypeError('An editable scene mesh needs an object ID, document, and optional named part');
     if (row.pivot !== undefined && !meshPivot.xyz(row.pivot))
       throw new TypeError('An editable mesh pivot needs a finite local XYZ point');
+    const points = A.objectPoints.read(row.points);
     if (row.provenance !== undefined) A.scenePrefabs.checkProvenance(row.provenance, true);
     const cage = topology.create(row.document), document = evaluation?.document ?? cage;
     if (!document.faces.length) throw new RangeError('An editable scene mesh needs at least one polygon');
@@ -148,7 +149,7 @@
     const attachmentStatus=manifest && (attachmentBinding ? 'ready' : 'needs-transfer');
     const shapeKeyStatus=row.shapeKeys!==undefined && K.meshTopology.shapeKeys.status(document,row.shapeKeys);
     const shapeKeys=shapeKeyStatus==='ready' && K.meshTopology.shapeKeys.bind(mesh,row.shapeKeys,frame);
-    return { mesh, document, bindings: moved, resolvedBindings, bakes: [...bakes.values()],
+    return { mesh, document, ...(row.points && {points}), bindings: moved, resolvedBindings, bakes: [...bakes.values()],
       ...(tilesetMaterials.size && {tilesetMaterials,tilesetMaterialSources}), ...(skin && {skin}),
       ...(shapeKeyStatus && {shapeKeyStatus}), ...(shapeKeys && {shapeKeys}),
       ...(attachmentStatus && {attachmentStatus}), ...(attachmentBinding && {attachments:attachmentBinding}),

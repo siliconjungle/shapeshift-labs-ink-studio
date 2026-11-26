@@ -726,6 +726,36 @@
       return {before,candidate,bindings,library,report};
     }
 
+    function stageObjectPoints(request) {
+      const plan = A.objectPoints.plan(snapshot(),buildEnv,request), {report} = plan;
+      if (!report.canCommit || !report.changed || report.instance === undefined) return plan;
+      const source = {instance:report.instance,sourceEdits:plan.edits};
+      const edit = stagePrefabSourceEdit(source).report;
+      return {...plan,source,report:freeze({...report,canCommit:edit.canCommit,revision:edit.afterRevision,
+        conflicts:edit.conflicts,...(edit.problems && {problems:edit.problems})})};
+    }
+
+    function planObjectPoints(request) {
+      return stageObjectPoints(request).report;
+    }
+
+    function editObjectPoints(request) {
+      const {report,points,source} = stageObjectPoints(request);
+      if (!report.canCommit) throw Object.assign(new RangeError('Object point edits need review'),{report});
+      if (!report.changed) return report;
+      if (source) editPrefabSource(source);
+      else {
+        const {points:old,...row} = meshTopology(report.object);
+        const write = () => document.batchSession(() => {
+          document.setEnvironment({topologyMeshes:{[report.object]:null}});
+          document.setEnvironment({topologyMeshes:{[report.object]:{...row,...(Object.keys(points).length && {points})}}});
+        });
+        if (document.pending()) write();
+        else document.transact('Edit object points on '+report.object,write);
+      }
+      return report;
+    }
+
     function planPrefabSourceEdit(request) {
       return stagePrefabSourceEdit(request).report;
     }
@@ -1042,8 +1072,9 @@
       return document.pending() ? write() : document.transact('Set construction plane',write);
     }
 
-    function planConstructionOrigin(request, options) {
-      return A.constructionPlane.snapOrigin(snapshot(),request,options);
+    function planConstructionOrigin(request, {constructionPlane,...options} = {}) {
+      const scene = snapshot();
+      return A.constructionPlane.snapOrigin(constructionPlane ? {...scene,constructionPlane} : scene,request,options,buildEnv);
     }
 
     function snapConstructionOrigin(request, options) {
@@ -1323,7 +1354,8 @@
       const row = meshTopology(object, part), scene = snapshot();
       const report = K.meshTopology.planPivot(row.document, request, {
         pivot: row.pivot, mesh: meshSnapTargets(scene),
-        instance: target => A.sceneInstances.anchor(scene, buildEnv, target)
+        instance: target => A.sceneInstances.anchor(scene, buildEnv, target),
+        point: target => A.objectPoints.resolve(scene,buildEnv,target)
       });
       return freeze({ ...report, object, ...(row.part !== undefined && { part: row.part }) });
     }
@@ -1355,7 +1387,10 @@
           {constructionPlane:A.constructionPlane.forScene(scene).plane} : {}),
         ...(request?.space === 'camera' && request.camera === undefined && { camera: authoredTransformCamera() }),
         mesh: meshSnapTargets(scene),
-        socket: (instance, binding) => A.sceneInstances.assetSocket(scene, buildEnv, instance, binding),
+        socket: (instance,binding,instanceKind) => instanceKind === 'prefab' ?
+          A.sceneInstances.anchor(scene,buildEnv,{instance,instanceKind,anchor:binding}).target :
+          A.sceneInstances.assetSocket(scene,buildEnv,instance,binding),
+        point: target => A.objectPoints.resolve(scene,buildEnv,target),
         sdf:id=>meshSnapField(scene,id)
       });
       if (!plan.document.faces.length) throw new RangeError('A scene transform must retain at least one polygon');
@@ -1857,6 +1892,7 @@
       planPrefabReplacement, previewPrefabReplacement, replacePrefabs,
       planPrefabVariant, previewPrefabVariant, applyPrefabVariant,
       planPrefabSourceEdit, previewPrefabSourceEdit, editPrefabSource,
+      planObjectPoints, editObjectPoints,
       setPrefabInstance, planPrefabStamp, stampPrefab, planTilesetPrefab, promoteTilesetPrefab,
       planPrefabIsolation, previewPrefabIsolation, editIsolatedPrefab,
       planPrefabRefresh, refreshPrefabs,

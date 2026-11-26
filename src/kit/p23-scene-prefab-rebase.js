@@ -1,7 +1,7 @@
 /* Replay path overrides and merge retained mesh snapshots against a new prefab baseline. */
 const prefabSourceRebase = (function (K) {
   const A = K.authoring;
-  const tables = ['solids','parts','groups','motion','effects','topologyMeshes'];
+  const tables = ['solids','parts','groups','motion','effects','topologyMeshes','points'];
   const tableView = definition => Object.fromEntries(tables.map(table => [table,definition[table] ?? {}]));
   const record = value => value && Object.getPrototypeOf(value) === Object.prototype;
 
