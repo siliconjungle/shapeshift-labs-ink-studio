@@ -52,8 +52,9 @@ A rest projector names its receiving solid's stable ID in
 `anchor.object`. Include `anchor.part` to check the receiver's rig part.
 The projector uses the diorama's rest coordinates and follows the part's
 animated pose. The diorama binds its splat receivers automatically.
-Use native receiver bindings for mesh UV projectors or node and socket
-anchors.
+A diorama also binds editable mesh receivers by object and optional part ID.
+Mesh decals can use a rest projector or UV rectangle. Use native receiver
+bindings for node and socket anchors.
 
 In the pixel document, add a `decal-layer` destination and link it to an
 existing scene binding for the receiving solid. A surface layer can point
@@ -200,3 +201,59 @@ The padding is measured in mesh UV units on each side. Ink clips the
 decal to the writable portion of that rectangle and keeps the brush's
 original UV registration through clipping and skinning. The mesh's
 material selector is also available when multiple materials share UVs.
+
+## Place a decal on a named face
+
+A sign, repair, stain, or wear layer can name an editable mesh face in
+`anchor.face`. Ink clips the projected decal to that face, including when
+other faces share the same material and atlas crop. A decal is placed
+once across the receiver. The brick or trim under it can still use
+[`tileset wrap`](mesh-uv.md#repeat-a-crop-on-one-face).
+
+```json
+{
+  "id": "pump-label",
+  "kind": "lettering",
+  "anchor": {
+    "object": "cistern-wall",
+    "part": "masonry",
+    "face": "straight-run",
+    "at": [-0.4, 0.2, 0],
+    "normal": [0, 0, 1],
+    "size": [1.9, 0.75],
+    "depth": 0.1,
+    "bias": 0.008
+  },
+  "grid": [16, 10]
+}
+```
+
+Use the scene's rest coordinates for the projector, including the placed
+rest transform of a prefab receiver. A UV anchor with a face ID uses the
+receiver's authored UVs before texture repetition. A UV decal is useful
+when the receiver has a suitable chart. The rest projector is useful
+when the underlying atlas has a collapsed or shared UV axis.
+
+```sh
+ink-studio tileset decal sign.json --scene wall.json --image sign.png --preview review --view camera.json > receipt.json
+ink-studio tileset decal sign.json --scene wall.json --image sign.png --expect receipt.json --out signed-wall.json
+```
+
+Use an inline RGBA image or supply a PNG with `--image`. The preview
+writes `before.png`, `after.png`, and `depth-conflicts.png` at the same
+native resolution. The optional view file sets `w`, `h`, `t`, `camera`,
+`raw`, and `depthTolerance` in scene units. The report counts projected
+and visible pixels, identifies foreground blockers, and flags samples
+close to the depth of another layer. It also reports visible pixels
+with no opaque scene depth behind them. An expired or out-of-frame
+layer may have zero projected pixels.
+
+Place each layer with its own small bias. Overlaps follow scene depth,
+with the earlier decal taking an exact depth tie. An object in front
+can still hide the decal. The SDK exposes
+`editor.planSurfaceDecal(decal)` and `editor.addSurfaceDecal(decal)`.
+Each placement is one undo and works with the existing move, mask,
+replace, bake, and lifetime controls.
+
+Run `node examples/tileset-pick/wrapped-surface-decals-demo.cjs decal-review`
+for a layered pump wall with a foreground pipe and a coplanar test.

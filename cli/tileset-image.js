@@ -520,6 +520,7 @@ function command([action, ...args], options, toolkit, projectTexelsPerUnit, open
   if (action === 'select') return require('./tileset-component-selection.js').command(args,options,openEditor);
   if (action === 'select-atlas') return require('./tileset-component-selection.js').atlasCommand(args,options,openEditor);
   if (action === 'reskin') return reskinCommand(args,options,openEditor);
+  if (action === 'decal') return require('./tileset-decal.js').command(args,options,toolkit,openEditor,sceneOutput);
   if (action === 'wrap') return wrapCommand(args,options,openEditor);
   if (action === 'material') return require('./tileset-material.js').command(args,options,openEditor,sceneOutput);
   if (action === 'palette') return require('./tileset-palette.js').command(args,options,toolkit,openEditor,sceneOutput);

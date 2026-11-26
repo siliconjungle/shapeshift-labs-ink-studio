@@ -656,7 +656,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
               brickPipelines.set(atlas.sceneMeshId,createSurfacePipeline(gl,{...surfaceOptions,sharedShaders:brickShaders}));
             surface=brickPipelines.get(atlas.sceneMeshId);
           } else surface=surfacePipelines[i] ??= createSurfacePipeline(gl,surfaceOptions);
-          if (atlas.sceneMeshId) gl.depthFunc(gl.LESS);
+          if (atlas.sceneMeshId || atlas.surfaceDecalId) gl.depthFunc(gl.LESS);
           surface.draw(atlas, { ...surfaceFrame, historyFirst:options.historyOwner?.(atlas),
             samplingScale: options.u_materialGridScale ?? 1,
             geometryCode: options.surfaceFrame?.meshCodes?.get(atlas.sceneMeshId),
@@ -668,7 +668,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           }
           if (atlas.blockTextures && !surfaceFrame.index && !options.u_markPass)
             surfaceFrame.sceneryDeliveryFrame?.({id:atlas.sceneMeshId,...surface.stats});
-          if (atlas.sceneMeshId) gl.depthFunc(gl.LEQUAL);
+          if (atlas.sceneMeshId || atlas.surfaceDecalId) gl.depthFunc(gl.LEQUAL);
         }
         if (previews) {
           gl.depthFunc(gl.LESS);
