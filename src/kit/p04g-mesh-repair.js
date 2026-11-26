@@ -388,14 +388,7 @@ const retainedMeshRepair = (function (K) {
     return {...corner,uvPinned:corner.uvPinned || lost.uvPinned,uvPins:{...corner.uvPins,...lost.uvPins}};
   }
 
-  function joinTriangles(doc, op) {
-    const {uvs = 'match'} = op;
-    if (!record(op,['kind','edge','faces','selection','keep','uvs']) ||
-        ['edge','faces','selection'].filter(key=>op[key] !== undefined).length !== 1 ||
-        op.faces !== undefined && (!Array.isArray(op.faces) || op.faces.length !== 2) ||
-        !['match','keep'].includes(uvs))
-      throw new TypeError('Join triangles needs an edge, two face IDs, or a saved face selection, and a match or keep UV policy');
-    const g = incidence(doc), edge = joinEdge(doc,g,op,'Join triangles');
+  function prepareTriangleJoin(doc, g, edge, op, uvs) {
     const uses = [...edge.uses].sort((a,b)=>a.face < b.face ? -1 : 1);
     const faces = uses.map(use=>g.faces.get(use.face));
     if (faces.some(face=>face.corners.length !== 3) ||
@@ -432,7 +425,6 @@ const retainedMeshRepair = (function (K) {
     const ring = [...corners.slice(start),...corners.slice(0,start)];
     const diagonal = shared.map(({kept})=>kept.id).sort();
     const quad = {id:keep.id,material:keep.material,smoothingGroup:keep.smoothingGroup,corners:ring,diagonal};
-    const joined = topology.edit(doc,{faces:[quad],removeFaces:[remove.id]});
     const links = {faces:[{from:remove.id,to:keep.id}],
       corners:shared.map(({kept,lost})=>({from:lost.id,to:kept.id}))};
     const effect = {kind:'join-triangles',edge:edge.id,vertices:edge.vertices,keep:keep.id,removedFace:remove.id,
@@ -440,9 +432,22 @@ const retainedMeshRepair = (function (K) {
       triangles:faces.map(({id,corners,sourceQuad})=>({face:id,corners:corners.map(row=>row.id),...(sourceQuad && {sourceQuad})}))};
     if (uvs === 'match' && seams.length) {
       const message = 'Join triangles would remove a UV seam. Set uvs to keep to accept the previewed change';
-      return {document:doc,links:{},effect,blockers:[{code:'join-uv-seam',edge:edge.id,sets:seams,message}]};
+      return {quad,links,effect,blockers:[{code:'join-uv-seam',edge:edge.id,sets:seams,message}]};
     }
-    return {document:joined,links,effect};
+    return {quad,links,effect};
+  }
+
+  function joinTriangles(doc, op) {
+    const {uvs = 'match'} = op;
+    if (!record(op,['kind','edge','faces','selection','keep','uvs']) ||
+        ['edge','faces','selection'].filter(key=>op[key] !== undefined).length !== 1 ||
+        op.faces !== undefined && (!Array.isArray(op.faces) || op.faces.length !== 2) ||
+        !['match','keep'].includes(uvs))
+      throw new TypeError('Join triangles needs an edge, two face IDs, or a saved face selection, and a match or keep UV policy');
+    const g = incidence(doc), edge = joinEdge(doc,g,op,'Join triangles');
+    const {quad,links,effect,blockers} = prepareTriangleJoin(doc,g,edge,op,uvs);
+    const joined = topology.edit(doc,{faces:[quad],removeFaces:[effect.removedFace]});
+    return blockers ? {document:doc,links:{},effect,blockers} : {document:joined,links,effect};
   }
 
   function tileRegistration(g, faces, reference) {
@@ -610,5 +615,5 @@ const retainedMeshRepair = (function (K) {
   }
 
   K.meshTopology = Object.freeze({ ...topology, planRepair });
-  return { tileRegistration };
+  return { tileRegistration, prepareTriangleJoin };
 })(KIT);

@@ -33,6 +33,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createGraphHost` | function | `(config = {}, { kit = require('../index.js').load() } = {})` | [guide](../graph-media.md#optional-host-adapters), [source](../../cli/graph-host.js) |
 | `node.createGraphProject` | function | `(source, { kit=require('../index.js').load(), baseDir=process.cwd(), operations={}, adapters={}, sourceFile, workerPool, planAssets=false, instance, baseContext, requireOutputs=true }={})` | [guide](../editable-material-graph.md#open-edit-and-save), [guide](../headless-authoring.md#persistent-sessions), [guide](../material-base-settings.md#inherit-individual-settings), [source](../../cli/graph-project.js) |
 | `node.createGraphWorkers` | function | `(limit, { kit = require('../index.js').load(), timeoutMs = 60000 } = {})` | [source](../../cli/graph-workers.js) |
+| `node.createLightingRoom` | function | `(project, plan, {toolkit = require('../index.js').load(),run = {},baseDir = process.cwd(), onFile = () => {}} = {})` | [guide](../material-lighting-room.md), [source](../../cli/material-lighting-room.js) |
 | `node.createLinkedMaterialPreview` | function | `(project, source, { toolkit = require('../index.js').load(), baseDir = process.cwd(), run = {}, onFile = () => {} } = {})` | [guide](../linked-material-preview.md), [source](../../cli/linked-material-preview.js) |
 | `node.createMotionalCoverageHistory` | function | `()` | [guide](../motional-coverage.md#matched-sequence-review), [guide](../motional-coverage.md), [source](../../src/motional-coverage.js) |
 | `node.createPartMotionHistory` | function | `()` | [guide](../art-passes.md#part-motion-and-previous-depth), [source](../../cli/part-motion.js) |
@@ -147,10 +148,11 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.readGraphProject` | function | `(file, options={})` | [guide](../editable-material-graph.md#open-edit-and-save), [guide](../graph-clips.md#node-api), [guide](../headless-authoring.md#persistent-sessions), [guide](../material-base-settings.md#inherit-individual-settings), [source](../../cli/graph-project.js) |
 | `node.readHorizonBands` | function | `(file, dependency)` | [guide](../layered-horizon.md), [source](../../cli/horizon-bands.js) |
 | `node.readMaterialGraph` | function | `(file, options)` | [guide](../editable-material-graph.md#open-edit-and-save), [source](../../cli/material-graph.js) |
-| `node.readMesh` | function | `(file, { attributes = false, uvSet = 0, allUVSets = false } = {})` | [guide](../../README.md#importing-meshes), [source](../../index.js) |
+| `node.readMesh` | function | `(file, { attributes = false, uvSet = 0, allUVSets = false, onFile, strictTextures = false } = {})` | [guide](../../README.md#importing-meshes), [source](../../index.js) |
 | `node.readProjectBundle` | function | `(file)` | [source](../../cli/project-bundle.js) |
 | `node.readRasterAsset` | function | `(file)` | [guide](../headless-authoring.md#materials-artwork-and-animation-signals), [source](../../index.js) |
 | `node.readReferencePalette` | function | `(file, options)` | [guide](../palette-recipes.md#extract-a-reference-palette), [source](../../index.js) |
+| `node.readRoomEnvironment` | function | `(filename)` | [guide](../material-lighting-room.md), [source](../../cli/material-lighting-room.js) |
 | `node.readSceneAudio` | function | `(file, { kit = require('../index.js').load(), onFile = () => {}, recordedOnly = false, additions, maxPlanBytes, jointPriority, ...graphOptions } = {})` | [guide](../scene-audio.md#optional-video-adapter), [guide](../scene-audio.md), [source](../../cli/scene-audio.js) |
 | `node.readSceneReplay` | function | `(file)` | [source](../../cli/scene-replay.js) |
 | `node.readSceneryPack` | function | `(file)` | [guide](../compressed-scenery.md#load-into-a-scene-or-look), [source](../../cli/scenery-delivery.js) |
@@ -226,6 +228,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.writeCurveQualityReview` | function | `(world, options, directory)` | [source](../../cli/curve-quality-review.js) |
 | `node.writeDisplacementPreview` | function | `(project, filename, { directory, toolkit, run, sources = [] } = {})` | [guide](../material-displacement-preview.md), [source](../../cli/material-displacement-preview.js) |
 | `node.writeGltfAsset` | function | `(source, { out } = {})` | [source](../../cli/gltf-asset.js) |
+| `node.writeLightingRoom` | function | `(project, filename, {directory,toolkit,run,sources=[]}={})` | [guide](../material-lighting-room.md), [source](../../cli/material-lighting-room.js) |
 | `node.writeLinkedMaterialPreview` | function | `(project, planFile, { directory, toolkit, run, sources = [] } = {})` | [guide](../linked-material-preview.md), [source](../../cli/linked-material-preview.js) |
 | `node.writeMaterialGraph` | function | `(file, source, { baseDir = path.dirname(path.resolve(file)) } = {})` | [guide](../bitmap-resources.md#edit-without-rewiring), [guide](../editable-material-graph.md#open-edit-and-save), [source](../../cli/material-graph.js) |
 | `node.writeProjectBundle` | function | `(source, { out } = {})` | [source](../../cli/project-bundle.js) |
