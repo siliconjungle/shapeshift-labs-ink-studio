@@ -246,16 +246,19 @@ function points(rows=[]) {
 }
 
 async function prepare(plan,override,baseDir,toolkit,onFile) {
-  if(!fields(plan,['format','version','label','view','settings','camera','meshes','materials','environment','lights'])||
+  if(!fields(plan,['format','version','label','view','settings','camera','meshes','materials','environment','lights','metersPerUnit'])||
     plan.format!==format||plan.version!==1||!text(plan.label))
     throw new TypeError('Expected a labeled version 1 physical reference plan');
+  const metersPerUnit=plan.metersPerUnit??.01;
+  if (!range(metersPerUnit,1e-9,1e9)) throw new RangeError('Physical reference metersPerUnit must be between 1e-9 and 1e9');
   const options=settings(plan,override), lens=camera(plan.camera,options);
   const {width,height,bounces,seed}=options, lights=points(plan.lights);
   const identity=createHash('sha256').update(JSON.stringify([format,1,width,height,bounces,seed,lens.config,lights]));
+  if (metersPerUnit!==.01) identity.update(JSON.stringify({metersPerUnit}));
   const rows=meshRows(plan.meshes,baseDir);
   const materials=await loadMaterials(plan.materials,baseDir,toolkit,onFile,identity);
   const sky=environment(plan.environment,baseDir,onFile,identity);
   const triangles=construct(rows,materials,toolkit,onFile,identity), geometry=traceGeometry(triangles);
-  return {label:plan.label,options,lens,geometry,triangles,sky,lights,materials,signature:identity.digest('hex')};
+  return {label:plan.label,options,lens,geometry,triangles,sky,lights,materials,metersPerUnit,signature:identity.digest('hex')};
 }
 module.exports = { format,prepare };

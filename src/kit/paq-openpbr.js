@@ -1,4 +1,4 @@
-/* OpenPBR Surface core input contract for graph-authored materials. */
+/* OpenPBR Surface input contract for graph-authored materials. */
 (function (P) {
   const format = 'ink-studio/openpbr-core';
   const version = 1, spec = '1.1.2', colorSpace = 'srgb-linear';
@@ -9,7 +9,7 @@
   const scalar = value => field('float', value);
   const rgb = (value = 1, max = 1) => field('color3', [value, value, value], 'unitless', 0, max);
   const direction = field('vector3', null, 'unitless', -Infinity, Infinity);
-  const ior = value => field('float', value, 'unitless', Number.MIN_VALUE, Infinity);
+  const positive = value => field('float', value, 'unitless', Number.MIN_VALUE, Infinity);
   const inputs = Object.freeze({
     base_weight: scalar(1),
     base_color: rgb(.8),
@@ -19,13 +19,31 @@
     specular_color: rgb(),
     specular_roughness: scalar(.3),
     specular_roughness_anisotropy: scalar(0),
-    specular_ior: ior(1.5),
+    specular_ior: positive(1.5),
+    transmission_weight: scalar(0),
+    transmission_color: rgb(),
+    transmission_depth: field('float', 0, 'cm', 0, Infinity),
+    transmission_scatter: rgb(0),
+    transmission_scatter_anisotropy: field('float', 0, 'unitless', -1),
+    transmission_dispersion_scale: scalar(0),
+    transmission_dispersion_abbe_number: positive(20),
+    subsurface_weight: scalar(0),
+    subsurface_color: rgb(.8),
+    subsurface_radius: field('float', 1, 'cm', 0, Infinity),
+    subsurface_radius_scale: field('color3', [1, .5, .25]),
+    subsurface_scatter_anisotropy: field('float', 0, 'unitless', -1),
     coat_weight: scalar(0),
     coat_color: rgb(),
     coat_roughness: scalar(0),
     coat_roughness_anisotropy: scalar(0),
-    coat_ior: ior(1.6),
+    coat_ior: positive(1.6),
     coat_darkening: scalar(1),
+    fuzz_weight: scalar(0),
+    fuzz_color: rgb(),
+    fuzz_roughness: scalar(.5),
+    thin_film_weight: scalar(0),
+    thin_film_thickness: field('float', .5, 'um', 0, Infinity),
+    thin_film_ior: positive(1.4),
     emission_luminance: field('float', 0, 'nits', 0, Infinity),
     emission_color: rgb(1, Infinity),
     geometry_opacity: scalar(1),
@@ -63,7 +81,8 @@
       return image;
     }
     if (type === 'float' && layout === 'r' && ['mask', 'data'].includes(intent) &&
-        (units === definition.units || name === 'emission_luminance' && units === 'cd/m2')) {
+        (units === definition.units || name === 'emission_luminance' && units === 'cd/m2' ||
+          definition.units === 'um' && ['µm', 'μm'].includes(units))) {
       if (data.some(n => n / full < min || n / full > max))
         throw new RangeError('OpenPBR map samples outside the range for ' + name);
       return image;
@@ -84,7 +103,7 @@
     for (const value of [parameters, maps]) {
       if (!record(value)) throw new TypeError('OpenPBR inputs and maps must be named records');
       for (const key of Object.keys(value))
-        if (!Object.hasOwn(inputs, key)) throw new RangeError('Unknown OpenPBR core input ' + key);
+        if (!Object.hasOwn(inputs, key)) throw new RangeError('Unknown OpenPBR input ' + key);
     }
     const values = Object.fromEntries(Object.entries(inputs).map(([name, entry]) =>
       [name, Object.hasOwn(parameters, name) ? resolve(name, parameters[name]) : entry.default]));
@@ -96,7 +115,7 @@
   function read(packet) {
     if (!record(packet) || !record(packet.parameters) || !record(packet.maps) || packet.format !== format || packet.version !== version || packet.spec !== spec ||
         packet.colorSpace !== colorSpace || Object.keys(packet).length !== 6)
-      throw new TypeError('Expected an OpenPBR core packet in linear sRGB');
+      throw new TypeError('Expected an OpenPBR surface packet in linear sRGB');
     return define(packet.parameters, packet.maps);
   }
 
@@ -110,9 +129,9 @@
 
   const operations = Object.freeze({
     'material.openPbr': {
-      description: 'Author OpenPBR Surface core values and typed texture bindings using standard input names.',
+      description: 'Author OpenPBR Surface values and typed texture bindings using standard input names.',
       inputs: {
-        parameters: { type: 'record', default: empty, description: 'Uniform OpenPBR inputs in linear sRGB; emission luminance is in nits.' },
+        parameters: { type: 'record', default: empty, description: 'Uniform OpenPBR inputs in linear sRGB, with nits for emission, centimeters for depth and radius, and micrometers for film thickness.' },
         maps: { type: 'record', default: empty, description: 'Typed image bindings by standard input name. A map overrides the uniform value.' }
       },
       outputs: { value: 'record', report: 'record' },

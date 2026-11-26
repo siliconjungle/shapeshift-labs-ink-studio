@@ -248,6 +248,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   painting-cels export <scene.json> <clip.json> --out directory [--view view.json]   render held exposures and animated PNG
   painting-flow sample <scene.json> <plan.json> [--at seconds] --out scene.json   advect retained marks through a painted field
   painting-flow bake <scene.json> <plan.json> [--from seconds --fps 12 --frames 24 --playback once] --out clip.json   bake editable flow poses into cels
+  paint-throb apply <scene.json> <plan.json> --out scene.json   retain independent paint pulses and embed WAV envelopes
+  paint-throb inspect <scene.json> [--at seconds] [--pulse id]   sample paint pulse drivers and channel multipliers
   paint-evaporation apply <scene.json> <plan.json> [--at seconds] --out scene.json   bake a painted region into a particle layer
   paint-evaporation inspect <scene.json> [--at seconds] [--layer id]   report stored source, color, emission and release times
   painting-wave apply <scene.json> <plan.json> --out scene.json   retain a painted sway on marks or geometry

@@ -61,7 +61,7 @@ async function writePhysicalReference(filename, { directory, resume, toolkit=req
       variance:'variance.png',albedo:'albedo.png',normals:'normals.png',depth:'depth.png',linear:'raw.exr',accumulation:'accumulation.bin'}};
   const openPbr = Object.fromEntries([...scene.materials].flatMap(([name, material]) =>
     material.openPbr ? [[name, material.openPbr]] : []));
-  if (Object.keys(openPbr).length) report.openPbr = { whiteNits, materials: openPbr };
+  if (Object.keys(openPbr).length) report.openPbr = { whiteNits, metersPerUnit: scene.metersPerUnit, materials: openPbr };
   Assets.json(path.join(root,'report.json'),report);
   const template=fs.readFileSync(path.join(__dirname,'physical-reference.html'),'utf8');
   Assets.write(path.join(root,'index.html'),template.replace('/*PHYSICAL_REFERENCE*/',()=>JSON.stringify(report).replaceAll('<','\\u003c')));

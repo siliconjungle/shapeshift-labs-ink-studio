@@ -1,6 +1,6 @@
 # OpenPBR core
 
-Use `material.openPbr` in an [editable material graph](editable-material-graph.md). It produces a versioned surface packet and a report with the resolved defaults, authored values, units, and map descriptors. The input contract follows [OpenPBR Surface 1.1.2](https://academysoftwarefoundation.github.io/OpenPBR/). Ink declares linear sRGB as the RGB working space for the packet.
+Use `material.openPbr` in an [editable material graph](editable-material-graph.md). It produces a versioned surface packet and a report with the resolved defaults, authored values, units, and map descriptors. The input contract follows [OpenPBR Surface 1.1.2](https://academysoftwarefoundation.github.io/OpenPBR/). Ink declares linear sRGB as the RGB working space for the packet. The same node also supports [advanced lobes](openpbr-advanced.md).
 
 ## Inputs and defaults
 
@@ -54,4 +54,4 @@ ink-studio physical-reference /tmp/ink-storm-dial/finish.plan.json --out /tmp/in
 
 Open `/tmp/ink-storm-dial/index.html` to compare the coated, uncoated, flat, sealed, and unpowered variants. The source maps, editable graph, and render plans are written beside it. The [physical reference renderer](physical-reference.md) also writes a material receipt and linear EXR. Its emission scale maps 100 cd/m² of white to one unit of scene-linear radiance before coat and exposure. Intermediate opacity is sampled on camera, bounce, and shadow rays. The first-hit diagnostic passes use a 0.5 threshold for a stable guide. Thin-walled materials can emit on both sides.
 
-The reference renderer uses anisotropic GGX, rough diffuse scattering, and an approximate layered coat with absorption and darkening. The packet covers the base, specular, coat, emission, and geometry groups. Runtime raster and splat shading, MaterialX exchange, and additional OpenPBR lobes are outside this integration.
+The core inputs control the reference renderer’s base, anisotropic specular and coat, emission, and geometry. The renderer adds angle-dependent coat absorption and darkening. Use the [advanced lobes guide](openpbr-advanced.md) to author optical transmission, volume scattering, or thin-film and fuzz layers in the same packet.

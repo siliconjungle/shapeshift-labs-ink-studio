@@ -245,6 +245,7 @@
     paintings3d: 'list',
     paintingWaves: 'list',
     paintEvaporations: 'list',
+    paintThrobs: 'list',
     constructionPlane: 'obj',
     tilesets: 'obj',
     tilesetSources: 'obj',
@@ -493,8 +494,15 @@
       error.problems = [{ level: 'error', path: 'paintEvaporations', problem: error.message, hint: '' }];
       throw error;
     }
+    let throbs;
     try {
-      return { ...K.authoring.paintings3d.expand(spec, time, waves.paints), waves, evaporation };
+      throbs = K.procedural.paintThrob.scene(spec, time);
+    } catch (error) {
+      error.problems = [{ level: 'error', path: 'paintThrobs', problem: error.message, hint: '' }];
+      throw error;
+    }
+    try {
+      return { ...K.authoring.paintings3d.expand(spec, time, waves.paints, throbs.targets), waves, evaporation, throbs };
     } catch (error) {
       error.problems = [{ level: 'error', path: 'paintings3d', problem: error.message, hint: '' }];
       throw error;
@@ -1818,7 +1826,7 @@
       e.problems = problems;
       throw e;
     }
-    const review = env.assemblyReview, { dataInputs, anchors, layers, looseness, boils, reports, waves, evaporation, customProperties } = resolved;
+    const review = env.assemblyReview, { dataInputs, anchors, layers, looseness, boils, reports, waves, evaporation, throbs, customProperties } = resolved;
     const hidden = modelOptions?.[brushField] ? undefined : resolved.hidden;
     const visibleEffect = (_,index) => !hidden?.effects.has(index);
     let { spec } = resolved;
@@ -2224,14 +2232,17 @@
         else if (k === 'torus') p = S.torus(s.at, s.R, s.r, m, baseOptions);
         else if (k === 'sweep') {
           const relief = guard?.relief, volume = relief?.mode === 'volume', recess = volume && relief.height < 0;
+          const pulse=throbs.targets.get(s.id), coverageScale=pulse?.coverage??1;
           const band = volume && (recess ? [relief.height, relief.seat] : [-relief.seat, relief.height]);
           const sweep = K.procedural.shapeSweeps.prepare(style ? { ...s, looseness: style } : s,
-            { orient, band, loosenessAt: guard?.loosenessAt });
+            { orient, band, width: pulse?.width, loosenessAt: guard?.loosenessAt });
           const boil = boils.get(s.id);
           const form = boil ? K.procedural.paintBoil.apply(sweep, boil.plan, s.id, boil.drawing) : sweep;
-          const paintOverlay = guard?.pigmentOnly || recess || !volume && (style || form.opacityAt) &&
+          const opacity=coverageScale===1 ? form.opacityAt :
+            ((x,y,z)=>(form.opacityAt?.(x,y,z)??1)*coverageScale);
+          const paintOverlay = guard?.pigmentOnly || recess || !volume && (style || opacity) &&
             !held && !s.hold && !s.carve && !s.ghost && !s.group && !modifiers.length;
-          const material = form.opacityAt ? { ...m, opacityAt: form.opacityAt } : m;
+          const material = opacity ? { ...m, opacityAt: opacity } : m;
           const removed = evaporation.targets.get(s.id);
           const placement = removed && affineSolidSpace(s.restAffine);
           const remaining = removed && (point => removed(point) > 0 ? 1 : 0);
@@ -2242,7 +2253,7 @@
               if (local.some((n, i) => n < form.bounds.min[i] - 1e-6 || n > form.bounds.max[i] + 1e-6)) return;
               if (form.sd(...local) > 1e-6 || remaining && !remaining(point)) return;
               if (guard.accepts && !guard.accepts(point, normal)) return;
-              return form.opacityAt?.(...local) ?? 1;
+              return opacity?.(...local) ?? 1;
             };
             if (guard.finish) S.addPaintFinish(guard.entity, s.id, guard.finish, coverage, guard.finishMask);
             else if (relief?.tint !== false) {
@@ -2532,7 +2543,7 @@
       return { meshes, joints, animations, ...(helpers.length && { helpers }) };
     }
     const moving = spec.solids.filter(s => s.part), authoredBounds = new Map();
-    const staticBake = cache && !env.paintEvaporationCapture && !evaporation.layers.length && !anchors.size && !looseness.size && !boils.size && !waves.geometry.size &&
+    const staticBake = cache && !env.paintEvaporationCapture && !evaporation.layers.length && !throbs.targets.size && !anchors.size && !looseness.size && !boils.size && !waves.geometry.size &&
       !moving.length && !effects.length && !spec.tap && !marks &&
       !presentation.breakables && !S.keepRenderSdf && !st0.finish.paint && !globalThis.INK_DECAL_NEXT &&
       !globalThis.INK_RETAIN_RENDER_SDF && !globalThis.INK_RETAIN_REFERENCE_SDF && !globalThis.INK_RAMPS;
@@ -2634,6 +2645,7 @@
     };
     if (waves.reports.length) W.paintWaveReport = waves.reports;
     if (waves.animated) W.paintWave = env.parameterInputs?.time ?? 0;
+    if (throbs.targets.size) W.paintThrob={at:throbs.at,key:throbs.key,duration:throbs.duration};
     if (paintParticles.length) {
       const plans=paintParticles.map(row=>row.plan), at=time=>JSON.stringify(plans.map(plan=>plan.key(time)));
       W.paintEvaporation={at,key:at(resolved.inputs?.time ?? env.parameterInputs?.time ?? 0),
