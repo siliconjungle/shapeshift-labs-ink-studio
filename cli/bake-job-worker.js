@@ -13,6 +13,7 @@ const Occlusion=require('./bake-job-occlusion.js');
 const Thickness=require('./thickness.js');
 const Curvature=require('./bake-job-curvature.js');
 const Attributes=require('./bake-job-attributes.js');
+const Transfer=require('./bake-job-transfer.js');
 const Geometry=require('./geometry-masks.js');
 const UV=require('./material-preview-geometry.js');
 const bake=require('./glb-bake.js');
@@ -28,6 +29,10 @@ const emit=row=>process.stdout.write(JSON.stringify(row)+'\n');
 const directory=(root,...parts)=>path.join(root,...parts);
 
 function interpretation(row) {
+  if(row.output?.kind==='texture-transfer') {
+    const {intent,colorSpace,alpha}=row.output;
+    return {intent,...(intent==='color'&&{colorSpace,alpha})};
+  }
   if(row.output?.kind==='normal') {
     const {space,orientation}=row.output;
     return {intent:'normal',normalSpace:space,...(orientation&&{normalOrientation:orientation})};
@@ -56,7 +61,8 @@ function sameInterpretation(prior,fresh) {
     JSON.stringify(prior.valueRange??null)===JSON.stringify(fresh.valueRange??null)&&
     (prior.vectorDomain??'signed-unit')===(fresh.vectorDomain??'signed-unit')&&
     (!fresh.sampling||(prior.sampling??'nearest')===fresh.sampling);
-  return intent!=='color'||!prior.colorSpace||prior.colorSpace===fresh.colorSpace;
+  return intent!=='color'||(!prior.colorSpace||prior.colorSpace===fresh.colorSpace)&&
+    (!fresh.alpha||(prior.alpha??'straight')===fresh.alpha);
 }
 
 function refreshGraph(report,refresh,output,K) {
@@ -186,11 +192,12 @@ function renderOcclusion(tasks,scene,K) {
   };
 }
 
-function renderTasks(tasks,model,receivers,normalInputs,onInput,K) {
+function renderTasks(tasks,model,receivers,{normalInputs,textureInputs},onInput,K) {
   const shared=new Map(), details=new Map(), heightTasks=new Map(), heightGroups=new Map();
   const occlusion=receivers&&renderOcclusion(tasks,Occlusion.scene(model,receivers,K),K);
   const curvature=Curvature.render(tasks,normalInputs,onInput,K);
   const attributes=Attributes.render(tasks,model,K);
+  const transfer=Transfer.render(tasks,textureInputs,onInput,K);
   const rasterKey=({authored,tile,settings})=>JSON.stringify([authored.id,tile.tile,settings.size,settings.padding]);
   for(const task of tasks) {
     const {map,settings,authored}=task, key=rasterKey(task);
@@ -222,6 +229,7 @@ function renderTasks(tasks,model,receivers,normalInputs,onInput,K) {
     if(settings.occlusion)return occlusion(task);
     if(settings.curvature)return curvature(task);
     if(settings.attribute)return attributes(task);
+    if(settings.transfer)return transfer(task);
     if(settings.geometry)return renderGeometry(task,K);
     if(map==='height') {
       if(!heightGroups.has(authored.id)) {
@@ -248,14 +256,15 @@ function main(request,base) {
   const library=Projection.sceneLibrary(plan,model,directory(base,'projection-textures'),record);
   if(request.mode==='inspect') {
     Assets.json(directory(base,'inspection.json'),{label:plan.label,preset:plan.preset,targets:plan.targets,
-      catalog:Meshes.catalog(model),refresh:plan.refresh?.bindings??[],projectionCatalog:library.describe(),normalInputs:[...plan.normalInputs.keys()]});
+      catalog:Meshes.catalog(model),refresh:plan.refresh?.bindings??[],projectionCatalog:library.describe(),normalInputs:[...plan.normalInputs.keys()],textureInputs:[...plan.textureInputs.keys()]});
     return;
   }
   const out=path.dirname(base), {tasks:pending,receivers}=steps(plan,model,library,K,record);
   const report={format:'ink-studio/bake-job-report',version:1,label:plan.label,preset:plan.preset,targets:plan.targets,
-    catalog:Meshes.catalog(model),maps:[],inputs:[],...(plan.normalInputs.size&&{normalInputs:[...plan.normalInputs.keys()]})};
+    catalog:Meshes.catalog(model),maps:[],inputs:[],...(plan.normalInputs.size&&{normalInputs:[...plan.normalInputs.keys()]}),
+    ...(plan.textureInputs.size&&{textureInputs:[...plan.textureInputs.keys()]})};
   emit({event:'planned',completed:0,total:pending.length});
-  const render=renderTasks(pending,model,receivers,plan.normalInputs,record,K);
+  const render=renderTasks(pending,model,receivers,plan,record,K);
   for(const [i,task] of pending.entries()) {
     const {map,tile,selection,authored,settings}=task;
     const detail={map,target:authored.id,tile:tile.label,total:pending.length};
