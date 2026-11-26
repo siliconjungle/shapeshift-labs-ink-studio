@@ -31,6 +31,10 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   volume combine <left.json> <right.json> <request.json> [--out file.json] [--report file.json]   combine aligned fields over active sites
   volume resample <volume.json> <request.json> [--out file.json] [--report file.json]   regrid selected fields within a cell budget
   volume export <volume.json> <request.json> [--out file.json] [--report file.json]   export sparse, dense, slice or isosurface data
+  terrain-set inspect <recipe.json> [--out file.json]   report terrain inputs, route controls and revision
+  terrain-set edit <recipe.json> <request.json> [--out recipe.json] [--report file.json]   edit routes, masks and instance replacements
+  terrain-set bake <recipe.json> --out directory   stitch and erode tiles, build populations, and publish chunk receipts
+  terrain-set stream <manifest.json> <views.json> [--out file.json]   load verified chunks under a byte budget and select instance LODs
   ornament <pattern.json> [--format pigment|relief|tiles] [--out file]   export a wallpaper or frieze pattern
   palette plot <plot.json> [--space rgb|oklab] [--orbit degrees] [--format png|data]   render a palette in 3D
   palette extract <reference.png> [--size 32] [--alpha visible|opaque|all] [--out report.json]
