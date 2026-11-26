@@ -43,8 +43,10 @@ function validResult(result, mode) {
       typeof row.sha256 === 'string' && /^[a-f0-9]{64}$/.test(row.sha256));
   }
   function report(value, kind) {
-    return value?.version === 1 && (kind === 'clip' ? value.format === 'ink-studio/graph-clip' :
-      value.format === 'ink-studio/graph-report' && value.kind === kind);
+    if (value?.version !== 1) return false;
+    if (kind === 'clip') return value.format === 'ink-studio/graph-clip';
+    if (kind === 'wardrobe') return value.format === 'ink-studio/wardrobe-bake';
+    return value.format === 'ink-studio/graph-report' && value.kind === kind;
   }
   return report(result?.report, mode) && (mode === 'batch' ? Array.isArray(result.results) &&
     result.results.every(row => typeof row?.id === 'string' && /^[a-z][\w.-]{0,99}$/i.test(row.id) &&

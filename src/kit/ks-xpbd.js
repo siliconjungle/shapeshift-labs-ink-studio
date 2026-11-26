@@ -146,12 +146,12 @@
           return n++;
         },
         /* tear: if given, the link breaks for good when it is stretched past tear times its length (cloth that rips, a rope that
-           snaps); sim.torn counts the broken, and o.onTear(index) hears of each. Gives back the link's index */
-        link(i, j, comp, tear, guards) {
+           snaps). A supplied rest length lets a stitch pull loose panel edges together. */
+        link(i, j, comp, tear, guards, restLength) {
           links.push([
             i,
             j,
-            Math.hypot(X[i * 3] - X[j * 3], X[i * 3 + 1] - X[j * 3 + 1], X[i * 3 + 2] - X[j * 3 + 2]),
+            restLength ?? Math.hypot(X[i * 3] - X[j * 3], X[i * 3 + 1] - X[j * 3 + 1], X[i * 3 + 2] - X[j * 3 + 2]),
             comp || 0,
             tear || 0,
             0,
@@ -372,6 +372,7 @@
                 X[k] -= (X[k] - P[k]) * fric;
                 X[k + 2] -= (X[k + 2] - P[k + 2]) * fric;
               }
+            o.projectBatch?.(X, P, W, ts);
             for (let i = 0; i < n; i++) {
               if (!W[i]) continue;
               const k = i * 3;
