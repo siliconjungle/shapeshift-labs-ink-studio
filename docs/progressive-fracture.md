@@ -14,7 +14,8 @@ ink-studio sim render stormglass/checkpoints/56.json --colored --out fracture.pn
 ```
 
 Omit `--out` to print JSON. A run directory contains the preparation, compiled
-world, native recording, sampled `report.json`, and requested native
+world, native recording, sampled `report.json` with every failure and contact
+tick, and requested native
 checkpoints. Use the recording alone to replay from the beginning, or resume a
 checkpoint with `ink-studio sim resume checkpoint.json --ticks 32`. Checkpoints
 carry the source plan, surviving islands, material history, and pending

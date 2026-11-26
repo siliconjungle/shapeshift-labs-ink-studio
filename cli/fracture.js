@@ -47,19 +47,20 @@ function open(kit,source){
 
 function execute(input,{artifacts=false}={}){
   const {run,world,prepared,ticks,sampleEvery,checkpoints}=input, captures=[], events=[], output=[];
-  const fields=['pieces','constraints','contacts','contact-limited'];
   for(let tick=0;tick<=ticks;tick++){
     if(tick)run.step();
     const changes=run.events.filter(row=>row.kind.startsWith('fracture-'));
     events.push(...changes);
     if(checkpoints.has(tick)&&artifacts)output.push({file:'checkpoints/'+tick+'.json',document:run.checkpoint()});
-    if(tick%sampleEvery!==0&&tick!==ticks&&!checkpoints.has(tick)&&!changes.length)continue;
-    const query=run.query(), values=Object.fromEntries(fields.map(field=>[field,query.probe('failure/'+field).value]));
-    const islands=query.probe('failure/islands').value;
+    const query=run.query(), inspect=field=>query.probe('failure/'+field).value;
+    const contacts=inspect('contacts'), limited=inspect('contact-limited');
+    if(tick%sampleEvery!==0&&tick!==ticks&&!checkpoints.has(tick)&&!changes.length&&!contacts.length&&!limited)continue;
+    const islands=inspect('islands');
     const groups=Object.values(islands).map(({id,parent,members,body})=>({
       id,parent,members,mass:body.mass,center:body.position,velocity:body.velocity,angular:body.angular
     }));
-    captures.push({tick,time:tick*world.dt,groups,...values});
+    captures.push({tick,time:tick*world.dt,groups,pieces:inspect('pieces'),constraints:inspect('constraints'),
+      contacts,'contact-limited':limited});
   }
   const last=captures.at(-1), mass=Object.values(last.pieces).reduce((total,row)=>total+row.mass,0);
   const report={format:reportFormat,version:1,id:prepared.id,dt:world.dt,ticks,

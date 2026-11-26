@@ -72,7 +72,7 @@ test('headless commands emit portable world, deterministic captures and verified
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'ink-fracture-'));
   try {
     const planFile=path.join(directory,'plan.json'), out=path.join(directory,'bake');
-    const sim={...source.simulation,ticks:42,sampleEvery:5,checkpoints:[32]};
+    const sim={...source.simulation,ticks:61,sampleEvery:7,checkpoints:[32]};
     fs.writeFileSync(planFile,JSON.stringify({...source,simulation:sim}));
     const prepared=JSON.parse(native('fracture','prepare',planFile));
     const world=JSON.parse(native('fracture','compile',planFile));
@@ -81,7 +81,8 @@ test('headless commands emit portable world, deterministic captures and verified
     assert.deepEqual(prepared,read('preparation.json'));
     assert.deepEqual(world,read('fracture.world.json'));
     const report=read('report.json');
-    assert(report.captures.some(row=>row.tick%5!==0&&row.tick!==32&&row.tick!==42));
+    assert(report.captures.some(row=>row.tick%7!==0&&row.tick!==32&&row.tick!==61));
+    assert(report.captures.some(row=>row.tick%7!==0&&row.tick!==61&&row.contacts.length));
     assert.deepEqual(JSON.parse(native('fracture','run',planFile)),report);
     assert.equal(JSON.parse(native('sim','verify',path.join(out,'fracture.run.json'))).status,'verified');
     const planText=fs.readFileSync(planFile,'utf8');
