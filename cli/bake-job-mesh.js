@@ -9,7 +9,7 @@ const clamp=n=>Math.min(1,Math.max(0,n));
 const linear=n=>n<=.04045?n/12.92:((n+.055)/1.055)**2.4;
 const slot=(model,p)=>p.material===null?'Unassigned':model.materials[p.material].name;
 function load(filename,directory,onInput) {
-  const model=fromGltf(filename,directory,onInput);
+  const model=fromGltf(filename,directory,onInput,{bakeAttributes:true});
   if(!model.meshes.length)throw new RangeError('No meshes in the scene');
   return model;
 }
@@ -18,16 +18,36 @@ function catalog(model) {
     submeshes:mesh.parts.map((p,index)=>({index,slot:slot(model,p),triangles:p.indices.length/3,uvSets:Object.keys(p.uv).map(Number)}))}));
 }
 
-function meshFor(model,selection,K,images) {
-  const {V}=K, matches=model.meshes.map((mesh,i)=>typeof selection.mesh==='number'?i===selection.mesh:mesh.name===selection.mesh);
-  if(matches.filter(Boolean).length!==1)throw new RangeError('Choose one unique mesh for '+selection.id);
-  const index=matches.indexOf(true), asset=model.meshes[index], {uvSet}=selection;
-  if(selection.submeshes?.some(n=>!asset.parts[n])||selection.slots?.some(name=>!asset.parts.some(p=>slot(model,p)===name)))
-    throw new RangeError('Unknown submesh or slot in '+selection.id);
-  const selected=asset.parts.map((part,i)=>(!selection.submeshes||selection.submeshes.includes(i))&&
-    (!selection.slots||selection.slots.includes(slot(model,part))));
-  if(!selected.some(Boolean))throw new RangeError('The submesh and slot filters select no faces in '+selection.id);
-  if(asset.parts.some((p,i)=>selected[i]&&!p.uv[uvSet]))throw new RangeError('Selected submesh lacks TEXCOORD_'+uvSet+' in '+selection.id);
+function chooseMesh(model,selector,label) {
+  const matches=model.meshes.map((mesh,i)=>typeof selector==='number'?i===selector:mesh.name===selector);
+  if(matches.filter(Boolean).length!==1)throw new RangeError('Choose one unique mesh for '+label);
+  return matches.indexOf(true);
+}
+
+function sceneMesh(model,index,{V},instance) {
+  const asset=model.meshes[index], instances=model.nodes.filter(node=>node.mesh===index);
+  if(instance===undefined&&instances.length>1)throw new RangeError('Projection needs one scene placement for mesh '+asset.name);
+  const matrix=(instance??instances[0])?.world;
+  if(!matrix)return asset;
+  const [x,y,z]=[0,4,8].map(i=>matrix.slice(i,i+3));
+  const origin=matrix.slice(12,15), dual=[V.cross(y,z),V.cross(z,x),V.cross(x,y)];
+  const determinant=V.dot(x,dual[0]), sign=Math.sign(determinant);
+  if(!Number.isFinite(determinant)||Math.abs(determinant)<=V.len(x)*V.len(y)*V.len(z)*1e-12)
+    throw new RangeError('Projection needs a nonsingular transform on '+asset.name);
+  const columns=[x,y,z], apply=(a,b,c,axes)=>V.add(V.add(V.mul(axes[0],a),V.mul(axes[1],b)),V.mul(axes[2],c));
+  return {...asset,parts:asset.parts.map(part=>{
+    const position=[], normals=[], indices=part.indices.slice();
+    for(let i=0;i<part.position.length;i+=3) {
+      position.push(...V.add(origin,apply(...part.position.slice(i,i+3),columns)));
+      if(part.normal)normals.push(...V.norm(V.mul(apply(...part.normal.slice(i,i+3),dual),sign)));
+    }
+    if(sign<0)for(let i=0;i<indices.length;i+=3)[indices[i+1],indices[i+2]]=[indices[i+2],indices[i+1]];
+    return {...part,position,indices,...(part.normal&&{normal:normals})};
+  })};
+}
+
+function surfaces(model,asset,selected,K,images) {
+  const {V}=K;
   const points=[], faces=[], geometryNormals=[], metadata=[];
   function texture(row) {
     if(!row)return null;
@@ -53,12 +73,21 @@ function meshFor(model,selection,K,images) {
       const normal=V.norm(cross), normals=part.normal?vertices.map(i=>vector(part.normal,i,3)):[normal,normal,normal];
       const charts=Object.fromEntries(Object.entries(part.uv).map(([set,flat])=>[set,vertices.map(i=>vector(flat,i,2))]));
       const d00=V.dot(ab,ab),d01=V.dot(ab,ac),d11=V.dot(ac,ac), denominator=d00*d11-d01*d01;
-      const row={i,part,selected:selected[i],normal,normals,points:[a,b,c],charts};
-      row.sample=(point,n)=>{
+      const row={i,vertices,selected:selected[i],normal,cross,normals,points:[a,b,c],charts};
+      row.weights=point=>{
         const ap=V.sub(point,a), e0=V.dot(ap,ab), e1=V.dot(ap,ac);
         const u=(d11*e0-d01*e1)/denominator, v=(d00*e1-d01*e0)/denominator;
+        return [1-u-v,u,v];
+      };
+      row.sample=(point,n)=>{
+        const weights=row.weights(point), [,u,v]=weights;
         const value={color:paint?.color.slice(0,3)??[.45,.45,.45],roughness:paint?.roughness??.8,
           metallic:paint?.metallic??0,emission:paint?.emission??[0,0,0],opacity:paint?.alphaMode==='OPAQUE'?1:paint?.color[3]??1};
+        if(part.color) {
+          const tint=lane=>vertices.reduce((sum,id,i)=>sum+weights[i]*part.color[id*part.colorLanes+lane],0);
+          value.color=value.color.map((n,i)=>n*clamp(tint(i)));
+          if(part.colorLanes===4&&paint?.alphaMode!=='OPAQUE')value.opacity*=clamp(tint(3));
+        }
         const rgba=[0,0,0,0];
         for(const [name,ref,read] of maps) {
           const [ta,tb,tc]=charts[ref.uv], x=ta[0]+u*(tb[0]-ta[0])+v*(tc[0]-ta[0]), y=ta[1]+u*(tb[1]-ta[1])+v*(tc[1]-ta[1]);
@@ -83,6 +112,19 @@ function meshFor(model,selection,K,images) {
       metadata.push(row);
     }
   }
+  return {points,faces,geometryNormals,metadata};
+}
+
+function meshFor(model,selection,K,images) {
+  const {V}=K,index=chooseMesh(model,selection.mesh,selection.id), {uvSet}=selection;
+  const asset=selection.projection?sceneMesh(model,index,K):model.meshes[index];
+  if(selection.submeshes?.some(n=>!asset.parts[n])||selection.slots?.some(name=>!asset.parts.some(p=>slot(model,p)===name)))
+    throw new RangeError('Unknown submesh or slot in '+selection.id);
+  const selected=asset.parts.map((part,i)=>(!selection.submeshes||selection.submeshes.includes(i))&&
+    (!selection.slots||selection.slots.includes(slot(model,part))));
+  if(!selected.some(Boolean))throw new RangeError('The submesh and slot filters select no faces in '+selection.id);
+  if(asset.parts.some((p,i)=>selected[i]&&!p.uv[uvSet]))throw new RangeError('Selected submesh lacks TEXCOORD_'+uvSet+' in '+selection.id);
+  const geometry=surfaces(model,asset,selected,K,images), {metadata}=geometry;
   const tiles=selection.tiles.map(tile=>{
     const [x,y]=tile, points=[],faces=[],uvs=[],normals=[],source=[];
     for(const [i,row] of metadata.entries()) {
@@ -104,6 +146,6 @@ function meshFor(model,selection,K,images) {
     return {tile,label:UV.tileLabel(tile),name:asset.name,mesh:{points,materials:[{}],paintedOpacity:true,
       sampleSurface:(p,n,f)=>metadata[source[f]].sample(p,n)},faces,uvs,normals,source};
   });
-  return {index,mesh:asset.name,points,faces,geometryNormals,tiles};
+  return {index,mesh:asset.name,asset,selected,...geometry,tiles};
 }
-module.exports={load,catalog,meshFor};
+module.exports={load,catalog,chooseMesh,sceneMesh,surfaces,meshFor};

@@ -2,9 +2,11 @@ const fs=require('node:fs');
 const path=require('node:path');
 const Geometry=require('./geometry-masks.js');
 const UV=require('./material-preview-geometry.js');
+const {maps:projectionMaps}=require('./bake-job-projection.js');
 
 const format='ink-studio/bake-job', presetFormat='ink-studio/bake-preset';
-const names=Object.freeze(['pigment','normal','roughness','metalness','emission','opacity','coverage',...Geometry.names]);
+const names=Object.freeze(['pigment','normal','roughness','metalness','emission','opacity','coverage',...Geometry.names,
+  ...projectionMaps]);
 const geometryFields=['up','samples','cavityRadius','exposureDistance','thicknessScale','rayBias'];
 const mapGeometry={slope:['up'],cavity:['samples','cavityRadius','rayBias'],
   exposure:['samples','exposureDistance','rayBias'],thickness:['thicknessScale','rayBias'],'thickness-valid':['rayBias']};
@@ -14,6 +16,9 @@ const text=value=>typeof value==='string'&&value.trim()&&value.length<=140&&!/[\
 const file=value=>typeof value==='string'&&value.trim()&&value.length<=4096&&!value.includes('\0');
 const fields=(o,keys)=>o&&Object.getPrototypeOf(o)===Object.prototype&&Object.keys(o).every(key=>keys.includes(key));
 const json=filename=>JSON.parse(fs.readFileSync(filename,'utf8'));
+const mesh=value=>integer(value,0,2047)||text(value);
+const meshFile=value=>file(value)&&/\.(glb|gltf)$/i.test(value);
+const distance=value=>Number.isFinite(value)&&value>=0&&value<=1e5;
 
 function coord(value) {
   if(integer(value,1001,9999)) return [(value-1001)%10,Math.floor((value-1001)/10)];
@@ -49,12 +54,68 @@ function defaults() {
   return preset({format:presetFormat,version:1,label:'Material maps',defaults:{size:128,padding:3},
     maps:names.map(id=>({id,enabled:['pigment','normal','roughness','coverage'].includes(id)}))});
 }
-function targets(rows) {
+function projection(value,sources,skewMaps) {
+  if(value===undefined)return undefined;
+  if(!fields(value,['mode','high','mesh','match','lowSuffix','highSuffix','front','back','units','normals',
+    'cage','backfaces','skew','invertSkew']))throw new TypeError('Invalid bake projection fields');
+  if(value.mode==='self') {
+    if(Object.keys(value).length!==1)throw new TypeError('Self-bake uses the receiving surface directly');
+    return {mode:'self'};
+  }
+  const {mode,high,mesh:highMesh,match=highMesh===undefined?'all':'selection',lowSuffix='',highSuffix='',
+    front=.1,back=.05,units='scene',normals='authored',cage,backfaces='ignore',skew,invertSkew=false}=value;
+  const known=name=>name==='$receiver'||sources.has(name);
+  const suffix=value=>typeof value==='string'&&(value===''||text(value));
+  if(mode!=='project'||!known(high)||!['all','selection','name'].includes(match)||
+    (match==='selection'?!mesh(highMesh):highMesh!==undefined)||!suffix(lowSuffix)||!suffix(highSuffix)||
+    match!=='name'&&(lowSuffix||highSuffix)||!distance(front)||!distance(back)||!cage&&front+back<1e-7||
+    !['scene','bounds'].includes(units)||!['authored','average','face'].includes(normals)||
+    !['ignore','block','accept'].includes(backfaces)||typeof invertSkew!=='boolean'||
+    skew!==undefined&&(!skewMaps.has(skew)||cage)||invertSkew&&skew===undefined||
+    cage!==undefined&&(!fields(cage,['source','mesh'])||!known(cage.source)||cage.mesh!==undefined&&!mesh(cage.mesh)))
+    throw new RangeError('Check projection source, matching, cage, distance and skew settings');
+  return {mode,high,match,...(highMesh!==undefined&&{mesh:highMesh}),...(match==='name'&&{lowSuffix,highSuffix}),
+    ...(!cage&&{front,back,units,normals}),...(cage&&{cage}),backfaces,...(skew!==undefined&&{skew,invertSkew})};
+}
+function libraries(source,baseDir) {
+  function entries(value,label,read) {
+    if(value===undefined)return new Map();
+    if(!value||Object.getPrototypeOf(value)!==Object.prototype||Object.keys(value).length>24)
+      throw new TypeError('Use up to 24 named '+label);
+    return new Map(Object.entries(value).map(([key,row])=>{
+      if(!id(key))throw new TypeError('Invalid '+label+' ID');
+      return [key,read(row)];
+    }));
+  }
+  const sources=entries(source.projectionSources,'projection sources',value=>{
+    if(!meshFile(value))throw new TypeError('Projection sources need a GLB or glTF file');
+    return path.resolve(baseDir,value);
+  });
+  function png(value) {
+    if(!file(value)||!(/\.png$/i.test(value)))throw new TypeError('Skew maps need PNG files');
+    return path.resolve(baseDir,value);
+  }
+  const skewMaps=entries(source.skewMaps,'skew maps',value=>{
+    if(typeof value==='string')return png(value);
+    if(!fields(value,['tiles'])||!Array.isArray(value.tiles)||!integer(value.tiles.length,1,32))
+      throw new TypeError('Specify one skew PNG or a set of explicit tiles');
+    const tiles=new Map();
+    for(const row of value.tiles) {
+      if(!fields(row,['tile','file']))throw new TypeError('Skew tiles need a tile coordinate and PNG filename');
+      const key=UV.tileKey(coord(row.tile));
+      if(tiles.has(key))throw new RangeError('Duplicate skew tile '+key);
+      tiles.set(key,png(row.file));
+    }
+    return tiles;
+  });
+  return {sources,skewMaps};
+}
+function targets(rows,{sources,skewMaps}) {
   if(!Array.isArray(rows)||!integer(rows.length,1,24))throw new RangeError('A bake job needs 1–24 targets');
   const ids=new Set();
   return Array.from(rows,row=>{
-    if(!fields(row,['id','mesh','submeshes','slots','uvSet','tiles'])||!id(row.id)||ids.has(row.id.toLowerCase())||
-      !(integer(row.mesh,0,2047)||text(row.mesh))||
+    if(!fields(row,['id','mesh','submeshes','slots','uvSet','tiles','projection'])||!id(row.id)||ids.has(row.id.toLowerCase())||
+      !mesh(row.mesh)||
       row.submeshes!==undefined&&(!Array.isArray(row.submeshes)||!row.submeshes.length||
         !Array.from(row.submeshes).every(n=>integer(n,0,255))||new Set(row.submeshes).size!==row.submeshes.length)||
       row.slots!==undefined&&(!Array.isArray(row.slots)||!row.slots.length||!Array.from(row.slots).every(text)||
@@ -65,7 +126,8 @@ function targets(rows) {
     ids.add(row.id.toLowerCase());
     const tiles=Array.from(row.tiles??[1001],coord);
     if(new Set(tiles.map(UV.tileKey)).size!==tiles.length)throw new RangeError('Duplicate bake tile on '+row.id);
-    return {...row,uvSet:row.uvSet??0,tiles};
+    const cast=projection(row.projection,sources,skewMaps);
+    return {...row,uvSet:row.uvSet??0,tiles,...(cast&&{projection:cast})};
   });
 }
 function bindings(value,baseDir,selected,onInput) {
@@ -88,9 +150,8 @@ function readPlan(filename,{presetFile,presetValue,targetValues,onInput=()=>{}}=
   const location=path.resolve(filename), baseDir=path.dirname(location);
   onInput(location);
   const source=json(location);
-  if(!fields(source,['format','version','label','source','targets','preset','refresh'])||
-    source.format!==format||source.version!==1||!text(source.label)||!file(source.source)||
-    !/\.(glb|gltf)$/i.test(source.source))
+  if(!fields(source,['format','version','label','source','targets','preset','refresh','projectionSources','skewMaps'])||
+    source.format!==format||source.version!==1||!text(source.label)||!meshFile(source.source))
     throw new TypeError('Expected a version 1 bake job with a GLB or glTF source');
   let settings=presetValue??presetFile??source.preset;
   if(typeof settings==='string') {
@@ -98,9 +159,9 @@ function readPlan(filename,{presetFile,presetValue,targetValues,onInput=()=>{}}=
     onInput(f);
     settings=json(f);
   }
-  const selected=targets(targetValues??source.targets), mesh=path.resolve(baseDir,source.source);
-  onInput(mesh);
-  return {location,label:source.label,source:mesh,targets:selected,preset:settings===undefined?defaults():preset(settings),
+  const catalogs=libraries(source,baseDir), selected=targets(targetValues??source.targets,catalogs), receiver=path.resolve(baseDir,source.source);
+  onInput(receiver);
+  return {location,label:source.label,source:receiver,targets:selected,...catalogs,preset:settings===undefined?defaults():preset(settings),
     refresh:bindings(source.refresh,baseDir,selected,onInput)};
 }
 

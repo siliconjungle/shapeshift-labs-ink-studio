@@ -7,6 +7,7 @@ const Linked=require('./bitmap-resources.js');
 const {readMaterialGraph,writeMaterialGraph}=require('./material-graph.js');
 const Plan=require('./bake-job-plan.js');
 const Meshes=require('./bake-job-mesh.js');
+const Projection=require('./bake-job-projection.js');
 const Geometry=require('./geometry-masks.js');
 const UV=require('./material-preview-geometry.js');
 const bake=require('./glb-bake.js');
@@ -85,8 +86,13 @@ function mapBytes(result,id,settings) {
   if(id==='metalness')return PNG.encodeGray(size,size,Uint8Array.from(raster.footprint,(_,i)=>raster.pixels.surface[i*3+2]));
   return textures[id]??registeredMaps[id]??registeredMaps.masks[id];
 }
-function steps(plan,model,K) {
+function steps(plan,model,library,K,onInput) {
   const images=new Map(), selections=plan.targets.map(row=>Meshes.meshFor(model,row,K,images));
+  const diagnostics=plan.preset.maps.some(row=>row.enabled&&Projection.maps.includes(row.id));
+  const casts=selections.map((selection,i)=>{
+    const {projection}=plan.targets[i];
+    if(projection||diagnostics)return Projection.prepare(projection,selection,library,plan,K,images,onInput);
+  });
   const totalTiles=selections.reduce((n,row)=>n+row.tiles.length,0), tasks=[];
   let pixels=0;
   for(const row of plan.preset.maps) {
@@ -96,7 +102,7 @@ function steps(plan,model,K) {
     if(pixels>12e6)throw new RangeError('Bake job exceeds twelve million output texels');
     for(const [i,selection] of selections.entries()) {
       const authored=plan.targets[i];
-      for(const tile of selection.tiles)tasks.push({map:row.id,settings,tile,selection,authored});
+      for(const tile of selection.tiles)tasks.push({map:row.id,settings,tile,selection,authored,cast:casts[i]});
     }
   }
   if(tasks.length>192)throw new RangeError('Bake job exceeds 192 enabled map/target/tile tasks');
@@ -119,12 +125,13 @@ function main(request,base) {
   const record=file=>snapshot(inputs,file);
   const plan=Plan.readPlan(request.file,{...request.settings,onInput:record});
   const model=Meshes.load(plan.source,directory(base,'source-textures'),record);
+  const library=Projection.sceneLibrary(plan,model,directory(base,'projection-textures'),record);
   if(request.mode==='inspect') {
     Assets.json(directory(base,'inspection.json'),{label:plan.label,preset:plan.preset,targets:plan.targets,
-      catalog:Meshes.catalog(model),refresh:plan.refresh?.bindings??[]});
+      catalog:Meshes.catalog(model),refresh:plan.refresh?.bindings??[],projectionCatalog:library.describe()});
     return;
   }
-  const out=path.dirname(base), pending=steps(plan,model,K);
+  const out=path.dirname(base), pending=steps(plan,model,library,K,record);
   const report={format:'ink-studio/bake-job-report',version:1,label:plan.label,preset:plan.preset,targets:plan.targets,
     catalog:Meshes.catalog(model),maps:[],inputs:[]};
   emit({event:'planned',completed:0,total:pending.length});
@@ -138,14 +145,15 @@ function main(request,base) {
     if(!settings.geometry) {
       // Both normal conventions are kept in the same registered raster.
       if(!shared.has(key)) {
-        const {mesh,faces,uvs,normals}=tile;
+        const {mesh,faces,uvs,normals,source}=tile, cage=task.cast?.(tile,settings.size);
         const value=bake(mesh,faces,uvs,normals,settings.size,settings.padding,K,{registered:true,
-          chartBake:{state:{faceCharts:faces.map(()=>0)}}});
+          sourceFaces:source,chartBake:{state:{faceCharts:faces.map(()=>0)},cage}});
         shared.set(key,value);
         if(shared.size>3)shared.delete(shared.keys().next().value);
       }
       const cache=shared.get(key);
-      result={bytes:mapBytes(cache,map,settings),texels:cache.sampledTexels,coverage:cache.coverage};
+      result={bytes:mapBytes(cache,map,settings),texels:cache.sampledTexels,coverage:cache.coverage,
+        ...(cache.cageBake&&{projection:cache.cageBake})};
     } else result=render(task,K);
     const [u,v]=tile.tile, relative='maps/'+authored.id+'/'+u+'_'+v+'/'+map+'.png';
     Assets.write(directory(out,relative),result.bytes);
@@ -154,6 +162,8 @@ function main(request,base) {
       tile:tile.tile,tileLabel:tile.label,map,settings,file:relative,sha256:digest(bytes),...rest});
     emit({event:'map-finished',...detail,completed:i+1});
   }
+  if(plan.sources.size||plan.skewMaps.size||plan.targets.some(row=>row.projection))
+    report.projectionCatalog=library.describe();
   refreshGraph(report,plan.refresh,out,K);
   for(const [file,sha256] of inputs) {
     if(fingerprint(file)!==sha256)throw new Error('Bake input changed while the job ran');
