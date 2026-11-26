@@ -53,6 +53,8 @@ Marks use native [sweep brushes and pressure poses](sculpt-sweeps.md). They rend
 
 [Align retained marks to a grid](mark-grid.md) to snap dab centers to a tangent or UV lattice, or snap headings relative to a surface direction.
 
+[Paint relief](paint-relief.md) lets a retained stroke act as flat pigment, a shading ridge or groove, or finite raised or cut volume.
+
 ## Dabs, pressure, and ruled strokes
 
 Use one pose for a precise dab or multiple poses for a stroke. Both use the same brush, quaternion orientation, pressure, and edit operations. Set `path: "ruled"` to lay the recorded poses along a straight line between the first and last points. Ink distributes the poses along the line by their original spacing along the stroke. A surface-bound mark rules the guide before projecting it onto the receiver.

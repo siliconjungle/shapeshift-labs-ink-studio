@@ -133,9 +133,9 @@ function trace(source, ray, near, far, settings, clip, visible, x, y, sourceBind
       }
       if (row && (row.i<0 || !visible || visible(row.i,x,y)) && settings.allows(row.target,point)) {
         const rest = source.motion?.rest(...point) ?? point;
-        const state = fieldOwner?.mat.surfaceState, program = fieldOwner?.mat.sdfPaint;
+        const state = fieldOwner?.mat.surfaceState, program = fieldOwner?.mat.sdfPaint, relief = fieldOwner?.mat.paintRelief;
         const generated=materialOwner?.mat.sdfNewSurface;
-        const localNormal = (generated || program || state?.hasOpacity || state?.hasNormal || state?.hasInkControls || capturePaintFinish) &&
+        const localNormal = (generated || program || relief || state?.hasOpacity || state?.hasNormal || state?.hasInkControls || capturePaintFinish) &&
           (source.motion?.restNormal(...normal) ?? normal);
         const length = localNormal && Math.hypot(...localNormal);
         const normalAtRest = length && localNormal.map(n=>n/length);
@@ -145,7 +145,9 @@ function trace(source, ray, near, far, settings, clip, visible, x, y, sourceBind
         const appearance=surface ? source.sdfBrushSurfaces.appearance(surface,materialPaint) : materialPaint;
         const opacity = paint?.values?.opacity;
         if (opacity && opacity.value < 1 && opacity.coverage > 0) return null;
-        const shadingNormal = paint?.paintedNormal && (source.motion?.normal(...paint.paintedNormal) ?? paint.paintedNormal);
+        const paintNormal = normalAtRest && (relief && !materialOwner?.mat.cutSurface?.locate(rest, normalAtRest) ?
+          relief.normal(rest, normalAtRest, paint?.paintedNormal) ?? paint?.paintedNormal : paint?.paintedNormal);
+        const shadingNormal = paintNormal && (source.motion?.normal(...paintNormal) ?? paintNormal);
         const materialId = (generated || program || row.baseColor!==undefined) && (appearance?.material ?? row.target.material);
         const finish = capturePaintFinish && fieldOwner && (() => {
           const material = fieldOwner.mat, painted = paint && state.apply(material, paint, rest);
