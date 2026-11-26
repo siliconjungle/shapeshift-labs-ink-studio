@@ -115,7 +115,9 @@
       metallic: 0,
       emission: material?.em ? color : [0, 0, 0],
       normal: n,
-      ...authored
+      ...authored,
+      ...(material?.opacityAt && { opacity: Math.round(
+        material.opacityAt(x, y, z) * K.clamp(authored?.opacity ?? material.a ?? 1, 0, 1) * 255) / 255 })
     };
   }
 
@@ -135,7 +137,7 @@
 
   function fromSculpt(sculpt, { palette = PAL_HEX, bounds, resolution = 0.08, targetTriangles = 16000,
       guides = [], topology, simplifyTopology = false, fur = {}, ...options } = {}) {
-    const { field, parts, noise,maskNames=[],paintedOpacity } = sculpt.modelSource();
+    const { field, parts, paintLayers = [], noise,maskNames=[],paintedOpacity } = sculpt.modelSource();
     if (!(targetTriangles === Infinity || Number.isInteger(targetTriangles) && targetTriangles >= 4))
       throw new Error('Target triangles must be an integer of at least four');
     if (!Array.isArray(guides) || guides.some(g => !Array.isArray(g.center) || g.center.length !== 3 ||
@@ -144,6 +146,13 @@
       throw new Error('Topology guides need a center and positive radius');
     const sample = (material, p, n) => bakeMaterial(palette, sculpt.materialAt(material, p, n), p, n);
     const attachments = parts.map(part => G.analyticModelPart(part, sample));
+    for (const layer of paintLayers) {
+      const detail = Math.min(resolution, layer.resolution), margin = detail * 2;
+      const bounds = { min: layer.bounds.min.map(n => n - margin), max: layer.bounds.max.map(n => n + margin) };
+      const { attachments: nested, ...mesh } = fromSculpt(layer.sculpt, { ...options, palette, targetTriangles,
+        name: layer.name, bounds, resolution: detail, fur: false });
+      attachments.push(mesh, ...nested);
+    }
     if (!field) {
       const [root, ...rest] = attachments;
       return { ...root, attachments: rest };
