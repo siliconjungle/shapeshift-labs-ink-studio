@@ -14,7 +14,7 @@ const options = {
   edit: ['object','out','view','preview','report','selection','uv-set','channel']
 };
 const imageNames = ['atlas-before.png', 'model-before.png', 'atlas-after.png', 'model-after.png', 'comparison.png'];
-const ink = { seam: '#f391a6', pin: '#ffcb78', selected: '#75e2c8', boundary: '#7393ac',
+const ink = { seam: '#f391a6', pin: '#ffcb78', selected: '#75e2c8', held: '#a8beff', boundary: '#7393ac',
   continuous: '#456578', 'material-boundary': '#859cad', 'non-manifold': '#ed8c70' };
 const tints = ['#25495a', '#413950', '#574232', '#335344', '#403c57'];
 const name = v => typeof v === 'string' && Boolean(v.trim());
@@ -23,6 +23,24 @@ const line = (points, color, width = 1) => ({ type: 'path', points, color, width
 const text = (text, at, color = '#dce8ee', size = 10) => ({ type: 'text', text, at, size, color });
 const center = (p, n) => [Math.round(p[0]) - n, Math.round(p[1]) - n, n * 2 + 1, n * 2 + 1];
 const regionSelection = selection=>selection?.domain === 'faces' || selection?.domain === 'islands';
+function cornerMarkers(corners,selection,project) {
+  const selected = new Set(selection?.domain === 'corners' ? selection.corners : []);
+  const held = new Set(selection?.heldCorners), marks = [], active = [];
+  for (const corner of corners) {
+    const chosen = selected.has(corner.id), stationary = held.has(corner.id);
+    if (!chosen && !stationary && !corner.pinned) continue;
+    const point = project(corner);
+    if (!point) continue;
+    if (stationary) {
+      const [x,y] = point.map(Math.round), r = 4;
+      marks.push(line([[x-r,y-r],[x+r,y-r],[x+r,y+r],[x-r,y+r],[x-r,y-r]],ink.held));
+    }
+    if (chosen) active.push(rect(center(point,2),ink.selected));
+    else if (corner.pinned) marks.push(rect(center(point,2),ink.pin));
+  }
+  return marks.concat(active);
+}
+
 const sideSelection = selection=>{
   const sides = new Map();
   for (const {edge,face} of selection?.edgeSides ?? []) {
@@ -83,7 +101,6 @@ function atlas(layout, material, selection, settings, kit, paint) {
   const corners = new Map(layout.corners.map(row => [row.id, row]));
   const faces = new Set(layout.faces.filter(row => row.material === material).map(row => row.id));
   const selected = new Set(selection?.faces), selectedEdges = new Set(selection?.domain === 'edges' ? selection.edges : []);
-  const selectedCorners = new Set(selection?.domain === 'corners' ? selection.corners : []);
   const selectedSides = sideSelection(selection);
   const chartColors = new Map(layout.islands.map((row, i) => [row.id, tints[i % tints.length]]));
   const sampleEvery = Math.max(1, Math.ceil(faces.size / 4000));
@@ -108,9 +125,8 @@ function atlas(layout, material, selection, settings, kit, paint) {
     }
   }
   for (const highlight of highlights) draw.push(highlight);
-  for (const corner of corners.values()) if (faces.has(corner.face) && (corner.pinned || selectedCorners.has(corner.id)))
-    draw.push(rect(center(at(corner.uv),2),selectedCorners.has(corner.id) ? ink.selected : ink.pin));
-  return composite(w, h, layers, draw, kit);
+  const marks = cornerMarkers(corners.values(),selection,corner=>faces.has(corner.face) ? at(corner.uv) : undefined);
+  return composite(w, h, layers, draw.concat(marks), kit);
 }
 
 function model(layout, { frame, mesh, camera }, selection, kit, visiblePixels) {
@@ -145,7 +161,6 @@ function model(layout, { frame, mesh, camera }, selection, kit, visiblePixels) {
   }
   const points = new Map(K.meshTopology.sourceDocument(mesh).vertices.map(row => [row.id, project(row.position)]));
   const selectedEdges = new Set(selection?.domain === 'edges' ? selection.edges : []);
-  const selectedCorners = new Set(selection?.domain === 'corners' ? selection.corners : []);
   const selectedSides = sideSelection(selection);
   for (const edge of layout.edges) if (edge.kind === 'seam' || selectedEdges.has(edge.id)) {
     const [a, b] = edge.vertices.map(id => points.get(id));
@@ -160,12 +175,10 @@ function model(layout, { frame, mesh, camera }, selection, kit, visiblePixels) {
       else if (edge.kind === 'seam' && visible(x,y,faces)) rgb.set([243,145,166],(x+y*w)*3);
     }
   }
-  const draw = [];
-  for (const corner of layout.corners) if (corner.pinned || selectedCorners.has(corner.id)) {
+  const draw = cornerMarkers(layout.corners,selection,corner=>{
     const p = points.get(corner.vertex);
-    if (p && visible(Math.round(p[0]), Math.round(p[1]), [corner.face]))
-      draw.push(rect(center(p,2),selectedCorners.has(corner.id) ? ink.selected : ink.pin));
-  }
+    return p && visible(Math.round(p[0]),Math.round(p[1]),[corner.face]) ? p : undefined;
+  });
   return composite(w, h, [{ source: { w, h, rgb } }], draw, kit);
 }
 
@@ -207,7 +220,8 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     }
     crossHighlight = { sheets, faces: selected.faces.map(id => ({ id, material: byId.get(id).material, visiblePixels: visible.get(id) })) };
   } else for (const [i, layout] of layouts.entries()) {
-    views.push(atlas(layout, material, selected, settings, kit), model(layout, captures[i], selected, kit));
+    const paint = selected?.cornerScope ? atlasPaint(captures[i].mesh,material,layout,kit) : undefined;
+    views.push(atlas(layout, material, selected, settings, kit, paint), model(layout, captures[i], selected, kit));
   }
   const gap = 6, { w, h } = settings, width = h + w + 3 * gap, height = h * 2 + 64;
   const layers = [], draw = [text('Atlas', [h / 2 + gap, 13]), text('Native model', [h + 2 * gap + w / 2, 13])];
@@ -217,9 +231,10 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     layers.push({ source: image, rect: [x, y, image.w, image.h] });
     if (i % 2 === 0) draw.push(text(rowNames[Math.floor(i / 2)], [x + h / 2, y - 7], '#9fb9c3', 8));
   }
+  const scope = selected?.cornerScope;
   draw.push(text('Cut seam', [width * .18, height - 8], ink.seam, 8),
-    text('Pinned corner', [width * .49, height - 8], ink.pin, 8),
-    text('Linked selection', [width * .80, height - 8], ink.selected, 8));
+    text(scope ? 'Held overlap' : 'Pinned corner', [width * .49, height - 8], scope ? ink.held : ink.pin, 8),
+    text(scope ? 'Move scope' : 'Linked selection', [width * .80, height - 8], ink.selected, 8));
   views.push(composite(width, height, layers, draw, kit));
   for (const [i, image] of views.entries()) files.write(paths[i], PNG.encode(image.w, image.h, image.rgb));
   const evidence = readability && {
@@ -228,7 +243,24 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     after: UV.readability(nativeAfter.mesh, nativeAfter.frame, readability)
   };
   return { material, grid: [w, h], files: [...imageNames, ...crossHighlight?.sheets.slice(1).map(row => row.file) ?? []],
+    ...(scope && {cornerScope:scope}),
     ...(crossHighlight && { crossHighlight }), ...(evidence && { readability: evidence }) };
+}
+
+function editSelection(UV,document,plan,selectionFile) {
+  const uvSet = plan.report.uvSet ?? 0;
+  if (selectionFile) {
+    const saved = read(selectionFile);
+    return UV.select(document,{domain:saved.domain,from:saved,uvSet});
+  }
+  const scopes = plan.report.operations.filter(row=>row.op==='move-corners').map(row=>row.evidence);
+  if (scopes.length) {
+    const moving = new Set(scopes.flatMap(row=>row.moving.map(corner=>corner.id)));
+    const held = [...new Set(scopes.flatMap(row=>row.held.map(corner=>corner.id)))].filter(id=>!moving.has(id)).sort();
+    const selected = UV.select(document,{domain:'corners',uvSet,ids:[...moving]});
+    return {...selected,heldCorners:held,cornerScope:{modes:scopes.map(row=>row.scope),moving:selected.ids,held}};
+  }
+  return UV.select(document,{domain:'faces',uvSet,ids:[...new Set(plan.report.corners.map(row=>row.face))]});
 }
 
 function command([action, file, input, ...rest], opt, kit, openEditor) {
@@ -291,10 +323,7 @@ function command([action, file, input, ...rest], opt, kit, openEditor) {
       const plan = editor ? editor.planMeshUV(object, request) : UV.plan(document, request);
       result = { ...plan.report };
       if (preview) {
-        const selected = opt.selection ? (() => {
-          const saved = read(opt.selection);
-          return UV.select(document,{domain:saved.domain,from:saved,uvSet:plan.report.uvSet ?? 0});
-        })() : UV.select(document,{domain:'faces',uvSet:plan.report.uvSet ?? 0,ids:[...new Set(plan.report.corners.map(row=>row.face))]});
+        const selected = editSelection(UV,document,plan,opt.selection);
         const draft = editor && Object.keys(plan.patch).length ? editor.fork() : editor;
         if (draft && draft !== editor) draft.editMeshTopology(object, plan.patch);
         const revised = plan.report.canCommit && settings.afterMaterials ? { ...settings, materials: settings.afterMaterials } : settings;

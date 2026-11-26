@@ -463,6 +463,54 @@
     return ids;
   }
 
+  function overlappingCorners(g,ids) {
+    const positionKey = corner=>JSON.stringify([g.faces.get(corner.face).material,...corner.uv]);
+    const byPosition = new Map();
+    for (const corner of g.corners.values()) {
+      const key = positionKey(corner);
+      if (!byPosition.has(key)) byPosition.set(key,[]);
+      byPosition.get(key).push(corner.id);
+    }
+    const seen = new Set(ids), queue = ids.slice(), positions = new Set(), welds = new Set();
+    function include(rows) {
+      for (const id of rows) if (!seen.has(id)) {
+        seen.add(id);
+        queue.push(id);
+      }
+    }
+    for (const id of queue) {
+      const key = positionKey(g.corners.get(id)), weld = g.atWeld.get(id);
+      if (!positions.has(key)) {
+        positions.add(key);
+        include(byPosition.get(key));
+      }
+      if (!welds.has(weld)) {
+        welds.add(weld);
+        include(g.welds.get(weld));
+      }
+    }
+    return order(queue);
+  }
+
+  function moveCorners(g,operation,points) {
+    const {scope,translate=[0,0]} = operation;
+    if (!fields(operation,['op','ids','selection','scope','translate']) ||
+        !['together','independent'].includes(scope) || !tuple(translate,2))
+      throw new TypeError('Move UV corners with together or independent scope and an optional finite UV translation');
+    const ids = targets(g,'corners',operation), coincident = overlappingCorners(g,ids);
+    const active = new Set(scope === 'together' ? coincident : ids), moving = [], held = [];
+    for (const id of coincident) {
+      const {face,vertex,uv,uvPinned} = g.corners.get(id);
+      const row = {id,face,vertex,material:g.faces.get(face).material,uv:uv.slice(),pinned:Boolean(uvPinned)};
+      if (active.has(id)) {
+        const next = uv.map((n,i)=>n+translate[i]);
+        points.set(id,next);
+        moving.push({...row,proposed:next.map(n=>Number.isFinite(n) ? n : null)});
+      } else held.push(row);
+    }
+    return {ids,evidence:{scope,translate:translate.slice(),moving,held,edgeChanges:[]}};
+  }
+
   function align(g, edges, keep, points, conflict) {
     const fixed = side => g.atIsland.get(side.face) === keep;
     const pairs = edges.map(edge => ({
@@ -558,8 +606,9 @@
   }
 
   function draft(g, operation) {
-    if (!operation || typeof operation !== 'object' || !['cut', 'stitch', 'pin', 'transform', 'unwrap', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
-      throw new TypeError('Use a UV cut, stitch, pin, transform, face remap, local solve or texel budget operation');
+    if (!operation || typeof operation !== 'object' ||
+        !['cut', 'stitch', 'pin', 'transform', 'move-corners', 'unwrap', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
+      throw new TypeError('Use a UV cut, stitch, pin, transform, corner move, face remap, local solve or texel budget operation');
     const points = new Map(), edges = new Map(), pins = new Map(), conflicts = [];
     let count = 0;
     function conflict(code, evidence) {
@@ -576,6 +625,7 @@
       ids = order((evidence.islands ?? []).map(row => row.id));
     } else if (operation.op === 'remap-face') ids = remapFace(g,operation,points,conflict);
     else if (operation.op === 'transform') ids = transform(g, operation, points);
+    else if (operation.op === 'move-corners') ({ids,evidence} = moveCorners(g,operation,points));
     else if (operation.op === 'stitch') ids = stitch(g, operation, points, edges, conflict);
     else if (operation.op === 'cut') {
       if (!fields(operation, ['op', 'ids', 'selection'])) throw new TypeError('Unknown UV cut setting');
@@ -589,7 +639,8 @@
     }
     for (const [id, uv] of points) {
       const corner = g.corners.get(id);
-      const unchanged = operation.op === 'remap-face' ? uv.every((n,i)=>n === corner.uv[i]) : sameUV(uv,corner.uv);
+      const exact = operation.op === 'remap-face' || operation.op === 'move-corners';
+      const unchanged = exact ? uv.every((n,i)=>n === corner.uv[i]) : sameUV(uv,corner.uv);
       if (unchanged) { points.delete(id); continue; }
       if (corner.uvPinned) conflict('pinned-corner', { corner: id, uv: corner.uv, proposed: uv });
       else if (!uv.every(n => Number.isFinite(n) && n >= -1e-10 && n <= 1 + 1e-10))
@@ -602,13 +653,13 @@
       const after = area2(...corners.map(id => points.get(id) ?? g.corners.get(id).uv));
       if (Math.abs(before) > 1e-12 && Math.abs(after) <= 1e-12)
         conflict('collapsed-uv-triangle', { face, corners });
-      else if ((operation.op === 'stitch' || local) && before * after < 0)
+      else if ((operation.op === 'stitch' || operation.op === 'move-corners' || local) && before * after < 0)
         conflict('flipped-uv-triangle', { face, corners });
     }
     if (!count && local && points.size) meshUVRegions.checkOverlaps(g, points, conflict);
     const report = { op: operation.op, ids, pointEdits: points.size, conflictCount: count, conflicts,
       ...(evidence && { evidence }) };
-    if (count) return { document: g.doc, report };
+    if (count || !points.size && !edges.size && !pins.size) return { document: g.doc, report };
     const affectedFaces = new Set([...points.keys(), ...pins.keys()].map(id => g.corners.get(id).face));
     const faces = [...affectedFaces].map(id => {
       const face = g.byFace.get(id);
@@ -623,6 +674,13 @@
     const seams = [...edges].map(([id, uvSeam]) => g.set ?
       {id,uvSeams:{...original.get(id).uvSeams,[g.set]:uvSeam}} : {id,uvSeam});
     const document = topology.edit(g.doc, { faces, edges: seams });
+    if (operation.op === 'move-corners') {
+      const next = graph(document,g.set);
+      evidence.edgeChanges = [...g.edges.values()].flatMap(({id,kind})=>{
+        const after = next.edges.get(id).kind;
+        return kind === after ? [] : [{edge:id,before:kind,after}];
+      });
+    }
     return { document, report };
   }
 

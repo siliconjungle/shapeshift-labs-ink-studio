@@ -1425,6 +1425,42 @@ resulting layout. For a retained scene mesh, add `--object ID` and write the
 revised scene beside the source. The scene editor journals the change in
 one undo step and invalidates material bakes for faces whose UVs moved.
 
+### Move overlapping UV corners
+
+Use `move-corners` with an explicit scope and a normalized UV
+translation. Supply stable corner `ids` or a saved corner `selection`
+from the atlas or model view.
+
+```json
+{
+  "operations": [
+    { "op": "move-corners", "scope": "together",
+      "ids": ["faceplate/frt"], "translate": [-0.065, 0.06] }
+  ]
+}
+```
+
+With `together`, Ink follows existing welds and exact coordinate
+overlaps on the same material sheet. This can include a separate
+chart stacked at the same position. With `independent`, only the
+named corner IDs move. A formerly continuous edge can become an
+inferred UV seam as its corner coordinates separate.
+
+Omit `translate` to inspect the scope at its current position. The
+operation report lists eligible movers, held overlaps, pins, and
+proposed UVs. A valid move also reports changes in UV edge continuity.
+The scene and atlas previews mark active corners in mint and held
+overlaps with a blue outline. Use `--view` with a material to choose
+which sheet appears in the atlas preview. A pin on an active corner,
+an out-of-atlas coordinate, or a newly collapsed or flipped triangle
+blocks the transaction.
+
+```sh
+ink-studio mesh-uv edit field-case.json move.json --object box --preview scope-review
+ink-studio mesh-uv edit field-case.json move.json --object box --out moved.json --report receipt.json
+node examples/tileset-pick/uv-corner-scope-demo.cjs corner-scope-review
+```
+
 ## Bind separate material layouts
 
 A retained mesh part can use a different UV set for each material channel.
