@@ -768,3 +768,48 @@ In the SDK, use `planObjectPoints`, `editObjectPoints`, and
 `KIT.authoring.objectPoints.resolve`. Run
 `node examples/tileset-pick/object-points-demo.cjs station-points`
 to replay a named pivot, construction snap, and anchored prefab stamp.
+
+### Organize placed prefabs in scene layers
+
+Use `mesh-topology scene-layer` to organize placed visual prefabs.
+Layers have stable IDs and can belong to another layer. Start with a
+`set` request to create a layer or change its label, parent, and local
+visibility. Use `parent: null` to move a layer to the scene root.
+
+```json
+{"action":"set","layer":"east-wing","parent":"station","visible":false}
+```
+
+A hidden layer suppresses the geometry, attached decals, and effects
+of its modules and its child layers. Showing a parent keeps each
+child's own visibility setting. A nested prefab or live mirror with
+no layer assignment inherits its carrier's or source's layer. Assign
+a placement explicitly to organize it independently of that link.
+Layer edits preserve the transform hierarchy and world placement.
+
+```sh
+ink-studio mesh-topology scene-layer station.json hide.json --preview review --view view.json --out hidden.json
+ink-studio tileset select east-wing.json --scene hidden.json --out selected.json
+ink-studio mesh-topology scene-layer hidden.json move.json --selection selected.json --out moved.json
+```
+
+Use `{"domain":"instances","query":{"layer":"east-wing"}}` in
+`east-wing.json` to select the entire branch. Hidden placements are
+included unless the query sets `includeHidden: false`. The saved
+selection can be passed to other prefab commands. A `move` request
+chooses the destination `layer` and one of `instances`, `selection`,
+or `from`. The latter moves the population of an entire source
+branch. Use `layer: null` to move selected placements to the scene
+root.
+
+Set `{"action":"insertion","layer":"east-wing"}` to route new prefab
+placements into that layer. Use `layer: null` to clear the insertion
+target. Without a target, array copies and combined modules use their
+source layer. An `inspect` request or an empty request lists layers,
+the insertion target, and each module's effective layer and visibility.
+One undo restores a layer edit and its membership together.
+
+In the SDK, use `planSceneLayers`, `previewSceneLayers`,
+`editSceneLayers`, and `selectSceneLayer`. Run
+`node examples/tileset-pick/scene-layers-demo.cjs station-layers`
+to hide a wing, move a saved selection, and stamp into an insertion layer.

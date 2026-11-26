@@ -4,6 +4,8 @@ Use an Ink flow map to paint direction and speed once and reuse the resulting
 velocity field in water, smoke, cloth, and debris. The editor opens locally
 and runs the four native solvers against the current map.
 
+[Painting flow](painting-flow.md) uses the same map to advect retained marks with wrap seams, obstructions, and edge loss.
+
 ```sh
 node cli/ink-studio.js flow-map editor --out split-current.html
 node cli/ink-studio.js flow-map editor harbor-flow.json --out harbor-editor.html

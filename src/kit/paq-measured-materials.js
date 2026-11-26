@@ -1,6 +1,6 @@
 /* Resolve planar material captures into an aligned, linear-light material packet. */
 (function (K) {
-  const P = K.procedural, { registration, calibration, fields, tuple, bounded, dot } = MeasuredAlignment;
+  const P = K.procedural, { registration, calibration, fields, tuple, bounded, dot, footprint } = MeasuredAlignment;
   const unit = n => bounded(n, 0, 1);
   const magnitude = v => Math.hypot(...v);
   const flat = [0, 0, 1];
@@ -59,16 +59,6 @@
         return diffuse;
       }
     };
-  }
-
-  // Gather four samples without extending data outside the photographed surface.
-  function footprint(x, y, width, height) {
-    if (x < -1e-6 || y < -1e-6 || x > width - 1 + 1e-6 || y > height - 1 + 1e-6) return null;
-    x = Math.max(0, Math.min(width - 1, x));
-    y = Math.max(0, Math.min(height - 1, y));
-    const x0 = Math.floor(x), y0 = Math.floor(y), tx = x - x0, ty = y - y0;
-    const a = y0 * width + x0, b = a + Number(tx !== 0), c = a + (ty ? width : 0);
-    return [[a, (1 - tx) * (1 - ty)], [b, tx * (1 - ty)], [c, (1 - tx) * ty], [c + (b - a), tx * ty]];
   }
 
   function reader(image, gate, depthGate, clipLevel) {

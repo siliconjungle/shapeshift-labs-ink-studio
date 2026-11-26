@@ -198,6 +198,37 @@ Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy
 Get the runnable example with `ink-studio graph describe material.replace --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### material.scanProcess
+
+Register, de-light, repair and tile material scan maps on a shared surface grid.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `materialChannels` | Required | {"layout":"Versioned named raster channels with independent grids and metadata","minItems":1,"maxItems":64} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} · {"align":{"type":"record","description":"Shared target dimensions, pitch, landmarks and channel overrides."},"repair":{"type":"record","description":"Repair radius, defect threshold and minimum evidence coverage."},"tile":{"type":"record","description":"Crop, repeat axes, seam bands and normal reconstruction mode."},"deLight":{"type":"record","description":"Correction strength and minimum calibrated irradiance."}} |
+| Input | `defects` | `any` | `null` |  |
+| Input | `illumination` | `any` | `null` |  |
+| Input | `validity` | `record` | `{}` | {"layout":"Plain named object"} |
+| Output | `value` | `materialChannels` | — | {"layout":"Versioned named raster channels with independent grids and metadata","minItems":1,"maxItems":64} |
+| Output | `aligned` | `materialChannels` | — | {"layout":"Versioned named raster channels with independent grids and metadata","minItems":1,"maxItems":64} |
+| Output | `delit` | `materialChannels` | — | {"layout":"Versioned named raster channels with independent grids and metadata","minItems":1,"maxItems":64} |
+| Output | `repaired` | `materialChannels` | — | {"layout":"Versioned named raster channels with independent grids and metadata","minItems":1,"maxItems":64} |
+| Output | `repairedMask` | `grayImage` | — | {"layout":"Typed unitless single-channel data or mask"} |
+| Output | `unresolved` | `grayImage` | — | {"layout":"Typed unitless single-channel data or mask"} |
+| Output | `support` | `grayImage` | — | {"layout":"Typed unitless single-channel data or mask"} |
+| Output | `report` | `record` | — | {"layout":"Plain named object"} |
+
+- Use a typed material packet, optional per-map validity, a target-space defect mask and calibrated source-space illumination.
+- Inspect registered, de-lit, repaired and tiled packets. Repair uses the same donor for all maps.
+- A repeat crop needs complete or repaired evidence. The seam report measures the opposing edge mismatch for every map.
+
+Guides: [guide](../scan-processing.md)
+
+Get the runnable example with `ink-studio graph describe material.scanProcess --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### material.smartMask
 
 Generate and inspect a wear or environment mask from aligned geometry bakes and authored corrections.

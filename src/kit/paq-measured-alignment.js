@@ -42,7 +42,8 @@ const MeasuredAlignment = (() => {
   function registration(landmarks, target, source, tolerance) {
     if (landmarks === undefined) {
       if (target.some((n, i) => n !== source[i])) throw new RangeError('A capture with a different extent needs registration landmarks');
-      return { map: identity, report: { landmarks: 0, rmsPx: 0, maxPx: 0 } };
+      return { map: identity, jacobian(_x, _y, out) { out[0] = out[3] = 1; out[1] = out[2] = 0; },
+        report: { landmarks: 0, rmsPx: 0, maxPx: 0 } };
     }
     const inGrid = (point, size) => tuple(point, 2) && point.every((n, i) => bounded(n, 0, size[i] - 1));
     if (!Array.isArray(landmarks) || !bounded(landmarks.length, 4, 64) || !Array.from(landmarks).every(pair =>
@@ -66,13 +67,32 @@ const MeasuredAlignment = (() => {
       out[0] = ((a * x + b * y + c) / z + 1) * sc[0];
       out[1] = ((d * x + e * y + f) / z + 1) * sc[1];
     }
+    function jacobian(x, y, out) {
+      x = x / tc[0] - 1;
+      y = y / tc[1] - 1;
+      const z = 1 + g * x + h * y, u = (a * x + b * y + c) / z, v = (d * x + e * y + f) / z;
+      out[0] = (a - u * g) / z * sc[0] / tc[0];
+      out[1] = (b - u * h) / z * sc[0] / tc[1];
+      out[2] = (d - v * g) / z * sc[1] / tc[0];
+      out[3] = (e - v * h) / z * sc[1] / tc[1];
+    }
     const out = [0, 0], errors = landmarks.map(({ target: [x, y], source: [u, v] }) => {
       map(x, y, out);
       return Math.hypot(out[0] - u, out[1] - v);
     });
     const { rms, max } = stats(errors);
     if (max > tolerance) throw new RangeError('Landmark registration residual ' + max.toFixed(3) + ' px exceeds ' + tolerance + ' px');
-    return { map, report: { landmarks: landmarks.length, rmsPx: rms, maxPx: max } };
+    return { map, jacobian, report: { landmarks: landmarks.length, rmsPx: rms, maxPx: max } };
+  }
+
+  // Gather four samples without extending data outside the photographed surface.
+  function footprint(x, y, width, height) {
+    if (x < -1e-6 || y < -1e-6 || x > width - 1 + 1e-6 || y > height - 1 + 1e-6) return null;
+    x = Math.max(0, Math.min(width - 1, x));
+    y = Math.max(0, Math.min(height - 1, y));
+    const x0 = Math.floor(x), y0 = Math.floor(y), tx = x - x0, ty = y - y0;
+    const a = y0 * width + x0, b = a + Number(tx !== 0), c = a + (ty ? width : 0);
+    return [[a, (1 - tx) * (1 - ty)], [b, tx * (1 - ty)], [c, (1 - tx) * ty], [c + (b - a), tx * ty]];
   }
 
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -98,5 +118,5 @@ const MeasuredAlignment = (() => {
     return { apply, report: { patches: patches.length, matrix, black, rms, max } };
   }
 
-  return { registration, calibration, fields, tuple, bounded, dot };
+  return { registration, calibration, fields, tuple, bounded, dot, footprint };
 })();

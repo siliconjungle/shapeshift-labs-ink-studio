@@ -277,6 +277,7 @@
     ...P.materialChannels.operations,
     ...P.smartMasks.operations,
     ...P.measuredMaterials.operations,
+    ...P.scanProcessing.operations,
     ...P.materialPaint.operations,
     ...P.vectorResources.operations,
     ...P.fontResources.operations,

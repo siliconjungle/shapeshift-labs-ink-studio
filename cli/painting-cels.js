@@ -336,3 +336,4 @@ module.exports = function paintingCels([verb, ...args], flags, kit, loadScene) {
   if (verb === 'export') return report(renderExport(clip, source, options, build, kit, output));
   return report(renderPreview(clip, select(clip, flags), source, options, build, kit, output));
 };
+module.exports.format = format;
