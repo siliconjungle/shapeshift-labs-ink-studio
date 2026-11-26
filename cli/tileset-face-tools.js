@@ -6,8 +6,8 @@ const rgbaValue = value=>Array.isArray(value) && value.length===4 && Array.from(
 const rgbHex = rgb=>'#'+rgb.map(value=>value.toString(16).padStart(2,'0')).join('');
 const integerSlot = value=>Number.isSafeInteger(value) && value>=0 && value<256;
 const channelLayouts = Object.freeze({normal:'normal',roughness:'metallicRoughness',metalness:'metallicRoughness',emission:'emission'});
-const fields = (value,keys)=>value && Object.getPrototypeOf(value)===Object.prototype &&
-  Object.keys(value).every(key=>keys.includes(key));
+const record = value=>value && Object.getPrototypeOf(value)===Object.prototype;
+const fields = (value,keys)=>record(value) && Object.keys(value).every(key=>keys.includes(key));
 
 function pencil({rgba,color,alpha,slot}) {
   if (rgba!==undefined && color===undefined && alpha===undefined && slot===undefined && rgbaValue(rgba)) return {rgba};
@@ -17,6 +17,12 @@ function pencil({rgba,color,alpha,slot}) {
     return {...(color!==undefined && {color:color.toLowerCase()}),...(alpha!==undefined && {alpha})};
 }
 
+function paintColors(colors) {
+  const paints = Array.from(colors,color=>fields(color,['rgba','color','alpha','slot']) && pencil(color));
+  if (paints.some(paint=>!paint)) throw new TypeError('Each pattern color needs pencil color, alpha, RGBA, or an exact palette slot');
+  return paints;
+}
+
 function fillOptions(input) {
   const {area='connected',tolerance=0,pattern='solid',colors,size=1} = input ?? {};
   if (!fields(input,['area','tolerance','pattern','colors','size']) ||
@@ -24,33 +30,56 @@ function fillOptions(input) {
       (pattern==='solid' ? input.size!==undefined : !Number.isSafeInteger(size) || size<1 || size>2048) ||
       !Array.isArray(colors) || colors.length!==(pattern==='solid' ? 1 : 2))
     throw new TypeError('Fill needs a connected or matching-color area and one solid color or two checker colors');
-  const paints = Array.from(colors,color=>fields(color,['rgba','color','alpha','slot']) && pencil(color));
-  if (paints.some(paint=>!paint)) throw new TypeError('Each fill color needs pencil color, alpha, RGBA, or an exact palette slot');
-  return {area,tolerance,pattern,colors:paints,...(pattern==='checker' && {size})};
+  return {area,tolerance,pattern,colors:paintColors(colors),...(pattern==='checker' && {size})};
 }
 
-function operation({tool='pencil',rgba,color,alpha,slot,sample,channel,fill}) {
+const fraction = value=>Number.isFinite(value) && value>=0 && value<=1;
+function sprayOptions(input={}) {
+  const {radius=4,density=.65,seed=0} = input ?? {};
+  if (!fields(input,['radius','density','seed']) || !Number.isSafeInteger(radius) || radius<0 || radius>512 ||
+      !fraction(density) || !Number.isSafeInteger(seed))
+    throw new TypeError('Spray needs a radius of 0–512 texels, unit density, and an integer seed');
+  return {radius,density,seed};
+}
+
+function ditherOptions(input) {
+  const {pattern='bayer',mix=.5,seed=0,colors} = input ?? {};
+  if (!fields(input,['pattern','mix','seed','colors']) || !['bayer','blue-noise'].includes(pattern) ||
+      !fraction(mix) || !Number.isSafeInteger(seed) || !Array.isArray(colors) || colors.length!==2)
+    throw new TypeError('Dither needs Bayer or blue-noise, two colors, a unit mix, and an integer seed');
+  return {pattern,mix,seed,colors:paintColors(colors)};
+}
+
+function operation({tool='pencil',rgba,color,alpha,slot,sample,channel,fill,spray,dither,drawing,selection}) {
   const write = rgba!==undefined || color!==undefined || alpha!==undefined || slot!==undefined;
-  if (tool==='fill') {
+  if (selection!==undefined && !record(selection))
+    throw new TypeError('Choose a native selection query or saved atlas pixel selection');
+  if (drawing!==undefined && (!['pencil','eraser','spray'].includes(tool) ||
+      !fields(drawing,['mirrorX','mirrorY']) || ![drawing.mirrorX,drawing.mirrorY].some(n=>n!==undefined) ||
+      !Object.values(drawing).every(n=>n===undefined || typeof n==='number' && Number.isSafeInteger(n*2))))
+    throw new TypeError('Use mirrorX or mirrorY in atlas texel coordinates with pencil, eraser, or spray');
+  const scope = {...(selection!==undefined && {selection}),...(drawing!==undefined && {drawing})};
+  if (fill!==undefined && tool!=='fill' || spray!==undefined && tool!=='spray' || dither!==undefined && tool!=='dither')
+    throw new TypeError('Pattern settings must match the selected tool');
+  if (tool==='fill' || tool==='dither') {
     if (write || sample!==undefined || channel!==undefined)
-      throw new TypeError('Put fill colors and selection options in the fill object');
-    return {tool,fill:fillOptions(fill)};
+      throw new TypeError('Put pattern colors in the fill or dither object');
+    return {tool,...(tool==='fill' ? {fill:fillOptions(fill)} : {dither:ditherOptions(dither)}),...scope};
   }
-  if (fill!==undefined) throw new TypeError('Fill options belong to the fill tool');
   if (tool==='eyedropper') {
-    if (write || !['color','alpha','source'].includes(sample) ||
+    if (write || selection!==undefined || !['color','alpha','source'].includes(sample) ||
         (sample==='source' ? typeof channel!=='string' || channel!=='pigment' && !Object.hasOwn(channelLayouts,channel) : channel!==undefined))
       throw new TypeError('Eyedropper needs color, alpha, or source with a named material channel');
     return {tool,sample,...(channel!==undefined && {channel})};
   }
   if (sample!==undefined || channel!==undefined)
     throw new TypeError('Sampling options belong to the eyedropper');
-  if (tool==='eraser' && !write) return {tool};
-  if (tool==='pencil') {
+  if (tool==='eraser' && !write) return {tool,...scope};
+  if (tool==='pencil' || tool==='spray') {
     const paint = pencil({rgba,color,alpha,slot});
-    if (paint) return {tool,...paint};
+    if (paint) return {tool,...paint,...(tool==='spray' && {spray:sprayOptions(spray)}),...scope};
   }
-  throw new TypeError('Pencil needs RGBA, color and/or alpha, or an exact slot. Eraser takes no color or alpha.');
+  throw new TypeError('Pencil and spray need RGBA, color and/or alpha, or an exact slot. Eraser takes no color or alpha.');
 }
 
 const unpack = value=>[value>>>24,(value>>>16)&255,(value>>>8)&255,value&255];

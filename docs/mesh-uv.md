@@ -1496,6 +1496,38 @@ Both shared and local fills commit as a single undoable edit.
 Run `node examples/tileset-pick/bound-tile-fill-demo.cjs bound-tile-fill-demo`
 to compare a connected solid fill with a matching-color checker fill.
 
+### Spray, dither, and mirror a bound tile
+
+Use the same visible hit, paint scope, and preview workflow. Pattern
+coordinates follow the source atlas.
+
+| Request fields | Result |
+| --- | --- |
+| `"tool": "spray", "color": "#f2bd7c", "spray": { "radius": 5, "density": 0.8, "seed": 71 }` | Spray a circular dab of the pencil color around the hit. Density falls toward the edge. |
+| `"tool": "dither", "dither": { "pattern": "bayer", "mix": 0.5, "seed": 71, "colors": [{ "color": "#263b47" }, { "color": "#567777" }] }` | Apply a seeded Bayer phase to the selected source texels. Mix sets the proportion of the second color. Use `"blue-noise"` for Ink's seeded blue-noise tile. |
+| `"tool": "pencil", "color": "#f2bd7c", "drawing": { "mirrorX": 11.5, "mirrorY": 11.5 }` | Reflect a dab across either or both atlas axes. Pixel-center and half-pixel positions work. Eraser and spray also accept the axes. |
+
+Keep the active boundary with an inline `selection` query in atlas texels
+or pass a saved pixel selection with `--selection`. An inline selection
+can use Ink's native rectangle, lasso, wand, and mask operations.
+A saved selection has `grid` and `pixels` fields. For a selection
+saved from a crop, add its atlas `origin` as `[x, y]`.
+
+```sh
+ink-studio tileset paint face spray.json --scene station.json --selection stencil.json --preview spray > review.json
+ink-studio tileset paint face spray.json --scene station.json --selection stencil.json --expect review.json --out station-painted.json
+```
+
+Ink clips the dab, dither, and reflected copies to the intersection of
+the selection and the face's pigment footprint. The preview receipt
+records the seed, pattern settings, and selected texel count.
+`texels.png` marks eligible texels in teal and the changed cells
+in gold. Narrowing a selection keeps the spray and dither phase
+at atlas coordinates that remain selected.
+
+Run `node examples/tileset-pick/bound-tile-stroke-demo.cjs bound-tile-stroke-demo`
+to compare spray, dither, and mirrored paint on a prefab sign.
+
 In Node, use `ink.openTilesetPaint(editor, request)` and
 `ink.writeTilesetPaint(editor, binding, document, { apply: true })`.
 Omit `apply` to preview the write. One scene undo restores the atlas

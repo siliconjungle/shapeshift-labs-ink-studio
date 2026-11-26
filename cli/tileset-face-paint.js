@@ -6,7 +6,7 @@ const {viewSettings} = require('./mesh-native-view.js');
 const {digest,isRevision} = require('./pixel-edit-revisions.js');
 const {paintPixels,planPixels} = require('./tileset-paint.js');
 const Tools = require('./tileset-face-tools.js');
-const Fill = require('./tileset-face-fill.js');
+const Region = require('./tileset-face-region.js');
 
 const format = 'ink-studio/tileset-face-paint';
 const read = file=>JSON.parse(fs.readFileSync(file,'utf8'));
@@ -18,7 +18,8 @@ const key = (object,face)=>JSON.stringify([object,face]);
 
 function settings(request) {
   const {at,object,face,view={}} = request ?? {};
-  if (!fields(request,['at','rgba','object','face','view','sharing','variant','tool','color','alpha','slot','sample','channel','fill']) || !fields(view,viewKeys) ||
+  if (!fields(request,['at','rgba','object','face','view','sharing','variant','tool','color','alpha','slot','sample','channel',
+    'fill','spray','dither','drawing','selection']) || !fields(view,viewKeys) ||
       object!==undefined && !name(object) || face!==undefined && !name(face) ||
       view.cameraShot!==undefined && !name(view.cameraShot) ||
       view.cameraTime!==undefined && (!Number.isFinite(view.cameraTime) || view.cameraTime<0) ||
@@ -42,9 +43,9 @@ function capture(editor, view, at, kit) {
   return {world,frame};
 }
 
-function usesOf(world, tileset, at, K, filled) {
+function usesOf(world, tileset, at, K, area) {
   const result = new Map(), {touches} = K.authoring.tilesetAtlasSelection;
-  const fillHit = filled && Fill.contact(filled.rect,filled.changedMask);
+  const areaHit = area && Region.contact(area.rect,area.changedMask);
   for (const [object,row] of Object.entries(world.topologyMeshes ?? {})) {
     if (!row.tilesetMaterials) continue;
     const layer = K.sceneMeshes.layer(row.mesh);
@@ -59,8 +60,8 @@ function usesOf(world, tileset, at, K, filled) {
       for (let corner=first;corner<end;corner+=3) {
         const face = layer.featureFaces[corner/3], id = key(object,face), offset = corner*5;
         if (result.get(id)?.sampling==='texel-footprint') continue;
-        const uv = fillHit ? null : [3,8,13].map(i=>[layer.vertices[offset+i],layer.vertices[offset+i+1]]);
-        const direct = fillHit ? fillHit(layer,corner,chart) :
+        const uv = areaHit ? null : [3,8,13].map(i=>[layer.vertices[offset+i],layer.vertices[offset+i+1]]);
+        const direct = areaHit ? areaHit(layer,corner,chart) :
           hi.every((limit,axis)=>uv.some(point=>point[axis]<limit)) && touches(uv,origin,hi);
         if (direct || filtered) result.set(id,{object,...(part!==undefined && {part}),face,material,
           sampling:direct ? 'texel-footprint' : 'filter-or-uv-motion',visiblePixels:0,changedPixels:0});
@@ -122,8 +123,9 @@ function paint(editor, request, {apply=false,expect} = {}, kit = require('..').l
   const dependencies = editor.sourceDependencies?.();
   if (editor.sourceDependencies && dependencies===undefined) throw new RangeError('Cannot verify face paint scene dependencies');
   // Explicit RGBA pencil requests also accept receipts produced before the tool field was added.
+  const legacy = tool==='pencil' && rgba!==undefined && !Region.usesRegion(op);
   const previewRevision = digest([scene,dependencies,at,rgba,object,face,view,...(local ? [sharing,variant] : []),
-    ...(rgba===undefined ? [op] : [])]);
+    ...(legacy ? [] : [op])]);
   const head = {format,version:1,scene:scene.id,at,view,tool,...(!sampling && {sharing}),...(local && {variant}),previewRevision};
   const blocked = (code,detail={})=>({report:{...head,...detail,...(sampling && {sampled:false}),
     canCommit:false,conflicts:[{code}]}});
@@ -147,14 +149,14 @@ function paint(editor, request, {apply=false,expect} = {}, kit = require('..').l
     if (!picked) return blocked('missing-source-channel',{source,channel:op.channel});
     return {report:{...head,source,sample:picked,sampled:true,canCommit:false,conflicts:[]}};
   }
-  const filled = tool==='fill' ? Fill.plan(row,source,sample,asset,op,K) : null;
-  if (filled?.conflict) return blocked(filled.conflict,{source,fill:op.fill});
-  const write = filled ? null : Tools.pencilOrEraser(asset,source.at,op);
-  if (!filled && !write) return blocked('palette-slot-unavailable',{source,slot:op.slot});
-  const region = filled ?? {rect:[...source.at,1,1],pixels:[write.pixel]};
+  const area = Region.usesRegion(op) ? Region.plan(row,source,sample,asset,op,K) : null;
+  if (area?.conflict) return blocked(area.conflict,{source,fill:op.fill});
+  const write = area ? null : Tools.pencilOrEraser(asset,source.at,op);
+  if (!area && !write) return blocked('palette-slot-unavailable',{source,slot:op.slot});
+  const region = area ?? {rect:[...source.at,1,1],pixels:[write.pixel]};
   const planned = planChange(editor,source,asset,region,variant);
   if (!planned.detail) return blocked('indexed-palette-full',{source});
-  const detail = {...head,source,...(filled ? {fill:filled.report} : {rgba:write.rgba}),
+  const detail = {...head,source,...(area ? {[op.fill ? 'fill' : 'stroke']:area.report} : {rgba:write.rgba}),
     ...(op.slot!==undefined && {slot:op.slot}),...planned.detail};
   if (!detail.canCommit) return {report:detail};
   let after = before;
@@ -163,7 +165,7 @@ function paint(editor, request, {apply=false,expect} = {}, kit = require('..').l
     planned.commit(candidate);
     after = capture(candidate,view,undefined,kit);
   }
-  const uses = filled && !detail.changedTexels ? new Map() : usesOf(before.world,tileset,source.at,K,filled);
+  const uses = area && !detail.changedTexels ? new Map() : usesOf(before.world,tileset,source.at,K,area);
   // The observed hit is authoritative even if an authored projection moved its UV footprint.
   const picked = key(source.object,source.face);
   uses.set(picked,{object:source.object,...(source.part!==null && {part:source.part}),
@@ -175,20 +177,25 @@ function paint(editor, request, {apply=false,expect} = {}, kit = require('..').l
     ...(local && {sharedPaintUses:[...uses.entries()].filter(([id])=>id!==picked).map(([,row])=>row)}),
     prefabDependencies:refs.prefabs,changedPixels},
     images:{before:before.frame,after:after.frame,diff,
-      ...(filled && {texels:Fill.preview(filled.rect,filled.selection,filled.changedMask)})}};
+      ...(area && {texels:Region.preview(area.rect,area.selection,area.changedMask)})}};
 }
 
 function command([file,...rest], options, kit, openEditor, sceneOutput) {
-  const {scene,out,preview,expect} = options;
-  if (rest.length || ![file,scene].every(name) || !fields(options,['scene','out','preview','expect']) ||
+  const {scene,out,preview,expect,selection} = options;
+  if (rest.length || ![file,scene].every(name) || !fields(options,['scene','out','preview','expect','selection']) ||
       !Object.values(options).every(name))
-    throw new TypeError('Use tileset paint face <request.json> --scene <scene.json> [--preview directory] [--expect receipt.json] [--out revised.json]');
+    throw new TypeError('Use tileset paint face <request.json> --scene <scene.json> [--selection mask.json] [--preview directory] [--expect receipt.json] [--out revised.json]');
   const output = out && sceneOutput(path.resolve(scene),out,file);
-  const inputs = [scene,file,expect,output].filter(Boolean).map(name=>path.resolve(name));
-  const request = read(file);
-  const artifacts = ['before','after','diff',...(request?.tool==='fill' ? ['texels'] : [])]
+  const inputs = [scene,file,expect,selection].filter(Boolean).map(name=>path.resolve(name));
+  let request = read(file);
+  if (selection!==undefined) {
+    if (!request || Object.getPrototypeOf(request)!==Object.prototype || Object.hasOwn(request,'selection'))
+      throw new TypeError('Provide an inline selection or use --selection');
+    request = {...request,selection:read(selection)};
+  }
+  const artifacts = ['before','after','diff',...(request && Region.usesRegion(request) ? ['texels'] : [])]
     .map(name=>[name,preview && path.resolve(preview,name+'.png')]);
-  if (output && expect && output===path.resolve(expect) || preview && artifacts.some(([,file])=>inputs.includes(file)))
+  if (output && inputs.includes(output) || preview && artifacts.some(([,file])=>inputs.includes(file) || file===output))
     throw new RangeError('Write face paint output separately from its inputs');
   const prior = expect && read(expect);
   if (expect && (prior?.format!==format || prior.version!==1 || prior.canCommit!==true || !isRevision(prior.previewRevision)))
