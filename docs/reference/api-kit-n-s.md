@@ -427,6 +427,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.pixelPaintTools` | namespace |  |  |
+| `KIT.pixelPaintTools.checkerIndex` | function | `(x,y,size)` | [source](../../src/pixel-paint-tools.js) |
 | `KIT.pixelPaintTools.dimensions` | function | `(width,height,large = false)` | [source](../../src/pixel-paint-tools.js) |
 | `KIT.pixelPaintTools.drawingGrid` | function | `(width,height,settings = {},large = false)` | [source](../../src/pixel-paint-tools.js) |
 | `KIT.pixelPaintTools.eight` | value | `array` |  |

@@ -243,13 +243,41 @@ const MeshUV = (() => {
     return true;
   }
 
-  function texelMask(triangles, width, height) {
+  // Packed texture coordinates address half-open texel cells, as in the raster sampler.
+  function scanSampled(tri, {x,y,width,height}, work, emit) {
+    const [low,top,high,bottom] = bounds(tri);
+    if (high<x || low>=x+width) return true;
+    for (let r=Math.max(y,Math.floor(top));r<=Math.min(y+height-1,Math.floor(bottom));r++) {
+      if (work.rows>=work.limit) return false;
+      work.rows++;
+      let left = Infinity, right = -Infinity, includesRight = false;
+      function hit(u,included) {
+        left = Math.min(left,u);
+        if (u>right) { right = u; includesRight = included; }
+        else if (u===right) includesRight ||= included;
+      }
+      for (let i=0;i<3;i++) {
+        const [u,v] = tri[i], [a,b] = tri[(i+1)%3];
+        if (v>=r && v<=r+1) hit(u,v<r+1);
+        for (const line of [r,r+1]) if (line>Math.min(v,b) && line<Math.max(v,b))
+          hit(u+(a-u)*(line-v)/(b-v),line===r);
+      }
+      const lo = Math.max(0,Math.floor(left)-x);
+      const hi = Math.min(width-1,(includesRight ? Math.floor(right) : Math.ceil(right)-1)-x);
+      if (lo<=hi && emit(r,lo,hi)===false) break;
+    }
+    return true;
+  }
+
+  function texelMask(triangles, width, height, {sampled=false} = {}) {
     const stride = width+1, counts = new Int32Array(stride*height);
     const crop = {x:0,y:0,width,height}, work = {rows:0,limit:4000000};
-    for (const tri of triangles) if (!scanTriangle(tri,crop,work,(row,left,right)=>{
+    const scan = sampled ? scanSampled : scanTriangle;
+    for (const tri of triangles) if (!scan(tri,crop,work,(row,left,right)=>{
       counts[row*stride+left]++;
       counts[row*stride+right+1]--;
-    })) throw new RangeError('UV guide fill exceeds its scanline budget. Choose fewer charts or a smaller canvas.');
+    })) throw new RangeError(sampled ? 'Face fill UV footprint exceeds its scanline budget.' :
+      'UV guide fill exceeds its scanline budget. Choose fewer charts or a smaller canvas.');
     const mask = new Uint8Array(width*height);
     for (let y=0;y<height;y++) {
       let active = 0;
@@ -313,6 +341,6 @@ const MeshUV = (() => {
       fraction:covered/(width*height),complete,scanlines:work.rows,perFace};
   }
 
-  return Object.freeze({ area2, sameUV, validate, topology, overlaps, metrics, changedOverlaps, inspect, sampleCoverage, texelMask });
+  return Object.freeze({ area2, sameUV, validate, topology, overlaps, metrics, changedOverlaps, inspect, sampleCoverage, texelMask, scanSampled });
 })();
 if (typeof module !== 'undefined') module.exports = MeshUV;
