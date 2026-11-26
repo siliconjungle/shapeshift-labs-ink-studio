@@ -44,9 +44,9 @@
       (node.clips ?? []).map(({id,sequence})=>({id,sequence,owner,reachable:owner === null || reachable.has(owner)})));
   }
 
-  function inventory(scene, ids, external) {
+  function inventory(scene, ids, external, customProperties) {
     const result = new Map(ids.map(id=>[id,{faces:[],materials:[],clips:[],prefabs:[]}]));
-    const expanded = Object.keys(scene.instances ?? {}).length && A.scenePrefabs.expand(scene,{prefabs:external});
+    const expanded = Object.keys(scene.instances ?? {}).length && A.scenePrefabs.expand(scene,{prefabs:external,customProperties});
     const meshes = expanded ? expanded.spec.topologyMeshes : scene.topologyMeshes;
     const evaluate = meshes && A.meshTopologyScene.evaluator(meshes,expanded?.meshPlacements);
     for (const [object,mesh] of ordered(meshes)) {
@@ -108,11 +108,11 @@
     return result;
   }
 
-  function dependencies(scene, id, external) {
+  function dependencies(scene, id, external, customProperties) {
     const tilesets = A.tilesets.prepare(scene.tilesets,scene.tilesetDefaults);
     const ids = id === undefined ? Object.keys(scene.tilesets ?? {}).sort() : [id];
     const assets = ids.map(key=>descriptor(key,tilesets.source(key),tilesets.grid(key).tileSize));
-    const refs = inventory(scene,ids,external), links = A.tilesetSources.prepare(scene);
+    const refs = inventory(scene,ids,external,customProperties), links = A.tilesetSources.prepare(scene);
     return freeze({format:'ink-studio/tileset-dependencies',version:1,
       sheets:assets.map(asset=>({...asset,...refs.get(asset.id),...(links[asset.id] && {source:links[asset.id]})}))});
   }
@@ -210,7 +210,7 @@
   const schemas = {clone:['id','newId'],replace:['id','asset'],palette:['id','asset'],material:['id','settings'],combine:['ids','newId','axis'],
     deduplicate:['id','keepId'],remove:['id']};
 
-  function plan(scene, request, external) {
+  function plan(scene, request, external, customProperties) {
     if (!request || Object.getPrototypeOf(request) !== Object.prototype ||
         !Object.hasOwn(schemas,request.type) || Object.keys(request).some(key=>key !== 'type' && !schemas[request.type].includes(key)))
       throw new TypeError('Choose a tileset clone, replace, palette, material, combine, deduplicate or remove request');
@@ -222,7 +222,7 @@
       throw new TypeError('Choose distinct source tileset IDs');
     const tilesets = API.prepare(scene.tilesets,scene.tilesetDefaults);
     const sources = ids.map(key=>tilesets.source(key));
-    const refs = inventory(scene,ids,external);
+    const refs = inventory(scene,ids,external,customProperties);
     const blockers = [], links = A.tilesetSources.prepare(scene);
     let extra = {}, detail = {};
     if (type === 'clone' || type === 'combine') {

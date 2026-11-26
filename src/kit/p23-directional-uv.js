@@ -125,6 +125,7 @@
         request.clip!==undefined && !id(request.clip) || request.pitch!==undefined && !Number.isFinite(request.pitch))
       throw new TypeError('Choose a tileset, target faces, and a list of enabled compass directions');
     const { metadata } = atlas.snapshot(), { width,height } = metadata;
+    A.tilesets.dimensions(width,height);
     if (metadata.scenery || metadata.cels || metadata.bump)
       throw new TypeError('Use a baked directional atlas from the pixel direction export');
     const source = request.clip && metadata.clips?.find(clip=>clip.id===request.clip);

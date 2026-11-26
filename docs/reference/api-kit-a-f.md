@@ -1032,8 +1032,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetReskin.planAssignment` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-reskin.js) |
 | `KIT.authoring.tilesetReskin.variant` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-reskin.js) |
 | `KIT.authoring.tilesetRevisions` | namespace |  |  |
-| `KIT.authoring.tilesetRevisions.dependencies` | function | `(scene, id, external)` | [source](../../src/kit/p23-tileset-revisions.js) |
-| `KIT.authoring.tilesetRevisions.plan` | function | `(scene, request, external)` | [source](../../src/kit/p23-tileset-revisions.js) |
+| `KIT.authoring.tilesetRevisions.dependencies` | function | `(scene, id, external, customProperties)` | [source](../../src/kit/p23-tileset-revisions.js) |
+| `KIT.authoring.tilesetRevisions.plan` | function | `(scene, request, external, customProperties)` | [source](../../src/kit/p23-tileset-revisions.js) |
 | `KIT.authoring.tilesetSources` | namespace |  |  |
 | `KIT.authoring.tilesetSources.prepare` | function | `(scene)` | [source](../../src/kit/p23-tileset-sources.js) |
 | `KIT.authoring.tilesetStrokes` | namespace |  |  |

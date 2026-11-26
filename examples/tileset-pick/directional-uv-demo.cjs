@@ -62,7 +62,8 @@ json('camera.json',{w:128,h:100,camera:{yaw:Math.PI/2,pitch:.14,dist:4.8,ortho:t
 run(['pixel-art','directions','export','art.json','--out','atlas.json'],'atlas-receipt.json');
 run(['pixel-art','directions','uv-clips','atlas.json','--settings','bindings.json','--out','uv-clips.json']);
 const rule = read('uv-clips.json'), image = ink.readTilesetImage(file(read('atlas.json').files.color));
-const source = {id:'beacon-directions',style:'slate',solids:[],tilesets:{
+const source = {id:'beacon-directions',style:'slate',solids:[],
+  camera:{yaw:0,pitch:.14,dist:3.7,target:[0,.7,0],projection:'orthographic',sway:0},tilesets:{
   'signal-views':{...image,material:{lighting:'unlit',alphaMode:'mask'}}
 }};
 const editor = ink.createSceneEditor(source);
@@ -89,14 +90,14 @@ function capture(direction,index,time,suffix='') {
 dirs.forEach((direction,index)=>capture(direction,index,.17));
 capture('n',0,.05,'-early');
 
-const width = 544, height = 248, tint = '#9fbcb4';
+const width = 544, height = 264, tint = '#9fbcb4';
 const board = drawing.render({width,height,edges:'hard',commands:[
   {type:'rect',rect:[0,0,width,height],fill:'#192b32'},
   {type:'text',text:'BEACON / DIRECTIONAL UV CLIPS',at:[12,9],scale:1,color:tint},
-  ...dirs.map((name,index)=>({type:'text',text:name.toUpperCase(),at:[12+132*(index%4),131+104*Math.floor(index/4)],scale:1,color:tint}))
+  ...dirs.map((name,index)=>({type:'text',text:name.toUpperCase(),at:[12+132*(index%4),131+116*Math.floor(index/4)],scale:1,color:tint}))
 ]});
 dirs.forEach((name,index)=>{
-  const {w,h,rgb} = PNG.read(file(name+'.png')), ox = 10+132*(index%4), oy = 26+104*Math.floor(index/4);
+  const {w,h,rgb} = PNG.read(file(name+'.png')), ox = 10+132*(index%4), oy = 26+116*Math.floor(index/4);
   for (let y=0;y<h;y++) for (let x=0;x<w;x++) {
     const p = (y*w+x)*3, q = ((oy+y)*width+ox+x)*4;
     board.data.set([rgb[p],rgb[p+1],rgb[p+2],255],q);
