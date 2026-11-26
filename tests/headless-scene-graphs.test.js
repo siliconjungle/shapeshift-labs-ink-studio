@@ -15,7 +15,7 @@ const link = (node, port = 'value') => ({ node, port });
 test('software evaluation connects a solver, mesh, material group and borrowed scene textures', async () => {
   const graph = ink.createGraphProject({ ...project, outputs: { ...project.outputs, frame: link('capture', 'frame'),
     pixels: link('capture'), mask: link('mask'), field: link('field'), grid: link('smoke', 'grid'), measure: link('measure'),
-    surface: link('offset') } }, { kit });
+    surface: link('offset'), carrier: link('terrain') } }, { kit });
   const { report, artifacts } = await graph.evaluateSoftware(['rendered', 'mask', 'measure', 'terrain']);
   assert.equal(report.backend, 'software');
   assert(report.passed);
@@ -38,6 +38,8 @@ test('software evaluation connects a solver, mesh, material group and borrowed s
   assert.equal(got.surface.uvs[0], 0);
   assert.deepEqual(Array.from(got.surface.uvs.subarray(-2)), [1, 1]);
   assert(got.binding.channels.every(channel => channel.sharedInput));
+  const meshOnly = kit.KIT.procedural.sceneGraph.world([], { meshes: [got.carrier] });
+  assert(meshOnly.pal.includes(0xffe4a7));
   assert.deepEqual(report.captured.map(row => row.format), ['png','png','json','json']);
   assert.deepEqual(PNG.raster(artifacts[0].bytes).data, got.survey.raster.data);
   const saved = JSON.parse(artifacts[2].bytes);
@@ -91,7 +93,7 @@ test('graph evaluate CLI persists selected typed textures without project export
   assert.match(invalid.stderr, /need --out/);
   const pulse = { op: 'evaluate', capture: ['original'] };
   const session = spawnSync(process.execPath, [cli, 'graph', 'session', graph, '--out', out], {
-    encoding: 'utf8', input: [pulse, pulse, { op: 'quit' }].map(JSON.stringify).join('\n') + '\n'
+    encoding: 'utf8', input: [pulse, pulse, { op: 'quit' }].map(row => JSON.stringify(row)).join('\n') + '\n'
   });
   assert.equal(session.status, 0, session.stderr);
   const [cold, warm] = session.stdout.trim().split('\n').map(JSON.parse);
