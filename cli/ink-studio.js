@@ -1467,6 +1467,8 @@ const CMD = {
         '  painting-cels export <scene.json> <clip.json> --out directory [--view view.json]   render held exposures and animated PNG',
         '  painting-flow sample <scene.json> <plan.json> [--at seconds] --out scene.json   advect retained marks through a painted field',
         '  painting-flow bake <scene.json> <plan.json> [--from seconds --fps 12 --frames 24 --playback once] --out clip.json   bake editable flow poses into cels',
+        '  paint-evaporation apply <scene.json> <plan.json> [--at seconds] --out scene.json   bake a painted region into a particle layer',
+        '  paint-evaporation inspect <scene.json> [--at seconds] [--layer id]   report stored source, color, emission and release times',
         '  painting-wave apply <scene.json> <plan.json> --out scene.json   retain a painted sway on marks or geometry',
         '  painting-wave inspect <scene.json> [--at seconds]   inspect sampled direction, stiffness, phase and offset',
         '  painting-wave sample <scene.json> --at seconds --out scene.json   hold the selected wave pose',
@@ -2854,6 +2856,10 @@ const CMD = {
       if (!descriptor.openEditor) throw new TypeError('Paint flow needs a plain editable JSON scene');
       return descriptor.openEditor({ historyLimit: 0 });
     });
+  },
+  'paint-evaporation'() {
+    return require('./paint-evaporation.js')(pos,opt,lib(),
+      (file,source)=>dataScene(file,source,{refreshTilesets:false}));
   },
   'painting-wave'() {
     return require('./painting-wave.js')(pos, opt, lib(),
@@ -4764,7 +4770,7 @@ const CMD = {
     const w = buildPreview(), diagnostics = previewPasses(),
       fps = num('fps', 12),
       from = num('from', 0),
-      duration = Math.max(w.timeline?.duration ?? 0, w.cameraRig?.duration ?? 0, w.materialResponse?.duration ?? 0),
+      duration = Math.max(w.timeline?.duration ?? 0, w.cameraRig?.duration ?? 0, w.materialResponse?.duration ?? 0, w.paintEvaporation?.duration ?? 0),
       to = num('to', duration > from ? duration : 6),
       n = Math.max(2, Math.round((to - from) * fps)),
       frames = [], ts = [], camera = clipCamera(w),
@@ -4785,10 +4791,12 @@ const CMD = {
     const replay = feedbackReplay(w, from, view(frame));
     let exposure = w;
     function sampleWorld(t) {
-      if (!w.paintBoil && w.paintWave===undefined) return w;
+      if (!w.paintBoil && w.paintWave===undefined && !w.paintEvaporation) return w;
       const time = num('parameter-time', t);
       if (w.paintBoil && exposure.paintBoil?.key !== w.paintBoil.at(time) ||
-          w.paintWave!==undefined && exposure.paintWave!==time || exposure.anim?.stateful && t < exposure.clock)
+          w.paintWave!==undefined && exposure.paintWave!==time ||
+          w.paintEvaporation && exposure.paintEvaporation?.key!==w.paintEvaporation.at(time) ||
+          exposure.anim?.stateful && t < exposure.clock)
         exposure = buildPreview(pos[0], { parameterInputs: { time } });
       return exposure;
     }

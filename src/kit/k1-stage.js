@@ -282,9 +282,9 @@
     return out;
   };
   // ---- pool: n hidden splats made before B.finish(); take() lends the next one (oldest first once all are out)
-  K.pool = (B, n) => {
+  K.pool = (B, n, flags) => {
     const first = B.count();
-    for (let i = 0; i < n; i++) B.iso(0, -99, 0, 0.05, B.P[0], 0, { nd: true });
+    for (let i = 0; i < n; i++) B.iso(0, -99, 0, 0.05, B.P[0], 0, { nd: true, ...flags?.(i) });
     let next = 0;
     const pl = {
       first,
