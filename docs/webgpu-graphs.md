@@ -148,6 +148,13 @@ and the indirect draw. The draw consumes the projected ellipses directly.
 The normal frame path transfers a 96-byte camera uniform and returns
 immediately after submitting commands.
 
+For moving geometry, reserve a resident buffer with
+`renderer.uploadChunk(rows, { order, capacity })`, where `capacity` is a
+number of splats. Call `renderer.updateChunk(handle, nextRows)` to replace its
+active rows. The stable order ID and allocation are reused. The method returns
+the number of splat bytes written. Pass an empty `Float32Array` to hide the
+chunk while retaining the buffer for a later update.
+
 Request `profile: true` for a diagnostic frame. It reads back the count and
 optional timestamps. `sortCapacity` is the active padded count in the sort.
 The report lists the cloud bytes uploaded since the previous frame and the

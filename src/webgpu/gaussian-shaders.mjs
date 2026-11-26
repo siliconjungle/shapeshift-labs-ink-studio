@@ -91,7 +91,7 @@ var<workgroup> first: u32;
 
 fn project(index: u32, xyz: vec3f, depth: f32) -> Ellipse {
   var ellipse: Ellipse;
-  if (index >= arrayLength(&chunk.points) || !(depth >= camera.clip.x && depth <= camera.clip.y)) { return ellipse; }
+  if (index >= chunk.identity.z || !(depth >= camera.clip.x && depth <= camera.clip.y)) { return ellipse; }
   let point = chunk.points[index];
   let compensated = camera.clip.w > 0.0;
   let minimum = select(0.004, 0.0000152587890625, compensated);
@@ -163,7 +163,7 @@ fn main(@builtin(global_invocation_id) id: vec3u, @builtin(local_invocation_inde
   if (lane == 0u) { atomicStore(&visible, 0u); }
   workgroupBarrier();
   var xyz: vec3f;
-  if (id.x < arrayLength(&chunk.points)) { xyz = (camera.view * vec4f(chunk.points[id.x].position.xyz, 1.0)).xyz; }
+  if (id.x < chunk.identity.z) { xyz = (camera.view * vec4f(chunk.points[id.x].position.xyz, 1.0)).xyz; }
   let depth = -xyz.z;
   let ellipse = project(id.x, xyz, depth);
   var offset = 0u;
