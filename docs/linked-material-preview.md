@@ -47,3 +47,5 @@ ink-studio graph material-preview /tmp/ink-relay/harbour-relay.material.json /tm
 ```
 
 The relay housing has separate enamel and bronze slots. Its front carries two different enamel tiles on adjacent UV regions. The demo includes the imported OBJ, a retained Ink topology carrier, three primitives, and an editable material graph with embedded maps.
+
+For an editable HDRI, reusable room and camera rigs, and live environment reflections, use the [material lighting room](material-lighting-room.md).
