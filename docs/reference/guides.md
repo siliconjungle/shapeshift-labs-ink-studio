@@ -197,6 +197,7 @@ All checked-in guides, indexed by title and section headings.
 - [Match-cut finder](../match-cut.md)
 - [Advanced typed texture filters](../material-advanced-texture-filters.md)
 - [Shared material base settings](../material-base-settings.md)
+- [Material-channel painting](../material-channel-paint.md)
 - [Typed material color corrections](../material-color-corrections.md)
 - [Consistent material controls](../material-controls.md)
 - [Two-way material conversion](../material-conversion.md)

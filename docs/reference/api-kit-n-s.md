@@ -292,9 +292,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.pixelBrushes` | namespace |  |  |
-| `KIT.pixelBrushes.beginDynamicStroke` | function | `(width,height,raw,emit,grid)` | [source](../../src/pixel-brushes.js) |
+| `KIT.pixelBrushes.beginDynamicStroke` | function | `(width,height,raw,emit,grid,large = false)` | [source](../../src/pixel-brushes.js) |
 | `KIT.pixelBrushes.capture` | function | `({ width,height,read,pixels,rect,anchor,settings } = {})` | [source](../../src/pixel-brushes.js) |
-| `KIT.pixelBrushes.dynamicStroke` | function | `(width,height,brush,samples,emit,grid)` | [source](../../src/pixel-brushes.js) |
+| `KIT.pixelBrushes.dynamicStroke` | function | `(width,height,brush,samples,emit,grid,large = false)` | [source](../../src/pixel-brushes.js) |
 | `KIT.pixelBrushes.footprint` | function | `(raw)` | [source](../../src/pixel-brushes.js) |
 | `KIT.pixelBrushes.format` | value | `string = "ink-studio/pixel-brush"` |  |
 | `KIT.pixelBrushes.resolvePalette` | function | `(brush,entries,{ limit = 255,named = false,used,preserveIds = false } = {})` | [source](../../src/pixel-brushes.js) |
@@ -426,7 +426,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.pixelPaintTools` | namespace |  |  |
-| `KIT.pixelPaintTools.drawingGrid` | function | `(width,height,settings = {})` | [source](../../src/pixel-paint-tools.js) |
+| `KIT.pixelPaintTools.dimensions` | function | `(width,height,large = false)` | [source](../../src/pixel-paint-tools.js) |
+| `KIT.pixelPaintTools.drawingGrid` | function | `(width,height,settings = {},large = false)` | [source](../../src/pixel-paint-tools.js) |
 | `KIT.pixelPaintTools.eight` | value | `array` |  |
 | `KIT.pixelPaintTools.fillPixels` | function | `(grid,point,matches)` | [source](../../src/pixel-paint-tools.js) |
 | `KIT.pixelPaintTools.four` | value | `array` |  |
@@ -478,9 +479,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelSelections` | namespace |  |  |
 | `KIT.pixelSelections.combine` | function | `(type,base,operand)` | [source](../../src/pixel-selections.js) |
 | `KIT.pixelSelections.contains` | function | `(width,height,value)` | [source](../../src/pixel-selections.js) |
-| `KIT.pixelSelections.fromPixels` | function | `(width,height,pixels)` | [source](../../src/pixel-selections.js) |
-| `KIT.pixelSelections.mask` | function | `(width,height,query,read,recall,matches,intent)` | [source](../../src/pixel-selections.js) |
-| `KIT.pixelSelections.modify` | function | `(width,height,mask,operation)` | [source](../../src/pixel-selections.js) |
+| `KIT.pixelSelections.fromPixels` | function | `(width,height,pixels,large = false)` | [source](../../src/pixel-selections.js) |
+| `KIT.pixelSelections.mask` | function | `(width,height,query,read,recall,matches,intent,large = false)` | [source](../../src/pixel-selections.js) |
+| `KIT.pixelSelections.modify` | function | `(width,height,mask,operation,large = false)` | [source](../../src/pixel-selections.js) |
 | `KIT.pixelSelections.pixels` | function | `(width,mask)` | [source](../../src/pixel-selections.js) |
 | `KIT.pixelSelections.swatch` | function | `(width,query,slots,alpha,ids)` | [source](../../src/pixel-selections.js) |
 

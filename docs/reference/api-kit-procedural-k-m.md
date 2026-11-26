@@ -219,6 +219,31 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.materialChannels.validMap` | function | `(name, map)` | [source](../../src/kit/paq-material-channels.js) |
 | `KIT.procedural.materialChannels.version` | value | `number = 1` |  |
 
+## KIT.procedural.materialPaint
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.materialPaint` | namespace |  |  |
+| `KIT.procedural.materialPaint.apply` | function | `(source, document, { masks = {}, charts = {}, flows = {} } = {})` | [source](../../src/kit/paq-material-paint.js) |
+| `KIT.procedural.materialPaint.create` | function | `(source, document = { format, version, layers: [] }, options)` | [guide](../material-channel-paint.md#coordinates-and-editing), [source](../../src/kit/paq-material-paint.js) |
+| `KIT.procedural.materialPaint.format` | value | `string = "ink-studio/material-paint"` |  |
+| `KIT.procedural.materialPaint.operations` | namespace |  |  |
+| `KIT.procedural.materialPaint.operations["material.paint"]` | namespace |  |  |
+| `KIT.procedural.materialPaint.operations["material.paint"].description` | value | `string = "Apply an editable stroke and layer session to native typed material maps."` |  |
+| `KIT.procedural.materialPaint.operations["material.paint"].inputs` | namespace |  |  |
+| `KIT.procedural.materialPaint.operations["material.paint"].inputs.charts` | namespace |  |  |
+| `KIT.procedural.materialPaint.operations["material.paint"].inputs.charts.default` | namespace |  |  |
+| `KIT.procedural.materialPaint.operations["material.paint"].inputs.charts.type` | value | `string = "record"` |  |
+| `KIT.procedural.materialPaint.operations["material.paint"].inputs.flows` | alias | `Alias of KIT.procedural.materialPaint.operations["material.paint"].inputs.charts` |  |
+| `KIT.procedural.materialPaint.operations["material.paint"].inputs.masks` | alias | `Alias of KIT.procedural.materialPaint.operations["material.paint"].inputs.charts` |  |
+| `KIT.procedural.materialPaint.operations["material.paint"].inputs.session` | value | `string = "record"` |  |
+| `KIT.procedural.materialPaint.operations["material.paint"].inputs.source` | value | `string = "materialChannels"` |  |
+| `KIT.procedural.materialPaint.operations["material.paint"].outputs` | namespace |  |  |
+| `KIT.procedural.materialPaint.operations["material.paint"].outputs.report` | value | `string = "record"` |  |
+| `KIT.procedural.materialPaint.operations["material.paint"].outputs.value` | value | `string = "materialChannels"` |  |
+| `KIT.procedural.materialPaint.operations["material.paint"].run` | function | `({ source, session, ...options })` | [source](../../src/kit/paq-material-paint.js) |
+| `KIT.procedural.materialPaint.version` | value | `number = 1` |  |
+
 ## KIT.procedural.materialParameters
 
 | Member | Kind | Signature or value | Guides and source |

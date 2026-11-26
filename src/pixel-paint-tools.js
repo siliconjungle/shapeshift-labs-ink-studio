@@ -7,14 +7,18 @@ const PixelPaintTools = (() => {
 
   const modulo = (x,n) => (x%n+n)%n;
 
-  function drawingGrid(width,height,settings = {}) {
+  function dimensions(width,height,large = false) {
+    return [width,height].every(n=>integer(n,1,large ? 8192 : 512)) && (!large || width*height <= 16777216);
+  }
+
+  function drawingGrid(width,height,settings = {},large = false) {
     const fields = ['mirrorX','mirrorY','wrapX','wrapY'];
     if (!settings || Object.getPrototypeOf(settings) !== Object.prototype ||
         !Object.keys(settings).every(key => fields.includes(key)))
       throw new TypeError('Drawing grid accepts mirrorX, mirrorY, wrapX and wrapY');
     const { mirrorX,mirrorY,wrapX = false,wrapY = false } = settings;
     if (typeof wrapX !== 'boolean' || typeof wrapY !== 'boolean' ||
-        ![width,height].every(n=>integer(n,1,512)) ||
+        !dimensions(width,height,large) ||
         ![mirrorX,mirrorY].every((n,i)=>n === undefined || typeof n === 'number' && integer(n*2,-1,2*(i ? height : width)-1)))
       throw new RangeError('Mirror axes need pixel or half-pixel positions on the canvas. Wrap flags must be boolean.');
 
@@ -37,13 +41,17 @@ const PixelPaintTools = (() => {
       return a < 0 || b < 0 ? -1 : b*width+a;
     }
     function pixels(u,v,emit) {
+      oriented(u,v,p=>emit(p));
+    }
+
+    function oriented(u,v,emit) {
       const a = x.normalize(u), b = y.normalize(v);
       const c = mirrorX === undefined ? -1 : x.normalize(2*mirrorX-u);
       const d = mirrorY === undefined ? -1 : y.normalize(2*mirrorY-v);
-      if (a >= 0 && b >= 0) emit(b*width+a);
-      if (c >= 0 && c !== a && b >= 0) emit(b*width+c);
-      if (a >= 0 && d >= 0 && d !== b) emit(d*width+a);
-      if (c >= 0 && c !== a && d >= 0 && d !== b) emit(d*width+c);
+      if (a >= 0 && b >= 0) emit(b*width+a,1,1);
+      if (c >= 0 && c !== a && b >= 0) emit(b*width+c,-1,1);
+      if (a >= 0 && d >= 0 && d !== b) emit(d*width+a,1,-1);
+      if (c >= 0 && c !== a && d >= 0 && d !== b) emit(d*width+c,-1,-1);
     }
 
     // Screen-space strokes use half-integer centers. Include only copies that reach the art.
@@ -63,7 +71,7 @@ const PixelPaintTools = (() => {
       return placements(x,left,right).flatMap(horizontal=>placements(y,top,bottom)
         .map(vertical=>[horizontal,vertical]));
     }
-    return { width,height,wrapX,wrapY,contains,quantize,primary,pixels,copies };
+    return { width,height,wrapX,wrapY,contains,quantize,primary,pixels,oriented,copies };
   }
 
   function visit(seed, marks, id, matches, { width,height,steps,queue,wrapX,wrapY,chart }) {
@@ -219,7 +227,7 @@ const PixelPaintTools = (() => {
     return spans;
   }
 
-  return Object.freeze({ four,eight,visit,labelComponents,region,drawingGrid,fillPixels,segment,freehand,runs,insideEllipse,staircase });
+  return Object.freeze({ four,eight,visit,labelComponents,region,dimensions,drawingGrid,fillPixels,segment,freehand,runs,insideEllipse,staircase });
 })();
 
 if (typeof module !== 'undefined') module.exports = PixelPaintTools;

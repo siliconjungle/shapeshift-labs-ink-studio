@@ -9,7 +9,7 @@
   const color = Object.freeze([3, 4]), scalar = Object.freeze([1]);
   const layouts = Object.freeze({
     baseColor: color, normal: color, height: scalar, roughness: scalar, metalness: scalar,
-    ao: scalar, emission: color, opacity: scalar
+    ao: scalar, emission: color, opacity: scalar, flow: Object.freeze([2])
   });
   const maskName = /^mask\.[a-zA-Z][\w.-]{0,94}$/;
   const maxChannels = 64;
@@ -27,7 +27,7 @@
       if (!images.valid(map)) return false;
       const { intent } = map.descriptor;
       const accepts = name === 'baseColor' || name === 'emission' ? ['color'] :
-        name === 'normal' ? ['normal'] : name === 'height' ? ['height'] : ['data', 'mask'];
+        name === 'normal' ? ['normal'] : name === 'height' ? ['height'] : name === 'flow' ? ['data'] : ['data', 'mask'];
       return accepts.includes(intent) && components.includes(map.raster.channels ?? map.descriptor.layout.length);
     }
     return raster(map) && components.includes(map.channels ?? map.data.length / (map.width * map.height));

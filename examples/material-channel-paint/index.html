@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tideglass · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--ink:#111b25;--card:#1a2833;--stroke:#3b505a;--paper:#f1eadd;--soft:#b0c2c2;--mint:#a8e7d5;--gold:#f3c182}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;color:var(--paper);background:radial-gradient(ellipse at 20% -20%,#314354,transparent 58%),var(--ink);font:14px/1.4 system-ui,sans-serif}
+main{max-width:1318px;margin:auto;padding:30px clamp(15px,3.4vw,44px)}header{display:flex;justify-content:space-between;align-items:end;gap:12px;margin-bottom:22px}
+h1,h2,p{margin:0}h1,h2{font-family:Georgia,serif;font-weight:400;letter-spacing:-.046em}h1{font-size:clamp(58px,8.8vw,92px);line-height:.98;margin:3px 0 8px}h2{font-size:23px;line-height:1.12}
+p,label{color:var(--soft)}.eyebrow,output,.unit{font:11px ui-monospace,monospace;letter-spacing:.045em}.eyebrow{color:var(--gold);text-transform:uppercase}output,.unit{color:var(--mint)}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 335px;align-items:start;gap:14px}.card{margin:0;background:var(--card);border:1px solid var(--stroke);border-radius:9px;overflow:hidden}.card+.card{margin-top:12px}
+.row{padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:9px}.row label,.row p{font-size:12px}.actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+select,button{font:inherit;color:var(--paper);background:#22343d;border:1px solid #61747a;border-radius:5px;padding:5px 8px}button{cursor:pointer}.actions button{font-size:12px}button:disabled{opacity:.45;cursor:default}
+button:not(:disabled):hover,select:hover,button[aria-pressed=true]{border-color:var(--mint)}button[aria-pressed=true]{color:var(--mint);background:#243b40}
+#download{background:var(--gold);color:#30251f;border-color:var(--gold);font-weight:650;white-space:nowrap;padding:8px 11px}input{accent-color:var(--gold)}:focus-visible{outline:2px solid var(--mint);outline-offset:2px}
+.stage{position:relative;display:grid;place-items:center;min-height:509px;background:radial-gradient(ellipse at 45% 52%,#2d424b,#182731 63%,#15212b);border-block:1px solid var(--stroke);isolation:isolate}
+.stage:before{content:"";position:absolute;inset:14px;border:1px solid #809fa52f;background:repeating-linear-gradient(90deg,transparent 0 31px,#c3ded80a 31px 32px),repeating-linear-gradient(0deg,transparent 0 31px,#c3ded80a 31px 32px);z-index:-1}
+.stage:after{content:"";position:absolute;inset:13px;pointer-events:none;background:linear-gradient(var(--gold),var(--gold)) left top/7px 1px,linear-gradient(var(--gold),var(--gold)) left top/1px 7px,linear-gradient(var(--gold),var(--gold)) right bottom/7px 1px,linear-gradient(var(--gold),var(--gold)) right bottom/1px 7px;background-repeat:no-repeat}
+.stack{position:relative;width:768px;max-width:100%}canvas{display:block;width:100%;height:auto;image-rendering:pixelated}.plate{cursor:crosshair;touch-action:none;filter:drop-shadow(7px 9px 0 #10202ba8)}.overlay{position:absolute;inset:0;pointer-events:none}
+.status{min-height:42px}.status output{overflow-wrap:anywhere;text-align:right}.foot{border-top:1px solid var(--stroke)}
+.layers{padding:0 11px 11px;display:grid;gap:5px}.layer{padding:0 6px;display:grid;grid-template-columns:minmax(0,1fr) 26px;align-items:center;gap:3px;border:1px solid transparent;border-radius:6px}.layer:has(button[aria-pressed=true]){background:#233b41;border-color:#4e7474}
+.layer button{background:transparent;border-color:transparent;text-align:left;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:6px;min-width:0}.layer button[aria-pressed=true]{border-color:transparent}.layer .unit{color:var(--soft);font-size:10px;text-align:right}.layer input{width:15px;height:15px;justify-self:center}
+.inspector{padding:0 14px 13px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:9px}.field{display:grid;gap:4px;min-width:0;font-size:12px}.range{display:grid;grid-template-columns:1fr auto;gap:3px 7px;margin-bottom:8px}.range label{font-size:12px}.range input{grid-column:1/-1;width:100%;margin:0}
+.toggles{display:flex;gap:8px 15px;flex-wrap:wrap}.toggles label{font-size:12px;display:flex;gap:3px;align-items:center}.toggles input{margin:2px}
+#notice{padding:0 14px 8px;color:var(--gold);font-size:12px}#notice:empty{display:none}#empty{padding:0 14px 10px;font-size:12px}[hidden]{display:none!important}
+@media(max-width:1190px){.stack{width:512px}.stage{min-height:356px}}
+@media(max-width:850px){.layout{grid-template-columns:1fr}main{padding-top:21px}header{align-items:start;flex-direction:column}.aside{display:grid;grid-template-columns:1fr 1fr;gap:12px}.aside .card{margin:0}}
+@media(max-width:560px){.stack{width:256px}.stage{min-height:212px}.aside{display:block}.aside .card+.card{margin-top:12px}.row{padding:10px}.status{align-items:start}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div>
+    <span class="eyebrow">Ink Studio · Material-channel painting</span>
+    <h1>Tideglass</h1>
+    <p>Paint a cast enamel plate. Its glaze, relief, light and flow stay editable on separate maps.</p>
+  </div>
+  <button type="button" id="download" disabled>Download editable material</button>
+</header>
+<div class="layout">
+  <section class="card" aria-label="Paint canvas">
+    <div class="row">
+      <h2>Paint canvas</h2>
+      <div class="actions">
+        <button id="before" type="button" aria-pressed="false">Before</button>
+        <button id="zoom" type="button" aria-pressed="false">Zoom</button>
+        <select id="view" aria-label="Canvas display">
+          <option value="material">Lit preview</option><option value="height">Height</option>
+          <option value="emission">Emission</option><option value="roughness">Roughness</option><option value="flow">Flow</option>
+        </select>
+      </div>
+    </div>
+    <div class="stage">
+      <div class="stack">
+        <canvas id="plate" class="plate" width="256" height="160" aria-label="Drag to paint on the plate"></canvas>
+        <canvas id="overlay" class="overlay" width="256" height="160" aria-hidden="true"></canvas>
+      </div>
+    </div>
+    <div class="row status"><p>Native sample</p><output id="sample">—</output></div>
+    <div class="row foot"><output id="canvasInfo">Loading…</output><div class="actions">
+      <button type="button" id="undo" disabled>Undo</button><button type="button" id="redo" disabled>Redo</button>
+    </div></div>
+    <p id="notice" role="alert"></p>
+  </section>
+  <aside class="aside">
+    <section class="card" aria-label="Channel layers">
+      <div class="row"><h2>Channel layers</h2><output id="edits"></output></div>
+      <div class="layers" id="layers"></div>
+    </section>
+    <section class="card" aria-label="Brush controls">
+      <div class="row"><h2>Brush</h2><input id="color" type="color" value="#60efe2" aria-label="Brush color"></div>
+      <div class="inspector">
+        <div class="fields">
+          <label class="field">Tip<select id="brush"><option value="round">Round</option><option value="engraved">Engraver</option><option value="flow">Flow-guided</option></select></label>
+          <label class="field">Coordinates<select id="space"><option value="uv">UV</option><option value="texel">Texel</option><option value="world">World</option><option value="rest">Rest</option></select></label>
+        </div>
+        <div class="range"><label for="radius">Radius</label><output id="radiusValue">16 px</output><input id="radius" type="range" min="2" max="80" value="16"></div>
+        <div class="range"><label for="amount" id="amountLabel">Energy</label><output id="amountValue">2</output><input id="amount" type="range" value="2" min="0" max="5" step=".05"></div>
+        <div class="toggles">
+          <label><input id="mirror" type="checkbox">Mirror</label>
+          <label><input id="selection" type="checkbox">Marquee</label>
+          <label><input id="erase" type="checkbox">Erase</label>
+        </div>
+        <div class="range" style="margin-top:11px"><label for="light">Light angle</label><output id="lightValue">−42°</output><input id="light" type="range" min="-180" max="180" value="-42"></div>
+      </div>
+    </section>
+  </aside>
+</div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="png-raster.js"></script>
+<script src="bitmap-resources.js"></script>
+<script src="preview.js"></script>
+<script src="data.js"></script>
+<script src="live.js"></script>
+</body>
+</html>
