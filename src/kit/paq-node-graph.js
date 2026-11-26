@@ -256,6 +256,7 @@
           throw new TypeError('Wrong value for function result: expected ' + description(stored.result));
         const snapshot = new Map(pending);
         for (const [name, item] of snapshot) marks.set(name, item);
+        textures = undefined; // Inspectable frames retain values, while working mip levels are scoped to evaluation.
         return { outputs, status, preview(node, port = 'value') {
           const [name, ...nested] = node.split('/');
           const result = snapshot.get(name);
