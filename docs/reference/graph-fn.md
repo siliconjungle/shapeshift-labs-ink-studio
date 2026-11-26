@@ -4,6 +4,29 @@
 
 Ports, defaults, and constraints come from the registered operations. Use `graph describe <op> --json` for the full structured record.
 
+### fn.branch
+
+Run only the chosen declared function and return its result.
+
+Origin: toolkit.
+The two literal function names select a shared input and result contract.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `whenTrue` | `string` | Required | {"literal":true} |
+| Input | `whenFalse` | `string` | Required | {"literal":true} |
+| Input | `condition` | `boolean` | Required |  |
+| Input | `state` | `number` | Required | {"finite":true} |
+| Output | `value` | `number` | — | {"finite":true} |
+| Output | `taken` | `boolean` | — |  |
+
+- Only the selected function runs. The taken output records the selected condition.
+
+Guides: [guide](../function-control.md#branches-sequences-and-loops)
+
+Get the runnable example with `ink-studio graph describe fn.branch --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### fn.cast
 
 Explicitly cast between finite numbers, signed safe integers, normalized scalars, and Booleans.
@@ -68,6 +91,24 @@ Guides: [guide](../reusable-function-graphs.md#value-nodes)
 Get the runnable example with `ink-studio graph describe fn.compare --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### fn.get
+
+Read a typed variable from a local scope.
+
+Origin: toolkit.
+Declare the type of the binding to read. The name is also literal.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `scope` | `functionLocals` | Required | {"layout":"Versioned linked frames of named typed local bindings","maxDepth":16,"maxBindingsPerScope":32} |
+| Input | `name` | `string` | Required | {"literal":true} |
+| Output | `value` | `number` | — | {"finite":true} |
+
+Guides: [guide](../function-control.md#local-variables)
+
+Get the runnable example with `ink-studio graph describe fn.get --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### fn.logic
 
 Combine Boolean values with and, or, xor, or not.
@@ -85,6 +126,29 @@ A literal operation selects one or two Boolean operands.
 Guides: [guide](../reusable-function-graphs.md#value-nodes)
 
 Get the runnable example with `ink-studio graph describe fn.logic --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### fn.loop
+
+Repeat a declared state function within a literal bound, with an optional continuation test.
+
+Origin: toolkit.
+The body function defines state and shared inputs. An optional continuation returns Boolean.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `initial` | `number` | Required | {"finite":true} |
+| Input | `count` | `integer` | Required | {"integer":true,"safe":true,"signed":true,"min":0,"max":1024} |
+| Input | `limit` | `integer` | `64` | {"integer":true,"safe":true,"signed":true,"min":1,"max":1024,"literal":true} |
+| Input | `while` | `string` | `""` | {"literal":true} |
+| Output | `value` | `number` | — | {"finite":true} |
+| Output | `iterations` | `integer` | — | {"integer":true,"safe":true,"signed":true} |
+
+- The count is checked against the literal limit. An optional continuation sees the current state and zero-based index before each iteration. The iterations port reports completed iterations.
+
+Guides: [guide](../function-control.md#branches-sequences-and-loops)
+
+Get the runnable example with `ink-studio graph describe fn.loop --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### fn.math
@@ -159,6 +223,26 @@ Guides: [guide](../function-texture-sampling.md), [guide](../reusable-function-g
 Get the runnable example with `ink-studio graph describe fn.sampleGray --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### fn.scope
+
+Open a typed local variable scope with an optional parent scope.
+
+Origin: toolkit.
+Literal variable names and types become initialization sockets.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `variables` | `record` | `{}` | {"layout":"Plain named object","maxProperties":32,"literal":true} |
+| Input | `charge` | `number` | Required | {"finite":true} |
+| Output | `value` | `functionLocals` | — | {"layout":"Versioned linked frames of named typed local bindings","maxDepth":16,"maxBindingsPerScope":32} |
+
+- A child can shadow a parent binding. All initial values are explicit.
+
+Guides: [guide](../function-control.md#local-variables)
+
+Get the runnable example with `ink-studio graph describe fn.scope --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### fn.select
 
 Choose one of two computed values that have the same declared type.
@@ -178,6 +262,66 @@ The declared value type selects both value inputs and the output.
 Guides: [guide](../reusable-function-graphs.md#value-nodes)
 
 Get the runnable example with `ink-studio graph describe fn.select --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### fn.sequence
+
+Run declared functions in order, passing the result of each as the next state.
+
+Origin: toolkit.
+Literal function names select ordered stages with a common state type.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `steps` | `array<string>` | Required | {"items":"string","minItems":1,"maxItems":64,"literal":true} |
+| Input | `initial` | `number` | Required | {"finite":true} |
+| Output | `value` | `number` | — | {"finite":true} |
+
+- Each stage receives the previous result as state. Additional arguments are shared.
+
+Guides: [guide](../function-control.md#branches-sequences-and-loops)
+
+Get the runnable example with `ink-studio graph describe fn.sequence --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### fn.set
+
+Set a typed variable and return the next scope value.
+
+Origin: toolkit.
+Declare the type of the value to write. The name is also literal.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `scope` | `functionLocals` | Required | {"layout":"Versioned linked frames of named typed local bindings","maxDepth":16,"maxBindingsPerScope":32} |
+| Input | `name` | `string` | Required | {"literal":true} |
+| Input | `value` | `number` | Required | {"finite":true} |
+| Output | `value` | `functionLocals` | — | {"layout":"Versioned linked frames of named typed local bindings","maxDepth":16,"maxBindingsPerScope":32} |
+
+- Updates the nearest binding and returns a new scope. Earlier scope outputs retain their values.
+
+Guides: [guide](../function-control.md#local-variables)
+
+Get the runnable example with `ink-studio graph describe fn.set --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### fn.system
+
+Read the active position, size, time, seed, or typed context value.
+
+Origin: toolkit.
+A literal name selects the output type. Context reads also declare node type.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `name` | `string` | Required | {"choices":["position","size","time","seed","context"],"literal":true} |
+| Output | `value` | `integer` | — | {"integer":true,"safe":true,"signed":true} |
+
+- Position defaults to [0,0]. Size uses the effective material extent when available and otherwise defaults to [1,1]. Time is in seconds. Seed is the project seed.
+
+Guides: [guide](../function-control.md#system-values)
+
+Get the runnable example with `ink-studio graph describe fn.system --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### fn.text
@@ -239,4 +383,25 @@ The vector dimension and literal operation determine the ports. Specify operands
 Guides: [guide](../reusable-function-graphs.md#value-nodes), [guide](../vector-operations.md)
 
 Get the runnable example with `ink-studio graph describe fn.vector --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### fn.withSystem
+
+Call a function with an explicit position, size and additional context values.
+
+Origin: toolkit.
+The called function defines its additional inputs and result.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `position` | `vec2` | Required | {"dimensions":2,"finite":true} |
+| Input | `size` | `vec2` | Required | pixels · {"dimensions":2,"finite":true,"integer":true,"min":1} |
+| Input | `context` | `record` | `{}` | {"layout":"Plain named object","maxProperties":64} |
+| Output | `value` | `vec2` | — | {"dimensions":2,"finite":true} |
+
+- The supplied context extends the caller’s context for this call. Time and seed propagate from the enclosing evaluation.
+
+Guides: [guide](../function-control.md#system-values)
+
+Get the runnable example with `ink-studio graph describe fn.withSystem --example > example.json`.
 Run it with `ink-studio graph run example.json`.

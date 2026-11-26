@@ -192,7 +192,21 @@ const floodExample = { op: 'image.floodRegions', inputs: { source: link('data'),
 const declareHeight = { op: 'image.toHeight', inputs: { source: link('data'), scale: 2 } };
 const uniformNormal = { op: 'image.uniform', inputs: {
   value: [.6, 0, .8], width: mask.width, height: mask.height, descriptor: { intent: 'normal' } } };
+const counterScope={op:'fn.scope',inputs:{variables:{charge:'number'},charge:.25}};
+const increment={result:'number',inputs:{state:'number'},nodes:{
+  next:{op:'fn.math',inputs:{a:param('state'),b:.25}}
+},outputs:{result:link('next')}};
+const hold={result:'number',inputs:increment.inputs,nodes:{},outputs:{result:param('state')}};
 const dynamic = {
+  'fn.scope': {inputs:counterScope.inputs},
+  'fn.get': {type:'number',nodes:{local:counterScope},inputs:{name:'charge',scope:link('local')}},
+  'fn.set': {type:'number',nodes:{local:counterScope},inputs:{name:'charge',scope:link('local'),value:.75}},
+  'fn.system': {inputs:{name:'seed'}},
+  'fn.branch': {groups:{increment,hold},inputs:{whenTrue:'increment',whenFalse:'hold',condition:true,state:.5}},
+  'fn.sequence': {groups:{increment},inputs:{steps:['increment','increment'],initial:.3}},
+  'fn.loop': {callback:increment,inputs:{initial:0,count:3,limit:8}},
+  'fn.withSystem': {callback:{result:'vec2',nodes:{at:{op:'fn.system',inputs:{name:'position'}}},
+    outputs:{result:link('at')}},inputs:{position:[8,13],size:[32,32]}},
   'fn.sampleColor':{ nodes:{color:declareColor},inputs:{source:link('color'),uv:[1.25,.65],wrapU:'wrap',filter:'linear',mip:1.25} },
   'fn.sampleGray':{ nodes:{gray:declareData},inputs:{source:link('gray'),uv:[.4,.3],filter:'linear'} },
   'fn.math': { type:'integer',inputs:{operation:'multiply',a:6,b:7} },
@@ -1017,9 +1031,9 @@ function exampleFor(id, operation, kit) {
       { assets: { sample: { format, file: path.join(__dirname, 'graph-catalog-assets', file) } } }) };
   }
   if (Object.hasOwn(dynamic, id)) {
-    const { type, inputs, callback, nodes, output = 'value' } = dynamic[id];
+    const { type, inputs, callback, groups, nodes, output = 'value' } = dynamic[id];
     return { kind: 'graph', project: project({ op: id, inputs, ...(type && { type }), ...(callback && { group: 'Callback' }) }, output,
-      { nodes, ...(callback && { groups: { Callback: callback } }) }) };
+      { nodes, ...(groups && {groups}), ...(callback && { groups: { Callback: callback } }) }) };
   }
   if (operation.specialize) return;
   const { inputs: specified = {}, nodes: earlier, output = Object.keys(operation.outputs ?? { value: 'any' })[0] } =

@@ -482,7 +482,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graph.arrays.stableSort` | function | `(items, key, direction='asc')` | [source](../../src/kit/par-graph-arrays.js) |
 | `KIT.procedural.graph.create` | function | `(source, { operations = {}, groups = {}, planOnly = false } = {})` | [guide](../headless-authoring.md#graphs-and-reusable-groups), [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/paq-node-graph.js) |
 | `KIT.procedural.graph.each` | function | `(elements, apply, { seed = 0, limit = 100000 } = {})` | [source](../../src/kit/paq-node-graph.js) |
-| `KIT.procedural.graph.group` | function | `(spec, { operations, groups, outputs } = {})` | [source](../../src/kit/paq-node-graph.js) |
+| `KIT.procedural.graph.group` | function | `(spec, { operations, groups, outputs, system } = {})` | [source](../../src/kit/paq-node-graph.js) |
 | `KIT.procedural.graph.material` | function | `({ height = 0, wetness = 0, ink = 0, palette = 'stone', spacing = .005, normalStrength = 1 } = {})` | [source](../../src/kit/par-graph-assets.js) |
 | `KIT.procedural.graph.operationSchema` | function | `(operation)` | [source](../../src/kit/paq-node-graph.js) |
 | `KIT.procedural.graph.operations` | registry | `Operation registry. See the graph reference.` |  |
@@ -491,6 +491,42 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graph.simulation` | function | `({ initial, step, dt = 1 / 60, checkpoint = 15, cache = 32, maxSteps = 10000, clone = P.data.clone, seed = 0 } = {})` | [source](../../src/kit/paq-node-graph.js) |
 | `KIT.procedural.graph.tiles` | function | `({ bounds, cell = [1, 1], seed = 0, mask = () => 1, vector = () => [0, 0], scale = 1, jitter = .25, limit = 65536, time = 0 } = {})` | [source](../../src/kit/par-graph-assets.js) |
 
+## KIT.procedural.graphControl
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.graphControl` | namespace |  |  |
+| `KIT.procedural.graphControl.execution` | function | `(time,seed,size=defaultSize)` | [source](../../src/kit/paq-graph-control.js) |
+| `KIT.procedural.graphControl.groupOperators` | value | `array` |  |
+| `KIT.procedural.graphControl.operations` | namespace |  |  |
+| `KIT.procedural.graphControl.operations["fn.branch"]` | namespace |  |  |
+| `KIT.procedural.graphControl.operations["fn.branch"].description` | value | `string = "Run only the chosen declared function and return its result."` |  |
+| `KIT.procedural.graphControl.operations["fn.branch"].specialize` | function | `(node,groups)` | [source](../../src/kit/paq-graph-control.js) |
+| `KIT.procedural.graphControl.operations["fn.get"]` | namespace |  |  |
+| `KIT.procedural.graphControl.operations["fn.get"].description` | value | `string = "Read a typed variable from a local scope."` |  |
+| `KIT.procedural.graphControl.operations["fn.get"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-control.js) |
+| `KIT.procedural.graphControl.operations["fn.loop"]` | namespace |  |  |
+| `KIT.procedural.graphControl.operations["fn.loop"].description` | value | `string = "Repeat a declared state function within a literal bound, with an optional continuation test."` |  |
+| `KIT.procedural.graphControl.operations["fn.loop"].specialize` | function | `(node,groups)` | [source](../../src/kit/paq-graph-control.js) |
+| `KIT.procedural.graphControl.operations["fn.scope"]` | namespace |  |  |
+| `KIT.procedural.graphControl.operations["fn.scope"].description` | value | `string = "Open a typed local variable scope with an optional parent scope."` |  |
+| `KIT.procedural.graphControl.operations["fn.scope"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-control.js) |
+| `KIT.procedural.graphControl.operations["fn.sequence"]` | namespace |  |  |
+| `KIT.procedural.graphControl.operations["fn.sequence"].description` | value | `string = "Run declared functions in order, passing the result of each as the next state."` |  |
+| `KIT.procedural.graphControl.operations["fn.sequence"].specialize` | function | `(node,groups)` | [source](../../src/kit/paq-graph-control.js) |
+| `KIT.procedural.graphControl.operations["fn.set"]` | namespace |  |  |
+| `KIT.procedural.graphControl.operations["fn.set"].description` | value | `string = "Set a typed variable and return the next scope value."` |  |
+| `KIT.procedural.graphControl.operations["fn.set"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-control.js) |
+| `KIT.procedural.graphControl.operations["fn.system"]` | namespace |  |  |
+| `KIT.procedural.graphControl.operations["fn.system"].description` | value | `string = "Read the active position, size, time, seed, or typed context value."` |  |
+| `KIT.procedural.graphControl.operations["fn.system"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-control.js) |
+| `KIT.procedural.graphControl.operations["fn.withSystem"]` | namespace |  |  |
+| `KIT.procedural.graphControl.operations["fn.withSystem"].description` | value | `string = "Call a function with an explicit position, size and additional context values."` |  |
+| `KIT.procedural.graphControl.operations["fn.withSystem"].specialize` | function | `(node,groups)` | [source](../../src/kit/paq-graph-control.js) |
+| `KIT.procedural.graphControl.sameSystem` | function | `(a,b)` | [source](../../src/kit/paq-graph-control.js) |
+| `KIT.procedural.graphControl.typedOperators` | value | `array` |  |
+| `KIT.procedural.graphControl.validScope` | function | `(scope)` | [source](../../src/kit/paq-graph-control.js) |
+
 ## KIT.procedural.graphFunctions
 
 | Member | Kind | Signature or value | Guides and source |
@@ -498,6 +534,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphFunctions` | namespace |  |  |
 | `KIT.procedural.graphFunctions.compatible` | function | `(from, to)` | [source](../../src/kit/paq-graph-functions.js) |
 | `KIT.procedural.graphFunctions.operations` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.branch"]` | alias | `Alias of KIT.procedural.graphControl.operations["fn.branch"]` |  |
 | `KIT.procedural.graphFunctions.operations["fn.cast"]` | namespace |  |  |
 | `KIT.procedural.graphFunctions.operations["fn.cast"].description` | value | `string = "Explicitly cast between finite numbers, signed safe integers, normalized scalars, and Booleans."` |  |
 | `KIT.procedural.graphFunctions.operations["fn.cast"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
@@ -507,9 +544,11 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphFunctions.operations["fn.compare"]` | namespace |  |  |
 | `KIT.procedural.graphFunctions.operations["fn.compare"].description` | value | `string = "Compare two values of a declared type and return a Boolean."` |  |
 | `KIT.procedural.graphFunctions.operations["fn.compare"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.operations["fn.get"]` | alias | `Alias of KIT.procedural.graphControl.operations["fn.get"]` |  |
 | `KIT.procedural.graphFunctions.operations["fn.logic"]` | namespace |  |  |
 | `KIT.procedural.graphFunctions.operations["fn.logic"].description` | value | `string = "Combine Boolean values with and, or, xor, or not."` |  |
 | `KIT.procedural.graphFunctions.operations["fn.logic"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.operations["fn.loop"]` | alias | `Alias of KIT.procedural.graphControl.operations["fn.loop"]` |  |
 | `KIT.procedural.graphFunctions.operations["fn.math"]` | namespace |  |  |
 | `KIT.procedural.graphFunctions.operations["fn.math"].description` | value | `string = "Evaluate a named numeric function or arithmetic operation in a declared scalar type."` |  |
 | `KIT.procedural.graphFunctions.operations["fn.math"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
@@ -551,9 +590,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphFunctions.operations["fn.sampleGray"].outputs` | namespace |  |  |
 | `KIT.procedural.graphFunctions.operations["fn.sampleGray"].outputs.value` | value | `string = "number"` |  |
 | `KIT.procedural.graphFunctions.operations["fn.sampleGray"].run` | function | `({source,uv,...options},context)` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.operations["fn.scope"]` | alias | `Alias of KIT.procedural.graphControl.operations["fn.scope"]` |  |
 | `KIT.procedural.graphFunctions.operations["fn.select"]` | namespace |  |  |
 | `KIT.procedural.graphFunctions.operations["fn.select"].description` | value | `string = "Choose one of two computed values that have the same declared type."` |  |
 | `KIT.procedural.graphFunctions.operations["fn.select"].specialize` | function | `({type})` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.operations["fn.sequence"]` | alias | `Alias of KIT.procedural.graphControl.operations["fn.sequence"]` |  |
+| `KIT.procedural.graphFunctions.operations["fn.set"]` | alias | `Alias of KIT.procedural.graphControl.operations["fn.set"]` |  |
+| `KIT.procedural.graphFunctions.operations["fn.system"]` | alias | `Alias of KIT.procedural.graphControl.operations["fn.system"]` |  |
 | `KIT.procedural.graphFunctions.operations["fn.text"]` | namespace |  |  |
 | `KIT.procedural.graphFunctions.operations["fn.text"].description` | value | `string = "Join strings, count UTF-16 code units or test for a substring."` |  |
 | `KIT.procedural.graphFunctions.operations["fn.text"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
@@ -570,10 +613,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphFunctions.operations["fn.vector"]` | namespace |  |  |
 | `KIT.procedural.graphFunctions.operations["fn.vector"].description` | value | `string = "Construct, swizzle, and operate on a declared two-, three-, or four-component vector."` |  |
 | `KIT.procedural.graphFunctions.operations["fn.vector"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.operations["fn.withSystem"]` | alias | `Alias of KIT.procedural.graphControl.operations["fn.withSystem"]` |  |
 | `KIT.procedural.graphFunctions.textureType` | function | `(type)` | [source](../../src/kit/paq-graph-functions.js) |
 | `KIT.procedural.graphFunctions.typedOperations` | value | `array` |  |
 | `KIT.procedural.graphFunctions.types` | value | `array` |  |
 | `KIT.procedural.graphFunctions.validInputType` | function | `(type)` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.validResultType` | function | `(type)` | [source](../../src/kit/paq-graph-functions.js) |
 | `KIT.procedural.graphFunctions.validType` | function | `(type)` | [source](../../src/kit/paq-graph-functions.js) |
 
 ## KIT.procedural.graphImages

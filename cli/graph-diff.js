@@ -95,23 +95,29 @@ function trace(snapshot, changes) {
         const value = read(binding.source);
         return [port, { ...value, causes: merge(value.causes, changed(pointer(prefix, 'inputs', port))) }];
       }));
-      let output;
-      if (node.groupPath !== undefined) {
-        const group = own(snapshot.groups, node.groupPath) && snapshot.groups[node.groupPath];
-        if (!group || active.has(node.groupPath)) throw new TypeError('Invalid graph snapshot group ' + node.groupPath);
+      function groupOutput(alias, argumentsByName) {
+        const group = own(snapshot.groups, alias) && snapshot.groups[alias];
+        if (!group || active.has(alias)) throw new TypeError('Invalid graph snapshot group ' + alias);
         const retime = node.op === 'anim.retime';
         const groupClock = retime ? merge(inputs.timing.causes,
           own(inputs.timing.value ?? {}, 'time') ? [] : clock) : clock;
-        active.add(node.groupPath);
-        output = scope(group, pointer('/groups', node.groupPath), inputs, groupClock);
-        active.delete(node.groupPath);
+        active.add(alias);
+        const output = scope(group, pointer('/groups', alias), argumentsByName, groupClock);
+        active.delete(alias);
+        return output;
       }
+      const control = node.groupPaths;
+      const output = !control && node.groupPath !== undefined ? groupOutput(node.groupPath, inputs) : undefined;
+      const controlCauses = control?.flatMap(alias=>groupOutput(alias,{...inputs,state:inputs.state??inputs.initial}).result.causes) ?? [];
       const contextSeed = node.seed === true || typeof node.seed === 'string' &&
         !own(inputs[node.seed]?.value ?? {}, 'seed') ? seed : [];
       const asset = inputs[node.asset]?.value;
       const files = node.asset === undefined ? [] : typeof asset === 'string'
         ? changed(pointer('/assets', asset)) : assetChanges;
-      const common = merge(changed(prefix), contextSeed, files);
+      const systemName = node.op === 'fn.system' ? inputs.name.value : undefined;
+      const systemCauses = systemName === 'time' ? clock : systemName === 'seed' ? seed :
+        systemName === 'size' ? changed('/settings/base') : [];
+      const common = merge(changed(prefix), contextSeed, files, systemCauses, controlCauses);
       const incoming = Object.values(inputs).map(input => input.causes);
       const directGroup = output && (node.group === undefined || node.op === 'anim.retime');
       const all = directGroup ? common : merge(common, ...incoming,

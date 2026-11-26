@@ -149,6 +149,7 @@
       Number.isSafeInteger(value.eventFrom)&&value.eventFrom>=0&&value.eventFrom<=value.tick+1&&
       Array.isArray(value.events)&&value.events.length<=maxEvents&&record(value.samples),
     boolean: value => typeof value === 'boolean',
+    functionLocals: value => K.procedural.graphControl.validScope(value),
     string: value => typeof value === 'string',
     vec2: value => vector(value, 2),
     vec3: value => vector(value, 3),
@@ -221,6 +222,7 @@
     shape2d: ['editable signed planar shape'],
     shapeLibrary: ['versioned signed shape library'],
     scatterSurface: ['aligned signed scatter surface maps'],
+    functionLocals: ['typed function local scope'],
     reliefHeight: ['height in art pixels'],
     materialChannels: ['material channel packet'],
     cameraGrid: ['camera grid with view and viewport', 'record']

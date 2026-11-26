@@ -10,17 +10,18 @@ function compact(value) {
 function audioTrace(snapshot,target) {
   const root={scope:snapshot.graph,path:''}, inputs={}, assets={}, chain=[];
   const seen=new Set(), emitted=new Set();
-  function descend(ctx,name,node) {
-    const scope=snapshot.groups[node.groupPath];
+  function descend(ctx,name,node,alias=node.groupPath) {
+    const scope=snapshot.groups[alias];
     if (!scope) throw new RangeError('Unknown graph group at '+ctx.path+name);
-    return {scope,path:ctx.path+name+'/',parent:ctx,bindings:node.inputs};
+    const bindings=node.groupPaths && node.inputs.initial ? {...node.inputs,state:node.inputs.initial} : node.inputs;
+    return {scope,path:ctx.path+name+'/',parent:ctx,bindings};
   }
   function follow(ctx,source) {
     if (!source) throw new RangeError('Unknown graph tap binding');
     if (source.kind==='node') visit(ctx,source.id,source.port);
     if (source.kind!=='input') return;
-    if (ctx.parent) follow(ctx.parent,ctx.bindings[source.id]?.source);
-    else {
+    if (ctx.parent && ctx.bindings[source.id]) follow(ctx.parent,ctx.bindings[source.id].source);
+    else if (!ctx.parent) {
       const socket=ctx.scope.inputs[source.id];
       if (socket && Object.hasOwn(socket,'default')) inputs[source.id]=compact(socket.default);
     }
@@ -31,7 +32,13 @@ function audioTrace(snapshot,target) {
     const key=JSON.stringify([full,port]);
     if (seen.has(key)) return;
     seen.add(key);
-    if (node.groupPath) {
+    if (node.groupPaths) {
+      for (const binding of Object.values(node.inputs)) follow(ctx,binding.source);
+      for (const alias of node.groupPaths) {
+        const nested=descend(ctx,name+'/'+alias,node,alias);
+        follow(nested,nested.scope.outputs.result);
+      }
+    } else if (node.groupPath) {
       const nested=descend(ctx,name,node);
       follow(nested,nested.scope.outputs[port]);
     } else for (const binding of Object.values(node.inputs)) follow(ctx,binding.source);
@@ -45,7 +52,7 @@ function audioTrace(snapshot,target) {
     }
     chain.push({node:full,op:node.op,inputs:sources,
       ...(node.type!==undefined && {type:node.type}),...(node.seed!==undefined && {seed:node.seed}),
-      ...(node.groupPath && {group:node.groupPath})});
+      ...(node.groupPaths ? {groups:node.groupPaths} : node.groupPath && {group:node.groupPath})});
   }
   if (target.output!==undefined) follow(root,root.scope.outputs[target.output]);
   else {

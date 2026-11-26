@@ -2,6 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
+const { aliases } = require('../src/graph-control-references.js');
 
 const own = Object.hasOwn;
 const record = value => value && [Object.prototype, null].includes(Object.getPrototypeOf(value));
@@ -99,12 +100,15 @@ function groupFor(scope, node) {
   return scope.get(node.group ?? node.op);
 }
 
+function groupsFor(scope,node) {
+  return [...new Set([groupFor(scope,node),...aliases(node).map(name=>scope.get(name))].filter(Boolean))];
+}
+
 function groupUsage(scope, nodes) {
   const used = new Set();
   function visit(scope, nodes) {
-    for (const node of Object.values(nodes ?? {})) {
-      const group = groupFor(scope, node);
-      if (!group || used.has(group)) continue;
+    for (const node of Object.values(nodes ?? {})) for (const group of groupsFor(scope,node)) {
+      if (used.has(group)) continue;
       used.add(group);
       visit(group.scope, group.spec.nodes);
     }
@@ -174,4 +178,4 @@ function findGraphGroupUsers(groupFile, { root = process.cwd() } = {}) {
 }
 
 module.exports = { groupEntries, groupReference, groupDocument, requireGroupReference, loadGraphGroups,
-  groupFor, groupUsage, groupDependencies, findGraphGroupUsers };
+  groupFor, groupsFor, groupUsage, groupDependencies, findGraphGroupUsers };
