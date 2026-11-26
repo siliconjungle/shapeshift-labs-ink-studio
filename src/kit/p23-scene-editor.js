@@ -228,6 +228,15 @@
       return report;
     }
 
+    const planSculptSplit = request => A.sculptSplit.plan(snapshot(), request, buildEnv).report;
+    function splitSculpt(request) {
+      const { patch, report } = A.sculptSplit.plan(snapshot(), request, buildEnv);
+      const write = () => document.setEnvironment(patch);
+      if (document.pending()) write();
+      else document.transact('Split sculpt ' + request.solid, write);
+      return report;
+    }
+
     function placeSculptStamp(stamp, placement) {
       const solids = A.sculptStamps.place(snapshot(), stamp, placement);
       const write = () => document.setEnvironment({ solids });
@@ -1254,7 +1263,7 @@
       setModifiers,
       updateModifier,
       sculptContributions, inspectSculptContribution, editSculptContribution,
-      placeSculptStamp,
+      placeSculptStamp, planSculptSplit, splitSculpt,
       setPrefabInstance,
       planPrefabIsolation, previewPrefabIsolation, editIsolatedPrefab,
       planPrefabRefresh, refreshPrefabs,

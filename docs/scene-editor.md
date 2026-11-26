@@ -59,6 +59,10 @@ Use `setModifiers(list, keys)` to add, remove, or reorder entries. Use `updateMo
 Use the [sculpt contribution tools](sculpt-contributions.md) to edit a
 single entry by ID and compare the later cuts and material regions it affects.
 
+Use `planSculptSplit(request)` and `splitSculpt(request)` to extract an
+editable piece with a matching cut boundary.
+[Split a sculpt](sculpt-splits.md)
+
 Use `setSurfaceState(state, keys)` to edit a solid's rest-chart marks or pass `null` to clear them. The marks are retained with the source and resampled when geometry is rebuilt. [Deformation-aware materials](deformation-materials.md)
 
 Pass the result of `build()` to `createSceneEditor` to reopen its source at the time of the bake. Retain `serialize()` output for durable storage alongside any exported splat or image data. Opening a scene with mesh operands uses the same asset lookup as opening its source JSON. Active modifiers on a separate analytic shape send its edited surface through the general mesh export path.
