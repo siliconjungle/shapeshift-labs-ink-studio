@@ -219,6 +219,14 @@
         list.length ? { ...solid, modifiers: list } : patchFields(solid, { modifiers: null }));
     }
 
+    function placeSculptStamp(stamp, placement) {
+      const solids = A.sculptStamps.place(snapshot(), stamp, placement);
+      const write = () => document.setEnvironment({ solids });
+      if (document.pending()) write();
+      else document.transact('Place sculpt stamp ' + placement.id, write);
+      return freeze(Object.keys(stamp.add).map(piece => placement.id + '.' + piece));
+    }
+
     function updateModifier(id, patch, targets = selectedKeys()) {
       const fields = clone(patch);
       if (!TargetSelectors.name(id) || !record(fields) || Object.hasOwn(fields, 'id') || Object.hasOwn(fields, 'kind'))
@@ -1236,6 +1244,7 @@
       updateShape,
       setModifiers,
       updateModifier,
+      placeSculptStamp,
       setPrefabInstance,
       planPrefabIsolation, previewPrefabIsolation, editIsolatedPrefab,
       planPrefabRefresh, refreshPrefabs,

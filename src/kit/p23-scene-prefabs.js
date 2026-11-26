@@ -1,36 +1,15 @@
 /* Expand linked visual recipes into the native diorama schema at build time. */
 (function (K) {
-  const A = K.authoring, DIO = K.diorama, { M, V } = K;
+  const A = K.authoring, DIO = K.diorama, { V } = K;
   const tables = ['solids', 'parts', 'groups', 'motion', 'effects', 'topologyMeshes'];
-  const axes = [[0, 1, 0], [1, 0, 0], [0, 0, 1]];
-
-  function frame(raw, fallback) {
-    const { translation, rotation, scale, pivot = fallback ?? [0, 0, 0] } =
-      DIO.solidTransform(raw === undefined ? {} : raw);
-    const basis = rotation.reduce((out, angle, i) => M.mul(out, M.rot(axes[i], angle)), M.id());
-    const direction = value => M.app(basis, value);
-    const offset = V.sub(V.add(pivot, translation), V.mul(direction(pivot), scale));
-    return { scale, basis, direction, point: value => V.mad(offset, direction(value), scale),
-      mesh: { matrix: basis.map(value => value * scale), position: offset } };
-  }
-
-  function combine(placement, solid) {
-    const local = frame(solid.transform, solid.at);
-    const rotation = M.mul(placement.basis, local.basis);
-    const pitch = Math.atan2(-rotation[5], Math.hypot(rotation[2], rotation[8]));
-    const level = Math.hypot(rotation[2], rotation[8]) > 1e-8;
-    const yaw = level ? Math.atan2(rotation[2], rotation[8]) : Math.atan2(-rotation[6], rotation[0]);
-    const roll = level ? Math.atan2(rotation[3], rotation[4]) : 0;
-    return { translation: placement.point(local.point([0, 0, 0])), rotation: [yaw, pitch, roll],
-      scale: placement.scale * local.scale, pivot: [0, 0, 0] };
-  }
+  const { authored, compose, transform } = DIO.solidFrames;
 
   function scopedSolid(solid, name, tasks, { primary, key, placement, prefab }) {
     const next = { ...solid };
     if (primary || solid.id !== undefined) next.id = name(primary ? key : solid.id);
     if (primary) {
       next.prefabs = [prefab, ...new Set((solid.prefabs ?? []).filter(value => value !== prefab))];
-      if (placement) next.transform = combine(placement, solid);
+      if (placement) next.transform = transform(compose(placement, authored(solid.transform, solid.at)));
     }
     if (solid.part !== undefined) next.part = name(solid.part);
     if (solid.group !== undefined) next.group = name(solid.group);
@@ -107,7 +86,7 @@
             'Mesh override for ' + member + ' needs review against prefab revision ' + definition.revision);
         }
         const name = local => key + '.' + local;
-        const placement = instance.transform === undefined ? null : frame(instance.transform);
+        const placement = instance.transform === undefined ? null : authored(instance.transform);
         const ids = [], meshes = new Map();
         for (const [local, solid] of Object.entries(resolved.solids)) {
           check(record(solid), 'Expected a solid at ' + local);
@@ -191,7 +170,7 @@
   }
 
   function origin(transform) {
-    return frame(transform).point([0,0,0]);
+    return authored(transform).point([0, 0, 0]);
   }
 
   A.scenePrefabs = Object.freeze({ expand, review, origin });
