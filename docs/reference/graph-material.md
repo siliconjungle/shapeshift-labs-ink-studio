@@ -97,6 +97,29 @@ Guides: [guide](../material-base-settings.md#inherit-individual-settings)
 Get the runnable example with `ink-studio graph describe material.inherit --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### material.layer
+
+Layer typed material maps with shared UV placement, coverage and height dominance, and per-channel blend rules.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `base` | `materialChannels` | Required | {"layout":"Versioned named raster channels with independent grids and metadata","minItems":1,"maxItems":64} |
+| Input | `layer` | `materialChannels` | Required | {"layout":"Versioned named raster channels with independent grids and metadata","minItems":1,"maxItems":64} |
+| Input | `options` | `record` | `{}` | Opacity, channel rules, UV transform, mask space and height dominance. · {"layout":"Plain named object"} · {"opacity":{"type":"number","min":0,"max":1,"default":1},"defaultMode":{"type":"string","constraints":{"choices":["blend","keep"]},"default":"blend"},"channels":{"type":"record"},"transform":{"type":"record"},"maskSpace":{"type":"string","constraints":{"choices":["layer","base"]},"default":"layer"},"height":{"type":"record"}} |
+| Input | `mask` | `any` | `null` | Normalized grayscale coverage in layer or base UV space. |
+| Output | `value` | `materialChannels` | — | {"layout":"Versioned named raster channels with independent grids and metadata","minItems":1,"maxItems":64} |
+
+- Match UV sets and use typed images for blended maps. Existing maps keep their grids and encodings.
+- A single transform places the layer. Tangent normals and UV flow vectors follow it.
+- Height dominance compares equal-unit relief and gates every active map. Use material.replace to edit individual maps before layering.
+
+Guides: [guide](../material-layering.md)
+
+Get the runnable example with `ink-studio graph describe material.layer --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### material.measure
 
 Register planar scan captures, remove calibrated illumination, and recover pigment, relief, normals and confidence.
@@ -170,7 +193,7 @@ Origin: toolkit.
 | Input | `metadata` | `record` | `{}` | Optional JSON metadata keyed by supplied channel. · {"layout":"Plain named object"} |
 | Output | `value` | `materialChannels` | — | {"layout":"Versioned named raster channels with independent grids and metadata","minItems":1,"maxItems":64} |
 
-Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes), [guide](../material-graph-ports.md#read-and-edit-maps)
+Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes), [guide](../material-graph-ports.md#read-and-edit-maps), [guide](../material-layering.md)
 
 Get the runnable example with `ink-studio graph describe material.replace --example > example.json`.
 Run it with `ink-studio graph run example.json`.

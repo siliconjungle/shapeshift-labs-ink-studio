@@ -88,7 +88,7 @@ const TypedImageSpatial = ({ requireImage, validImage, grayDescriptor, descripto
     function tap(x, y, weight, out) {
       if (!(weight > 0)) return;
       const u = ax(x, width), v = ay(y, height);
-      if (u >= 0 && v >= 0) accumulate((v * width + u) * channels, out, weight);
+      if (u >= 0 && v >= 0) accumulate((v * width + u) * channels, out, weight, x, y);
     }
     if (filter === 'nearest') return (u, v, weight, out) => tap(Math.floor(u * width), Math.floor(v * height), weight, out);
     return (u, v, weight, out) => {
@@ -206,6 +206,22 @@ const TypedImageSpatial = ({ requireImage, validImage, grayDescriptor, descripto
     };
   }
 
+  // A registered material layer supplies its own sample decoder and coverage lane.
+  function mappedSampler(image, lanes, { filter = image.descriptor.sampling, border = {} }, read) {
+    if (!['nearest', 'linear'].includes(filter)) throw new RangeError('Invalid material layer filter');
+    const { width, height, channels } = image.raster;
+    const { u, v } = borders(border, image.descriptor.tiling);
+    const reflected = (coordinate, size, mode) => mode === 'mirror' && Math.abs(Math.floor(coordinate / size) % 2) === 1 ? -1 : 1;
+    const sample = sampler({ width, height, accumulate(i, out, weight, x, y) {
+      read(i / lanes * channels, out, weight, reflected(x, width, u), reflected(y, height, v));
+    } }, lanes, filter, TextureAddress.axis(u), TextureAddress.axis(v));
+    return (uv, out) => {
+      out.fill(0);
+      sample(boundedCoordinate(uv[0], u), boundedCoordinate(uv[1], v), 1, out);
+      return out;
+    };
+  }
+
   function resample(source, options, name, optionKeys, prepare, cropGeometry) {
     const { raster: grid, descriptor: spec } = requireImage(source);
     if (!fields(options, ['width', 'height', 'border', 'filter', 'mip', 'mipBias', ...optionKeys]))
@@ -293,5 +309,5 @@ const TypedImageSpatial = ({ requireImage, validImage, grayDescriptor, descripto
   const spatial = Object.freeze(Object.fromEntries(Object.entries(optionsFor).map(([name, keys]) => [name, (source, options = {}) =>
     resample(source, options, name, keys, TypedImageSpatialGeometry[name],
       name === 'crop' ? TypedImageSpatialGeometry.crop : undefined)])));
-  return { spatial, resample, sampler, borders, workingSamples, textureSampling };
+  return { spatial, resample, sampler, borders, workingSamples, textureSampling, mappedSampler };
 };
