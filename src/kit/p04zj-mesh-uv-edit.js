@@ -440,6 +440,40 @@
     return edges;
   }
 
+  function connectedUnwrap(g, faceIds, operation, points, edges, conflict) {
+    const {cuts} = operation;
+    const ids = cuts===undefined ? [] : Array.isArray(cuts) ? known(g,'edges',cuts) :
+      select(g.doc,{domain:'edges',from:cuts,uvSet:g.set}).ids;
+    const requested = new Set(ids), selected = new Set(faceIds);
+    for (const edge of seamEdges(g,ids)) {
+      if (!edge.sides.some(side=>selected.has(side.face))) throw new RangeError('A new unwrap cut must touch a selected face');
+      edges.set(edge.id,true);
+    }
+    const weldSet = sets(g.corners.keys()), topologyEdges = new Map(), joined = [];
+    for (const edge of g.edges.values()) {
+      let kind = edge.kind;
+      if (requested.has(edge.id)) kind = 'seam';
+      else if (kind==='seam' && !edge.authored && edge.sides.every(side=>selected.has(side.face))) {
+        kind = 'continuous';
+        joined.push(edge.id);
+      }
+      if (kind==='continuous') {
+        const [a,b] = edge.sides;
+        a.corners.forEach((id,i)=>weldSet.join(id,b.corners[i]));
+      }
+      topologyEdges.set(edge.id,kind===edge.kind ? edge : {...edge,kind});
+    }
+    const welds = new Map(), atWeld = new Map();
+    for (const id of order(g.corners.keys())) {
+      const weld = weldSet.root(id);
+      if (!welds.has(weld)) welds.set(weld,[]);
+      welds.get(weld).push(id);
+      atWeld.set(id,weld);
+    }
+    const report = meshUVRegions.connected({...g,edges:topologyEdges,welds,atWeld},faceIds,operation,points,conflict);
+    return {...report,across:'geometry',cuts:ids,joinedEdges:order(joined),edgeChanges:[]};
+  }
+
   function islandWelds(g, id) {
     return order(g.islands.get(id).faces.flatMap(face => g.faces.get(face).corners.map(corner => g.atWeld.get(corner.id))));
   }
@@ -1191,11 +1225,13 @@
     }
     let ids, evidence;
     const local = operation.op === 'unwrap' || operation.op === 'relax';
-    const precise = ['remap-face','orient','normalize-orientation','scale','move-corners','nudge','snap','flatten'].includes(operation.op);
+    const connected = operation.op==='unwrap' && operation.across==='geometry';
+    const precise = connected || ['remap-face','orient','normalize-orientation','scale','move-corners','nudge','snap','flatten'].includes(operation.op);
     const preserveWinding = local || ['stitch','scale','move-corners','nudge','snap'].includes(operation.op);
     if (local) {
       ids = targets(g, 'faces', operation);
-      evidence = meshUVRegions.local(g, ids, operation, points, conflict);
+      evidence = connected ? connectedUnwrap(g,ids,operation,points,edges,conflict) :
+        meshUVRegions.local(g, ids, operation, points, conflict);
     } else if (operation.op==='flatten') {
       const domain = operation.domain ?? operation.selection?.domain ?? 'faces';
       if (!['faces','islands'].includes(domain)) throw new TypeError('Flatten selected faces or UV islands');

@@ -2019,6 +2019,47 @@ with the surrounding layout. UV movement uses the existing scene transaction
 and bake invalidation workflow. Use the registered paint inputs when
 [rebaking](registered-material-bake.md) a revised atlas.
 
+### Unwrap across connected edges
+
+Add `across: "geometry"` to an `unwrap` operation to connect selected
+faces across manifold edges on the same material sheet, including
+edges with mismatched UVs. Existing authored seams separate regions.
+Add `cuts` as stable edge IDs or a saved UV edge selection. Each cut
+must touch a selected face. The unwrap commits cuts and new UVs as
+one edit.
+
+```json
+{
+  "protect": {
+    "painted": [{ "id": "enamel-sign", "faces": ["label"] }]
+  },
+  "operations": [
+    { "op": "unwrap", "across": "geometry",
+      "ids": ["label", "web", "return"], "cuts": ["return-seam"],
+      "atlas": [128, 128], "rects": { "return": [0.70, 0.18, 0.20, 0.20] } }
+  ]
+}
+```
+
+Each region uses the local unwrap solver and fits its existing UV
+bounds by default. Use `rect` for a single region or `rects` to place
+regions individually. A `rects` key can be any selected face in that
+region, with one rectangle per region. Paint, pins, approved seams,
+and corners welded to unselected faces keep their exact coordinates.
+Conflicting held coordinates block joining an edge. Mark that edge
+as a cut if both sides must stay in place.
+
+The atlas and native preview mark cuts in pink and held corners in
+gold. The receipt lists the regions, proposed joins, and before and
+after stretch. New overlaps and flipped or collapsed triangles block
+both the unwrap and its cuts.
+
+```sh
+ink-studio mesh-uv edit facade.json connected.json --object facade --preview unwrap-review
+ink-studio mesh-uv edit facade.json connected.json --object facade --out unwrapped.json --report unwrap-receipt.json
+node examples/tileset-pick/uv-connected-unwrap-demo.cjs uv-connected-unwrap-demo
+```
+
 ## Allocate texels for a shot
 
 A `texel-budget` operation redistributes space among named features on one

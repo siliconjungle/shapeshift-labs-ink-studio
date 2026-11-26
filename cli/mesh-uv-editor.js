@@ -26,9 +26,10 @@ const regionSelection = selection=>selection?.domain === 'faces' || selection?.d
 function cornerMarkers(corners,selection,project) {
   const selected = new Set(selection?.domain === 'corners' ? selection.corners : []);
   const held = new Set(selection?.heldCorners), marks = [], active = [];
+  const protectedCorners = new Set(selection?.unwrap?.protectedCorners);
   for (const corner of corners) {
     const chosen = selected.has(corner.id), stationary = held.has(corner.id);
-    if (!chosen && !stationary && !corner.pinned) continue;
+    if (!chosen && !stationary && !corner.pinned && !protectedCorners.has(corner.id)) continue;
     const point = project(corner);
     if (!point) continue;
     if (stationary) {
@@ -36,7 +37,7 @@ function cornerMarkers(corners,selection,project) {
       marks.push(line([[x-r,y-r],[x+r,y-r],[x+r,y+r],[x-r,y+r],[x-r,y-r]],ink.held));
     }
     if (chosen) active.push(rect(center(point,2),ink.selected));
-    else if (corner.pinned) marks.push(rect(center(point,2),ink.pin));
+    else if (corner.pinned || protectedCorners.has(corner.id)) marks.push(rect(center(point,2),ink.pin));
   }
   return marks.concat(active);
 }
@@ -102,10 +103,11 @@ function atlas(layout, material, selection, settings, kit, paint) {
   const faces = new Set(layout.faces.filter(row => row.material === material).map(row => row.id));
   const selected = new Set(selection?.faces), selectedEdges = new Set(selection?.domain === 'edges' ? selection.edges : []);
   const selectedSides = sideSelection(selection);
+  const cuts = new Set(selection?.unwrap?.cuts);
   const chartColors = new Map(layout.islands.map((row, i) => [row.id, tints[i % tints.length]]));
   const sampleEvery = Math.max(1, Math.ceil(faces.size / 4000));
   const layers = paint ? [{ source: paint, rect: [...start, ...size] }] : [];
-  const draw = paint ? [] : [rect([...start, ...size], '#152634')], highlights = [];
+  const draw = paint ? [] : [rect([...start, ...size], '#152634')], highlights = [], cutLines = [];
   for (let i = 0; !paint && i <= 8; i++) {
     draw.push(line([at([i / 8, 0]), at([i / 8, 1])], '#29404f'));
     draw.push(line([at([0, i / 8]), at([1, i / 8])], '#29404f'));
@@ -118,13 +120,15 @@ function atlas(layout, material, selection, settings, kit, paint) {
         line([...points, points[0]], ink.selected, 2));
     } else if (!paint) draw.push({ type: 'polygon', points, fill: chartColors.get(row.island) });
   }
-  for (const [i, edge] of layout.edges.entries()) if (i % sampleEvery === 0 || selectedEdges.has(edge.id) || edge.authored) {
+  for (const [i, edge] of layout.edges.entries()) if (i % sampleEvery === 0 || selectedEdges.has(edge.id) || edge.authored || cuts.has(edge.id)) {
     for (const side of edge.sides) if (faces.has(side.face)) {
       const marked = selectedEdges.has(edge.id) && (selectedSides.get(edge.id)?.includes(side.face) ?? true);
-      draw.push(line(side.uv.map(at),marked ? ink.selected : ink[edge.kind],marked ? 2 : 1));
+      if (cuts.has(edge.id)) cutLines.push(line(side.uv.map(at),ink.seam,2));
+      else draw.push(line(side.uv.map(at),marked ? ink.selected : ink[edge.kind],marked ? 2 : 1));
     }
   }
   for (const highlight of highlights) draw.push(highlight);
+  for (const cut of cutLines) draw.push(cut);
   for (const guide of selection?.snapGuides ?? []) if (guide.material===material) {
     const points = guide.points.map(at);
     draw.push(points.length>1 ? line(points,ink.snap,2) : rect(center(points[0],4),ink.snap));
@@ -179,7 +183,8 @@ function model(layout, { frame, mesh, camera }, selection, kit, visiblePixels) {
   const points = new Map(K.meshTopology.sourceDocument(mesh).vertices.map(row => [row.id, project(row.position)]));
   const selectedEdges = new Set(selection?.domain === 'edges' ? selection.edges : []);
   const selectedSides = sideSelection(selection);
-  for (const edge of layout.edges) if (edge.kind === 'seam' || selectedEdges.has(edge.id)) {
+  const cuts = new Set(selection?.unwrap?.cuts);
+  for (const edge of layout.edges) if (edge.kind === 'seam' || selectedEdges.has(edge.id) || cuts.has(edge.id)) {
     const [a, b] = edge.vertices.map(id => points.get(id));
     if (!a || !b) continue;
     const faces = edge.sides.map(row => row.face);
@@ -189,7 +194,7 @@ function model(layout, { frame, mesh, camera }, selection, kit, visiblePixels) {
       const x = Math.round(a[0] + (b[0] - a[0]) * j / steps), y = Math.round(a[1] + (b[1] - a[1]) * j / steps);
       if (x < 0 || x >= w || y < 0 || y >= h) continue;
       if (markedFaces.length && visible(x,y,markedFaces)) rgb.set([117,226,200],(x+y*w)*3);
-      else if (edge.kind === 'seam' && visible(x,y,faces)) rgb.set([243,145,166],(x+y*w)*3);
+      else if ((edge.kind === 'seam' || cuts.has(edge.id)) && visible(x,y,faces)) rgb.set([243,145,166],(x+y*w)*3);
     }
   }
   const draw = cornerMarkers(layout.corners,selection,corner=>{
@@ -220,12 +225,12 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     layouts[0].faces[0]?.material;
   if (!layouts[0].faces.some(row => row.material === material)) throw new RangeError('Choose an authored UV material');
   const captures = [nativeBefore, nativeAfter], views = [];
-  const {orientation,scaling,normalization,flatten} = selected ?? {};
+  const {orientation,scaling,normalization,flatten,unwrap} = selected ?? {};
   const basis = scaling ?? orientation;
   const assignment = selected?.assignment;
   const materialAfter = captures[0]===captures[1] ? material :
     assignment?.faces.find(row=>row.before.material===material)?.after.material ?? material;
-  const useAtlasPaint = basis || selected?.cornerScope || selected?.snapGuides || settings.pivot || layouts.some(layout=>layout.pivot);
+  const useAtlasPaint = basis || unwrap || selected?.cornerScope || selected?.snapGuides || settings.pivot || layouts.some(layout=>layout.pivot);
   let crossHighlight;
   if (selectionOutput) {
     const layout = layouts[0], byId = new Map(layout.faces.map(row => [row.id, row]));
@@ -266,7 +271,7 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     const {covered,texels,complete} = assignment.coverage;
     draw.push(text((complete ? 'Coverage ' : 'Partial ')+covered+'/'+texels,[width*.49,height-8],ink.selected,8),
       text(stretch ? 'Peak stretch '+stretch.toFixed(2)+'x' : 'No 2D stretch measure',[width*.80,height-8],ink.pin,8));
-  } else draw.push(text(scope ? 'Held overlap' : 'Pinned corner', [width * .49, height - 8], scope ? ink.held : ink.pin, 8),
+  } else draw.push(text(scope ? 'Held overlap' : unwrap ? 'Held coordinates' : 'Pinned corner', [width * .49, height - 8], scope ? ink.held : ink.pin, 8),
     text(scope ? 'Move scope' : hasPivot ? 'UV pivot' : 'Linked selection', [width * .80, height - 8],
       !scope && hasPivot ? ink.pivot : ink.selected, 8));
   views.push(composite(width, height, layers, draw, kit));
@@ -281,6 +286,7 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     ...(scope && {cornerScope:scope}), ...(orientation && {orientation}), ...(scaling && {scaling}),
     ...(normalization && {normalization}),
     ...(flatten && {flatten}),
+    ...(unwrap && {unwrap}),
     ...((pivotBefore || pivotAfter) && {pivot:{before:pivotBefore,after:pivotAfter}}),
     ...(crossHighlight && { crossHighlight }), ...(evidence && { readability: evidence }) };
 }
@@ -304,6 +310,7 @@ function editSelection(UV,document,plan,selectionFile) {
   const uvSet = plan.report.uvSet ?? 0;
   const normalized = plan.report.operations.findLast(row=>row.op==='normalize-orientation')?.evidence;
   const flatten = plan.report.operations.findLast(row=>row.op==='flatten')?.evidence;
+  const unwrap = plan.report.operations.findLast(row=>row.op==='unwrap' && row.evidence?.across==='geometry')?.evidence;
   const footprints = flatten?.faces.flatMap(({material,atlas,texelBounds,metrics})=>{
     if (!metrics) return [];
     const [l,t,r,b] = texelBounds.map((n,i)=>n/(atlas[i%2]-1));
@@ -315,6 +322,7 @@ function editSelection(UV,document,plan,selectionFile) {
   const applied = basis?.evidence;
   const inspection = {...(guides.length && {snapGuides:guides}),
     ...(flatten && {flatten}),
+    ...(unwrap && {unwrap}),
     ...(normalized && {normalization:{axis:normalized.axis,method:normalized.method,reference:normalized.reference,faces:normalized.faces}}),
     ...(applied && {[basis.op==='orient' ? 'orientation' : 'scaling']:{
       mode:applied.mode,faces:applied.faces,pivotSource:applied.pivotSource,pivots:applied.pivots,
@@ -332,7 +340,8 @@ function editSelection(UV,document,plan,selectionFile) {
     return {...selected,...inspection,heldCorners:held,cornerScope:{modes:scopes.map(row=>row.scope),moving:selected.ids,held}};
   }
   const ids = [...new Set([...plan.report.corners.map(row=>row.face),...applied?.faces ?? [],
-    ...normalized?.faces.map(row=>row.face) ?? [],...flatten?.faces.map(row=>row.face) ?? []])];
+    ...normalized?.faces.map(row=>row.face) ?? [],...flatten?.faces.map(row=>row.face) ?? [],
+    ...unwrap?.components.flatMap(row=>row.faces) ?? []])];
   return {...UV.select(document,{domain:'faces',uvSet,ids}),...inspection};
 }
 

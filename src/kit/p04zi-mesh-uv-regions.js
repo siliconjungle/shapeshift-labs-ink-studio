@@ -23,13 +23,17 @@ const meshUVRegions = (function (K) {
 
   function protection(g, protect = {}) {
     if (!fields(protect, ['seams', 'painted'])) throw new TypeError('UV protection accepts approved seams and painted spans');
-    const fixed = new Set(), pinned = [];
-    for (const { id, uvPinned } of g.corners.values()) if (uvPinned) {
+    const fixed = new Set(), heldCorners = new Set(), pinned = [];
+    const hold = id=>{
+      heldCorners.add(id);
       fixed.add(g.atWeld.get(id));
+    };
+    for (const { id, uvPinned } of g.corners.values()) if (uvPinned) {
+      hold(id);
       pinned.push(id);
     }
     const addEdge = id => {
-      for (const side of g.edges.get(id).sides) for (const corner of side.corners) fixed.add(g.atWeld.get(corner));
+      for (const side of g.edges.get(id).sides) for (const corner of side.corners) hold(corner);
     };
     const seams = ids(protect.seams ?? [], g.edges, 'UV seam edges');
     seams.forEach(addEdge);
@@ -41,11 +45,11 @@ const meshUVRegions = (function (K) {
       used.add(row.id);
       const faces = ids(row.faces ?? [], g.faces, 'painted faces'), edges = ids(row.edges ?? [], g.edges, 'painted edges');
       if (!faces.length && !edges.length) throw new RangeError('A painted span needs at least one face or edge');
-      for (const face of faces) for (const corner of g.faces.get(face).corners) fixed.add(g.atWeld.get(corner.id));
+      for (const face of faces) for (const corner of g.faces.get(face).corners) hold(corner.id);
       edges.forEach(addEdge);
       return { id: row.id, faces, edges };
     });
-    return { fixed, report: { seams, painted, pins: pinned.sort() } };
+    return { fixed, heldCorners, report: { seams, painted, pins: pinned.sort() } };
   }
 
   function triangles(g, selected) {
@@ -184,7 +188,7 @@ const meshUVRegions = (function (K) {
     for (const [id, [x, y]] of plane) plane.set(id, [x * c - y * s, x * s + y * c]);
     const [l, t, r, b] = bounds(plane.values());
     const [x0, y0, x1, y1] = rect ? [rect[0] * atlas[0], rect[1] * atlas[1],
-      (rect[0] + rect[2]) * atlas[0], (rect[1] + rect[3]) * atlas[1]] : bounds(region.original.values());
+      (rect[0] + rect[2]) * atlas[0], (rect[1] + rect[3]) * atlas[1]] : region.sourceBounds ?? bounds(region.original.values());
     const scale = Math.min((x1 - x0) / (r - l), (y1 - y0) / (b - t));
     if (!Number.isFinite(scale) || scale <= 1e-10) return null;
     for (const [id, [x, y]] of plane)
@@ -192,25 +196,30 @@ const meshUVRegions = (function (K) {
     return plane;
   }
 
-  function local(g, faceIds, operation, points, conflict) {
+  const validRect = rect=>tuple(rect,4,n=>Number.isFinite(n) && n>=0 && n<=1) &&
+    rect[2]>0 && rect[3]>0 && rect[0]+rect[2]<=1 && rect[1]+rect[3]<=1;
+
+  function settings(operation) {
     if (!fields(operation, ['op', 'ids', 'selection', 'atlas', 'protect', 'rect', 'normal', 'iterations', 'strength']))
       throw new TypeError('Unknown local UV solve setting');
     const { op, atlas = [1024, 1024], protect, rect, normal, iterations = 64, strength = .85 } = operation;
     grid(atlas);
     if (op === 'relax' && (rect !== undefined || normal !== undefined) ||
-        rect !== undefined && (!tuple(rect, 4, n => Number.isFinite(n) && n >= 0 && n <= 1) ||
-          rect[2] <= 0 || rect[3] <= 0 || rect[0] + rect[2] > 1 || rect[1] + rect[3] > 1) ||
+        rect !== undefined && !validRect(rect) ||
         normal !== undefined && (!tuple(normal, 3) || !Number.isFinite(V.len(normal)) || V.len(normal) < 1e-8) ||
         !integer(iterations, 1, 256) || !Number.isFinite(strength) || strength <= 0 || strength > 1)
       throw new RangeError('Use a positive UV solve strength, 1–256 iterations, and optional unwrap rectangle and normal');
-    const part = region(g, faceIds, op === 'relax', protect, atlas);
+    return {op,atlas,protect,rect,normal,iterations,strength};
+  }
+
+  function solvePart(g, faceIds, part, {op,atlas,rect,normal,iterations,strength}, points, conflict) {
     let values = new Map(part.original), solveReport = { iterations: 0, maxDelta: 0 };
     if (op === 'relax') solveReport = solve(part, values, iterations, strength);
-    else {
+    else if (!part.anchors || part.fixed.size!==part.keys.length) {
       values = project(g, part, atlas, rect, normal);
       if (!values) {
         conflict('degenerate-projection', { faces: faceIds });
-        return { atlas, fixed: part.fixed.size, protection: part.protection };
+        return {atlas,fixed:part.fixed.size,...(part.protection && {protection:part.protection})};
       }
       if (part.fixed.size) {
         const delta = new Map(part.keys.map(id => [id, part.fixed.has(id) ?
@@ -219,12 +228,87 @@ const meshUVRegions = (function (K) {
         for (const id of part.keys) values.set(id, values.get(id).map((n, a) => n + delta.get(id)[a]));
       }
     }
-    for (const id of part.keys) if (!part.fixed.has(id)) {
-      const uv = values.get(id).map((n, a) => n / atlas[a]);
-      for (const corner of g.welds.get(id)) points.set(corner, uv);
+    for (const id of part.keys) {
+      if (!part.anchors && part.fixed.has(id)) continue;
+      const uv = part.anchors?.get(id) ?? values.get(id).map((n, a) => n / atlas[a]);
+      for (const corner of g.welds.get(id)) {
+        if (part.anchors && (part.heldCorners.has(corner) || !part.selected.has(g.corners.get(corner).face))) continue;
+        points.set(corner,uv);
+      }
     }
-    return { atlas, fixed: part.fixed.size, free: part.keys.length - part.fixed.size, protection: part.protection, ...solveReport,
+    return { atlas, fixed: part.fixed.size, free: part.keys.length - part.fixed.size,
+      ...(part.protection && {protection:part.protection}), ...solveReport,
       before: stats(part.rows, atlas), after: stats(part.rows, atlas, row => row.corners.map((id, j) => points.get(id) ?? row.uv[j])) };
+  }
+
+  function local(g, faceIds, operation, points, conflict) {
+    const params = settings(operation);
+    return solvePart(g,faceIds,region(g,faceIds,params.op==='relax',params.protect,params.atlas),params,points,conflict);
+  }
+
+  function connected(g, faceIds, operation, points, conflict) {
+    const {across,cuts,rects,...localOp} = operation, params = settings(localOp);
+    const {atlas,rect,protect} = params, selected = new Set(faceIds);
+    const pending = new Set(faceIds), groups = new Map(), at = new Map();
+    for (const face of faceIds) if (pending.delete(face)) {
+      const queue = [face];
+      for (const id of queue) {
+        at.set(id,face);
+        for (const edge of g.faceEdges.get(id)) {
+          const row = g.edges.get(edge);
+          if (row.kind!=='continuous') continue;
+          for (const side of row.sides) if (pending.delete(side.face)) queue.push(side.face);
+        }
+      }
+      groups.set(face,queue.sort());
+    }
+    if (rect && groups.size>1) throw new RangeError('Use rects to place multiple connected unwrap regions separately');
+    const placements = new Map();
+    if (rects!==undefined) {
+      if (rect || !rects || Object.getPrototypeOf(rects)!==Object.prototype)
+        throw new TypeError('Use rect or a map of connected unwrap rectangles keyed by selected face ID');
+      for (const [face,value] of Object.entries(rects)) {
+        const id = at.get(face);
+        if (id===undefined || placements.has(id) || !validRect(value))
+          throw new RangeError('Choose at most one valid rectangle per connected unwrap region');
+        placements.set(id,value);
+      }
+    }
+    const trianglesByFace = new Map(faceIds.map(id=>[id,[]]));
+    for (const row of triangles(g,selected)) trianglesByFace.get(row.face).push(row);
+    const held = protection(g,protect), protectedCorners = new Set(), components = [];
+    for (const [id,faces] of groups) {
+      const rows = faces.flatMap(face=>trianglesByFace.get(face)), keys = sorted(rows.flatMap(row=>row.keys));
+      const original = new Map(), anchors = new Map(), heldCorners = new Set();
+      const component = new Set(faces);
+      let blocked = false;
+      for (const key of keys) {
+        const occurrences = g.welds.get(key);
+        const anchorsAtKey = occurrences.filter(id=>held.heldCorners.has(id) || !selected.has(g.corners.get(id).face));
+        const reference = g.corners.get(anchorsAtKey[0] ?? key).uv;
+        original.set(key,pixels(reference,atlas));
+        if (anchorsAtKey.length) anchors.set(key,reference);
+        for (const id of anchorsAtKey) {
+          heldCorners.add(id);
+          protectedCorners.add(id);
+        }
+        if (anchorsAtKey.length>1) {
+          const corners = anchorsAtKey.map(id=>({id,uv:g.corners.get(id).uv}));
+          const extent = bounds(corners.map(row=>row.uv));
+          if (!MeshUV.sameUV(extent.slice(0,2),extent.slice(2))) {
+            conflict('conflicting-unwrap-anchors',{region:id,corners});
+            blocked = true;
+          }
+        }
+      }
+      const fixed = new Set(anchors.keys()), placement = placements.get(id) ?? rect;
+      const part = {rows,keys,fixed,original,anchors,heldCorners,selected:component,
+        sourceBounds:bounds(rows.flatMap(row=>row.uv.map(uv=>pixels(uv,atlas))))};
+      components.push({id,faces,material:g.faces.get(id).material,...(placement && {rect:placement}),
+        ...(blocked ? {fixed:fixed.size,free:keys.length-fixed.size} :
+          solvePart(g,faces,part,{...params,rect:placement},points,conflict))});
+    }
+    return {atlas,protection:held.report,protectedCorners:sorted(protectedCorners),components};
   }
 
   function checkOverlaps(g, points, conflict) {
@@ -240,5 +324,5 @@ const meshUVRegions = (function (K) {
       conflict('uv-overlap-check-budget', {});
   }
 
-  return Object.freeze({ fields, tuple, integer, name, sorted, grid, ids, protection, triangles, stats, bounds, local, checkOverlaps });
+  return Object.freeze({ fields, tuple, integer, name, sorted, grid, ids, protection, triangles, stats, bounds, local, connected, checkOverlaps });
 })(KIT);
