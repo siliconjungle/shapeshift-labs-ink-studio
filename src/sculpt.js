@@ -188,11 +188,11 @@ function makeSculpt(B, rest) {
     const state = selected.surfaceState, hit = state?.locate(point, normal);
     return hit ? state.apply(selected, hit, point, normal) : selected;
   }
-  function paintAppearance(material, point, normal, cap, program = material.sdfSpray) {
+  function paintAppearance(material, point, normal, cap, program = material.sdfSpray, onPigment) {
     const paint = !cap && material.sdfPaint?.locate(point, normal);
     const surface = !cap && material.sdfNewSurface?.locate(point, normal);
     const appearance = surface ? KIT.procedural.sdfBrushSurfaces.appearance(surface, paint) : paint;
-    const spray = program?.locate(point, normal);
+    const spray = program?.locate(point, normal, onPigment);
     if (!spray) return surface ? { ...appearance, surface } : appearance;
     const under = appearance?.tint;
     return { ...appearance, ...(surface && { surface }), spray, tint: under ? rgb => spray(under(rgb)) : spray };
@@ -228,13 +228,17 @@ function makeSculpt(B, rest) {
       if (!stack) {
         stack = [];
         finishLayers.set(solid, stack);
-        solid.mat = { ...solid.mat, paintFinish(point, normal, spillAt) {
+        solid.mat = { ...solid.mat, paintFinish(point, normal, spillAt, onFinish) {
           let row;
           for (let i = stack.length - 1; i >= 0; i--) {
             const layer = stack[i], weight = layer.coverage(point, normal) * layer.plan.opacity;
             if (!weight) continue;
             const remaining = layer.mask ? channel => layer.mask(channel, point) : undefined;
             row = PaintFinish.add(row, layer.plan, weight, remaining);
+            if (onFinish) {
+              const single = PaintFinish.add(undefined, layer.plan, weight, remaining);
+              if (single[0]) onFinish(layer.id, PaintFinish.emission(single));
+            }
             if (layer.plan.spill) spillAt?.(layer.id, layer.plan.spill,
               weight * (remaining?.('emission') ?? 1) * (remaining?.('spill') ?? 1));
           }
@@ -2082,8 +2086,15 @@ function makeSculpt(B, rest) {
       material = baseMaterialAt(material, sample.slice(1, 4), sample.slice(4, 7));
     if (!cap && paintRelief)
       material = reliefMaterial(material, paintRelief, sample.slice(1, 4), sample.slice(4, 7));
-    let spills;
-    const finish = !cap && paintFinish?.(sample.slice(1, 4), sample.slice(4, 7), (...source) => (spills ??= []).push(source));
+    const paintCapture = S.capturePaint;
+    let spills, paintSource, emission;
+    const finish = !cap && paintFinish?.(sample.slice(1, 4), sample.slice(4, 7),
+      (...source) => (spills ??= []).push(source), paintCapture && ((id, glow) => {
+        if (paintCapture.sources.has(id)) {
+          paintSource = id;
+          emission = glow;
+        }
+      }));
     if (finish) material = { ...material, paintFinishSample: finish };
     material = controlled(material);
     const preview = typeof globalThis !== 'undefined' && globalThis.INK_LOOK_ALBEDO;
@@ -2094,7 +2105,7 @@ function makeSculpt(B, rest) {
     const collectEngraving=material.engraving!==undefined||material.top?.engraving!==undefined||S.engraving!==undefined;
     const collectPrint=material.screenPrint!==undefined||material.top?.screenPrint!==undefined||S.screenPrint!==undefined;
     const collectStyle = B.describePixelStyle && (material.pixelStyle || material.top?.pixelStyle);
-    if (!renderSdf && !referenceSdf && !capture && !B.describeSplats && !collectStyle && !collectFootprint && !collectEngraving && !collectPrint && !material.optical && !material.top?.optical && !material.paintReliefActive)
+    if (!renderSdf && !referenceSdf && !paintCapture && !capture && !B.describeSplats && !collectStyle && !collectFootprint && !collectEngraving && !collectPrint && !material.optical && !material.top?.optical && !material.paintReliefActive)
       return light(material, ...sample, undefined, fine);
     const first = B.count();
     let effective = material, style, pair;
@@ -2142,7 +2153,8 @@ function makeSculpt(B, rest) {
     const baseId = effective.materialId ?? material.materialId;
     const ownerMat = owner?.mat;
     const appearance = first < end && ownerMat && (ownerMat.sdfPaint || ownerMat.sdfNewSurface || spray) &&
-      paintAppearance(ownerMat, sample.slice(1, 4), sample.slice(4, 7), cap, spray);
+      paintAppearance(ownerMat, sample.slice(1, 4), sample.slice(4, 7), cap, spray,
+        paintCapture && !paintSource && (id => { if (paintCapture.sources.has(id)) paintSource = id; }));
     if (appearance?.tint && B.tintSplatColors)
       B.tintSplatColors(first,end,appearance.tint,owner.sdfPaintBase??=new Map(),baseId);
     B.describeSplats?.(first, end, {
@@ -2150,6 +2162,15 @@ function makeSculpt(B, rest) {
       material: appearance?.material ?? baseId ?? material,
       target: renderTarget(owner, surfaceId)
     });
+    if (paintCapture && first < end) {
+      const entity = owner?.renderTarget?.entity;
+      if (!paintSource && paintCapture.sources.has(entity)) paintSource = entity;
+      if (paintSource) paintCapture.sample({
+        source: paintSource, point: sample.slice(1, 4), normal: sample.slice(4, 7).map(n => clamp(n, -1, 1)),
+        index: first, finish, emission, glow: paintSource === entity && effective.em,
+        material: appearance?.material ?? baseId
+      });
+    }
     const albedo = pigment ?? effective.albedo ?? effective.r?.at(-1) ?? material.albedo ?? material.r?.at(-1);
     if (capture && albedo !== undefined) {
       if (appearance?.spray) {
