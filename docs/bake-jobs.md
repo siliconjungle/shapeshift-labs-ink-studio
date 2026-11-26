@@ -77,3 +77,7 @@ See [projection controls](bake-projection.md) for high and low source selection,
 ## Deliver normals and signed height
 
 See [normal and height bakes](bake-normal-height.md) for tangent and world vectors, DirectX or OpenGL orientation, shared signed relief ranges and PNG or OpenEXR encodings.
+
+## Bake visibility and directions
+
+See [occlusion bakes](bake-occlusion.md) for ambient, contact and directional AO, scene ray controls, self-occlusion policies, bent normals and blocker directions.

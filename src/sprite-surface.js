@@ -54,15 +54,17 @@ const SpriteSurface = (() => {
     const regions = new WeakSet();
     const faces = new Map(), sampling = [], shadowFaces = [], projections = [], charts = [];
     const geometry = typeof TexturedSurface !== 'undefined' ? TexturedSurface : require('./textured-surface.js');
-    function reserve(w, h, paint, { normal } = {}) {
+    function reserve(w, h, paint, { normal, rgba } = {}) {
       if (!Number.isInteger(w) || !Number.isInteger(h) || w < 1 || w > width || h < 1 ||
-        paint !== undefined && typeof paint !== 'function')
+        paint !== undefined && typeof paint !== 'function' ||
+        rgba !== undefined && (!(rgba instanceof Uint8Array) || rgba.length !== w*h*4))
         throw new RangeError('Expected bounded sprite dimensions and an optional paint function');
       let nextX = x, nextY = y, nextShelf = shelf;
       if (nextX + w > width) { nextX = 0; nextY += nextShelf; nextShelf = 0; }
       if (nextY + h > limit) throw new RangeError('Sprite surface atlas is full');
       const pixels = new Uint8Array(w * h * 4);
-      if (paint) for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+      if (rgba) pixels.set(rgba);
+      else if (paint) for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
         const ink = paint(i, j);
         if (ink == null) continue;
         if (!Number.isSafeInteger(ink) || ink < 0 || ink > 0xffffff)
@@ -369,7 +371,24 @@ const SpriteSurface = (() => {
     if (faces) namedFaces.set(copy, new Map(faces));
     return copy;
   }
-  return Object.freeze({ make, setShadowShell, markDirty, updatesSince, update, markGeometryDirty, geometryUpdatesSince, forkGeometry,
+  const tilesetMaterialDefaults = Object.freeze({lighting:'lit',emissiveGain:0,alphaMode:'mask',alphaCutoff:.5,
+    sidedness:'double',minFilter:'nearest',magFilter:'nearest'});
+  function tilesetMaterial(value) {
+    if (value === undefined) return;
+    if (!value || Object.getPrototypeOf(value)!==Object.prototype ||
+        Object.keys(value).some(key=>!Object.hasOwn(tilesetMaterialDefaults,key)))
+      throw new TypeError('Expected a tileset material settings object');
+    const rule = {...tilesetMaterialDefaults,...value};
+    const {lighting,emissiveGain,alphaMode,alphaCutoff,sidedness,minFilter,magFilter} = rule;
+    if (!['lit','unlit'].includes(lighting) || !Number.isFinite(emissiveGain) || emissiveGain<0 || emissiveGain>64 ||
+        !['opaque','mask','blend'].includes(alphaMode) || !Number.isFinite(alphaCutoff) || alphaCutoff<0 || alphaCutoff>1 ||
+        !['front','double'].includes(sidedness) || ![minFilter,magFilter].every(mode=>['nearest','linear'].includes(mode)))
+      throw new RangeError('Invalid tileset lighting, emissive gain, alpha, sidedness or filter settings');
+    return Object.freeze(rule);
+  }
+
+  const tilesetLight = Object.freeze({direction:Object.freeze([-.48,.64,.6]),ambient:.32,intensity:.68});
+  return Object.freeze({ tilesetMaterial, tilesetLight, make, setShadowShell, markDirty, updatesSince, update, markGeometryDirty, geometryUpdatesSince, forkGeometry,
     uvSlip, projectionPlan, samplingPlan, samplingGLSL: resampling.glsl });
 })();
 if (typeof module !== 'undefined') module.exports = SpriteSurface;

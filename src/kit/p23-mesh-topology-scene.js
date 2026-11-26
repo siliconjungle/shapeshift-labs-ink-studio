@@ -41,7 +41,14 @@
   function material(input, tilesets) {
     const value = { ...input };
     const shared = tilesets.resolve(value.texture);
-    if (shared) value.texture = shared;
+    if (shared) {
+      const settings = tilesets.source(value.texture.tileset).material;
+      value.texture = shared;
+      if (settings) {
+        value.tilesetMaterial = settings;
+        value.sampling = undefined;
+      }
+    }
     else if (value.texture !== undefined) {
       if (!record(value.texture)) throw new TypeError('A mesh texture needs a JSON descriptor');
       value.texture = { ...value.texture };
