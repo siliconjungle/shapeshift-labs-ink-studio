@@ -1592,6 +1592,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.splatFrames` | namespace |  | [guide](../materialisation.md) |
 | `KIT.splatFrames.covariance` | function | `(data, q, basis, M, transpose = M.tr(basis))` | [guide](../materialisation.md), [source](../../src/splat-frames.js) |
 | `KIT.splatFrames.create` | function | `(world, time, M)` | [guide](../materialisation.md#ownership-and-rendering), [guide](../materialisation.md), [source](../../src/splat-frames.js) |
+| `KIT.splatFrames.interpolatePose` | function | `(previous, current, alpha, { out = new Float32Array(current?.length ?? 0), visible } = {})` | [guide](../shared-time-domains.md#interpolate-a-packed-splat-pose), [guide](../materialisation.md), [source](../../src/splat-frames.js) |
 
 ## KIT.splatInteractionDetail
 
