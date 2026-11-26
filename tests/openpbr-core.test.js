@@ -24,13 +24,14 @@ const close = (a,b) => assert(Math.abs(a-b)<1e-6,[a,b].join(' ≠ '));
 
 test('OpenPBR core resolves standard values and rejects unit, range, and binding mismatches', () => {
   const { parameters:p } = openPbr.define();
-  assert.deepEqual(p,{
+  const core = {
     base_weight:1,base_color:[.8,.8,.8],base_metalness:0,base_diffuse_roughness:0,
     specular_weight:1,specular_color:[1,1,1],specular_roughness:.3,specular_roughness_anisotropy:0,specular_ior:1.5,
     coat_weight:0,coat_color:[1,1,1],coat_roughness:0,coat_roughness_anisotropy:0,coat_ior:1.6,coat_darkening:1,
     emission_luminance:0,emission_color:[1,1,1],geometry_opacity:1,geometry_thin_walled:false,
     geometry_normal:null,geometry_coat_normal:null,geometry_tangent:null,geometry_coat_tangent:null
-  });
+  };
+  assert.deepEqual(Object.fromEntries(Object.keys(core).map(name=>[name,p[name]])),core);
   const nits=graphImages.uniform(275,1,1,{intent:'data',units:'nits',precision:'float32'});
   const normal=graphImages.uniform([0,0,1],1,1,{intent:'normal',normalOrientation:'opengl'});
   const surface=openPbr.define({specular_weight:3,emission_color:[1.25,.2,.4]}, {emission_luminance:nits,geometry_normal:normal});
@@ -38,7 +39,7 @@ test('OpenPBR core resolves standard values and rejects unit, range, and binding
   assert.equal(fields.emission_luminance.units,'nits');
   assert.equal(fields.emission_luminance.map.precision,'float32');
   assert.deepEqual(fields.emission_color.value,[1.25,.2,.4]);
-  assert.throws(()=>openPbr.define({baseColor:[0,0,0]}),/Unknown OpenPBR core input baseColor/);
+  assert.throws(()=>openPbr.define({baseColor:[0,0,0]}),/Unknown OpenPBR input baseColor/);
   assert.throws(()=>openPbr.define({coat_ior:0}),/coat_ior/);
   assert.throws(()=>openPbr.define({geometry_opacity:1.1}),/geometry_opacity/);
   assert.throws(()=>openPbr.define({geometry_normal:[0,0,0]}),/geometry_normal/);

@@ -821,6 +821,7 @@ const notes = {
   'material.openPbr': [
     'Use standard OpenPBR names for uniform controls and typed images. Bound images replace the matching uniform at the sampled UV.',
     'Color uses explicit linear sRGB. Bind emissive luminance as scalar nits, and keep base and coat geometry maps independent.',
+    'Use centimeters for transmission depth and subsurface radius and micrometers for thin-film thickness.',
     'Publish value for the physical reference renderer and report for defaults, authored values, units and map contracts.'
   ],
   'material.validate': [

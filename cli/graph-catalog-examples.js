@@ -479,8 +479,12 @@ const specifications = {
   'material.openPbr': { nodes: {
     panel: { op: 'image.uniform', inputs: { value: 160, width: 4, height: 2,
       descriptor: { intent: 'data', units: 'nits', precision: 'float32' } } },
-    bindings: { op: 'data.record', inputs: { emission_luminance: link('panel') } }
-  }, inputs: { maps: link('bindings'), parameters: { base_color: [.08, .22, .25], coat_weight: .65 } }, output: 'report' },
+    film: { op: 'image.uniform', inputs: { value: .34, width: 4, height: 2,
+      descriptor: { intent: 'data', units: 'um', precision: 'float32' } } },
+    bindings: { op: 'data.record', inputs: { emission_luminance: link('panel'), thin_film_thickness: link('film') } }
+  }, inputs: { maps: link('bindings'), parameters: { base_color: [.08, .22, .25], coat_weight: .65,
+    transmission_weight: .55, transmission_depth: .4, transmission_dispersion_scale: .28,
+    thin_film_weight: .7, fuzz_weight: .18 } }, output: 'report' },
   'material.validate': { nodes: {
     roughness: { op: 'image.uniform', inputs: { value: 1.12, width: 4, height: 3, descriptor: { intent: 'data' } } },
     maps: { op: 'data.record', inputs: { roughness: link('roughness') } },

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mothglass · Ink Studio</title>
+<style>
+:root{color-scheme:dark;background:#141a22;color:#eee4d0;font:15px/1.5 system-ui,sans-serif}
+*{box-sizing:border-box}
+body{max-width:1270px;margin:auto;padding:35px 32px 40px}
+header{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:20px}
+h1{font:normal clamp(40px,6vw,78px)/1 Georgia,serif;letter-spacing:-.056em;margin:0}
+header p{color:#aec2c8;margin:6px 0 0}
+header small{color:#aec2c8;text-align:right}
+main{display:grid;grid-template-columns:minmax(0,2.18fr) minmax(245px,1fr);gap:24px}
+figure{margin:0;background:#0d131b;border:1px solid #3f4854;border-radius:9px;overflow:hidden}
+figure img{display:block;width:100%;image-rendering:pixelated}
+figcaption{min-height:55px;padding:13px 14px;color:#c6c9ca}
+nav,.controls{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:13px}
+button{font:inherit;color:#ece4d5;border:1px solid #525b69;background:#212a34;border-radius:5px;padding:6px 8px;cursor:pointer}
+button[aria-pressed=true]{color:#1a1b26;background:#edbd86;border-color:#edbd86}
+aside{border-top:1px solid #485362;padding-top:13px}
+h2{font-size:1rem;margin:9px 0 6px}
+label{display:flex;align-items:center;gap:9px;margin-bottom:2px;font-weight:600}
+select{color:inherit;font:inherit;background:#212a34;padding:4px 6px;border:1px solid #525b69;border-radius:4px}
+table{width:100%;border-collapse:collapse;font-size:.80rem}
+th,td{padding:5px 0;text-align:left;border-bottom:1px solid #343e49}
+th{color:#afc4ce}
+td{padding-left:7px}
+code{font-size:.91em;overflow-wrap:anywhere}
+details{margin-top:12px;color:#bdc9cf}
+summary{cursor:pointer;color:#eee4d0}
+a{color:#edbd86;text-underline-offset:3px}
+footer{margin-top:18px;display:flex;gap:15px;flex-wrap:wrap}
+@media(max-width:700px){body{padding:20px 14px}header{align-items:start}header small{display:none}main{grid-template-columns:1fr}}
+</style>
+<header>
+  <div><h1>Mothglass</h1><p>OpenPBR advanced lobes in Ink Studio</p></div>
+  <small id="sampling"></small>
+</header>
+<main>
+  <div>
+    <figure><img id="image" alt="Path-traced optical material study"><figcaption id="caption" aria-live="polite"></figcaption></figure>
+    <footer>
+      <a id="plan">Render plan</a>
+      <a href="wing.material.json">Editable foil graph</a>
+      <a id="report">Render report</a>
+      <a id="linear">Linear EXR</a>
+    </footer>
+  </div>
+  <aside>
+    <nav id="variants" aria-label="Material variants"></nav>
+    <div id="passes" class="controls" aria-label="Render passes"></div>
+    <label for="surface">Inspect material
+      <select id="surface">
+        <option value="prism">Glass prism</option><option value="wax">Wax seal</option>
+        <option value="paper">Paper shade</option><option value="wing">Foil wing</option>
+        <option value="filter">Thin glass filter</option>
+      </select>
+    </label>
+    <table><tbody id="fields"></tbody></table>
+    <details><summary>Traced events</summary><table><tbody id="stats"></tbody></table></details>
+  </aside>
+</main>
+<script>
+const data = /*MOTHGLASS*/;
+let selected = data.variants.find(row => data.receipts[row.id]), pass = 'denoised';
+const passes = {denoised:'Beauty',raw:'Raw',normals:'Normals',albedo:'Albedo'};
+const names = {
+  prism:['transmission_weight','transmission_depth','transmission_color','transmission_scatter',
+    'transmission_scatter_anisotropy','transmission_dispersion_scale','transmission_dispersion_abbe_number','specular_ior'],
+  wax:['subsurface_weight','subsurface_color','subsurface_radius','subsurface_radius_scale',
+    'subsurface_scatter_anisotropy','coat_weight','fuzz_weight'],
+  paper:['geometry_thin_walled','subsurface_weight','subsurface_color','subsurface_scatter_anisotropy','fuzz_weight'],
+  wing:['thin_film_weight','thin_film_thickness','thin_film_ior','coat_weight','coat_color','coat_roughness',
+    'coat_roughness_anisotropy','fuzz_weight','specular_weight','specular_roughness_anisotropy'],
+  filter:['geometry_thin_walled','transmission_weight','transmission_color','specular_ior','specular_roughness','coat_weight']
+};
+const events = {dispersionPaths:'Dispersed paths',volumeScatters:'Glass volume scatters',
+  subsurfaceScatters:'Subsurface scatters',thinSpecularEvents:'Thin specular crossings',thinDiffuseEvents:'Thin diffuse crossings'};
+const byId = id => document.getElementById(id);
+byId('surface').addEventListener('change', draw);
+function control(parent,label,active,change) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = label;
+  button.active = active;
+  button.addEventListener('click', () => { change(); draw(); });
+  parent.append(button);
+}
+function cellRow(name,value,technical=false) {
+  const row = document.createElement('tr'), head = document.createElement('th'), content = document.createElement('td');
+  const label = technical ? document.createElement('code') : head;
+  label.textContent = name;
+  if (technical) head.append(label);
+  head.scope = 'row';
+  content.textContent = value;
+  row.append(head,content);
+  return row;
+}
+for (const row of data.variants) if (data.receipts[row.id])
+  control(byId('variants'),row.label,() => selected === row,() => selected = row);
+for (const [id,label] of Object.entries(passes))
+  control(byId('passes'),label,() => pass === id,() => pass = id);
+function draw() {
+  if (!selected) { byId('caption').textContent = 'Render a material variant to start the review.'; return; }
+  for (const button of document.querySelectorAll('button')) button.setAttribute('aria-pressed',button.active());
+  const id = selected.id, receipt = data.receipts[id], material = byId('surface').value;
+  byId('image').src = id + '/' + pass + '.png';
+  byId('image').alt = 'Mothglass, ' + selected.label + ', ' + passes[pass];
+  byId('caption').textContent = selected.caption;
+  byId('sampling').textContent = receipt.samples + ' samples per pixel · fixed camera and lighting';
+  byId('plan').href = id + '.plan.json';
+  byId('report').href = id + '/report.json';
+  byId('linear').href = id + '/raw.exr';
+  byId('fields').replaceChildren(...names[material].map(name => {
+    const field = receipt.inputs[material][name], unit = {cm:' cm',um:' µm'}[field.units] ?? '';
+    const value = field.map ? 'Map · ' + field.map.precision : Array.isArray(field.value) ? field.value.join(', ') : field.value;
+    return cellRow(name,value + unit,true);
+  }));
+  byId('stats').replaceChildren(...Object.entries(events).map(([key,name])=>cellRow(name,receipt.stats[key].toLocaleString())));
+}
+draw();
+</script>
+</html>
