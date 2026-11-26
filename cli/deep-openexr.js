@@ -2,7 +2,7 @@
    https://openexr.com/en/latest/OpenEXRFileLayout.html */
 const fs = require('node:fs');
 const path = require('node:path');
-const { deflateSync } = require('node:zlib');
+const { cstring, int, float, attribute, zips } = require('./exr-bytes.js');
 const { write, json } = require('./asset-files.js');
 const { stride, idStride, kinds, maxLayers, maxSlots } = require('./deep-composite.js').layout;
 const { render } = require('./render.js');
@@ -16,32 +16,8 @@ const sampleChannels = ['surface', 'scatter', 'transmission'].map(layer => color
 const channels = ['A', ...colors, 'Z', 'ZBack', 'ink.visibleCoverage', ...sampleChannels.flat(), ...labelChannels].sort();
 const positions = Object.fromEntries(channels.map((name, index) => [name,index]));
 const end = Buffer.from([0]);
-const cstring = text => Buffer.from(text + '\0');
 const text = value => Buffer.from(value);
 const byte = value => Buffer.from([value]);
-const int = (...values) => {
-  const out = Buffer.allocUnsafe(values.length * 4);
-  values.forEach((n,i) => out.writeInt32LE(n,i*4));
-  return out;
-};
-const float = (...values) => {
-  const out = Buffer.allocUnsafe(values.length * 4);
-  values.forEach((n,i) => out.writeFloatLE(n,i*4));
-  return out;
-};
-function attribute(name, type, value) {
-  return Buffer.concat([cstring(name),cstring(type),int(value.length),value]);
-}
-
-function zips(raw) {
-  if (!raw.length) return raw;
-  // OpenEXR's ZIP predictor uses the even bytes followed by the odd bytes.
-  const packed = Buffer.allocUnsafe(raw.length), odd = Math.ceil(raw.length/2);
-  for (let i=0;i<raw.length;i++) packed[(i&1 ? odd : 0)+(i>>1)] = raw[i];
-  for (let i=packed.length-1;i>0;i--) packed[i] = packed[i] - packed[i-1] + 128;
-  const zipped = deflateSync(packed,{level:4});
-  return zipped.length < raw.length ? zipped : raw;
-}
 
 function dimensions(source) {
   const { w, h, layers, count, colors:surface, ids } = source ?? {};

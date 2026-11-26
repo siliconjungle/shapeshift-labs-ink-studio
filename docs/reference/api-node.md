@@ -66,6 +66,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.editMaterialVector` | function | `(source, request, { baseDir = process.cwd() } = {})` | [source](../../cli/material-vectors.js) |
 | `node.encodeDeepEXR` | function | `(frame, options)` | [guide](../deep-openexr.md#node-api), [guide](../deep-openexr.md), [source](../../cli/deep-openexr.js) |
 | `node.encodeSceneryPack` | function | `(id, meshes)` | [source](../../cli/scenery-delivery.js) |
+| `node.encodeTexture` | function | `(image, options)` | [source](../../index.js) |
 | `node.encodeWav` | function | `(source, { encoding = 'pcm16', bwf } = {})` | [guide](../graph-media.md#wav-and-frame-analysis), [source](../../cli/wav.js) |
 | `node.exportDeepEXR` | function | `(world, { out, view = {}, times = [view.time ?? view.t ?? world?.lookSnapshot?.time ?? 0], layers, reflection, allowTruncated = false, coalesce = true, pose } = {})` | [guide](../deep-openexr.md#node-api), [guide](../deep-openexr.md), [source](../../cli/deep-openexr.js) |
 | `node.exportGlb` | function | `(modelOrFile, { out, uvMargin = 0.008, textureSize, bakeDir, paintViews, capturePaint, rebakeFrom, chartEdits, geometryMasks, cageBake, onModelingWork } = {})` | [guide](../registered-material-bake.md#project-approved-paint-from-several-views), [guide](../registered-material-bake.md#bake-geometry-masks), [source](../../cli/export-glb.js) |
@@ -108,7 +109,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.openMaterialGraph` | function | `(source, { id } = {})` | [guide](../editable-material-graph.md#open-edit-and-save), [source](../../cli/material-graph.js) |
 | `node.openPixelEditorSession` | function | `(directory, options)` | [source](../../index.js) |
 | `node.openSampleLibrary` | function | `(directory, {kit = require('../index.js').load()} = {})` | [guide](../sample-capture.md#use-the-tools-from-code-or-a-graph), [source](../../cli/sample-library.js) |
-| `node.openTilesetPaint` | function | `(editor, request, kit = require('..').load())` | [guide](../mesh-uv.md#paint-a-picked-crop-or-the-whole-sheet), [source](../../cli/tileset-paint.js) |
+| `node.openTilesetPaint` | function | `(editor, request)` | [guide](../mesh-uv.md#paint-a-picked-crop-or-the-whole-sheet), [source](../../index.js) |
 | `node.packProject` | function | `(scene, { out, root, revision, assetPack, paint, attachments } = {})` | [source](../../cli/project-bundle.js) |
 | `node.paletteUsage` | function | `(world,{select,rarePixels=3,rareShare=.001,...view}={})` | [guide](../palette-recipes.md#measure-palette-usage-at-export-size), [source](../../cli/palette-usage.js) |
 | `node.pickSurface` | function | `(passes,x,y)` | [guide](../art-passes.md#shared-opaque-surfaces), [guide](../textured-surfaces.md#inspecting-a-mesh), [guide](../art-passes.md), [source](../../src/art-passes.js) |
@@ -151,6 +152,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.readSpriteAtlas` | function | `(file, { cels } = {})` | [guide](../curve-bake.md#use-the-ribbon-as-native-geometry), [guide](../impostor-atlases.md), [guide](../impostor-atlases.md#bake-a-set-of-moves-from-one-rig), [guide](../sprite-reconstruction.md#bind-a-reusable-asset), [source](../../cli/sprite-atlas.js) |
 | `node.readStoryDocument` | function | `(file)` | [source](../../cli/story-document.js) |
 | `node.readTake` | function | `(file, { kit = require('../index.js').load(), checkpoint, ...options } = {})` | [guide](../take-clock.md#library-and-shared-domains), [source](../../cli/take.js) |
+| `node.readTexture` | function | `(file,options={})` | [source](../../cli/texture-files.js) |
 | `node.readTilesetImage` | function | `(source, toolkit = require('..').load())` | [guide](../mesh-uv.md#register-a-tileset-image), [source](../../cli/tileset-image.js) |
 | `node.readWav` | function | `(file, options)` | [guide](../graph-media.md#wav-and-frame-analysis), [source](../../cli/wav.js) |
 | `node.rebindPixelFeature` | function | `(design,request,{render,graph,decals,replacementScene}={})` | [source](../../cli/feature-rebind.js) |
@@ -165,6 +167,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.repackTilesetImage` | function | `(source, options, toolkit = require('..').load())` | [guide](../mesh-uv.md#repack-an-imported-atlas), [source](../../cli/tileset-repack.js) |
 | `node.repairColorVisionPalette` | function | `(frame, options = {})` | [guide](../palette-recipes.md#repair-palette-separation-for-color-vision-deficiencies), [source](../../cli/color-vision-repair.js) |
 | `node.replayStoryBundle` | function | `(file, options)` | [source](../../index.js) |
+| `node.reportTexture` | function | `(file,options={})` | [source](../../cli/texture-files.js) |
 | `node.resolveMaterialBaseSettings` | function | `(source = {}, { seed: defaultSeed = 0 } = {})` | [guide](../material-base-settings.md#ferry-glaze-demo), [guide](../material-base-settings.md), [source](../../src/material-base-settings.js) |
 | `node.resolveMaterialInheritance` | function | `(source = {}, rules = {}, context = {}, { seed, seedOverride } = {})` | [guide](../material-base-settings.md#inherit-individual-settings), [guide](../material-base-settings.md), [source](../../src/material-base-settings.js) |
 | `node.reviewCurveQuality` | function | `(world, { frame = {}, thresholds: overrides = {}, ...options } = {}, receive)` | [source](../../cli/curve-quality-review.js) |
@@ -222,4 +225,4 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.writeRasterAsset` | function | `(source, { out } = {})` | [source](../../cli/raster-asset.js) |
 | `node.writeSceneEmbed` | function | `(document, { out, settings } = {})` | [source](../../cli/scene-replay.js) |
 | `node.writeSpriteAtlas` | function | `(source, { out } = {})` | [source](../../cli/sprite-atlas.js) |
-| `node.writeTilesetPaint` | function | `(editor, binding, document, {apply=false} = {}, kit = require('..').load())` | [guide](../mesh-uv.md#paint-a-picked-crop-or-the-whole-sheet), [source](../../cli/tileset-paint.js) |
+| `node.writeTilesetPaint` | function | `(editor, binding, document, options)` | [guide](../mesh-uv.md#paint-a-picked-crop-or-the-whole-sheet), [source](../../index.js) |
