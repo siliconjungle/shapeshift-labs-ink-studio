@@ -92,8 +92,17 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.markDirection` | namespace |  |  |
-| `KIT.procedural.markDirection.align` | function | `(style, { frame, distance, forward, root, spacing, mark, observe })` | [source](../../src/kit/p26e-mark-direction.js) |
+| `KIT.procedural.markDirection.align` | function | `(style, { frame, distance, forward, root, spacing, mark, grid, observe })` | [source](../../src/kit/p26e-mark-direction.js) |
+| `KIT.procedural.markDirection.preferred` | function | `(brush, support, normal, context)` | [source](../../src/kit/p26e-mark-direction.js) |
 | `KIT.procedural.markDirection.prepare` | function | `(raw, flowMaps = {})` | [source](../../src/kit/p26e-mark-direction.js) |
+
+## KIT.procedural.markGrid
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.markGrid` | namespace |  |  |
+| `KIT.procedural.markGrid.align` | function | `(plan, { chart, distance, reach, minFacing })` | [source](../../src/kit/p26f-mark-grid.js) |
+| `KIT.procedural.markGrid.prepare` | function | `(raw, flowMaps)` | [source](../../src/kit/p26f-mark-grid.js) |
 
 ## KIT.procedural.markProfiles
 
