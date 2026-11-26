@@ -82,6 +82,7 @@ const texturePointPorts = {
 };
 const systemVariableNames = oneOf('position','size','time','seed','context');
 const ports = {
+  bitmapAsset: {frame: {constraints: {integer: true, min: -1}}, tile: {constraints: {dimensions: 2, integer: true}}},
   'sdf.primitive': {
     kind:{constraints:{...oneOf('sphere','box','torus','capsule','cylinder').constraints,literal:true}},
     center:{unit:'world units'},radius:limit(.0001,1e4),length:limit(.0001,1e4),rotation:{unit:'radians'}
@@ -758,6 +759,7 @@ const simulationClock = { dt: property('number', { ...seconds, ...limit(.001, .1
   maxTicks: property('number', limit(1, 12000, true), 2400) };
 
 const specialization = {
+  bitmapAsset: {field:'name', description:'A literal resource name resolves its declared image intent. A linked name uses typedImage.'},
   'sdf.primitive': {field:'kind',description:'Select a sphere, rounded box, torus, capsule, or cylinder and show its dimension sockets.'},
   'sdf.bound': {field:'bounds',optional:true,description:'Use typed min and max, or connect the legacy bounds record.'},
   'sdf.transform': {field:'options',optional:true,description:'Typed position, rotation and scale override corresponding settings in the legacy options record.'},
@@ -798,6 +800,8 @@ const specialization = {
   'anim.retime': { field: 'group', description: 'Uses the group’s inputs and outputs and adds a timing record. The group cannot declare timing.' }
 };
 const notes = {
+  bitmapAsset: ['Reads a bitmap resource without converting its native sample precision.',
+    'Frame -1 samples the sequence at graph time. Use a frame number or signed UV tile coordinates to select an authored member.'],
   'sdf.bound': ['Overrides the sampling domain. Use sdf.boolean intersection with a shape for a physical cut.'],
   'sdf.repeat': ['Evaluate all translated copies as a union, centered on the grid offset. An optional object ID prefix appends the zero-based X, Y and Z indices.'],
   'sdf.boolean': ['Earlier inputs win ties. A subtractor can color the cut and supply its material ID while the body keeps its object ID.'],

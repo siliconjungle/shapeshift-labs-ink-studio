@@ -44,6 +44,7 @@ All checked-in guides, indexed by title and section headings.
 - [Authored contacts and prop handoffs](../authored-contacts.md)
 - [Batch spatial queries and occupancy](../batch-spatial-queries.md)
 - [Capture beat-level live performance](../beat-performance-captures.md)
+- [Bitmap resources](../bitmap-resources.md)
 - [Run a blind audiovisual review](../blind-av-review.md)
 - [Boarding and shared traversal](../boarding.md)
 - [Local bounce probes](../bounce-probes.md)
