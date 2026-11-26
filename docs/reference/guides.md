@@ -210,6 +210,7 @@ All checked-in guides, indexed by title and section headings.
 - [Authored lightning](../lightning.md)
 - [Linked 3D material preview](../linked-material-preview.md)
 - [Linked views and selections](../linked-views.md)
+- [Volume liquid and spectral seas](../liquid-3d.md)
 - [Live scene hierarchy](../live-scene-hierarchy.md)
 - [Live sun lighting](../live-sun.md)
 - [Cycle detection and loop authoring](../loop-authoring.md)
