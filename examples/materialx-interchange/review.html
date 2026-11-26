@@ -94,7 +94,8 @@ function draw(){
   if(report==='round'){
     $('title').textContent='Reopened material';
     $('summary').textContent=data.exported.roundTrip.uniforms.filter(v=>v.equal).length+' matching uniforms and '+
-      data.exported.roundTrip.maps.length+' verified maps. '+data.render.changed.toLocaleString()+' changed display pixels.';
+      data.exported.roundTrip.maps.length+' verified maps. '+data.render.changed.toLocaleString()+' of '+
+      (data.render.width*data.render.height).toLocaleString()+' display pixels changed.';
     $('records').replaceChildren(...data.exported.roundTrip.maps.map(r=>row(r.input,r.binding&&r.sameTexture?'Matched':'Changed')));
   }else{
     $('title').textContent='Unsupported source connection';
