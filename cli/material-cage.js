@@ -31,15 +31,18 @@ function read(input) {
     throw new TypeError('Use a version 1 material cage plan with 1–32 receivers');
   const entries = new Map();
   for (const row of plan.receivers) {
-    if (!record(row,['mesh','source','front','back','part','parts','faces','direction','minFacing','partPolicy','steps','maxWork','channels']))
+    if (!record(row,['mesh','source','front','back','part','parts','faces','protectPigment','direction','minFacing','partPolicy','steps','maxWork','channels']))
       throw new TypeError('Use cage receiver distances, part bindings, channel selection and a named source');
-    const { mesh=0,source,front,back=0,part,parts,faces,direction='smooth', minFacing=.2,partPolicy='match',
+    const { mesh=0,source,front,back=0,part,parts,faces,protectPigment=[],direction='smooth', minFacing=.2,partPolicy='match',
       steps=40,maxWork=24000000,channels:selected=channels } = row;
     if (!Number.isSafeInteger(mesh) || mesh<0 || entries.has(mesh) || !finite(front,0,1e5) ||
         !finite(back,0,1e5) || front+back<1e-7 || !finite(minFacing,0,1) || !['match','allow'].includes(partPolicy) ||
         !['smooth','geometric'].includes(direction) || part!==undefined && !Source.name(part) ||
         !Number.isSafeInteger(steps) || !finite(steps,4,256) || !Number.isSafeInteger(maxWork) || !finite(maxWork,1,200000000) ||
         !Array.isArray(selected) || !selected.length || new Set(selected).size!==selected.length || !selected.every(key=>channels.includes(key)) ||
+        !Array.isArray(protectPigment) || protectPigment.length>24000 ||
+        !protectPigment.every(id=>Source.name(id) || Number.isSafeInteger(id) && id>=0) ||
+        new Set(protectPigment.map(String)).size!==protectPigment.length ||
         faces!==undefined && (!Array.isArray(faces) || !faces.length ||
           !faces.every(id=>Source.name(id) || Number.isSafeInteger(id) && id>=0) || new Set(faces.map(String)).size!==faces.length))
       throw new RangeError('Use distinct cage receiver meshes, bounded front/back distances and valid projection controls');
@@ -49,7 +52,7 @@ function read(input) {
         (source.kind==='sdf' ? ['model','materials','faceParts'] : ['volume','field','material']).some(key=>source[key]!==undefined))
       throw new TypeError('Choose a detailed mesh, signed field or registered scan proxy for the cage');
     entries.set(mesh,{mesh,source,front,back,part,parts:faceParts(parts,'Cage receiver'),faces:faces && new Set(faces.map(String)),direction,
-      minFacing,partPolicy,steps,maxWork,channels:selected.slice(),directory});
+      protectPigment:new Set(protectPigment.map(String)),minFacing,partPolicy,steps,maxWork,channels:selected.slice(),directory});
   }
   return entries;
 }
@@ -97,11 +100,12 @@ function meshCaster(entry, studio, kit, work) {
   }
   if (triangles.length>250000) throw new RangeError('Cage source exceeds 250000 triangles');
   const tree=spatial.pointIndex(triangles);
-  return { triangles:triangles.length, cast(point,axis,ray) {
+  return { triangles:triangles.length, cast(point,axis,ray,probe) {
     const start=ray?.front ?? front, length=start+(ray?.back ?? back);
     const origin=V.mad(point,axis,start), direction=V.mul(axis,-1), candidates=[];
     tree.ray(origin,direction,length+tolerance,row=>{
       work();
+      if (probe && ((probe.part != null && probe.part !== row.part) || V.dot(row.normal,probe.facing)<entry.minFacing)) return;
       const cross=V.cross(direction,row.v), det=V.dot(row.u,cross);
       if (Math.abs(det)<1e-12) return;
       const d=V.sub(origin,row.a), u=V.dot(d,cross)/det;
@@ -109,7 +113,7 @@ function meshCaster(entry, studio, kit, work) {
       if (u>=-1e-9 && v>=-1e-9 && u+v<=1+1e-9 && t>=-tolerance && t<=length+tolerance)
         candidates.push({t:Math.max(0,Math.min(length,t)),row,weights:[1-u-v,u,v]});
     });
-    candidates.sort((a,b)=>a.t-b.t || a.row.i-b.row.i);
+    candidates.sort((a,b)=>(probe ? Math.abs(a.t-start)-Math.abs(b.t-start) : a.t-b.t) || a.row.i-b.row.i);
     let result, skippedBackface=false;
     for (const {t,row,weights} of candidates) {
       if (result && t-result.t>tolerance) break;
@@ -117,6 +121,7 @@ function meshCaster(entry, studio, kit, work) {
         weights.reduce((sum,w,i)=>sum+w*row.cornerNormals[i][k],0)),row.normal);
       const material=Source.meshMaterial(row,normal,weights,at,model,kit);
       if (!material) continue; // Transparent scan texels do not occlude the ray.
+      if (probe) return { offset:start-t, point:at, part:row.part, sourceFace:row.id };
       if (ray?.ignoreBackfaces && V.dot(row.normal,axis)<entry.minFacing) {
         skippedBackface=true;
         continue;
@@ -172,9 +177,10 @@ function fieldCaster(entry, kit, work) {
 }
 
 function prepare(spec, mesh, studio, kit) {
-  const { source,front,back,part,parts,faces,direction,minFacing,partPolicy,channels,maxWork,buildRay,backfaces='block' }=spec;
+  const { source,front,back,part,parts,faces,protectPigment=new Set(),direction,minFacing,partPolicy,channels,maxWork,
+    buildRay,backfaces='block' }=spec;
   const known=new Set(mesh.faces.map((_,i)=>String(mesh.faceIds?.[i] ?? i)));
-  for (const id of [...parts.keys(),...(faces ?? [])]) if (!known.has(id)) throw new RangeError('Unknown cage receiver face '+id);
+  for (const id of [...parts.keys(),...(faces ?? []),...protectPigment]) if (!known.has(id)) throw new RangeError('Unknown cage receiver face '+id);
   const maskNames=new Set(), range=Math.max(front,back), tolerance=Math.max(1e-9,Math.min(1e-5,range*1e-6));
   let checks=0;
   function work() {
@@ -187,7 +193,7 @@ function prepare(spec, mesh, studio, kit) {
   const byPart=new Map(), examples={}, fields={pigment:'color',normal:'normal',roughness:'roughness',metallic:'metallic',emission:'emission',opacity:'opacity'};
   const counter=()=>({sampled:0,hits:0,misses:0,crossPart:0,rejectedCrossPart:0,backfaces:0});
   const stats=counter(), {V}=kit;
-  let min=Infinity,max=-Infinity;
+  let min=Infinity,max=-Infinity,retainedPigment=0;
   function sample(point, smooth, geometric, face, pixel) {
     const faceId=String(mesh.faceIds?.[face] ?? face);
     if (faces && !faces.has(faceId)) return;
@@ -217,7 +223,9 @@ function prepare(spec, mesh, studio, kit) {
     if (accepted) {
       min=Math.min(min,hit.offset);
       max=Math.max(max,hit.offset);
-      material=Object.fromEntries(channels.filter(key=>fields[key] && hit.material[fields[key]]!==undefined)
+      if (protectPigment.has(faceId) && channels.includes('pigment') && hit.material.color!==undefined) retainedPigment++;
+      material=Object.fromEntries(channels.filter(key=>fields[key] && (key!=='pigment' || !protectPigment.has(faceId)) &&
+        hit.material[fields[key]]!==undefined)
         .map(key=>[fields[key],hit.material[fields[key]]]));
       if (channels.includes('masks') && hit.material.masks) material.masks=hit.material.masks;
     }
@@ -230,8 +238,48 @@ function prepare(spec, mesh, studio, kit) {
   const report=()=>({ version:1,source:{kind:source.kind,...(source.file && {file:source.file}),
     ...(caster.triangles && {triangles:caster.triangles})},front,back,distanceScale:range,direction,partPolicy,minFacing,channels,
     ...(source.kind==='sdf' && {steps:spec.steps}),...(buildRay&&{backfacesPolicy:backfaces}),maxWork,checks,...stats,
+    ...(protectPigment.size && {protectedPigment:{faces:[...protectPigment],texels:retainedPigment}}),
     offsets:stats.hits ? {min,max} : null, parts:[...byPart].map(([part,row])=>({part,...row})),examples });
   return {maskNames:[...masks,...(channels.includes('masks') ? maskNames : [])],sample,report};
 }
 
-module.exports={read,prepare,masks};
+function estimate(spec, mesh, studio, kit, { search, margin = search * .05, maxProbes = 320 } = {}) {
+  if (spec.source.kind==='sdf' || !finite(search,1e-5,1e5) || !finite(margin,0,search) ||
+      !Number.isSafeInteger(maxProbes) || !finite(maxProbes,1,4096))
+    throw new RangeError('Automatic cage needs a mesh source and bounded search, margin and probes');
+  const {V}=kit, tolerance=Math.max(1e-9,Math.min(1e-5,search*1e-6));
+  let checks=0;
+  const caster=meshCaster({...spec,front:search,back:search,tolerance,maskNames:new Set()},studio,kit,()=>{
+    if (++checks>spec.maxWork) throw new RangeError('Automatic cage exceeds its probe work budget');
+  });
+  const faces=mesh.faces.flatMap((ids,i)=>spec.faces && !spec.faces.has(String(mesh.faceIds?.[i] ?? i)) ? [] : [i]);
+  const weights=[[1/3,1/3,1/3],[.7,.15,.15],[.15,.7,.15],[.15,.15,.7]];
+  const total=faces.length*weights.length, probes=Math.min(total,maxProbes);
+  let matches=0,min=Infinity,max=-Infinity;
+  const parts=new Map();
+  for (let k=0;k<probes;k++) {
+    const i=Math.floor((k+.5)*total/probes), face=faces[Math.floor(i/weights.length)], w=weights[i%weights.length];
+    const ids=mesh.faces[face], [a,b,c]=ids.map(id=>mesh.points[id]), cross=V.cross(V.sub(b,a),V.sub(c,a));
+    if (ids.length!==3 || V.len(cross)<=1e-10) throw new RangeError('Automatic cage needs nondegenerate receiver triangles');
+    const geometric=V.norm(cross), fallback=ids.map(id=>mesh.normals?.[id] ?? geometric);
+    const weighted=rows=>[0,1,2].map(axis=>rows.reduce((v,row,j)=>v+w[j]*row[axis],0));
+    const direction=spec.direction==='geometric' ? geometric : V.norm(weighted(mesh.cornerNormals?.[face] ?? fallback),geometric);
+    const part=spec.parts.get(String(mesh.faceIds?.[face] ?? face)) ?? spec.part ?? mesh.faceParts?.[face] ?? null;
+    if (!parts.has(part)) parts.set(part,{part,probes:0,matches:0});
+    const row=parts.get(part);
+    row.probes++;
+    const hit=caster.cast(weighted([a,b,c]),direction,undefined,{part,facing:geometric});
+    if (!hit) continue;
+    row.matches++;
+    matches++;
+    min=Math.min(min,hit.offset);
+    max=Math.max(max,hit.offset);
+  }
+  if (!matches) throw new RangeError('Automatic cage found no matching source surface in its search range');
+  const floor=Math.max(1e-7,search*1e-5);
+  return {mode:'automatic',front:Math.min(search,Math.max(floor,max+margin)),
+    back:Math.min(search,Math.max(floor,-min+margin)),search,margin,probes,matches,checks,
+    offsets:{min,max},parts:[...parts.values()]};
+}
+
+module.exports={read,prepare,estimate,masks};

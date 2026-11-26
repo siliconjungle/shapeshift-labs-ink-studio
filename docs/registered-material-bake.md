@@ -410,6 +410,11 @@ clips and moves the brass service plate, transfers its approved lettering,
 and reuses the other charts. The revised material manifest includes its
 chart and mip receipts.
 
+## Bake a part and LOD batch
+
+Use [Registered part and LOD baking](registered-part-bakes.md) for automatic
+rest-space cages, native UV pages, seam checks, and pinned palette exports.
+
 ## Schedule selected maps
 
 Use [bake jobs and presets](bake-jobs.md) to select mesh primitives, slots, UV sets and tiles, then run ordered maps with individual settings and refresh graph resources when the bake completes.

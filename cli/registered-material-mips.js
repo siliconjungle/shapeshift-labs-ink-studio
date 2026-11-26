@@ -118,7 +118,7 @@ function reduce(source, size, saved, dirty, read, reviseOwners) {
     filteredTexels, changedOwners, clearedTexels, oldOwners, changed};
 }
 
-function writeMips(baked, size, dirty, prior, read, map, sidecar) {
+function writeMips(baked, size, dirty, prior, read, map, sidecar, palette) {
   const levels = [];
   const savedLevels = prior?.version === 1 ? prior.levels : undefined;
   if (prior?.version === 1 && (!Array.isArray(savedLevels) || savedLevels.length !== Math.log2(size)))
@@ -145,6 +145,7 @@ function writeMips(baked, size, dirty, prior, read, map, sidecar) {
     } else {
       source = reduce(source, width, saved, dirty, read, baked.layoutRevised);
       const {pixels, footprint, opacity} = source;
+      if (palette) for (const [i,owner] of source.owners.entries()) if (owner) palette.apply(pixels.base,i,false);
       const rgb = (name, data, space, alpha) => map(prefix + name,
         alpha ? png.encodeFrame(png.packFrame({w:width,h:width,rgb:data,alpha})) : png.encode(width, width, data), space);
       const gray = (name, data) => map(prefix + name, png.encodeGray(width, width, data), 'linear');

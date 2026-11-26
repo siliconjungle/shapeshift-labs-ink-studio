@@ -33,7 +33,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
   const worldNormals = samples?.world && new Float32Array(count * 3);
   const height = samples?.height && new Float32Array(count), heightValid = height && new Uint8Array(count);
   if(projection && count*projection.views>64000000)throw new RangeError('Paint views exceed the projected texel budget');
-  const { previous, state, dirty, reproject, geometry, layout, rebuild, release, transfer, cage } = chartBake || {};
+  const { previous, state, dirty, reproject, geometry, layout, rebuild, release, transfer, cage, palette } = chartBake || {};
   const revised = Boolean(rebuild?.size || release?.size), layoutRows = new Map(layout?.charts.map(row => [row.id, row]));
   const retired = new Map(layout?.retired.map(row => [row.id, row]));
   const owners = (revised ? previous.owners.slice() : previous?.owners) ?? (registered && new Uint32Array(count));
@@ -192,6 +192,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
         heightValid[i]=1;
       }
       pixels.base.set(color.map(sRGB), at);
+      palette?.apply(pixels.base,i);
       pixels.normal.set(yNormal.map(value => byte(0.5 + 0.5 * value)), at);
       pixels.surface.set([255, byte(roughness), byte(metallic)], at);
       if(hot)hot.set(emission,at);
@@ -206,6 +207,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
       strength = Math.max(strength, ...emission);
     }
   }
+  palette?.finish();
   if (!used && !previous) throw new Error('Texture bake found no surface in the UV atlas');
   if (!registered && !normalUsed) delete pixels.normal;
   if (!registered && !surfaceUsed) delete pixels.surface;

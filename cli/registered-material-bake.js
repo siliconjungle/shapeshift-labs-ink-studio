@@ -6,16 +6,22 @@ const charts = require('./material-chart-rebake.js');
 const {writeMips} = require('./registered-material-mips.js');
 const Geometry = require('./geometry-masks.js');
 const Cage = require('./material-cage.js');
+const Palette = require('./registered-bake-palette.js');
 const UV = require('../src/material-uv.js');
 
-function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometryMasks,cageBake,onModelingWork}) {
-  if ([bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,cageBake].every(value=>value===undefined) &&
+function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometryMasks,cageBake,registeredPages,onModelingWork}) {
+  if ([bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,cageBake,registeredPages].every(value=>value===undefined) &&
       (geometryMasks === undefined || geometryMasks === false)) return null;
   if(chartEdits!==undefined && rebakeFrom===undefined)throw new TypeError('Chart edits need a rebake baseline');
   if(geometryMasks!==undefined && geometryMasks!==false && !bakeDir)
     throw new TypeError('Geometry masks need a registered bake directory');
   if(typeof bakeDir!=='string'||!bakeDir || paintViews!==undefined && capturePaint!==undefined)
     throw new TypeError('Registered baking needs a bake directory and one paint or capture plan at a time');
+  if (registeredPages!==undefined && (!Array.isArray(registeredPages) || !registeredPages.length ||
+      registeredPages.length>32 || rebakeFrom!==undefined ||
+      registeredPages.some(row=>!row || ![32,64,128,256,512,1024,2048].includes(row.size) ||
+        !Number.isSafeInteger(row.padding) || row.padding<0 || row.padding>32 || row.padding>=row.size/2)))
+    throw new RangeError('Per-page registered settings need bounded dimensions, padding and a fresh bake');
   const directory=path.resolve(bakeDir), meshes=[], atlases=new Map(), output=new Map(), captures=[], work=[];
   const baseline=charts.readBaseline(rebakeFrom), edits=charts.readPlan(chartEdits);
   const geometrySettings=Geometry.settings(geometryMasks === undefined ? baseline?.document.geometryMasks : geometryMasks);
@@ -26,6 +32,7 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
       capture.some(({id})=>fs.existsSync(path.join(directory,'paint-views',id+'-paint.png')))))
     throw new Error('Choose a fresh paint capture directory to preserve the existing paint files');
   function validate(count) {
+    if (registeredPages && registeredPages.length!==count) throw new RangeError('Missing per-page registered settings');
     if([...paint,...capture,...edits].some(row=>row.mesh>=count))throw new RangeError('Material bake plan references a missing mesh index');
     if ([...cages.keys()].some(index=>index>=count)) throw new RangeError('Material cage plan references a missing receiver mesh');
     if(baseline && baseline.document.meshes.length!==count)throw new Error('Chart rebake needs the baseline mesh count');
@@ -68,7 +75,11 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
       ...(layout && {layout}),
       ...(baked.geometryMasks && {geometryMaskTexels:chartBake.geometry.calculate ? baked.geometryMasks.texels : 0})
     };
-    const mipmaps=writeMips(baked,size,dirty,source?.row.mipmaps,baseline?.read,map,sidecar);
+    const palette=chartBake.palette && {
+      asset:chartBake.palette.asset,pins:chartBake.palette.pins,
+      indexed:map('pigment-indexed',chartBake.palette.encode(baked.raster.pixels.base,baked.owners),'sRGB')
+    };
+    const mipmaps=writeMips(baked,size,dirty,source?.row.mipmaps,baseline?.read,map,sidecar,chartBake.palette);
     if (onModelingWork && source) {
       const charts=state.charts.filter(chart=>dirty.has(chart.id)), labels=state.identity?.labels;
       const mipTexels=mipmaps.levels.reduce((total,row)=>total+row.filteredTexels,0);
@@ -82,6 +93,7 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
       coverage,emissionStrength:strength,maps,masks,mipmaps,paintViews:[...paintReceipts.values()],
       ...(baked.geometryMasks && {geometryMasks:baked.geometryMasks}),
       ...(baked.cageBake && {cageBake:baked.cageBake}),
+      ...(palette && {palette}),
       charts:state.charts.map(({id,faces,bounds})=>({id,faces,bounds})),
       chartLayout:sidecar('chart-layout','json',Buffer.from(JSON.stringify(state))),
       rebakeState:{owners:sidecar('chart-owners','deflate',(!baked.layoutRevised && previous?.packedOwners) || charts.pack(baked.owners)),
@@ -186,11 +198,13 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits,geometry
           ...(same && { scope:'updated-charts' })};
       }
     }
+    const page=registeredPages?.[index];
+    if (page?.palette && set===primary) chartBake.palette=Palette.page(page.palette,page.pins ?? [],input.size);
     const projected=chartBake.reproject.size ? projection.prepare(input.mesh.points,input.faces,views,kit) : undefined;
     return {chartBake,projection:projected};
   }
 
-  return {validate,record,compose,write,plan,name:index=>baseline?.document.meshes[index]?.name,
+  return {validate,record,compose,write,plan,page:index=>registeredPages?.[index],name:index=>baseline?.document.meshes[index]?.name,
     layout:(index,mesh,set)=>charts.baselineLayout(baseline,index,mesh,set)};
 }
 
