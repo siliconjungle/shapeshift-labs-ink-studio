@@ -44,15 +44,16 @@ assert(receipt.canCommit);
 assert.deepEqual(receipt.sources[0].selection.ids.sort(),['grille','sign']);
 assert.equal(receipt.sources[0].remaining,1);
 
-const promoted = ink.createSceneEditor(read('promoted.json'));
-promoted.setPrefabInstance('east',{prefab:'painted-bay',transform:{translation:[.43,0,0]}});
-json('reused.json',promoted.snapshot());
-assert.deepEqual(Object.keys(promoted.build().topologyMeshes).sort(),['bay-panel','east.bay-panel','west.bay-panel']);
+json('place-east.json',[{op:'set',path:'/instances/east',
+  value:{prefab:'painted-bay',transform:{translation:[.43,0,0]}}}]);
+run(['scene','apply','promoted.json','place-east.json','--out','reused.json']);
+const reused = ink.createSceneEditor(read('reused.json'));
+assert.deepEqual(Object.keys(reused.build().topologyMeshes).sort(),['bay-panel','east.bay-panel','west.bay-panel']);
 
 const panels = [['SOURCE TILE FACES','station.json','Source-1x.png'],
   ['PROMOTED IN PLACE','promoted.json','Promoted-1x.png'],
   ['SECOND INSTANCE','reused.json','Reused-1x.png']];
-for (const [,scene,name] of panels) run(['render',scene,'--raw','--w','208','--h','104','--px','1','--out',name]);
+for (const [,scene,name] of panels) run(['render',scene,'--raw','--w','208','--h','104','--px','1','--zoom','1.7','--out',name]);
 assert(fs.readFileSync(file('Source-1x.png')).equals(fs.readFileSync(file('Promoted-1x.png'))));
 
 const w=672,h=232, drawing = ink.load().KIT.procedural.drawing2d;
@@ -76,6 +77,6 @@ write('README.md',[
   'Run `sh COMMANDS.sh` with `ink-studio` on your PATH.',
   'The source and promoted images should match exactly.',
   'The construction plane is at the left edge of the BAY panel.',
-  'The checked-in demo generator uses `setPrefabInstance` for the east placement.',
+  'The replay adds the east placement with `scene apply`.',
   'The loose NXT marker remains in the scene.', ''
 ].join('\n'));
