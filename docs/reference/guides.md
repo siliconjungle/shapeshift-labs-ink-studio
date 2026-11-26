@@ -475,6 +475,7 @@ All checked-in guides, indexed by title and section headings.
 - [Target inspection effects](../target-inspection.md)
 - [Targeted interactions](../targeted-interactions.md)
 - [Run native artifact tasks](../task-graphs.md)
+- [Headless terrain sets](../terrain-sets.md)
 - [Terrain trails](../terrain-trails.md)
 - [Where the pixels live](../texel-coverage.md)
 - [Thread, stitch and woven rendering](../textile-rendering.md)
