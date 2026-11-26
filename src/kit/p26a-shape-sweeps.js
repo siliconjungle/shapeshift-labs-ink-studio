@@ -95,28 +95,73 @@
   function outside({ min, max }, x, y, z) {
     return Math.max(min[0] - x, x - max[0], min[1] - y, y - max[1], min[2] - z, z - max[2]);
   }
-  function distance(root, x, y, z, best) {
+  const nearestDistance = (entry, x, y, z, best) => Math.min(best, entry.sample(x, y, z));
+  function distance(root, x, y, z, best, measure = nearestDistance) {
     // The signed box distance is a lower bound even inside the box.
     if (outside(root.bounds, x, y, z) > best) return best;
-    if (root.sample) return Math.min(best, root.sample(x, y, z));
+    if (root.sample) return measure(root, x, y, z, best);
     const { left, right } = root;
     return outside(left.bounds, x, y, z) <= outside(right.bounds, x, y, z)
-      ? distance(right, x, y, z, distance(left, x, y, z, best))
-      : distance(left, x, y, z, distance(right, x, y, z, best));
+      ? distance(right, x, y, z, distance(left, x, y, z, best, measure), measure)
+      : distance(left, x, y, z, distance(right, x, y, z, best, measure), measure);
   }
   function blend(a, b, radius) {
     const margin = Math.max(0, radius - Math.abs(a - b));
     return Math.min(a, b) - margin * margin / (4 * radius);
   }
 
-  function prepare({ brush, poses, step, blendRadius = 0 }) {
+  function ruled(poses) {
+    const start = poses[0].point, end = poses.at(-1).point;
+    if (V.dist(start, end) < 1e-8) throw new RangeError('A ruled stroke needs distinct first and last points');
+    let length = 0;
+    const offsets = poses.map((pose, i) => i ? length += V.dist(pose.point, poses[i - 1].point) : 0);
+    return poses.map((pose, i) => ({ ...pose, point: V.lerp(start, end, offsets[i] / length) }));
+  }
+
+  const range = (value, max) => vector(value, 2) && value.every(n => n >= 0 && n <= max);
+  const responseAt = ([low, high], pressure) => low + (high - low) * Math.min(1, pressure);
+  const hasOpacity = pressureResponse => pressureResponse?.opacity?.some(value => value < 1) ?? false;
+
+  function opacitySampler(poses, response) {
+    if (poses.length === 1) return () => responseAt(response, poses[0].pressure);
+    const sections = poses.slice(1).map((end, i) => {
+      const start = poses[i], delta = V.sub(end.point, start.point), length2 = V.dot(delta, delta);
+      return { index: i, bounds: boxOf([start.point, end.point]), sample(x, y, z) {
+        const offset = [x - start.point[0], y - start.point[1], z - start.point[2]];
+        const t = length2 > 1e-16 ? K.clamp(V.dot(offset, delta) / length2, 0, 1) : 1;
+        return { distance: Math.hypot(...V.mad(offset, delta, -t)), pressure: start.pressure + (end.pressure - start.pressure) * t };
+      } };
+    });
+    const root = tree(sections);
+    return (x, y, z) => {
+      let pressure = 1, latest = -1;
+      distance(root, x, y, z, Infinity, (entry, x, y, z, best) => {
+        const sample = entry.sample(x, y, z);
+        if (sample.distance > best || sample.distance === best && entry.index < latest) return best;
+        pressure = sample.pressure;
+        latest = entry.index;
+        return sample.distance;
+      });
+      return responseAt(response, pressure);
+    };
+  }
+
+  function prepare({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse }) {
     const source = brushSource(brush);
-    if (!Array.isArray(poses) || poses.length < 2 || poses.length > 1024 ||
+    if (!Array.isArray(poses) || poses.length < 1 || poses.length > 1024 ||
         !finite(blendRadius) || blendRadius < 0 ||
         (step !== undefined && (!positive(step) || step > 1)))
-      throw new RangeError('A sweep needs 2–1024 poses, a nonnegative blend radius and an optional step from .0001 to 1');
-    const authored = Array.from(poses, poseSource);
-    if (!authored.some(p => p.pressure)) throw new RangeError('A sweep needs at least one positive pressure');
+      throw new RangeError('A sweep needs 1–1024 poses, a nonnegative blend radius and an optional step from .0001 to 1');
+    if (!['free', 'ruled'].includes(path)) throw new TypeError('A sweep path must be free or ruled');
+    if (pressureResponse !== undefined && (!fields(pressureResponse, ['width', 'opacity']) ||
+        pressureResponse.width !== undefined && !range(pressureResponse.width, 4) ||
+        pressureResponse.opacity !== undefined && !range(pressureResponse.opacity, 1)))
+      throw new TypeError('Pressure response needs [at zero, at one] ranges for width (0–4) or opacity (0–1)');
+    const input = Array.from(poses, poseSource), guide = path === 'ruled' ? ruled(input) : input;
+    const authored = pressureResponse === undefined ? guide : guide.map(pose => ({
+      ...pose, pressure: responseAt(pressureResponse.width ?? [1, 1], pose.pressure)
+    }));
+    if (!authored.some(p => p.pressure)) throw new RangeError('A sweep needs at least one positive pressure or mapped width');
     const radius = Math.hypot(...source.bounds.min.map((v, i) => Math.max(Math.abs(v), Math.abs(source.bounds.max[i]))));
     const narrowest = Math.min(1, ...authored.filter(p => p.pressure > 0).map(p => p.pressure));
     const spacing = step ?? Math.max(.0001, Math.min(.06, source.feature * narrowest / 2));
@@ -144,8 +189,10 @@
         sample: (x, y, z) => blend(a.local(x, y, z, source.sd), b.local(x, y, z, source.sd), blendRadius) };
     }) : rows.map(row => ({ bounds: row.bounds, sample: (x, y, z) => row.local(x, y, z, source.sd) }));
     const root = tree(entries);
-    return { bounds: P.data.freeze({ min: root.bounds.min.slice(), max: root.bounds.max.slice() }), cost: source.cost, sampleCount: stations.length, step: spacing,
-      sd: (x, y, z) => distance(root, x, y, z, Infinity) };
+    return { bounds: P.data.freeze({ min: root.bounds.min.slice(), max: root.bounds.max.slice() }), cost: source.cost,
+      sampleCount: stations.length, step: spacing, guide,
+      sd: (x, y, z) => distance(root, x, y, z, Infinity),
+      ...(hasOpacity(pressureResponse) && { opacityAt: opacitySampler(guide, pressureResponse.opacity) }) };
   }
 
   P.shapeSweeps = Object.freeze({ prepare });

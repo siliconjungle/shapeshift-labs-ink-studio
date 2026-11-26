@@ -48,12 +48,19 @@ runs along local Z. The poses below rotate that Z axis along the path.
 | `sphere` | `radius`. |
 | `capsule`, `cylinder` | `radius` and `length` along Y. Capsule length is the distance between the cap centers. |
 
+One pose makes a dab. A sweep accepts up to 1024 poses.
 Each pose takes an XYZ `point`, a quaternion `rotation` in `[x,y,z,w]`
 order, and uniform `pressure` from 0 to 4. Defaults are identity
 rotation and pressure 1. Between poses, position and pressure interpolate
 linearly and rotation interpolates on the shortest quaternion arc.
 Pressure zero tapers the brush to a point. Supply additional poses to
 author a curved path or a rotation beyond 180 degrees.
+
+Set `path: "ruled"` to evaluate a straight guide between distinct endpoints.
+The optional [pressure response](painting-3d.md#dabs-pressure-and-ruled-strokes)
+sets brush scale and opacity from the recorded pressure. Standalone shapes
+can render translucently. For paint layered over a receiving solid, use
+a retained 3D painting with a surface attachment.
 
 Ink evaluates a bounded approximation from intermediate poses. The
 optional `step` limits how far the brush moves between evaluations,
@@ -65,7 +72,7 @@ for a standalone sweep. A targeted modifier renders on the host's grid.
 
 Inspect returns the authored sweep, its evaluated bounds, pose count,
 and effective step. Update takes an `id` and any subset of `brush`,
-`poses`, `step`, and `blendRadius`. A new `poses` array replaces the
+`poses`, `step`, `blendRadius`, `path`, and `pressureResponse`. A new `poses` array replaces the
 previous one. Use null to clear an optional control. Keep each revised
 scene beside its source so relative assets still resolve.
 

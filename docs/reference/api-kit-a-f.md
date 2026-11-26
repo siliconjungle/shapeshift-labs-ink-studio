@@ -1704,6 +1704,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.diorama.kinds.sweep` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.sweep.may` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.sweep.may.blendRadius` | value | `string = "num"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.kinds.sweep.may.path` | value | `string = "str"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.kinds.sweep.may.pressureResponse` | value | `string = "obj"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.sweep.may.step` | value | `string = "pos"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.sweep.need` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.sweep.need.brush` | value | `string = "obj"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |

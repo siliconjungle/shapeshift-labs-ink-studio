@@ -157,15 +157,17 @@ function makeSculpt(B, rest) {
     p.reach = o.reach || 0;
     p.whole = !!o.whole;
     if (o.paintLayer) p.paintLayer = true;
+    if (o.paintOverlay) p.paintOverlay = true;
     if (o.lowerBound !== undefined) {
       if (typeof o.lowerBound !== 'function') throw new Error('A field lower bound must be a function');
       p.lowerBound = o.lowerBound;
     }
     if (o.born !== undefined) p.born = o.born;
     if (o.hold) return p; // held: made to be combined into another solid, not drawn by itself
-    if (S.collide && (o.ghost || (p.mat.skip && !p.mat.solid))) return p; // when only what can be walked on matters, leave out what is drawn but not solid
-    (o.ghost ? ghosts : o.neg ? neg : pos).push(p);
-    if (p.mat.omitFromProxy && !o.ghost && !o.neg) hasOptionalProxy = true;
+    const separated = o.ghost || o.paintOverlay;
+    if (S.collide && (separated || (p.mat.skip && !p.mat.solid))) return p; // when only what can be walked on matters, leave out what is drawn but not solid
+    (separated ? ghosts : o.neg ? neg : pos).push(p);
+    if (p.mat.omitFromProxy && !separated && !o.neg) hasOptionalProxy = true;
     return p;
   }
   // Capture a multi-piece recipe as operands for a sculpt operation.
@@ -266,6 +268,7 @@ function makeSculpt(B, rest) {
           space.affine ? space.inverseDirection : normal => axes.map(axis => axis[0] * normal[0] + axis[1] * normal[1] + axis[2] * normal[2]),
           space.pushNormal ?? direction);
       }
+      if (mat.opacityAt) solid.mat = { ...solid.mat, opacityAt: (x, y, z) => mat.opacityAt(...inverse([x, y, z])) };
       if (space.affine) delete solid.analytic;
       else if (analytic) {
         const axes = analytic.frame ?? [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
@@ -1001,6 +1004,8 @@ function makeSculpt(B, rest) {
   }
   function light(m, res, x, y, z, nx, ny, nz, full, selected, fine, coarse = false) {
     if (!coarse && S.clip && !S.clip(x, y, z)) return;
+    const mappedOpacity = m.opacityAt?.(x, y, z);
+    if (mappedOpacity === 0 && !coarse && !PRB) return;
     /* born: when this dab appears (growth you can watch). A material's or a solid's o.born: seconds, or (x, y, z, along) -> seconds */
     const bn = m.born !== undefined ? m.born : curP && curP.born !== undefined ? curP.born : null;
     if (!coarse) B.born(
@@ -1257,6 +1262,9 @@ function makeSculpt(B, rest) {
     selected?.(m, style, style?.mode && !flat && !m.glass && shade?.[0] !== shade?.[1] ? shade : null);
     const fl =
       FLO || m.motionAt?.(x, y, z) || m.fl || (m.em ? EM : glint ? GLINT : (m.leaf || m.blade) && !m.still ? (m.leaf ? WINDL : WINDG) : undefined);
+    const opacity = mappedOpacity === undefined ? (m.a === undefined || glint ? 3 : m.a)
+      : mappedOpacity * Math.min(1, m.a ?? 1);
+    const decorationOpacity = mappedOpacity === undefined ? 3 : opacity;
     if (m.leaf && !flat) {
       const lf = m.leaf,
         a = R() * TAU,
@@ -1295,7 +1303,7 @@ function makeSculpt(B, rest) {
           lf.l,
           lf.w || res * 0.5,
           P[ci],
-          3,
+          decorationOpacity,
           fl
         );
         return;
@@ -1318,7 +1326,7 @@ function makeSculpt(B, rest) {
         size * 1.15,
         size * 0.5,
         P[ci],
-        3,
+        decorationOpacity,
         fl
       );
       return;
@@ -1337,7 +1345,7 @@ function makeSculpt(B, rest) {
         mid = ramp[k],
         hi = ramp[Math.min(n - 1, k + 1)];
       if (surface) B.surfaceNext(surface, nx, ny, nz, L, 1 - shd, undefined, bevel, facingRamp);
-      disc(x, y, z, [nx, ny, nz], res * S.fat, res * 0.3, P[lo], 3, m.fl);
+      disc(x, y, z, [nx, ny, nz], res * S.fat, res * 0.3, P[lo], decorationOpacity, m.fl);
       if (wear > 0.7 && R() < (wear - 0.7) * 6) return;
       const h = (bl.h || 0.15) * 2.1 * (0.45 + 1.1 * tall) * (0.55 + 0.75 * R()),
         w = (bl.w || 0.032) * 1.9 * (0.8 + 0.5 * R());
@@ -1354,7 +1362,7 @@ function makeSculpt(B, rest) {
         h * 0.34,
         w,
         P[lo === mid ? mid : R() < 0.55 ? lo : mid],
-        3,
+        decorationOpacity,
         fl
       );
       if (surface) B.surfaceNext(surface, nx, ny, nz, L, 1 - shd, ax, bevel, facingRamp);
@@ -1366,7 +1374,7 @@ function makeSculpt(B, rest) {
         h * 0.3,
         w * 0.55,
         P[R() < 0.3 + 0.5 * (kf - k) ? hi : mid],
-        3,
+        decorationOpacity,
         fl
       );
       return;
@@ -1401,7 +1409,7 @@ function makeSculpt(B, rest) {
       fz -= nz * fn;
       const fm = Math.hypot(fx, fy, fz) || 1;
       if (surface) B.surfaceNext(surface, nx, ny, nz, L, 1 - shd, undefined, bevel, facingRamp);
-      disc(x, y, z, [nx, ny, nz], res * S.fat, res * 0.3, P[ramp[Math.max(0, k - 2)]], 3, m.fl);
+      disc(x, y, z, [nx, ny, nz], res * S.fat, res * 0.3, P[ramp[Math.max(0, k - 2)]], decorationOpacity, m.fl);
       for (let hi = 0; hi < hairs; hi++) {
         const jx = R() - 0.5,
           jy = R() - 0.5,
@@ -1438,7 +1446,7 @@ function makeSculpt(B, rest) {
             sl * 0.62,
             w * FWID[sg],
             P[c],
-            3,
+            decorationOpacity,
             sway
           );
           qx += ax[0] * sl;
@@ -1450,7 +1458,7 @@ function makeSculpt(B, rest) {
     }
     const alternate = shadowArt?.small && hadShadow && !m.glass && !flat ?
       light(m0, res, x, y, z, gx, gy, gz, full, undefined, undefined, true) : null;
-    if (!m0.indexedPigment && !m0.paintedEmission && (fine ?? (S.fine || m0.fine)) && !m.glass && (m.a === undefined || m.a >= 1 || glint))
+    if (mappedOpacity === undefined && !m0.indexedPigment && !m0.paintedEmission && (fine ?? (S.fine || m0.fine)) && !m.glass && (m.a === undefined || m.a >= 1 || glint))
       fineTile(m0, res, x, y, z, nx, ny, nz, full, ci);
     if (S.bounce && !flat && !m.em)
       ((BTAP.ramp[B.count()] = ramp), (BTAP.t[B.count()] = t)); /* kept for the bounce pass */
@@ -1458,7 +1466,7 @@ function makeSculpt(B, rest) {
     /* colour worked out per pixel (S.pixel, for a diorama whose look.pixel is on): the dab says which ramp, how lit, which pattern and
        which way its surface truly faces; each pixel is then coloured from those where it lands. A colour a material chose itself
        (a texture with no pattern behind it), a glowing thing, glass and a glint keep the dab's own colour */
-    if (S.pixel && !m0.indexedPigment && !m0.paintedEmission && !m.optical && !surface?.opacity && !m.em && !m.glass && !glint && (m.a === undefined || m.a >= 1) && (!flat || m.pat))
+    if (mappedOpacity === undefined && S.pixel && !m0.indexedPigment && !m0.paintedEmission && !m.optical && !surface?.opacity && !m.em && !m.glass && !glint && (m.a === undefined || m.a >= 1) && (!flat || m.pat))
       B.pixNext(
         ramp,
         t,
@@ -1479,12 +1487,12 @@ function makeSculpt(B, rest) {
       const brush = brushSettings(brushDefinition);
       const frame = withBrushNormals(normalAt =>
         SurfaceBrush.direction(brush, [x, y, z], [nx, ny, nz], { spacing: res, normalAt }));
-      SurfaceBrush.stamp(B, frame, P[ci], brush, { opacity: m.a === undefined || glint ? 3 : m.a, animation: fl });
+      SurfaceBrush.stamp(B, frame, P[ci], brush, { opacity, animation: fl });
       return;
     }
     const geometry = m0.paintedNormal ? [gx,gy,gz] : [nx,ny,nz];
     if (S.follow && !m.glass) {
-      formDab(res, x, y, z, ...geometry, P[ci], m.a === undefined || glint ? 3 : m.a, fl);
+      formDab(res, x, y, z, ...geometry, P[ci], opacity, fl);
       return;
     }
     disc(
@@ -1495,7 +1503,7 @@ function makeSculpt(B, rest) {
       res * (m.fat || S.fat), // (a material may ask for bigger dabs: m.fat, against the sculpt's 0.46: stone with steps in it)
       res * 0.3,
       P[ci],
-      m.a === undefined || glint ? 3 : m.a,
+      opacity,
       m.glass ? (m.em ? GLASSEM : GLASS) : fl
     );
   }
@@ -1752,21 +1760,26 @@ function makeSculpt(B, rest) {
   };
   /* Detach the rest field from the splat bake, which clears its live solids. */
   S.modelSource = () => {
-    const parts = [], positive = [];
+    const parts = [], positive = [], paintLayers = [];
     for (const solid of pos) {
       if ((solid.model === 'separate' || solid.model?.separate) && !solid.analytic)
         throw new Error('A separate sculpt model requires an analytic primitive');
       if (solid.analytic && (solid.model === 'separate' || solid.model?.separate)) parts.push(solid);
       else positive.push(solid);
     }
-    for (const solid of ghosts)
-      if (solid.analytic && (solid.model === 'separate' || solid.model?.separate)) parts.push(solid);
-    if (!positive.length && !parts.length) throw new Error('Model export needs an unbaked sculpt');
+    for (const solid of ghosts) {
+      if (solid.paintOverlay) {
+        const layer = makeSculpt(B, { positive: [solid] });
+        layer.ready();
+        paintLayers.push({ sculpt: layer, name: solid.renderTarget?.entity, resolution: solid.res, bounds: solid.geometryBounds });
+      } else if (solid.analytic && (solid.model === 'separate' || solid.model?.separate)) parts.push(solid);
+    }
+    if (!positive.length && !parts.length && !paintLayers.length) throw new Error('Model export needs an unbaked sculpt');
     const field = positive.length ? makeSculpt(B, { positive, negative: [...neg, ...negAll] }) : null;
     if (field) field.ready();
     const maskNames = [...new Set([...positive,...neg,...negAll].flatMap(solid=>[...(solid.mat.surfaceState?.maskNames ?? []),...Object.keys(solid.mat.model?.masks ?? {})]))];
-    const paintedOpacity = [...positive,...neg,...negAll].some(solid=>solid.mat.surfaceState?.hasOpacity);
-    return { field, parts, noise: n3,maskNames,paintedOpacity,palette:P };
+    const paintedOpacity = [...positive,...neg,...negAll].some(solid=>solid.mat.surfaceState?.hasOpacity || solid.mat.opacityAt);
+    return { field, parts, paintLayers, noise: n3,maskNames,paintedOpacity,palette:P };
   };
   S.renderSurface = (x,y,z) => {
     fieldAll(x,y,z);
@@ -1798,7 +1811,7 @@ function makeSculpt(B, rest) {
     const {pre,clip} = S;
     const accepts = (pre || clip) && ((x,y,z) => (!pre || pre(x,y,z)) && (!clip || clip(x,y,z)));
     const rows = new Map([...bodies, ...cuts, ...separate].map(owner => [owner, []]));
-    const isPane = mat => mat.optical || mat.glass || mat.a < 1 ||
+    const isPane = mat => mat.optical || mat.glass || mat.a < 1 || mat.opacityAt ||
       Object.values(mat.surface?.layers ?? {}).some(layer => layer?.type === 'transmission') ||
       mat.top && isPane(mat.top);
     function bind(allowed, cutsAllowed = allowed) {
@@ -2321,6 +2334,10 @@ function makeSculpt(B, rest) {
     for (const p of ghosts) {
       const res = p.res * (p.detailBudget?.spacing ?? 1),
         e = 0.012;
+      if (p.paintOverlay) {
+        bakeBand(p, -1, res, null);
+        continue;
+      }
       sampleAt(p, p.bump ? res * 0.8 : res, (x, y, z) => {
         if (S.pre && !S.pre(x, y, z)) return;
         let d = psd(p, x, y, z),

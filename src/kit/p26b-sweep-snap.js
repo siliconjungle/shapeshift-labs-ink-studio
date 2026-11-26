@@ -36,7 +36,8 @@
     const tolerance = Math.min(.00001, maxDistance * .01);
     const surface = direction && CurveGrowth.sdfSurface({ field: { distance }, reach: maxDistance, steps: 64, minFacing });
     const context = surface && surface.context({});
-    const { poses } = shape;
+    const evaluated = (shape.path === 'ruled' || spacing === undefined) && K.procedural.shapeSweeps.prepare(shape);
+    const poses = shape.path === 'ruled' ? evaluated.guide : shape.poses;
 
     function contact(pose, label) {
       const guide = toHost(pose.point);
@@ -59,7 +60,7 @@
       return { poses: shifted, contacts: [root] };
     }
 
-    const gap = spacing ?? K.procedural.shapeSweeps.prepare(shape).step;
+    const gap = spacing ?? evaluated.step;
     const contacts = [root];
     const between = (a, b, t) => ({ point: V.lerp(a.point, b.point, t),
       rotation: Q.slerp(Q.normalize(a.rotation ?? rotation), Q.normalize(b.rotation ?? rotation), t),

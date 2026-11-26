@@ -7,7 +7,7 @@ const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const name = value => typeof value === 'string' && value.trim() === value && value.length > 0;
 const fields = (value, keys) => value && typeof value === 'object' && !Array.isArray(value) &&
   Object.keys(value).every(key => keys.includes(key));
-const controls = ['brush', 'poses', 'blendRadius', 'step'];
+const controls = ['brush', 'poses', 'blendRadius', 'step', 'path', 'pressureResponse'];
 
 function host(editor, target) {
   const node = editor.node('solid:' + target);
@@ -38,7 +38,7 @@ module.exports = function sculptSweep([verb, scene, file, ...rest], flags, kit, 
     const { solid } = sweepNode(editor, id, target);
     const attachment = target && host(editor, target).solid.modifiers?.find(row => row.id === id)?.snap;
     const snap = attachment && editor.inspectSculptSnap(target, id);
-    const { bounds, sampleCount, step } = api.prepare(snap?.resolvedPoses ? { ...solid, poses: snap.resolvedPoses } : solid);
+    const { bounds, sampleCount, step } = api.prepare(snap?.resolvedPoses ? { ...solid, poses: snap.resolvedPoses, path: 'free' } : solid);
     console.log(JSON.stringify({ id, ...(target && { target }), sweep: solid, bounds, sampleCount, step,
       ...(snap && { snap }) }, null, 2));
     return;
