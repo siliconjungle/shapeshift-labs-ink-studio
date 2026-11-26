@@ -749,31 +749,36 @@ float pixelDepth(ivec2 p) {
 vec3 pixelNative(ivec2 p) { return texelFetch(u_crispScene, p, 0).rgb; }
 #endif
 vec3 pixelResolve(ivec2 p) {
-  vec3 samples[4]; int labels[4]; bool solid[4]; float coverage = 0.0;
+  ivec2 origin = p * 2;
+  bool solid[4]; float coverage = 0.0;
   for (int i = 0; i < 4; i++) {
-    ivec2 q = pixelAt(p * 2 + ivec2(i & 1, i >> 1));
-    samples[i] = texelFetch(u_scene, q, 0).rgb;
+    ivec2 q = pixelAt(origin + ivec2(i & 1, i >> 1));
     solid[i] = texelFetch(u_depth, q, 0).r < 0.995;
-    labels[i] = pixelNearest(samples[i], solid[i]); if (solid[i]) coverage += 0.25;
+    if (solid[i]) coverage += 0.25;
+  }
+  // Supersample pigment only contributes when the contour vote replaces the native pixel.
+  if (coverage > 0.0 && (coverage < 1.0 ||
+    max(max(pixelDepth(p - ivec2(1, 0)), pixelDepth(p + ivec2(1, 0))),
+        max(pixelDepth(p - ivec2(0, 1)), pixelDepth(p + ivec2(0, 1)))) >= 0.995)) {
+    int labels[4];
+    for (int i = 0; i < 4; i++) {
+      ivec2 q = pixelAt(origin + ivec2(i & 1, i >> 1));
+      labels[i] = solid[i] ? pixelNearest(texelFetch(u_scene, q, 0).rgb, true) : -1;
+    }
+    int best = 0, score = 0;
+    for (int i = 0; i < 4; i++) {
+      if (!solid[i]) continue;
+      int n = 0;
+      for (int j = 0; j < 4; j++) if (labels[j] == labels[i]) n++;
+      if (n > score) { best = labels[i]; score = n; }
+    }
+    vec3 body = pixelMapped(best);
+    vec3 tone = body * 0.64; tone = min(vec3(1.0), tone * max(1.0, 0.12 / max(dot(tone, vec3(0.30, 0.55, 0.15)), 0.001)));
+    return mix(pixelMapped(0), mix(body, tone, 0.65), coverage);
   }
   vec3 native = pixelNative(p);   // (a page may define PIXEL_NATIVE and its own pixelNative, to work on the native picture first: glass, contact shade)
   float noise = ((BAYER[(p.x & 3) + ((p.y & 3) << 2)] + 0.5) / 16.0 - 0.5) * u_dither;
-  vec3 c = pixelMapped(pixelNearest(clamp(native + noise, 0.0, 1.0), false)); int best = -1, score = 0;
-  for (int i = 0; i < 4; i++) {
-    if (!solid[i]) continue; int n = 0;
-    for (int j = 0; j < 4; j++) if (solid[j] && labels[j] == labels[i]) n++;
-    if (n > score) { best = labels[i]; score = n; }
-  }
-  if (best >= 0) {
-    bool outer = coverage < 1.0 || max(max(pixelDepth(p - ivec2(1, 0)), pixelDepth(p + ivec2(1, 0))),
-      max(pixelDepth(p - ivec2(0, 1)), pixelDepth(p + ivec2(0, 1)))) >= 0.995;
-    if (outer) {
-      vec3 body = pixelMapped(best);
-      vec3 tone = body * 0.64; tone = min(vec3(1.0), tone * max(1.0, 0.12 / max(dot(tone, vec3(0.30, 0.55, 0.15)), 0.001)));
-      c = mix(pixelMapped(0), mix(body, tone, 0.65), coverage);
-    }
-  }
-  return c;
+  return pixelMapped(pixelNearest(clamp(native + noise, 0.0, 1.0), false));
 }`;
   const toneGlsl = `
 uniform int u_inkToneCount;
