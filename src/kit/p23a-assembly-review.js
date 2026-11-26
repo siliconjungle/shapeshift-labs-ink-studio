@@ -127,7 +127,8 @@
 
   function inventory(source, env) {
     const { spec: expanded, instances, meshPlacements } = A.scenePrefabs.expand(source, env);
-    const { scene: spec } = A.sculptGuides.expand(expanded);
+    const { spec, anchors, reports } = A.paintings3d.expand(A.sculptGuides.expand(expanded).scene);
+    const paintingMarks = new Map(reports.flatMap(row => row.marks.filter(mark => mark.enabled).map(mark => [mark.solid, mark])));
     const settings = DIO.assemblyLighting(spec);
     const { effects = [], motion = [], parts = {} } = spec, result = new Map();
     const tracks = timelineTargets(spec.timeline), bindings = bindingTargets(source);
@@ -173,7 +174,9 @@
       const parents = [...partParents(solid.part), ...(solid.group ? [addr('group', solid.group)] : []),
         ...(prefab ? [addr('prefab', prefab)] : [])];
       const paint = sculptPaint(solid), carrier = addr(kind, id);
-      add(kind, id, [solid, partData(solid.part), spec.groups?.[solid.group], bindings.get(addr('solids', i))], parents,
+      const mark = paintingMarks.get(solid.id), anchor = anchors.get(solid.id);
+      add(kind, id, [solid, partData(solid.part), spec.groups?.[solid.group], bindings.get(addr('solids', i)),
+        ...(mark ? [mark, anchor?.host, anchor?.snap] : [])], parents,
         { object: solid.id ?? tag, ...(tag && { tag }), ...(solid.part !== undefined && { part: solid.part }) });
       if (solid.id) surfaces.set(solid.id, result.get(carrier));
       if (Object.keys(paint).length)

@@ -238,6 +238,7 @@
     assetParts: 'obj',
     topologyMeshes: 'obj',
     guidedOperations: 'list',
+    paintings3d: 'list',
     constructionPlane: 'obj',
     tilesets: 'obj',
     tilesetSources: 'obj',
@@ -459,11 +460,17 @@
     return K.authoring.looks.material(surface, settings.lookAsset, catalog);
   }
   const parameterRoots = ['solids', 'roles', 'palette', 'motion', 'light', 'effects', 'finish', 'tap'];
-  function expandGuidedOperations(spec) {
+  function expandAuthoredGeometry(spec) {
     try {
-      return K.authoring.sculptGuides.expand(spec).scene;
+      spec = K.authoring.sculptGuides.expand(spec).scene;
     } catch (error) {
       error.problems = [{ level: 'error', path: 'guidedOperations', problem: error.message, hint: '' }];
+      throw error;
+    }
+    try {
+      return K.authoring.paintings3d.expand(spec);
+    } catch (error) {
+      error.problems = [{ level: 'error', path: 'paintings3d', problem: error.message, hint: '' }];
       throw error;
     }
   }
@@ -479,7 +486,7 @@
         throw error;
       }
     }
-    if (expanded?.parameterBindings === undefined) return { spec: expandGuidedOperations(expanded), dataInputs, meshPlacements };
+    if (expanded?.parameterBindings === undefined) return { ...expandAuthoredGeometry(expanded), dataInputs, meshPlacements };
     try {
       const { parameterBindings, timeline, dataInputs: authoredData, ...base } = expanded;
       const program = K.parameters.prepare(parameterBindings);
@@ -488,7 +495,7 @@
       const inputs = { ...env?.parameterInputs, ...(dataInputs && { dataInputs }) };
       const { document, values } = program.apply(base, inputs);
       const spec = timeline === undefined ? document : { ...document, timeline };
-      return { spec: expandGuidedOperations(spec), program, values, inputs, dataInputs, meshPlacements };
+      return { ...expandAuthoredGeometry(spec), program, values, inputs, dataInputs, meshPlacements };
     } catch (error) {
       error.problems ??= [{ level: 'error', path: 'parameterBindings', problem: error.message, hint: '' }];
       throw error;
@@ -1711,6 +1718,7 @@
   const brushField = Symbol('brush field');
   DIO.brushField = (spec, env) => DIO.build(spec, env, { [brushField]: true });
   DIO.sculptFieldReceivers = (spec, env) => DIO.build(spec, env, { [brushField]: 'receivers' });
+  DIO.paintingPlacements = (spec, env) => DIO.build(spec, env, { [brushField]: 'paintings' });
   DIO.sculptRestTrace = (spec, solid, env, { measureBounds = false } = {}) => {
     const trace = { solid, measureBounds, stages: new Map(), ...(measureBounds && { bumpPhases: new WeakMap() }) };
     DIO.build(spec, env, { [brushField]: trace });
@@ -1744,7 +1752,7 @@
       e.problems = problems;
       throw e;
     }
-    const review = env.assemblyReview, { dataInputs } = resolved;
+    const review = env.assemblyReview, { dataInputs, anchors, layers, reports } = resolved;
     let { spec } = resolved;
     const { timeline, cameraRig, dataMarks, decals } = presentation, dynamics = boundRuntime(source, env, resolved);
     if (review) spec = review.scene(spec);
@@ -1872,8 +1880,11 @@
       EmissiveFinishes.prepare(st0.finish.emissiveFinishes, pal).some(({spill}) => spill?.shadows && spill.intensity) ||
       st0.finish.volumeLighting?.spots?.some(light => light.surfaceIntensity && light.castsShadow !== false);
     const shadowMarch = st0.finish.shadowMarch === undefined ? null : bakedShadowMarch(st0.finish.shadowMarch);
+    const carrierIds = new Set([...anchors.values()].map(anchor => anchor.host.id));
+    const carriers = new Map(), paintContacts = new Map();
     let S, grp;
     function startSculpt() {
+      carriers.clear();
       const measureBounds = modelOptions?.[brushField]?.measureBounds;
       S = K.sculpt((env.makeSculpt || makeSculpt)(B, measureBounds ? { measureBounds } : undefined));
       S.sun = B.norm(st0.sun);
@@ -1901,6 +1912,15 @@
     startSculpt();
     const rig = modelOptions ? null : K.rig(B, S),
       cap = !modelOptions && lamps.length ? K.light.capture(B, S) : null;
+    const paintRows = rig && spec.solids.some(s => s.part && layers.has(s.id) && spec.parts?.[s.part]?.joint === undefined)
+      ? new Set() : null;
+    if (paintRows) {
+      const emit = S.emit;
+      S.emit = (solid, start, end) => {
+        emit(solid, start, end);
+        if (solid?.paintLayer) for (let i = start; i < end; i++) paintRows.add(i);
+      };
+    }
     const ramp = m => (typeof m === 'string' ? st0.roles[m] : m.ramp || st0.roles[m.role]),
       matOf = m => {
         if (m === undefined) m = 'stone';
@@ -1961,6 +1981,18 @@
     }
     const made = {},
       make = (s, held) => {
+        const anchor = anchors.get(s.id);
+        if (anchor) {
+          try {
+            const carrier = carriers.get(anchor.host.id) ?? makeSolid(anchor.host, true);
+            const { poses, contacts } = K.procedural.sweepSnap.resolve({ ...s, restAffine: anchor.guideFrame },
+              anchor.snap, (x, y, z) => S.psd(carrier, x, y, z));
+            s = { ...s, poses };
+            paintContacts.set(s.id, contacts.length);
+          } catch (error) {
+            throw new RangeError(s.id + ' on ' + anchor.host.id + ' — ' + error.message, { cause: error });
+          }
+        }
         const rigid = uniformSolidSpace(s, B.frame), rest = affineSolidSpace(s.restAffine);
         const recipe = () => makeSolid(s, held);
         const trackModifierSpace = Boolean(s.id && (env.retainRenderSdf || env.retainPartRenderSdf));
@@ -1985,6 +2017,7 @@
         if (s.part) {
           o.tag = s.part;
           o.whole = true;
+          if (layers.has(s.id)) o.paintLayer = true;
         }
         if (s.group) Object.assign(o, grp[s.group]);
         if (s.carve) o.neg = true;
@@ -2151,6 +2184,7 @@
         }
         if ((paint || spray) && p?.mat)
           p.mat = { ...p.mat, ...(paint && { sdfPaint: paint }), ...(spray && { sdfSpray: spray }) };
+        if (p?.sd && carrierIds.has(s.id)) carriers.set(s.id, { ...p });
         if (trace) {
           trace.output = { ...p };
           trace.sockets = s.sockets ?? recipeSockets ?? {};
@@ -2173,8 +2207,11 @@
         return p;
       };
     if (modelOptions?.[brushField]) {
-      for (const solid of spec.solids) make(solid);
       const request = modelOptions[brushField];
+      if (request === 'paintings' && !anchors.size) return reports;
+      for (const solid of spec.solids) make(solid);
+      if (request === 'paintings') return reports.map(report => ({ ...report, marks: report.marks.map(mark =>
+        paintContacts.has(mark.solid) ? { ...mark, contacts: paintContacts.get(mark.solid) } : mark) }));
       if (request === true || request === 'receivers') S.ready();
       if (request === 'receivers') return { field: S, frames: new Map(spec.solids.filter(s => s.id)
         .map(s => [s.id, DIO.solidFrames.rest(s)])) };
@@ -2204,7 +2241,9 @@
         visiting.delete(name);
       }
       for (const name of groups.keys()) if (name !== null) place(name);
-      const { rig: previewRig } = names.length ? DIO.build(spec, env).lab : {};
+      // Model joints are inferred from the rig before its decorative marks are added.
+      const rigSpec = layers.size ? { ...spec, solids: spec.solids.filter(solid => !layers.has(solid.id)) } : spec;
+      const { rig: previewRig } = names.length ? DIO.build(rigSpec, env).lab : {};
       const joints = [], joint = {};
       for (const name of [null, ...names]) {
         if (!groups.has(name)) continue;
@@ -2248,7 +2287,7 @@
       return { meshes, joints, animations };
     }
     const moving = spec.solids.filter(s => s.part), authoredBounds = new Map();
-    const staticBake = cache && !moving.length && !effects.length && !spec.tap && !marks &&
+    const staticBake = cache && !anchors.size && !moving.length && !effects.length && !spec.tap && !marks &&
       !presentation.breakables && !S.keepRenderSdf && !st0.finish.paint && !globalThis.INK_DECAL_NEXT &&
       !globalThis.INK_RETAIN_RENDER_SDF && !globalThis.INK_RETAIN_REFERENCE_SDF && !globalThis.INK_RAMPS;
     const bakeKey = staticBake ? cacheAPI.sceneKey(spec, st0,
@@ -2387,10 +2426,11 @@
     const partNames = [...new Set(moving.map(s => s.part))],
       PI = spec.parts || {},
       joint = {};
+    const pivotRows = paintRows && (index => !paintRows.has(index));
     for (const p of partNames) {
-      const bx = rig.box(p),
+      const bx = rig.has(p) && rig.box(p, pivotRows),
         j = PI[p] && PI[p].joint;
-      joint[p] = j || (bx ? [(bx.lo[0] + bx.hi[0]) / 2, bx.lo[1], (bx.lo[2] + bx.hi[2]) / 2] : [0, 0, 0]);
+      joint[p] = j || (bx?.n ? [(bx.lo[0] + bx.hi[0]) / 2, bx.lo[1], (bx.lo[2] + bx.hi[2]) / 2] : [0, 0, 0]);
     }
     const order = partNames.slice().sort((a, b) => {
       const depth = p => {

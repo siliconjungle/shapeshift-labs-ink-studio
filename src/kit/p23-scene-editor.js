@@ -259,6 +259,21 @@
       return report;
     }
 
+    const inspectPaintings3d = () => freeze(DIO.paintingPlacements(snapshot(), buildEnv));
+    function planPainting3d(request, { update = false } = {}) {
+      const scene = snapshot(), api = A.paintings3d, paintings3d = api.revise(scene, request, update);
+      const report = DIO.paintingPlacements({ ...scene, paintings3d }, buildEnv).find(row => row.id === request.id);
+      return freeze({ paintings3d, report });
+    }
+
+    function applyPainting3d(request, options) {
+      const { paintings3d, report } = planPainting3d(request, options);
+      const write = () => document.setEnvironment({ paintings3d });
+      if (document.pending()) write();
+      else document.transact('Edit 3D painting ' + request.id, write);
+      return report;
+    }
+
     const planSculptSnap = request => A.sculptSnap.plan(snapshot(), request, buildEnv).report;
     const inspectSculptSnap = (target, id) => A.sculptSnap.inspect(snapshot(), target, id, buildEnv);
     function applySculptSnap(request) {
@@ -1454,6 +1469,8 @@
       sculptContributions, inspectSculptContribution, editSculptContribution,
       planSculptSnap, inspectSculptSnap, applySculptSnap, planSculptGuide, applySculptGuide,
       inspectSculptGuides: () => A.sculptGuides.inspect(snapshot(), buildEnv),
+      planPainting3d, applyPainting3d, inspectPaintings3d,
+      extractPainting3d: id => A.paintings3d.extract(snapshot(), id),
       placeSculptStamp, planSculptSplit, splitSculpt, planAssemblyStretch, stretchAssembly,
       setPrefabInstance,
       planPrefabIsolation, previewPrefabIsolation, editIsolatedPrefab,
