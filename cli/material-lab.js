@@ -79,7 +79,7 @@ function command([mode,input,...extra],opt,kit){
     throw new TypeError('Use material-lab presets [--out file] or material-lab compile|run <plan.json> [--out path]');
   const out=opt.out&&path.resolve(opt.out), print=value=>process.stdout.write(JSON.stringify(value,null,2)+'\n');
   if(mode==='presets'){
-    const presets=kit.KIT.world.materialConstraints.presets;
+    const presets=kit.KIT.world.materialLab.presets();
     if(out)files.json(out,presets);
     else print(presets);
     return;

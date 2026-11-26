@@ -1,7 +1,7 @@
 /* Bounded native world adapter for nonlinear solids, grains, and measured contacts. */
 (function(K){
   const W=K.world, Q=W.query, {V}=K, {check,record,id,own,vector}=W.data, {freeze}=K.procedural.data;
-  const {presets,signed,get,tetra,link}=W.materialConstraints, Contact=W.materialContact;
+  const {presets,signed,get,tetra,link}=materialLabConstraints, Contact=materialLabContact;
   const zero=[0,0,0], finite=(n,lo,hi)=>Number.isFinite(n)&&n>=lo&&n<=hi;
   const integer=(n,lo,hi)=>Number.isSafeInteger(n)&&n>=lo&&n<=hi;
   const vec=(p,limit=100)=>vector(p)&&Array.from(p).every(n=>finite(n,-limit,limit));
@@ -319,5 +319,6 @@
       }};
   }
 
+  W.materialLab=Object.freeze({presets:()=>presets});
   W.runtime.register('material-lab',materialLab);
 })(KIT);

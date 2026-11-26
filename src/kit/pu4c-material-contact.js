@@ -1,6 +1,6 @@
 /* Shared sphere and authored surface contact for soft nodes and loose grains. */
-(function(K){
-  const W=K.world, {V,M}=K, {get}=W.materialConstraints;
+const materialLabContact = (function(K){
+  const W=K.world, {V,M}=K, {get}=materialLabConstraints;
   const zero=[0,0,0], up=[0,1,0], identity=M.id(), eps=1e-7;
   const pairKey=(a,b)=>a<b?a+'/'+b:b+'/'+a;
 
@@ -172,5 +172,5 @@
     }
     return {session};
   }
-  W.materialContact=Object.freeze({pairKey,mix,shape,start});
+  return Object.freeze({pairKey,mix,shape,start});
 })(KIT);

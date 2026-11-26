@@ -1,5 +1,5 @@
 /* XPBD constraints for finite strain and user-authored point assemblies. */
-(function (K) {
+const materialLabConstraints = (function (K) {
   const W=K.world, {V}=K, zero=[0,0,0];
   const lengthPresets={
     seam:{kind:'distance',compliance:8e-6},
@@ -105,5 +105,5 @@
     }};
   }
 
-  W.materialConstraints=Object.freeze({presets,signed,get,tetra,link});
+  return Object.freeze({presets,signed,get,tetra,link});
 })(KIT);
