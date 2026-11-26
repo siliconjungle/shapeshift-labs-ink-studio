@@ -1375,7 +1375,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.coverage` | value | `string = "typedImage"` |  |
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.instanceId` | value | `string = "typedImage"` |  |
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.layout` | value | `string = "record"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.materialId` | value | `string = "typedImage"` |  |
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.normal` | value | `string = "normalImage"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.objectId` | value | `string = "typedImage"` |  |
+| `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.pigment` | value | `string = "colorImage"` |  |
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.shapeId` | value | `string = "typedImage"` |  |
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.surface` | value | `string = "scatterSurface"` |  |
 | `KIT.procedural.graphImages.operations["image.shapeSplatter"].outputs.uv` | value | `string = "typedImage"` |  |

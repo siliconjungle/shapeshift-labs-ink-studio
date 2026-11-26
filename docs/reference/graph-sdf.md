@@ -4,21 +4,84 @@
 
 Ports, defaults, and constraints come from the registered operations. Use `graph describe <op> --json` for the full structured record.
 
+### sdf.attributes
+
+Assign a stable object ID, material ID, or normalized RGB to a signed field.
+
+Origin: toolkit.
+Omit color to keep the input surface pigment.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `field` | Required | {"layout":"Function or native object with a sample method"} |
+| Input | `objectId` | `string` | `""` |  |
+| Input | `materialId` | `string` | `""` |  |
+| Input | `color` | `srgb` | `[1,1,1]` | display sRGB · {"lengths":[3,4],"min":0,"max":1} |
+| Output | `value` | `field` | — | {"layout":"Function or native object with a sample method"} |
+
+Guides: [guide](../sdf-functions.md)
+
+Get the runnable example with `ink-studio graph describe sdf.attributes --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### sdf.boolean
+
+Union, intersect or subtract two signed fields with deterministic surface ownership.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `a` | `field` | Required | {"layout":"Function or native object with a sample method"} |
+| Input | `b` | `field` | Required | {"layout":"Function or native object with a sample method"} |
+| Input | `operation` | `string` | `"union"` | {"choices":["union","intersection","subtract"]} |
+| Output | `value` | `field` | — | {"layout":"Function or native object with a sample method"} |
+
+- Earlier inputs win ties. A subtractor can color the cut and supply its material ID while the body keeps its object ID.
+
+Guides: [guide](../sdf-functions.md)
+
+Get the runnable example with `ink-studio graph describe sdf.boolean --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### sdf.bound
 
+Replace the sampling bounds of a signed field.
 
+Origin: toolkit.
+Use typed min and max, or connect the legacy bounds record.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `field` | Required | {"layout":"Function or native object with a sample method"} |
+| Input | `min` | `vec3` | `[-1,-1,-1]` | {"dimensions":3,"finite":true} |
+| Input | `max` | `vec3` | `[1,1,1]` | {"dimensions":3,"finite":true} |
+| Output | `value` | `field` | — | {"layout":"Function or native object with a sample method"} |
+
+- Overrides the sampling domain. Use sdf.boolean intersection with a shape for a physical cut.
+
+Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes), [guide](../material-shape-splatter.md#shape-sources), [guide](../sdf-functions.md)
+
+Get the runnable example with `ink-studio graph describe sdf.bound --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### sdf.bounds
+
+Read the minimum, maximum, center and size of a field domain.
 
 Origin: toolkit.
 
 | Direction | Port | Type | Default | Details |
 | --- | --- | --- | --- | --- |
 | Input | `source` | `field` | Required | {"layout":"Function or native object with a sample method"} |
-| Input | `bounds` | `record` | Required | {"layout":"Plain named object"} |
-| Output | `value` | `field` | — | {"layout":"Function or native object with a sample method"} |
+| Output | `value` | `vec3` | — | {"dimensions":3,"finite":true} |
+| Output | `min` | `vec3` | — | {"dimensions":3,"finite":true} |
+| Output | `max` | `vec3` | — | {"dimensions":3,"finite":true} |
+| Output | `center` | `vec3` | — | {"dimensions":3,"finite":true} |
 
-Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes), [guide](../material-shape-splatter.md#shape-sources)
+Guides: [guide](../sdf-functions.md)
 
-Get the runnable example with `ink-studio graph describe sdf.bound --example > example.json`.
+Get the runnable example with `ink-studio graph describe sdf.bounds --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### sdf.combine
@@ -75,6 +138,27 @@ Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes), [guid
 Get the runnable example with `ink-studio graph describe sdf.mesh --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### sdf.primitive
+
+Construct a bounded signed primitive with typed size and pose inputs.
+
+Origin: toolkit.
+Select a sphere, rounded box, torus, capsule, or cylinder and show its dimension sockets.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `kind` | `string` | `"cylinder"` | {"choices":["sphere","box","torus","capsule","cylinder"],"literal":true} |
+| Input | `center` | `vec3` | `[0,0,0]` | world units · {"dimensions":3,"finite":true} |
+| Input | `rotation` | `vec3` | `[0,0,0]` | radians · {"dimensions":3,"finite":true} |
+| Input | `radius` | `number` | `0.55` | {"finite":true,"min":0.0001,"max":10000} |
+| Input | `length` | `number` | `1` | {"finite":true,"min":0.0001,"max":10000} |
+| Output | `value` | `field` | — | {"layout":"Function or native object with a sample method"} |
+
+Guides: [guide](../sdf-functions.md)
+
+Get the runnable example with `ink-studio graph describe sdf.primitive --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### sdf.render
 
 
@@ -92,9 +176,53 @@ Samples the graph clock.
 | Output | `frame` | `renderFrame` | — | {"layout":"Headless frame with width, height and RGB buffer"} |
 | Output | `report` | `record` | — | {"layout":"Plain named object"} |
 
-Guides: [guide](../headless-authoring.md#convert-coordinates-time-and-colour-explicitly), [guide](../headless-authoring.md#signed-fields-and-render-passes)
+Guides: [guide](../headless-authoring.md#convert-coordinates-time-and-colour-explicitly), [guide](../headless-authoring.md#signed-fields-and-render-passes), [guide](../sdf-functions.md)
 
 Get the runnable example with `ink-studio graph describe sdf.render --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### sdf.repeat
+
+Repeat a bounded field in a finite grid, optionally assigning object IDs from the cell indices.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `field` | Required | {"layout":"Function or native object with a sample method"} |
+| Input | `count` | `vec3` | `[2,1,1]` | {"dimensions":3,"finite":true,"integer":true,"min":1,"max":32,"maxProduct":256} |
+| Input | `spacing` | `vec3` | `[1.5,1.5,1.5]` | world units · {"dimensions":3,"finite":true,"min":0.0001,"max":10000} |
+| Input | `center` | `vec3` | `[0,0,0]` | world units · {"dimensions":3,"finite":true} |
+| Input | `idPrefix` | `string` | `""` |  |
+| Output | `value` | `field` | — | {"layout":"Function or native object with a sample method"} |
+
+- Evaluate all translated copies as a union, centered on the grid offset. An optional object ID prefix appends the zero-based X, Y and Z indices.
+
+Guides: [guide](../sdf-functions.md)
+
+Get the runnable example with `ink-studio graph describe sdf.repeat --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### sdf.sample
+
+Query signed distance and surface attributes at a point.
+
+Origin: toolkit.
+Samples the graph clock.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `field` | Required | {"layout":"Function or native object with a sample method"} |
+| Input | `position` | `vec3` | `[0,0,0]` | world units · {"dimensions":3,"finite":true} |
+| Output | `value` | `number` | — | {"finite":true} |
+| Output | `objectId` | `string` | — |  |
+| Output | `materialId` | `string` | — |  |
+| Output | `color` | `srgb` | — | display sRGB · {"lengths":[3,4],"min":0,"max":1} |
+| Output | `hasColor` | `boolean` | — |  |
+
+Guides: [guide](../sdf-functions.md)
+
+Get the runnable example with `ink-studio graph describe sdf.sample --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### sdf.shape
@@ -126,26 +254,52 @@ Samples the graph clock.
 | Input | `source` | `field` | Required | {"layout":"Function or native object with a sample method"} |
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
 | Output | `value` | `array<raster>` | — | {"items":"raster"} |
+| Output | `objectId` | `array<raster>` | — | {"items":"raster"} |
+| Output | `materialId` | `array<raster>` | — | {"items":"raster"} |
 | Output | `layout` | `record` | — | {"layout":"Plain named object"} |
 
-Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes)
+- Object and material ID layers use the name tables in layout. ID zero is untagged or empty.
+
+Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes), [guide](../sdf-functions.md)
 
 Get the runnable example with `ink-studio graph describe sdf.slices --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
-### sdf.transform
+### sdf.symmetry
 
-
+Union a field with its reflection across an axis-aligned plane.
 
 Origin: toolkit.
 
 | Direction | Port | Type | Default | Details |
 | --- | --- | --- | --- | --- |
 | Input | `source` | `field` | Required | {"layout":"Function or native object with a sample method"} |
-| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
+| Input | `axis` | `string` | `"x"` | {"choices":["x","y","z"]} |
+| Input | `plane` | `number` | `0` | world units · {"finite":true} |
 | Output | `value` | `field` | — | {"layout":"Function or native object with a sample method"} |
 
-Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes), [guide](../material-shape-splatter.md#shape-sources)
+Guides: [guide](../sdf-functions.md)
+
+Get the runnable example with `ink-studio graph describe sdf.symmetry --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### sdf.transform
+
+Translate, rotate or scale a signed field and its attributes.
+
+Origin: toolkit.
+Typed position, rotation and scale override corresponding settings in the legacy options record.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `field` | Required | {"layout":"Function or native object with a sample method"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
+| Input | `position` | `vec3` | `[0,0,0]` | world units · {"dimensions":3,"finite":true} |
+| Input | `rotation` | `vec3` | `[0,0,0]` | radians · {"dimensions":3,"finite":true} |
+| Input | `scale` | `vec3` | `[1,1,1]` | {"dimensions":3,"finite":true} |
+| Output | `value` | `field` | — | {"layout":"Function or native object with a sample method"} |
+
+Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes), [guide](../material-shape-splatter.md#shape-sources), [guide](../sdf-functions.md)
 
 Get the runnable example with `ink-studio graph describe sdf.transform --example > example.json`.
 Run it with `ink-studio graph run example.json`.

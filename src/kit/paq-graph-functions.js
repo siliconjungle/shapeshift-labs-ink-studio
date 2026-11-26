@@ -7,8 +7,8 @@
   const types = Object.freeze([...scalarTypes, ...vectorTypes, ...colorTypes, 'unitScalar', 'boolean', 'string']);
   const validType = type => types.includes(type);
   const textureType = type => type === 'colorImage' || type === 'grayImage';
-  const validResultType = type => validType(type) || type === 'functionLocals';
-  const validInputType = type => validResultType(type) || textureType(type);
+  const validResultType = type => validType(type) || type === 'functionLocals' || type === 'field';
+  const validInputType = type => validResultType(type) || textureType(type) || type === 'array<field>';
   const compatible = (from, to) => from === to ||
     to === 'number' && ['integer','unitScalar'].includes(from) ||
     to === 'unitScalar' && scalarTypes.includes(from);

@@ -1452,13 +1452,58 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.operations["scene.world"].outputs.value` | value | `string = "world"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["scene.world"].run` | function | `(inputs, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
 | `KIT.procedural.sceneGraph.operations["scene.world"].seed` | value | `string = "options"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.attributes"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.attributes"].description` | value | `string = "Assign a stable object ID, material ID, or normalized RGB to a signed field."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.attributes"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.attributes"].inputs.color` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.attributes"].inputs.color.default` | value | `array` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.attributes"].inputs.color.type` | value | `string = "srgb"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.attributes"].inputs.materialId` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.attributes"].inputs.materialId.default` | value | `string = ""` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.attributes"].inputs.materialId.type` | value | `string = "string"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.attributes"].inputs.objectId` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.attributes"].inputs.objectId.default` | value | `string = ""` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.attributes"].inputs.objectId.type` | value | `string = "string"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.attributes"].inputs.source` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.attributes"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.attributes"].outputs.value` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.attributes"].run` | function | `(inputs, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
+| `KIT.procedural.sceneGraph.operations["sdf.attributes"].specialize` | function | `(spec)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
+| `KIT.procedural.sceneGraph.operations["sdf.boolean"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.boolean"].description` | value | `string = "Union, intersect or subtract two signed fields with deterministic surface ownership."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.boolean"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.boolean"].inputs.a` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.boolean"].inputs.b` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.boolean"].inputs.operation` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.boolean"].inputs.operation.default` | value | `string = "union"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.boolean"].inputs.operation.type` | value | `string = "string"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.boolean"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.boolean"].outputs.value` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.boolean"].run` | function | `(inputs, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
 | `KIT.procedural.sceneGraph.operations["sdf.bound"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.bound"].description` | value | `string = "Replace the sampling bounds of a signed field."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.bound"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
-| `KIT.procedural.sceneGraph.operations["sdf.bound"].inputs.bounds` | value | `string = "record"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.bound"].inputs.max` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.bound"].inputs.max.default` | value | `array` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.bound"].inputs.max.type` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.bound"].inputs.min` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.bound"].inputs.min.default` | value | `array` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.bound"].inputs.min.type` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.bound"].inputs.source` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.bound"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.bound"].outputs.value` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.bound"].run` | function | `(inputs, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
+| `KIT.procedural.sceneGraph.operations["sdf.bound"].specialize` | function | `(spec)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
+| `KIT.procedural.sceneGraph.operations["sdf.bounds"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.bounds"].description` | value | `string = "Read the minimum, maximum, center and size of a field domain."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.bounds"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.bounds"].inputs.source` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.bounds"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.bounds"].outputs.center` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.bounds"].outputs.max` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.bounds"].outputs.min` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.bounds"].outputs.value` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.bounds"].run` | function | `({ source })` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
 | `KIT.procedural.sceneGraph.operations["sdf.combine"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.combine"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.combine"].inputs.options` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.options` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
@@ -1483,6 +1528,23 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.operations["sdf.mesh"].outputs.value` | value | `string = "mesh"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.mesh"].run` | function | `(inputs, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
 | `KIT.procedural.sceneGraph.operations["sdf.mesh"].time` | value | `boolean = true` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].description` | value | `string = "Construct a bounded signed primitive with typed size and pose inputs."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.center` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.center.default` | value | `array` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.center.type` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.kind` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.kind.default` | value | `string = "sphere"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.kind.type` | value | `string = "string"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.radius` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.radius.default` | value | `number = 0.7` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.radius.type` | value | `string = "number"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.rotation` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].outputs.value` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].run` | function | `(inputs, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].specialize` | function | `(spec)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
 | `KIT.procedural.sceneGraph.operations["sdf.render"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.render"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.render"].inputs.camera` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.options` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
@@ -1497,6 +1559,37 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.operations["sdf.render"].outputs.value` | value | `string = "displayRaster"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.render"].run` | function | `({ source, camera, lights, options }, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
 | `KIT.procedural.sceneGraph.operations["sdf.render"].time` | value | `boolean = true` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"].description` | value | `string = "Repeat a bounded field in a finite grid, optionally assigning object IDs from the cell indices."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs.center` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs.count` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs.count.default` | value | `array` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs.count.type` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs.idPrefix` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs.idPrefix.default` | value | `string = ""` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs.idPrefix.type` | value | `string = "string"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs.source` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs.spacing` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs.spacing.default` | value | `array` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs.spacing.type` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"].outputs.value` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"].run` | function | `(inputs, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
+| `KIT.procedural.sceneGraph.operations["sdf.sample"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.sample"].description` | value | `string = "Query signed distance and surface attributes at a point."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.sample"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.sample"].inputs.position` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.sample"].inputs.source` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.sample"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.sample"].outputs.color` | value | `string = "srgb"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.sample"].outputs.hasColor` | value | `string = "boolean"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.sample"].outputs.materialId` | value | `string = "string"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.sample"].outputs.objectId` | value | `string = "string"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.sample"].outputs.value` | value | `string = "number"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.sample"].run` | function | `({ source, position }, { time })` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
+| `KIT.procedural.sceneGraph.operations["sdf.sample"].system` | value | `boolean = true` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.sample"].time` | value | `boolean = true` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.shape"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.shape"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.shape"].inputs.kind` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
@@ -1512,16 +1605,36 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.operations["sdf.slices"].inputs.source` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.slices"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.slices"].outputs.layout` | value | `string = "record"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.slices"].outputs.materialId` | value | `string = "array<raster>"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.slices"].outputs.objectId` | value | `string = "array<raster>"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.slices"].outputs.value` | value | `string = "array<raster>"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.slices"].run` | function | `({ source, options }, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
 | `KIT.procedural.sceneGraph.operations["sdf.slices"].time` | value | `boolean = true` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.symmetry"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.symmetry"].description` | value | `string = "Union a field with its reflection across an axis-aligned plane."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.symmetry"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.symmetry"].inputs.axis` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.symmetry"].inputs.axis.default` | value | `string = "x"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.symmetry"].inputs.axis.type` | value | `string = "string"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.symmetry"].inputs.plane` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.symmetry"].inputs.plane.default` | value | `number = 0` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.symmetry"].inputs.plane.type` | value | `string = "number"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.symmetry"].inputs.source` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.symmetry"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.symmetry"].outputs.value` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.symmetry"].run` | function | `(inputs, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
 | `KIT.procedural.sceneGraph.operations["sdf.transform"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.transform"].description` | value | `string = "Translate, rotate or scale a signed field and its attributes."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.transform"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.transform"].inputs.options` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.options` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.transform"].inputs.position` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.transform"].inputs.rotation` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.transform"].inputs.scale` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.bound"].inputs.max` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.transform"].inputs.source` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.transform"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.transform"].outputs.value` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.transform"].run` | function | `(inputs, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
+| `KIT.procedural.sceneGraph.operations["sdf.transform"].specialize` | function | `(spec)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
 | `KIT.procedural.sceneGraph.operations["sdf.voxels"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.voxels"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.voxels"].inputs.options` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.options` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
@@ -1562,15 +1675,32 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.operations["voxels.world"].run` | function | `(inputs, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
 | `KIT.procedural.sceneGraph.rasterFrame` | function | `({ w, h, rgb, alpha })` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-trace.js) |
 | `KIT.procedural.sceneGraph.renderSDF` | function | `(source, { width = 128, height = 128, time = 0, camera, lights = [], bounds, color: tint = '#b88964', background = '#171e31', transparent = false, steps = 104, epsilon, stepScale = .76, shades = 8, shadows = true } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-trace.js) |
+| `KIT.procedural.sceneGraph.repeatSDF` | function | `(source, { count = [2, 1, 1], spacing = [1.5, 1.5, 1.5], center = [0, 0, 0], idPrefix = '' } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-sdf.js) |
 | `KIT.procedural.sceneGraph.scrambleIndices` | function | `(source, options = {})` | [guide](../headless-authoring.md#bounded-mesh-index-scrambling), [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-scramble.js) |
 | `KIT.procedural.sceneGraph.sdfExtent` | function | `(source, override)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-sdf.js) |
 | `KIT.procedural.sceneGraph.sdfMesh` | function | `(source, { bounds: explicitBounds, time = 0, color: tint = '#b7bccb', ...options } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-sdf.js) |
+| `KIT.procedural.sceneGraph.sdfOperations` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.sdfOperations["sdf.attributes"]` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.attributes"]` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.sdfOperations["sdf.boolean"]` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.boolean"]` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.sdfOperations["sdf.bound"]` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.bound"]` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.sdfOperations["sdf.bounds"]` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.bounds"]` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.sdfOperations["sdf.combine"]` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.combine"]` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.sdfOperations["sdf.primitive"]` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.primitive"]` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.sdfOperations["sdf.repeat"]` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.repeat"]` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.sdfOperations["sdf.sample"]` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.sample"]` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.sdfOperations["sdf.shape"]` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.shape"]` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.sdfOperations["sdf.symmetry"]` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.symmetry"]` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.sdfOperations["sdf.transform"]` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.transform"]` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.sdfSampler` | function | `(source, time = 0)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-sdf.js) |
 | `KIT.procedural.sceneGraph.sdfSlices` | function | `(source, { width = 32, height = 32, count = 20, axis = 'z', bounds: explicitBounds, time = 0, level = 0, color: tint = '#b7bccb' } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-sdf.js) |
+| `KIT.procedural.sceneGraph.sdfTagCatalog` | function | `(sources, fallback = '')` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-sdf.js) |
+| `KIT.procedural.sceneGraph.sdfTags` | function | `(source, time = 0)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-sdf.js) |
 | `KIT.procedural.sceneGraph.shape` | function | `(kind, { center = [0, 0, 0], radius = .7, half = [.6, .6, .6], round = 0, major = .68, minor = .19, length = 1, rotation = [0, 0, 0] } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-sdf.js) |
 | `KIT.procedural.sceneGraph.skinSprite` | function | `(source, bind, pose = {}, options = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-rig.js) |
 | `KIT.procedural.sceneGraph.sliceStack` | function | `(slices, options)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-raster.js) |
 | `KIT.procedural.sceneGraph.spritePose` | function | `(tracks, time = 0)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-rig.js) |
+| `KIT.procedural.sceneGraph.symmetrySDF` | function | `(source, { axis = 'x', plane = 0 } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-sdf.js) |
+| `KIT.procedural.sceneGraph.tagSDF` | function | `(source, { objectId = '', materialId = '', color: pigment } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-sdf.js) |
 | `KIT.procedural.sceneGraph.transform` | function | `(source, options = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-mesh.js) |
 | `KIT.procedural.sceneGraph.transformSDF` | function | `(source, { bounds: explicitBounds, ...options } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-sdf.js) |
 | `KIT.procedural.sceneGraph.triangulate` | function | `(rings, { z = 0, color: tint = '#b7bccb' } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-mesh.js) |

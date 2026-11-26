@@ -16,12 +16,13 @@ const SplatterGeometry = ({ V,M,planar,volume }) => {
       }};
     });
     return [...flat,...Array.from(volumes,source=>{
-      const {box,read}=volume(source,time);
+      const {box,read,tags}=volume(source,time);
       const extent=box.max.map((n,i)=>n-box.min[i]), size=Math.max(...extent);
       if (!Number.isFinite(size)||size<1e-8||size>1e7||extent.some(n=>n<size*1e-8))
         throw new RangeError('Shape Splatter field has invalid bounds');
       const center=box.min.map((n,i)=>n+extent[i]/2), half=extent.map(n=>n/(2*size));
-      return {kind:'volume',half,read:(x,y,z)=>read(x*size+center[0],y*size+center[1],z*size+center[2])/size};
+      const world=(sample,x,y,z)=>sample(x*size+center[0],y*size+center[1],z*size+center[2]);
+      return {kind:'volume',half,read:(x,y,z)=>world(read,x,y,z)/size,tags:tags&&(q=>world(tags,...q))};
     })];
   }
   function pose(shape,base,scale,angles,slope,align,epsilon) {

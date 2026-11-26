@@ -1341,15 +1341,19 @@ Origin: toolkit.
 | Output | `shapeId` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
 | Output | `uv` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
 | Output | `coverage` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `objectId` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `materialId` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
+| Output | `pigment` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
 | Output | `layout` | `record` | — | {"layout":"Plain named object"} |
 | Output | `surface` | `scatterSurface` | — | {"layout":"Versioned aligned ID, UV, coverage and optional height, normal and placement maps"} |
 
 - Planar definitions become rounded extrusions. Volumetric fields need local XYZ bounds and use local Y as their height axis.
-- Projection keeps the top visible hit. Height, normal, IDs and stamp UVs refer to that hit; coverage measures subpixel visibility.
+- Projection keeps the top visible hit. Height, normal, IDs and stamp UVs refer to that hit. Coverage measures subpixel visibility.
+- Object and material IDs resolve through layout. Pigment carries the authored surface color with coverage in alpha.
 - Density and mask gate placements; clip gates individual surface samples. Background height also drives slope alignment and occlusion.
 - Connect surface to a scatter mapper. Use edits from image.scatterEdit on a downstream copy of the bake to hide or replace stamps.
 
-Guides: [guide](../material-scatter-mappers.md), [guide](../material-shape-splatter.md)
+Guides: [guide](../material-scatter-mappers.md), [guide](../material-shape-splatter.md), [guide](../sdf-functions.md)
 
 Get the runnable example with `ink-studio graph describe image.shapeSplatter --example > example.json`.
 Run it with `ink-studio graph run example.json`.

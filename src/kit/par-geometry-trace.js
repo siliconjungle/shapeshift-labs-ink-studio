@@ -33,6 +33,8 @@
     const sun = illumination.liveSun ?? A.light('sun').settings;
     const locals = AreaLights.prepare(illumination.areaLights, { time });
     if (size * steps * (2 + locals.length) > 84e6) throw new RangeError('Signed-field lights exceed the ray work budget');
+    const tags = A.sdfTags(source, time);
+    const { objects, materials, objectIndex, materialIndex } = A.sdfTagCatalog([source], 'signed-field');
     const base = color(tint), backdrop = color(background).map(n => Math.round(n * 255));
     const rgb = new Uint8Array(size * 3), alpha = transparent ? new Uint8Array(size) : undefined;
     const coverage = new Float32Array(size), depth = new Float32Array(size).fill(Infinity);
@@ -82,9 +84,10 @@
         const gain = facing * (1 - range / light.radius) ** 2 * light.intensity;
         for (let i = 0; i < 3; i++) lit[i] += gain * light.rgb[i];
       }
+      const surface = tags?.(u, v, w), ink = surface?.color ?? base;
       for (let i = 0; i < 3; i++) {
         const resolved = shades > 1 ? Math.round(clamp(lit[i]) * (shades - 1)) / (shades - 1) : clamp(lit[i]);
-        rgb[p * 3 + i] = Math.round(255 * clamp(base[i] * (.23 + resolved * 1.05)));
+        rgb[p * 3 + i] = Math.round(255 * clamp(ink[i] * (.23 + resolved * 1.05)));
       }
       hits++;
       if (alpha) alpha[p] = 255;
@@ -92,9 +95,9 @@
       depth[p] = at * axial;
       position.set(point, p * 3);
       normal.set(n, p * 3);
-      objectId[p] = materialId[p] = 1;
+      objectId[p] = objectIndex.get(surface?.objectId || 'signed-field');
+      materialId[p] = materialIndex.get(surface?.materialId || 'signed-field');
     }
-    const objects = ['', 'signed-field'], materials = ['', 'signed-field'];
     const frame = { w: width, h: height, rgb, ...(alpha && { alpha }), passes: {
       w: width, h: height, coverage, depth, normal, position, objectPosition: position, objectId, materialId, objects, materials
     } };
