@@ -88,7 +88,7 @@
       const row = { status: 'pass', ...(samples && { width: samples.width, height: samples.height }),
         ...(imageSpec && { descriptor: imageSpec }), origin, findings: [] };
       maps[name] = row;
-      const contract = { name, spec, samples, key };
+      const contract = { name, spec, samples, key, version: image?.version };
       function finding(code, severity, message, p, values, details, cause) {
         let item = list.get(code);
         if (!item) {
@@ -150,7 +150,7 @@
     return { report: { valid: errors === 0, errors, warnings: mapFindings.length - errors, maps, findings: mapFindings }, rasters };
   }
 
-  function checkContract({ name, spec, samples, key }, find) {
+  function checkContract({ name, spec, samples, key, version }, find) {
     const role = name === 'baseColor' || name === 'emission' ? 'color' : name === 'normal' ? 'normal' :
       name === 'height' ? 'height' : name === 'flow' ? 'flow' :
       scalar.includes(name) || name.startsWith('mask.') ? 'scalar' : null;
@@ -161,9 +161,9 @@
       const Type = storage[precision];
       const encoding = Type && (Array.isArray(data) || data instanceof Type ||
         precision === 'unorm8' && data instanceof Uint8ClampedArray);
-      const expectedDomain = maximum[precision] || intent === 'mask' || intent === 'color' && !colorSpace?.endsWith?.('-linear') ?
+      const expectedDomain = maximum[precision] || intent === 'mask' || intent === 'color' && (typeof colorSpace !== 'string' || !colorSpace.endsWith('-linear')) ?
         'unit' : intent === 'normal' ? 'signed-unit' : 'finite';
-      if (!encoding || domain !== expectedDomain || !['nearest', 'linear'].includes(sampling) ||
+      if (version !== P.graphImages.version || !encoding || domain !== expectedDomain || !['nearest', 'linear'].includes(sampling) ||
           !['u', 'v'].every(axis => ['clamp', 'transparent', 'wrap', 'mirror'].includes(tiling?.[axis])) ||
           !['color', 'normal', 'height', 'mask', 'data'].includes(intent) ||
           typeof layout !== 'string' || layout.length !== channels || !contractChecks.alpha(alpha) ||

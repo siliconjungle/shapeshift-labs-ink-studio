@@ -63,7 +63,7 @@
       throw new RangeError('Domain '+domain+' is disabled for '+edit+'. Enabled domains: '+(enabledDomains.join(', ') || 'none'));
     if (!record(query)) throw new TypeError('A tile component query needs an object');
     if (domain === 'instances') {
-      if ([object,part,visibility].some(value=>value !== undefined) || Object.keys(query).some(key=>!['kind','ids'].includes(key)))
+      if ([object,part,visibility].some(value=>value !== undefined) || Object.keys(query).some(key=>!['kind','ids','layer','includeHidden'].includes(key)))
         throw new TypeError('Select instances by kind and IDs without a mesh or visibility capture');
       const instances = A.sceneInstances.select(scene,query);
       return freeze({...report,domain,ids:instances.map(row=>row.instanceKind+':'+row.instance),instances});

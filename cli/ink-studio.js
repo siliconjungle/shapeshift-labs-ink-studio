@@ -1449,6 +1449,8 @@ const CMD = {
         '  painting-cels sample <scene.json> <clip.json> --out scene.json [--frame cel-1 | --at seconds]   write one editable cel into the scene',
         '  painting-cels preview <scene.json> <clip.json> --out directory [--frame cel-1 | --at seconds] [--view view.json]   render neighboring poses in one camera',
         '  painting-cels export <scene.json> <clip.json> --out directory [--view view.json]   render held exposures and animated PNG',
+        '  painting-flow sample <scene.json> <plan.json> [--at seconds] --out scene.json   advect retained marks through a painted field',
+        '  painting-flow bake <scene.json> <plan.json> [--from seconds --fps 12 --frames 24 --playback once] --out clip.json   bake editable flow poses into cels',
         '  paint-survival review <scene.json> <plan.json> --out directory   compare painted fallbacks across native grids and angles',
         '  paint-survival apply <scene.json> <plan.json> <review.json> --case angle/resolution --out scene.json   accept one reviewed paint variant',
         '  sculpt-spray plan <scene.json> <brush.json>   capture receivers for a volumetric paint brush',
@@ -1532,6 +1534,7 @@ const CMD = {
         '  mesh-topology transform <mesh-or-scene.json> <random-receipt.json> --replay [--object id] [--out file] [--report file]   replay recorded positions on the source revision',
         '  mesh-topology health <mesh-or-scene.json> [settings.json] [--object id] [--out report.json]   locate local topology and geometry problems',
         '  mesh-topology overlaps <mesh-or-scene.json> [settings.json] [--object id] [--part id] [--out report.json | --selection-out faces.json]   review same-facing coincident polygons',
+        '  mesh-topology scene-layer <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   organize placed prefabs in nested scene layers',
         '  mesh-topology mirror-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   link or commit a mirrored visual prefab placement',
         '  mesh-topology reparent-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   change a visual prefab parent and hold world placement',
         '  mesh-topology combine-prefab <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   combine linked placements into a reusable prefab',
@@ -2824,6 +2827,13 @@ const CMD = {
   'painting-cels'() {
     return require('./painting-cels.js')(pos, opt, lib(),
       (file, source) => dataScene(file, source, { refreshTilesets: false }));
+  },
+  'painting-flow'() {
+    return require('./painting-flow.js')(pos, opt, lib(), file => {
+      const descriptor = dataScene(file, undefined, { refreshTilesets: false });
+      if (!descriptor.openEditor) throw new TypeError('Paint flow needs a plain editable JSON scene');
+      return descriptor.openEditor({ historyLimit: 0 });
+    });
   },
   'paint-survival'() {
     return require('./paint-survival.js')(pos, opt, lib(),

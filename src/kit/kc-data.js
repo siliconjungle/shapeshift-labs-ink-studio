@@ -238,6 +238,7 @@
     assetParts: 'obj',
     topologyMeshes: 'obj',
     prefabArrays: 'obj',
+    sceneLayers: 'obj',
     guidedOperations: 'list',
     paintings3d: 'list',
     constructionPlane: 'obj',
@@ -482,7 +483,14 @@
     }
   }
   function resolveParameters(source, env) {
-    let { spec: expanded, meshPlacements } = K.authoring.scenePrefabs.expand(source, env);
+    let { spec: expanded, meshPlacements, instances } = K.authoring.scenePrefabs.expand(source, env);
+    let hidden;
+    try {
+      hidden = K.authoring.sceneLayers.visibility(source,instances);
+    } catch (error) {
+      error.problems ??= [{level:'error',path:'sceneLayers',problem:error.message,hint:''}];
+      throw error;
+    }
     if (expanded?.dataMarks !== undefined && expanded.solids === undefined) expanded = { ...expanded, solids: [] };
     let dataInputs;
     if (expanded?.dataInputs !== undefined) {
@@ -494,7 +502,7 @@
       }
     }
     if (expanded?.parameterBindings === undefined)
-      return { ...expandAuthoredGeometry(expanded, env?.parameterInputs?.time), dataInputs, meshPlacements };
+      return { ...expandAuthoredGeometry(expanded, env?.parameterInputs?.time), dataInputs, meshPlacements, hidden };
     try {
       const { parameterBindings, timeline, dataInputs: authoredData, ...base } = expanded;
       const program = K.parameters.prepare(parameterBindings);
@@ -503,7 +511,7 @@
       const inputs = { ...env?.parameterInputs, ...(dataInputs && { dataInputs }) };
       const { document, values } = program.apply(base, inputs);
       const spec = timeline === undefined ? document : { ...document, timeline };
-      return { ...expandAuthoredGeometry(spec, inputs.time), program, values, inputs, dataInputs, meshPlacements };
+      return { ...expandAuthoredGeometry(spec, inputs.time), program, values, inputs, dataInputs, meshPlacements, hidden };
     } catch (error) {
       error.problems ??= [{ level: 'error', path: 'parameterBindings', problem: error.message, hint: '' }];
       throw error;
@@ -1780,8 +1788,21 @@
       throw e;
     }
     const review = env.assemblyReview, { dataInputs, anchors, layers, looseness, boils, reports } = resolved;
+    const hidden = modelOptions?.[brushField] ? undefined : resolved.hidden;
+    const visibleEffect = (_,index) => !hidden?.effects.has(index);
     let { spec } = resolved;
     const { timeline, cameraRig, dataMarks, decals } = presentation, dynamics = boundRuntime(source, env, resolved);
+    const hiddenSolids = hidden && new Set(hidden.solids);
+    if (hiddenSolids) {
+      for (const [id,{host}] of anchors) if (hiddenSolids.has(host.id)) hiddenSolids.add(id);
+      spec = { ...spec, solids: spec.solids.filter(row => !hiddenSolids.has(row.id)) };
+      for (const id of hiddenSolids) {
+        anchors.delete(id);
+        layers.delete(id);
+        looseness.delete(id);
+        boils.delete(id);
+      }
+    }
     if (review) spec = review.scene(spec);
     const authoredStyle = styleOf(spec), catalog = lookCatalog(spec);
     authoredStyle.finish = K.authoring.environments.apply(authoredStyle.finish, spec.environmentPreset, catalog, authoredStyle.palette);
@@ -1790,26 +1811,31 @@
       seed = spec.seed === undefined ? 1 : spec.seed,
       effects = spec.effects || [],
       motion = spec.motion || [],
-      lamps = effects.filter((e, i) => e.do === 'lamp' && (!review || review.lamp(i))),
-      loose = effects.some(e => ['dust', 'embers', 'smoke', 'sparks', 'rain'].includes(e.do)) || !!spec.tap;
+      lamps = effects.filter((e, i) => visibleEffect(e,i) && e.do === 'lamp' && (!review || review.lamp(i))),
+      loose = effects.some((e,i) => visibleEffect(e,i) && ['dust', 'embers', 'smoke', 'sparks', 'rain'].includes(e.do)) || !!spec.tap;
     function bindSceneMeshes(world) {
       if (spec.assetParts !== undefined) {
         const imported = Object.fromEntries(Object.keys(spec.assetParts).map(id => [id, env.assetPartImports[id]]));
         K.authoring.assetRevisions.install(world, imported);
       }
-      K.authoring.meshTopologyScene.mount(world, presentation.topologyMeshes);
+      K.authoring.meshTopologyScene.mount(world, hidden ?
+        presentation.topologyMeshes?.filter(([id]) => !hidden.meshes.has(id)) : presentation.topologyMeshes);
       if (presentation.hybridOwnership) world.hybridOwnership = presentation.hybridOwnership;
     }
     function bindBreakables(world) {
       try {
-        return K.authoring.breakables.bind(world, spec, presentation.breakables);
+        const breakables = hidden && presentation.breakables ? K.authoring.sceneLayers.visibleBreakables(spec, presentation.breakables) :
+          presentation.breakables;
+        return K.authoring.breakables.bind(world, spec, breakables);
       } catch (error) {
         error.problems = [{ level: 'error', path: 'breakables', problem: error.message, hint: '' }];
         throw error;
       }
     }
     function bindDecals(world, rig) {
-      const document = review && decals ? review.decals(decals.document) : decals?.document;
+      let document = review && decals ? review.decals(decals.document) : decals?.document;
+      if (document && hidden) document = {...document,decals:document.decals.filter(({anchor}) =>
+        !hiddenSolids.has(anchor.object) && !hidden.meshes.has(anchor.object))};
       if (!document?.decals.length) return;
       const receivers = new Map(), nodes = {}, parts = new Map();
       for (const {anchor:{object,part}} of document.decals) {
@@ -2557,7 +2583,7 @@
     const liveLamps = dynamics?.lamps || timeline?.targets.some(([root, index]) =>
       root === 'effects' && effects[index].do === 'lamp');
     if (timelineActive) applyCamera(timelineFrame(timeline, 0, effects));
-    const authoredStage = moving.length || effects.length || spec.tap || timelineActive;
+    const authoredStage = moving.length || effects.some(visibleEffect) || spec.tap || timelineActive;
     const socketSources = spec.solids.filter(solid => Object.keys(solid.sockets ?? {}).length);
     if (!authoredStage && !marksSystem && !socketSources.length) {
       bindDecals(W);
@@ -2659,7 +2685,7 @@
     }
     let ps = null;
     if (loose) {
-      const winds = effects.filter(e => e.do === 'wind'),
+      const winds = effects.filter((e,i) => visibleEffect(e,i) && e.do === 'wind'),
         flow = winds.length
           ? K.flow.sum(
               ...winds.map(w => (w.swirl ? K.flow.sum(K.flow.wind(w.v), K.flow.curl(0.35, w.swirl)) : K.flow.wind(w.v)))
@@ -2674,6 +2700,7 @@
       st.add({
         update(dt, t) {
           activeEffects.forEach((e, i) => {
+            if (!visibleEffect(e,i)) return;
             if (e.do === 'rain') {
               timers[i] += (e.rate ?? 60) * dt;
               const n = Math.floor(timers[i]);
@@ -2705,7 +2732,7 @@
       });
       st.add(ps);
     }
-    const rv = effects.find(e => e.do === 'reveal');
+    const rv = effects.find((e,i) => visibleEffect(e,i) && e.do === 'reveal');
     if (rv) st.add(K.fx.reveal(st, { auto: true, dur: rv.dur || 1.4, block: rv.block || 0.6 }));
     W.lab = { rig, ps, lit, parts: partNames };
     return W;
