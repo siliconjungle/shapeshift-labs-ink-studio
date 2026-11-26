@@ -123,6 +123,7 @@
     separate: 'bool',
     turn: 'vec3',
     transform: 'obj',
+    restAffine: 'obj',
     modifiers: 'list',
     bump: 'vec2',
     bumpPhase: 'num',
@@ -273,7 +274,7 @@
       throw new RangeError('A transform needs finite XYZ vectors and uniform scale from 0.02 to 20');
     return { translation, rotation, scale, pivot };
   }
-  function solidSpace(s, frame) {
+  function uniformSolidSpace(s, frame) {
     const transform = solidTransform(s.transform);
     if (!transform) return null;
     const { translation, rotation, scale, pivot = s.at ?? [0, 0, 0] } = transform;
@@ -284,6 +285,28 @@
       point:vector=>V.mad(translatedPivot,direction(V.sub(vector,pivot)),scale),
       inverse:vector=>V.mad(pivot,inverseDirection(V.sub(vector,translatedPivot)),1/scale) };
   }
+  function affineSolidSpace(raw) {
+    if (raw === undefined) return null;
+    const { sceneGraph: graph, procedural: { transforms } } = K;
+    const frame = graph.transform(raw), inverse = graph.inverse(frame);
+    const scale = transforms.distanceScale({ R: frame.matrix });
+    const boundScale = 1 / transforms.distanceScale({ R: inverse.matrix });
+    if (!(M.det(frame.matrix) > 0) || scale < 1e-4 || boundScale > 1024)
+      throw new RangeError('A sculpt affine needs a positive orientation and usable distance and sampling scales');
+    const pull = M.tr(frame.matrix), push = M.tr(inverse.matrix);
+    return { affine: true, scale, boundScale, point: value => graph.point(frame, value),
+      inverse: value => graph.point(inverse, value), direction: value => M.app(frame.matrix, value),
+      inverseDirection: value => V.norm(M.app(pull, value)), pushNormal: value => V.norm(M.app(push, value)) };
+  }
+
+  function solidSpace(s, frame) {
+    const a = affineSolidSpace(s.restAffine), rigid = uniformSolidSpace(s, frame);
+    if (!a || !rigid) return a ?? rigid;
+    return { point: point => a.point(rigid.point(point)), inverse: point => rigid.inverse(a.inverse(point)),
+      direction: vector => a.direction(rigid.direction(vector)),
+      inverseDirection: normal => rigid.inverseDirection(a.inverseDirection(normal)) };
+  }
+
   function surfaceBakeSources(solids, frame, margin) {
     const { V } = K, sources = [];
     function visit(solid, key, spatial) {
@@ -304,7 +327,7 @@
             max: axes.map(values => Math.max(...values) + margin) };
         }
         sources.push({ key: JSON.stringify([...key, id]), bounds,
-          definition: [order, chart, solid.surfaceState.masks, solid.transform] });
+          definition: [order, chart, solid.surfaceState.masks, solid.transform, solid.restAffine] });
       }
       // Nested operands can be sampled through a nonlinear inverse. Their
       // authored projection box is only valid before the parent operation.
@@ -362,7 +385,10 @@
   }
 
   DIO.solidFrames = Object.freeze({ authored: authoredFrame, inverse: inverseFrame,
-    compose: composeFrames, transform: frameTransform });
+    compose: composeFrames, transform: frameTransform, rest(solid) {
+      const rigid = authoredFrame(solid.transform, solid.at).mesh;
+      return solid.restAffine === undefined ? rigid : K.sceneGraph.compose(K.sceneGraph.transform(solid.restAffine), rigid);
+    } });
   const lev = (a, b) => {
     const d = [];
     for (let i = 0; i <= a.length; i++) {
@@ -1240,6 +1266,10 @@
       } catch (error) {
         bad(path + '.transform', error.message);
       }
+      if (s.restAffine !== undefined) {
+        try { affineSolidSpace(s.restAffine); }
+        catch (error) { bad(path + '.restAffine', error.message); }
+      }
       if (K.drawing.kind(s)) {
         try {
           K.drawing.prepare(s);
@@ -1867,9 +1897,12 @@
     }
     const made = {},
       make = (s, held) => {
-        const space = solidSpace(s,B.frame), recipe = () => makeSolid(s,held);
+        const rigid = uniformSolidSpace(s, B.frame), rest = affineSolidSpace(s.restAffine);
+        const recipe = () => makeSolid(s, held);
         const trackModifierSpace = Boolean(s.id && (env.retainRenderSdf || env.retainPartRenderSdf));
-        const p = space ? S.transformSolids(space,recipe,trackModifierSpace) : recipe();
+        const placed = () => rigid ? S.transformSolids(rigid, recipe, trackModifierSpace) : recipe();
+        const p = rest ? S.transformSolids(rest, placed, trackModifierSpace) : placed();
+        if (rest && trackModifierSpace && p?.sd) p.modifierSpace = solidSpace(s, B.frame);
         if (s.id) made[s.id] = p;
         return p;
       },
@@ -1891,7 +1924,7 @@
         if (s.group) Object.assign(o, grp[s.group]);
         if (s.carve) o.neg = true;
         if (s.ghost) o.ghost = true;
-        if (s.separate && !modifiers.length) o.model = { separate: true, name: s.id ?? s.part ?? s.kind };
+        if (s.separate && s.restAffine === undefined && !modifiers.length) o.model = { separate: true, name: s.id ?? s.part ?? s.kind };
         if (s.bump) {
           o.bump = s.bump;
           if (s.bumpPhase !== undefined) o.bumpPhase = s.bumpPhase;
@@ -2137,13 +2170,13 @@
     };
     function placeSolid(s) {
       const p = make(s);
-      if (candidateKeys && ['ball', 'box', 'ground', 'mesh'].includes(s.kind) && !s.transform && !activeModifiers(s).length) {
+      if (candidateKeys && ['ball', 'box', 'ground', 'mesh'].includes(s.kind) && !s.transform && !s.restAffine && !activeModifiers(s).length) {
         const { kind, at, r, half, turn, rad, stretch, asset, size, spin, up } = s;
         candidateKeys.set(p, cacheAPI.signature([seed, kind, at, r, half, turn, rad, stretch,
           kind === 'mesh' ? [env.assets[asset].pos, env.assets[asset].tri, size, spin, up] : null]));
       }
-      if (p.geometryBounds && (K.drawing.kind(s) || s.transform)) authoredBounds.set(s, p.geometryBounds);
-      else if ((s.transform || activeModifiers(s).length) && s.kind !== 'ground') {
+      if (p.geometryBounds && (K.drawing.kind(s) || s.transform || s.restAffine)) authoredBounds.set(s, p.geometryBounds);
+      else if ((s.transform || s.restAffine || activeModifiers(s).length) && s.kind !== 'ground') {
         const at = p.bc ?? (s.at && V.add(s.at, s.transform?.translation ?? [0, 0, 0]));
         if (at) authoredBounds.set(s, { min: at, max: at });
       }

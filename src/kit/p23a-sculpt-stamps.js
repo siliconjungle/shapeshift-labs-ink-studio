@@ -5,7 +5,7 @@
   const localId = value => K.world.data.id(value) && !value.includes('.');
   const fields = (value, allowed) => K.world.data.record(value) &&
     Object.keys(value).every(key => allowed.includes(key));
-  const unowned = ['id', 'part', 'group', 'carve', 'ghost', 'hold', 'separate'];
+  const unowned = ['restAffine', 'id', 'part', 'group', 'carve', 'ghost', 'hold', 'separate'];
 
   function bounded(solid) {
     if (!K.world.data.record(solid) || !Object.hasOwn(DIO.kinds, solid.kind) ||
@@ -70,6 +70,7 @@
     const additions = positives.map(([key, solid]) => ({
       ...solid, id: id + '.' + key,
       ...(host?.part && { part: host.part }),
+      ...(host?.restAffine && { restAffine: host.restAffine }),
       transform: transform(compose(worldFrame, authored(solid.transform, solid.at))),
       modifiers: [...(solid.modifiers ?? []), ...masks.get(key)]
     }));

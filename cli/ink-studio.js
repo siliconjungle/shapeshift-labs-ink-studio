@@ -1390,6 +1390,8 @@ const CMD = {
         '  sculpt-contribution list <scene.json> --solid id   list retained contributions in order',
         '  sculpt-contribution inspect <scene.json> --solid id --id contribution   compare with the contribution muted',
         '  sculpt-contribution edit <scene.json> <edit.json> --out scene.json   edit one contribution and report dependencies',
+        '  assembly-stretch plan <scene.json> <stretch.json> [--preview scene.json]   check a stretch from two picks',
+        '  assembly-stretch apply <scene.json> <stretch.json> --out scene.json   carry a connected assembly through the stretch',
         '  sculpt-split plan <scene.json> <split.json>   report a complementary sculpt split',
         '  sculpt-split apply <scene.json> <split.json> --out scene.json   save separate sculpt pieces',
         '  sculpt-stamp place <scene.json> <stamp.json> <placement.json> --out scene.json   add and carve one compound stamp',
@@ -2626,6 +2628,13 @@ const CMD = {
     return require('./sculpt-contribution.js')(pos, opt, file => {
       const descriptor = dataScene(file, undefined, { refreshTilesets: false });
       if (!descriptor.openEditor) throw new TypeError('Sculpt contribution edits need a plain editable JSON scene');
+      return descriptor.openEditor();
+    });
+  },
+  'assembly-stretch'() {
+    return require('./assembly-stretch.js')(pos, opt, file => {
+      const descriptor = dataScene(file, undefined, { refreshTilesets: false });
+      if (!descriptor.openEditor) throw new TypeError('Assembly stretches need a plain editable JSON scene');
       return descriptor.openEditor();
     });
   },
