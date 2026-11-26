@@ -218,7 +218,7 @@ function nativeOperations(kit, assets) {
         const entry = assets.get(literal(spec, 'name'));
         if (entry?.format !== Bitmap.format) return bitmapOp;
         const { intent, units } = entry.value.interpretation;
-        const type = intent === 'color' ? 'colorImage' : intent === 'height' ? 'heightImage' :
+        const type = intent === 'color' ? 'colorImage' : intent === 'height' ? 'heightImage' : intent === 'normal' ? 'normalImage' :
           units === 'unitless' || units === undefined ? 'grayImage' : 'typedImage';
         return { ...bitmapOp, outputs: { ...bitmapOp.outputs, value: type } };
       }

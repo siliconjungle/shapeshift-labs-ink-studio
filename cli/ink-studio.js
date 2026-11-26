@@ -1540,6 +1540,7 @@ const CMD = {
         '  interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets',
         '  scene-resource inspect|validate <scene> [--python path --blender path]',
         '  scene-resource convert <scene> --out <file> [--materialx look.mtlx --python path --blender path]',
+        '  bake-job inspect|run|serve|preset <job.json> [--out directory --preset preset.json --port 0]',
         '    --manifest <revision.json>   attach an Ink asset revision to tagged glTF data',
         '  hybrid-ownership inspect <scene.json> [--out file.json]   list authored channels and derived outputs',
         '  hybrid-ownership route <scene.json> <object> <part> <channel>   resolve the authored edit destination',
@@ -2941,6 +2942,38 @@ const CMD = {
   },
   'asset-part'() {
     return require('./asset-part.js').command(pos, opt, lib());
+  },
+  async 'bake-job'() {
+    const [action,input]=pos, {out,preset,port}=opt;
+    if(pos.length!==2||!['inspect','run','serve','preset'].includes(action)||
+       (action==='inspect'?out!==undefined:typeof out!=='string')||
+       port!==undefined&&action!=='serve'||
+       Object.entries(opt).some(([key,value])=>!['out','preset','port'].includes(key)||typeof value!=='string'||!value.trim()))
+      die('Use bake-job inspect|run|serve|preset <job.json> [--out directory --preset preset.json --port 0]');
+    const api=require('./bake-jobs.js'), controller=new AbortController(), options={presetFile:preset,signal:controller.signal};
+    const stop=()=>controller.abort(new Error('Bake cancelled'));
+    process.on('SIGINT',stop);process.on('SIGTERM',stop);
+    try {
+      let result;
+      if(action==='inspect') result=await api.inspectBakeJob(input,options);
+      else if(action==='preset') {
+        if(path.resolve(input)===path.resolve(out)||preset&&path.resolve(preset)===path.resolve(out))
+          die('Save the bake preset to a separate file');
+        result=api.saveBakePreset(out,(await api.inspectBakeJob(input,options)).preset);
+      } else if(action==='serve') {
+        const session=await require('./bake-job-server.js').serveBakeJob(input,{...options,directory:out,port:port===undefined?0:Number(port)});
+        console.log(session.url);
+        if(!controller.signal.aborted)await new Promise(resolve=>controller.signal.addEventListener('abort',resolve,{once:true}));
+        await session.close();
+        return;
+      } else {
+        result=await api.runBakeJob(input,{...options,directory:out,onProgress:row=>console.error(JSON.stringify(row))});
+        if(result.status==='cancelled')process.exitCode=2;
+      }
+      console.log(JSON.stringify(result,null,2));
+    } finally {
+      process.removeListener('SIGINT',stop);process.removeListener('SIGTERM',stop);
+    }
   },
   'scene-resource'() {
     const [action,input]=pos, {out,materialx,python,blender}=opt;

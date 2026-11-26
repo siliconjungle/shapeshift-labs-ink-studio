@@ -60,13 +60,15 @@ function shells(points, faces, V) {
   return { groups,owners };
 }
 
-function prepare(points, faces, normals, options, { V,procedural:{spatial} }) {
+function prepare(points, faces, normals, options, { V,procedural:{spatial} }, selected=names) {
   const box = spatial.boxOf(points), diagonal = V.dist(box.min,box.max);
   const up = options.up.map(n => n/Math.hypot(...options.up));
   const { samples,cavityRadius = diagonal*.14,exposureDistance = diagonal,thicknessScale = diagonal,
     rayBias = Math.max(diagonal*1e-7,Math.max(...box.min.map(Math.abs),...box.max.map(Math.abs))*Number.EPSILON*64) } = options;
   if (!(diagonal > rayBias && rayBias > 0))
     throw new RangeError('Geometry mask ray bias must be smaller than the mesh bounds');
+  const rays=selected.includes('cavity')||selected.includes('exposure');
+  const interiors=selected.includes('thickness')||selected.includes('thickness-valid');
   const { owners,groups } = shells(points,faces,V);
   const rows = faces.map(([i,j,k],face) => {
     const [a,b,c] = [points[i],points[j],points[k]], shell = owners[face], group = groups.get(shell);
@@ -103,7 +105,7 @@ function prepare(points, faces, normals, options, { V,procedural:{spatial} }) {
   function forFace(face, layers) {
     const { normal,shell,closed } = rows[face], tangent = V.perp(normal), bitangent = V.cross(normal,tangent);
     const slope = byte(Math.acos(Math.min(1,Math.abs(V.dot(normal,up))))*2/Math.PI);
-    const directions = Array.from({length:samples},(_sample,i) => {
+    const directions = Array.from({length:rays?samples:0},(_sample,i) => {
       const t = (i+.5)/samples, a = i*Math.PI*(3-Math.sqrt(5)), radius = Math.sqrt(t);
       return V.mad(V.mad(V.mul(normal,Math.sqrt(1-t)),tangent,radius*Math.cos(a)),bitangent,radius*Math.sin(a));
     });
@@ -122,7 +124,7 @@ function prepare(points, faces, normals, options, { V,procedural:{spatial} }) {
       exposures[i] = byte(visible/samples);
       thickness[i] = validity[i] = 0;
       texels++;
-      if (!closed) return;
+      if (!interiors || !closed) return;
       const distance = trace(V.mad(point,inward,rayBias),inward,diagonal+rayBias,face)+rayBias;
       if (!hit || hit.shell !== shell || V.dot(hit.normal,inward) <= 1e-8) return;
       thickness[i] = byte(distance/thicknessScale);

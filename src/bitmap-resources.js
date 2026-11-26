@@ -25,7 +25,7 @@ const BitmapResources = (() => {
     const seen = new Set();
     for (const row of value) {
       if (!fields(row, ['x', 'y', 'value']) || !integer(row.x, 0, 8191) || !integer(row.y, 0, 8191) ||
-          !Array.isArray(row.value) || ![1, 4].includes(row.value.length) || !Array.from(row.value).every(Number.isFinite))
+          !Array.isArray(row.value) || ![1, 3, 4].includes(row.value.length) || !Array.from(row.value).every(Number.isFinite))
         throw new TypeError('Bitmap edits need integer x and y and one or four finite samples');
       const key = row.y * 8192 + row.x;
       if (seen.has(key)) throw new RangeError('Duplicate bitmap pixel edit at ' + row.x + ',' + row.y);
@@ -49,10 +49,12 @@ const BitmapResources = (() => {
     return source;
   }
   function interpretation(settings = {}) {
-    if (!fields(settings, ['intent', 'colorSpace', 'channel', 'units', 'alpha', 'sampling', 'tiling']))
+    if (!fields(settings, ['intent', 'colorSpace', 'channel', 'units', 'alpha', 'sampling', 'tiling', 'normalOrientation']))
       throw new TypeError('Invalid bitmap interpretation settings');
-    const { intent = 'color', colorSpace, channel, units, alpha, sampling, tiling } = settings;
-    if (!['color', 'data', 'mask', 'height'].includes(intent) ||
+    const { intent = 'color', colorSpace, channel, units, alpha, sampling, tiling, normalOrientation } = settings;
+    if (!['color', 'data', 'mask', 'height', 'normal'].includes(intent) ||
+        normalOrientation !== undefined && (intent !== 'normal' || !['opengl','directx'].includes(normalOrientation)) ||
+        intent === 'normal' && (channel !== undefined || units !== undefined && units !== 'unitless') ||
         (intent === 'color' ? colorSpace !== undefined && !spaces.includes(colorSpace) || channel !== undefined ||
           alpha !== undefined && !['straight', 'premultiplied'].includes(alpha) :
           colorSpace !== undefined && colorSpace !== 'none' || channel !== undefined && !['r', 'g', 'b', 'a'].includes(channel) ||
@@ -165,9 +167,11 @@ const BitmapResources = (() => {
     if (!dimensions(width, height)) throw new RangeError('Bitmap exceeds the 8192-axis or 16-million-pixel budget');
     const { intent = 'color', colorSpace = raw.colorSpace ?? (codec === 'pfm' || codec === 'exr' ? 'srgb-linear' : 'srgb'), units,
       sampling = 'nearest', tiling = {}, alpha = raw.alpha === 'premultiplied' ? 'premultiplied' : 'straight' } = settings;
-    const color = intent === 'color';
-    return { width, height, channels: color ? 4 : 1, descriptor: {
-      intent, layout: color ? 'rgba' : 'r', colorSpace: color ? colorSpace : 'none',
+    const color = intent === 'color', normal = intent === 'normal';
+    if (normal && raw.channels!==undefined && raw.channels<3) throw new TypeError('Tangent normal bitmaps need three source lanes');
+    return { width, height, channels: color ? 4 : normal ? 3 : 1, descriptor: {
+      intent, layout: color ? 'rgba' : normal ? 'xyz' : 'r', colorSpace: color ? colorSpace : 'none',
+      ...(normal && { normalSpace:'tangent',normalOrientation:settings.normalOrientation??'opengl' }),
       alpha: color ? alpha : 'none', sampling, tiling: { u: tiling.u ?? 'clamp', v: tiling.v ?? 'clamp' },
       units: units ?? (intent === 'height' ? 'shape-units' : 'unitless'),
       precision: intent === 'height' ? 'float32' : native
@@ -181,6 +185,8 @@ const BitmapResources = (() => {
     const data = copy ? src : new Data(count * channels);
     const sourceMax = src instanceof Uint16Array ? 65535 : src instanceof Uint8Array ? 255 : 1;
     const targetMax = Data === Uint16Array ? 65535 : Data === Uint8Array ? 255 : 1;
+    if (!src && descriptor.intent==='normal') for(let i=0;i<count;i++)
+      data.set(targetMax===1?[0,0,1]:[Math.round(targetMax/2),Math.round(targetMax/2),targetMax],i*3);
     if (src && !copy) {
       const lane = ['r', 'g', 'b', 'a'].indexOf(settings?.channel ?? 'r');
       function read(p, c) {
@@ -195,7 +201,7 @@ const BitmapResources = (() => {
       const ratio = targetMax / sourceMax;
       for (let p = 0; p < count; p++) {
         if (channels === 1) data[p] = read(p, lane) * ratio;
-        else for (let c = 0; c < 4; c++) data[p * 4 + c] = read(p, c) * ratio;
+        else for (let c = 0; c < channels; c++) data[p * channels + c] = read(p, c) * ratio;
       }
     }
     for (const { x, y, value } of edits ?? []) {

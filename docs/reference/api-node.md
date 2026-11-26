@@ -92,6 +92,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.graphRenderPass` | function | `(frame, channel, { emptyDepth = 1e9, kit } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../cli/graph-render.js) |
 | `node.httpJsonAdapter` | function | `(location, { maxBytes = 1048576, timeout = 5000, headers = {} } = {})` | [guide](../graph-media.md#optional-host-adapters), [source](../../cli/graph-host.js) |
 | `node.importAxF` | function | `(bytes, options)` | [guide](../measured-materials.md#optional-axf-exchange), [source](../../cli/axf-material-adapter.js) |
+| `node.inspectBakeJob` | function | `(file,{signal=new AbortController().signal,...settings}={})` | [guide](../bake-jobs.md), [source](../../cli/bake-jobs.js) |
 | `node.inspectEffectPixel` | function | `(world, { at, ...view } = {})` | [guide](../material-response.md#inspect-a-pixel), [source](../../cli/render.js) |
 | `node.inspectEnvironment` | function | `(world, options = {})` | [guide](../environment-inspector.md), [source](../../cli/environment-inspector.js) |
 | `node.inspectMaterialParameters` | function | `(source, { inputs, instance, kit = require('../index.js').load() } = {})` | [guide](../editable-material-graph.md#expose-and-reset-material-parameters), [source](../../cli/material-parameters.js) |
@@ -204,10 +205,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.roomImpulseCapture.mixSettings` | function | `(options={})` | [guide](../room-impulse-capture.md), [source](../../src/room-impulse-capture.js) |
 | `node.roomImpulseCapture.split` | function | `(response,edit)` | [guide](../room-impulse-capture.md), [source](../../src/room-impulse-capture.js) |
 | `node.roomImpulseCapture.sweep` | function | `(options={})` | [guide](../room-impulse-capture.md), [source](../../src/room-impulse-capture.js) |
+| `node.runBakeJob` | function | `(file,{directory,signal=new AbortController().signal,onProgress,...settings}={})` | [guide](../bake-jobs.md), [source](../../cli/bake-jobs.js) |
 | `node.runReferenceExperiments` | function | `({ kit = module.exports.load(), ...options } = {})` | [guide](../reference-experiments.md), [source](../../index.js) |
 | `node.sampleReframe` | function | `(delivery, time)` | [guide](../subject-reframe.md), [source](../../cli/subject-reframe.js) |
 | `node.sampleSceneReplay` | function | `(document, seconds = 0, { loop = false } = {})` | [source](../../cli/scene-replay.js) |
 | `node.sampleTilesetCollection` | function | `(scene, collection, options)` | [source](../../index.js) |
+| `node.saveBakePreset` | function | `(out,source)` | [guide](../bake-jobs.md), [source](../../cli/bake-jobs.js) |
 | `node.scanFusion` | function | `(inputs,options={})` | [source](../../cli/scan-fusion.js) |
 | `node.scanToMesh` | function | `(capture, { toolkit=require('../index.js').load(), cloud, meshStride=capture?.stride, sampleStride, materials, paintRadius=2, rgbThreshold=16, tolerance, residualLimit=30000, name='Captured surface' }={})` | [guide](../relightable-scans.md#node-api), [guide](../scan-to-mesh.md#node-api), [source](../../cli/scan-mesh.js) |
 | `node.scoreModelingBenchmarkReview` | function | `(...args)` | [source](../../index.js) |
