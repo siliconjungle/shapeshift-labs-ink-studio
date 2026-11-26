@@ -191,6 +191,20 @@ Origin: toolkit.
 Get the runnable example with `ink-studio graph describe densityPoints --example > example.cjs`.
 Run it with `node example.cjs`.
 
+### fontAsset
+
+
+
+Origin: headless.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `name` | `string` | Required |  |
+| Output | `value` | `fontResource` | — |  |
+
+Get the runnable example with `ink-studio graph describe fontAsset --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### indexedPngAsset
 
 

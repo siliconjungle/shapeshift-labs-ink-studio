@@ -271,6 +271,7 @@
     ...P.materialChannels.operations,
     ...P.materialPaint.operations,
     ...P.vectorResources.operations,
+    ...P.fontResources.operations,
     ...P.materialBase.operations,
     ...P.graphImages.operations,
     ...P.pixelProcessor.operations,

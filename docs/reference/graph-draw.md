@@ -4,6 +4,26 @@
 
 Ports, defaults, and constraints come from the registered operations. Use `graph describe <op> --json` for the full structured record.
 
+### draw.fontText
+
+Lay out editable text with selected TrueType faces, ordered fallbacks and native raster coverage.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `text` | `string` | Required |  |
+| Input | `faces` | `array<fontResource>` | Required | {"items":"fontResource"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
+| Output | `value` | `raster` | — | {"layout":"Interleaved samples on a positive integer grid","channels":[1,4],"finite":true} |
+| Output | `layout` | `record` | — | {"layout":"Plain named object"} |
+| Output | `anchors` | `record` | — | {"layout":"Plain named object"} |
+
+Guides: [guide](../font-resources.md#use-text-in-a-material-graph), [guide](../headless-authoring.md#drawing-layout-and-regions)
+
+Get the runnable example with `ink-studio graph describe draw.fontText --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### draw.path
 
 

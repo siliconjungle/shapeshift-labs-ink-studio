@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const assets = require('./asset-files.js');
+const fontResources = require('./font-resources.js');
 const { groupDocument } = require('./graph-groups.js');
 const { openMaterialGraph, toGraphProject, editableScope, portVisibility } = require('./material-graph.js');
 const { createGraphProject } = require('./graph-project.js');
@@ -124,13 +125,33 @@ function reset(graph, node, inputs, ports) {
   }
 }
 
+function pinFonts(scope, faces) {
+  const fontNodes = Object.values(scope.nodes).filter(node => node.op === 'fontAsset');
+  if (fontNodes.length) {
+    let pin = 'font-resources', suffix = 1;
+    while (own(scope.nodes, pin)) pin = 'font-resources-' + ++suffix;
+    scope.nodes[pin] = { op: 'data.typed', type: 'record', inputs: { value: { value: faces } } };
+    for (const node of fontNodes) {
+      node.op = 'font.resolve';
+      (node.inputs ??= {}).resources = { node: pin };
+    }
+  }
+  for (const group of Object.values(scope.groups ?? {})) {
+    if (record(group) && !own(group, 'file')) pinFonts(group, faces);
+  }
+}
+
 function publishMaterialSubgraph(file, source, { revision = 1, baseDir = path.dirname(path.resolve(file)), ...options } = {}) {
   if (!Number.isSafeInteger(revision) || revision < 1) throw new RangeError('Subgraph publication needs a positive integer revision');
   const document = openMaterialGraph(source);
-  if (Object.keys(document.resources ?? {}).length || document.settings?.base !== undefined)
+  const { inputs, nodes, outputs, groups, result, assets: resourceDefinitions = {} } = toGraphProject(document);
+  if (Object.values(resourceDefinitions).some(resource => resource.format !== fontResources.format) ||
+      document.settings?.base !== undefined)
     throw new TypeError('Publish a portable subgraph with explicit inputs for material resources and base settings');
-  const { inputs, nodes, outputs, groups, result } = toGraphProject(document);
   const target = path.resolve(file), folder = path.dirname(target);
+  const dependencies = new Set();
+  const faces = Object.fromEntries(Object.entries(resourceDefinitions).map(([id, definition]) =>
+    [id, fontResources.load(definition, { baseDir, onFile: file => dependencies.add(file) }).value]));
   function relocate(declarations) {
     return Object.fromEntries(Object.entries(declarations).map(([name, definition]) => {
       if (typeof definition !== 'string' && !own(definition, 'file'))
@@ -142,13 +163,14 @@ function publishMaterialSubgraph(file, source, { revision = 1, baseDir = path.di
     }));
   }
   const body = { ...(inputs && { inputs }), nodes, outputs, ...(result!==undefined && {result}), ...(groups && { groups: relocate(groups) }) };
+  if (Object.keys(faces).length) pinFonts(body, faces);
   const inspector = portVisibility(document.graph, document.controls);
   const definition = { format: graphFormat, version: 1, revision, ...body, ...(inspector && { inspector }) };
   // Register the body as a group to compile the same public interface its consumers will receive.
   const project = createGraphProject({ format: 'ink-studio/graph-project', version: 1,
     groups: { [document.id]: body }, nodes: {}, outputs: {} }, { ...options, baseDir: folder });
   const contract = project.describeSubgraph({ group: document.id });
-  if (project.sourceFiles().some(dependency => dependency === target ||
+  if ([...project.sourceFiles(), ...dependencies].some(dependency => dependency === target ||
       fs.existsSync(target) && fs.realpathSync(dependency) === fs.realpathSync(target)))
     throw new RangeError('Cannot publish a subgraph over its dependency');
   assets.publishJson(target, definition, 'Subgraph publication already exists at ' + target);

@@ -141,6 +141,7 @@ All checked-in guides, indexed by title and section headings.
 - [Editable flow maps](../flow-maps.md)
 - [Local lights in fog](../fog-lighting.md)
 - [Foley and perspective](../foley-perspective.md)
+- [Font resources](../font-resources.md)
 - [4D projections and slices](../four-dimensional.md)
 - [Bounded 3D fractal forms](../fractal-forms.md)
 - [Variables and execution control](../function-control.md)

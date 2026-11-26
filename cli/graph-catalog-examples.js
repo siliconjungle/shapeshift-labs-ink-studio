@@ -1077,6 +1077,22 @@ function runtimeExample(id, { inputs, output = 'value', type = 'field', factory 
 
 function exampleFor(id, operation, kit) {
   if (Object.hasOwn(runtime, id)) return runtimeExample(id, runtime[id]);
+  if (['fontAsset', 'font.resolve', 'font.stack', 'draw.fontText'].includes(id)) {
+    const { value } = require('./font-resources.js').load({
+      format: 'ttf', file: path.resolve(__dirname, '../examples/font-resources/fonts/NightMarks.ttf')
+    });
+    if (id === 'fontAsset') return { kind: 'graph', project: project({ op: id, inputs: { name: 'sample' } }, 'value',
+      { assets: { sample: { format: 'ttf', data: value.data } } }) };
+    if (id === 'font.resolve') return { kind: 'graph', project: project({
+      op: id, inputs: { name: 'sample', resources: { sample: value } }
+    }, 'value') };
+    if (id === 'font.stack') return { kind: 'graph', project: project({
+      op: id, inputs: { names: ['sample'], resources: { sample: value } }
+    }, 'value') };
+    return { kind: 'graph', project: project({ op: id, inputs: {
+      text: '✶ ☾', faces: [value], options: { width: 96, height: 40, size: 26, align: 'center', at: [48, 1] }
+    } }, 'value') };
+  }
   if (id === 'svgAsset') {
     const document = require('../src/vector-resources.js').parse(svgExample);
     return { kind: 'graph', project: project({ op: id, inputs: { name: 'sample' } }, 'value',

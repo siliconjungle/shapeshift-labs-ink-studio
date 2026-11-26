@@ -1817,6 +1817,7 @@ const CMD = {
         '  graph material-parameters <material.json> <request.json> [--out material.json]   batch expose, set or reset parameters',
         '  graph material-bitmap <material.json> <id|request.json> [--out material.json]   inspect or edit a bitmap resource',
         '  graph material-vector <material.json> <id|request.json> [--out material.json]   inspect or edit an SVG resource',
+        '  graph material-font <material.json> <id|request.json> [--out material.json]   inspect or edit TrueType resources',
         '  graph material-visibility <material.json> [--inputs values.json] [--instance ID] [--scope GROUP/PATH]   show inspector visibility and expression diagnostics',
         '  graph material-library [registry.json] [--audience library|workspace|publication] [--query TEXT] [--tag TAG] [--offset N] [--limit N] [--out directory]',
         '  graph subgraph <material.json> <request.json> [--out material.json]   inspect or edit reusable material instances',

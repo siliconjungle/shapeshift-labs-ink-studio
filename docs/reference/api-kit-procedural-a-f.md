@@ -944,6 +944,45 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.foldedRibbon` | namespace |  |  |
 | `KIT.procedural.foldedRibbon.compile` | function | `(faces,{origin=0,offset=0}={})` | [source](../../src/kit/p07-folded-ribbon.js) |
 
+## KIT.procedural.fontResources
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.fontResources` | namespace |  |  |
+| `KIT.procedural.fontResources.create` | function | `(input, { family, style } = {})` | [guide](../font-resources.md#use-text-in-a-material-graph), [guide](../font-resources.md), [source](../../src/font-resources.js) |
+| `KIT.procedural.fontResources.layout` | function | `(text, faces, settings = {})` | [guide](../font-resources.md#use-text-in-a-material-graph), [guide](../font-resources.md), [source](../../src/font-resources.js) |
+| `KIT.procedural.fontResources.operations` | namespace |  |  |
+| `KIT.procedural.fontResources.operations["draw.fontText"]` | namespace |  |  |
+| `KIT.procedural.fontResources.operations["draw.fontText"].description` | value | `string = "Lay out editable text with selected TrueType faces, ordered fallbacks and native raster coverage."` |  |
+| `KIT.procedural.fontResources.operations["draw.fontText"].inputs` | namespace |  |  |
+| `KIT.procedural.fontResources.operations["draw.fontText"].inputs.faces` | value | `string = "array<fontResource>"` |  |
+| `KIT.procedural.fontResources.operations["draw.fontText"].inputs.options` | namespace |  |  |
+| `KIT.procedural.fontResources.operations["draw.fontText"].inputs.options.default` | namespace |  |  |
+| `KIT.procedural.fontResources.operations["draw.fontText"].inputs.options.type` | value | `string = "record"` |  |
+| `KIT.procedural.fontResources.operations["draw.fontText"].inputs.text` | value | `string = "string"` |  |
+| `KIT.procedural.fontResources.operations["draw.fontText"].outputs` | namespace |  |  |
+| `KIT.procedural.fontResources.operations["draw.fontText"].outputs.anchors` | value | `string = "record"` |  |
+| `KIT.procedural.fontResources.operations["draw.fontText"].outputs.layout` | value | `string = "record"` |  |
+| `KIT.procedural.fontResources.operations["draw.fontText"].outputs.value` | value | `string = "raster"` |  |
+| `KIT.procedural.fontResources.operations["draw.fontText"].run` | function | `({ text, faces, options })` | [source](../../src/kit/paq-font-resources.js) |
+| `KIT.procedural.fontResources.operations["font.resolve"]` | namespace |  |  |
+| `KIT.procedural.fontResources.operations["font.resolve"].description` | value | `string = "Select a named font face from the embedded resources of a published graph."` |  |
+| `KIT.procedural.fontResources.operations["font.resolve"].inputs` | namespace |  |  |
+| `KIT.procedural.fontResources.operations["font.resolve"].inputs.name` | value | `string = "string"` |  |
+| `KIT.procedural.fontResources.operations["font.resolve"].inputs.resources` | value | `string = "record"` |  |
+| `KIT.procedural.fontResources.operations["font.resolve"].outputs` | namespace |  |  |
+| `KIT.procedural.fontResources.operations["font.resolve"].outputs.value` | value | `string = "fontResource"` |  |
+| `KIT.procedural.fontResources.operations["font.resolve"].run` | function | `({ name, resources })` | [source](../../src/kit/paq-font-resources.js) |
+| `KIT.procedural.fontResources.operations["font.stack"]` | namespace |  |  |
+| `KIT.procedural.fontResources.operations["font.stack"].description` | value | `string = "Collect named font resources in the order used for face selection."` |  |
+| `KIT.procedural.fontResources.operations["font.stack"].inputs` | namespace |  |  |
+| `KIT.procedural.fontResources.operations["font.stack"].inputs.names` | value | `string = "array<string>"` |  |
+| `KIT.procedural.fontResources.operations["font.stack"].inputs.resources` | value | `string = "record"` |  |
+| `KIT.procedural.fontResources.operations["font.stack"].outputs` | namespace |  |  |
+| `KIT.procedural.fontResources.operations["font.stack"].outputs.value` | value | `string = "array<fontResource>"` |  |
+| `KIT.procedural.fontResources.operations["font.stack"].run` | function | `({ names, resources })` | [source](../../src/kit/paq-font-resources.js) |
+| `KIT.procedural.fontResources.render` | function | `(text, faces, { width = 320, height = 128, color = '#ffffff', edges = 'smooth', ...settings } = {})` | [source](../../src/kit/paq-font-resources.js) |
+
 ## KIT.procedural.footprintCorridor
 
 | Member | Kind | Signature or value | Guides and source |

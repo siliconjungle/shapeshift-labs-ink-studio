@@ -6,6 +6,7 @@ const PNG = require('./png.js');
 const Bitmap = require('../src/bitmap-resources.js');
 const bitmapFiles = require('./bitmap-resources.js');
 const vectorFiles = require('./vector-resources.js');
+const fontFiles = require('./font-resources.js');
 const { literal } = require('../src/graph-control-references.js');
 const WAV = require('./wav.js');
 const Sound = require('./sound-source.js');
@@ -227,6 +228,7 @@ function nativeOperations(kit, assets) {
     random:{outputs:{value:'number'},seed:true,run(_,ctx){return {value:kit.KIT.grow.dice(ctx.seed)()};}},
     ...require('./graph-render.js').graph3DOperations(kit),
     svgAsset:asset('vectorDocument', entry => entry.format===vectorFiles.format),
+    fontAsset:asset('fontResource', entry => entry.format===fontFiles.format),
     pngAsset:asset('image', entry => entry.format==='png'),
     indexedPngAsset:{
       inputs:{name:'string'},outputs:{value:'raster',palette:'palette',alpha:'raster'},asset:'name',workerLocal:true,
@@ -349,6 +351,10 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const groupTree=loadGraphGroups(definitions,baseDir,{onFile:file=>paths.add(file),inspectors:groupInspectors});
   const groupSpecs=new Map(groupTree.entries.map(group=>[group,graphSpec(group.spec,'group '+group.alias,groupOperators,typedOperations)]));
   const assets=new Map(named(assetDefinitions,'assets').map(([name,definition])=>{
+    if (definition?.format === fontFiles.format) {
+      const { info, value, sha256 } = fontFiles.load(definition, { baseDir, onFile: file => paths.add(file) });
+      return [name, { format: fontFiles.format, type: 'fontResource', info, value, sha256 }];
+    }
     if (definition?.format === vectorFiles.format) {
       const { info, value, sha256 } = vectorFiles.load(definition, { baseDir, onFile: file => paths.add(file) });
       return [name, { format: vectorFiles.format, type: 'vectorDocument', info, value, sha256 }];
@@ -422,7 +428,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     if (expandedNodes>maxNodes) throw new RangeError('Expanded graph exceeds its '+maxNodes+' node budget');
     const compiled=graph.create(spec,{operations:ops,groups:operationsIn(scope),planOnly:true}), plan=compiled.plan();
     for (const {id,op,inputs} of plan.nodes) {
-      if (ops[op]!==stock[op] || !['pngAsset','indexedPngAsset','jsonAsset','audioAsset','rasterAsset','inputAsset','bitmapAsset','svgAsset'].includes(op) ||
+      if (ops[op]!==stock[op] || !['pngAsset','indexedPngAsset','jsonAsset','audioAsset','rasterAsset','inputAsset','bitmapAsset','svgAsset','fontAsset'].includes(op) ||
           inputs.name.source.kind!=='value') continue;
       const node=spec.nodes[id], definition=node.inputs?.name ?? node.params?.name;
       const name=record(definition) ? definition.value : definition;
