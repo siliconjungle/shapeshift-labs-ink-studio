@@ -707,3 +707,64 @@ In the SDK, use `planPrefabMirror`, `previewPrefabMirror`, and
 `applyPrefabMirror`. Run
 `node examples/tileset-pick/prefab-mirror-demo.cjs mirror-bays`
 to link two bays, paint them together, and make a local variation.
+
+### Name object points for placement and alignment
+
+Store named points on a retained mesh or on a visual prefab definition.
+A point has a local `position` and an optional `direction`. Socket
+direction defaults to local +Z. Placement transforms resolve the same
+point in world space, including nested and reflected placements.
+
+```json
+{"object":"panel","points":{"hinge":{"position":[-0.75,0.3,0],"direction":[0,1,1]}}}
+```
+
+Inspect the change with `tileset object-points` and add `--out` to
+publish it. Omit `points` to list the effective local and world
+coordinates, or give a point a `null` value to remove it. Use
+`"instance":"west"` in place of `object` to edit that inline prefab's
+definition through the existing revision workflow. For a shared
+library, publish a new revision with `mesh-topology edit-prefab`, using a
+`sourceEdits` path such as `/points/hinge`.
+
+```sh
+ink-studio tileset object-points points.json --scene station.json --out authored.json
+ink-studio mesh-topology plane authored.json --snap-origin object-point --object panel --point-id hinge
+```
+
+Use a selector such as `{"kind":"object-point","object":"panel","id":"hinge"}`
+as a mesh pivot target, component snap target, or prefab promotion
+origin. Use `instance` to refer to a point on a placed prefab, and
+`object` with a qualified ID such as `west.panel` for a prefab member.
+Snap requests can also use `kind: "socket"` with
+`instanceKind: "prefab"` and the point's name as `binding`.
+Live diorama graphs expose these sockets on `prefab.<instance>`
+and on `mesh.<object>` when a mesh has named points.
+
+Stamp a prefab by putting its named anchor at a target. Use a root point
+name or a member point selector such as `{"member":"panel","id":"hinge"}`
+for `anchor`. With a named `target`, placement uses its exact world
+XYZ. Orientation and angle still come from the stamp request. Plane
+stamps can also use an `anchor` and retain their normal grid behavior.
+
+```json
+{
+  "prefab":"bay",
+  "id":"upper-bay",
+  "anchor":"foot",
+  "target":{"kind":"object-point","instance":"west","id":"dock"},
+  "orientation":"world"
+}
+```
+
+Pivot and plane snaps sample the current position. Graph sockets
+continue following their nodes. Mesh points are authored in local
+coordinates and independent of individual vertices. Promotion and
+module combination preserve the coordinates of points carried into
+the resulting prefab. A detached prefab keeps member mesh points and
+reports the prefab-level points whose owner was removed.
+
+In the SDK, use `planObjectPoints`, `editObjectPoints`, and
+`KIT.authoring.objectPoints.resolve`. Run
+`node examples/tileset-pick/object-points-demo.cjs station-points`
+to replay a named pivot, construction snap, and anchored prefab stamp.

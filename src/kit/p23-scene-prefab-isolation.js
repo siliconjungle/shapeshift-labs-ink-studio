@@ -100,7 +100,8 @@ const prefabEditIsolation = (function (K) {
         const pivotTarget = anchor?.kind === 'center' && anchor.object === undefined && anchor.selection === undefined ?
           { ...anchor, selection: pickActive() } : anchor;
         evidence = T.planPivot(doc, { ...raw, target: pivotTarget, frame: meshPlacements.get(target.object) }, {
-          pivot: row.pivot, mesh: targetMesh, instance: target => A.sceneInstances.anchor(scene, env, target)
+          pivot: row.pivot, mesh: targetMesh, instance: target => A.sceneInstances.anchor(scene, env, target),
+          point: target => A.objectPoints.resolve(scene,env,target)
         });
         if (evidence.changed) {
           next = { ...row };
@@ -118,7 +119,11 @@ const prefabEditIsolation = (function (K) {
           ...(raw.constructionPlane === undefined && meshComponentSnap.usesConstructionPlane(raw) ?
             { constructionPlane: A.constructionPlane.forScene(scene).plane } : {}),
           ...(raw.space === 'camera' && raw.camera === undefined && { camera: camera ??= authoredCamera() }),
-          mesh: targetMesh
+          mesh: targetMesh,
+          point: target => A.objectPoints.resolve(scene,env,target),
+          socket: (instance,binding,instanceKind) => instanceKind === 'prefab' ?
+            A.sceneInstances.anchor(scene,env,{instance,instanceKind,anchor:binding}).target :
+            A.sceneInstances.assetSocket(scene,env,instance,binding)
         });
         if (transformed.report.canCommit === false) {
           report.conflicts.push({index,member,reason:'face-fold-needs-review',details:transformed.report.issues});
