@@ -320,6 +320,23 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.procedural.measureSculptBounds` | function | `(build)` | [source](../../src/kit/p9d-sculpt-measurement.js) |
 
+## KIT.procedural.measuredMaterials
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.measuredMaterials` | namespace |  |  |
+| `KIT.procedural.measuredMaterials.operations` | namespace |  |  |
+| `KIT.procedural.measuredMaterials.operations["material.measure"]` | namespace |  |  |
+| `KIT.procedural.measuredMaterials.operations["material.measure"].description` | value | `string = "Register planar scan captures, remove calibrated illumination, and recover pigment, relief, normals and confidence."` |  |
+| `KIT.procedural.measuredMaterials.operations["material.measure"].inputs` | namespace |  |  |
+| `KIT.procedural.measuredMaterials.operations["material.measure"].inputs.captures` | value | `string = "array<record>"` |  |
+| `KIT.procedural.measuredMaterials.operations["material.measure"].inputs.settings` | value | `string = "record"` |  |
+| `KIT.procedural.measuredMaterials.operations["material.measure"].outputs` | namespace |  |  |
+| `KIT.procedural.measuredMaterials.operations["material.measure"].outputs.report` | value | `string = "record"` |  |
+| `KIT.procedural.measuredMaterials.operations["material.measure"].outputs.value` | value | `string = "materialChannels"` |  |
+| `KIT.procedural.measuredMaterials.operations["material.measure"].run` | function | `({ captures, settings })` | [source](../../src/kit/paq-measured-materials.js) |
+| `KIT.procedural.measuredMaterials.recover` | function | `(captures, settings)` | [guide](../measured-materials.md#assemble-captures), [source](../../src/kit/paq-measured-materials.js) |
+
 ## KIT.procedural.mediaGraph
 
 | Member | Kind | Signature or value | Guides and source |

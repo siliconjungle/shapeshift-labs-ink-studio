@@ -97,6 +97,24 @@ Guides: [guide](../material-base-settings.md#inherit-individual-settings)
 Get the runnable example with `ink-studio graph describe material.inherit --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### material.measure
+
+Register planar scan captures, remove calibrated illumination, and recover pigment, relief, normals and confidence.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `captures` | `array<record>` | Required | {"items":"record"} |
+| Input | `settings` | `record` | Required | {"layout":"Plain named object"} |
+| Output | `value` | `materialChannels` | — | {"layout":"Versioned named raster channels with independent grids and metadata","minItems":1,"maxItems":64} |
+| Output | `report` | `record` | — | {"layout":"Plain named object"} |
+
+Guides: [guide](../measured-materials.md)
+
+Get the runnable example with `ink-studio graph describe material.measure --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### material.pack
 
 Bundle named material rasters into one typed port, with independent map sizes and metadata.

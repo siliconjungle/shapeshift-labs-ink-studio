@@ -462,6 +462,16 @@ const specifications = {
         space: 'uv', samples: [[.25, .5], [.75, .5]], value: [.7, .32, .14], brush: { radius: 1.5 }
       }] }] } }
   },
+  'material.measure': {
+    nodes: {
+      color: declareColor, data: declareData,
+      height: { op: 'image.toHeight', inputs: { source: link('data'), scale: .2, units: 'mm' } },
+      capture: { op: 'data.record', inputs: { id: 'front', color: link('color'), height: link('height') } },
+      table: { op: 'data.record', inputs: { front: link('capture') } },
+      captures: { op: 'data.collect', inputs: { source: link('table'), keys: ['front'] } }
+    },
+    inputs: { captures: link('captures'), settings: { width: 4, height: 4, pixelPitchMm: [.3, .3] } }
+  },
   'material.pack': { inputs: materialSource.inputs },
   'material.channel': { nodes: { material: materialSource }, inputs: { source: link('material'), name: 'mask.wear' } },
   'material.replace': { nodes: { material: materialSource }, inputs: {

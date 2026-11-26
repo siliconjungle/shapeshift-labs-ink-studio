@@ -68,6 +68,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.encodeSceneryPack` | function | `(id, meshes)` | [source](../../cli/scenery-delivery.js) |
 | `node.encodeTexture` | function | `(image, options)` | [source](../../index.js) |
 | `node.encodeWav` | function | `(source, { encoding = 'pcm16', bwf } = {})` | [guide](../graph-media.md#wav-and-frame-analysis), [source](../../cli/wav.js) |
+| `node.exportAxF` | function | `(value, options)` | [guide](../measured-materials.md#optional-axf-exchange), [source](../../cli/axf-material-adapter.js) |
 | `node.exportDeepEXR` | function | `(world, { out, view = {}, times = [view.time ?? view.t ?? world?.lookSnapshot?.time ?? 0], layers, reflection, allowTruncated = false, coalesce = true, pose } = {})` | [guide](../deep-openexr.md#node-api), [guide](../deep-openexr.md), [source](../../cli/deep-openexr.js) |
 | `node.exportGlb` | function | `(modelOrFile, { out, uvMargin = 0.008, textureSize, bakeDir, paintViews, capturePaint, rebakeFrom, chartEdits, geometryMasks, cageBake, onModelingWork } = {})` | [guide](../registered-material-bake.md#project-approved-paint-from-several-views), [guide](../registered-material-bake.md#bake-geometry-masks), [source](../../cli/export-glb.js) |
 | `node.exportLayers` | function | `(world, { out, view = {}, times = [view.time ?? view.t ?? world?.lookSnapshot?.time ?? 0], native = false, pose, replay, partMotion = false, strandPasses = false, compositing } = {})` | [source](../../cli/export-layers.js) |
@@ -85,6 +86,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.graphDeepLayer` | function | `(frame, options = {}, channel)` | [guide](../art-passes.md#deep-compositing), [source](../../cli/deep-composite.js) |
 | `node.graphRenderPass` | function | `(frame, channel, { emptyDepth = 1e9, kit } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../cli/graph-render.js) |
 | `node.httpJsonAdapter` | function | `(location, { maxBytes = 1048576, timeout = 5000, headers = {} } = {})` | [guide](../graph-media.md#optional-host-adapters), [source](../../cli/graph-host.js) |
+| `node.importAxF` | function | `(bytes, options)` | [guide](../measured-materials.md#optional-axf-exchange), [source](../../cli/axf-material-adapter.js) |
 | `node.inspectEffectPixel` | function | `(world, { at, ...view } = {})` | [guide](../material-response.md#inspect-a-pixel), [source](../../cli/render.js) |
 | `node.inspectEnvironment` | function | `(world, options = {})` | [guide](../environment-inspector.md), [source](../../cli/environment-inspector.js) |
 | `node.inspectMaterialParameters` | function | `(source, { inputs, instance, kit = require('../index.js').load() } = {})` | [guide](../editable-material-graph.md#expose-and-reset-material-parameters), [source](../../cli/material-parameters.js) |
@@ -109,7 +111,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.openMaterialGraph` | function | `(source, { id } = {})` | [guide](../editable-material-graph.md#open-edit-and-save), [source](../../cli/material-graph.js) |
 | `node.openPixelEditorSession` | function | `(directory, options)` | [source](../../index.js) |
 | `node.openSampleLibrary` | function | `(directory, {kit = require('../index.js').load()} = {})` | [guide](../sample-capture.md#use-the-tools-from-code-or-a-graph), [source](../../cli/sample-library.js) |
-| `node.openTilesetPaint` | function | `(editor, request)` | [guide](../mesh-uv.md#paint-a-picked-crop-or-the-whole-sheet), [source](../../index.js) |
+| `node.openTilesetPaint` | function | `(editor, request)` | [guide](../mesh-uv.md#paint-through-a-placed-face), [source](../../index.js) |
 | `node.packProject` | function | `(scene, { out, root, revision, assetPack, paint, attachments } = {})` | [source](../../cli/project-bundle.js) |
 | `node.paintTilesetFace` | function | `(editor, request, options)` | [source](../../index.js) |
 | `node.paletteUsage` | function | `(world,{select,rarePixels=3,rareShare=.001,...view}={})` | [guide](../palette-recipes.md#measure-palette-usage-at-export-size), [source](../../cli/palette-usage.js) |
@@ -226,4 +228,4 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.writeRasterAsset` | function | `(source, { out } = {})` | [source](../../cli/raster-asset.js) |
 | `node.writeSceneEmbed` | function | `(document, { out, settings } = {})` | [source](../../cli/scene-replay.js) |
 | `node.writeSpriteAtlas` | function | `(source, { out } = {})` | [source](../../cli/sprite-atlas.js) |
-| `node.writeTilesetPaint` | function | `(editor, binding, document, options)` | [guide](../mesh-uv.md#paint-a-picked-crop-or-the-whole-sheet), [source](../../index.js) |
+| `node.writeTilesetPaint` | function | `(editor, binding, document, options)` | [guide](../mesh-uv.md#paint-through-a-placed-face), [source](../../index.js) |
