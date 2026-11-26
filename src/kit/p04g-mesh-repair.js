@@ -86,8 +86,8 @@ const retainedMeshRepair = (function (K) {
   const weight = (g,corner,channel) => Object.hasOwn(weights(g,corner),channel) ? weights(g,corner)[channel] : 0;
   const affine = (a,b,c,x,y) => a+x*(b-a)+y*(c-a);
   const blend = ([a,b,c],x,y) => a.map((n,i)=>affine(n,b[i],c[i],x,y));
-  const tint = row => {
-    const values = meshCornerTint.effective(row);
+  const tint = (row,mode='multiply') => {
+    const values = meshCornerTint.stream(row,mode);
     return [values[0],values[1],values[2],values[3] ?? 1];
   };
 
@@ -111,7 +111,7 @@ const retainedMeshRepair = (function (K) {
             y * (values[2][i] - start)) > 1e-6))
           throw new RangeError('Dissolve would change corner attribute interpolation for ' + channel);
       }
-      if (!sameUV(tint(corner),blend([a,b,c].map(tint),x,y),1e-6))
+      if (!sameUV(tint(corner,doc.tintBlend),blend([a,b,c].map(row=>tint(row,doc.tintBlend)),x,y),1e-6))
         throw new RangeError('Dissolve would change corner tint interpolation');
       for (const channel of channels) {
         const expected = affine(weight(g,a,channel),weight(g,b,channel),weight(g,c,channel),x,y);
@@ -456,7 +456,7 @@ const retainedMeshRepair = (function (K) {
     return blockers ? {document:doc,links:{},effect,blockers} : {document:joined,links,effect};
   }
 
-  function tileRegistration(g, faces, reference) {
+  function tileRegistration(g, faces, reference, mode) {
     const corners = faces.flatMap(face=>face.corners);
     const coordinates = facePlane(g,reference);
     const origin = g.vertices.get(reference[0].vertex).position;
@@ -479,7 +479,7 @@ const retainedMeshRepair = (function (K) {
         const value = row=>width ? row.attributes[key] : [row.attributes[key]];
         compare('attribute-interpolation',{attribute:key},reference.map(value),value(corner));
       }
-      compare('attribute-interpolation',{attribute:'tint'},reference.map(tint),tint(corner));
+      compare('attribute-interpolation',{attribute:'tint'},reference.map(row=>tint(row,mode)),tint(corner,mode));
       for (const joint of joints) {
         const value = row=>[weight(g,row,joint)];
         compare('weight-interpolation',{joint},reference.map(value),value(corner));
@@ -513,7 +513,7 @@ const retainedMeshRepair = (function (K) {
 
     const before = faceTriangles(doc,faces.map(face=>face.id));
     const reference = before.get(keep.id)[0].map(id=>g.corners.get(id));
-    const discarded = tileRegistration(g,faces,reference);
+    const discarded = tileRegistration(g,faces,reference,doc.tintBlend);
     if (keep.material !== remove.material)
       discarded.push({kind:'material',face:remove.id,before:remove.material,after:keep.material});
     if (keep.smoothingGroup !== remove.smoothingGroup)

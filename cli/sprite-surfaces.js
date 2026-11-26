@@ -3,6 +3,7 @@ const SpriteSurface = require('../src/sprite-surface.js');
 const Mips = require('../src/semantic-texture-mipmaps.js');
 const Simulation = require('../src/simulation-material-layers.js');
 const uvSlip=Symbol.for('ink-studio.spriteSurface.uvSlip');
+const clampTint = n=>Math.max(0,Math.min(1,n));
 const dot = (a, b) => a.reduce((sum, n, i) => sum + n * b[i], 0);
 const cross = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
 const sub = (a, b) => a.map((n, i) => n-b[i]);
@@ -54,12 +55,13 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
     if (!layer) continue;
     const code=meshMask?.get(layer.sceneMeshId);
     if (code && spriteLOD.hidden(code)) continue;
-    const {vertices,pixels,normalPixels,cornerNormals,cornerTints,width,height}=layer;
+    const {vertices,pixels,normalPixels,cornerNormals,cornerTints,tintBlend,width,height}=layer;
+    const tintStride = tintBlend===undefined ? 3 : 4;
     if(!(vertices instanceof Float32Array)||vertices.length%15||!Number.isSafeInteger(width)||width<1||
       !Number.isSafeInteger(height)||height<1||!(pixels instanceof Uint8Array)||pixels.length!==width*height*4||
       (normalPixels!==undefined&&(!(normalPixels instanceof Uint8Array)||normalPixels.length!==pixels.length))||
       (cornerNormals!==undefined&&(!(cornerNormals instanceof Float32Array)||cornerNormals.length!==vertices.length/5*3))||
-      (cornerTints!==undefined&&(!(cornerTints instanceof Float32Array)||cornerTints.length!==vertices.length/5*3))||
+      (cornerTints!==undefined&&(!(cornerTints instanceof Float32Array)||cornerTints.length!==vertices.length/5*tintStride))||
       !vertices.every(Number.isFinite))throw new RangeError('Invalid sprite surface atlas');
     const plan=depthOnly ? null : layer[uvSlip];
     const ranges=plan?.vertices===vertices&&plan.width===width&&plan.height===height ? plan.ranges : [];
@@ -97,8 +99,8 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
         object:chart.objectId,entity:chart.objectId,material:chart.materialId,part:chart.partId
       };
       const authored = !depthOnly && surfaceNormals && cornerNormals?.subarray(first * 3, first * 3 + 9);
-      const cornerColor = !depthOnly && cornerTints?.subarray(first*3,first*3+9);
-      const tint = cornerColor && cornerColor.some(value=>value!==1) ? cornerColor : null;
+      const cornerColor = !depthOnly && cornerTints?.subarray(first*tintStride,(first+3)*tintStride);
+      const tint = cornerColor && (tintBlend || cornerColor.some(value=>value!==1)) ? cornerColor : null;
       const trackWeights=authored || tint || sourceBinding || motion || chart && (sampleCharts || pbr?.materials[pbrMaterial-1]?.readBand);
       const input=identity.map((weights,i)=>transform(Array.from(vertices.subarray(offset+i*5,offset+i*5+5)),step,
         trackWeights ? weights : undefined,local));
@@ -229,8 +231,18 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
           if(clip&&!clip(position) || omitLayer && omit(omitLayer,chart?.materialId,position))continue;
           const weights3=trackWeights && identity.map((_,k)=>row.reduce((s,v,i)=>s+v.weights[k]*w[i]/sum,0));
           const pigment = material?.color ?? [ink>>>16,(ink>>>8)&255,ink&255].map(n=>n/255);
-          const tinted = tint ? pigment.map((channel,k)=>channel*Math.max(0,Math.min(1,
-            weights3[0]*tint[k]+weights3[1]*tint[3+k]+weights3[2]*tint[6+k]))) : pigment;
+          let tinted = pigment;
+          if (tint) {
+            const channel = k=>clampTint(weights3[0]*tint[k]+weights3[1]*tint[tintStride+k]+weights3[2]*tint[2*tintStride+k]);
+            if (tintBlend==='midpoint') tinted=pigment.map((base,k)=>{
+              const shift=2*channel(k)-1;
+              return base+shift*(shift<0 ? base : 1-base);
+            });
+            else if (tintBlend) {
+              const remain=1-channel(3);
+              tinted=pigment.map((base,k)=>clampTint(channel(k)+remain*base));
+            } else tinted=pigment.map((base,k)=>base*channel(k));
+          }
           if (tint && material) material.color=tinted;
           let base = normal, mapped;
           if (authored) {

@@ -1521,7 +1521,7 @@ const CMD = {
         '  mesh-topology limit-surface <mesh.json> <samples.json> [--out report.json]   sample a quad subdivision limit surface',
         '  mesh-topology boolean <mesh-or-scene.json> <request.json> [--object id] [--operand mesh.json] [--view file] [--preview dir] [--out file] [--report file]   solve and compare mesh or SDF Booleans',
         '  mesh-topology bevel <mesh-or-scene.json> <request.json> [--object id] [--view file] [--preview dir] [--out file] [--report file]   preview or apply an edge bevel with native-grid protection',
-        '  mesh-topology tint <mesh-or-scene.json> <request.json> [--object id] [--part id] [--selection file] [--view file --preview dir] [--expect receipt.json] [--out file]   paint, sample, or erase corner and vertex tint',
+        '  mesh-topology tint <mesh-or-scene.json> <request.json> [--object id] [--part id] [--selection file] [--view file --preview dir] [--expect receipt.json] [--out file]   paint, sample, erase, or set mesh tint blend behavior',
         '  mesh-topology shading <mesh-or-scene.json> [request.json] [--object id] [--view file] [--preview dir] [--subdivision level] [--out file] [--report file]   inspect or edit smoothing groups, corner normals, hard edges and subdivision creases',
         '  mesh-topology shape-keys <mesh-or-scene.json> [request.json] [--object id] [--view file --preview dir] [--out file] [--report file]   edit the rest model or capture a named pose correction',
         '  mesh-topology skin <mesh-or-scene.json> [request.json] [--object id] [--view file] [--preview dir] [--out file] [--report file]   inspect, paint, mirror and preview named joint weights',

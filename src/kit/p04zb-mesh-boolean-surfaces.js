@@ -40,14 +40,14 @@ const meshBooleanSurfaces = (function(K) {
       points:meta.points.map((p,i)=>({p,weights:even[i]}))}));
   }
 
-  function cornerData(meta,weights,flipped,shade) {
+  function cornerData(meta,weights,flipped,shade,mode) {
     const rows=meta.attributes;
     const uv=vector(rows.map(row=>row.uv),weights).map(unit);
-    const attributes=blend(rows.map(meshCornerTint.generic),weights), tint=meshCornerTint.sample(rows,weights);
-    if (tint) attributes.tint=tint;
+    const attributes=blend(rows.map(meshCornerTint.generic),weights), tint=meshCornerTint.sample(rows,weights,mode);
+    Object.assign(attributes,tint);
     const normal=shade && rows.some(row=>row.normal) &&
       V.norm(vector(rows.map(row=>row.normal ?? meta.normal),weights));
-    return {uv,...((rows[0].attributes || tint) && {attributes}),...(normal && V.len(normal)>.99 && {normal:flipped ? V.mul(normal,-1) : normal})};
+    return {uv,...((rows[0].attributes || tint.tint) && {attributes}),...(normal && V.len(normal)>.99 && {normal:flipped ? V.mul(normal,-1) : normal})};
   }
   function vertexData(meta,weights) {
     const rows=meta.authored, channels=[...new Set(rows.flatMap(row=>Object.keys(row.weights ?? {})))].sort();
@@ -161,7 +161,7 @@ const meshBooleanSurfaces = (function(K) {
           const id=from && !cornersUsed.has(from) ? from : fresh('corner');
           cornersUsed.add(id);
           if (from && id!==from) cornerLinks.push({from,to:id});
-          return {id,vertex:row.node.vertex.id,...cornerData(poly.meta,row.weights,poly.flipped,true)};
+          return {id,vertex:row.node.vertex.id,...cornerData(poly.meta,row.weights,poly.flipped,true,doc.tintBlend)};
         });
         faces.push({id,material,corners,...(original.smoothingGroup !== undefined && {smoothingGroup:original.smoothingGroup})});
         owners.push({face:id,operand:side,sourceFace:original.id,material});
@@ -211,7 +211,7 @@ const meshBooleanSurfaces = (function(K) {
     }
     if (Object.values(lineage).some(rows=>rows.length)) patch.lineage=lineage;
     const sideVertices=new Set(faces.flatMap(face=>face.corners.map(row=>row.vertex)));
-    const side=api.create({id:doc.id,faces,vertices:document.vertices.filter(row=>sideVertices.has(row.id))});
+    const side=api.create({id:doc.id,faces,tintBlend:doc.tintBlend,vertices:document.vertices.filter(row=>sideVertices.has(row.id))});
     return {document,patch,owners,side};
   }
 

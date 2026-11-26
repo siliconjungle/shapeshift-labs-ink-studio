@@ -1244,8 +1244,8 @@
     function editMeshTint(object, request, {part} = {}) {
       const before = meshTopology(object,part);
       const {document:painted,report} = K.meshTopology.planTint(before.document,request);
-      if (!report.changedCorners) return report;
       const {beforeRevision,afterRevision} = report;
+      if (beforeRevision===afterRevision) return report;
       const next = {...before,document:painted};
       // Tint changes the authoring revision while keeping geometry and valid source bindings intact.
       if (before.attachments?.revision===beforeRevision)
