@@ -6,6 +6,9 @@ reaches it. The same take can use RMS measured from the actual output mix to
 set a render effect. The render report records the raw and mapped values on
 every frame.
 
+Use [headless channel routing](channel-routing.md) to compare several
+source clocks and replay an authored route in a graph clip.
+
 ```sh
 ink-studio take render-av organ.av.json --out published
 ```

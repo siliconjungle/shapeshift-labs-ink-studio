@@ -1744,6 +1744,12 @@ const CMD = {
         '  character-motion sample <rig.json> <motion.json> <clip> [--at seconds --out pose.json --free --require-solved]   mix clips and solve contacts',
         '  character-motion edit <rig.json> <motion.json> <edits.json> --out motion.json   edit curve keys or key saved rig controls',
         '  character-motion retarget <rig.json> <motion.json> <clip> <target-rig.json> <plan.json> --out motion.json [--report report.json --require-solved]   bake editable controls with transferred contacts',
+        '  channels discover <plan.json> [--out index.json]   discover animation, audio and simulation channels',
+        '  channels filter <plan.json> <stage> [--out trace.json]   filter a named channel',
+        '  channels blend <plan.json> <stage> [--out trace.json]   combine aligned channels',
+        '  channels resample <plan.json> <stage> [--out trace.json]   change a channel clock',
+        '  channels route <plan.json> [--out controls.json]   publish named frame controls',
+        '  channels run <plan.json> [--out report.json]   publish comparable traces, routes and source clocks',
         '  motion-review <id> [--finding kind-or-id] [--out report.json]  inspect motion findings and focused playback ranges',
         '  clip-sequence <id> [--handoff 0] [--out report.json]  inspect clip instances, retimed cues, and handoffs',
         '  animation-graph <graph.json> [--at seconds] [--inputs file.json] [--out report.json]  inspect poses and event responses',
@@ -1947,6 +1953,7 @@ const CMD = {
         '  graph clip <project.json> --output NAME --from FRAME --to FRAME --out directory',
         '    [--fps N|N/D --warmup FRAMES --cuts FRAME,FRAME --format frames|apng|both|sample --clock file.json --render-options file.json]',
         '    --format sample [--capture-options file.json]   retain a reusable visual span with aligned planes',
+        '    --controls routes.json [--controls-input NAME]   replay named controls at the exact frame rate',
         '  graph batch <project.json> <cases-or-sweep.json> [--out directory]   run named cases or a Cartesian sweep',
         '    --resume --out directory   keep verified cases and retry failures',
         '    --progress ndjson   stream case and batch records',
@@ -3648,6 +3655,9 @@ const CMD = {
   },
   'character-motion'() {
     return require('./character-motion.js').command(pos,opt,lib());
+  },
+  channels() {
+    return require('./channel-tools.js').command(pos,opt,lib());
   },
   'pose-review'() {
     const w = build(pos[0]);
