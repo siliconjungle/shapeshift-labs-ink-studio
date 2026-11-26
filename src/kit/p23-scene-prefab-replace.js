@@ -75,6 +75,15 @@
     let invalid = false;
     for (const {instance,target:origin} of selected) {
       const link = before.instances.get(instance), from = link.instance.prefab;
+      if (from !== to && link.mirror) {
+        report.conflicts.push({instance,reason:'commit-live-mirror-first',source:link.mirror.source});
+        continue;
+      }
+      const dependent = [...before.instances].filter(([,row]) => row.mirror?.source===instance).map(([key])=>key);
+      if (from !== to && dependent.length) {
+        report.conflicts.push({instance,reason:'dependent-live-mirror',dependents:dependent});
+        continue;
+      }
       const move = migration(own(migrations,from) ? migrations[from] : undefined,link.definition,target);
       report.anchors.push({kind:'origin',instance,status:'retained',at:origin});
       if (from === to) {

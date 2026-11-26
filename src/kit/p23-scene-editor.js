@@ -513,8 +513,8 @@
       else document.transact('Edit prefab instance ' + id, write);
     }
 
-    function stagePrefabReparent(request) {
-      const before = snapshot(), {patch,report} = A.scenePrefabs.planReparent(before,buildEnv,request);
+    function stagePrefabPlacement(plan, request) {
+      const before = snapshot(), {patch,report} = plan(before,buildEnv,request);
       if (!patch) return {before,report};
       const candidate = {...before,...patch};
       const problems = DIO.check(candidate,buildEnv).filter(row => row.level === 'error');
@@ -528,21 +528,41 @@
     }
 
     function planPrefabReparent(request) {
-      return stagePrefabReparent(request).report;
+      return stagePrefabPlacement(A.scenePrefabs.planReparent,request).report;
     }
 
-    function previewPrefabReparent(request, {time=0} = {}) {
+    function previewPrefabPlacement(plan, request, {time=0} = {}) {
       if (!Number.isFinite(time) || time < 0) throw new RangeError('Prefab preview time must be nonnegative');
-      const {before,candidate,report} = stagePrefabReparent(request);
+      const {before,candidate,report} = stagePrefabPlacement(plan,request);
       const env = {...buildEnv,parameterInputs:{...buildEnv.parameterInputs,time}};
       return {report,before:DIO.build(before,env),after:candidate && DIO.build(candidate,env)};
     }
 
-    function reparentPrefab(request) {
-      const {candidate,report} = stagePrefabReparent(request);
-      if (!candidate) throw Object.assign(new RangeError('Prefab reparent needs review'),{report});
+    function previewPrefabReparent(request, settings) {
+      return previewPrefabPlacement(A.scenePrefabs.planReparent,request,settings);
+    }
+
+    function applyPrefabPlacement(plan, request, message) {
+      const {candidate,report} = stagePrefabPlacement(plan,request);
+      if (!candidate) throw Object.assign(new RangeError(message),{report});
       if (report.changed) setPrefabInstance(report.instance,candidate.instances[report.instance]);
       return report;
+    }
+
+    function reparentPrefab(request) {
+      return applyPrefabPlacement(A.scenePrefabs.planReparent,request,'Prefab reparent needs review');
+    }
+
+    function planPrefabMirror(request) {
+      return stagePrefabPlacement(A.scenePrefabs.planMirror,request).report;
+    }
+
+    function previewPrefabMirror(request, settings) {
+      return previewPrefabPlacement(A.scenePrefabs.planMirror,request,settings);
+    }
+
+    function applyPrefabMirror(request) {
+      return applyPrefabPlacement(A.scenePrefabs.planMirror,request,'Prefab mirror needs review');
     }
 
     function stagePrefabCombination(request) {
@@ -1576,7 +1596,7 @@
       if (settings.from===undefined) return {report:freeze(report)};
       const {spec,instances}=A.scenePrefabs.expand(scene,buildEnv), owners=new Map();
       for (const [instance,link] of instances) for (const [member,mesh] of link.meshes)
-        owners.set(mesh.object,{...mesh,instance,member,revision:link.revision});
+        owners.set(mesh.object,{...mesh,instance,member,revision:link.revision,mirror:link.mirror});
       const direct=Object.create(null), overrides=Object.create(null);
       for (const object of Object.keys(spec.topologyMeshes ?? {}).sort()) {
         const owner=owners.get(object), expanded=spec.topologyMeshes[object], row=owner?.row ?? expanded;
@@ -1588,7 +1608,7 @@
         report.changedFaces+=effect.faces.filter(face=>face.changedCorners).length;
         report.matchedCorners+=effect.matchedCorners;
         report.changedCorners+=effect.changedCorners;
-        if (!effect.changedCorners) continue;
+        if (!effect.changedCorners || owner?.mirror) continue;
         const mesh=tintedMeshRow(row,painted,effect);
         if (owner) {
           const instance=overrides[owner.instance] ?? scene.instances[owner.instance];
@@ -1831,6 +1851,7 @@
       extractPainting3d: id => A.paintings3d.extract(snapshot(), id),
       placeSculptStamp, planSculptSplit, splitSculpt, planAssemblyStretch, stretchAssembly,
       planPrefabReparent, previewPrefabReparent, reparentPrefab,
+      planPrefabMirror, previewPrefabMirror, applyPrefabMirror,
       planPrefabCombination, previewPrefabCombination, combinePrefabs,
       planPrefabArray, previewPrefabArray, applyPrefabArray,
       planPrefabReplacement, previewPrefabReplacement, replacePrefabs,

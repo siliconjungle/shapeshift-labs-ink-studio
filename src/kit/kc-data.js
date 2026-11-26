@@ -371,6 +371,12 @@
     return affineFrame(basis, scale, offset);
   }
 
+  function reflectionFrame(origin, normal) {
+    const {V} = K;
+    const basis = K.M.id().map((value,i) => value - 2*normal[Math.floor(i/3)]*normal[i%3]);
+    return affineFrame(basis, 1, V.mul(normal,2*V.dot(origin,normal)));
+  }
+
   function inverseFrame(frame) {
     const { M, V } = K;
     const basis = M.tr(frame.basis), scale = 1 / frame.scale;
@@ -391,7 +397,7 @@
     return { translation: jsonVector(mesh.position), rotation: jsonVector([yaw, pitch, roll]), scale, pivot: [0, 0, 0] };
   }
 
-  DIO.solidFrames = Object.freeze({ authored: authoredFrame, inverse: inverseFrame,
+  DIO.solidFrames = Object.freeze({ authored: authoredFrame, reflection: reflectionFrame, inverse: inverseFrame,
     compose: composeFrames, transform: frameTransform, rest(solid) {
       const rigid = authoredFrame(solid.transform, solid.at).mesh;
       return solid.restAffine === undefined ? rigid : K.sceneGraph.compose(K.sceneGraph.transform(solid.restAffine), rigid);
@@ -461,7 +467,7 @@
     return K.authoring.looks.material(surface, settings.lookAsset, catalog);
   }
   const parameterRoots = ['solids', 'roles', 'palette', 'motion', 'light', 'effects', 'finish', 'tap'];
-  function expandAuthoredGeometry(spec) {
+  function expandAuthoredGeometry(spec, time) {
     try {
       spec = K.authoring.sculptGuides.expand(spec).scene;
     } catch (error) {
@@ -469,7 +475,7 @@
       throw error;
     }
     try {
-      return K.authoring.paintings3d.expand(spec);
+      return K.authoring.paintings3d.expand(spec, time);
     } catch (error) {
       error.problems = [{ level: 'error', path: 'paintings3d', problem: error.message, hint: '' }];
       throw error;
@@ -487,7 +493,8 @@
         throw error;
       }
     }
-    if (expanded?.parameterBindings === undefined) return { ...expandAuthoredGeometry(expanded), dataInputs, meshPlacements };
+    if (expanded?.parameterBindings === undefined)
+      return { ...expandAuthoredGeometry(expanded, env?.parameterInputs?.time), dataInputs, meshPlacements };
     try {
       const { parameterBindings, timeline, dataInputs: authoredData, ...base } = expanded;
       const program = K.parameters.prepare(parameterBindings);
@@ -496,7 +503,7 @@
       const inputs = { ...env?.parameterInputs, ...(dataInputs && { dataInputs }) };
       const { document, values } = program.apply(base, inputs);
       const spec = timeline === undefined ? document : { ...document, timeline };
-      return { ...expandAuthoredGeometry(spec), program, values, inputs, dataInputs, meshPlacements };
+      return { ...expandAuthoredGeometry(spec, inputs.time), program, values, inputs, dataInputs, meshPlacements };
     } catch (error) {
       error.problems ??= [{ level: 'error', path: 'parameterBindings', problem: error.message, hint: '' }];
       throw error;
@@ -1772,7 +1779,7 @@
       e.problems = problems;
       throw e;
     }
-    const review = env.assemblyReview, { dataInputs, anchors, layers, looseness, reports } = resolved;
+    const review = env.assemblyReview, { dataInputs, anchors, layers, looseness, boils, reports } = resolved;
     let { spec } = resolved;
     const { timeline, cameraRig, dataMarks, decals } = presentation, dynamics = boundRuntime(source, env, resolved);
     if (review) spec = review.scene(spec);
@@ -2155,8 +2162,10 @@
         else if (k === 'sweep') {
           const relief = guard?.relief, volume = relief?.mode === 'volume', recess = volume && relief.height < 0;
           const band = volume && (recess ? [relief.height, relief.seat] : [-relief.seat, relief.height]);
-          const form = K.procedural.shapeSweeps.prepare(style ? { ...s, looseness: style } : s,
+          const sweep = K.procedural.shapeSweeps.prepare(style ? { ...s, looseness: style } : s,
             { orient, band, loosenessAt: guard?.loosenessAt });
+          const boil = boils.get(s.id);
+          const form = boil ? K.procedural.paintBoil.apply(sweep, boil.plan, s.id, boil.drawing) : sweep;
           const paintOverlay = guard?.pigmentOnly || recess || !volume && (style || form.opacityAt) &&
             !held && !s.hold && !s.carve && !s.ghost && !s.group && !modifiers.length;
           const material = form.opacityAt ? { ...m, opacityAt: form.opacityAt } : m;
@@ -2431,7 +2440,7 @@
       return { meshes, joints, animations };
     }
     const moving = spec.solids.filter(s => s.part), authoredBounds = new Map();
-    const staticBake = cache && !anchors.size && !looseness.size && !moving.length && !effects.length && !spec.tap && !marks &&
+    const staticBake = cache && !anchors.size && !looseness.size && !boils.size && !moving.length && !effects.length && !spec.tap && !marks &&
       !presentation.breakables && !S.keepRenderSdf && !st0.finish.paint && !globalThis.INK_DECAL_NEXT &&
       !globalThis.INK_RETAIN_RENDER_SDF && !globalThis.INK_RETAIN_REFERENCE_SDF && !globalThis.INK_RAMPS;
     const bakeKey = staticBake ? cacheAPI.sceneKey(spec, st0,
@@ -2522,6 +2531,12 @@
             spec.light?.surfaceDirection !== undefined && { surfaceLight: spec.light.surfaceDirection }) }
       )
     );
+    const animatedBoils = [...boils.values()].filter(({ plan }) =>
+      plan.drawing === undefined && (!plan.loop || plan.ends.length > 1));
+    if (animatedBoils.length) W.paintBoil = {
+      key: animatedBoils.map(row => row.drawing).join('/'),
+      at: time => animatedBoils.map(({ plan }) => K.procedural.paintBoil.state(plan, time).drawing).join('/')
+    };
     if (env.resolveSpriteAtlas && Array.isArray(W.spriteAtlases))
       W.spriteAtlases = W.spriteAtlases.map(placement => typeof placement?.atlas === 'string' ?
         K.sprite.placeAtlas({ ...placement, atlas: env.resolveSpriteAtlas(placement.atlas) }) : placement);

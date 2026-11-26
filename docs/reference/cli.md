@@ -226,7 +226,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   sculpt-guide inspect <scene.json>   report generated copies and placements
   painting-3d plan <scene.json> <placement.json>   validate attachment slots and mark contacts
   painting-3d apply <scene.json> <placement.json> --out scene.json   retain a 3D painting
-  painting-3d update <scene.json> <edit.json> --out scene.json   edit marks, profiles, erasers, order or placement
+  painting-3d update <scene.json> <edit.json> --out scene.json   edit marks, profiles, erasers, boil, order or placement
   painting-3d inspect <scene.json>   report marks and resolved attachments
   painting-3d extract <scene.json> --id painting --out painting.json   export a reusable painting
   painting-cels init <scene.json> --id painting --out clip.json [--fps 12 --playback loop]   start with an editable 3D painting
@@ -234,7 +234,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   painting-cels edit <scene.json> <clip.json> <edit.json> --out clip.json   insert, retime, or edit retained cels
   painting-cels sample <scene.json> <clip.json> --out scene.json [--frame cel-1 | --at seconds]   write one editable cel into the scene
   painting-cels preview <scene.json> <clip.json> --out directory [--frame cel-1 | --at seconds] [--view view.json]   render neighboring poses in one camera
-  painting-cels export <scene.json> <clip.json> --out directory [--view view.json]   render numbered cels and animated PNG
+  painting-cels export <scene.json> <clip.json> --out directory [--view view.json]   render held exposures and animated PNG
   paint-survival review <scene.json> <plan.json> --out directory   compare painted fallbacks across native grids and angles
   paint-survival apply <scene.json> <plan.json> <review.json> --case angle/resolution --out scene.json   accept one reviewed paint variant
   sculpt-spray plan <scene.json> <brush.json>   capture receivers for a volumetric paint brush
@@ -317,6 +317,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology transform <mesh-or-scene.json> <random-receipt.json> --replay [--object id] [--out file] [--report file]   replay recorded positions on the source revision
   mesh-topology health <mesh-or-scene.json> [settings.json] [--object id] [--out report.json]   locate local topology and geometry problems
   mesh-topology overlaps <mesh-or-scene.json> [settings.json] [--object id] [--part id] [--out report.json | --selection-out faces.json]   review same-facing coincident polygons
+  mesh-topology mirror-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   link or commit a mirrored visual prefab placement
   mesh-topology reparent-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   change a visual prefab parent and hold world placement
   mesh-topology combine-prefab <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   combine linked placements into a reusable prefab
   mesh-topology array-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   duplicate a linked prefab on a retained XYZ array

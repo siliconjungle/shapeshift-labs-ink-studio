@@ -50,6 +50,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.packing` | namespace |  |  |
 | `KIT.procedural.packing.apollonian` | function | `({ depth = 7, center = [0, 0], radius = 1, rotation = 0, seeds = regular(), minRadius = .001, maxCircles = 6000 } = {})` | [guide](../hyperbolic-mosaics.md), [guide](../hyperbolic-mosaics.md#apollonian-packing), [source](../../src/kit/p42-apollonian-packing.js) |
 
+## KIT.procedural.paintBoil
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.paintBoil` | namespace |  |  |
+| `KIT.procedural.paintBoil.apply` | function | `(form, plan, mark, drawing)` | [source](../../src/kit/p26i-paint-boil.js) |
+| `KIT.procedural.paintBoil.prepare` | function | `(raw)` | [source](../../src/kit/p26i-paint-boil.js) |
+| `KIT.procedural.paintBoil.state` | function | `(plan, time = 0, celTime)` | [source](../../src/kit/p26i-paint-boil.js) |
+
 ## KIT.procedural.paintLooseness
 
 | Member | Kind | Signature or value | Guides and source |
@@ -2034,6 +2043,36 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.signalRecovery.operations["fx.signalRecovery"].outputs.status` | value | `string = "record"` |  |
 | `KIT.procedural.signalRecovery.operations["fx.signalRecovery"].outputs.value` | value | `string = "any"` |  |
 | `KIT.procedural.signalRecovery.operations["fx.signalRecovery"].time` | value | `boolean = true` |  |
+
+## KIT.procedural.smartMasks
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.smartMasks` | namespace |  |  |
+| `KIT.procedural.smartMasks.evaluate` | function | `(recipe, bakes, options = {}, add = null, remove = null)` | [source](../../src/kit/paq-smart-masks.js) |
+| `KIT.procedural.smartMasks.names` | value | `array` |  |
+| `KIT.procedural.smartMasks.operations` | namespace |  |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"]` | namespace |  |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].description` | value | `string = "Generate and inspect a wear or environment mask from aligned geometry bakes and authored corrections."` |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].inputs` | namespace |  |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].inputs.add` | namespace |  |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].inputs.add.default` | value | `null` |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].inputs.add.description` | value | `string = "Optional aligned unitless grayscale correction image."` |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].inputs.add.type` | value | `string = "any"` |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].inputs.bakes` | namespace |  |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].inputs.bakes.description` | value | `string = "Named typed bakes for one UV grid."` |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].inputs.bakes.type` | value | `string = "record"` |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].inputs.options` | namespace |  |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].inputs.options.default` | namespace |  |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].inputs.options.type` | value | `string = "record"` |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].inputs.recipe` | value | `string = "string"` |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].inputs.remove` | alias | `Alias of KIT.procedural.smartMasks.operations["material.smartMask"].inputs.add` |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].outputs` | namespace |  |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].outputs.evidence` | value | `string = "grayImage"` |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].outputs.raw` | value | `string = "grayImage"` |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].outputs.report` | value | `string = "record"` |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].outputs.value` | value | `string = "grayImage"` |  |
+| `KIT.procedural.smartMasks.operations["material.smartMask"].run` | function | `({ recipe, bakes, options, add, remove })` | [source](../../src/kit/paq-smart-masks.js) |
 
 ## KIT.procedural.snapping
 

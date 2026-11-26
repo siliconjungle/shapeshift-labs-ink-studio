@@ -26,13 +26,16 @@
         revision !== undefined && (!Number.isSafeInteger(revision) || revision < 1))
       throw new TypeError('Choose a prefab instance, ordered edits, and an optional source revision');
     if (!own(scene.instances,instance)) throw new RangeError('Unknown visual prefab instance '+instance);
-    const entry = scene.instances[instance], prefab = entry.prefab;
+    const entry = scene.instances[instance], context = entry.mirror ? scene.instances[entry.mirror.source] : entry;
+    const {prefab} = context;
     const inline = own(scene.prefabs,prefab), definition = (inline ? scene.prefabs : env.prefabs)[prefab];
     if (revision !== undefined && revision !== definition.revision) throw new RangeError('Stale prefab source revision');
 
     const report = {format,version:1,scene:scene.id,instance,prefab,source:inline ? 'inline' : 'library',
       beforeRevision:definition.revision,afterRevision:definition.revision,sourcePaths:[],meshEdits:[],
       instances:[],conflicts:[],canCommit:true,changed:false};
+    if (entry.mirror) return {report:freeze({...report,canCommit:false,
+      conflicts:[{reason:'edit-live-mirror-source',source:entry.mirror.source}]})};
     const properties = definitionEdits(definition,sourceEdits);
     report.sourcePaths = properties.paths;
     const updated = {...definition};
@@ -42,8 +45,8 @@
       else delete updated[table];
     }
     if (edits.length) {
-      const {overrides,meshOverrides,...context} = entry;
-      const draft = {...scene,instances:{...scene.instances,[instance]:context}};
+      const {overrides,meshOverrides,...base} = entry;
+      const draft = {...scene,instances:{...scene.instances,[instance]:base}};
       const planned = prefabEditIsolation.plan(draft,env,{instance,faces,edits},requireShapeOwner,authoredCamera,{source:true});
       report.meshEdits = planned.report.edits;
       if (!planned.report.canCommit)
@@ -73,6 +76,16 @@
       if (result.invalid) invalid = true;
       else instances[id] = result.entry;
     }
+    for (const [id,{mirror}] of Object.entries(instances))
+      if (mirror && instances[mirror.source]?.prefab === prefab) {
+        const seed = report.instances.find(row => row.instance === mirror.source);
+        if (seed) {
+          const member = object => id+object.slice(mirror.source.length);
+          report.instances.push({...seed,instance:id,mirrorOf:mirror.source,
+            objects:(seed.objects ?? []).map(member),
+            members:seed.members.map(row=>({...row,object:member(row.object)}))});
+        }
+      }
     const library = inline ? undefined : {...env.prefabs,[prefab]:updated};
     const candidate = inline ? {...scene,prefabs:{...scene.prefabs,[prefab]:updated},instances} : {...scene,instances};
     const bindings = inline ? env : {...env,prefabs:library};

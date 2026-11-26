@@ -2,14 +2,14 @@
 (function (K) {
   const A = K.authoring, DIO = K.diorama, { M,V } = K;
   const tables = ['solids', 'parts', 'groups', 'motion', 'effects', 'topologyMeshes'];
-  const { authored, compose, inverse, transform } = DIO.solidFrames;
+  const { authored, compose, inverse, reflection, transform } = DIO.solidFrames;
 
   function scopedSolid(solid, name, tasks, { primary, key, placement, prefab }) {
     const next = { ...solid };
     if (primary || solid.id !== undefined) next.id = name(primary ? key : solid.id);
     if (primary) {
       next.prefabs = [prefab, ...new Set((solid.prefabs ?? []).filter(value => value !== prefab))];
-      if (placement && solid.restAffine !== undefined)
+      if (placement && (solid.restAffine !== undefined || reflected(placement)))
         next.restAffine = K.sceneGraph.compose(placement.mesh, K.sceneGraph.transform(solid.restAffine));
       else if (placement) next.transform = transform(compose(placement, authored(solid.transform, solid.at)));
     }
@@ -55,7 +55,7 @@
       const frame = K.sceneGraph.transform(raw), columns = M.tr(frame.matrix);
       const axes = [columns.slice(0,3),columns.slice(3,6),columns.slice(6,9)];
       const scale = V.len(axes[0]), epsilon = scale*scale*1e-8;
-      check(M.det(frame.matrix)>0 && axes.every((axis,i) => axes.every((other,j) =>
+      check(axes.every((axis,i) => axes.every((other,j) =>
         Math.abs(V.dot(axis,other)-(i===j ? scale*scale : 0))<=epsilon)),
       'Prefab mesh frame needs a rigid orientation and uniform scale on '+member);
       return [member,frame];
@@ -67,6 +67,32 @@
     return Object.assign(new Error(DIO.report([problem])), {problems:[problem]});
   }
 
+  const reflected = frame => M.det(frame.basis) < 0;
+  const flipX = () => reflection([0,0,0],[1,0,0]);
+  const dependency = entry => entry.mirror?.source ?? entry.parent;
+  const objects = link => [...link.solids,...Array.from(link.meshes.values(),row => row.object)];
+
+  function mirrorPlane(raw) {
+    const {record} = K.world.data;
+    const xyz = value => Array.isArray(value) && value.length===3 && Array.from(value).every(Number.isFinite);
+    const {origin,normal} = raw ?? {};
+    if (!record(raw) || Object.keys(raw).some(key => !['origin','normal'].includes(key)) ||
+        !xyz(origin) || !xyz(normal) || !normal.some(Boolean) || !Number.isFinite(Math.hypot(...normal)))
+      throw new TypeError('A mirror plane needs a finite origin and a nonzero XYZ normal');
+    const length = Math.hypot(...normal);
+    return {origin:origin.slice(),normal:normal.map(value => value/length || 0)};
+  }
+
+  function savedPlacement(frame, pivot) {
+    const flip = reflected(frame), proper = flip ? compose(frame,flipX()) : frame;
+    const raw = transform(proper);
+    if (pivot) {
+      raw.pivot = pivot.slice();
+      raw.translation = V.sub(proper.point(pivot),pivot);
+    }
+    return {transform:raw,...(flip && {flipX:true})};
+  }
+
   function placements(instances = {}) {
     const {check,id,own,record} = K.world.data;
     check(record(instances),'Expected an instance map');
@@ -75,8 +101,24 @@
       check(id(key) && record(entry),'Invalid visual prefab instance '+key);
       if (entry.parent !== undefined && (!id(entry.parent) || !own(instances,entry.parent)))
         throw placementError(key,'parent','Parent must name another visual prefab instance');
+      if (entry.mirror !== undefined) {
+        try {
+          const rule = entry.mirror;
+          check(Object.keys(entry).length===1 && record(rule) && Object.keys(rule).every(key => ['source','plane'].includes(key)),
+            'A live mirror derives its placement and overrides from its source');
+          check(id(rule.source) && own(instances,rule.source) && instances[rule.source]?.mirror === undefined,
+            'A live mirror needs an authored prefab source');
+          const {origin,normal} = mirrorPlane(rule.plane);
+          locals.set(key,reflection(origin,normal));
+        } catch (error) {
+          throw placementError(key,'mirror',error.message);
+        }
+        continue;
+      }
       try {
-        locals.set(key,entry.transform === undefined ? null : authored(entry.transform));
+        check(entry.flipX === undefined || entry.flipX === true,'An independent reflected placement uses flipX: true');
+        const local = entry.transform === undefined ? null : authored(entry.transform);
+        locals.set(key,entry.flipX ? (local ? compose(local,flipX()) : flipX()) : local);
       } catch (error) {
         throw placementError(key,'transform',error.message);
       }
@@ -85,14 +127,14 @@
       const chain = new Set();
       let current = key;
       while (current !== undefined && !world.has(current)) {
-        if (chain.has(current)) throw placementError(current,'parent','Prefab parent cycle: '+[...chain,current].join(' -> '));
+        if (chain.has(current)) throw placementError(current,'parent','Prefab parent cycle (including mirror links): '+[...chain,current].join(' -> '));
         chain.add(current);
-        current = instances[current].parent;
+        current = dependency(instances[current]);
       }
       let frame = world.get(current);
       for (const name of [...chain].reverse()) {
         const local = locals.get(name);
-        frame = frame && local ? compose(frame,local) : local ?? frame;
+        frame = frame && local ? (instances[name].mirror ? compose(local,frame) : compose(frame,local)) : local ?? frame;
         if (frame && (!Number.isFinite(frame.scale) || frame.scale <= 0 || !frame.mesh.position.every(Number.isFinite)))
           throw placementError(name,'transform','World transform exceeds numeric precision');
         world.set(name,frame ?? null);
@@ -117,13 +159,14 @@
     if (!own(scene.instances,instance)) throw new RangeError('Unknown visual prefab instance '+instance);
     const expanded = expand(scene,env), entry = scene.instances[instance];
     const world = expanded.instances.get(instance).placement ?? authored();
-    const before = {parent:entry.parent ?? null,transform:clone(entry.transform ?? null),world:world.mesh};
+    const before = {parent:entry.parent ?? null,transform:clone(entry.transform ?? null),...(entry.flipX && {flipX:true}),world:world.mesh};
     const changed = parent !== before.parent;
     const report = {format:'ink-studio/prefab-reparent',version:1,scene:scene.id,instance,before,
       requestedParent:parent,changed,canCommit:false,instances:[],conflicts:[]};
     const finish = patch => ({patch,report:freeze(report)});
     const children = new Map();
-    for (const [key,{parent}] of Object.entries(scene.instances)) {
+    for (const [key,entry] of Object.entries(scene.instances)) {
+      const parent = dependency(entry);
       if (!children.has(parent)) children.set(parent,[]);
       children.get(parent).push(key);
     }
@@ -132,8 +175,12 @@
     for (const id of subtree) {
       const link = expanded.instances.get(id);
       const frame = (link.placement ?? authored()).mesh;
-      report.instances.push({instance:id,objects:[...link.solids,...Array.from(link.meshes.values(),row=>row.object)],
+      report.instances.push({instance:id,objects:objects(link),
         beforeWorld:frame});
+    }
+    if (entry.mirror) {
+      report.conflicts.push({reason:'commit-live-mirror-first',instance});
+      return finish();
     }
     if (parent !== null && !own(scene.instances,parent)) {
       report.conflicts.push({reason:'unknown-parent',parent});
@@ -148,12 +195,8 @@
     if (changed) {
       const carrier = expanded.instances.get(parent)?.placement;
       const relative = carrier ? compose(inverse(carrier),world) : world;
-      const next = {...entry,transform:transform(relative)};
-      if (entry.transform?.pivot) {
-        const pivot = entry.transform.pivot;
-        next.transform.pivot = pivot;
-        next.transform.translation = V.sub(relative.point(pivot),pivot);
-      }
+      const {flipX:previousFlip,...rest} = entry;
+      const next = {...rest,...savedPlacement(relative,entry.transform?.pivot)};
       if (parent === null) delete next.parent;
       else next.parent = parent;
       instances[instance] = next;
@@ -170,7 +213,7 @@
       row.afterWorld = actual.mesh;
       if (!sameFrame({mesh:row.beforeWorld},actual)) report.conflicts.push({reason:'world-placement-drift',instance:row.instance});
     }
-    report.after = {parent,transform:clone(instances[instance].transform ?? null),world:report.instances[0].afterWorld};
+    report.after = {parent,transform:clone(instances[instance].transform ?? null),...(instances[instance].flipX && {flipX:true}),world:report.instances[0].afterWorld};
     report.canCommit = !report.conflicts.length;
     return finish(report.canCommit ? {instances} : undefined);
   }
@@ -209,11 +252,13 @@
       motion: [...(rest.motion ?? [])], effects: [...(rest.effects ?? [])] };
     const links = new Map(), meshPlacements = new Map(), framesByInstance = placements(instances);
     const offset = origin?.some(Boolean) ? authored({translation:V.mul(origin,-1)}) : null;
-    for (const [key, instance] of Object.entries(instances)) {
+    for (const [key, raw] of Object.entries(instances)) {
       if (only && !only.has(key)) continue;
       try {
+        const seed = raw.mirror && instances[raw.mirror.source];
+        const instance = seed ? {prefab:seed.prefab,overrides:seed.overrides,meshOverrides:seed.meshOverrides} : raw;
         check(id(key) && record(instance) &&
-          Object.keys(instance).every(field => ['prefab', 'parent', 'transform', 'overrides', 'meshOverrides'].includes(field)) &&
+          Object.keys(instance).every(field => ['prefab', 'parent', 'transform', 'overrides', 'meshOverrides','flipX'].includes(field)) &&
           available.has(instance.prefab), 'Unknown visual prefab or invalid instance');
         const {definition,frames} = available.get(instance.prefab);
         for (const sheet of definition.usesTilesets ?? [])
@@ -283,6 +328,7 @@
           const next = { ...row, part: name(row.part) };
           if (placement) {
             next.axis = placement.direction(row.axis ?? [0, 1, 0]);
+            if (reflected(placement) && ['turn','spin'].includes(row.do)) next.axis = V.mul(next.axis,-1);
             if (row.do === 'bob') {
               next.amount = (row.amount ?? .3) * placement.scale;
               if (row.keys) next.keys = row.keys.map((value, i) => i % 2 ? value * placement.scale : value);
@@ -305,7 +351,7 @@
           }
           spec.effects.push(next);
         }
-        links.set(key, { instance, definition, resolved, revision: definition.revision, solids: ids, meshes, placement, frame: placement?.mesh });
+        links.set(key, { instance, definition, resolved, revision: definition.revision, solids: ids, meshes, placement, frame: placement?.mesh, ...(raw.mirror && {mirror:raw.mirror}) });
       } catch (error) {
         throw placementError(key,null,error.message);
       }
@@ -313,9 +359,57 @@
     return { spec, instances: links, meshPlacements };
   }
 
+  function planMirror(scene, env, request) {
+    const {id,own,record,equal} = K.world.data, {clone,freeze} = K.procedural.data;
+    const {action='link',instance,source,plane} = request ?? {};
+    if (!record(request) || Object.keys(request).some(key => !['action','instance','source','plane'].includes(key)) ||
+        !id(instance) || !['link','commit'].includes(action) ||
+        (action === 'link' ? !id(source) : source !== undefined || plane !== undefined))
+      throw new TypeError('Link a mirror with source and instance IDs, or commit the named live mirror');
+    const before = expand(scene,env), current = before.instances.get(instance), rows = {...scene.instances};
+    const report = {format:'ink-studio/prefab-mirror',version:1,scene:scene.id,action,instance,
+      source:source ?? current?.mirror?.source ?? null,instances:[],conflicts:[],changed:false,canCommit:false};
+    const finish = patch => ({patch,report:freeze(report)});
+    const block = (reason, details={}) => {
+      report.conflicts.push({reason,...details});
+      return finish();
+    };
+    if (action === 'link') {
+      if (!own(rows,source) || rows[source].mirror) return block('choose-an-authored-source');
+      if (instance===source || current && current.mirror?.source !== source) return block('instance-in-use');
+      const working = plane === undefined && A.constructionPlane.forScene(scene);
+      const guide = mirrorPlane(working ? {origin:working.plane.origin,normal:working.axes[2]} : plane);
+      rows[instance] = {mirror:{source,plane:guide}};
+      report.plane = guide;
+    } else {
+      if (!current?.mirror) return block('instance-is-not-a-live-mirror');
+      const {prefab,overrides,meshOverrides} = current.instance;
+      rows[instance] = {prefab,...savedPlacement(current.placement),
+        ...(overrides && {overrides}),...(meshOverrides && {meshOverrides})};
+      report.plane = clone(current.mirror.plane);
+    }
+    try {
+      const after = expand({...scene,instances:rows},env);
+      for (const name of [report.source,instance]) {
+        const from = before.instances.get(name), to = after.instances.get(name);
+        report.instances.push({instance:name,objects:[...new Set([...(from ? objects(from) : []),...objects(to)])],
+          beforeWorld:from ? from.frame ?? authored().mesh : null,afterWorld:to.frame ?? authored().mesh});
+      }
+      if (action === 'commit' && !sameFrame(current.placement,after.instances.get(instance).placement))
+        return block('world-placement-drift');
+      report.changed = !equal(scene.instances,rows);
+      report.canCommit = true;
+      return finish({instances:rows});
+    } catch (error) {
+      report.problems = error.problems ?? [{level:'error',problem:error.message}];
+      return finish();
+    }
+  }
+
   function review(source, before, after) {
     const {equal, own, selector} = K.world.data;
-    return Object.entries(source.instances ?? {}).flatMap(([id, instance]) => {
+    return Object.entries(source.instances ?? {}).flatMap(([id, raw]) => {
+      const instance = raw.mirror ? source.instances[raw.mirror.source] : raw;
       const {prefab} = instance;
       const from = source.prefabs?.[prefab] ?? before?.[prefab], to = source.prefabs?.[prefab] ?? after?.[prefab];
       if (!from || !to || !(from.generation || to.generation) || equal(from, to)) return [];
@@ -355,5 +449,5 @@
     return authored(transform).point([0, 0, 0]);
   }
 
-  A.scenePrefabs = Object.freeze({ expand, placements, planReparent, review, origin, checkProvenance, tilesetRequirements, indexedTargets });
+  A.scenePrefabs = Object.freeze({ expand, placements, planReparent, planMirror, review, origin, checkProvenance, tilesetRequirements, indexedTargets });
 })(KIT);

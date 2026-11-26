@@ -840,7 +840,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.meshTopologyScene.transferAttachments` | function | `(row, patch, settings, projection)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.uvAtlases` | function | `(scene,row,selector,{tileGrid=false} = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.paintings3d` | namespace |  |  |
-| `KIT.authoring.paintings3d.expand` | function | `(source)` | [source](../../src/kit/p23a-paintings-3d.js) |
+| `KIT.authoring.paintings3d.expand` | function | `(source, time = 0)` | [source](../../src/kit/p23a-paintings-3d.js) |
 | `KIT.authoring.paintings3d.extract` | function | `(scene, id)` | [source](../../src/kit/p23a-paintings-3d.js) |
 | `KIT.authoring.paintings3d.format` | value | `string = "ink-studio/painting-3d"` |  |
 | `KIT.authoring.paintings3d.revise` | function | `(scene, input, update = false)` | [source](../../src/kit/p23a-paintings-3d.js) |
@@ -894,6 +894,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.scenePrefabs.indexedTargets` | function | `(scene,before,after,mapAddress = (instance,table,name) => [instance,name])` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.origin` | function | `(transform)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.placements` | function | `(instances = {})` | [source](../../src/kit/p23-scene-prefabs.js) |
+| `KIT.authoring.scenePrefabs.planMirror` | function | `(scene, env, request)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.planReparent` | function | `(scene, env, request)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.review` | function | `(source, before, after)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.tilesetRequirements` | function | `(definition, meshes)` | [source](../../src/kit/p23-scene-prefabs.js) |
@@ -1770,6 +1771,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.diorama.solidFrames.authored` | function | `(raw, fallback)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidFrames.compose` | function | `(outer, inner)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidFrames.inverse` | function | `(frame)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
+| `KIT.diorama.solidFrames.reflection` | function | `(origin, normal)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidFrames.rest` | function | `(solid)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidFrames.transform` | function | `({ basis, scale, mesh })` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidTransform` | function | `(value)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
