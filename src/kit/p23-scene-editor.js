@@ -1011,6 +1011,13 @@
       return freeze(K.meshTopology.uv.inspect(row.document,uvSet,{atlas,atlasFor}));
     }
 
+    function selectMeshUV(object, query, {part} = {}) {
+      const row = meshTopology(object,part);
+      const atlasFor = query?.atlas?.texel === undefined ? undefined :
+        A.meshTopologyScene.uvAtlases(snapshot(),row,query.uvSet ?? 0);
+      return K.meshTopology.uv.select(row.document,query,{atlasFor});
+    }
+
     function planMeshUV(object, request, { part } = {}) {
       return K.meshTopology.uv.plan(meshTopology(object, part).document, request);
     }
@@ -1218,6 +1225,7 @@
       planMeshAttachmentTransfer,
       transferMeshAttachments,
       inspectMeshUV,
+      selectMeshUV,
       planMeshUV,
       editMeshUV,
       inspectMeshModifiers,

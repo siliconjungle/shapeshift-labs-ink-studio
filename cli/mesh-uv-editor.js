@@ -9,7 +9,8 @@ const { viewSettings, worldFor } = require('./mesh-native-view.js');
 
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const options = {
-  layout: ['object','out','uv-set','channel','atlas'], select: ['object','out','topology-out','view','preview','uv-set','channel'],
+  layout: ['object','out','uv-set','channel','atlas'],
+  select: ['object','out','topology-out','topology-domain','view','preview','uv-set','channel'],
   edit: ['object','out','view','preview','report','selection','uv-set','channel']
 };
 const imageNames = ['atlas-before.png', 'model-before.png', 'atlas-after.png', 'model-after.png', 'comparison.png'];
@@ -21,6 +22,15 @@ const rect = (rect, color) => ({ type: 'rect', rect, color });
 const line = (points, color, width = 1) => ({ type: 'path', points, color, width });
 const text = (text, at, color = '#dce8ee', size = 10) => ({ type: 'text', text, at, size, color });
 const center = (p, n) => [Math.round(p[0]) - n, Math.round(p[1]) - n, n * 2 + 1, n * 2 + 1];
+const regionSelection = selection=>selection?.domain === 'faces' || selection?.domain === 'islands';
+const sideSelection = selection=>{
+  const sides = new Map();
+  for (const {edge,face} of selection?.edgeSides ?? []) {
+    if (!sides.has(edge)) sides.set(edge,[]);
+    sides.get(edge).push(face);
+  }
+  return sides;
+};
 
 function composite(w, h, layers, draw, kit) {
   const plan = kit.KIT.frameComposite.prepare({ layers: [...layers, { draw }] }, w, h, 1);
@@ -74,6 +84,7 @@ function atlas(layout, material, selection, settings, kit, paint) {
   const faces = new Set(layout.faces.filter(row => row.material === material).map(row => row.id));
   const selected = new Set(selection?.faces), selectedEdges = new Set(selection?.domain === 'edges' ? selection.edges : []);
   const selectedCorners = new Set(selection?.domain === 'corners' ? selection.corners : []);
+  const selectedSides = sideSelection(selection);
   const chartColors = new Map(layout.islands.map((row, i) => [row.id, tints[i % tints.length]]));
   const sampleEvery = Math.max(1, Math.ceil(faces.size / 4000));
   const layers = paint ? [{ source: paint, rect: [...start, ...size] }] : [];
@@ -85,18 +96,20 @@ function atlas(layout, material, selection, settings, kit, paint) {
   let step = 0;
   for (const row of layout.faces) if (faces.has(row.id) && (step++ % sampleEvery === 0 || selected.has(row.id))) {
     const points = row.corners.map(id => at(corners.get(id).uv));
-    if (selected.has(row.id)) {
+    if (selected.has(row.id) && regionSelection(selection)) {
       highlights.push({ type: 'polygon', points, fill: paint ? '#75e2c84d' : '#357c75' },
         line([...points, points[0]], ink.selected, 2));
     } else if (!paint) draw.push({ type: 'polygon', points, fill: chartColors.get(row.island) });
   }
   for (const [i, edge] of layout.edges.entries()) if (i % sampleEvery === 0 || selectedEdges.has(edge.id) || edge.authored) {
-    const color = selectedEdges.has(edge.id) ? ink.selected : ink[edge.kind];
-    for (const side of edge.sides) if (faces.has(side.face)) draw.push(line(side.uv.map(at), color, selectedEdges.has(edge.id) ? 2 : 1));
+    for (const side of edge.sides) if (faces.has(side.face)) {
+      const marked = selectedEdges.has(edge.id) && (selectedSides.get(edge.id)?.includes(side.face) ?? true);
+      draw.push(line(side.uv.map(at),marked ? ink.selected : ink[edge.kind],marked ? 2 : 1));
+    }
   }
   for (const highlight of highlights) draw.push(highlight);
   for (const corner of corners.values()) if (faces.has(corner.face) && (corner.pinned || selectedCorners.has(corner.id)))
-    draw.push(rect(center(at(corner.uv), corner.pinned ? 2 : 1), corner.pinned ? ink.pin : ink.selected));
+    draw.push(rect(center(at(corner.uv),2),selectedCorners.has(corner.id) ? ink.selected : ink.pin));
   return composite(w, h, layers, draw, kit);
 }
 
@@ -108,6 +121,7 @@ function model(layout, { frame, mesh, camera }, selection, kit, visiblePixels) {
   for (let i = 0; i < mapped.faceAt.length; i++) if (selectedAt(i)) {
     const face = mapped.faces[mapped.faceAt[i]], x = i % w;
     if (visiblePixels) visiblePixels.set(face, visiblePixels.get(face) + 1);
+    if (!regionSelection(selection)) continue;
     const outline = visiblePixels && (x === 0 || x === w - 1 ||
       !selectedAt(i - 1) || !selectedAt(i + 1) || !selectedAt(i - w) || !selectedAt(i + w));
     const tint = outline ? [117, 226, 200] : [93, 205, 179];
@@ -132,21 +146,25 @@ function model(layout, { frame, mesh, camera }, selection, kit, visiblePixels) {
   const points = new Map(K.meshTopology.sourceDocument(mesh).vertices.map(row => [row.id, project(row.position)]));
   const selectedEdges = new Set(selection?.domain === 'edges' ? selection.edges : []);
   const selectedCorners = new Set(selection?.domain === 'corners' ? selection.corners : []);
+  const selectedSides = sideSelection(selection);
   for (const edge of layout.edges) if (edge.kind === 'seam' || selectedEdges.has(edge.id)) {
     const [a, b] = edge.vertices.map(id => points.get(id));
     if (!a || !b) continue;
-    const faces = edge.sides.map(row => row.face), color = selectedEdges.has(edge.id) ? [117, 226, 200] : [243, 145, 166];
+    const faces = edge.sides.map(row => row.face);
+    const markedFaces = selectedEdges.has(edge.id) ? selectedSides.get(edge.id) ?? faces : [];
     const steps = Math.min((w + h) * 2, Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]))));
     for (let j = 0; j <= steps; j++) {
       const x = Math.round(a[0] + (b[0] - a[0]) * j / steps), y = Math.round(a[1] + (b[1] - a[1]) * j / steps);
-      if (x >= 0 && x < w && y >= 0 && y < h && visible(x, y, faces)) rgb.set(color, (x + y * w) * 3);
+      if (x < 0 || x >= w || y < 0 || y >= h) continue;
+      if (markedFaces.length && visible(x,y,markedFaces)) rgb.set([117,226,200],(x+y*w)*3);
+      else if (edge.kind === 'seam' && visible(x,y,faces)) rgb.set([243,145,166],(x+y*w)*3);
     }
   }
   const draw = [];
   for (const corner of layout.corners) if (corner.pinned || selectedCorners.has(corner.id)) {
     const p = points.get(corner.vertex);
     if (p && visible(Math.round(p[0]), Math.round(p[1]), [corner.face]))
-      draw.push(rect(center(p, corner.pinned ? 2 : 1), corner.pinned ? ink.pin : ink.selected));
+      draw.push(rect(center(p,2),selectedCorners.has(corner.id) ? ink.selected : ink.pin));
   }
   return composite(w, h, [{ source: { w, h, rgb } }], draw, kit);
 }
@@ -219,6 +237,9 @@ function command([action, file, input, ...rest], opt, kit, openEditor) {
       opt.selection && !opt.preview)
     throw new TypeError('Use mesh-uv layout, select, or edit on a retained mesh topology document');
   const { object, out, report, preview, 'topology-out': topologyOut } = opt;
+  const topologyDomain = opt['topology-domain'];
+  if (topologyDomain !== undefined && (!topologyOut || !['match','faces','edges','vertices'].includes(topologyDomain)))
+    throw new TypeError('Use --topology-domain match, faces, edges, or vertices with --topology-out');
   const inputs = [file, input, opt.view, opt.selection].filter(Boolean).map(value => path.resolve(value));
   const paths = preview ? imageNames.map(name => path.resolve(preview, name)) : [];
   const outputs = [...[out, report, topologyOut].filter(Boolean).map(value => path.resolve(value)), ...paths];
@@ -258,12 +279,12 @@ function command([action, file, input, ...rest], opt, kit, openEditor) {
             Object.keys(request.model).some(key => key !== 'pixel'))
           throw new TypeError('Use a UV model query with a domain and native pixel');
         result = UV.pickModel(old.mesh, old.frame, request.model.pixel, request.domain,request.uvSet);
-      } else result = UV.select(document, request);
+      } else result = editor ? editor.selectMeshUV(object,request) : UV.select(document,request);
       value = result;
       if (preview) result.preview = review(document, document, old, old, result, settings, kit, paths, settings.readability,
         { directory: preview, guard: extra => separate([...outputs, ...extra]) });
       if (topologyOut) {
-        const selection = topology.select(document, { domain: 'faces', ids: result.faces });
+        const selection = UV.toTopologySelection(document,result,topologyDomain ?? 'faces');
         files.publishJson(path.resolve(topologyOut), selection, 'A different topology selection already exists at ' + topologyOut);
       }
     } else {
