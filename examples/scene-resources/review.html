@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Meridian Switchboard</title>
+<style>
+:root{color-scheme:dark;--bg:#151b1d;--ink:#eee8da;--gold:#e9b880;--edge:#394849;--mute:#adbfbc;--panel:#202b2d;font:14px/1.4 system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink)}
+main{max-width:1330px;margin:auto;padding:24px clamp(15px,4vw,50px) 24px}
+header{display:flex;align-items:end;justify-content:space-between;gap:15px;flex-wrap:wrap;border-bottom:1px solid var(--edge);padding-bottom:13px;margin-bottom:14px}
+small{color:var(--gold);font:650 11px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.12em}
+h1{font:400 clamp(34px,6vw,67px)/1 Georgia,serif;letter-spacing:-.045em;margin:6px 0 0}
+h2{margin:0 0 9px;font:400 24px/1 Georgia,serif}
+a{color:var(--gold);text-underline-offset:3px}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 305px;gap:12px;align-items:start}
+figure,aside{background:var(--panel);border:1px solid var(--edge);border-radius:4px;margin:0;overflow:hidden}
+nav{display:flex;gap:6px;padding:9px;align-items:center;flex-wrap:wrap}
+button{color:var(--ink);background:#2a393a;border:1px solid #4f6563;padding:6px 9px;border-radius:3px;cursor:pointer}
+button[aria-pressed=true]{background:#5a493b;border-color:#ae8055}
+button:focus-visible,a:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+img{display:block;width:100%;height:auto;background:#152125;aspect-ratio:1.52}
+figcaption{color:var(--mute);font-size:12px;padding:9px 11px}
+aside{padding:12px}
+section+section{margin-top:14px;padding-top:12px;border-top:1px solid var(--edge)}
+dl{display:grid;grid-template-columns:1fr max-content;gap:4px 7px;margin:0;font-size:12px}
+dt{color:var(--mute)}dd{margin:0;color:#bcdfad}dd.fail{color:#ffb39c}
+ul{padding:0;margin:0;list-style:none;font-size:12px}li+li{margin-top:7px}
+li span{display:block;color:var(--mute);font-size:11px}
+@media(max-width:760px){.layout{grid-template-columns:1fr}}
+</style>
+</head>
+<body><main>
+<header><div><small>Ink Studio · Scene resources</small><h1>Meridian Switchboard</h1></div><a href="report.json">Round-trip report</a></header>
+<div class="layout">
+<figure>
+<nav aria-label="Scene previews"><button id="source" type="button">Source GLB</button><button id="reopened" type="button">Reopened USD + MaterialX</button></nav>
+<img id="render" alt="Meridian Switchboard, a teal marine console with a bronze picture bezel">
+<figcaption>Same camera and lighting for both renders. The enamel texture uses UV set 1.</figcaption>
+</figure>
+<aside>
+<section><h2>Round-trip checks</h2><dl id="checks"></dl></section>
+<section><h2>Mesh groups</h2><ul id="groups"></ul></section>
+<section><h2>Resources</h2><ul>
+<li><a href="meridian.usda" download>USD scene</a></li><li><a href="meridian.usdz" download>Packaged USDZ</a></li>
+<li><a href="meridian.mtlx" download>Editable MaterialX</a></li><li><a href="meridian-reopened.glb" download>Reopened GLB</a></li>
+</ul></section>
+</aside></div>
+<script>
+const report=/*SCENE_RESOURCES*/;
+const el=id=>document.getElementById(id);
+const labels={hierarchy:'Hierarchy',transforms:'Local transforms',meshGroups:'Mesh groups',triangleData:'Triangle data',
+  materialSlots:'Material slots',uvSets:'UV sets and coordinates',textureBindings:'Texture bytes and bindings'};
+for(const [key,status] of Object.entries(report.roundTrip)) {
+  const name=document.createElement('dt'),value=document.createElement('dd');
+  name.textContent=labels[key];value.textContent=status?'Passed':'Changed';
+  value.classList.toggle('fail',!status);el('checks').append(name,value);
+}
+for(const group of report.groups) {
+  const row=document.createElement('li'),detail=document.createElement('span');
+  row.textContent=group.name;
+  detail.textContent=group.parts?group.parts.map(part=>part.material).join(' · '):group.parent?'Transform marker':'Root transform';
+  row.append(detail);el('groups').append(row);
+}
+function show(which) {
+  el('render').src=which+'.png';
+  for(const id of ['source','reopened'])el(id).setAttribute('aria-pressed',String(id===which));
+}
+for(const id of ['source','reopened'])el(id).onclick=()=>show(id);
+show('reopened');
+</script>
+</main></body></html>
