@@ -800,6 +800,9 @@ const specialization = {
   'anim.retime': { field: 'group', description: 'Uses the group’s inputs and outputs and adds a timing record. The group cannot declare timing.' }
 };
 const notes = {
+  'material.paint': ['A session affects only the channels it paints or explicitly converts.',
+    'Blend color in linear light. Preserve native float height and flow samples and allow HDR color in a floating linear canvas.',
+    'Paint in texel, top-left UV, world or rest space. Named masks, chart projections, and native flow maps can come from upstream nodes.'],
   bitmapAsset: ['Reads a bitmap resource without converting its native sample precision.',
     'Frame -1 samples the sequence at graph time. Use a frame number or signed UV tile coordinates to select an authored member.'],
   'sdf.bound': ['Overrides the sampling domain. Use sdf.boolean intersection with a shape for a physical cut.'],

@@ -7,6 +7,7 @@ Use the `materialChannels` socket type to pass named rasters through a graph or 
 | `baseColor`, `normal`, `emission` | Three or four |
 | `height`, `roughness`, `metalness`, `ao`, `opacity` | One |
 | `mask.<name>` | One |
+| `flow` | Two signed UV velocity components in a floating-point data map |
 
 The package keeps sample values as supplied. A signed height raster or float normal can pass beside byte pigment without quantization. Metadata is per-map JSON such as `{ "texCoord": 1, "unit": "world" }` or `{ "encoding": "rgb8", "space": "tangent" }`. Graph operations and carriers use the conventions they already expect. For maps with verified layouts, precision and sampling policies, use [typed images](graph-image-types.md#send-images-through-materials-and-legacy-nodes). Extract a grayscale channel from an RGBA source with `raster.channel` before packing scalar maps.
 
@@ -19,6 +20,8 @@ The package keeps sample values as supplied. A signed height raster or float nor
 The version 1 value serializes as `{ format: "ink-studio/material-channels", version: 1, channels }`. Each entry of `channels` contains `raster` and `metadata`. Treat shared buffers as read-only and generate a new buffer for any map you edit. A package holds 1–64 maps. The packet can be exported as graph JSON. Use `material.channel` with standard graph exports for individual maps.
 
 In code the corresponding Toolkit functions are `KIT.procedural.materialChannels.pack`, `KIT.procedural.materialChannels.channel`, and `KIT.procedural.materialChannels.replace`.
+
+Use [material-channel painting](material-channel-paint.md) to apply an editable layer session directly to a packet.
 
 ## Northstar seal demo
 

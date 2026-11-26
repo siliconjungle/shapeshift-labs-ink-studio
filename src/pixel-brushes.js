@@ -153,8 +153,8 @@ const PixelBrushes = (() => {
     }
   }
 
-  function beginDynamicStroke(width,height,raw,emit,grid) {
-    if (!integer(width,1,512) || !integer(height,1,512) || typeof emit !== 'function')
+  function beginDynamicStroke(width,height,raw,emit,grid,large = false) {
+    if (!tools.dimensions(width,height,large) || typeof emit !== 'function')
       throw new TypeError('Brush dynamics need a native canvas and pixel callback');
     const brush = validate(raw), { size } = brush.settings;
     const { stabilization = 0,pressure = [1,1],velocity } = brush.settings.dynamics ?? {};
@@ -221,10 +221,10 @@ const PixelBrushes = (() => {
     return { add,finish };
   }
 
-  function dynamicStroke(width,height,brush,samples,emit,grid) {
+  function dynamicStroke(width,height,brush,samples,emit,grid,large = false) {
     if (!Array.isArray(samples) || !integer(samples.length,1,4096))
       throw new RangeError('A dynamic brush stroke needs 1–4096 samples');
-    const stroke = beginDynamicStroke(width,height,brush,emit,grid);
+    const stroke = beginDynamicStroke(width,height,brush,emit,grid,large);
     for (const sample of samples) stroke.add(sample);
     stroke.finish();
   }

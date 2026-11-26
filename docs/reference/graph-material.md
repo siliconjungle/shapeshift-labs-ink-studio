@@ -56,7 +56,7 @@ Origin: toolkit.
 | Output | `value` | `typedImage` | — | {"layout":"Versioned raster and declared image contract"} |
 | Output | `metadata` | `record` | — | {"layout":"Plain named object"} |
 
-Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes)
+Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes), [guide](../material-channel-paint.md)
 
 Get the runnable example with `ink-studio graph describe material.image --example > example.json`.
 Run it with `ink-studio graph run example.json`.
@@ -112,6 +112,31 @@ Origin: toolkit.
 Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes), [guide](../material-graph-ports.md#read-and-edit-maps)
 
 Get the runnable example with `ink-studio graph describe material.pack --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### material.paint
+
+Apply an editable stroke and layer session to native typed material maps.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `materialChannels` | Required | {"layout":"Versioned named raster channels with independent grids and metadata","minItems":1,"maxItems":64} |
+| Input | `session` | `record` | Required | {"layout":"Plain named object"} |
+| Input | `masks` | `record` | `{}` | {"layout":"Plain named object"} |
+| Input | `charts` | `record` | `{}` | {"layout":"Plain named object"} |
+| Input | `flows` | `record` | `{}` | {"layout":"Plain named object"} |
+| Output | `value` | `materialChannels` | — | {"layout":"Versioned named raster channels with independent grids and metadata","minItems":1,"maxItems":64} |
+| Output | `report` | `record` | — | {"layout":"Plain named object"} |
+
+- A session affects only the channels it paints or explicitly converts.
+- Blend color in linear light. Preserve native float height and flow samples and allow HDR color in a floating linear canvas.
+- Paint in texel, top-left UV, world or rest space. Named masks, chart projections, and native flow maps can come from upstream nodes.
+
+Guides: [guide](../material-channel-paint.md)
+
+Get the runnable example with `ink-studio graph describe material.paint --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### material.replace
