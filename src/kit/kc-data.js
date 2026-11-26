@@ -2937,6 +2937,14 @@
         }
       };
     };
+    function timelineContext(time) {
+      const sampleEnv = time === undefined ? env : { ...env, parameterInputs: { ...env?.parameterInputs, time } };
+      const resolved = resolveParameters(spec, sampleEnv), presentation = { captureChannels: true };
+      const problems = checkResolved(resolved.spec, sampleEnv, presentation, resolved.dataInputs, resolved.meshPlacements)
+        .filter(row => row.level === 'error');
+      if (problems.length) throw new RangeError(DIO.report(problems));
+      return { channel: presentation.captureChannels, scene: resolved.spec, timeline: presentation.timeline, sampleEnv };
+    }
     return {
       id: spec.id,
       name: spec.name || spec.id,
@@ -2944,11 +2952,24 @@
       seed: seed0,
       build,
       recording() {
-        const resolved = resolveParameters(spec, env), presentation = { captureChannels: true };
-        const problems = checkResolved(resolved.spec, env, presentation, resolved.dataInputs, resolved.meshPlacements)
-          .filter(row => row.level === 'error');
-        if (problems.length) throw new RangeError(DIO.report(problems));
-        return K.sceneRecording.bind(spec, presentation.captureChannels);
+        return K.sceneRecording.bind(spec, timelineContext().channel);
+      },
+      poseCapture(time = 0) {
+        const { channel, scene, timeline, sampleEnv } = timelineContext(time);
+        let camera;
+        const cameraAt = () => {
+          const world = DIO.build(spec, sampleEnv);
+          if (world.anim) {
+            world.anim.update(0, 0);
+            if (time) world.anim.update(0, time);
+          }
+          const view = world.cameraRig?.sample(time).camera ?? world.cam;
+          return { ...view, ...CameraLens.resolve(view) };
+        };
+        return K.scenePoses.bind(spec, scene, channel, timeline, time, field => {
+          camera ??= cameraAt();
+          return camera[field];
+        });
       },
       model: (seed, { snapshot, controls, parameterInputs, ...options } = {}) =>
         DIO.build(resolve(seed, snapshot), {

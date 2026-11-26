@@ -426,6 +426,7 @@ All checked-in guides, indexed by title and section headings.
 - [Headless scene editor](../scene-editor.md)
 - [Indoor and outdoor exposure](../scene-exposure.md)
 - [Scene optics](../scene-optics.md)
+- [Capture sparse scene poses](../scene-poses.md)
 - [Scene publishing](../scene-publishing.md)
 - [Record scene manipulation](../scene-recording.md)
 - [Static 3D scene resources](../scene-resources.md)
