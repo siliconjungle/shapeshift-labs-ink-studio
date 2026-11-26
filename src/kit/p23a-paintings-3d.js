@@ -5,7 +5,8 @@
   const record = value => K.world.data.record(value);
   const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
   const name = value => K.world.data.id(value) && /^[a-zA-Z0-9_-]{1,40}$/.test(value);
-  const editable = ['brush', 'poses', 'step', 'blendRadius', 'path', 'pressureResponse', 'looseness', 'mat', 'res', 'transform', 'attachment', 'enabled'];
+  const editable = ['brush', 'poses', 'step', 'blendRadius', 'path', 'pressureResponse', 'looseness', 'direction', 'mat', 'res', 'transform', 'attachment', 'enabled'];
+  const resources = ['profiles', 'flowMaps'];
 
   function resolveBrush(brush, profiles) {
     if (brush?.kind !== 'mark-profile') return brush;
@@ -35,7 +36,7 @@
         throw new TypeError('3D painting placements need unique IDs and a portable painting');
       const { id, painting, bindings = {}, transform } = placement;
       placements.add(id);
-      if (!fields(painting, ['format', 'version', 'id', 'marks', 'profiles']) || painting.format !== format ||
+      if (!fields(painting, ['format', 'version', 'id', 'marks', ...resources]) || painting.format !== format ||
           painting.version !== 1 || !name(painting.id) || !Array.isArray(painting.marks) || painting.marks.length > 256)
         throw new TypeError(id + ' needs a version 1 ' + format + ' document with up to 256 ordered marks');
       if (!record(bindings) || Object.entries(bindings).some(([slot, target]) => !name(slot) || !TargetSelectors.name(target)))
@@ -47,16 +48,25 @@
         try { K.procedural.markProfiles.prepare(profile); }
         catch (error) { throw new RangeError(id + ' profile ' + key + ' — ' + error.message, { cause: error }); }
       }
+      const flowMaps = painting.flowMaps ?? {};
+      if (!record(flowMaps) || painting.flowMaps === null || Object.keys(flowMaps).length > 64 || !Object.keys(flowMaps).every(name))
+        throw new TypeError(id + ' needs a map of up to 64 named flow maps');
+      const openedFlows = Object.fromEntries(Object.entries(flowMaps).map(([key, flow]) => {
+        try { return [key, K.flowMap.open(flow)]; }
+        catch (error) { throw new TypeError(id + ' flow map ' + key + ' — ' + error.message, { cause: error }); }
+      }));
       const frame = graph.transform(transform), ids = new Set(), slots = new Set();
       const report = { id, painting: painting.id, transform: frame, marks: [],
-        ...(painting.profiles !== undefined && { profiles: Object.keys(profiles) }) };
+        ...(painting.profiles !== undefined && { profiles: Object.keys(profiles) }),
+        ...(painting.flowMaps !== undefined && { flowMaps: Object.keys(flowMaps) }) };
       reports.push(report);
       for (const [order, mark] of painting.marks.entries()) {
         if (!fields(mark, ['id', ...editable]) || !name(mark.id) || ids.has(mark.id) || mark.mat === undefined ||
             mark.enabled !== undefined && typeof mark.enabled !== 'boolean' ||
             mark.res !== undefined && (!Number.isFinite(mark.res) || mark.res <= 0))
           throw new TypeError(id + ' mark ' + order + ' needs a unique ID, brush, poses and material');
-        const { id: key, attachment = { kind: 'free' }, transform, enabled = true, looseness: authoredStyle, ...stroke } = mark;
+        const { id: key, attachment = { kind: 'free' }, transform, enabled = true, looseness: authoredStyle,
+          direction: authoredDirection, ...stroke } = mark;
         ids.add(key);
         const solid = 'paint.' + id + '.' + key;
         const guideFrame = graph.compose(frame, graph.transform(transform));
@@ -65,8 +75,10 @@
             (attachment.kind === 'free' ? attachment.slot !== undefined : !name(attachment.slot)) ||
             (attachment.kind === 'surface') !== (attachment.snap !== undefined))
           throw new TypeError(solid + ' needs a free, surface or part attachment');
-        let shape, style;
+        let shape, style, direction;
         try {
+          direction = K.procedural.markDirection.prepare(authoredDirection, openedFlows);
+          if (direction && attachment.kind !== 'surface') throw new TypeError('Mark direction needs a surface attachment');
           style = K.procedural.paintLooseness.prepare(authoredStyle);
           if (style && (attachment.kind === 'surface') !== (style.silhouetteAllowance !== undefined))
             throw new TypeError(attachment.kind === 'surface' ? 'State a silhouette allowance for surface looseness'
@@ -91,7 +103,9 @@
               throw new RangeError(solid + ' needs a named exterior sculpt for slot ' + attachment.slot);
             part = host.part;
             restAffine = graph.compose(DIO.solidFrames.rest(host), guideFrame);
-            anchors.set(solid, { host, guideFrame, snap: attachment.snap });
+            const map = authoredDirection?.field?.map;
+            anchors.set(solid, { host, guideFrame, snap: attachment.snap,
+              ...(direction && { direction, flowAsset: typeof map === 'string' ? flowMaps[map] : map }) });
           } else if (attachment.kind === 'part') {
             if (!parts.has(target)) throw new RangeError(solid + ' needs an existing sculpt rig part for slot ' + attachment.slot);
             part = target;
@@ -108,6 +122,8 @@
           ...(typeof brush.profile === 'string' && { profile: brush.profile }),
           ...(brush.mix && { mix: { range: brush.mix.range, ...(typeof brush.mix.profile === 'string' && { profile: brush.mix.profile }) } }),
           ...(style && { looseness: style }),
+          ...(direction && { direction: { field: direction.field, strength: direction.strength,
+            ruffleDegrees: direction.ruffleDegrees, seed: direction.seed } }),
           ...(stroke.path !== undefined && { path: stroke.path }), ...(stroke.pressureResponse && { pressureResponse: stroke.pressureResponse }) });
       }
       for (const slot of Object.keys(bindings)) if (!slots.has(slot))
@@ -154,16 +170,17 @@
       return [...list, value];
     }
     if (index === -1) throw new RangeError('Unknown 3D painting placement ' + value.id);
-    if (!fields(value, ['id', 'transform', 'bindings', 'painting', 'edits', 'profiles']) ||
-        value.painting !== undefined && (value.edits !== undefined || value.profiles !== undefined) ||
-        value.profiles !== undefined && !record(value.profiles))
-      throw new TypeError('A painting update can replace the document or edit profiles, marks, bindings and transform');
-    const { edits, profiles, ...patch } = value, current = list[index];
+    if (!fields(value, ['id', 'transform', 'bindings', 'painting', 'edits', ...resources]) ||
+        value.painting !== undefined && ['edits', ...resources].some(key => value[key] !== undefined) ||
+        resources.some(key => value[key] !== undefined && !record(value[key])))
+      throw new TypeError('A painting update can replace the document or edit resources, marks, bindings and transform');
+    const { edits, profiles, flowMaps, ...patch } = value, current = list[index];
     const revised = { ...current, ...patch, ...(edits !== undefined && { painting: editMarks(current.painting, edits) }) };
-    if (profiles !== undefined) {
-      const definitions = { ...revised.painting.profiles, ...profiles };
-      for (const [name, value] of Object.entries(profiles)) if (value === null) delete definitions[name];
-      revised.painting = { ...revised.painting, profiles: definitions };
+    for (const [key, changes] of Object.entries({ profiles, flowMaps })) {
+      if (changes === undefined) continue;
+      const definitions = { ...revised.painting[key], ...changes };
+      for (const [id, asset] of Object.entries(changes)) if (asset === null) delete definitions[id];
+      revised.painting = { ...revised.painting, [key]: definitions };
     }
     for (const key of ['transform', 'bindings']) if (revised[key] === null) delete revised[key];
     return list.map((row, i) => i === index ? revised : row);
