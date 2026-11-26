@@ -1437,6 +1437,10 @@ const CMD = {
         '  splat-attributes plan <scene> <plan.json> --out directory   select, clean, transfer and deform splats',
         '  splat-attributes export <scene> <plan directory> --out cloud.inksplats   export a materialized native cloud',
         '  splat-attributes verify <scene> <plan directory> <cloud.inksplats> --views views.json --out directory   check render and export parity',
+        '  stream-splats index <manifest.json> [--cell-size n --voxels n,...,0]   assign stable addresses to packed rows',
+        '  stream-splats inspect <manifest.json> [--chunk id --start N --limit N --out catalog.json]   inspect groups, levels and row addresses',
+        '  stream-splats edit <manifest.json> <patch.json> [--previous previous.json --out report.json]   edit only affected cells',
+        '  stream-splats review <manifest.json> <views.json> [--previous previous.json] --out directory   export and measure streamed views',
         '  splat-redistribute <scene> --plan operations.json --out fit.json --report review.json [--base fit.json]',
         '  render/clip --shot-corrections file.json|off   load or bypass native shot corrections',
         '  render or clip --multiprojection plan.json   use local projection for named mesh surfaces',
@@ -1571,6 +1575,7 @@ const CMD = {
         '  mesh-topology overlaps <mesh-or-scene.json> [settings.json] [--object id] [--part id] [--out report.json | --selection-out faces.json]   review same-facing coincident polygons',
         '  mesh-topology custom-properties <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   inspect and edit typed project, prefab and instance properties',
         '  mesh-topology scene-layer <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   organize placed prefabs, inspect bounds, and set layer origins',
+        '  mesh-topology construction-light <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   place and aim a light on construction anchors',
         '  mesh-topology billboard-prefab <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   make selected prefab modules face the camera',
         '  mesh-topology mirror-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   link or commit a mirrored visual prefab placement',
         '  mesh-topology reparent-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   change a visual prefab parent and hold world placement',
@@ -2058,6 +2063,8 @@ const CMD = {
         '  take approve-video <plan.json> --out directory   check decoded video for palette, accent and flicker damage',
         '  take review-flashes <plan.json> --out directory   trace composited and decoded flashes and verify a reduced-flicker preview',
         '  take check-sync <recipe.json> [--out report.json] [--fail-on-flags]   compare visible contact and rendered attack',
+        '  scene-record capture <scene.json> <plan.json> [--input changes.ndjson] --out take.json   capture timed scene manipulation',
+        '  scene-record apply <scene.json> <take.json> --out scene.json   overdub a take or punch selected timeline channels',
         '  timeline <scene> [--at seconds] [--from seconds --to seconds] [--out report.json]  sample tracks and export cues',
         '  authored-contacts <id> [--at seconds] [--out report.json]  inspect contact ranges and socket transfer timing',
         '  motion-fx <id> [--at seconds] [--out report.json]  inspect keyed FX layers and sampled effect output',
@@ -2680,6 +2687,9 @@ const CMD = {
     }
     files.json(file,asset);
     console.log('Wrote',report.operations.length,'reviewed splat topology operations to',file);
+  },
+  'stream-splats'() {
+    return require('./stream-splats.js').command(pos,opt,lib().KIT);
   },
   'splat-attributes'() {
     return require('./splat-attributes-command.js').command(pos,opt,lib().KIT,buildPreview);
@@ -3977,6 +3987,10 @@ const CMD = {
   },
   take() {
     return require('./take.js').command(pos,opt,{kit:lib(),operations:cfg.graphOperations,adapters:cfg.graphAdapters});
+  },
+  'scene-record'() {
+    return require('./scene-record.js')(pos,opt,
+      (file,source)=>dataScene(file,source,{refreshTilesets:false}));
   },
   timeline() {
     return worldCLI().inspectTimeline(pos[0]);
@@ -5926,9 +5940,10 @@ async function run() {
     });
   }
   const sceneFiles = captureScenes.length ? captureScenes : cmd === 'snap' ? pos : cmd === 'pixel-art' ? pixelInputs :
+    cmd === 'scene-record' ? pos.slice(1, 2) :
     cmd === 'cable-route' && pos[0] === 'review' ? pos.slice(1, 2) :
     cmd === 'mesh-uv' && ['layout', 'guide', 'select', 'edit'].includes(pos[0]) && typeof opt.object === 'string' ? pos.slice(1, 2) :
-    cmd === 'mesh-topology' && pos[0] === 'tint-remap' ? pos.slice(1, 2) :
+    cmd === 'mesh-topology' && ['tint-remap','construction-light'].includes(pos[0]) ? pos.slice(1, 2) :
     cmd === 'mesh-topology' && pos[0] === 'modifiers' && typeof opt.object === 'string' ? pos.slice(2, 3) :
     cmd === 'mesh-topology' && (pos[0] === 'select' && typeof opt.view === 'string' ||
       ['transform', 'repair', 'cut', 'boolean', 'retopology', 'face-region', 'edge-edit', 'bevel', 'shading', 'skin', 'shape-keys', 'tint'].includes(pos[0]) && typeof opt.object === 'string') ? pos.slice(1, 2) :

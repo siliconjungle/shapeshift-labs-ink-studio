@@ -763,6 +763,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.brushRegions` | namespace |  |  |
 | `KIT.authoring.brushRegions.create` | function | `()` | [source](../../src/kit/p26-brush-regions.js) |
 | `KIT.authoring.brushRegions.prepare` | function | `(spec, roles)` | [source](../../src/kit/p26-brush-regions.js) |
+| `KIT.authoring.constructionLights` | namespace |  |  |
+| `KIT.authoring.constructionLights.bind` | function | `(world, prepared, {hidden,joints} = {})` | [source](../../src/kit/p24a-construction-lights.js) |
+| `KIT.authoring.constructionLights.plan` | function | `(scene, env, request)` | [source](../../src/kit/p24a-construction-lights.js) |
+| `KIT.authoring.constructionLights.prepare` | function | `(spec, env, instances, meshPlacements, areaLights)` | [source](../../src/kit/p24a-construction-lights.js) |
 | `KIT.authoring.constructionPlane` | namespace |  |  |
 | `KIT.authoring.constructionPlane.forScene` | function | `(scene)` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.gridPreset` | function | `(scene, request, {projectTexelsPerUnit} = {})` | [guide](../mesh-topology.md#set-grid-increments-and-rounding), [source](../../src/kit/p23-construction-plane.js) |
