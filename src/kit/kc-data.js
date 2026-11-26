@@ -919,6 +919,11 @@
       bad('finish.look.shadowArt', error.message);
     }
     try {
+      DirectionalShadowMap.bounds(st.finish.liveSun?.bounds);
+    } catch (error) {
+      bad('finish.liveSun.bounds',error.message);
+    }
+    try {
       ContactShadows.prepare(look?.contactShadows);
     } catch (error) {
       bad('finish.look.contactShadows', error.message);

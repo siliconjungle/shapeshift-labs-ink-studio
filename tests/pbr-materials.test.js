@@ -249,6 +249,11 @@ test('per-light shadows follow posed blockers, use shadow swatches and leave the
     const blocked=render();
     const bypass=render({pbrShadows:false});
     const mask=render({shadowArt:{...shadowArt,receive:{exclude:[{object:'plate'}]}}});
+    const onlyPlate = {min:[-2.6,-.2],max:[-1.7,.2]};
+    const fixedLights=pbrMaterials.lights.map(light=>({...light,bounds:onlyPlate,mapSize:64}));
+    const fixed=render({pbrLights:fixedLights});
+    const objectReceives=render({pbrLights:fixedLights,shadowArt:{...shadowArt,objects:{plate:{receive:false}}}});
+    const objectCasts=render({pbrLights:fixedLights,shadowArt:{...shadowArt,objects:{blocker:{cast:false}}}});
     const filled=render({pbrLights:[...pbrMaterials.lights,fill]});
     const fillOnly=render({pbrLights:[fill]});
     moveBlocker(1.2);
@@ -266,7 +271,11 @@ test('per-light shadows follow posed blockers, use shadow swatches and leave the
     }
     assert.deepEqual(mask.mesh,bypass.mesh);
     assert.deepEqual(mask.texel,blocked.texel);
-    const actual=runWebGL({},fixture,(kit,build,backend,{view,samples,shadowSource})=>{
+    assert.deepEqual(fixed.mesh,blocked.mesh);
+    assert.deepEqual(fixed.texel,bypass.texel);
+    assert.deepEqual(objectReceives.mesh,bypass.mesh);
+    assert.deepEqual(objectCasts.mesh,bypass.mesh);
+    const actual=runWebGL({},fixture,(kit,build,backend,{view,samples,shadowSource,onlyPlate})=>{
       const {world,definition,moveBlocker}=build(kit,'mesh');
       const {pbrMaterials,shadowArt,fill}=new Function('return ('+shadowSource+')')()(definition);
       const painter=backend(view.w,view.h,view);
@@ -277,16 +286,20 @@ test('per-light shadows follow posed blockers, use shadow swatches and leave the
         }
         const blocked=render(),bypass=render({pbrShadows:false});
         const mask=render({shadowArt:{...shadowArt,receive:{exclude:[{object:'plate'}]}}});
+        const fixedLights=pbrMaterials.lights.map(light=>({...light,bounds:onlyPlate,mapSize:64}));
+        const fixed=render({pbrLights:fixedLights});
+        const objectReceives=render({pbrLights:fixedLights,shadowArt:{...shadowArt,objects:{plate:{receive:false}}}});
+        const objectCasts=render({pbrLights:fixedLights,shadowArt:{...shadowArt,objects:{blocker:{cast:false}}}});
         const filled=render({pbrLights:[...pbrMaterials.lights,fill]}),fillOnly=render({pbrLights:[fill]});
         moveBlocker(1.2);
         const moved=render(),strandBlocker=build(kit,'transmitting').world;
         const strandLook={...pbrMaterials,materials:Object.fromEntries(Object.entries(pbrMaterials.materials)
           .map(([id,finish])=>[id,{...finish,highlight:false}]))};
         painter.draw(strandBlocker,{pbrMaterials:strandLook});
-        return {blocked,bypass,mask,filled,fillOnly,moved,transmitting:painter.sample(samples)};
+        return {blocked,bypass,mask,filled,fillOnly,moved,fixed,objectReceives,objectCasts,transmitting:painter.sample(samples)};
       }finally{painter.close();}
-    },{view,samples,shadowSource:shadowSettings.toString()});
-    for(const [stage,colors] of Object.entries({blocked,bypass,mask,filled,fillOnly,moved})){
+    },{view,samples,shadowSource:shadowSettings.toString(),onlyPlate});
+    for(const [stage,colors] of Object.entries({blocked,bypass,mask,filled,fillOnly,moved,fixed,objectReceives,objectCasts})){
       for(const name of ['mesh','texel','decal','gaussian','strand']){
         const expected=colors[name], seen=actual[stage][name];
         assert(expected.every((n,k)=>Math.abs(seen[k]-n)<=4),JSON.stringify({stage,name,expected,seen}));

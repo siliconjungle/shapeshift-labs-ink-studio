@@ -73,11 +73,11 @@ const ShotLighting = (() => {
       (role === 'key' || definition[role].shadows === true) && definition[role].intensity !== 0);
   }
 
-  function bind(rig, world, data, alpha, art=Channels.bind(rig?.art,world)) {
+  function bind(rig, world, data, alpha, art=Channels.bind(rig?.art,world), shadowSettings=Shadow.prepare(world.look?.shadowArt)) {
     if (!rig) return null;
     const { positive, negative, exposure } = rig;
-    const targets = positive.some(entry => entry.receive || entry.cast) || negative?.receive ? Target.index(world) : null;
-    const casters = positive.some(entry => entry.light.shadows) ? Area.staticSources(world, data, alpha) : [];
+    const targets = shadowSettings?.objects || positive.some(entry => entry.receive || entry.cast) || negative?.receive ? Target.index(world) : null;
+    const casters = positive.some(entry => entry.light.shadows) ? Area.staticSources(world, data, alpha, [], shadowSettings) : [];
     const byLight = new Map();
     for (const { light, cast } of positive) {
       if (!light.shadows) continue;
@@ -94,9 +94,10 @@ const ShotLighting = (() => {
     function receiver(row) {
       const target = row && typeof row==='object' ? row : row >= 0 ? targets?.row(row) ?? unnamed : unnamed;
       if (!masks.has(target)) {
+        const shadowed=Shadow.objectAllows(shadowSettings,'receive',target);
         const lights=positive.filter(entry=>Shadow.allows(entry.receive,target)).map(entry=>entry.light);
         masks.set(target,{
-          lights,
+          lights,shadow:shadowed ? shadow : undefined,
           ...(shapedKey&&{keys:lights.filter(light=>light.id==='key'),other:lights.filter(light=>light.id!=='key')}),
           negative:negative&&Shadow.allows(negative.receive,target)?negative:null
         });
@@ -112,13 +113,13 @@ const ShotLighting = (() => {
       sample(row, point, normal, out, biasNormal=normal) {
         const layer = receiver(row), shadeNormal=art?.normal?.(row,normal) ?? normal;
         if(layer.keys?.length){
-          Area.evaluate(layer.other,point,shadeNormal,out,{shadow,biasNormal});
+          Area.evaluate(layer.other,point,shadeNormal,out,{shadow:layer.shadow,biasNormal});
           const key=[0,0,0];
-          Area.evaluate(layer.keys,point,shadeNormal,key,{shadow,biasNormal,
+          Area.evaluate(layer.keys,point,shadeNormal,key,{shadow:layer.shadow,biasNormal,
             incidence:art.band && ((light,value)=>art.band(row,value)), visibility:art.curves.shadow});
           const graded=art.curves.key?.(key) ?? key;
           for(let c=0;c<3;c++)out[c]+=graded[c];
-        } else if(layer.lights.length)Area.evaluate(layer.lights,point,shadeNormal,out,{shadow,biasNormal});
+        } else if(layer.lights.length)Area.evaluate(layer.lights,point,shadeNormal,out,{shadow:layer.shadow,biasNormal});
         else out.fill(0);
         if (!layer.negative) return 1;
         const { at: [x, y, z], strength, radius } = layer.negative;

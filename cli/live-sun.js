@@ -53,7 +53,7 @@ function prepare(authored, override, time, celestialSun) {
   };
   const base = settings(authored), selected = settings(override ?? undefined);
   const { direction = defaultDirection, ambient = .32, intensity = .88,
-    shadows = true, mapSize = 512, bias = .02, filter = 1 } = { ...base, ...selected };
+    shadows = true, mapSize = 512, bias = .02, filter = 1, bounds } = { ...base, ...selected };
   const strandShadows = selected.strandShadows === false ? {} :
     { ...StrandShadows.prepare(base.strandShadows), ...StrandShadows.prepare(selected.strandShadows) };
   const sky = bounce(base.skyBounce, selected.skyBounce, 'clear-sky', time);
@@ -66,7 +66,7 @@ function prepare(authored, override, time, celestialSun) {
       !Number.isInteger(mapSize) || !Number.isInteger(filter) || !range(filter, 0, 2) || typeof shadows !== 'boolean')
     throw new RangeError('Invalid live sun lighting or shadow map settings');
   return { direction: unit(directionAt), ambient, intensity: intensity * (celestialSun?.gain ?? 1), shadows, mapSize, bias, filter, sky, ground,
-    strandShadows };
+    strandShadows, bounds:DirectionalShadowMap.bounds(bounds) };
 }
 
 function shadowMap(sun, world, pose, normalAt, casts, {curveAt,curveProxyAt,curveData,curveStats}) {
@@ -85,11 +85,11 @@ function shadowMap(sun, world, pose, normalAt, casts, {curveAt,curveProxyAt,curv
       return layers;
     }
   });
-  return map && ((x,y,z,normal,facing)=>DirectionalShadowMap.visibility(map,x,y,z,normal,facing));
+  return map;
 }
 
 function create(sun, world, pose, normalAt, cloudShadow, exposure,
-  { shadowArt, footprint, probes, curveAt, curveProxyAt, curveData, curveStats, artLighting, traced, paintShadowBands } = {}) {
+  { shadowArt, footprint, probes, curveAt, curveProxyAt, curveData, curveStats, artLighting, traced, paintShadowBands, shadowReport } = {}) {
   // Albedo exists on opted-in sculpt bakes and explicitly described builder rows.
   // Older pixel-material bakes still carry the original material ramps.
   const fill = new Int32Array(pose.alpha.length).fill(-1);
@@ -108,7 +108,9 @@ function create(sun, world, pose, normalAt, cloudShadow, exposure,
   const art = ShadowArt.prepare(shadowArt ?? world.look?.shadowArt);
   const receives = ShadowArt.bind(art, world, 'receive');
   const coarse = ShadowArt.small(art, footprint);
-  const shadow = shadowMap(sun,world,pose,normalAt,ShadowArt.bind(art,world,'cast'),{curveAt,curveProxyAt,curveData,curveStats});
+  const map = shadowMap(sun,world,pose,normalAt,ShadowArt.bind(art,world,'cast'),{curveAt,curveProxyAt,curveData,curveStats});
+  const shadow = map && ((...args)=>DirectionalShadowMap.visibility(map,...args));
+  if (shadowReport) shadowReport(DirectionalShadowMap.inspect(map));
   const facing = new Float32Array(fill.length), curves=artLighting?.curves;
   const splitIndirect=curves?.sky || curves?.bounce;
   const indirect = (sun.sky || sun.ground) && new Float32Array(fill.length * 3);

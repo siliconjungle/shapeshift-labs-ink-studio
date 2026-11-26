@@ -102,7 +102,7 @@ vec3 eCookie(int i,vec3 p){
 }
 vec2 eDisk(vec2 a){if(a.x==0.0&&a.y==0.0)return vec2(0);bool wide=abs(a.x)>abs(a.y);float r=wide?a.x:a.y,angle=.78539816339*(wide?a.y/a.x:2.0-a.x/a.y);return r*vec2(cos(angle),sin(angle));}
 vec3 eSurfaceLighting(vec3 p,vec3 normal,bool fog,vec3 viewRay,vec3 biasNormal,
-  vec3 observer,float roughness,float sheen,out vec3 specular){
+  vec3 observer,float roughness,float sheen,bool receivesShadow,out vec3 specular){
   vec3 sum=vec3(0);
   specular=vec3(0);
   float gloss=1.0-roughness;
@@ -124,7 +124,7 @@ vec3 eSurfaceLighting(vec3 p,vec3 normal,bool fog,vec3 viewRay,vec3 biasNormal,
       float angular=type>=3?1.0:type==2?1.0:max(0.0,params.z>=2.0?abs(facing):facing);
       if(type==3){float outer=u.w,inner=v.w;if(facing<outer)continue;float edge=inner==outer?1.0:clamp((facing-outer)/(inner-outer),0.0,1.0);angular*=edge*edge*(3.0-2.0*edge);}
       float amount=receive*angular*pow(1.0-d/at.w,2.0);total+=amount;
-      bool shadows=mod(params.z,2.0)>.5&&(!fog||eRow(i,10).y>.5);
+      bool shadows=receivesShadow&&mod(params.z,2.0)>.5&&(!fog||eRow(i,10).y>.5);
       vec3 origin=p+(fog?vec3(0):biasNormal*params.w);
       float visible=shadows?eShadow(origin,dir,d,params.w)*eCutoutShadow(origin,sampleAt,fog&&type>=3?0.0:params.w):1.0;
       lit+=amount*visible;
@@ -146,11 +146,11 @@ vec3 eSurfaceLighting(vec3 p,vec3 normal,bool fog,vec3 viewRay,vec3 biasNormal,
   }
   return sum;
 }
-vec3 eLighting(vec3 p,vec3 normal,bool fog,vec3 viewRay,vec3 biasNormal){
+vec3 eLighting(vec3 p,vec3 normal,bool fog,vec3 viewRay,vec3 biasNormal,bool receivesShadow){
   vec3 unused;
-  return eSurfaceLighting(p,normal,fog,viewRay,biasNormal,vec3(0),1.0,0.0,unused);
+  return eSurfaceLighting(p,normal,fog,viewRay,biasNormal,vec3(0),1.0,0.0,receivesShadow,unused);
 }
-vec3 eLighting(vec3 p,vec3 normal,bool fog,vec3 viewRay){return eLighting(p,normal,fog,viewRay,normal);}
+vec3 eLighting(vec3 p,vec3 normal,bool fog,vec3 viewRay){return eLighting(p,normal,fog,viewRay,normal,true);}
 vec3 ePaint(vec3 rgb,vec3 p,vec3 n){return eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+eLighting(p,n,false,vec3(0)))));}
 `;
 
@@ -212,6 +212,7 @@ export function createLightEmitters(gl, resources, { table, textureUnit }, maxSi
     receiverData,
     receiverMetadata,
     receiverStatic = false,
+    previousShadowObjects,
     lastFactorShadow, lastFactorCutouts;
   gl.activeTexture(gl.TEXTURE0 + 29);
   gl.bindTexture(gl.TEXTURE_3D, shadowTexture);
@@ -257,11 +258,13 @@ export function createLightEmitters(gl, resources, { table, textureUnit }, maxSi
     if (!lamps.length && !raw?.sun && !world.atmosphere?.some(v => v.lit)) return null;
     if (!gl.getExtension('EXT_color_buffer_float'))
       throw new Error('Native emitter lighting needs EXT_color_buffer_float');
+    const shadowArt=K.shadowArt, shadowSettings=shadowArt.prepare(frame.shadowArt ?? world.look?.shadowArt);
+    const objectFlags=shadowSettings?.objects && ((mode,target)=>shadowArt.objectAllows(shadowSettings,mode,target));
     const cutouts = lamps.some(l => l.shadows) && Cutouts ? Cutouts.prepare(world, {
       time, interfaceTime: frame.interfaceTime, enabled: frame.cutoutShadows !== false, shadowShells: frame.shadowShells,
       surfaces: frame.spriteSurfaces === false ? false : world.spriteSurfaces,
       sprites: frame.spriteAtlases === true ? world.spriteAtlases : frame.spriteAtlases ?? world.spriteAtlases,
-      atlasMode: frame.spriteAtlasMode
+      atlasMode: frame.spriteAtlasMode, accepts:objectFlags && (target=>objectFlags('cast',target))
     }) : [];
     const cutoutImages = cutouts.map(plane => plane.image);
     const images = [...new Set([...lamps.map(l => l.cookie?.image).filter(Boolean), ...cutoutImages])];
@@ -304,7 +307,7 @@ export function createLightEmitters(gl, resources, { table, textureUnit }, maxSi
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
       lastCookies = images;
     }
-    const sources = lamps.some(l => l.shadows) ? A.staticSources(world,undefined,undefined,derived) : [];
+    const sources = lamps.some(l => l.shadows) ? A.staticSources(world,undefined,undefined,derived,shadowSettings) : [];
     if (media?.shadow?.field) {
       const r = world.radius ?? 10;
       const bounds = { min: [-r, -r, -r], max: [r, r, r] };
@@ -469,6 +472,8 @@ export function createLightEmitters(gl, resources, { table, textureUnit }, maxSi
       count: lamps.length,
       shadow: grid,
       cutoutRevision,
+      shadowObjects:shadowSettings?.objects && (frame.shadowArt ?? world.look?.shadowArt).objects,
+      receivesSurface:objectFlags && (chart=>objectFlags('receive',shadowArt.surfaceTarget(chart))),
       active: true,
       surface: lamps.some(l => l.surface > 0),
       uniforms,
@@ -562,7 +567,8 @@ uniform vec3 u_fogMin,u_fogExtent,u_fogSize;uniform int u_fogSlice;out vec4 colo
   function compose(state, world, time, baseRows, baseActive) {
     if (!state?.surface) return baseActive;
     if (!world.count) return baseActive;
-    if (receiverWorld !== world || receiverData !== world.data || receiverMetadata !== world.renderMetadata) {
+    if (receiverWorld !== world || receiverData !== world.data || receiverMetadata !== world.renderMetadata ||
+        previousShadowObjects !== state.shadowObjects) {
       normalRows = null;
       receiverData = world.data;
       receiverStatic = !world.anim;
@@ -570,12 +576,14 @@ uniform vec3 u_fogMin,u_fogExtent,u_fogSize;uniform int u_fogSlice;out vec4 colo
         receiverStatic = (Math.round(world.data[i * 16 + 11]) & 15) === 0;
       receiverWorld = world;
       receiverMetadata = world.renderMetadata;
+      previousShadowObjects = state.shadowObjects;
     }
     const reuse =
       receiverStatic && !world.anim && normalRows?.length === world.count * 8 && state.frame.changedRows?.length === 0;
     const rows = normalRows?.length === world.count * 8 ? normalRows : new Float32Array(world.count * 8);
     if (!reuse) {
       const sample = K.splatFrames.create(world, time, K.M);
+      const receives=K.shadowArt.bind({objects:state.shadowObjects},world,'receive');
       for (let i = 0; i < world.count; i++) {
         const q = i * 8,
           o = i * 16,
@@ -585,6 +593,7 @@ uniform vec3 u_fogMin,u_fogExtent,u_fogSize;uniform int u_fogSlice;out vec4 colo
         if ((Math.round(world.data[o + 11]) & 15) !== 0) receiverStatic = false;
         rows.set([...p, world.data[o + 3], ...(n ?? [0, 0, 0]), world.data[o + 7]], q);
         if (Math.round(world.data[o + 11]) & (32 | 64 | 256) || !n) rows[q + 3] = 0;
+        else if (receives?.(i)===false) rows[q + 3] *= -1;
       }
     }
     normalRows = rows;
@@ -618,7 +627,7 @@ precision highp float;void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);
       vertex,
       `#version 300 es
 precision highp float;${emitterGLSL}
-uniform highp sampler2D u_eReceivers;uniform int u_eReceiverCount;out vec4 color;void main(){ivec2 p=ivec2(gl_FragCoord.xy);int i=p.x+p.y*512;if(i>=u_eReceiverCount){color=vec4(0);return;}vec4 at=texelFetch(u_eReceivers,ivec2(p.x*2,p.y),0),n=texelFetch(u_eReceivers,ivec2(p.x*2+1,p.y),0);color=vec4(at.w>0.0?eLighting(at.xyz,normalize(n.xyz),false,vec3(0)):vec3(0),1);}`
+uniform highp sampler2D u_eReceivers;uniform int u_eReceiverCount;out vec4 color;void main(){ivec2 p=ivec2(gl_FragCoord.xy);int i=p.x+p.y*512;if(i>=u_eReceiverCount){color=vec4(0);return;}vec4 at=texelFetch(u_eReceivers,ivec2(p.x*2,p.y),0),n=texelFetch(u_eReceivers,ivec2(p.x*2+1,p.y),0);color=vec4(at.w!=0.0?eLighting(at.xyz,normalize(n.xyz),false,vec3(0),normalize(n.xyz),at.w>0.0):vec3(0),1);}`
     );
     program ??= resources.program(
       vertex,

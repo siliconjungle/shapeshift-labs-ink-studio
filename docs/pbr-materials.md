@@ -103,6 +103,8 @@ node examples/pbr-materials/build-shadow-band-demo.cjs brass-warden.html
 Set `shadows: true` on any directional light in `pbrMaterials.lights` or `pbrLights`.
 `mapSize` accepts 32–1024 pixels on the longer axis and defaults to 256.
 `bias` defaults to 0.02 world units and `filter` is a radius of 0–2 shadow-map pixels, defaulting to 1.
+Set `bounds: { min: [u, v], max: [u, v] }` to fix the map's footprint in the light's right and up coordinates.
+See the [object and light shadow controls](scene-editor.md#control-shadows-by-object-and-light) for edit and preview commands.
 
 ```js
 const lights = [

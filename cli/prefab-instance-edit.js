@@ -9,6 +9,7 @@ const name = value => typeof value === 'string' && value.trim();
 
 const commands = {
   'custom-properties': ['planCustomProperties','previewCustomProperties','editCustomProperties'],
+  'shadow-controls': ['planShadowControls','previewShadowControls','editShadowControls'],
   'construction-light': ['planConstructionLight','previewConstructionLight','editConstructionLight'],
   'scene-layer': ['planSceneLayers','previewSceneLayers','editSceneLayers'],
   'billboard-prefab': ['planPrefabBillboards','previewPrefabBillboards','editPrefabBillboards'],

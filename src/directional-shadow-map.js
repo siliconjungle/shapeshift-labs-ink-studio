@@ -9,6 +9,17 @@ const DirectionalShadowMap = (() => {
   };
   const cross = (a, b) => [a[1]*b[2] - a[2]*b[1], a[2]*b[0] - a[0]*b[2], a[0]*b[1] - a[1]*b[0]];
 
+  function bounds(value) {
+    if (value === undefined) return;
+    if (!value || Object.getPrototypeOf(value) !== Object.prototype ||
+        Object.keys(value).some(key => key !== 'min' && key !== 'max') ||
+        ![value.min,value.max].every(pair => Array.isArray(pair) && pair.length === 2 &&
+          Array.from(pair).every(n => Number.isFinite(n) && Math.abs(n) <= 1e6)) ||
+        value.min.some((low,k) => value.max[k]-low < 1e-6))
+      throw new RangeError('Shadow bounds need increasing light-space UV pairs within ±1,000,000 scene units');
+    return {min:value.min.slice(),max:value.max.slice()};
+  }
+
   function covariance(data, i, a, b) {
     const xx=data[i<0?0:i+4], xy=data[i<0?1:i+5], xz=data[i<0?2:i+6],
       yy=data[i<0?3:i+8], yz=data[i<0?4:i+9], zz=data[i<0?5:i+10];
@@ -67,10 +78,17 @@ const DirectionalShadowMap = (() => {
     };
     const triangles=sourceTriangles.map(project), shells=sourceShells.map(project);
     if (!casters.length && !strands.size && !triangles.length && !shells.length) return null;
-    const guard = sun.filter + 2;
-    const texel = Math.max(maxU - minU, maxV - minV, 1e-6) / (sun.mapSize - 2 * guard - 1);
-    const width = Math.ceil((maxU - minU) / texel) + 2 * guard;
-    const height = Math.ceil((maxV - minV) / texel) + 2 * guard;
+    const fixed = sun.bounds;
+    if (fixed) {
+      [minU,minV] = fixed.min;
+      [maxU,maxV] = fixed.max;
+    }
+    const guard = fixed ? 0 : sun.filter + 2;
+    const spanU = maxU - minU, spanV = maxV - minV;
+    const texel = Math.max(spanU, spanV, 1e-6) / (sun.mapSize - (fixed ? 0 : 2*guard+1));
+    const size = span => fixed ? Math.max(1,Math.min(sun.mapSize,Math.ceil(span/texel-1e-9))) :
+      Math.ceil(span/texel) + 2*guard;
+    const width = size(spanU), height = size(spanV);
     minU -= guard * texel;
     minV -= guard * texel;
     const map = new DepthArray(width * height).fill(-Infinity);
@@ -99,10 +117,19 @@ const DirectionalShadowMap = (() => {
         }
       }
     }
-    const frame={map,right,up,light,minU,minV,width,height,texel,filter:sun.filter,bias:sun.bias+texel*.25};
+    const frame={map,right,up,light,minU,minV,width,height,texel,filter:sun.filter,bias:sun.bias+texel*.25,bounds:fixed};
     for (const triangle of triangles) rasterTriangle(frame,triangle);
     for (const shell of shells) rasterShell(frame,shell);
     if (curveAt) frame.curveDepth=drawCurves?.(frame,strands,curveCamera);
+    if (fixed) {
+      const validWidth = Math.floor(spanU/texel+.5), validHeight = Math.floor(spanV/texel+.5);
+      for (let i=0; i<height; i++) {
+        const first = i*width+(i<validHeight ? validWidth : 0);
+        map.fill(-Infinity,first,(i+1)*width);
+      }
+      for (const index of frame.curveDepth?.keys() ?? [])
+        if (index%width>=validWidth || Math.floor(index/width)>=validHeight) frame.curveDepth.delete(index);
+    }
     return frame;
   }
 
@@ -140,8 +167,9 @@ const DirectionalShadowMap = (() => {
 
   function visibility(frame,x,y,z,normal,facing) {
     const {map,right,up,light,minU,minV,width,height,texel,filter,bias,curveDepth}=frame;
-    const u = (x*right[0] + y*right[1] + z*right[2] - minU) / texel;
-    const v = (x*up[0] + y*up[1] + z*up[2] - minV) / texel;
+    const uAt = x*right[0] + y*right[1] + z*right[2], vAt = x*up[0] + y*up[1] + z*up[2];
+    if (frame.bounds && (uAt < minU || vAt < minV || uAt >= frame.bounds.max[0] || vAt >= frame.bounds.max[1])) return 1;
+    const u = (uAt - minU) / texel, v = (vAt - minV) / texel;
     const depth = x*light[0] + y*light[1] + z*light[2];
     const i = Math.floor(u), j = Math.floor(v), denominator = Math.max(.10, facing);
     const slopeU = -dot(normal, right) * texel / denominator;
@@ -238,6 +266,13 @@ const DirectionalShadowMap = (() => {
     return layers;
   }
 
-  return Object.freeze({build,visibility,rasterCurves});
+  function inspect(frame) {
+    if (!frame) return null;
+    const {right,up,light,minU,minV,width,height,texel,filter,bias,bounds:fixed} = frame;
+    return {size:[width,height],texel,filter,effectiveBias:bias,axes:{right,up,towardLight:light},
+      bounds:fixed ?? {min:[minU,minV],max:[minU+width*texel,minV+height*texel]},boundsMode:fixed ? 'fixed' : 'auto'};
+  }
+
+  return Object.freeze({bounds,build,visibility,rasterCurves,inspect});
 })();
 if (typeof module !== 'undefined') module.exports = DirectionalShadowMap;

@@ -44,7 +44,7 @@ function sampleRgba(pixels,stride,bounds,x,y,linear,opaque,wrap) {
   return result;
 }
 
-function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,sourceBinding=false,captureRestNormal=false,trackMesh,allow,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection,pbr,paintIndex,captureMeshTint,reviewTarget,targetOnly,footprint}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,sourceBinding=false,captureRestNormal=false,trackMesh,allow,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,shadowObjects,captureFogOwners,multiprojection,pbr,paintIndex,captureMeshTint,reviewTarget,targetOnly,footprint}) {
   if(!atlas)return [];
   const depth=depthOnly && new Float32Array(W*H).fill(Infinity);
   const blended=[];
@@ -89,7 +89,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
     const filtered = depthOnly || paletteSampling === false ? null : SpriteSurface.samplingPlan(layer);
     const projections = depthOnly ? [] : SpriteSurface.projectionPlan(layer);
     const omitLayer=omit && layer.brickField;
-    const lightingMesh=lightingTargets && layer.sceneMeshId;
+    const lightingMesh=lightingTargets && layer.sceneMeshId || shadowObjects && !depthOnly;
     const sampleCharts=capture || omitLayer || simulationLayers?.size;
     const semantic=depthOnly ? [] : layer.semanticMipmaps??[];
     const charts=(allow || reviewTarget || sampleCharts || lightingMesh || captureFogOwners || multiprojection || pbr ||

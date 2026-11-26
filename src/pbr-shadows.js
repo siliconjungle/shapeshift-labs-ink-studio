@@ -10,10 +10,6 @@ const PbrShadows = (() => {
   const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
   const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
   const slip=Symbol.for('ink-studio.spriteSurface.uvSlip');
-  const subject=chart=>chart ? {
-    object:chart.objectId,entity:chart.objectId,part:chart.partId,material:chart.materialId,surface:chart.id
-  } : {};
-
   function meshTriangles(layers,settings) {
     const triangles=[];
     for (const layer of layers) {
@@ -24,7 +20,7 @@ const PbrShadows = (() => {
       for (let first=0;first<vertices.length/5;first+=3) {
         while(charts[chart]?.end<=first)chart++;
         const target=charts[chart]?.first<=first ? charts[chart] : null;
-        if (!art.allows(settings?.cast,subject(target))) continue;
+        if (!art.participates(settings,'cast',art.surfaceTarget(target,layer.sceneMeshId))) continue;
         while(shifts[shift]?.end<=first)shift++;
         const change=shifts[shift]?.first<=first?shifts[shift]:null;
         while(layer.tilesetMaterials?.[tile]?.end<=first)tile++;
@@ -94,7 +90,7 @@ const PbrShadows = (() => {
     const casts=art.bind(settings,world,'cast'), receives=art.bind(settings,world,'receive');
     const small=art.small(settings,footprint), ramp=(small && settings.small.ramp) || settings?.ramp;
     const {triangles,shells}=cutoutGeometry(cutouts.prepare(world,{
-      ...surfaceOptions,accepts:settings?.cast && (target=>art.allows(settings.cast,target))
+      ...surfaceOptions,accepts:settings && (target=>art.participates(settings,'cast',target))
     }));
     triangles.push(...meshTriangles(layers.flat(),settings));
     const {count,data}=world, x=new Float64Array(count),y=new Float64Array(count),z=new Float64Array(count),
@@ -146,7 +142,7 @@ const PbrShadows = (() => {
     if(!depths.some(Boolean))return null;
     return {
       depths,ramp,strength:small?settings.small.strength:1,receives,
-      receivesSurface:chart=>art.allows(settings?.receive,subject(chart)),
+      receivesSurface:chart=>art.participates(settings,'receive',art.surfaceTarget(chart)),
       visibility(index,position,normal) {
         const depth=depths[index];
         if(!depth)return 1;
@@ -157,8 +153,8 @@ const PbrShadows = (() => {
   }
 
   function pack(shadows, offset) {
-    const u_pbrShadow=new Float32Array(4*16), u_pbrShadowRamp=new Float32Array(16);
-    if (!shadows) return {rows:new Float32Array(0),uniforms:{u_pbrShadow}};
+    const u_pbrShadow=new Float32Array(4*16), u_pbrShadowBounds=new Float32Array(4*4), u_pbrShadowRamp=new Float32Array(16);
+    if (!shadows) return {rows:new Float32Array(0),uniforms:{u_pbrShadow,u_pbrShadowBounds}};
     const depthSize=depth=>Math.ceil(depth.map.length/4)*4;
     const layerSize=depth=>depth.curveDepth?.size ? depthSize(depth)+depth.curveDepth.size*curveLayers*2 : 0;
     const rows=new Float32Array(shadows.depths.reduce((size,depth)=>size+(depth?depthSize(depth)+layerSize(depth):0),0));
@@ -166,6 +162,7 @@ const PbrShadows = (() => {
     for(const [i,depth] of shadows.depths.entries()){
       if(!depth)continue;
       const {map,right,up,minU,minV,width,height,texel,filter,bias,curveDepth}=depth;
+      if (depth.bounds) u_pbrShadowBounds.set([...depth.bounds.min,...depth.bounds.max],i*4);
       rows.set(map,at);
       const start=at;
       at+=depthSize(depth);
@@ -185,10 +182,10 @@ const PbrShadows = (() => {
       u_pbrShadow.set([...right,minU,...up,minV,width,height,texel,bias,offset+start/4,filter,layerTable,0],i*16);
     }
     if(shadows.ramp)u_pbrShadowRamp.set(shadows.ramp);
-    return {rows,uniforms:{u_pbrShadow,u_pbrShadowRamp,u_pbrShadowRampCount:shadows.ramp?.length??0,
+    return {rows,uniforms:{u_pbrShadow,u_pbrShadowBounds,u_pbrShadowRamp,u_pbrShadowRampCount:shadows.ramp?.length??0,
       u_pbrShadowStrength:shadows.strength}};
   }
 
-  return Object.freeze({prepare,pack,curveLayers});
+  return Object.freeze({prepare,pack,curveLayers,bounds:maps.bounds,inspect:maps.inspect});
 })();
 if (typeof module !== 'undefined') module.exports = PbrShadows;

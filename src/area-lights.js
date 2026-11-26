@@ -238,10 +238,13 @@ const AreaLights = (() => {
     }
     return out;
   }
-  function staticSources(world, data = world.data, alpha, derived=[]) {
+  function staticSources(world, data = world.data, alpha, derived=[], shadowSettings) {
     const retained=world.brickSnapshot?.assets?.shadow;
-    const sources = retained ? [retained,...derived] : derived.slice(),
-      boned = new Set(world.anim?.boned ?? []),
+    const art = typeof ShadowArt === 'undefined' ? require('./shadow-art.js') : ShadowArt;
+    const settings = shadowSettings === undefined ? art.prepare(world.look?.shadowArt) : shadowSettings;
+    const sources = (retained ? [retained,...derived] : derived).filter(source=>
+      art.objectAllows(settings,'cast',{object:source.objectId}));
+    const boned = new Set(world.anim?.boned ?? []),
       backdrop = new Set(world.back ?? []),
       owned = world.anim?.geometryOwned;
     for (const source of world.renderSdfs ?? []) {
