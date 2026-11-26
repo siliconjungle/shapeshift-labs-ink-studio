@@ -1446,6 +1446,8 @@ const CMD = {
         '  painting-cels sample <scene.json> <clip.json> --out scene.json [--frame cel-1 | --at seconds]   write one editable cel into the scene',
         '  painting-cels preview <scene.json> <clip.json> --out directory [--frame cel-1 | --at seconds] [--view view.json]   render neighboring poses in one camera',
         '  painting-cels export <scene.json> <clip.json> --out directory [--view view.json]   render numbered cels and animated PNG',
+        '  paint-survival review <scene.json> <plan.json> --out directory   compare painted fallbacks across native grids and angles',
+        '  paint-survival apply <scene.json> <plan.json> <review.json> --case angle/resolution --out scene.json   accept one reviewed paint variant',
         '  sculpt-spray plan <scene.json> <brush.json>   capture receivers for a volumetric paint brush',
         '  sculpt-spray apply <scene.json> <brush.json> --out scene.json   retain a shaped surface tint',
         '  sculpt-spray inspect <scene.json>   show retained volumes and receiver coverage',
@@ -2814,6 +2816,10 @@ const CMD = {
   },
   'painting-cels'() {
     return require('./painting-cels.js')(pos, opt, lib(),
+      (file, source) => dataScene(file, source, { refreshTilesets: false }));
+  },
+  'paint-survival'() {
+    return require('./paint-survival.js')(pos, opt, lib(),
       (file, source) => dataScene(file, source, { refreshTilesets: false }));
   },
   'sculpt-spray'() {

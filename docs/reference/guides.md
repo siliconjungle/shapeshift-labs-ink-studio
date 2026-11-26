@@ -315,6 +315,7 @@ All checked-in guides, indexed by title and section headings.
 - [Paint mixing](../paint-mixing.md)
 - [Apply multiple paint channels with a brush preset](../paint-presets.md)
 - [Raise, flatten, or recess retained paint](../paint-relief.md)
+- [Choose paint fallbacks at sprite size](../paint-survival.md)
 - [Shadows from painted cutouts](../painted-cutout-shadows.md)
 - [Retain and edit a 3D painting](../painting-3d.md)
 - [Animate retained 3D painting cels](../painting-cels.md)
