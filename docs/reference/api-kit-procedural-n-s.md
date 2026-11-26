@@ -59,6 +59,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.paintLooseness.prepare` | function | `(raw)` | [source](../../src/kit/p26d-paint-looseness.js) |
 | `KIT.procedural.paintLooseness.vary` | function | `(settings, row, family, source)` | [source](../../src/kit/p26d-paint-looseness.js) |
 
+## KIT.procedural.paintRelief
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.paintRelief` | namespace |  |  |
+| `KIT.procedural.paintRelief.gradient` | function | `(relief, form, space, accepts)` | [source](../../src/kit/p26g-paint-relief.js) |
+| `KIT.procedural.paintRelief.prepare` | function | `(raw)` | [source](../../src/kit/p26g-paint-relief.js) |
+
 ## KIT.procedural.panelFrames
 
 | Member | Kind | Signature or value | Guides and source |
@@ -1989,7 +1997,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.shapeSweeps` | namespace |  |  |
-| `KIT.procedural.shapeSweeps.prepare` | function | `({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse, looseness }, { orient } = {})` | [guide](../sculpt-sweeps.md), [source](../../src/kit/p26a-shape-sweeps.js) |
+| `KIT.procedural.shapeSweeps.prepare` | function | `({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse, looseness }, { orient, band } = {})` | [guide](../sculpt-sweeps.md), [source](../../src/kit/p26a-shape-sweeps.js) |
 
 ## KIT.procedural.signalRecovery
 

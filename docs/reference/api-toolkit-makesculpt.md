@@ -13,9 +13,11 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.makeSculpt().adaptiveSampling` | value | `boolean` | [guide](../../README.md#geometry-and-materials) |
 | `toolkit.makeSculpt().add` | function | `(p, mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `toolkit.makeSculpt().addSurfacePigment` | function | `(entity, id, sample)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
+| `toolkit.makeSculpt().addSurfaceRelief` | function | `(entity, sample)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `toolkit.makeSculpt().amb` | value | `number` | [guide](../../README.md#geometry-and-materials) |
 | `toolkit.makeSculpt().aoK` | value | `number` | [guide](../../README.md#geometry-and-materials) |
 | `toolkit.makeSculpt().aoR` | value | `number` | [guide](../../README.md#geometry-and-materials) |
+| `toolkit.makeSculpt().applyPaintRecesses` | function | `(recesses)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `toolkit.makeSculpt().attr` | function | `(name, fn)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `toolkit.makeSculpt().bake` | function | `()` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `toolkit.makeSculpt().ball` | function | `(c, r, mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
@@ -56,6 +58,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.makeSculpt().res` | value | `number` | [guide](../../README.md#geometry-and-materials) |
 | `toolkit.makeSculpt().rock` | function | `(c, r, mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `toolkit.makeSculpt().sdf` | function | `(x, y, z)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
+| `toolkit.makeSculpt().sdf.forShadow` | function | `(x, y, z)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `toolkit.makeSculpt().shEmptySpace` | value | `string` | [guide](../../README.md#geometry-and-materials) |
 | `toolkit.makeSculpt().shK` | value | `number` | [guide](../../README.md#geometry-and-materials) |
 | `toolkit.makeSculpt().shLen` | value | `number` | [guide](../../README.md#geometry-and-materials) |

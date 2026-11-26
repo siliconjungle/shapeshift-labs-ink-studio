@@ -28,10 +28,11 @@ const TargetSelectors = (() => {
 
   function describe(target) {
     if (!record(target)) throw new TypeError('Expected named target metadata');
-    const keys = ['entity', 'part', 'surface', 'prefabs', 'tags', 'medium', 'mediumKind', 'mark', 'markLayer'];
+    const keys = ['entity', 'part', 'surface', 'prefabs', 'tags', 'medium', 'mediumKind', 'mark', 'markLayer', 'castsShadow'];
     for (const [key, value] of Object.entries(target)) {
       const valid = key === 'tags' || key === 'prefabs' ?
-        Array.isArray(value) && Array.from(value).every(name) : name(value) || key === 'entity' && Number.isSafeInteger(value);
+        Array.isArray(value) && Array.from(value).every(name) : key === 'castsShadow' ? typeof value === 'boolean' :
+          name(value) || key === 'entity' && Number.isSafeInteger(value);
       if (!keys.includes(key) || !valid) throw new TypeError('Invalid target metadata field: ' + key);
     }
     return target;

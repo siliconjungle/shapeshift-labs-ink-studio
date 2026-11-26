@@ -134,7 +134,7 @@ function makeSculpt(B, rest) {
   S.grp = k => ({ g: gid++, k }); // members of a group melt into each other over distance k
   S.pick = (ramp, t) => ramp[clamp(Math.floor(t * ramp.length), 0, ramp.length - 1)];
 
-  let hasOptionalProxy = false;
+  let hasOptionalProxy = false, hasNonCaster = false;
   function add(p, mat, o) {
     o = o || {};
     if (!p.sourceLocal) {
@@ -150,7 +150,10 @@ function makeSculpt(B, rest) {
     p.tag = o.tag || null;
     p.renderOwner = o.objectId ?? p.tag;
     p.renderTarget = o.surfaceId !== undefined ? { surface: o.surfaceId, ...o.target } : o.target;
-    if (shadowArt?.cast) p.shadowCaster = ShadowArt.allows(shadowArt.cast, shadowTarget(p, p.mat));
+    if (o.target?.castsShadow === false) {
+      p.shadowCaster = false;
+      hasNonCaster = true;
+    } else if (shadowArt?.cast) p.shadowCaster = ShadowArt.allows(shadowArt.cast, shadowTarget(p, p.mat));
     if (budgetFor) p.detailBudget = budgetFor(p);
     p.model = o.model;
     if (p.bump) p.br += p.bump[0];
@@ -217,20 +220,74 @@ function makeSculpt(B, rest) {
       stack.push({ id, sample });
     }
   };
+  const reliefLayers = new WeakMap();
+  S.addSurfaceRelief = (entity, sample) => {
+    for (const solid of pos) {
+      if (solid.renderTarget?.entity !== entity) continue;
+      let stack = reliefLayers.get(solid);
+      if (!stack) {
+        stack = [];
+        reliefLayers.set(solid, stack);
+        solid.mat = { ...solid.mat, paintRelief: {
+          normal(point, normal, base = normal) {
+            let slope;
+            for (const read of stack) {
+              const value = read(point, normal);
+              if (value) slope = slope ? KIT.V.add(slope, value) : value;
+            }
+            if (slope) return norm(KIT.V.sub(base, slope));
+          }
+        } };
+      }
+      stack.push(sample);
+    }
+  };
+  function reliefMaterial(material, program, point, normal) {
+    const paintedNormal = program?.normal(point, normal, material?.paintedNormal);
+    return paintedNormal ? { ...material, paintedNormal, paintReliefActive: true } : material;
+  }
+  S.applyPaintRecesses = recesses => {
+    for (const solid of pos) {
+      const tools = recesses.get(solid.renderTarget?.entity);
+      if (!tools?.length) continue;
+      const base = { ...solid }, previous = base.mat.cutSurface;
+      const receiver = (...point) => psd(base, ...point);
+      const trimmed = S.join('cut', base, tools, { r: 0, mask: true, hold: true, mat: base.mat });
+      solid.sd = trimmed.sd;
+      solid.sample = trimmed.sample;
+      solid.bump = null;
+      solid.paintRecess = true;
+      delete solid.lowerBound;
+      delete solid.analytic;
+      delete solid.model;
+      solid.mat = { ...trimmed.mat, cutSurface: { locate(point, normal) {
+        let best = receiver(...point), material;
+        for (const tool of tools) {
+          const next = -psd(tool, ...point);
+          if (next > best + 1e-7) {
+            best = next;
+            material = tool.mat;
+          }
+        }
+        return material ?? previous?.locate(point, normal);
+      } } };
+    }
+  };
   S.materialAt = (material, point, normal) => {
     if (!material) return material;
     const cap = material.cutSurface?.locate(point,normal);
-    const base = cap ?? baseMaterialAt(material,point,normal);
+    const base = cap ?? reliefMaterial(baseMaterialAt(material, point, normal), material.paintRelief, point, normal);
     const appearance = paintAppearance(material, point, normal, cap);
-    if (!appearance) return base;
-    const { material:role,masks,tint }=appearance;
+    if (!appearance && !base.paintReliefActive) return base;
+    const { material:role,masks,tint }=appearance ?? {};
     const next={ ...base,...(role && { materialId:role }),
-      ...(appearance.surface && { surfaceUV:appearance.surface.uv,generatedSurface:appearance.surface.details }) };
-    if (masks || tint) {
+      ...(appearance?.surface && { surfaceUV:appearance.surface.uv,generatedSurface:appearance.surface.details }) };
+    if (masks || tint || base.paintReliefActive) {
       const model=(typeof base.model==='function' ? base.model(point,normal) : base.model) ?? {};
       const changed={ ...model.masks };
       for (const [name,value] of Object.entries(masks ?? {})) if (value!==null) changed[name]=value;
       next.model={ ...model,...(tint && { color:tint(model.color ?? [1,1,1]) }),
+        ...(base.paintReliefActive && { normal: base.paintedNormal }),
         ...(Object.keys(changed).length && { masks:changed }) };
     }
     return next;
@@ -1059,6 +1116,7 @@ function makeSculpt(B, rest) {
       if (f) ((nx = f[0]), (ny = f[1]), (nz = f[2]));
     }
     if (m.paintedNormal) [nx,ny,nz]=m.paintedNormal;
+    const ox = m.paintReliefActive ? gx : nx, oy = m.paintReliefActive ? gy : ny, oz = m.paintReliefActive ? gz : nz;
     let ramp = m.rf ? m.rf(x, y, z) || m.r : m.r,
       t,
       ao = 1,
@@ -1076,7 +1134,7 @@ function makeSculpt(B, rest) {
             w = 1;
           for (let j = 1; j <= 3; j++) {
             const h = S.aoR * j;
-            occ += (Math.max(0, h - field(x + nx * h, y + ny * h, z + nz * h)) * w) / h;
+            occ += (Math.max(0, h - field(x + ox * h, y + oy * h, z + oz * h)) * w) / h;
             w *= 0.6;
           }
           ao = clamp(1 - (S.aoK * occ) / 1.96, 0, 1);
@@ -1090,7 +1148,7 @@ function makeSculpt(B, rest) {
           if (coarse || PRB && (LSH === 0 || LSH === 1)) sh = LSH;
           else
             for (let i = 0; i < shadowMarch.steps && tt < shadowMarch.distance; i++) {
-              const h = shadowDistance(x + nx * 0.05 + L[0] * tt, y + ny * 0.05 + L[1] * tt, z + nz * 0.05 + L[2] * tt);
+              const h = shadowDistance(x + ox * 0.05 + L[0] * tt, y + oy * 0.05 + L[1] * tt, z + oz * 0.05 + L[2] * tt);
               if (h < 0.004) {
                 sh = 0;
                 break;
@@ -1129,9 +1187,9 @@ function makeSculpt(B, rest) {
             let tt = 0.08;
             for (let k = 0; k < shadowMarch.steps && tt < dist - 0.12; k++) {
               const h = shadowDistance(
-                x + nx * 0.05 + (lx / dist) * tt,
-                y + ny * 0.05 + (ly / dist) * tt,
-                z + nz * 0.05 + (lz / dist) * tt
+                x + ox * 0.05 + (lx / dist) * tt,
+                y + oy * 0.05 + (ly / dist) * tt,
+                z + oz * 0.05 + (lz / dist) * tt
               );
               if (h < 0.004) {
                 k2 = 0.12;
@@ -1513,10 +1571,10 @@ function makeSculpt(B, rest) {
     if (surface) B.surfaceNext(surface, nx, ny, nz, L, 1 - shd, undefined, bevel, facingRamp);
     if (alternate) B.shadowNext(ci, alternate);
     const brushDefinition = m.brush === undefined ? (m0.brush ?? S.brush) : m.brush;
-    if (brushDefinition !== undefined && brushDefinition !== false && !m.glass && Math.hypot(nx, ny, nz) > 1e-8) {
+    if (brushDefinition !== undefined && brushDefinition !== false && !m.glass && Math.hypot(ox, oy, oz) > 1e-8) {
       const brush = brushSettings(brushDefinition);
       const frame = withBrushNormals(normalAt =>
-        SurfaceBrush.direction(brush, [x, y, z], [nx, ny, nz], { spacing: res, normalAt }));
+        SurfaceBrush.direction(brush, [x, y, z], [ox, oy, oz], { spacing: res, normalAt }));
       SurfaceBrush.stamp(B, frame, P[ci], brush, { opacity, animation: fl });
       return;
     }
@@ -1754,9 +1812,9 @@ function makeSculpt(B, rest) {
     return d;
   };
   S.sdf = (x, y, z) => fieldAll(x, y, z);
-  S.shadowSdf = shadowArt?.cast ? (x, y, z) => fieldAll(x, y, z, false, true) : S.sdf;
-  if (shadowArt?.cast) S.sdf.forShadow = S.shadowSdf;
-  const shadowDistance = shadowArt?.cast ? S.shadowSdf : field;
+  S.shadowSdf = (x, y, z) => fieldAll(x, y, z, false, true);
+  S.sdf.forShadow = S.shadowSdf;
+  const shadowDistance = (x, y, z) => hasNonCaster || shadowArt?.cast ? S.shadowSdf(x, y, z) : field(x, y, z);
   S.proxySdf = () => hasOptionalProxy ? (x, y, z) => fieldAll(x, y, z, true) : S.sdf;
   /* Material and part ownership at a rest-pose surface. The distance field
      is retained even when the renderer samples it at a different resolution. */
@@ -1833,7 +1891,10 @@ function makeSculpt(B, rest) {
       field.ready();
       return {bounds:field.modelBounds(.05), distance:field.sdf, locate:field.renderSurface, accepts};
     }
-    return { ...bind(()=>true,()=>true), bind, rows, owners, negative };
+    const casts = p => p.renderTarget?.castsShadow !== false;
+    const filtered = positive.some(p => !casts(p));
+    return { ...bind(()=>true,()=>true), bind, rows, owners, negative,
+      ...(filtered && { shadowGeometry: bind(casts, () => true) }) };
   }
   function captureReferenceSdf() {
     const finite = p => !p.whole && Number.isFinite(p.br) && p.br < 1e8 && !p.mat.skip;
@@ -1973,11 +2034,13 @@ function makeSculpt(B, rest) {
   }
 
   function shadeOwned(owner, material, ...sample) {
-    const spray = material.sdfSpray;
+    const { sdfSpray: spray, paintRelief } = material;
     const cap = material.cutSurface?.locate(sample.slice(1, 4), sample.slice(4, 7));
     if (cap) material = cap;
     else if (material.materialAt || material.surfaceState)
       material = baseMaterialAt(material, sample.slice(1, 4), sample.slice(4, 7));
+    if (!cap && paintRelief)
+      material = reliefMaterial(material, paintRelief, sample.slice(1, 4), sample.slice(4, 7));
     material = controlled(material);
     const preview = typeof globalThis !== 'undefined' && globalThis.INK_LOOK_ALBEDO;
     const pigment = material.indexedPigment, glow = material.paintedEmission;
@@ -1987,7 +2050,8 @@ function makeSculpt(B, rest) {
     const collectEngraving=material.engraving!==undefined||material.top?.engraving!==undefined||S.engraving!==undefined;
     const collectPrint=material.screenPrint!==undefined||material.top?.screenPrint!==undefined||S.screenPrint!==undefined;
     const collectStyle = B.describePixelStyle && (material.pixelStyle || material.top?.pixelStyle);
-    if (!renderSdf && !referenceSdf && !capture && !B.describeSplats && !collectStyle && !collectFootprint && !collectEngraving && !collectPrint && !material.optical && !material.top?.optical) return light(material, ...sample, undefined, fine);
+    if (!renderSdf && !referenceSdf && !capture && !B.describeSplats && !collectStyle && !collectFootprint && !collectEngraving && !collectPrint && !material.optical && !material.top?.optical && !material.paintReliefActive)
+      return light(material, ...sample, undefined, fine);
     const first = B.count();
     let effective = material, style, pair;
     const shade = () => light(material, ...sample, material.top || collectStyle || collectFootprint || collectEngraving || collectPrint ?
