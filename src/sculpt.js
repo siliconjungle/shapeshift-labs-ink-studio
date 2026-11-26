@@ -261,7 +261,7 @@ function makeSculpt(B, rest) {
     const solids = lists.flatMap((list, i) => list.slice(starts[i]));
     if (!solids.length && result?.sd) solids.push(result);
     for (const solid of solids) {
-      const { sd, sample, lowerBound, along, analytic, geometryBounds, mat, sourceLocal, markWarp } = solid;
+      const { sd, sample, lowerBound, along, analytic, geometryBounds, mat, sourceLocal, markWarp, markCharts } = solid;
       if (trackModifierSpace) solid.modifierSpace=space;
       solid.bc = point(solid.bc);
       const noisy = space.affine && solid.bump && { ...solid };
@@ -274,6 +274,11 @@ function makeSculpt(B, rest) {
       solid.sourceLocal = value => sourceLocal(inverse(value));
       if (markWarp) solid.markWarp = { base: markWarp.base, forward: value => point(markWarp.forward(value)),
         inverse: value => markWarp.inverse(inverse(value)) };
+      if (markCharts) solid.markCharts = id => {
+        const chart = markCharts(id);
+        if (chart) return { u: direction(chart.u), v: direction(chart.v), axis: direction(chart.axis),
+          read: (value, normal) => chart.read(inverse(value), space.inverseDirection(normal)) };
+      };
       solid.sample = function (visit) {
         const res = this.res;
         this.res = res / boundScale;

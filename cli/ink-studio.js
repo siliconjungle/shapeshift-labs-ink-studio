@@ -1733,6 +1733,12 @@ const CMD = {
         ...require('./effect-clip-command.js').usage.map(command=>'  '+command.replace('ink-studio ','')),
         '    compare native frames around midnight, weather beats, or cuts [--scale N --fail-on-flags]',
         '  pose-review <id> [--directions 8 --w 96 --h 96]  review named poses at sprite resolution',
+        '  character-rig templates   list reusable character components',
+        '  character-rig assemble <plan.json> [--out rig.json]   place and join character components',
+        '  character-rig inspect <rig.json> [--pose pose.json --out report.json]   inspect joints and constraints',
+        '  character-rig solve <rig.json> <targets.json> [--out pose.json --require-solved]   solve whole-body IK',
+        '  character-rig bind <rig.json> <bind-plan.json> --out binding.json   bind meshes, splats and proxies to one rig',
+        '  character-rig preview <rig.json> <binding.json> <pose.json> [--view view.json] --out directory   render and capture a bound pose',
         '  motion-review <id> [--finding kind-or-id] [--out report.json]  inspect motion findings and focused playback ranges',
         '  clip-sequence <id> [--handoff 0] [--out report.json]  inspect clip instances, retimed cues, and handoffs',
         '  animation-graph <graph.json> [--at seconds] [--inputs file.json] [--out report.json]  inspect poses and event responses',
@@ -3631,6 +3637,9 @@ const CMD = {
     const reportFile=file.replace(/\.[^.]+$/,'')+'.json';
     fs.writeFileSync(reportFile,JSON.stringify(report,null,2)+'\n');
     console.log('wrote',reportFile);
+  },
+  'character-rig'() {
+    return require('./character-rig.js').command(pos,opt,lib());
   },
   'pose-review'() {
     const w = build(pos[0]);
