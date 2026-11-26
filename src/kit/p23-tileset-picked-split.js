@@ -7,7 +7,7 @@
     const tileset = material?.texture?.tileset;
     if (!tileset) return;
     const asset = A.tilesets.prepare(scene.tilesets,scene.tilesetDefaults).source(tileset);
-    const texels = ([u,v])=>[u*(asset.width-1),v*(asset.height-1)];
+    const texels = uv=>MaterialUV.texel(uv,asset.width,asset.height);
     const uvSet = MaterialUV.resolve(row.document.uvBindings,'pigment');
     const prior = A.tilesetEyedrop.sourceBinding(row,polygon.id);
     const outline = polygon.corners.map(corner=>texels(MaterialUV.uv(corner,uvSet)));

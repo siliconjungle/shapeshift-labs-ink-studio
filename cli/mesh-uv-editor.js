@@ -9,7 +9,7 @@ const { viewSettings, worldFor } = require('./mesh-native-view.js');
 
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const options = {
-  layout: ['object','out','uv-set','channel'], select: ['object','out','topology-out','view','preview','uv-set','channel'],
+  layout: ['object','out','uv-set','channel','atlas'], select: ['object','out','topology-out','view','preview','uv-set','channel'],
   edit: ['object','out','view','preview','report','selection','uv-set','channel']
 };
 const imageNames = ['atlas-before.png', 'model-before.png', 'atlas-after.png', 'model-after.png', 'comparison.png'];
@@ -239,7 +239,12 @@ function command([action, file, input, ...rest], opt, kit, openEditor) {
     throw new RangeError('Choose --channel or --uv-set');
   const selector=opt.channel ?? (numeric!==undefined ? +numeric : undefined);
   let result, value;
-  if (action === 'layout') result = value = UV.inspect(document,selector);
+  if (action === 'layout') {
+    if (opt.atlas !== undefined && !/^\d+,\d+$/.test(opt.atlas))
+      throw new TypeError('Use --atlas width,height for an explicit UV inspection atlas');
+    const atlas = opt.atlas?.split(',').map(Number);
+    result = value = editor ? editor.inspectMeshUV(object,{uvSet:selector,atlas}) : UV.inspect(document,selector,{atlas});
+  }
   else {
     const authored=read(input);
     if (selector!==undefined && authored?.uvSet!==undefined)

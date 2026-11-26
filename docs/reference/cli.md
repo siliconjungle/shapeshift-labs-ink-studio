@@ -263,7 +263,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology transfer-materials <before.json> <replacement.json> <map.json> [--materials file] [--settings file] [--out mesh.json] [--out-materials file] [--report file] [--partial on]   transfer registered paint and corner data
   mesh-uv inspect|simplify <mesh> [--uv-set n | --channel id] --out <directory|mesh.json>   inspect UV maps or reduce with seam locks
   mesh-uv import <mesh> --out topology.json [--id id] [--uv-set n] [--join-coincident on|off]   retain triangle corner UVs for editing
-  mesh-uv layout <mesh-or-scene.json> [--object id] [--uv-set n | --channel id] [--out file]   inspect stable faces, seam sides, pins and islands
+  mesh-uv layout <mesh-or-scene.json> [--object id] [--uv-set n | --channel id] [--atlas width,height] [--out file]   inspect normalized UVs and source texels on faces and seam sides
   mesh-uv select <mesh-or-scene.json> <query.json> [--object id] [--view file] [--preview dir] [--out file] [--topology-out file]   select by UV element, vertex tint, atlas location or model pixel
   mesh-uv edit <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file] [--preview dir] [--out file] [--report file]   plan UV seam edits, local unwraps, relax and texel budgets
   scenery pack <scene.js> --out asset.inkscenery   pack indexed meshes and textures from a scenery hook
@@ -1017,7 +1017,6 @@ These options are read by CLI code. Follow each source link for the accepted val
 - `--art-timecode-in` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--as` · [cli/world.js](../../cli/world.js)
 - `--aspect` · [cli/render-grid.js](../../cli/render-grid.js)
-- `--atlas` · [cli/mesh-uv.js](../../cli/mesh-uv.js)
 - `--ballots` · [cli/music-critique-calibration.js](../../cli/music-critique-calibration.js)
 - `--bins` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--boundaries` · [cli/mesh-uv.js](../../cli/mesh-uv.js)

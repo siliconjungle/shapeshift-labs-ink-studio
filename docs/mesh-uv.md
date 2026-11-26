@@ -1351,6 +1351,37 @@ including when the two sides still share the same UV coordinates. It keeps the
 in that connected UV region, ordered by ID. Check the current layout after
 cutting or stitching, since island memberships and IDs can change.
 
+### Inspect source texels and normalized UVs together
+
+```sh
+ink-studio mesh-uv layout panel-scene.json --object panel --channel pigment --out layout.json
+ink-studio mesh-uv layout panel-topology.json --atlas 33,17 --out layout.json
+ink-studio tileset eyedrop --scene panel-scene.json --object panel --face sign
+```
+
+In a scene, `mesh-uv layout` uses each face's source texture dimensions,
+including an active bake's replacement texture. Select `--channel pigment`
+to use the paint layout even when the mesh binds it to a set other than
+UV 0. Named normal, emission, and metallic-roughness channels can also
+report texels when the material has the corresponding map. Use
+`--atlas width,height` to supply dimensions explicitly for a standalone
+mesh or another inspection layout.
+
+Read the normalized pair in `corners[].uv` and the corresponding
+source position in `corners[].texel`. Each `edges[].sides[]` row pairs
+`uv` and `texels` in its corner order. Both sides of a seam can use
+different atlases. Each face's `atlas` records its source and size.
+Coordinates are top-down with the first texel center at `[0,0]`. For
+an image of width `W` and height `H`, Ink reports
+`[u * (W - 1), v * (H - 1)]` without snapping to a pixel. An unknown
+source size leaves the normalized UVs available on their own.
+
+The SDK exposes `editor.inspectMeshUV(object, { uvSet: "pigment" })`
+and `KIT.meshTopology.uv.inspect(mesh, uvSet, { atlas: [W,H] })`.
+`tileset eyedrop` lists the same pairs for the picked face. Run
+`node examples/tileset-pick/uv-texel-inspection-demo.cjs <directory>`
+for a panel with two source sheets and fractional insets.
+
 An edit takes one to 32 sequential operations and can include the layout's
 `revision`. The editor checks that the requested revision is current before
 planning. This example cuts a wing, pins the keeper corner, and moves the

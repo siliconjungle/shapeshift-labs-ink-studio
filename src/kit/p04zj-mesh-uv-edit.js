@@ -91,18 +91,31 @@
     return { format, version: 1, mesh: doc.id, revision: topology.revision(doc) };
   }
 
-  function inspect(source, uvSet = 0) {
+  function inspect(source, uvSet = 0, { atlas, atlasFor } = {}) {
     const g = graph(source,uvSet);
+    if (atlas !== undefined && !tuple(atlas,2,n=>Number.isSafeInteger(n) && n>0))
+      throw new RangeError('UV inspection atlas needs positive integer width and height');
+    const explicit = atlas && {kind:'explicit',size:atlas.slice()};
+    const sources = new Map();
+    if (explicit || atlasFor) for (const {id,material} of g.faces.values()) {
+      const resolved = explicit ?? atlasFor?.(material);
+      if (resolved) sources.set(id,resolved);
+    }
+    const toTexel = (face,uv)=>MaterialUV.texel(uv,...sources.get(face).size);
     return {
       ...sourceInfo(g.doc, 'ink-studio/uv-layout'),
       ...(g.set && {uvSet:g.set}), ...(g.doc.uvBindings && {uvBindings:g.doc.uvBindings}),
+      ...(sources.size && {texelCoordinates:{origin:'top-left',units:'texel-centers'}}),
       islands: Array.from(g.islands.values(), row => ({ ...row, faces: row.faces.slice(), bounds: row.bounds.slice() })),
       faces: Array.from(g.faces.values(), face => ({ id: face.id, material: face.material, island: g.atIsland.get(face.id),
-        corners: face.corners.map(row => row.id), edges: g.faceEdges.get(face.id).slice() })),
+        corners: face.corners.map(row => row.id), edges: g.faceEdges.get(face.id).slice(),
+        ...(sources.has(face.id) && {atlas:sources.get(face.id)}) })),
       edges: Array.from(g.edges.values(), row => ({ ...row, vertices: row.vertices.slice(),
-        sides: row.sides.map(side => ({ face: side.face, corners: side.corners.slice(), uv: side.uv.map(p => p.slice()) })) })),
+        sides: row.sides.map(({face,corners,uv})=>({face,corners:corners.slice(),uv:uv.map(p=>p.slice()),
+          ...(sources.has(face) && {texels:uv.map(pair=>toTexel(face,pair))})})) })),
       corners: Array.from(g.corners.values(), ({ id, vertex, uv, face, uvPinned }) =>
-        ({ id, vertex, face, uv: uv.slice(), pinned: Boolean(uvPinned), weld: g.atWeld.get(id) }))
+        ({ id, vertex, face, uv: uv.slice(), pinned: Boolean(uvPinned), weld: g.atWeld.get(id),
+          ...(sources.has(face) && {texel:toTexel(face,uv)}) }))
     };
   }
 
