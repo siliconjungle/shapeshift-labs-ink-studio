@@ -54,6 +54,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().editMeshTopology` | function | `(object, patch, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().editMeshUV` | function | `(object, request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().editObjectPoints` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().editPrefabBillboards` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().editPrefabSource` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().editSceneLayers` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().editSculptContribution` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
@@ -110,6 +111,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().planObjectPoints` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planPainting3d` | function | `(request, { update = false } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planPrefabArray` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().planPrefabBillboards` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planPrefabCombination` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planPrefabIsolation` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planPrefabMirror` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
@@ -145,6 +147,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().preview` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().previewCustomProperties` | function | `(request, settings)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().previewPrefabArray` | function | `(request, {time=0} = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().previewPrefabBillboards` | function | `(request, settings)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().previewPrefabCombination` | function | `(request, {time=0} = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().previewPrefabIsolation` | function | `(request, { time = 0 } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().previewPrefabMirror` | function | `(request, settings)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
