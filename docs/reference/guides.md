@@ -477,6 +477,7 @@ All checked-in guides, indexed by title and section headings.
 - [Value Processor](../value-processor.md)
 - [Vector-field painting](../vector-field-painting.md)
 - [Vector operations and casts](../vector-operations.md)
+- [SVG and vector resources](../vector-resources.md)
 - [Approve a video codec round trip](../video-round-trip.md)
 - [View-adaptive legends and labels](../view-annotations.md)
 - [View-specific pose corrections](../view-poses.md)

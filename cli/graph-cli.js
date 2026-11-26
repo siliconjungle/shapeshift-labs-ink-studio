@@ -6,6 +6,7 @@ const { save, graphOutputs } = require('./graph-outputs.js');
 const { readGraphProject } = require('./graph-project.js');
 const { openMaterialGraph, readMaterialGraph, writeMaterialGraph } = require('./material-graph.js');
 const { describeMaterialBitmap, editMaterialBitmap } = require('./material-bitmaps.js');
+const { describeMaterialVector, editMaterialVector } = require('./material-vectors.js');
 const { describeMaterialMetadata } = require('./material-metadata.js');
 const { inspectMaterialVisibility } = require('./material-visibility.js');
 const { editMaterialParameters, inspectMaterialParameters } = require('./material-parameters.js');
@@ -37,7 +38,7 @@ const discoveryFlags = { nodes: ['json'], describe: ['json', 'example'] };
 const analysisFlags = { impact: ['root', 'json'], diff: ['adapters', 'json'], material: ['id', 'out', 'base', 'output-usages', 'metadata'],
   subgraph: ['out', 'adapters'], 'publish-subgraph': ['out', 'revision', 'adapters'],
   'material-presets': ['out', 'instance', 'export', 'presets'],
-  'material-parameters': ['out', 'instance', 'inputs', 'adapters'], 'material-bitmap': ['out'],
+  'material-parameters': ['out', 'instance', 'inputs', 'adapters'], 'material-bitmap': ['out'], 'material-vector': ['out'],
   'material-visibility': ['inputs', 'instance', 'scope'], 'material-info': ['audience'], 'material-library': ['audience', 'query', 'tag', 'offset', 'limit', 'out'] };
 const commandOptions = { ...flags, ...discoveryFlags, ...analysisFlags, ...host.commands };
 
@@ -201,24 +202,27 @@ async function graphCommand(pos,opt,settings) {
     const saved=writeMaterialGraph(opt.out,result.document,{baseDir});
     return send({file:path.resolve(opt.out),id:saved.id,inspector:result.inspector});
   }
-  if (mode==='material-bitmap') {
+  if (mode==='material-bitmap' || mode==='material-vector') {
+    const bitmap = mode==='material-bitmap', kind = bitmap ? 'bitmap' : 'vector';
+    const describe = bitmap ? describeMaterialBitmap : describeMaterialVector;
+    const edit = bitmap ? editMaterialBitmap : editMaterialVector;
     if (pos.length !== 3 || Object.entries(opt).some(([key, value]) =>
       key !== 'out' || typeof value !== 'string' || !value.trim()))
-      throw new TypeError('Use graph material-bitmap <material.json> <id|request.json> [--out material.json]');
+      throw new TypeError('Use graph '+mode+' <material.json> <id|request.json> [--out material.json]');
     const sourceFile = path.resolve(file), baseDir = path.dirname(sourceFile);
     const document = readMaterialGraph(sourceFile);
     if (!caseFile.toLowerCase().endsWith('.json') || Object.hasOwn(document.resources ?? {}, caseFile)) {
-      if (opt.out !== undefined) throw new TypeError('A bitmap inspection does not take --out');
-      return send(describeMaterialBitmap(document, caseFile, { baseDir }));
+      if (opt.out !== undefined) throw new TypeError('A '+kind+' inspection does not take --out');
+      return send(describe(document, caseFile, { baseDir }));
     }
     const requestFile = path.resolve(caseFile);
     if (opt.out && path.resolve(opt.out) === requestFile)
-      throw new TypeError('Choose a material output separate from the bitmap edit request');
+      throw new TypeError('Choose a material output separate from the '+kind+' edit request');
     const request = JSON.parse(fs.readFileSync(requestFile, 'utf8'));
-    const result = editMaterialBitmap(document, request, { ...settings, baseDir });
+    const result = edit(document, request, { ...settings, baseDir });
     if (!opt.out) return send(result);
     writeMaterialGraph(opt.out, result.document, { baseDir });
-    return send({ file: path.resolve(opt.out), id: result.document.id, bitmap: result.bitmap });
+    return send({ file: path.resolve(opt.out), id: result.document.id, [kind]: result[kind] });
   }
   if (mode==='material-visibility') {
     if (pos.length!==2 || Object.entries(opt).some(([key,value])=>

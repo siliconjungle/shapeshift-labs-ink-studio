@@ -9,6 +9,7 @@ const Presets = require('../src/material-presets.js');
 const OutputUsages = require('./material-output-usages.js');
 const Metadata = require('./material-metadata.js');
 const Bitmap = require('../src/bitmap-resources.js');
+const Vector = require('./vector-resources.js');
 
 const format = 'ink-studio/material-graph';
 const version = 1;
@@ -199,6 +200,7 @@ function lower(document, { requireOutputs, instance } = {}) {
     entity(resource, ['definition'], 'resource ' + id);
     const { definition } = resource;
     if (definition?.format === Bitmap.format) Bitmap.layout(definition);
+    else if (definition?.format === Vector.format) Vector.validate(definition);
     else if (!record(definition) || !Object.hasOwn(definition, 'file'))
       throw new TypeError('Resource ' + id + ' needs a graph asset definition');
     return [id, definition];
@@ -284,6 +286,7 @@ function writeMaterialGraph(file, source, { baseDir = path.dirname(path.resolve(
       ...member, ...(member.file && { file: relocate(member.file) }), ...(member.origin && { origin: relocate(member.origin) })
     });
     else if (typeof definition.file === 'string') definition.file = relocate(definition.file);
+    else if (definition.format === Vector.format && definition.origin) definition.origin = relocate(definition.origin);
   }
   files.json(target, document);
   return document;

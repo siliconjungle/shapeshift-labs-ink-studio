@@ -95,6 +95,65 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.valueProcessor.specialize` | function | `(node)` | [source](../../src/kit/paq-value-processor.js) |
 | `KIT.procedural.valueProcessor.version` | value | `number = 1` |  |
 
+## KIT.procedural.vectorResources
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.vectorResources` | namespace |  |  |
+| `KIT.procedural.vectorResources.describe` | function | `(document)` | [guide](../vector-resources.md), [source](../../src/vector-resources.js) |
+| `KIT.procedural.vectorResources.edit` | function | `(source, requests)` | [guide](../vector-resources.md), [source](../../src/vector-resources.js) |
+| `KIT.procedural.vectorResources.exportSVG` | function | `(document)` | [guide](../vector-resources.md), [source](../../src/vector-resources.js) |
+| `KIT.procedural.vectorResources.fillMask` | function | `(source,key,{width=128,height=128,samples=1,tolerance=.125,rule}={})` | [source](../../src/kit/paq-vector-resources.js) |
+| `KIT.procedural.vectorResources.handles` | function | `(segments)` | [source](../../src/vector-paths.js) |
+| `KIT.procedural.vectorResources.importSVG` | function | `(xml)` | [guide](../vector-resources.md), [source](../../src/vector-resources.js) |
+| `KIT.procedural.vectorResources.operations` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.edit"]` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.edit"].description` | value | `string = "Apply ordered edits to retained SVG points, segments, attributes and hierarchy."` |  |
+| `KIT.procedural.vectorResources.operations["vector.edit"].inputs` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.edit"].inputs.edits` | value | `string = "array<record>"` |  |
+| `KIT.procedural.vectorResources.operations["vector.edit"].inputs.source` | value | `string = "vectorDocument"` |  |
+| `KIT.procedural.vectorResources.operations["vector.edit"].outputs` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.edit"].outputs.value` | value | `string = "vectorDocument"` |  |
+| `KIT.procedural.vectorResources.operations["vector.edit"].run` | function | `({source,edits})` | [source](../../src/kit/paq-vector-resources.js) |
+| `KIT.procedural.vectorResources.operations["vector.export"]` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.export"].description` | value | `string = "Write editable vector geometry and presentation as SVG text."` |  |
+| `KIT.procedural.vectorResources.operations["vector.export"].inputs` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.export"].inputs.source` | value | `string = "vectorDocument"` |  |
+| `KIT.procedural.vectorResources.operations["vector.export"].outputs` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.export"].outputs.value` | value | `string = "string"` |  |
+| `KIT.procedural.vectorResources.operations["vector.export"].run` | function | `({source})` | [source](../../src/kit/paq-vector-resources.js) |
+| `KIT.procedural.vectorResources.operations["vector.fillMask"]` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.fillMask"].description` | value | `string = "Rasterize one vector shape as a typed fill mask using its winding rule and the SVG viewBox."` |  |
+| `KIT.procedural.vectorResources.operations["vector.fillMask"].inputs` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.fillMask"].inputs.key` | value | `string = "string"` |  |
+| `KIT.procedural.vectorResources.operations["vector.fillMask"].inputs.options` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.fillMask"].inputs.options.default` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.fillMask"].inputs.options.type` | value | `string = "record"` |  |
+| `KIT.procedural.vectorResources.operations["vector.fillMask"].inputs.source` | value | `string = "vectorDocument"` |  |
+| `KIT.procedural.vectorResources.operations["vector.fillMask"].outputs` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.fillMask"].outputs.info` | value | `string = "record"` |  |
+| `KIT.procedural.vectorResources.operations["vector.fillMask"].outputs.value` | value | `string = "grayImage"` |  |
+| `KIT.procedural.vectorResources.operations["vector.fillMask"].run` | function | `({source,key,options})` | [source](../../src/kit/paq-vector-resources.js) |
+| `KIT.procedural.vectorResources.operations["vector.import"]` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.import"].description` | value | `string = "Read passive SVG into its editable hierarchy of curves, basic shapes and presentation."` |  |
+| `KIT.procedural.vectorResources.operations["vector.import"].inputs` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.import"].inputs.svg` | value | `string = "string"` |  |
+| `KIT.procedural.vectorResources.operations["vector.import"].outputs` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.import"].outputs.value` | value | `string = "vectorDocument"` |  |
+| `KIT.procedural.vectorResources.operations["vector.import"].run` | function | `({svg})` | [source](../../src/kit/paq-vector-resources.js) |
+| `KIT.procedural.vectorResources.operations["vector.path"]` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.path"].description` | value | `string = "Sample a selected vector shape into existing Ink paths with an explicit curve tolerance."` |  |
+| `KIT.procedural.vectorResources.operations["vector.path"].inputs` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.path"].inputs.key` | value | `string = "string"` |  |
+| `KIT.procedural.vectorResources.operations["vector.path"].inputs.options` | alias | `Alias of KIT.procedural.vectorResources.operations["vector.fillMask"].inputs.options` |  |
+| `KIT.procedural.vectorResources.operations["vector.path"].inputs.source` | value | `string = "vectorDocument"` |  |
+| `KIT.procedural.vectorResources.operations["vector.path"].outputs` | namespace |  |  |
+| `KIT.procedural.vectorResources.operations["vector.path"].outputs.contours` | value | `string = "array<path>"` |  |
+| `KIT.procedural.vectorResources.operations["vector.path"].outputs.info` | value | `string = "record"` |  |
+| `KIT.procedural.vectorResources.operations["vector.path"].outputs.value` | value | `string = "path"` |  |
+| `KIT.procedural.vectorResources.operations["vector.path"].run` | function | `({source,key,options})` | [source](../../src/kit/paq-vector-resources.js) |
+| `KIT.procedural.vectorResources.path` | function | `(source,key,{index=0,tolerance=.125,maxPoints=2048,space='document'}={})` | [source](../../src/kit/paq-vector-resources.js) |
+
 ## KIT.procedural.verticalSpans
 
 | Member | Kind | Signature or value | Guides and source |

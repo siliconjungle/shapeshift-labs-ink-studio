@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Night Ferry · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--base:#151723;--panel:#202433;--paper:#f3e6d4;--muted:#b9bacb;--gold:#efbe91;--mint:#8fd5c8;--edge:#474757}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 26% -23%,#3e3c56,transparent 59%),var(--base);color:var(--paper);font:14px/1.4 system-ui,sans-serif}
+main{max-width:1300px;margin:auto;padding:30px clamp(16px,4vw,48px)}header{display:flex;justify-content:space-between;align-items:end;gap:11px;margin-bottom:20px}
+h1,h2,p{margin:0}h1,h2{font-family:Georgia,serif;font-weight:400;letter-spacing:-.052em}h1{font-size:clamp(56px,8vw,90px);line-height:.97;margin:5px 0 8px}h2{font-size:24px;line-height:1.12}
+p,label{color:var(--muted)}.eyebrow,output,.micro{font:11px ui-monospace,monospace;letter-spacing:.035em}.eyebrow{color:var(--gold);text-transform:uppercase}output,.micro{color:var(--mint)}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;align-items:start;gap:14px}
+.card{background:var(--panel);margin:0;overflow:hidden;border:1px solid var(--edge);border-radius:9px}.card+.card{margin-top:13px}
+.row{padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px}.row p{font-size:12px}
+.actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+button,select,input[type=text]{font:inherit;color:var(--paper);background:#2c2e42;border:1px solid #67627b;border-radius:5px;padding:5px 8px;min-width:0}
+button{cursor:pointer}button:disabled{opacity:.4;cursor:default}button:not(:disabled):hover,select:hover,button[aria-pressed=true]{border-color:var(--mint)}
+button[aria-pressed=true]{color:var(--mint);background:#263841}:focus-visible{outline:2px solid var(--mint);outline-offset:2px}
+#export{background:var(--gold);color:#292332;border-color:var(--gold);font-weight:650;padding:8px 12px}#import,#material{padding:8px 10px}
+.stage{border-block:1px solid var(--edge);position:relative;display:grid;place-items:center;min-height:510px;isolation:isolate;background:radial-gradient(ellipse at 52% 50%,#303449,transparent 72%),#171c2b}
+.stage::before{content:"";position:absolute;inset:13px;border:1px solid #7b779a36;background:repeating-linear-gradient(0deg,transparent 0 27px,#c9bed00a 27px 28px),repeating-linear-gradient(90deg,transparent 0 27px,#c9bed00a 27px 28px);z-index:-1}
+.art{width:100%;max-width:770px;aspect-ratio:640/440;position:relative}.art img,.art>svg{display:block;width:100%;height:100%;position:absolute;inset:0}.art img{object-fit:contain;filter:drop-shadow(7px 9px 0 #13172866)}
+.art>svg{touch-action:none}.handle{cursor:grab;pointer-events:all}.handle:active{cursor:grabbing}.gizmo{pointer-events:none}
+.bottom{min-height:50px}.bottom output{overflow-wrap:anywhere;text-align:right}
+.tools{padding:0 14px 12px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}.field{display:grid;min-width:0;gap:4px;font-size:12px}
+.field.full{grid-column:1/-1}
+.paints{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:8px 0}
+.tools .actions{margin-top:8px}.tools button{font-size:12px}.flat{border-top:1px solid var(--edge)}
+.maskView{display:grid;grid-template-columns:122px 1fr;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid var(--edge);background:#1a2030}
+.maskView canvas{display:block;width:122px;height:104px;image-rendering:pixelated;background:#131928;border:1px solid #454b61;border-radius:4px}
+#maskOpen{padding:3px 6px;font-size:11px}#notice{padding:0 14px 8px;color:var(--gold);font-size:12px}#notice:empty{display:none}
+@media(max-width:1020px){.stage{min-height:398px}}
+@media(max-width:819px){.layout{grid-template-columns:1fr}header{align-items:start;flex-direction:column}.stage{min-height:310px}}
+@media(max-width:520px){.stage{min-height:220px}.row{padding:9px 11px}.card .row h2{font-size:21px}.bottom{align-items:start}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div><span class="eyebrow">Ink Studio · Vector resources</span><h1>Night Ferry</h1><p>Move the curves, change the winding rule, and save the artwork as editable SVG.</p></div>
+  <div class="actions">
+    <button id="import" type="button">Import SVG</button><input type="file" id="file" accept=".svg,image/svg+xml" hidden>
+    <button id="material" type="button">Save material</button><button id="export" type="button">Export SVG</button>
+  </div>
+</header>
+<div class="layout">
+  <section class="card" aria-label="Vector work area">
+    <div class="row">
+      <h2>Artwork</h2>
+      <div class="actions"><button id="handles" type="button" aria-pressed="true">Handles</button><button id="undo" type="button">Undo</button><button id="redo" type="button">Redo</button></div>
+    </div>
+    <div class="stage">
+      <div class="art" id="art">
+        <img id="image" alt="Vector illustration of a lighthouse and sailboat under a crescent moon">
+        <svg id="overlay" xmlns="http://www.w3.org/2000/svg" aria-label="Editable SVG control points"><g id="gizmo"></g></svg>
+      </div>
+    </div>
+    <div class="row bottom"><p>Selected point</p><output id="point">Drag a handle in the artwork</output></div>
+    <p id="notice" role="alert"></p>
+  </section>
+  <aside>
+    <section class="card" aria-label="Path inspector">
+      <div class="row"><h2>Path inspector</h2><output id="count">—</output></div>
+      <div class="tools">
+        <div class="fields">
+          <label class="field full">Element<select id="element"></select></label>
+          <label class="field">Tangents<select id="tangent"><option value="free">Free</option><option value="aligned">Aligned</option><option value="mirrored" selected>Mirrored</option></select></label>
+          <label class="field">Fill rule<select id="rule"><option value="nonzero">Nonzero</option><option value="evenodd">Even-odd</option></select></label>
+        </div>
+        <div class="paints">
+          <label class="field">Fill<input type="text" id="fill" placeholder="inherit"></label>
+          <label class="field">Stroke<input type="text" id="stroke" placeholder="inherit"></label>
+          <label class="field">Width<input type="text" id="width" inputmode="decimal" value="3.1"></label>
+        </div>
+        <div class="fields">
+          <label class="field full">Transform<input type="text" id="transform" placeholder="translate(0 0)"></label>
+          <label class="field full">Parent group<select id="parent"></select></label>
+        </div>
+        <div class="actions">
+          <button type="button" id="backward">Send back</button><button type="button" id="forward">Bring forward</button>
+        </div>
+      </div>
+      <div class="tools flat" style="padding-top:11px">
+        <label class="field">ViewBox<input type="text" id="viewBox" value="0 0 640 440"></label>
+      </div>
+    </section>
+    <section class="card" aria-label="Graph fill mask">
+      <div class="row"><h2>Graph fill mask</h2><button id="maskOpen" type="button">Select source</button></div>
+      <div class="maskView"><canvas id="mask" width="122" height="104" aria-label="Native vector mask"></canvas>
+        <div><p id="maskLabel">Compass ring</p><output id="maskRule">—</output></div>
+      </div>
+    </section>
+  </aside>
+</div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="data.js"></script>
+<script src="live.js"></script>
+</body>
+</html>

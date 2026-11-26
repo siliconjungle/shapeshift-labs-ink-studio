@@ -47,6 +47,7 @@ For example, a color output can keep its ID while its connection is rewired. Kee
 Opening checks document structure and references. Executing additionally checks socket types, operations, dependencies, and that each output is bound. Existing version 1 graph projects still run as before and can be converted without altering the source. Ink rejects a document with a newer, unsupported version before writing it.
 
 See [Bitmap resources](bitmap-resources.md) for linked and embedded images, native precision, editable pixels, and sequence or tile policies.
+See [SVG and vector resources](vector-resources.md) for editable path geometry, graph contour and mask nodes, and standalone SVG exports.
 
 ## Publish and edit reusable subgraphs
 
