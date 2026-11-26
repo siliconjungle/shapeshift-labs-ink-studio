@@ -3,13 +3,15 @@ const path=require('node:path');
 const Geometry=require('./geometry-masks.js');
 const UV=require('./material-preview-geometry.js');
 const {maps:projectionMaps}=require('./bake-job-projection.js');
+const Surface=require('./bake-job-surface.js');
 
 const format='ink-studio/bake-job', presetFormat='ink-studio/bake-preset';
-const names=Object.freeze(['pigment','normal','roughness','metalness','emission','opacity','coverage',...Geometry.names,
+const names=Object.freeze(['pigment','normal','world-normal','height','roughness','metalness','emission','opacity','coverage',...Geometry.names,
   ...projectionMaps]);
 const geometryFields=['up','samples','cavityRadius','exposureDistance','thicknessScale','rayBias'];
 const mapGeometry={slope:['up'],cavity:['samples','cavityRadius','rayBias'],
   exposure:['samples','exposureDistance','rayBias'],thickness:['thicknessScale','rayBias'],'thickness-valid':['rayBias']};
+const mapSurface={normal:['space','orientation','encoding'],'world-normal':['encoding'],height:['normalization','range','encoding']};
 const integer=(n,lo,hi)=>Number.isSafeInteger(n)&&n>=lo&&n<=hi;
 const id=value=>typeof value==='string'&&/^[a-z][\w-]{0,63}$/i.test(value)&&!['constructor','prototype'].includes(value);
 const text=value=>typeof value==='string'&&value.trim()&&value.length<=140&&!/[\x00-\x1f]/.test(value);
@@ -44,8 +46,9 @@ function preset(value) {
       row.enabled!==undefined&&typeof row.enabled!=='boolean')
       throw new TypeError('Use each supported bake map once and set enabled to a boolean');
     seen.add(row.id);
-    return {id:row.id,enabled:row.enabled??true,overrides:options(row.overrides??{},
-      ['size','padding',...(row.id==='normal'?['orientation']:[]),...(mapGeometry[row.id]??[])])};
+    const overrides=options(row.overrides??{},['size','padding',...(mapSurface[row.id]??[]),...(mapGeometry[row.id]??[])]);
+    Surface.settings(row.id,overrides);
+    return {id:row.id,enabled:row.enabled??true,overrides};
   });
   if(!maps.some(row=>row.enabled))throw new RangeError('Enable at least one bake map');
   return {format:presetFormat,version:1,label:value.label,defaults,maps};
@@ -166,9 +169,9 @@ function readPlan(filename,{presetFile,presetValue,targetValues,onInput=()=>{}}=
 }
 
 function effective(preset,row) {
-  const {size=128,padding=3,orientation='opengl',...geometry}={...preset.defaults,...row.overrides};
+  const {size=128,padding=3,...tuning}={...preset.defaults,...row.overrides};
   if(padding*2>=size)throw new RangeError('Map padding must be less than half its size');
-  return {size,padding,...(row.id==='normal'&&{orientation}),
-    ...(Geometry.names.includes(row.id)&&{geometry:Geometry.settings(geometry)})};
+  return {size,padding,...Surface.settings(row.id,tuning),
+    ...(Geometry.names.includes(row.id)&&{geometry:Geometry.settings(tuning)})};
 }
 module.exports={format,presetFormat,names,preset,readPlan,effective,id};

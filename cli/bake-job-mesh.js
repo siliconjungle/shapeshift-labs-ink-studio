@@ -24,24 +24,37 @@ function chooseMesh(model,selector,label) {
   return matches.indexOf(true);
 }
 
-function sceneMesh(model,index,{V},instance) {
+function sceneTransform(model,index,{V},instance) {
   const asset=model.meshes[index], instances=model.nodes.filter(node=>node.mesh===index);
   if(instance===undefined&&instances.length>1)throw new RangeError('Projection needs one scene placement for mesh '+asset.name);
   const matrix=(instance??instances[0])?.world;
-  if(!matrix)return asset;
+  if(!matrix)return;
   const [x,y,z]=[0,4,8].map(i=>matrix.slice(i,i+3));
   const origin=matrix.slice(12,15), dual=[V.cross(y,z),V.cross(z,x),V.cross(x,y)];
   const determinant=V.dot(x,dual[0]), sign=Math.sign(determinant);
   if(!Number.isFinite(determinant)||Math.abs(determinant)<=V.len(x)*V.len(y)*V.len(z)*1e-12)
     throw new RangeError('Projection needs a nonsingular transform on '+asset.name);
   const columns=[x,y,z], apply=(a,b,c,axes)=>V.add(V.add(V.mul(axes[0],a),V.mul(axes[1],b)),V.mul(axes[2],c));
+  return {
+    mirrored:sign<0,
+    point:value=>V.add(origin,apply(...value,columns)),
+    normal(value) {
+      const direction=apply(...value,dual), length=V.len(direction);
+      return length>0?V.mul(direction,sign/length):[0,1,0];
+    }
+  };
+}
+
+function sceneMesh(model,index,K,instance) {
+  const asset=model.meshes[index], transform=sceneTransform(model,index,K,instance);
+  if(!transform)return asset;
   return {...asset,parts:asset.parts.map(part=>{
     const position=[], normals=[], indices=part.indices.slice();
     for(let i=0;i<part.position.length;i+=3) {
-      position.push(...V.add(origin,apply(...part.position.slice(i,i+3),columns)));
-      if(part.normal)normals.push(...V.norm(V.mul(apply(...part.normal.slice(i,i+3),dual),sign)));
+      position.push(...transform.point(part.position.slice(i,i+3)));
+      if(part.normal)normals.push(...transform.normal(part.normal.slice(i,i+3)));
     }
-    if(sign<0)for(let i=0;i<indices.length;i+=3)[indices[i+1],indices[i+2]]=[indices[i+2],indices[i+1]];
+    if(transform.mirrored)for(let i=0;i<indices.length;i+=3)[indices[i+1],indices[i+2]]=[indices[i+2],indices[i+1]];
     return {...part,position,indices,...(part.normal&&{normal:normals})};
   })};
 }
@@ -148,4 +161,4 @@ function meshFor(model,selection,K,images) {
   });
   return {index,mesh:asset.name,asset,selected,...geometry,tiles};
 }
-module.exports={load,catalog,chooseMesh,sceneMesh,surfaces,meshFor};
+module.exports={load,catalog,chooseMesh,sceneMesh,sceneTransform,surfaces,meshFor};
