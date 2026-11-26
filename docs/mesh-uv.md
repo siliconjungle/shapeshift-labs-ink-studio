@@ -1541,6 +1541,53 @@ ink-studio mesh-uv edit panel.json nudge.json --object sign --channel pigment --
 node examples/tileset-pick/uv-nudge-demo.cjs uv-nudge-demo
 ```
 
+### Snap UV corners and edges
+
+Use `snap` with stable corner IDs or a saved corner or edge selection.
+Set `scope` to `"independent"` to move the chosen corners, or
+`"together"` to carry their welds and overlapping corners. When an
+edge has split UVs, save the specific side from the atlas or mesh view.
+
+```json
+{
+  "operations": [
+    { "op": "snap", "ids": ["faceplate/frt"], "scope": "independent",
+      "target": { "kind": "chart", "corner": "lid/frt" } }
+  ]
+}
+```
+
+- A `chart` target takes a `corner` or `edge` ID on another chart of the
+  same material. Add `face` to resolve an edge side, or supply a saved
+  target `selection`. Corners land exactly on a target corner or project
+  onto the target segment. A source edge matches the two endpoints of
+  the target edge in the order with the least travel. Ink measures this
+  travel in source texels when atlas dimensions are available.
+- A `seam` target takes an `edge` and its `face`, or a saved seam-side
+  `selection`. Aligning opposite sides of the same edge pairs their
+  shared vertex IDs. Use the separate stitch operation to remove an
+  authored seam.
+- A `grid` target takes `axis: "u"` for a vertical line or `axis: "v"`
+  for a horizontal line. Corners find the nearest line independently.
+  Each edge uses its midpoint to choose one line for both endpoints.
+  The other axis stays fixed. By default the grid uses source texels
+  with `step: 1` and `origin: 0`. Use a fractional `step` for subpixel
+  alignment, `units: "uv"` for a normalized grid, or `units: "tile"`
+  for complete tiles' start lines with their registered offsets and gutters. A standalone
+  texel or tile grid needs `atlas: [width, height]`. A standalone
+  tile grid also needs `tileSize` as in the nudge operation.
+
+The preview marks snap targets in gold and moving corners in mint.
+The receipt names the fixed reference or resolved grid plus the proposed
+corner coordinates. Pinned corners, competing targets for one corner,
+and newly flipped or collapsed triangles block the edit.
+
+```sh
+ink-studio mesh-uv edit field-case.json snap.json --object box --preview snap-review
+ink-studio mesh-uv edit field-case.json snap.json --object box --out snapped.json --report snap-receipt.json
+node examples/tileset-pick/uv-snap-demo.cjs uv-snap-demo
+```
+
 ## Bind separate material layouts
 
 A retained mesh part can use a different UV set for each material channel.

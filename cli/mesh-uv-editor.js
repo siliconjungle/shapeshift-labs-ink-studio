@@ -14,7 +14,7 @@ const options = {
   edit: ['object','out','view','preview','report','selection','uv-set','channel']
 };
 const imageNames = ['atlas-before.png', 'model-before.png', 'atlas-after.png', 'model-after.png', 'comparison.png'];
-const ink = { seam: '#f391a6', pin: '#ffcb78', pivot: '#f0b8ff', selected: '#75e2c8', held: '#a8beff', boundary: '#7393ac',
+const ink = { seam: '#f391a6', pin: '#ffcb78', pivot: '#f0b8ff', snap: '#ffe181', selected: '#75e2c8', held: '#a8beff', boundary: '#7393ac',
   continuous: '#456578', 'material-boundary': '#859cad', 'non-manifold': '#ed8c70' };
 const tints = ['#25495a', '#413950', '#574232', '#335344', '#403c57'];
 const name = v => typeof v === 'string' && Boolean(v.trim());
@@ -125,6 +125,10 @@ function atlas(layout, material, selection, settings, kit, paint) {
     }
   }
   for (const highlight of highlights) draw.push(highlight);
+  for (const guide of selection?.snapGuides ?? []) if (guide.material===material) {
+    const points = guide.points.map(at);
+    draw.push(points.length===2 ? line(points,ink.snap,2) : rect(center(points[0],4),ink.snap));
+  }
   const marks = cornerMarkers(corners.values(),selection,corner=>faces.has(corner.face) ? at(corner.uv) : undefined);
   const pivot = settings.pivot ?? layout.pivot;
   if (pivot) {
@@ -208,7 +212,7 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     layouts[0].faces[0]?.material;
   if (!layouts[0].faces.some(row => row.material === material)) throw new RangeError('Choose an authored UV material');
   const captures = [nativeBefore, nativeAfter], views = [];
-  const useAtlasPaint = selected?.cornerScope || settings.pivot || layouts.some(layout=>layout.pivot);
+  const useAtlasPaint = selected?.cornerScope || selected?.snapGuides || settings.pivot || layouts.some(layout=>layout.pivot);
   let crossHighlight;
   if (selectionOutput) {
     const layout = layouts[0], byId = new Map(layout.faces.map(row => [row.id, row]));
@@ -239,7 +243,8 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
   }
   const scope = selected?.cornerScope;
   const [pivotBefore,pivotAfter] = layouts.map(layout=>settings.pivot ?? layout.pivot ?? null);
-  draw.push(text('Cut seam', [width * .18, height - 8], ink.seam, 8),
+  draw.push(text(selected?.snapGuides ? 'Snap target' : 'Cut seam', [width * .18, height - 8],
+    selected?.snapGuides ? ink.snap : ink.seam, 8),
     text(scope ? 'Held overlap' : 'Pinned corner', [width * .49, height - 8], scope ? ink.held : ink.pin, 8),
     text(scope ? 'Move scope' : pivotBefore || pivotAfter ? 'UV pivot' : 'Linked selection', [width * .80, height - 8],
       !scope && (pivotBefore || pivotAfter) ? ink.pivot : ink.selected, 8));
@@ -258,17 +263,18 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
 
 function editSelection(UV,document,plan,selectionFile) {
   const uvSet = plan.report.uvSet ?? 0;
+  const guides = plan.report.operations.flatMap(row=>row.op==='snap' ? row.evidence.guides : []);
+  const snap = guides.length ? {snapGuides:guides} : {};
   if (selectionFile) {
     const saved = read(selectionFile);
-    return UV.select(document,{domain:saved.domain,from:saved,uvSet});
+    return {...UV.select(document,{domain:saved.domain,from:saved,uvSet}),...snap};
   }
-  const scopes = plan.report.operations.filter(row=>row.op==='move-corners' ||
-    row.op==='nudge' && row.evidence.scope!==undefined).map(row=>row.evidence);
+  const scopes = plan.report.operations.filter(row=>row.evidence?.scope!==undefined && row.evidence.moving).map(row=>row.evidence);
   if (scopes.length) {
     const moving = new Set(scopes.flatMap(row=>row.moving.map(corner=>corner.id)));
     const held = [...new Set(scopes.flatMap(row=>row.held.map(corner=>corner.id)))].filter(id=>!moving.has(id)).sort();
     const selected = UV.select(document,{domain:'corners',uvSet,ids:[...moving]});
-    return {...selected,heldCorners:held,cornerScope:{modes:scopes.map(row=>row.scope),moving:selected.ids,held}};
+    return {...selected,...snap,heldCorners:held,cornerScope:{modes:scopes.map(row=>row.scope),moving:selected.ids,held}};
   }
   return UV.select(document,{domain:'faces',uvSet,ids:[...new Set(plan.report.corners.map(row=>row.face))]});
 }
