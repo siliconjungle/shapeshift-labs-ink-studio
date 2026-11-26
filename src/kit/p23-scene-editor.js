@@ -1026,8 +1026,10 @@
 
     function planMeshUV(object, request, { part } = {}) {
       const row = meshTopology(object,part);
-      const atlasFor = Array.isArray(request?.operations) && request.operations.some(op=>['nudge','snap'].includes(op?.op)) ?
-        A.meshTopologyScene.uvAtlases(snapshot(),row,request.uvSet ?? 0,{tileGrid:true}) : undefined;
+      const operations = Array.isArray(request?.operations) ? request.operations : [];
+      const tileGrid = operations.some(op=>['nudge','snap'].includes(op?.op));
+      const atlasFor = tileGrid || operations.some(op=>op?.op==='orient' && op.space==='texel' && op.atlas===undefined) ?
+        A.meshTopologyScene.uvAtlases(snapshot(),row,request.uvSet ?? 0,{tileGrid}) : undefined;
       return K.meshTopology.uv.plan(row.document,request,{atlasFor});
     }
 

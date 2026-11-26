@@ -1588,6 +1588,57 @@ ink-studio mesh-uv edit field-case.json snap.json --object box --out snapped.jso
 node examples/tileset-pick/uv-snap-demo.cjs uv-snap-demo
 ```
 
+### Flip, mirror, or rotate UVs
+
+Use `orient` to rotate UV coordinates in degrees and to reflect the
+source axes with `flipX` or `flipY`. Reflections apply before rotation.
+A positive angle turns UV coordinates clockwise in the top-down atlas.
+Set `increment` to round the requested angle to the nearest multiple
+of that many degrees. Ties round away from zero. The receipt records
+the requested and applied angles and whether Ink used exact axis swaps
+and sign changes for a quarter turn.
+
+```json
+{
+  "uvSet": "pigment",
+  "operations": [
+    { "op": "orient", "mode": "per-face", "ids": ["left", "right"],
+      "degrees": 87, "increment": 15, "flipX": true, "space": "texel" }
+  ]
+}
+```
+
+- `mode: "group"` uses one pivot for the whole selection. It takes the
+  explicit normalized `pivot`, the dedicated layout pivot, or the center
+  of the group's bounds in that order. IDs resolve to islands by default.
+  Set `domain` to `"faces"`, `"edges"`, or `"corners"` to use those IDs,
+  or pass a saved selection. Set `scope: "together"` to include welded and
+  overlapping corners. The default scope is `"independent"`.
+- `mode: "per-face"` uses the center of each face's UV bounds. Use face
+  IDs or a saved face or island selection. Adjacent faces can acquire an
+  inferred seam if their shared UVs separate. The receipt lists these
+  edge changes and retains any authored seams.
+- `space: "uv"` uses normalized coordinates and is the default. Use
+  `space: "texel"` to turn in source texel units on a rectangular atlas.
+  A scene resolves source dimensions from the selected layout and
+  materials. Each group needs matching dimensions. In per-face mode,
+  each face uses its own dimensions. Pass `atlas: [width, height]` in
+  the operation for standalone texel edits or an explicit override.
+  A texel-space quarter turn swaps the width and height of a rectangular
+  crop around its pivot.
+
+The preview shows the applied pivots on the atlas. Pins, atlas bounds,
+and triangle checks constrain the operation. A reflection of a whole UV
+triangle can reverse its UV winding. The geometry and its winding stay
+fixed. Use the existing `transform` operation for translation, scale, or
+rotation in radians around each island.
+
+```sh
+ink-studio mesh-uv edit signs.json orient.json --object signs --preview orient-review
+ink-studio mesh-uv edit signs.json orient.json --object signs --out oriented.json --report orient-receipt.json
+node examples/tileset-pick/uv-orientation-demo.cjs uv-orientation-demo
+```
+
 ## Bind separate material layouts
 
 A retained mesh part can use a different UV set for each material channel.
