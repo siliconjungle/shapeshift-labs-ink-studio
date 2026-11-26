@@ -116,7 +116,8 @@ function atlas(layout, material, selection, settings, kit, paint) {
   const faces = new Set(layout.faces.filter(row => row.material === material).map(row => row.id));
   const selected = new Set(selection?.faces), selectedEdges = new Set(selection?.domain === 'edges' ? selection.edges : []);
   const selectedSides = sideSelection(selection);
-  const cuts = new Set(selection?.unwrap?.cuts);
+  const cuts = new Set(selection?.unwrap?.cuts), packing = selection?.packing;
+  const unpacked = new Set(packing?.charts.filter(row=>!row.destination).flatMap(row=>row.faces));
   const chartColors = new Map(layout.islands.map((row, i) => [row.id, tints[i % tints.length]]));
   const sampleEvery = Math.max(1, Math.ceil(faces.size / 4000));
   const layers = paint ? [{ source: paint, rect: [...start, ...size] }] : [];
@@ -129,8 +130,10 @@ function atlas(layout, material, selection, settings, kit, paint) {
   for (const row of layout.faces) if (faces.has(row.id) && (step++ % sampleEvery === 0 || selected.has(row.id))) {
     const points = row.corners.map(id => at(corners.get(id).uv));
     if (selected.has(row.id) && regionSelection(selection)) {
-      highlights.push({ type: 'polygon', points, fill: paint ? '#75e2c84d' : '#357c75' },
-        line([...points, points[0]], ink.selected, 2));
+      const failed = unpacked.has(row.id);
+      const fill = failed ? paint ? '#f391a64d' : '#784853' : paint ? '#75e2c84d' : '#357c75';
+      highlights.push({ type: 'polygon', points, fill },
+        line([...points, points[0]], failed ? ink.seam : ink.selected, 2));
     } else if (!paint) draw.push({ type: 'polygon', points, fill: chartColors.get(row.island) });
   }
   for (const [i, edge] of layout.edges.entries()) if (i % sampleEvery === 0 || selectedEdges.has(edge.id) || edge.authored || cuts.has(edge.id)) {
@@ -145,6 +148,21 @@ function atlas(layout, material, selection, settings, kit, paint) {
   for (const guide of selection?.snapGuides ?? []) if (guide.material===material) {
     const points = guide.points.map(at);
     draw.push(points.length>1 ? line(points,ink.snap,2) : rect(center(points[0],4),ink.snap));
+  }
+  if (packing?.material === material) {
+    const outline = ([l,t,r,b], color) => line([[l,t],[r,t],[r,b],[l,b],[l,t]]
+      .map(point=>at(point.map((n,i)=>n/packing.atlas[i]))),color);
+    const [x,y,w,h] = packing.pool;
+    draw.push(outline([x,y,x+w,y+h],ink.snap));
+    for (const row of packing.groups) {
+      const box = settings.packStage ? row.destination : row.source;
+      if (box) draw.push(outline(box,ink.pivot));
+    }
+    for (const row of packing.charts) {
+      const box = settings.packStage ? row.destination ?? row.source : row.source;
+      const color = !row.destination ? ink.seam : row.status==='held' ? ink.held : ink.selected;
+      draw.push(outline(box,color));
+    }
   }
   const marks = cornerMarkers(corners.values(),selection,corner=>faces.has(corner.face) ? at(corner.uv) : undefined);
   const pivot = settings.pivot ?? layout.pivot;
@@ -240,12 +258,12 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     layouts[0].faces[0]?.material;
   if (!layouts[0].faces.some(row => row.material === material)) throw new RangeError('Choose an authored UV material');
   const captures = [nativeBefore, nativeAfter], views = [];
-  const {orientation,scaling,normalization,flatten,unwrap} = selected ?? {};
+  const {orientation,scaling,normalization,flatten,unwrap,packing} = selected ?? {};
   const basis = scaling ?? orientation;
   const assignment = selected?.assignment;
   const materialAfter = captures[0]===captures[1] ? material :
     assignment?.faces.find(row=>row.before.material===material)?.after.material ?? material;
-  const useAtlasPaint = basis || unwrap || selected?.projection || selected?.cornerScope || selected?.snapGuides || settings.pivot || layouts.some(layout=>layout.pivot);
+  const useAtlasPaint = basis || unwrap || packing || selected?.projection || selected?.cornerScope || selected?.snapGuides || settings.pivot || layouts.some(layout=>layout.pivot);
   let crossHighlight;
   if (selectionOutput) {
     const layout = layouts[0], byId = new Map(layout.faces.map(row => [row.id, row]));
@@ -265,11 +283,12 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
   } else for (const [i, layout] of layouts.entries()) {
     const slot = i ? materialAfter : material;
     const paint = useAtlasPaint ? atlasPaint(captures[i].mesh,slot,layout,kit) : undefined;
-    views.push(atlas(layout, slot, selected, settings, kit, paint), model(layout, captures[i], selected, kit));
+    views.push(atlas(layout, slot, selected, packing ? {...settings,packStage:i} : settings, kit, paint),
+      model(layout, captures[i], selected, kit));
   }
   const gap = 6, { w, h } = settings, width = h + w + 3 * gap, height = h * 2 + 64;
   const layers = [], draw = [text('Atlas', [h / 2 + gap, 13]), text('Native model', [h + 2 * gap + w / 2, 13])];
-  const rowNames = before === after ? ['Selection', 'Selection'] : ['Before', 'After'];
+  const rowNames = packing && before===after ? ['Current','Planned layout'] : before===after ? ['Selection','Selection'] : ['Before','After'];
   for (const [i, image] of views.entries()) {
     const x = i % 2 ? h + 2 * gap : gap, y = 33 + Math.floor(i / 2) * (h + 15);
     layers.push({ source: image, rect: [x, y, image.w, image.h] });
@@ -279,7 +298,7 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
   const [pivotBefore,pivotAfter] = layouts.map(layout=>basis ? null : settings.pivot ?? layout.pivot ?? null);
   const hasPivot = basis || pivotBefore || pivotAfter;
   const snapGuide = scaling?.snapBounds ? 'Snapped bounds' : normalization ? 'UV reference' :
-    assignment ? 'Assigned region' : flatten ? 'Flattened bounds' : selected?.projection ? 'Projected corner' :
+    assignment ? 'Assigned region' : flatten ? 'Flattened bounds' : packing ? 'Pack pool' : selected?.projection ? 'Projected corner' :
     selected?.snapGuides && 'Snap target';
   draw.push(text(snapGuide || 'Cut seam', [width * .18, height - 8], snapGuide ? ink.snap : ink.seam, 8));
   if (assignment) {
@@ -287,6 +306,10 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     const {covered,texels,complete} = assignment.coverage;
     draw.push(text((complete ? 'Coverage ' : 'Partial ')+covered+'/'+texels,[width*.49,height-8],ink.selected,8),
       text(stretch ? 'Peak stretch '+stretch.toFixed(2)+'x' : 'No 2D stretch measure',[width*.80,height-8],ink.pin,8));
+  } else if (packing) {
+    draw.push(text('Held chart',[width*.49,height-8],ink.held,8),
+      text(packing.unpacked.length ? 'Unpacked chart' : 'Packed chart',[width*.80,height-8],
+        packing.unpacked.length ? ink.seam : ink.selected,8));
   } else draw.push(text(scope ? 'Held overlap' : unwrap ? 'Held coordinates' : 'Pinned corner', [width * .49, height - 8], scope ? ink.held : ink.pin, 8),
     text(scope ? 'Move scope' : hasPivot ? 'UV pivot' : 'Linked selection', [width * .80, height - 8],
       !scope && hasPivot ? ink.pivot : ink.selected, 8));
@@ -324,6 +347,7 @@ function assignmentReview(editor,revised,report,input,kit,directory,inputs) {
 
 function editSelection(UV,document,plan,selectionFile) {
   const uvSet = plan.report.uvSet ?? 0;
+  const packing = plan.report.operations.findLast(row=>row.op==='pack-charts')?.evidence;
   const projection = plan.report.operations.findLast(row=>row.op==='project-camera')?.evidence;
   const normalized = plan.report.operations.findLast(row=>row.op==='normalize-orientation')?.evidence;
   const flatten = plan.report.operations.findLast(row=>row.op==='flatten')?.evidence;
@@ -340,6 +364,7 @@ function editSelection(UV,document,plan,selectionFile) {
   const inspection = {...(guides.length && {snapGuides:guides}),
     ...(flatten && {flatten}),
     ...(projection && {projection}),
+    ...(packing && {packing}),
     ...(unwrap && {unwrap}),
     ...(normalized && {normalization:{axis:normalized.axis,method:normalized.method,reference:normalized.reference,faces:normalized.faces}}),
     ...(applied && {[basis.op==='orient' ? 'orientation' : 'scaling']:{
@@ -359,7 +384,7 @@ function editSelection(UV,document,plan,selectionFile) {
   }
   const ids = [...new Set([...plan.report.corners.map(row=>row.face),...applied?.faces ?? [],
     ...normalized?.faces.map(row=>row.face) ?? [],...flatten?.faces.map(row=>row.face) ?? [],
-    ...unwrap?.components.flatMap(row=>row.faces) ?? [],...projection?.faces ?? []])];
+    ...unwrap?.components.flatMap(row=>row.faces) ?? [],...projection?.faces ?? [],...packing?.charts.flatMap(row=>row.faces) ?? []])];
   return {...UV.select(document,{domain:'faces',uvSet,ids}),...inspection};
 }
 
