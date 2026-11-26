@@ -457,6 +457,60 @@ In the SDK, use `planPrefabVariant`, `previewPrefabVariant`, and
 `node examples/tileset-pick/prefab-variant-demo.cjs variant-demo`
 for a replay that edits a fork, detached tiles, and the source independently.
 
+### Replace selected prefab instances
+
+`mesh-topology replace-prefab` changes the prefab used by one or more
+placements. The instance IDs, positions, orientations, scales, and
+pivots stay in place. The target can be an inline or library definition.
+Supply its `revision` to check that you are using the reviewed definition.
+
+```json
+{
+  "instances": ["west", "east"],
+  "to": "revised-bay",
+  "revision": 7,
+  "migrations": {
+    "bay": {
+      "revision": 3,
+      "members": { "topologyMeshes": { "panel": "fascia" } },
+      "faces": { "panel": { "sign": "badge" } }
+    }
+  }
+}
+```
+
+```sh
+ink-studio mesh-topology replace-prefab station.json replacement.json --preview review --view view.json
+ink-studio mesh-topology replace-prefab station.json replacement.json --out replaced.json
+```
+
+Omit `instances` to pass a saved prefab instance report with
+`--selection selected.json`. Save one with
+`tileset select query.json --scene station.json --out selected.json`,
+using the `instances` domain and `query.kind: "prefab"`.
+
+Members match by stable local ID. Optional migrations name each source
+prefab and its expected revision. A `members` entry maps a named record
+in `solids`, `parts`, `groups`, `motion`, `effects`, or
+`topologyMeshes`. A `faces` entry maps named decal receiver faces within
+the source mesh member. Scene decals follow compatible receivers, with
+mesh UV overlap or sampled projector contact recorded in the receipt.
+Static mesh attachments can use the native attachment transfer through
+topology correspondence. Pose-dependent transfers require separate pose
+evidence through the existing attachment tooling.
+
+The visual revision tools replay compatible path overrides and rebase
+disjoint local mesh edits against the replacement revision. Missing
+targets, conflicting mesh edits, lost decal contact, or moved indexed controls block the batch
+and appear in the report. Preview images use matched native captures and
+show changed pixels for the selected instances. One undo restores the
+original links and decal receivers.
+
+In the SDK, use `planPrefabReplacement`, `previewPrefabReplacement`, or
+`replacePrefabs`. Run
+`node examples/tileset-pick/prefab-replacement-demo.cjs replace-demo`
+to replace two bays and inspect the carried sign, mark, and material.
+
 ## Breakable groups
 
 Use `editor.suggestBreakable({ at, radius, voxel })` to query a nearby

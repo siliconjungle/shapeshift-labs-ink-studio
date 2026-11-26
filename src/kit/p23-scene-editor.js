@@ -510,6 +510,43 @@
       else document.transact('Edit prefab instance ' + id, write);
     }
 
+    function stagePrefabReplacement(request) {
+      const before = snapshot(), {patch,report} = A.prefabReplacement.plan(before,buildEnv,request);
+      if (!patch) return {before,report};
+      const candidate = {...before,...patch};
+      const problems = DIO.check(candidate,buildEnv).filter(row => row.level === 'error');
+      try {
+        if (!problems.length) requireReviewEdit(before,candidate);
+      } catch (error) {
+        problems.push({level:'error',problem:error.message});
+      }
+      if (problems.length) return {before,report:freeze({...report,canCommit:false,problems})};
+      return {before,candidate,patch,report};
+    }
+
+    function planPrefabReplacement(request) {
+      return stagePrefabReplacement(request).report;
+    }
+
+    function previewPrefabReplacement(request, {time=0} = {}) {
+      if (!Number.isFinite(time) || time < 0) throw new RangeError('Prefab review time must be nonnegative');
+      const {before,candidate,report} = stagePrefabReplacement(request);
+      const env = {...buildEnv,parameterInputs:{...buildEnv.parameterInputs,time}};
+      return {report,before:DIO.build(before,env),after:candidate && DIO.build(candidate,env)};
+    }
+
+    function replacePrefabs(request) {
+      const {patch,report} = stagePrefabReplacement(request);
+      if (!patch || !report.canCommit) throw Object.assign(new RangeError('Prefab replacement needs review'),{report});
+      if (!report.changed) return report;
+      const write = () => document.batchSession(() => {
+        document.setEnvironment({instances:null});
+        document.setEnvironment(patch);
+        return report;
+      });
+      return document.pending() ? write() : document.transact('Replace prefab instances with '+report.to.prefab,write);
+    }
+
     function stagePrefabVariant(request) {
       const before = snapshot(), {patch,report} = A.prefabVariant.plan(before,buildEnv,request);
       if (!patch) return {before,report};
@@ -1685,6 +1722,7 @@
       planPainting3d, applyPainting3d, inspectPaintings3d,
       extractPainting3d: id => A.paintings3d.extract(snapshot(), id),
       placeSculptStamp, planSculptSplit, splitSculpt, planAssemblyStretch, stretchAssembly,
+      planPrefabReplacement, previewPrefabReplacement, replacePrefabs,
       planPrefabVariant, previewPrefabVariant, applyPrefabVariant,
       planPrefabSourceEdit, previewPrefabSourceEdit, editPrefabSource,
       setPrefabInstance, planPrefabStamp, stampPrefab, planTilesetPrefab, promoteTilesetPrefab,
