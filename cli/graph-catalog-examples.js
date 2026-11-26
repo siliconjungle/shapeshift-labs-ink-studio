@@ -476,6 +476,14 @@ const specifications = {
     inputs: { captures: link('captures'), settings: { width: 4, height: 4, pixelPitchMm: [.3, .3] } }
   },
   'material.pack': { inputs: materialSource.inputs },
+  'material.scanProcess': { nodes: {
+    color: { op: 'image.uniform', inputs: { width: 8, height: 6, value: [.36, .27, .18],
+      descriptor: { intent: 'color', colorSpace: 'srgb-linear' } } },
+    finish: { op: 'image.uniform', inputs: { width: 1, height: 1, value: .39, descriptor: { intent: 'data' } } },
+    irradiance: { op: 'image.uniform', inputs: { width: 8, height: 6, value: .6, descriptor: { intent: 'data' } } },
+    maps: { op: 'data.record', inputs: { baseColor: link('color'), roughness: link('finish') } },
+    packet: { op: 'material.pack', inputs: { maps: link('maps') } }
+  }, inputs: { source: link('packet'), illumination: link('irradiance'), options: { tile: { band: 2 } } } },
   'material.smartMask': { nodes: {
     coverage: { op: 'image.uniform', inputs: { value: 1, width: 8, height: 4, descriptor: { intent: 'mask' } } },
     convex: { op: 'image.uniform', inputs: { value: .6, width: 8, height: 4, descriptor: { intent: 'data' } } },

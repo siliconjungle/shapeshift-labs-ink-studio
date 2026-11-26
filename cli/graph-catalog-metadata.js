@@ -354,6 +354,12 @@ const scatterMaterial={
   border:property('string|record'),seed:tileLayout.seed
 };
 const options = {
+  'material.scanProcess': {
+    align: property('record', { description: 'Shared target dimensions, pitch, landmarks and channel overrides.' }),
+    repair: property('record', { description: 'Repair radius, defect threshold and minimum evidence coverage.' }),
+    tile: property('record', { description: 'Crop, repeat axes, seam bands and normal reconstruction mode.' }),
+    deLight: property('record', { description: 'Correction strength and minimum calibrated irradiance.' })
+  },
   'material.layer': {
     opacity: property('number', { min: 0, max: 1 }, 1),
     defaultMode: property('string', oneOf('blend', 'keep'), 'blend'),
@@ -812,6 +818,11 @@ const notes = {
   'vector.path': ['Returns one sampled contour and all sampled contours separately. Sampling is independent of the retained SVG path data.'],
   'vector.fillMask': ['Bake one selected shape using its inherited winding rule and the chosen viewport.',
     'The mask describes geometric fill coverage. Use SVG export for stroke, gradient and clip styling.'],
+  'material.scanProcess': [
+    'Use a typed material packet, optional per-map validity, a target-space defect mask and calibrated source-space illumination.',
+    'Inspect registered, de-lit, repaired and tiled packets. Repair uses the same donor for all maps.',
+    'A repeat crop needs complete or repaired evidence. The seam report measures the opposing edge mismatch for every map.'
+  ],
   'material.smartMask': [
     'Choose edgeWear, dirt, dust, rust, leaks, slope, waterline or exposure.',
     'Supply aligned typed bake images and a coverage map. Inspect the evidence, generated mask, corrected mask and recipe report.',
