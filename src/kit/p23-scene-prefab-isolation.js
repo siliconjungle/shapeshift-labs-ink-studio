@@ -114,6 +114,10 @@ const prefabEditIsolation = (function (K) {
           ...(raw.space === 'camera' && raw.camera === undefined && { camera: camera ??= authoredCamera() }),
           mesh: targetMesh
         });
+        if (transformed.report.canCommit === false) {
+          report.conflicts.push({index,member,reason:'face-fold-needs-review',details:transformed.report.issues});
+          break;
+        }
         if (transformed.patch.vertices.length || transformed.patch.faces?.length)
           ({ row: next, ...changes } = revise(row, transformed.patch));
         evidence = transformed.report;

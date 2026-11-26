@@ -539,6 +539,42 @@ The coincident snap demo aligns a sign edge to a placed fixture.
 Its adjacent trim shares the displacement. The authored seam on
 the opposite side stays free.
 
+### Fold a painted face about a shared edge
+
+Save a face selection containing the one face to fold. In the transform
+request, use that selection and this operation.
+
+```json
+{
+  "kind": "fold",
+  "edge": "awning-hinge",
+  "from": "wall/v3",
+  "degrees": -68
+}
+```
+
+The hinge must be a consistently wound edge shared with a stationary
+face. The rotation uses the edge midpoint and its local direction.
+Angles follow the right-hand rule from the `from` endpoint toward the
+other endpoint. Omit `from` to start at the first vertex in the edge's
+stored order. Both endpoints keep their exact positions. The fold
+keeps the UVs, material, corner IDs and registered crop, and rotates any
+authored corner normals with the face. The mesh's retained pivot
+stays in place.
+
+```sh
+ink-studio mesh-topology transform flat.json fold.json --object panel --selection face.json
+ink-studio mesh-topology transform flat.json fold.json --object panel --selection face.json --out awning.json --report fold-receipt.json
+node examples/tileset-pick/face-fold-demo.cjs face-fold-review
+```
+
+The preview lists the hinge, signed angle, and moved vertices. Save
+`operation.replay` from the transform report as the next request file
+to repeat the fold on the same source revision. The planner blocks
+off-axis vertices shared with another face and checks for contact in
+the final pose. The scene edit uses the existing undo and replay
+journal.
+
 ### Align a selection to a plane
 
 Use the same `mesh-topology transform` command and saved selection with one
