@@ -1419,6 +1419,8 @@ const CMD = {
         '  bounce-probes review <scene> --out directory [--from 0 --to 3 --fps 12 --w 184 --h 112]',
         '  traced-lighting <scene> --out asset.json [--plan settings.json --t 0 --samples 32 --bounces 2]',
         '  splat-fit <scene> --plan approvals.json --out asset.json',
+        '  gaussian-train capture <scene> <plan.json> --out directory   capture registered RGBA views',
+        '  gaussian-train train <dataset.json> --out directory   fit and evaluate a Gaussian cloud',
         '  splat-groups <scene> --plan groups.json --out fit.json [--base fit.json --report report.json]',
         '  splat-redistribute <scene> --plan operations.json --out fit.json --report review.json [--base fit.json]',
         '  render/clip --shot-corrections file.json|off   load or bypass native shot corrections',
@@ -3729,6 +3731,11 @@ const CMD = {
   liquid3d() {
     return require('./liquid3d.js').command(pos,opt,lib());
   },
+  'gaussian-train'() {
+    return require('./gaussian-training.js').command(pos,opt,lib().KIT,
+      (id,time) => buildPreview(id,{ parameterInputs:{ time } }),
+      (world,t) => require('./diarama-pose.js').pose(world,t,{ kit:lib(),maxSteps:7200 }));
+  },
   atmosphere3d() {
     return require('./atmosphere3d.js').command(pos,opt,lib());
   },
@@ -5777,8 +5784,9 @@ async function run() {
     shotReplay?.verify();
     return;
   }
+  const captureScenes = cmd === 'gaussian-train' && pos[0] === 'capture' ? pos.slice(1, 2) : [];
   const pixelInputs=cmd==='pixel-art' ? (['capture','splat-diagnostics'].includes(pos[0]) ? [pos[1]] : [opt.scene,...(pos[0]==='feature-rebind' ? [opt.replacement] : [])]).filter(value=>typeof value==='string') : [];
-  const splatFiles = cmd === 'pixel-art' ? pixelInputs.filter(gaussianFile) : cmd === 'snap' ? pos.filter(gaussianFile) : ['render', 'turn', 'sheet', 'clip', 'atlas', 'splat-groups', 'splat-redistribute'].includes(cmd)
+  const splatFiles = captureScenes.length ? captureScenes.filter(gaussianFile) : cmd === 'pixel-art' ? pixelInputs.filter(gaussianFile) : cmd === 'snap' ? pos.filter(gaussianFile) : ['render', 'turn', 'sheet', 'clip', 'atlas', 'splat-groups', 'splat-redistribute'].includes(cmd)
     ? pos.slice(0, 1).filter(gaussianFile) : [];
   if (splatFiles.length) {
     const ink = require('../index.js');
@@ -5792,7 +5800,7 @@ async function run() {
       });
     }
   }
-  const sceneryFiles = cmd === 'snap' ? pos.filter(sceneryFile)
+  const sceneryFiles = captureScenes.length ? captureScenes.filter(sceneryFile) : cmd === 'snap' ? pos.filter(sceneryFile)
     : ['render','turn','sheet','clip','surface-pixel'].includes(cmd) ? pos.slice(0,1).filter(sceneryFile) : [];
   for (const file of new Set(sceneryFiles)) {
     shot?.dependency(path.resolve(file));
@@ -5810,7 +5818,7 @@ async function run() {
       })
     });
   }
-  const sceneFiles = cmd === 'snap' ? pos : cmd === 'pixel-art' ? pixelInputs :
+  const sceneFiles = captureScenes.length ? captureScenes : cmd === 'snap' ? pos : cmd === 'pixel-art' ? pixelInputs :
     cmd === 'cable-route' && pos[0] === 'review' ? pos.slice(1, 2) :
     cmd === 'mesh-uv' && ['layout', 'guide', 'select', 'edit'].includes(pos[0]) && typeof opt.object === 'string' ? pos.slice(1, 2) :
     cmd === 'mesh-topology' && pos[0] === 'tint-remap' ? pos.slice(1, 2) :
@@ -5827,7 +5835,7 @@ async function run() {
     const imported = await require('./asset-part.js').loadSceneParts(source, file, { toolkit: lib(), onFile });
     sceneAssetParts.set(path.resolve(file), imported);
   }
-  const gltfInputs = cmd === 'pixel-art' ? pixelInputs : cmd === 'snap' ? pos :
+  const gltfInputs = captureScenes.length ? captureScenes : cmd === 'pixel-art' ? pixelInputs : cmd === 'snap' ? pos :
     ['render','turn','sheet','clip','passes','surface-pixel','inspect-gltf','splat-groups','splat-redistribute'].includes(cmd) ? pos.slice(0,1) : [];
   for (const file of new Set(gltfInputs.filter(file=>/\.(gltf|glb)$/i.test(file)))) {
     if (opt.scene === true) die('--scene needs a glTF scene index');
