@@ -141,7 +141,9 @@ function fieldSource(source, directory, K) {
 }
 
 function meshMaterial(row, normal, weights, point, model, { V }) {
-  const material = model.sampleSurface?.(point,normal,row.face) ?? row.material;
+  const sampled = model.sampleSurface?.(point,normal,row.face);
+  if (sampled === null && model.alphaHoles) return null;
+  const material = sampled ?? row.material;
   const uv = row.uvs && [0,1].map(k=>weights.reduce((sum,w,i)=>sum+row.uvs[i][k]*w,0));
   const maps = row.material.images;
   const pigment = uv && maps.pigment && texel(maps.pigment,uv);

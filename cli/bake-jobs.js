@@ -93,7 +93,8 @@ async function runBakeJob(file,{directory,signal=new AbortController().signal,on
       if(digest(fs.readFileSync(input))!==sha256)throw new Error('Bake input changed before publication');
     }
     const report=json(path.join(stage,'report.json'));
-    reviewData({label:report.label,preset:report.preset,targets:report.targets,catalog:report.catalog,report},stage);
+    reviewData({label:report.label,preset:report.preset,targets:report.targets,catalog:report.catalog,
+      projectionCatalog:report.projectionCatalog,report},stage);
     if(signal.aborted)return {status:'cancelled',latest:latestBakeJob(root)?.revision??null};
     fs.rmSync(work,{recursive:true,force:true});
     fs.renameSync(stage,destination);

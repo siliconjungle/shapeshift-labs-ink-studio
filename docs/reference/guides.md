@@ -45,6 +45,7 @@ All checked-in guides, indexed by title and section headings.
 - [Drive picture from an audiovisual take](../audiovisual-takes.md)
 - [Authored contacts and prop handoffs](../authored-contacts.md)
 - [Bake jobs and presets](../bake-jobs.md)
+- [Bake projection controls](../bake-projection.md)
 - [Batch spatial queries and occupancy](../batch-spatial-queries.md)
 - [Capture beat-level live performance](../beat-performance-captures.md)
 - [Bitmap resources](../bitmap-resources.md)

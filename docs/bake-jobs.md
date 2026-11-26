@@ -69,3 +69,7 @@ ink-studio bake-job serve brineglass-demo/brineglass.bake.json --out brineglass-
 ```
 
 Brineglass Signal bakes two enamel designs from UV0 onto two tiles in UV1 and includes a separate fitting. Inspect the pigment, tangent normals, surface roughness, coverage and cavity. The completed review opens from the revision's `index.html`. The local workstation also runs jobs and cancels active bakes.
+
+## Project high detail onto a receiver
+
+See [projection controls](bake-projection.md) for high and low source selection, self-bake, distance units, cage meshes, ray direction, name matching, backfaces and UV skew. Projection-enabled targets use scene placements. Regular direct bakes retain their mesh-local behavior.
