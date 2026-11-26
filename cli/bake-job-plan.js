@@ -215,10 +215,11 @@ function readPlan(filename,{presetFile,presetValue,targetValues,onInput=()=>{}}=
   if(!fields(source,['format','version','label','source','targets','preset','refresh','projectionSources','skewMaps','normalInputs','textureInputs'])||
     source.format!==format||source.version!==1||!text(source.label)||!meshFile(source.source))
     throw new TypeError('Expected a version 1 bake job with a GLB or glTF source');
-  let settings=presetValue??presetFile??source.preset;
+  let settings=presetValue??presetFile??source.preset, presetPath;
   if(typeof settings==='string') {
     const f=path.resolve(presetFile&&!presetValue?process.cwd():baseDir,settings);
     onInput(f);
+    presetPath=f;
     settings=json(f);
   }
   const catalogs=libraries(source,baseDir), selected=targets(targetValues??source.targets,catalogs), receiver=path.resolve(baseDir,source.source);
@@ -231,7 +232,7 @@ function readPlan(filename,{presetFile,presetValue,targetValues,onInput=()=>{}}=
     if(row.id===Transfer.name&&!textureInput)throw new RangeError('Texture transfer needs a named texture input');
     if(textureInput&&!catalogs.textureInputs.has(textureInput))throw new RangeError('Unknown bake texture input '+textureInput);
   }
-  return {location,label:source.label,source:receiver,targets:selected,...catalogs,preset:chosen,
+  return {location,label:source.label,source:receiver,targets:selected,...catalogs,preset:chosen,presetPath,
     refresh:bindings(source.refresh,baseDir,selected,onInput)};
 }
 
@@ -248,4 +249,4 @@ function effective(preset,row) {
   if(!delivery&&padding*2>=size)throw new RangeError('Map padding must be less than half its size');
   return {...base,...(delivery&&{delivery})};
 }
-module.exports={format,presetFormat,names,preset,readPlan,effective,id};
+module.exports={format,presetFormat,names,preset,readPlan,effective,id,coord};
