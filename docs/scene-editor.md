@@ -559,6 +559,52 @@ In the SDK, use `planPrefabArray`, `previewPrefabArray`, and
 to duplicate a bay in three axes, edit an individual copy, and resize
 the array with that edit intact.
 
+### Combine placed instances into a module
+
+`mesh-topology combine-prefab` captures the effective geometry, paint,
+materials, and local overrides of two or more linked placements into a
+new inline prefab. The module preserves their relative positions,
+orientations, and scales. Member IDs are qualified by source placement,
+such as `west.panel` and `east.panel`.
+
+```json
+{
+  "instances": ["west", "east"],
+  "prefab": "paired-bays",
+  "mode": "replace",
+  "instance": "lower-module",
+  "origin": [-1.31, 0, 0]
+}
+```
+
+Choose the mode explicitly. **Keep** registers the module and leaves the
+selected placements in the scene. Omit `instance` in keep mode. **Replace**
+installs one new linked instance at the chosen origin and removes the
+selected placements in the same undo. Omit `origin` to use the first
+selected placement in scene order.
+
+```sh
+ink-studio mesh-topology combine-prefab station.json combine.json --preview review --view view.json
+ink-studio mesh-topology combine-prefab station.json combine.json --out combined.json
+```
+
+Use `--selection selected.json` with a saved prefab instance report from
+`tileset select` in place of the explicit `instances` list. The receipt
+lists source revisions and member mappings. Replacement reroutes
+scene-level decals to the corresponding module receivers. The module
+records source provenance and tileset requirements. Its mesh frames
+keep editable documents in their own local coordinates.
+
+Projection modifiers that require a mesh outside the selected module
+need review. Replacement also checks references such as an array's
+source instance or an indexed scene control before retiring placements.
+
+In the SDK, use `planPrefabCombination`, `previewPrefabCombination`, and
+`combinePrefabs`. Run
+`node examples/tileset-pick/prefab-combine-demo.cjs combined-bays`
+to compare the original placements with a combined stamp and then reuse
+the module elsewhere.
+
 ## Breakable groups
 
 Use `editor.suggestBreakable({ at, radius, voxel })` to query a nearby
