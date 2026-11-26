@@ -50,6 +50,12 @@ function capture({before,after,report},settings,directory,kit) {
   return evidence;
 }
 
+function relativeSolidAssets(solids,directory,kit) {
+  for (const solid of kit.KIT.diorama.solids({solids}))
+    if (solid.kind === 'mesh' && typeof solid.asset === 'string' && path.isAbsolute(solid.asset))
+      solid.asset = path.relative(directory,solid.asset);
+}
+
 function publish(output,libraryOut,librarySource,result,kit) {
   const entries = [];
   let scene = result.scene;
@@ -57,9 +63,7 @@ function publish(output,libraryOut,librarySource,result,kit) {
     if (!libraryOut) throw new TypeError('Use --library-out to publish a revised shared prefab library beside its source');
     const {prefab} = result.report, library = read(librarySource);
     const definition = structuredClone(result.library[prefab]);
-    for (const solid of kit.KIT.diorama.solids({solids:Object.values(definition.solids)}))
-      if (solid.kind === 'mesh' && typeof solid.asset === 'string' && path.isAbsolute(solid.asset))
-        solid.asset = path.relative(path.dirname(libraryOut),solid.asset);
+    relativeSolidAssets(Object.values(definition.solids),path.dirname(libraryOut),kit);
     entries.push([libraryOut,{...library,[prefab]:definition}]);
     scene = {...scene,prefabLibrary:path.relative(path.dirname(output),libraryOut)};
   } else if (libraryOut) throw new TypeError('An inline prefab is saved with its scene');
@@ -104,4 +108,4 @@ function command(file,input,rest,opt,kit,openEditor) {
   process.stdout.write(JSON.stringify({...result.report,...(evidence && {preview:evidence})},null,2)+'\n');
 }
 
-module.exports = {command};
+module.exports = {command,capture,images,relativeSolidAssets};

@@ -356,9 +356,13 @@ const SceneMeshes = (() => {
     return { positions: positions.slice(), indices: indices.slice() };
   }
 
-  function withPose(mesh, positions) {
-    const data = read(mesh);
-    const copy = Object.freeze({ ...mesh, [state]: { ...data, layer: Sprite.forkGeometry(data.layer),
+  function withPose(mesh, positions, { id = mesh.id, objectId = mesh.objectId } = {}) {
+    if (!name(id) || !name(objectId)) throw new TypeError('A posed mesh needs valid mesh and object IDs');
+    const data = read(mesh), layer = Sprite.forkGeometry(data.layer);
+    if (id !== mesh.id) layer.sceneMeshId = id;
+    if (objectId !== mesh.objectId && layer.surfaceCharts)
+      layer.surfaceCharts = Object.freeze(layer.surfaceCharts.map(chart => Object.freeze({ ...chart, objectId })));
+    const copy = Object.freeze({ ...mesh, id, objectId, [state]: { ...data, layer,
       ...(data.objectTexels && { objectTexels: { ...data.objectTexels } }) } });
     return pose(copy, positions);
   }

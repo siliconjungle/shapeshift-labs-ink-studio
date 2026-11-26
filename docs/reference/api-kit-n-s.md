@@ -1310,7 +1310,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.sceneMeshes.updateObjectTexels` | function | `(mesh, bake)` | [guide](../pbr-materials.md#carrier-channels), [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.uvAnchors` | function | `(mesh, {V, procedural:{spatial}}, selector = 'pigment')` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.valid` | function | `(mesh)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.withPose` | function | `(mesh, positions)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.withPose` | function | `(mesh, positions, { id = mesh.id, objectId = mesh.objectId } = {})` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 
 ## KIT.screenPrint
 
