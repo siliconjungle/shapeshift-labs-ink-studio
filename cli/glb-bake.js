@@ -179,7 +179,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
         }
         if(stamp && stamp[i*4+3])color=color.map((value,k)=>value*(1-stamp[i*4+3])+stamp[i*4+k]);
       }
-      geometrySample?.(p,i);
+      geometrySample?.(p,i,n);
       const source = authoredNormal ? (registered ? V.norm(authoredNormal) : authoredNormal) : n;
       const tx = V.norm(V.mad(tangent, n, -V.dot(tangent, n)), V.perp(n));
       const ty = V.mul(V.cross(n, tx), V.dot(V.cross(n, tx), bitangent) < 0 ? -1 : 1);
@@ -239,6 +239,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
       for (let k = 0; k < 3; k++) layer[j * 3 + k] = layer[i * 3 + k];
     }
     for (const layer of masks.values()) layer[j]=layer[i];
+    geometry?.copy?.(i,j);
     visibility?.copy(i,j);
     if(height)height[j]=height[i];
     if(alpha)alpha[j]=alpha[i];
