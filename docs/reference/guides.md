@@ -106,6 +106,7 @@ All checked-in guides, indexed by title and section headings.
 - [Interactive cutaways and clipping](../cutaways.md)
 - [Data-bound visual marks](../data-bound-marks.md)
 - [Deep OpenEXR export](../deep-openexr.md)
+- [Headless deep shot compositing](../deep-shot.md)
 - [Deformation-aware materials](../deformation-materials.md)
 - [Check sync in delivered picture and sound](../delivered-sync.md)
 - [Depth-map import](../depth-maps.md)
