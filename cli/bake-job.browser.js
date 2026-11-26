@@ -2,7 +2,8 @@
   const el=id=>document.getElementById(id), title=s=>s.replaceAll('-',' ').replace(/^./,c=>c.toUpperCase());
   const names={pigment:'Pigment',normal:'Normal',roughness:'Roughness',metalness:'Metalness',emission:'Emission',
     opacity:'Opacity',coverage:'Coverage',slope:'Slope',cavity:'Cavity',exposure:'Exposure',thickness:'Thickness',
-    'thickness-valid':'Thickness validity'};
+    'thickness-valid':'Thickness validity','cage-hit':'Projection hits','cage-miss':'Projection misses',
+    'cage-backface':'Projection backfaces','cage-distance':'Projection distance','cage-relief':'Signed projection relief'};
   const geometry=['slope','cavity','exposure','thickness','thickness-valid'];
   const {label,catalog,token}=bakeJob;
   function withAvailableMaps(value) {
@@ -13,6 +14,8 @@
   let base='', revision;
   el('title').textContent=label;
   document.title=label+' · Ink Studio';
+  if(targets.some(row=>row.projection))
+    el('target-card').parentElement.prepend(el('target-card'));
   function node(type,value) {
     const item=document.createElement(type);
     if(value!==undefined)item.textContent=value;
@@ -42,6 +45,98 @@
   }
   function put(row,key,value) {
     if(value===undefined||value==='')delete row[key];else row[key]=value;
+  }
+  function projectionControls(row) {
+    const pane=node('div');
+    const known=bakeJob.projectionCatalog??{sources:[{id:'$receiver',meshes:catalog}],skewMaps:[]};
+    const sourceChoices=known.sources.map(source=>[source.id,source.id==='$receiver'?'Receiver scene':source.id]);
+    const meshChoices=id=>known.sources.find(source=>source.id===id).meshes.map(mesh=>[mesh.index,mesh.name]);
+    const index=(id,value)=>known.sources.find(source=>source.id===id).meshes
+      .find(mesh=>mesh.index===value||mesh.name===value)?.index;
+    const projection=node('details');
+    const summary=node('summary','Projection');
+    projection.open=Boolean(row.projection);
+    projection.append(summary,pane);
+    function draw() {
+      const options=row.projection??{mode:'self'};
+      const high=options.high??known.sources.find(source=>source.id!=='$receiver')?.id??'$receiver';
+      const layout=node('div');layout.className='form';
+      pane.replaceChildren(layout);
+      layout.append(field('Bake from',selected([['self','Low mesh · self-bake'],['project','High mesh · project']],
+        options.mode,value=>{
+          row.projection=value==='self'?{mode:'self'}:{mode:'project',high,match:'all',front:.1,back:.05,
+            units:'scene',normals:'authored',backfaces:'ignore'};
+          draw();
+        })));
+      summary.textContent=options.mode==='project'?'Projection · High to low':'Projection · Self-bake';
+      if(options.mode==='self')return;
+      layout.append(field('High source',selected(sourceChoices,high,value=>{
+        options.high=value;
+        if(options.match==='selection')options.mesh=meshChoices(value)[0][0];
+        draw();
+      })));
+      layout.append(field('Match meshes',selected([['all','All high meshes'],['selection','One high mesh'],['name','By mesh name']],
+        options.match,value=>{
+          options.match=value;
+          delete options.lowSuffix;delete options.highSuffix;delete options.mesh;
+          if(value==='selection')options.mesh=meshChoices(high)[0][0];
+          draw();
+        })));
+      if(options.match==='selection')
+        layout.append(field('High mesh',selected(meshChoices(high),index(high,options.mesh),value=>{options.mesh=+value;})));
+      if(options.match==='name') {
+        for(const [key,label] of [['lowSuffix','Low suffix'],['highSuffix','High suffix']]) {
+          const input=node('input');input.value=options[key]??'';input.maxLength=140;
+          input.oninput=()=>put(options,key,input.value);
+          layout.append(field(label,input));
+        }
+      }
+      layout.append(field('Backfaces',selected([['ignore','Ignore and continue'],['block','Stop the ray'],['accept','Accept hit']],
+        options.backfaces??'ignore',value=>{options.backfaces=value;})));
+      layout.append(field('Cage',selected([['distance','Distance based'],['mesh','Explicit cage mesh']],options.cage?'mesh':'distance',value=>{
+        if(value==='mesh') {
+          options.cage={source:high,mesh:meshChoices(high)[0][0]};
+          delete options.skew;delete options.invertSkew;
+        } else {
+          delete options.cage;
+          options.front??=.1;options.back??=.05;options.units??='scene';options.normals??='authored';
+        }
+        draw();
+      })));
+      if(options.cage) {
+        const cage=options.cage;
+        layout.append(field('Cage source',selected(sourceChoices,cage.source,value=>{
+          cage.source=value;cage.mesh=meshChoices(value)[0][0];draw();
+        })));
+        layout.append(field('Cage mesh',selected([['','Match low mesh'],...meshChoices(cage.source)],
+          cage.mesh===undefined?'':index(cage.source,cage.mesh),value=>put(cage,'mesh',value===''?undefined:+value))));
+        return;
+      }
+      layout.append(field('Distance units',selected([['scene','Scene units'],['bounds','Low bounding box']],
+        options.units,value=>{options.units=value;})));
+      layout.append(field('Frontal distance',numeric('Frontal distance',options.front,n=>put(options,'front',n),
+        {placeholder:.1,min:0,max:1e5,step:'any'})));
+      layout.append(field('Rear distance',numeric('Rear distance',options.back,n=>put(options,'back',n),
+        {placeholder:.05,min:0,max:1e5,step:'any'})));
+      const direction=selected([['authored','Authored normals'],['average','Average normals'],['face','Face normals']],
+        options.normals,value=>{options.normals=value;});
+      direction.disabled=Boolean(options.skew);
+      layout.append(field('Ray direction',direction));
+      if(known.skewMaps.length) {
+        layout.append(field('Skew map',selected([['','None'],...known.skewMaps.map(id=>[id,id])],options.skew??'',value=>{
+          put(options,'skew',value);
+          if(!value)delete options.invertSkew;
+          draw();
+        })));
+        if(options.skew) {
+          const invert=node('input');invert.type='checkbox';invert.checked=options.invertSkew??false;
+          invert.onchange=()=>{options.invertSkew=invert.checked;};
+          layout.append(field('Invert skew',invert));
+        }
+      }
+    }
+    draw();
+    return projection;
   }
   function fillDefaults() {
     el('preset-name').value=preset.label;
@@ -125,6 +220,7 @@
       }).join(', ');
       tile.oninput=()=>{row.tiles=tile.value.split(',').map(s=>s.trim()).filter(Boolean).map(s=>s.includes(':')?s.split(':').map(Number):Number(s));};
       detail.append(field('Tiles · UDIM or u:v',tile));
+      detail.append(projectionControls(row));
       pane.append(detail);
     }
   }
@@ -166,7 +262,11 @@
     properties(el('details'),{'UV set':row.uvSet,'Grid':row.settings.size+' × '+row.settings.size,
       'Padding':row.settings.padding+' px','Surface coverage':(row.coverage*100).toFixed(1)+'%',
       ...(row.settings.orientation&&{'Orientation':title(row.settings.orientation)}),
-      ...(row.geometry&&{'Probe rays':row.geometry.rayCount.toLocaleString()})});
+      ...(row.geometry&&{'Probe rays':row.geometry.rayCount.toLocaleString()}),
+      ...(row.projection&&{'Projection':row.projection.mode==='self'?'Self-bake':row.projection.highMeshes.join(', '),
+        'Hits':row.projection.hits.toLocaleString(),'Misses':row.projection.misses.toLocaleString(),
+        'Backfaces':row.projection.backfaces.toLocaleString(),
+        ...(row.projection.cageMesh&&{'Cage':row.projection.cageMesh})})});
   }
   function results() {
     const select=el('result');

@@ -259,6 +259,21 @@
       return report;
     }
 
+    const inspectPaintings3d = () => freeze(DIO.paintingPlacements(snapshot(), buildEnv));
+    function planPainting3d(request, { update = false } = {}) {
+      const scene = snapshot(), api = A.paintings3d, paintings3d = api.revise(scene, request, update);
+      const report = DIO.paintingPlacements({ ...scene, paintings3d }, buildEnv).find(row => row.id === request.id);
+      return freeze({ paintings3d, report });
+    }
+
+    function applyPainting3d(request, options) {
+      const { paintings3d, report } = planPainting3d(request, options);
+      const write = () => document.setEnvironment({ paintings3d });
+      if (document.pending()) write();
+      else document.transact('Edit 3D painting ' + request.id, write);
+      return report;
+    }
+
     const planSculptSnap = request => A.sculptSnap.plan(snapshot(), request, buildEnv).report;
     const inspectSculptSnap = (target, id) => A.sculptSnap.inspect(snapshot(), target, id, buildEnv);
     function applySculptSnap(request) {
@@ -1222,6 +1237,30 @@
       return document.pending() ? write() : document.transact('Edit pose shape of '+object,write);
     }
 
+    function planMeshTint(object, request, {part} = {}) {
+      return K.meshTopology.planTint(meshTopology(object,part).document,request);
+    }
+
+    function editMeshTint(object, request, {part} = {}) {
+      const before = meshTopology(object,part);
+      const {document:painted,report} = K.meshTopology.planTint(before.document,request);
+      if (!report.changedCorners) return report;
+      const {beforeRevision,afterRevision} = report;
+      const next = {...before,document:painted};
+      // Tint changes the authoring revision while keeping geometry and valid source bindings intact.
+      if (before.attachments?.revision===beforeRevision)
+        next.attachments = {...before.attachments,revision:afterRevision};
+      if (before.shapeKeys?.restRevision===beforeRevision)
+        next.shapeKeys = {...before.shapeKeys,restRevision:afterRevision};
+      function write() {
+        const topologyMeshes = {...snapshot().topologyMeshes,[object]:next};
+        validate({...snapshot(),topologyMeshes});
+        document.setEnvironment({topologyMeshes});
+        return report;
+      }
+      return document.pending() ? write() : document.transact('Paint mesh tint on '+object,write);
+    }
+
     function planMeshSkin(object, request, { part } = {}) {
       return K.meshTopology.skin.plan(meshTopology(object, part).document, request);
     }
@@ -1430,6 +1469,8 @@
       sculptContributions, inspectSculptContribution, editSculptContribution,
       planSculptSnap, inspectSculptSnap, applySculptSnap, planSculptGuide, applySculptGuide,
       inspectSculptGuides: () => A.sculptGuides.inspect(snapshot(), buildEnv),
+      planPainting3d, applyPainting3d, inspectPaintings3d,
+      extractPainting3d: id => A.paintings3d.extract(snapshot(), id),
       placeSculptStamp, planSculptSplit, splitSculpt, planAssemblyStretch, stretchAssembly,
       setPrefabInstance,
       planPrefabIsolation, previewPrefabIsolation, editIsolatedPrefab,
@@ -1481,6 +1522,8 @@
       bevelMeshTopology,
       planMeshShading,
       editMeshShading,
+      planMeshTint,
+      editMeshTint,
       planMeshSkin,
       editMeshSkin,
       planMeshShapeKeys,

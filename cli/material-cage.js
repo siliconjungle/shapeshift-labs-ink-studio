@@ -99,9 +99,10 @@ function meshCaster(entry, studio, kit, work) {
     }
   }
   if (triangles.length>250000) throw new RangeError('Cage source exceeds 250000 triangles');
-  const tree=spatial.pointIndex(triangles), length=front+back;
-  return { triangles:triangles.length, cast(point,axis,probe) {
-    const origin=V.mad(point,axis,front), direction=V.mul(axis,-1), candidates=[];
+  const tree=spatial.pointIndex(triangles);
+  return { triangles:triangles.length, cast(point,axis,ray,probe) {
+    const start=ray?.front ?? front, length=start+(ray?.back ?? back);
+    const origin=V.mad(point,axis,start), direction=V.mul(axis,-1), candidates=[];
     tree.ray(origin,direction,length+tolerance,row=>{
       work();
       if (probe && ((probe.part != null && probe.part !== row.part) || V.dot(row.normal,probe.facing)<entry.minFacing)) return;
@@ -112,22 +113,26 @@ function meshCaster(entry, studio, kit, work) {
       if (u>=-1e-9 && v>=-1e-9 && u+v<=1+1e-9 && t>=-tolerance && t<=length+tolerance)
         candidates.push({t:Math.max(0,Math.min(length,t)),row,weights:[1-u-v,u,v]});
     });
-    candidates.sort((a,b)=>(probe ? Math.abs(a.t-front)-Math.abs(b.t-front) : a.t-b.t) || a.row.i-b.row.i);
-    let result;
+    candidates.sort((a,b)=>(probe ? Math.abs(a.t-start)-Math.abs(b.t-start) : a.t-b.t) || a.row.i-b.row.i);
+    let result, skippedBackface=false;
     for (const {t,row,weights} of candidates) {
       if (result && t-result.t>tolerance) break;
       const at=V.mad(origin,direction,t), normal=V.norm([0,1,2].map(k=>
         weights.reduce((sum,w,i)=>sum+w*row.cornerNormals[i][k],0)),row.normal);
       const material=Source.meshMaterial(row,normal,weights,at,model,kit);
       if (!material) continue; // Transparent scan texels do not occlude the ray.
-      if (probe) return { offset:front-t, point:at, part:row.part, sourceFace:row.id };
+      if (probe) return { offset:start-t, point:at, part:row.part, sourceFace:row.id };
+      if (ray?.ignoreBackfaces && V.dot(row.normal,axis)<entry.minFacing) {
+        skippedBackface=true;
+        continue;
+      }
       if (result) {
         if (row.part!==result.part) result.competingPart=row.part ?? null;
         continue;
       }
-      result={ t,point:at,offset:front-t,normal:row.normal,material,part:row.part,sourceFace:row.id };
+      result={ t,point:at,offset:start-t,normal:row.normal,material,part:row.part,sourceFace:row.id };
     }
-    return result;
+    return skippedBackface ? { ...result, skippedBackface:true } : result;
   }};
 }
 
@@ -172,7 +177,8 @@ function fieldCaster(entry, kit, work) {
 }
 
 function prepare(spec, mesh, studio, kit) {
-  const { source,front,back,part,parts,faces,protectPigment,direction,minFacing,partPolicy,channels,maxWork }=spec;
+  const { source,front,back,part,parts,faces,protectPigment=new Set(),direction,minFacing,partPolicy,channels,maxWork,
+    buildRay,backfaces='block' }=spec;
   const known=new Set(mesh.faces.map((_,i)=>String(mesh.faceIds?.[i] ?? i)));
   for (const id of [...parts.keys(),...(faces ?? []),...protectPigment]) if (!known.has(id)) throw new RangeError('Unknown cage receiver face '+id);
   const maskNames=new Set(), range=Math.max(front,back), tolerance=Math.max(1e-9,Math.min(1e-5,range*1e-6));
@@ -181,10 +187,10 @@ function prepare(spec, mesh, studio, kit) {
     if (++checks>maxWork) throw new RangeError('Material cage exceeds its work budget. Adjust atlas size, cage bounds or maxWork.');
   }
   const settings={...spec,tolerance,maskNames};
-  const caster=source.kind==='sdf' ? fieldCaster(settings,kit,work) : meshCaster(settings,studio,kit,work);
+  const caster=spec.caster ?? (source.kind==='sdf' ? fieldCaster(settings,kit,work) : meshCaster(settings,studio,kit,work));
   const declared=new Set([...(mesh.maskNames ?? []),...mesh.materials.flatMap(material=>Object.keys(material.masks ?? {})),...maskNames]);
   if ([...declared].some(id=>names.has(id) || !idOK(id))) throw new TypeError('Cage diagnostic names are reserved material masks');
-  const byPart=new Map(), examples={}, fields={pigment:'color',normal:'normal',roughness:'roughness',metallic:'metallic',emission:'emission'};
+  const byPart=new Map(), examples={}, fields={pigment:'color',normal:'normal',roughness:'roughness',metallic:'metallic',emission:'emission',opacity:'opacity'};
   const counter=()=>({sampled:0,hits:0,misses:0,crossPart:0,rejectedCrossPart:0,backfaces:0});
   const stats=counter(), {V}=kit;
   let min=Infinity,max=-Infinity,retainedPigment=0;
@@ -196,10 +202,14 @@ function prepare(spec, mesh, studio, kit) {
     const local=byPart.get(expected);
     stats.sampled++;
     local.sampled++;
-    const hit=caster.cast(point,direction==='geometric' ? geometric : smooth);
+    const ray=buildRay?.(point,smooth,geometric,face,pixel);
+    const axis=ray?.axis ?? (direction==='geometric' ? geometric : smooth);
+    const attempt=caster.cast(point,axis,ray&&{...ray,ignoreBackfaces:backfaces==='ignore'});
+    const hit=attempt?.normal&&attempt;
     const cross=hit && (hit.competingPart!==undefined || expected!==null && hit.part!==expected);
-    const backface=hit && (V.len(hit.normal)===0 || V.dot(hit.normal,geometric)<minFacing);
-    const accepted=Boolean(hit && !backface && (!cross || partPolicy==='allow') && hit.competingPart===undefined);
+    const hitBackface=hit && (V.len(hit.normal)===0 || V.dot(hit.normal,ray?axis:geometric)<minFacing);
+    const backface=hitBackface || attempt?.skippedBackface;
+    const accepted=Boolean(hit && (!hitBackface || backfaces==='accept') && (!cross || partPolicy==='allow') && hit.competingPart===undefined);
     for (const [key,on] of [['hits',accepted],['misses',!hit],['crossPart',cross],['rejectedCrossPart',cross&&!accepted],['backfaces',backface]]) {
       if (!on) continue;
       stats[key]++;
@@ -227,7 +237,7 @@ function prepare(spec, mesh, studio, kit) {
   }
   const report=()=>({ version:1,source:{kind:source.kind,...(source.file && {file:source.file}),
     ...(caster.triangles && {triangles:caster.triangles})},front,back,distanceScale:range,direction,partPolicy,minFacing,channels,
-    ...(source.kind==='sdf' && {steps:spec.steps}),maxWork,checks,...stats,
+    ...(source.kind==='sdf' && {steps:spec.steps}),...(buildRay&&{backfacesPolicy:backfaces}),maxWork,checks,...stats,
     ...(protectPigment.size && {protectedPigment:{faces:[...protectPigment],texels:retainedPigment}}),
     offsets:stats.hits ? {min,max} : null, parts:[...byPart].map(([part,row])=>({part,...row})),examples });
   return {maskNames:[...masks,...(channels.includes('masks') ? maskNames : [])],sample,report};
@@ -258,7 +268,7 @@ function estimate(spec, mesh, studio, kit, { search, margin = search * .05, maxP
     if (!parts.has(part)) parts.set(part,{part,probes:0,matches:0});
     const row=parts.get(part);
     row.probes++;
-    const hit=caster.cast(weighted([a,b,c]),direction,{part,facing:geometric});
+    const hit=caster.cast(weighted([a,b,c]),direction,undefined,{part,facing:geometric});
     if (!hit) continue;
     row.matches++;
     matches++;

@@ -43,10 +43,11 @@ const meshBooleanSurfaces = (function(K) {
   function cornerData(meta,weights,flipped,shade) {
     const rows=meta.attributes;
     const uv=vector(rows.map(row=>row.uv),weights).map(unit);
-    const attributes=rows[0].attributes && blend(rows.map(row=>row.attributes),weights);
+    const attributes=blend(rows.map(meshCornerTint.generic),weights), tint=meshCornerTint.sample(rows,weights);
+    if (tint) attributes.tint=tint;
     const normal=shade && rows.some(row=>row.normal) &&
       V.norm(vector(rows.map(row=>row.normal ?? meta.normal),weights));
-    return {uv,...(attributes && {attributes}),...(normal && V.len(normal)>.99 && {normal:flipped ? V.mul(normal,-1) : normal})};
+    return {uv,...((rows[0].attributes || tint) && {attributes}),...(normal && V.len(normal)>.99 && {normal:flipped ? V.mul(normal,-1) : normal})};
   }
   function vertexData(meta,weights) {
     const rows=meta.authored, channels=[...new Set(rows.flatMap(row=>Object.keys(row.weights ?? {})))].sort();

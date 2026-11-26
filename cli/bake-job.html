@@ -20,7 +20,7 @@ input:focus-visible,button:focus-visible,select:focus-visible,summary:focus-visi
 .toolbar{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
 .form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 label{font-size:12px;color:var(--muted);display:grid;gap:3px}summary{cursor:pointer;color:var(--gold)}
-.targets details{padding:5px 0}.targets textarea{width:100%;resize:vertical}
+.targets details{padding:5px 0}.targets details details{margin-top:6px;border-top:1px solid var(--line)}.targets details details .form{margin-top:6px}
 .partlist{display:flex;flex-wrap:wrap;gap:4px 7px;margin:6px 0}.partlist label{display:inline-flex;align-items:center;gap:3px}
 #rows{margin-top:10px}
 .map-row{border-top:1px solid var(--line);padding:5px 0}
@@ -52,7 +52,7 @@ dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 9px;font
 <input id="preset-file" type="file" accept=".json" hidden>
 <div id="rows"></div>
 </section>
-<section class="card"><h2>Targets</h2><div class="targets" id="targets"></div></section>
+<section class="card" id="target-card"><h2>Targets</h2><div class="targets" id="targets"></div></section>
 </div>
 <div class="stack">
 <section class="card">

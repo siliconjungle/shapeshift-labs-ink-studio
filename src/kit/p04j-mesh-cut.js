@@ -156,18 +156,20 @@
       return { ...corner, id };
     }
     const uv = [0, 1].map(axis => Math.max(0, Math.min(1, weighted(triangle.loop.map(row => row.uv[axis]), weights))));
-    const layout = triangle.loop[0].attributes;
-    const attributes = layout && Object.fromEntries(Object.entries(layout).map(([key, value]) => {
+    const layout = meshCornerTint.generic(triangle.loop[0]);
+    const attributes = Object.fromEntries(Object.entries(layout ?? {}).map(([key, value]) => {
       const values = triangle.loop.map(row => row.attributes[key]);
       return [key, Array.isArray(value) ? value.map((_, i) => weighted(values.map(data => data[i]), weights)) : weighted(values, weights)];
     }));
+    const tint = meshCornerTint.sample(triangle.loop,weights);
+    if (tint) attributes.tint=tint;
     let normal;
     if (triangle.loop.some(row => row.normal)) {
       const fallback = meshTopologyShading.triangleNormal(triangle.positions);
       const sum = triangle.loop.reduce((sum, row, i) => V.mad(sum, row.normal ?? fallback, weights[i]), [0, 0, 0]);
       if (V.len(sum)) normal = meshTopologyShading.direction(sum);
     }
-    return { id: fresh('corner'), vertex: id, uv, ...(attributes && { attributes }), ...(normal && { normal }) };
+    return { id: fresh('corner'), vertex: id, uv, ...((layout || tint) && { attributes }), ...(normal && { normal }) };
   }
 
   function cutFaces(doc, config, pool, fresh) {

@@ -156,6 +156,7 @@ function makeSculpt(B, rest) {
     if (p.bump) p.br += p.bump[0];
     p.reach = o.reach || 0;
     p.whole = !!o.whole;
+    if (o.paintLayer) p.paintLayer = true;
     if (o.lowerBound !== undefined) {
       if (typeof o.lowerBound !== 'function') throw new Error('A field lower bound must be a function');
       p.lowerBound = o.lowerBound;
@@ -691,6 +692,14 @@ function makeSculpt(B, rest) {
     if (p.bump && d > p.bump[0] + 0.25) return d - p.bump[0]; // far away: skip the noise, stay conservative
     if (p.bump) d -= p.bump[0] * (n3(x * p.bump[1] + (p.bumpPhase ?? p.g) * 3.7, y * p.bump[1], z * p.bump[1]) * 1.5 - 0.75);
     return d;
+  }
+  function coveredPaint(p, d, x, y, z) {
+    for (let upper = p.paintAbove; upper; upper = upper.paintAbove) {
+      const reach = upper.br + .005;
+      const [cx, cy, cz] = upper.bc, dx = x - cx, dy = y - cy, dz = z - cz;
+      if (dx * dx + dy * dy + dz * dz <= reach * reach && Math.abs(psd(upper, x, y, z) - d) < .00001) return true;
+    }
+    return false;
   }
   // A coarse grid lists, for each cell, only the solids that can come within MARG of it; beyond that the
   // field just reports MARG, which is all the shadow and occlusion marches need.
@@ -2049,7 +2058,7 @@ function makeSculpt(B, rest) {
           z -= nz * st;
           d = psd(p, x, y, z);
         }
-        if (Math.abs(d) > res * 0.5 || !p.mat.r || p.mat.skip) return;
+        if (Math.abs(d) > res * 0.5 || !p.mat.r || p.mat.skip || p.paintAbove && coveredPaint(p, d, x, y, z)) return;
         if (S.capture) {
           S.capture(p, S.materialAt(p.mat, [x, y, z], [nx, ny, nz]), res, x, y, z, nx, ny, nz, 1);
           return;
@@ -2284,9 +2293,14 @@ function makeSculpt(B, rest) {
     if(S.stipple&&S.stipple!==true&&(typeof S.stipple!=='object'||Array.isArray(S.stipple)))throw new TypeError('Stippling needs a boolean or settings');
     stippleProfile=Stippling.prepare(S.stipple ? {light:S.sun,ambient:S.amb,...(S.stipple===true?{}:S.stipple)} : S.stipple);stippleCandidates=stippleProfile&&!S.capture?[]:null;stippleProbes=0;
     buildGrid();
+    const topPaint = new Map();
     L = S.sun;
     for (const p of pos.concat(neg)) {
       if (p.mat.skip) continue;
+      if (p.paintLayer) {
+        p.paintAbove = topPaint.get(p.tag);
+        topPaint.set(p.tag, p);
+      }
       const adaptive = sampling && SculptSampling.surface(p.mat) ? sampling : null;
       const res0 = p.res * (p.detailBudget?.spacing ?? 1),
         bands = S.focus && !S.capture ? focusBands(p) : ONE_BAND;

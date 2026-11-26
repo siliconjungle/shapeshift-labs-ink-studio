@@ -245,6 +245,7 @@ function command([action, file, input, ...rest], opt, toolkit, { build, openEdit
     return require('./mesh-material-transfer.js').command([file, input, ...rest], opt, meshTopology);
   if (action === 'modifiers')
     return require('./mesh-modifiers.js').command([file, input, ...rest], opt, toolkit, openEditor);
+  if (action === 'tint') return require('./mesh-tint.js').command(file,input,rest,opt,toolkit,openEditor);
   if (action === 'shading') return require('./mesh-shading-preview.js').command(file, input, rest, opt, toolkit, openEditor);
   if (action === 'shape-keys') return require('./mesh-shape-keys.js').command(file,input,rest,opt,toolkit,openEditor);
   if (action === 'skin') return require('./mesh-skin-preview.js').command(file, input, rest, opt, toolkit, openEditor);
@@ -258,7 +259,7 @@ function command([action, file, input, ...rest], opt, toolkit, { build, openEdit
   if (action === 'overlaps') return overlaps(file,input,rest,opt,meshTopology);
   if (action === 'isolate-prefab')
     return require('./prefab-edit-isolation.js').command(file,input,rest,opt,toolkit,openEditor);
-  if (opt.preview !== undefined) throw new TypeError('Use --preview with mesh-topology bevel or shading');
+  if (opt.preview !== undefined) throw new TypeError('Use --preview with mesh-topology bevel, shading, or tint');
   if (opt.subdivision !== undefined) throw new TypeError('Use --subdivision with mesh-topology shading');
   const { out, report, projection, lineage, 'match-ids': matchIds } = opt;
   if (action === 'select') {

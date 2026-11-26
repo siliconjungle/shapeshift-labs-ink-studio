@@ -418,3 +418,5 @@ rest-space cages, native UV pages, seam checks, and pinned palette exports.
 ## Schedule selected maps
 
 Use [bake jobs and presets](bake-jobs.md) to select mesh primitives, slots, UV sets and tiles, then run ordered maps with individual settings and refresh graph resources when the bake completes.
+
+Use [bake projection controls](bake-projection.md) to configure mesh-to-mesh or self-bake projection from the tiled bake-job workstation.
