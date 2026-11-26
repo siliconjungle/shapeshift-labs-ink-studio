@@ -480,6 +480,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art directions open <atlas> --out document.json   open directional tiles as editable frames
   pixel-art directions review <document.json> [--anchor id] [--out report.json] [--review review.html]   compare adjacent views
   pixel-art directions export <document.json> --out atlas.json [--base registered-atlas.json]   export approved views
+  pixel-art directions uv-clips <atlas> --settings bindings.json --out clips.json   bind approved atlas views as mesh UV clips
   pixel-art export <document.json|layers.json> --preset preset.json --out directory   run a saved asset export preset
   pixel-art slices inspect <document.json> [--frame id] [--out report.json]   inspect slice keys and registration
   pixel-art slices export <document.json> --slice id [--frame id] --out slice.png [--metadata registration.json]   export a native slice
@@ -929,7 +930,7 @@ wind options: --wind-field on|off|file.json
 lightning options: --lightning on|off|file.json
 exposure options: --scene-exposure on|off|file.json
 aerial options: --aerial-perspective on|off --aerial-start units --aerial-density per-unit --aerial-contrast 0..1
-view options: --surface off (no finish layers) --pbr-materials file.json|off --pbr-shadows on|off --pbr-specular-sampling on|off --facing-colors off --directional-colors off --water off --reflections off --reflection-probes off --transmission off --surface-detail-kits off --atmosphere off --edges off (no edge sprites) --yaw --pitch --zoom 2 --target x,y,z --w 900 --h 620 --px 2 (screen pixels per art pixel) --px1 (native art pixels) --tone stipple|off --raw (no palette) --colored (smooth body-colored contours) --fine (inked detail: colours looked up per pixel) --bounce (bounce light baked in) --focus x,y,z[,near,far,coarse] (uneven detail) --follow [stretch,broad] (dabs along the form) --adaptive-sampling on|off|file.json --clean (remove lone pixels) --camera-shot id --ortho [on|off] (override authored projection) --cols 4 --out file.png --seed n
+view options: --directional-uv-report report.json (render) --surface off (no finish layers) --pbr-materials file.json|off --pbr-shadows on|off --pbr-specular-sampling on|off --facing-colors off --directional-colors off --water off --reflections off --reflection-probes off --transmission off --surface-detail-kits off --atmosphere off --edges off (no edge sprites) --yaw --pitch --zoom 2 --target x,y,z --w 900 --h 620 --px 2 (screen pixels per art pixel) --px1 (native art pixels) --tone stipple|off --raw (no palette) --colored (smooth body-colored contours) --fine (inked detail: colours looked up per pixel) --bounce (bounce light baked in) --focus x,y,z[,near,far,coarse] (uneven detail) --follow [stretch,broad] (dabs along the form) --adaptive-sampling on|off|file.json --clean (remove lone pixels) --camera-shot id --ortho [on|off] (override authored projection) --cols 4 --out file.png --seed n
 socket emitter options: --atmosphere-emitters on|off|file.json
 animated splat options: --splat-fields on|off|file.json
 sprite options: --sprite-atlas on|off|atlas.json --sprite-at x,y,z --sprite-scale n --sprite-atlas-mode card|impostor|scenery --sprite-reconstruction auto|geometry|sprite --impostor-blend nearest|depth-reprojected --protected-lod guard.json|off
@@ -1045,6 +1046,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio pixel-art directions export` · [source](../../cli/pixel-directional-views.js)
 - `ink-studio pixel-art directions open` · [source](../../cli/pixel-directional-views.js)
 - `ink-studio pixel-art directions review` · [source](../../cli/pixel-directional-views.js)
+- `ink-studio pixel-art directions uv-clips` · [source](../../cli/pixel-directional-views.js)
 - `ink-studio pixel-art draw` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art edit` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art export` · [source](../../cli/pixel-art.js)
