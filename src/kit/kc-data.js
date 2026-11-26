@@ -114,6 +114,7 @@
     sdfSpray: 1,
     sdfProtection: 1,
     sockets: 'obj',
+    deliveryHelper: 'obj',
     prefabs: 'list',
     tags: 'list',
     mat: 'mat',
@@ -506,7 +507,7 @@
       }
     }
     if (expanded?.parameterBindings === undefined)
-      return { ...expandAuthoredGeometry(expanded, env?.parameterInputs?.time), dataInputs, meshPlacements, hidden, customProperties };
+      return { ...expandAuthoredGeometry(expanded, env?.parameterInputs?.time), dataInputs, meshPlacements, instances, hidden, customProperties };
     try {
       const { parameterBindings, timeline, dataInputs: authoredData, ...base } = expanded;
       const program = K.parameters.prepare(parameterBindings);
@@ -515,7 +516,7 @@
       const inputs = { ...env?.parameterInputs, ...(dataInputs && { dataInputs }) };
       const { document, values } = program.apply(base, inputs);
       const spec = timeline === undefined ? document : { ...document, timeline };
-      return { ...expandAuthoredGeometry(spec, inputs.time), program, values, inputs, dataInputs, meshPlacements, hidden, customProperties };
+      return { ...expandAuthoredGeometry(spec, inputs.time), program, values, inputs, dataInputs, meshPlacements, instances, hidden, customProperties };
     } catch (error) {
       error.problems ??= [{ level: 'error', path: 'parameterBindings', problem: error.message, hint: '' }];
       throw error;
@@ -1297,6 +1298,13 @@
             typeof row === 'object' && !Array.isArray(row) && Object.keys(row).every(key => key === 'p' || key === 'dir') &&
             isVec(row.p, 3) && (row.dir === undefined || isVec(row.dir, 3) && V.len(row.dir) > 1e-9));
         if (!valid) bad(path + '.sockets', 'solid sockets need stable names and rest points, with optional nonzero directions');
+      }
+      if (s.deliveryHelper !== undefined) {
+        try {
+          if (!s.id || inner || s.carve || s.ghost || s.hold || s.kind === 'ground')
+            throw new TypeError('A delivery helper needs a named, finite exterior solid');
+          K.authoring.deliveryHelpers.read(s.deliveryHelper, s.sockets);
+        } catch (error) { bad(path + '.deliveryHelper', error.message); }
       }
       if (s.kind === 'body-shape') {
         try {
@@ -2415,6 +2423,9 @@
     }
     if (modelOptions) {
       const groups = new Map(), meshes = [];
+      const helpers = K.authoring.deliveryHelpers.collect(spec, resolved, hidden);
+      const omitted = new Set(spec.solids.filter(solid => solid.deliveryHelper !== undefined).map(solid => solid.id));
+      for (const [id, { host }] of anchors) if (omitted.has(host.id)) omitted.add(id);
       const { duration = timeline?.duration || 4, fps = 30, resolution, method, bounds, targetTriangles } = modelOptions;
       for (const solid of spec.solids) {
         // Ground is an infinite half-space in the sculpt API. Ghosts are render overlays.
@@ -2423,7 +2434,7 @@
         if (!groups.has(name)) groups.set(name, []);
         groups.get(name).push(solid);
       }
-      if (!groups.size) throw new Error('The diorama contains no finite model geometry');
+      if (!groups.size && !helpers.length) throw new Error('The diorama contains no finite model geometry');
       const parts = spec.parts || {}, names = [], visiting = new Set();
       function place(name) {
         if (visiting.has(name)) throw new Error('Scene rig has a parent cycle at ' + name);
@@ -2443,32 +2454,38 @@
       const joints = [], joint = {};
       for (const name of [null, ...names]) {
         if (!groups.has(name)) continue;
-        startSculpt();
-        const members = groups.get(name), built = members.map(solid => make(solid));
-        if (recesses.size) S.applyPaintRecesses(recesses);
-        let detail = name === null ? resolution ?? 0.08 :
-          Math.min(resolution ?? 0.08, ...groups.get(name).map(solid => solid.res ?? Infinity));
-        const hasBody = members.some((solid, i) => (!solid.separate || activeModifiers(solid).length || built[i]?.paintRecess) && !solid.carve &&
-          !built[i]?.paintOverlay);
-        const restBounds = (name === null ? bounds : undefined) ?? (hasBody ? S.modelBounds(detail * 2) : undefined);
-        if (resolution === undefined && name === null && restBounds) {
-          const volume = restBounds.max.reduce((v, high, i) => v * (high - restBounds.min[i]), 1);
-          detail = Math.max(detail, Math.cbrt(volume / 400000));
+        const members = groups.get(name).filter(solid => !omitted.has(solid.id));
+        let mesh, surfaceSources;
+        if (members.length) {
+          startSculpt();
+          const built = members.map(solid => make(solid));
+          if (recesses.size) S.applyPaintRecesses(recesses);
+          let detail = name === null ? resolution ?? 0.08 :
+            Math.min(resolution ?? 0.08, ...members.map(solid => solid.res ?? Infinity));
+          const hasBody = members.some((solid, i) => (!solid.separate || activeModifiers(solid).length || built[i]?.paintRecess) && !solid.carve &&
+            !built[i]?.paintOverlay);
+          const restBounds = (name === null ? bounds : undefined) ?? (hasBody ? S.modelBounds(detail * 2) : undefined);
+          if (resolution === undefined && name === null && restBounds) {
+            const volume = restBounds.max.reduce((v, high, i) => v * (high - restBounds.min[i]), 1);
+            detail = Math.max(detail, Math.cbrt(volume / 400000));
+          }
+          mesh = K.model.fromSculpt(S, {
+            name: name ?? spec.id, palette: pal, resolution: detail, method, bounds: restBounds, targetTriangles
+          });
+          surfaceSources = surfaceBakeSources(members, B.frame, detail);
         }
-        const mesh = K.model.fromSculpt(S, {
-          name: name ?? spec.id, palette: pal, resolution: detail, method, bounds: restBounds, targetTriangles
-        });
-        const surfaceSources = surfaceBakeSources(groups.get(name), B.frame, detail);
-        if (name === null) meshes.push(...K.model.mapModelMeshes(mesh, part => ({ ...part, surfaceSources, static: true })));
-        else {
-          const index = joints.length, box = previewRig.box(name);
-          joint[name] = parts[name]?.joint || (box ? [(box.lo[0] + box.hi[0]) * 0.5, box.lo[1], (box.lo[2] + box.hi[2]) * 0.5] : mesh.points[0]);
-          joints.push({ name, parent: parts[name]?.parent ? names.indexOf(parts[name].parent) : null,
-            head: joint[name], tail: V.mad(joint[name], [0, 1, 0], box ? Math.max(0.05, box.hi[1] - box.lo[1]) : 0.1) });
-          meshes.push(...K.model.mapModelMeshes(mesh, part => ({
-            ...part, surfaceSources, weights: part.points.map(() => [[index, 1]])
-          })));
+        if (name === null) {
+          if (mesh) meshes.push(...K.model.mapModelMeshes(mesh, part => ({ ...part, surfaceSources, static: true })));
+          continue;
         }
+        const index = joints.length, box = previewRig.box(name);
+        joint[name] = parts[name]?.joint || (box ? [(box.lo[0] + box.hi[0]) * 0.5, box.lo[1], (box.lo[2] + box.hi[2]) * 0.5] :
+          mesh?.points?.[0] ?? helpers.find(helper => helper.part === name)?.frame.position ?? [0, 0, 0]);
+        joints.push({ name, parent: parts[name]?.parent ? names.indexOf(parts[name].parent) : null,
+          head: joint[name], tail: V.mad(joint[name], [0, 1, 0], box ? Math.max(0.05, box.hi[1] - box.lo[1]) : 0.1) });
+        if (mesh) meshes.push(...K.model.mapModelMeshes(mesh, part => ({
+          ...part, surfaceSources, weights: part.points.map(() => [[index, 1]])
+        })));
       }
       const pose = names.length && (motion.length || timeline?.targets.some(path => path[0] === 'poses')) &&
         partMotion(B, previewRig, names, joint, parts, motion);
@@ -2482,7 +2499,7 @@
           return Array.from(previewRig.M.slice(index * 12, index * 12 + 12));
         });
       }) : [];
-      return { meshes, joints, animations };
+      return { meshes, joints, animations, ...(helpers.length && { helpers }) };
     }
     const moving = spec.solids.filter(s => s.part), authoredBounds = new Map();
     const staticBake = cache && !anchors.size && !looseness.size && !boils.size && !moving.length && !effects.length && !spec.tap && !marks &&

@@ -13,6 +13,50 @@ Use `readGltfAsset(file)` and `writeGltfAsset(asset, { out })` from the Node ent
 
 The glTF pivot is the node's local origin. Use parent and child transforms to represent a pivot offset in other glTF applications. An explicit `node.extras.inkStudio.pivot` is retained and exposed as metadata when present. The [glTF 2.0 specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html) defines node transforms and animation channels.
 
+## Keep helper nodes in model delivery
+
+Set `deliveryHelper` on a named exterior solid or a retained scene mesh. Ink
+keeps the visual in the authoring scene. When exporting the diorama, Ink
+writes the helper's transform and metadata to a meshless node.
+
+```json
+{
+  "id": "door-clearance",
+  "kind": "box",
+  "at": [1.25, 0.9, 0],
+  "half": [0.4, 0.8, 0.12],
+  "deliveryHelper": {
+    "socketId": "door-mount",
+    "markerId": "clearance-center",
+    "collisionRef": "gate/door-clearance@2"
+  }
+}
+```
+
+```sh
+ink-studio export-glb gate.json --out gate.glb > delivery.json
+ink-studio interchange gate.glb --out gate.gltf
+```
+
+The export receipt's `helpers` array identifies the glTF node, its rest
+position, and its references. `node.extras.inkStudio` carries the stable
+`helperId` and the authored references. Placed prefab helpers use their
+qualified scene object IDs and include their instance and prefab IDs.
+Helpers on exported rig parts follow the joint's animation. An asset
+can consist entirely of helper nodes.
+
+The optional `point` sets an XYZ origin in the solid's recipe coordinates
+or the mesh's local coordinates. The default uses the solid's `at`, the
+mesh's `pivot`, or local zero. Existing solid `sockets` and retained mesh
+`points` become named child sockets. Use an empty `deliveryHelper` object
+when those child sockets supply all the references. `collisionRef` is a
+reference for the consuming runtime to resolve.
+
+Diorama model export builds its visual meshes from authored solids.
+Tagged retained scene meshes contribute helper nodes and sockets.
+`readGltfAsset(file).sample()` exposes the helper's metadata as `helper` and
+returns socket IDs and world frames for inspection.
+
 ## Stable asset revisions
 
 An Ink asset revision manifest names the asset and its parts independently
