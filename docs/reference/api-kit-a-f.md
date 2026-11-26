@@ -772,7 +772,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.constructionPlane.project` | function | `(frame, position, mode = 'plane')` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.quantize` | function | `(frame, at, worldMagnitude = 0)` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.resolve` | function | `(raw = {})` | [source](../../src/kit/p23-construction-plane.js) |
-| `KIT.authoring.constructionPlane.snapOrigin` | function | `(scene, request, {detachEdge = false} = {}, env)` | [source](../../src/kit/p23-construction-plane.js) |
+| `KIT.authoring.constructionPlane.snapOrigin` | function | `(scene, request, options, env)` | [source](../../src/kit/p23-construction-plane.js) |
+| `KIT.authoring.constructionPlane.snapTo` | function | `(scene, snap, {detachEdge = false} = {})` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.tilt` | function | `(scene, options)` | [guide](../mesh-topology.md#tilt-a-plane-from-an-existing-edge), [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.context` | function | `(doc, options)` | [guide](../../README.md#retained-authoring), [guide](../procedural.md#optional-retained-authoring), [source](../../src/kit/p24-authoring-context.js) |
 | `KIT.authoring.data` | namespace |  |  |
@@ -892,6 +893,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.sceneInstances.assetSocket` | function | `(scene, env, instance, binding)` | [source](../../src/kit/p23-scene-instances.js) |
 | `KIT.authoring.sceneInstances.prefabSelection` | function | `(scene, request)` | [source](../../src/kit/p23-scene-instances.js) |
 | `KIT.authoring.sceneInstances.select` | function | `(scene, {kind,ids,layer,includeHidden} = {})` | [source](../../src/kit/p23-scene-instances.js) |
+| `KIT.authoring.sceneLayerFrames` | namespace |  |  |
+| `KIT.authoring.sceneLayerFrames.measure` | function | `(scene,env,expanded,ids)` | [source](../../src/kit/p23-scene-layer-frames.js) |
+| `KIT.authoring.sceneLayerFrames.plan` | function | `(scene,env,request,expanded,measurement)` | [source](../../src/kit/p23-scene-layer-frames.js) |
 | `KIT.authoring.sceneLayers` | namespace |  |  |
 | `KIT.authoring.sceneLayers.plan` | function | `(scene, env, request = {})` | [source](../../src/kit/p23-scene-layers.js) |
 | `KIT.authoring.sceneLayers.prepare` | function | `(scene)` | [source](../../src/kit/p23-scene-layers.js) |
@@ -905,6 +909,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.scenePrefabs.expand` | function | `(source, { prefabs: external } = {}, {only, origin} = {})` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.indexedTargets` | function | `(scene,before,after,mapAddress = (instance,table,name) => [instance,name])` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.origin` | function | `(transform)` | [source](../../src/kit/p23-scene-prefabs.js) |
+| `KIT.authoring.scenePrefabs.placedOrigin` | function | `(instance, frame)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.placements` | function | `(instances = {})` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.planMirror` | function | `(scene, env, request)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.planReparent` | function | `(scene, env, request)` | [source](../../src/kit/p23-scene-prefabs.js) |
@@ -1779,6 +1784,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.diorama.sceneMaterials` | function | `(spec)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.sculptFieldReceivers` | function | `(spec, env)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.sculptRestTrace` | function | `(spec, solid, env, { measureBounds = false } = {})` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
+| `KIT.diorama.solidBounds` | function | `(spec, ids, env)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidFrames` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.solidFrames.authored` | function | `(raw, fallback)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidFrames.compose` | function | `(outer, inner)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |

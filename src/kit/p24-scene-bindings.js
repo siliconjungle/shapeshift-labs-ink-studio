@@ -429,8 +429,11 @@
     const rigNodes = graph.ids(), prefabRoots = [];
     for (const [key, link] of expanded.instances) {
       const id = 'prefab.' + key;
-      graph.add(id, { kind: 'prefab', label: key, transform: link.frame,
-        sockets:K.authoring.objectPoints.socketFrames(link.resolved.points) });
+      const localOrigin = link.instance.origin;
+      const sockets = K.authoring.objectPoints.socketFrames(link.resolved.points);
+      if (localOrigin) for (const socket of Object.values(sockets)) socket.position = V.sub(socket.position,localOrigin);
+      graph.add(id, { kind: 'prefab', label: key,
+        transform:localOrigin ? {...link.frame,position:link.origin} : link.frame,sockets });
       prefabRoots.push({ key, id });
     }
     for (const [key,{instance}] of expanded.instances)

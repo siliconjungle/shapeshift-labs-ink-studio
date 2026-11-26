@@ -16,9 +16,9 @@
       Object.entries(link.definition.meshFrames).filter(([member]) => Object.hasOwn(topologyMeshes,member)));
     const sheets = A.scenePrefabs.tilesetRequirements(link.definition,topologyMeshes);
     if (sheets !== undefined) definition.usesTilesets = sheets;
-    const {transform,parent,flipX} = link.instance;
+    const {transform,parent,flipX,origin} = link.instance;
     return {prefabs:{...scene.prefabs,[variant]:definition},
-      instances:{...scene.instances,[instance]:{prefab:variant,...(flipX && {flipX}),...(parent !== undefined && {parent}),...(transform !== undefined && {transform})}}};
+      instances:{...scene.instances,[instance]:{prefab:variant,...(origin && {origin}),...(flipX && {flipX}),...(parent !== undefined && {parent}),...(transform !== undefined && {transform})}}};
   }
 
   function hasPlacement(frame) {
