@@ -2,7 +2,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
-const {spawnSync}=require('node:child_process');
+const {spawnSync,execFileSync}=require('node:child_process');
 const {test}=require('node:test');
 const Ink=require('..');
 const PNG=require('../cli/png.js');
@@ -160,4 +160,32 @@ test('official validation catches broken connections and legacy MDL and Iray sta
   const report=Ink.inspectMaterialX(invalid);
   assert.equal(report.library.valid,false);
   assert(report.library.messages.length>0);
+});
+
+const ocioPython=process.env.INK_OCIO_PYTHON??'python3';
+const ocio=spawnSync(ocioPython,['-c',
+  'import PyOpenColorIO as o,numpy; o.Config.CreateFromBuiltinConfig("cg-config-v4.0.0_aces-v2.0_ocio-v2.5")'
+],{stdio:'ignore'}).status===0;
+
+test('an explicitly managed source converts ACEScg and records its portable config dependency', {
+  skip:(!enabled||!ocio)&&'MaterialX and the optional OCIO backend are required'
+},t=>{
+  const dir=setup(t);
+  const config=execFileSync(ocioPython,['-c',
+    'import PyOpenColorIO as o; print(o.Config.CreateFromBuiltinConfig("cg-config-v4.0.0_aces-v2.0_ocio-v2.5").serialize())'
+  ]);
+  fs.writeFileSync(path.join(dir,'aces.ocio'),config);
+  const settings=text(dir,'color.json',JSON.stringify({config:'aces.ocio',working:'ACEScg',
+    inkLinear:'Linear Rec.709 (sRGB)',displayEncoding:'srgb'}));
+  const input=text(dir,'managed.mtlx',`<materialx version="1.39" colorspace="ACEScg">
+    <open_pbr_surface name="paint" type="surfaceshader">
+      <input name="base_color" type="color3" value=".32, .28, .15" />
+    </open_pbr_surface></materialx>`);
+  assert.equal(Ink.inspectMaterialX(input).summary.dropped,1);
+  const output=path.join(dir,'converted');
+  const report=Ink.importMaterialX(input,{directory:output,strict:true,colorSettings:settings});
+  assert.equal(report.status,'written');
+  assert(report.dependencies.some(row=>row.file==='aces.ocio'&&row.sha256.length===64));
+  const [r,,b]=reopen(output,report).parameters.base_color;
+  assert(r>.33&&b<.15);
 });

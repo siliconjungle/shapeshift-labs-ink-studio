@@ -53,7 +53,8 @@ function bridge(python,operation,input,output) {
 }
 
 function dependencyRows(inputs,base) {
-  return [...inputs].sort().map(file=>({file:path.relative(base,file).split(path.sep).join('/'),sha256:hash(fs.readFileSync(file))}));
+  const root=fs.realpathSync(base), files=new Set([...inputs].map(file=>fs.realpathSync(file)));
+  return [...files].sort().map(file=>({file:path.relative(root,file).split(path.sep).join('/'),sha256:hash(fs.readFileSync(file))}));
 }
 
 function summary(entries) {
