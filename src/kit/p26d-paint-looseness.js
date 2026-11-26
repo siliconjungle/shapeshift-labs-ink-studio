@@ -32,11 +32,13 @@
     return smooth(K.clamp((1 - radius) / interior.feather, 0, 1));
   }
 
-  function dabs(guide, interval, settings, limit = 4096) {
+  function dabs(guide, interval, settings, limit = 4096, remaining) {
+    const authored = remaining && settings && settings.spacing !== 1 ? dabs(guide, interval, settings, limit) : undefined;
+    const anchors = authored?.filter(row => remaining(row.pose.point) === 1);
     let length = 0;
     const offsets = guide.map((pose, i) => i ? length += V.dist(pose.point, guide[i - 1].point) : 0);
     const rows = [];
-    let d = 0, i = 1;
+    let d = 0, i = 1, a = 0, checkpoint = 0;
     // Integrate spacing along the unscattered path. Displacement and width leave these stations fixed.
     for (;;) {
       if (rows.length >= limit) throw new RangeError('A stamped stroke exceeds 4096 evaluated dabs; increase spacing or shorten the path');
@@ -47,10 +49,21 @@
         const t = span > 1e-10 ? (d - offsets[i - 1]) / span : 1;
         pose = { point: V.lerp(a.point, b.point, t), rotation: Q.slerp(a.rotation, b.rotation, t), pressure: mix(a.pressure, b.pressure, t) };
       }
-      const amount = amountAt(settings, pose.point);
-      rows.push({ pose, amount, progress: length > 1e-8 ? d / length : 0, ordinal: rows.length });
+      const amount = amountAt(settings, pose.point) * (remaining?.(pose.point) ?? 1);
+      const progress = length > 1e-8 ? d / length : 0;
+      let ordinal = rows.length;
+      if (authored) {
+        while (a < authored.length - 1 && authored[a].progress < progress - 1e-10) a++;
+        ordinal = Math.abs(authored[a].progress - progress) <= 1e-10 ? authored[a].ordinal : authored.length + ordinal;
+      }
+      rows.push({ pose, amount, progress, ordinal });
       if (d >= length - 1e-8) return rows;
-      const next = d + interval * mix(1, settings?.spacing ?? 1, amount);
+      let next = d + interval * mix(1, settings?.spacing ?? 1, amount);
+      if (anchors) {
+        // Rejoin the authored sampling phase before passing an unaffected dab.
+        while (checkpoint < anchors.length && anchors[checkpoint].progress <= progress + 1e-10) checkpoint++;
+        if (checkpoint < anchors.length) next = Math.min(next, anchors[checkpoint].progress * length);
+      }
       d = next >= length - 1e-8 ? length : next;
     }
   }

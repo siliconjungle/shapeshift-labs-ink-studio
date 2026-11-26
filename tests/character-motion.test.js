@@ -6,7 +6,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { KIT:K } = require('..').load();
 const { compile, sha } = require('../cli/character-rig-assembly.js');
-const { compileCatalog, sample } = require('../cli/character-motion.js');
+const { compileCatalog, sample, timeline } = require('../cli/character-motion.js');
 const { retarget } = require('../cli/character-motion-retarget.js');
 
 const cli = path.resolve(__dirname,'../cli/ink-studio.js');
@@ -63,6 +63,46 @@ test('nested trims, eased weights, additive masks and sparse curves share a repr
   assert.deepEqual(sample(catalog,'final',.25,K),pose);
   assert.throws(()=>compileCatalog(source,doc(source,{cycle:{type:'mix',duration:1,layers:[{id:'self',clip:'cycle',at:0}]}}),K),
     /Cyclic motion/);
+});
+
+test('CLI animation erasers reveal the preceding pose on selected controls and preserve the source keys',t=>{
+  const w = work(t), source = rig('source');
+  const motion = doc(source,{
+    base:{type:'curves',duration:2,joints:{'body.head':[key(0,[10])],'body.hip':[key(0,[5])]}},
+    pose:{type:'curves',duration:1,joints:{'body.head':[key(0,[50])],'body.hip':[key(0,[25])]}},
+    take:{type:'mix',duration:2,layers:[{id:'base',clip:'base',at:0},{id:'pose',clip:'pose',at:.5}]}
+  });
+  w.write('rig.json',source.document);
+  w.write('motion.json',motion);
+  function edit(from,to,...changes) {
+    w.write('edit.json',{format:'ink-studio/character-motion-edit',version:1,
+      operations:changes.map(([eraser,patch])=>({op:'set-eraser',clip:'take',layer:'pose',eraser,patch}))});
+    return w.run('character-motion','edit','rig.json',from+'.json','edit.json','--out',to+'.json');
+  }
+  const window = {start:.2,end:.8,controls:['body.head']};
+  const edited = edit('motion','erased',['settle',{...window,
+    strength:[key(.2,0),key(.4,1),key(.55,.5),key(.8,0)]}],['boost',{...window,strength:.5}]);
+  assert.deepEqual(edited.clips.pose,motion.clips.pose);
+  assert.deepEqual(w.open('motion.json'),motion);
+  const catalog = compileCatalog(source,edited,K), clip = catalog.clips.get('take');
+  const poseAt = time => sample(catalog,'take',time,K);
+  close(poseAt(.65).angles['body.head'][0],50);
+  close(poseAt(.9).angles['body.head'][0],10);
+  close(poseAt(1.05).angles['body.head'][0],20);
+  close(poseAt(1.05).angles['body.hip'][0],25);
+  assert.deepEqual(poseAt(1.05).motion.layers.at(-1).erasers,[
+    {id:'settle',strength:.5,controls:['body.head']},{id:'boost',strength:.5,controls:['body.head']}
+  ]);
+  assert(timeline(catalog,clip,true).boundaries.has(1.05));
+  const index = w.run('character-motion','catalog','rig.json','erased.json');
+  assert.equal(index.clips.find(row=>row.id==='take').layers[1].erasers.length,2);
+  const disabled = edit('erased','disabled',['settle',{enabled:false}],['boost',{enabled:false}]);
+  assert.deepEqual(sample(compileCatalog(source,disabled,K),'take',1.05,K),
+    sample(compileCatalog(source,motion,K),'take',1.05,K));
+  assert.deepEqual(edit('disabled','removed',['settle',null],['boost',null]),motion);
+  assert.throws(()=>compileCatalog(source,{...edited,clips:{...edited.clips,take:{...edited.clips.take,
+    layers:[edited.clips.take.layers[0],{...edited.clips.take.layers[1],mask:['body.hip']}]
+  }}},K),/inside the layer mask/);
 });
 
 test('retargeted nested contact windows anchor a larger rig between bake keys',()=>{

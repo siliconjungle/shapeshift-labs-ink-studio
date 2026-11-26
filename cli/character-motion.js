@@ -84,7 +84,7 @@ function compileCatalog(rig, input, K) {
         Array.isArray(row.layers) && range(row.layers.length,1,64)) {
       const ids = new Set();
       clip.layers = row.layers.map(layer => {
-        if (!fields(layer,['id','clip','at','in','out','speed','mode','weight','mask','contacts']) ||
+        if (!fields(layer,['id','clip','at','in','out','speed','mode','weight','mask','contacts','erasers']) ||
             !localName(layer.id) || ids.has(layer.id) || !localName(layer.clip) ||
             !Object.hasOwn(input.clips,layer.clip) || !range(layer.at,0,duration) ||
             !range(layer.speed ?? 1,.01,100) || !['override','add'].includes(layer.mode ?? 'override') ||
@@ -102,7 +102,14 @@ function compileCatalog(rig, input, K) {
         if (!curve && !range(weight,0,1)) throw new RangeError('Invalid layer weight in ' + name);
         keyCount += curve?.keys.length ?? 0;
         const mask = layer.mask===undefined ? null : channels(rig,layer.mask);
-        return {id:layer.id,clip:layer.clip,at,span,from,to,speed,mode,weight,curve,mask,
+        const erasers = K.procedural.channelEraser.temporal(layer.erasers,span,list=>channels(rig,list),
+          keys=>makeTrack(keys,span,0,K));
+        for (const eraser of erasers) {
+          if (mask && [...eraser.scope].some(channel=>!mask.has(channel)))
+            throw new RangeError('Animation eraser controls must be inside the layer mask');
+          keyCount += eraser.track?.keys.length ?? 0;
+        }
+        return {id:layer.id,clip:layer.clip,at,span,from,to,speed,mode,weight,curve,mask,erasers,
           contacts:layer.contacts ?? mode==='override'};
       });
     } else throw new TypeError('Use a curves or mix clip in ' + name);
@@ -153,14 +160,23 @@ function controlsAt(catalog, clip, time, trace, address=clip.name) {
     if (weight===0) continue;
     const sourceTime = clamp(layer.from+elapsed*layer.speed,layer.from,layer.to);
     const ref = address+'/'+layer.id;
-    trace?.push({layer:ref,clip:layer.clip,time:sourceTime,weight,mode:layer.mode});
+    const active = layer.erasers.flatMap(({id,start,end,enabled,strength,scope,track}) => {
+      if (!enabled || elapsed<start-epsilon || elapsed>end+epsilon) return [];
+      const amount = clamp(track?.sample(elapsed).v ?? strength,0,1);
+      return amount ? [{id,amount,scope}] : [];
+    });
+    trace?.push({layer:ref,clip:layer.clip,time:sourceTime,weight,mode:layer.mode,
+      ...(active.length && {erasers:active.map(({id,amount,scope})=>({id,strength:amount,controls:[...scope]}))})});
     const child = controlsAt(catalog,getClip(catalog,layer.clip),sourceTime,trace,ref);
     for (const [channel,values] of child) {
       if (layer.mask && !layer.mask.has(channel)) continue;
+      let influence = weight;
+      for (const {amount,scope} of active) if (scope.has(channel)) influence *= 1-amount;
+      if (!influence) continue;
       const previous = controls.get(channel);
       controls.set(channel,values.map((value,i) => {
         const base = previous?.[i] ?? 0;
-        return layer.mode==='add' ? base+value*weight : base+(value-base)*weight;
+        return layer.mode==='add' ? base+value*influence : base+(value-base)*influence;
       }));
     }
   }
@@ -191,10 +207,17 @@ function timeline(catalog, initial, includeKeys=false) {
       if (start>end) continue;
       boundaries.add(mapTime(start));
       boundaries.add(mapTime(end));
-      for (const {time} of (includeKeys ? layer.curve?.keys ?? [] : [])) {
-        if (boundaries.size>512) break;
-        const clock = layer.at+time;
-        if (clock>=start && clock<=end) boundaries.add(mapTime(clock));
+      if (includeKeys && boundaries.size<=512) {
+        const marks = [layer.curve?.keys ?? [], ...layer.erasers.filter(row=>row.enabled).map(({start,end,track})=>
+          [{time:start},{time:end},...(track?.keys ?? [])])];
+        for (const keys of marks) {
+          for (const {time} of keys) {
+            const clock = layer.at+time;
+            if (clock>=start && clock<=end) boundaries.add(mapTime(clock));
+            if (boundaries.size>512) break;
+          }
+          if (boundaries.size>512) break;
+        }
       }
       const childTime = time => clamp(layer.from+(time-layer.at)*layer.speed,layer.from,layer.to);
       visit(getClip(catalog,layer.clip),childTime(start),childTime(end),mapTime(start),rate*layer.speed,
@@ -253,8 +276,10 @@ function summarize(catalog) {
       validateContacts(contacts);
       return {id:clip.name,type:clip.layers.length?'mix':'curves',duration:clip.duration,
         curves:[...clip.tracks].map(([control,track])=>({control,keys:track.keys.length})),
-        layers:clip.layers.map(({id,clip,at,span,from,to,speed,mode,mask,weight,contacts})=>
-          ({id,clip,at,end:at+span,in:from,out:to,speed,mode,weight,contacts,...(mask&&{mask:[...mask]})})),
+        layers:clip.layers.map(({id,clip,at,span,from,to,speed,mode,mask,weight,contacts,erasers})=>
+          ({id,clip,at,end:at+span,in:from,out:to,speed,mode,weight,contacts,...(mask&&{mask:[...mask]}),
+            ...(erasers.length && {erasers:erasers.map(({id,start,end,enabled,strength,scope})=>
+              ({id,start,end,enabled,strength,controls:[...scope]}))})})),
         contacts};
     })};
 }
@@ -279,6 +304,16 @@ function editCatalog(catalog, input, request, revision, readPose, K) {
   for (const operation of request.operations) {
     const {op,clip,time,control,to,value,ease,pose,controls} = operation ?? {};
     const row = Object.hasOwn(edited.clips,clip) && edited.clips[clip];
+    if (op==='set-eraser') {
+      if (!fields(operation,['op','clip','layer','eraser','patch']) || row?.type!=='mix')
+        throw new TypeError('An animation eraser edit needs a mix clip and layer');
+      const layer = row.layers.find(entry=>entry.id===operation.layer);
+      if (!layer) throw new RangeError('Unknown motion layer '+operation.layer);
+      const erasers = K.procedural.channelEraser.revise(layer.erasers,operation.eraser,operation.patch);
+      if (erasers.length) layer.erasers = erasers;
+      else delete layer.erasers;
+      continue;
+    }
     if (row?.type!=='curves' || !range(time,0,row.duration))
       throw new RangeError('Edits need a curves clip and a time within its duration');
     const change = (name, keyValue, action, destination) => {

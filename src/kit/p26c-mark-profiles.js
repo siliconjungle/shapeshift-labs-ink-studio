@@ -96,10 +96,10 @@
     return { profiles: [first, prepare(profile)], range };
   }
 
-  function place({ profiles, range }, guide, limit, looseness) {
+  function place({ profiles, range }, guide, limit, looseness, loosenessAt) {
     let remaining = limit;
     return profiles.map(({ spacing, stamp }, family) => {
-      const rows = P.paintLooseness.dabs(guide, spacing, looseness, remaining);
+      const rows = P.paintLooseness.dabs(guide, spacing, looseness, remaining, loosenessAt);
       remaining -= rows.length;
       return rows.flatMap(row => {
         const blend = range ? smooth(K.clamp((row.progress - range[0]) / (range[1] - range[0]), 0, 1)) : 0;

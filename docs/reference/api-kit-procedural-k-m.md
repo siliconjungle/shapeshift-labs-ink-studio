@@ -92,7 +92,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.markDirection` | namespace |  |  |
-| `KIT.procedural.markDirection.align` | function | `(style, { frame, distance, forward, root, spacing, mark, grid, observe })` | [source](../../src/kit/p26e-mark-direction.js) |
+| `KIT.procedural.markDirection.align` | function | `(style, { frame, distance, forward, root, spacing, mark, grid, directionAt, gridAt, observe })` | [source](../../src/kit/p26e-mark-direction.js) |
 | `KIT.procedural.markDirection.preferred` | function | `(brush, support, normal, context)` | [source](../../src/kit/p26e-mark-direction.js) |
 | `KIT.procedural.markDirection.prepare` | function | `(raw, flowMaps = {})` | [source](../../src/kit/p26e-mark-direction.js) |
 
@@ -109,7 +109,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.markProfiles` | namespace |  |  |
-| `KIT.procedural.markProfiles.place` | function | `({ profiles, range }, guide, limit, looseness)` | [source](../../src/kit/p26c-mark-profiles.js) |
+| `KIT.procedural.markProfiles.place` | function | `({ profiles, range }, guide, limit, looseness, loosenessAt)` | [source](../../src/kit/p26c-mark-profiles.js) |
 | `KIT.procedural.markProfiles.prepare` | function | `(raw)` | [source](../../src/kit/p26c-mark-profiles.js) |
 | `KIT.procedural.markProfiles.prepareBrush` | function | `(raw)` | [source](../../src/kit/p26c-mark-profiles.js) |
 
