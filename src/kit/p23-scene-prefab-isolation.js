@@ -66,6 +66,10 @@ const prefabEditIsolation = (function (K) {
       hideSurroundings, objects: order([...link.solids, ...Array.from(link.meshes.values(), entry => entry.object)]),
       members: Array.from(scope, ([member, entry]) => ({ member, object: entry.object, selection: entry.selection })),
       edits: [], conflicts: [], canCommit: true };
+    if (link.mirror && edits.length) {
+      report.conflicts.push({reason:'commit-live-mirror-first',source:link.mirror.source});
+      return {draft:scene,report:freeze({...report,canCommit:false,changed:false})};
+    }
     let camera;
     const targetMesh = object => {
       const staged = [...scope.values()].find(entry => entry.object === object);

@@ -73,9 +73,10 @@
       }
     }
     const instances = new Map();
-    for (const [id,{prefab}] of ordered(scene.instances)) {
-      if (!instances.has(prefab)) instances.set(prefab,[]);
-      instances.get(prefab).push(id);
+    for (const [id,{prefab,mirror}] of ordered(scene.instances)) {
+      const definition = mirror ? scene.instances[mirror.source].prefab : prefab;
+      if (!instances.has(definition)) instances.set(definition,[]);
+      instances.get(definition).push(id);
     }
     for (const [scope,table] of [['scene',scene.prefabs],['library',external]]) {
       for (const [id,prefab] of ordered(table)) for (const sheet of prefab.usesTilesets ?? []) {

@@ -371,6 +371,12 @@
     return affineFrame(basis, scale, offset);
   }
 
+  function reflectionFrame(origin, normal) {
+    const {V} = K;
+    const basis = K.M.id().map((value,i) => value - 2*normal[Math.floor(i/3)]*normal[i%3]);
+    return affineFrame(basis, 1, V.mul(normal,2*V.dot(origin,normal)));
+  }
+
   function inverseFrame(frame) {
     const { M, V } = K;
     const basis = M.tr(frame.basis), scale = 1 / frame.scale;
@@ -391,7 +397,7 @@
     return { translation: jsonVector(mesh.position), rotation: jsonVector([yaw, pitch, roll]), scale, pivot: [0, 0, 0] };
   }
 
-  DIO.solidFrames = Object.freeze({ authored: authoredFrame, inverse: inverseFrame,
+  DIO.solidFrames = Object.freeze({ authored: authoredFrame, reflection: reflectionFrame, inverse: inverseFrame,
     compose: composeFrames, transform: frameTransform, rest(solid) {
       const rigid = authoredFrame(solid.transform, solid.at).mesh;
       return solid.restAffine === undefined ? rigid : K.sceneGraph.compose(K.sceneGraph.transform(solid.restAffine), rigid);

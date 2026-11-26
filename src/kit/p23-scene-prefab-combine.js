@@ -72,9 +72,12 @@
     if (mode === 'replace') {
       if (own(scene.instances,instance) && !ids.has(instance))
         report.conflicts.push({reason:'instance-in-use',instance});
-      for (const [child,row] of Object.entries(scene.instances))
+      for (const [child,row] of Object.entries(scene.instances)) {
         if (ids.has(row.parent) && !ids.has(child))
           report.conflicts.push({reason:'child-needs-reparent',instance:child,parent:row.parent});
+        if (ids.has(row.mirror?.source) && !ids.has(child))
+          report.conflicts.push({reason:'dependent-live-mirror',instance:child,source:row.mirror.source});
+      }
       for (const [name,array] of Object.entries(scene.prefabArrays ?? {}))
         if (ids.has(array.instance) && array.instance !== instance) report.conflicts.push({reason:'array-source-would-be-removed',array:name,instance:array.instance});
     }
