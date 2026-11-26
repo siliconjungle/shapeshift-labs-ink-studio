@@ -476,9 +476,11 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
   }
   if (plan.captures?.size) result.renderGraphPasses = Object.fromEntries([...plan.captures].map(([id, kind]) => {
     const data = outputs.get(id);
-    const raster = kind === 'mask' ? { width: w, height: h, channels: 1, data: data.slice() } :
-      procedural.sceneGraph.rasterFrame(FrameComposite.straight(data, w, h, true));
-    return [id, { kind, ...raster }];
+    const mask = kind === 'mask';
+    let samples = data;
+    if (!mask) samples = FrameComposite.straightRGBA(data);
+    else if (options[passImages]?.has(id)) samples = data.slice();
+    return [id, { kind, width: w, height: h, channels: mask ? 1 : 4, data: samples }];
   }));
   return result;
 }

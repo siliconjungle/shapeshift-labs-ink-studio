@@ -81,13 +81,24 @@
   }
 
   function world(objects, { seed = 0, lights = [], camera: view, background = '#171d30', look = {},
-    palette: authoredPalette, style = {}, surfaces } = {}) {
-    if (!Array.isArray(objects) || !integer(objects.length, 1, 32) || !Number.isSafeInteger(seed) ||
+    palette: authoredPalette, style = {}, surfaces, meshes = [] } = {}) {
+    if (!Array.isArray(objects) || !Array.isArray(meshes) || !integer(objects.length + meshes.length, 1, 32) || !Number.isSafeInteger(seed) ||
         !record(look) || !record(style)) throw new RangeError('Scene needs 1 to 32 mesh objects and finite settings');
+    K.sceneMeshes.list({ meshes }, true);
     const rows = Array.from(objects, row => object(row?.mesh, row)), ids = new Set(rows.map(row => row.id));
     if (ids.size !== rows.length) throw new RangeError('Scene mesh objects need unique IDs');
     let work = 0, triangles = 0, fieldCells = 0;
     const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+    function include(lo, hi) {
+      for (let axis = 0; axis < 3; axis++) {
+        min[axis] = Math.min(lo[axis], min[axis]);
+        max[axis] = Math.max(hi[axis], max[axis]);
+      }
+    }
+    for (const mesh of meshes) {
+      const bounds = K.sceneMeshes.bounds(mesh);
+      include(bounds.min, bounds.max);
+    }
     const backgroundHex = packed(color(background));
     const palette = [backgroundHex];
     if (authoredPalette !== undefined) {
@@ -97,16 +108,24 @@
         const hex = typeof entry === 'number' ? entry : packed(color(entry));
         if (palette.length < 256 && !palette.includes(hex)) palette.push(hex);
       }
+    } else if (meshes.length) {
+      const counts = new Map();
+      for (const mesh of meshes) {
+        const { pixels } = K.sceneMeshes.layer(mesh);
+        const step = 4 * Math.ceil(pixels.length / (4 * 4096));
+        for (let i = 0; i < pixels.length; i += step) if (pixels[i + 3]) {
+          const hex = (pixels[i] << 16) | (pixels[i + 1] << 8) | pixels[i + 2];
+          if (hex !== backgroundHex) counts.set(hex, (counts.get(hex) ?? 0) + 1);
+        }
+      }
+      for (const [hex] of [...counts].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, 64)) palette.push(hex);
     }
     const views = rows.map(row => {
       const { mesh, resolution, cells } = row, { lo, hi } = K.mesh.box(mesh), surface = area(mesh);
       if (!(surface > 0) || (work += row.facets?mesh.tri.length/3:surface / (.8 * resolution ** 2)) > 220000 ||
           (triangles += mesh.tri.length / 3) > 180000 || (fieldCells += row.facets?0:(cells + 7) ** 3) > 12000000)
         throw new RangeError('Scene mesh bake exceeds its surface or field budget');
-      for (let axis = 0; axis < 3; axis++) {
-        min[axis] = Math.min(lo[axis], min[axis]);
-        max[axis] = Math.max(hi[axis], max[axis]);
-      }
+      include(lo, hi);
       const view = K.mesh.look(mesh, { bg: backgroundHex, hues: 8, shades: 5 });
       if (authoredPalette === undefined) for (const hex of view.pal.slice(1))
         if (palette.length < 256 && !palette.includes(hex)) palette.push(hex);
@@ -155,6 +174,7 @@
     S.bake();
     return B.finish({ ...light, radius, dither: 0, look: { splatCoverage: 'continuous', ...look },
       cam: camera({ target, dist: Math.max(1, radius * 3.65), yaw: .36, pitch: .18, ...view }),
+      ...(meshes.length && { meshes: meshes.slice() }),
       ...(surfaces && { spriteSurfaces: surfaces }) });
   }
 

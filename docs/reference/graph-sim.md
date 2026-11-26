@@ -73,7 +73,7 @@ Origin: toolkit.
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
 | Output | `value` | `mesh` | — | {"layout":"XYZ vertices with in-range indices"} |
 
-Guides: [guide](../simulation-output-adapters.md#fields-surfaces-and-points)
+Guides: [guide](../headless-scene-graphs.md#build-a-scene-from-graph-outputs), [guide](../simulation-output-adapters.md#fields-surfaces-and-points)
 
 Get the runnable example with `ink-studio graph describe sim.fieldMesh --example > example.json`.
 Run it with `ink-studio graph run example.json`.
@@ -91,7 +91,7 @@ Origin: toolkit.
 | Output | `value` | `raster` | — | {"layout":"Interleaved samples on a positive integer grid","channels":[1,4],"finite":true} |
 | Output | `report` | `record` | — | {"layout":"Plain named object"} |
 
-Guides: [guide](../simulation-output-adapters.md#fields-surfaces-and-points)
+Guides: [guide](../headless-scene-graphs.md#build-a-scene-from-graph-outputs), [guide](../simulation-output-adapters.md#fields-surfaces-and-points)
 
 Get the runnable example with `ink-studio graph describe sim.fieldRaster --example > example.json`.
 Run it with `ink-studio graph run example.json`.

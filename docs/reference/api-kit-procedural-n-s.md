@@ -1493,7 +1493,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.operations["scene.object"].run` | function | `(inputs, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
 | `KIT.procedural.sceneGraph.operations["scene.world"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["scene.world"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
-| `KIT.procedural.sceneGraph.operations["scene.world"].inputs.objects` | value | `string = "array<record>"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["scene.world"].inputs.meshes` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["scene.world"].inputs.meshes.default` | value | `array` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["scene.world"].inputs.meshes.type` | value | `string = "array<sceneMesh>"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["scene.world"].inputs.objects` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["scene.world"].inputs.objects.default` | value | `array` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["scene.world"].inputs.objects.type` | value | `string = "array<record>"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["scene.world"].inputs.options` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.options` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["scene.world"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["scene.world"].outputs.value` | value | `string = "world"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
@@ -1748,7 +1753,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.transformSDF` | function | `(source, { bounds: explicitBounds, ...options } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-sdf.js) |
 | `KIT.procedural.sceneGraph.triangulate` | function | `(rings, { z = 0, color: tint = '#b7bccb' } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-mesh.js) |
 | `KIT.procedural.sceneGraph.tube` | function | `(start, end, { radius = .2, sides = 12, color: tint = '#b7bccb' } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-mesh.js) |
-| `KIT.procedural.sceneGraph.world` | function | `(objects, { seed = 0, lights = [], camera: view, background = '#171d30', look = {}, palette: authoredPalette, style = {}, surfaces } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-scene.js) |
+| `KIT.procedural.sceneGraph.world` | function | `(objects, { seed = 0, lights = [], camera: view, background = '#171d30', look = {}, palette: authoredPalette, style = {}, surfaces, meshes = [] } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-scene.js) |
 
 ## KIT.procedural.sculptDetail
 
