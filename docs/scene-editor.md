@@ -544,7 +544,8 @@ Reuse the array `id` with updated `count`, `spacing`, or `space` to
 resize it. Omitted settings come from the saved array. A surviving
 copy keeps its prefab link, local overrides, rotation, scale, pivot, and
 manual translation offset relative to the grid. Added cells take their
-settings from the current source. A deleted or detached cell is listed
+settings from the current source. Copies that share a parent inherit its
+motion, and resizing accounts for that motion. A deleted or detached cell is listed
 as missing while its coordinate is within the array.
 
 The receipt lists added, moved, retained, missing, and retired copies.

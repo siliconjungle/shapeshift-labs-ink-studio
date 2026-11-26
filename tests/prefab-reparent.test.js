@@ -114,6 +114,11 @@ test('nested placements work with arrays, forks, detached leaf members and combi
   const copy = array.cells[1], origin = frames.get('sign').mesh.position;
   close(copy.at,K.V.mad(origin,frames.get('sign').direction([1,0,0]),2.25));
   assert.equal(editor.snapshot().instances[copy.instance].parent,'west');
+  const shift = [.38,.17,.11], carrier = scene.instances.west;
+  editor.setPrefabInstance('west',{...carrier,transform:{...carrier.transform,
+    translation:K.V.add(carrier.transform.translation,shift)}});
+  const resized = editor.applyPrefabArray({id:'row',spacing:[2.85,0,0]});
+  close(resized.cells[1].at,K.V.mad(K.V.add(copy.at,shift),frames.get('sign').direction([1,0,0]),.60));
   editor.applyPrefabVariant({instance:'sign',mode:'fork',prefab:'sign-revision'});
   assert.equal(editor.snapshot().instances.sign.parent,'west');
   const detached = editor.previewPrefabVariant({instance:'badge',mode:'detach'});
@@ -121,7 +126,7 @@ test('nested placements work with arrays, forks, detached leaf members and combi
   assert.deepEqual(render(detached.before,view),render(detached.after,view));
   const module = editor.previewPrefabCombination({instances:['sign','badge'],prefab:'joined',instance:'sign',mode:'replace'});
   assert(module.report.canCommit,JSON.stringify(module.report));
-  close(module.report.origin,frames.get('badge').mesh.position);
+  close(module.report.origin,K.V.add(frames.get('badge').mesh.position,shift));
   assert.deepEqual(render(module.before,view),render(module.after,view));
 });
 

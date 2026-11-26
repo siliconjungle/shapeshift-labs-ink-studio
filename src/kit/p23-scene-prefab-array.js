@@ -18,11 +18,18 @@
     const {id} = K.world.data;
     if (!record(arrays)) throw new TypeError('Prefab arrays need a named record map');
     for (const [name,row] of Object.entries(arrays)) {
-      if (!id(name) || !fields(row,['version','instance','count','spacing','space','origin','axes']) ||
+      if (!id(name) || !fields(row,['version','instance','count','spacing','space','origin','axes','parentFrame']) ||
           row.version !== 1 || !id(row.instance) || !vector(row.origin) || !vector(row.axes,axis => vector(axis)) ||
           row.axes.some((axis,i) => row.axes.some((other,j) => Math.abs(V.dot(axis,other)-(i===j ? 1 : 0))>1e-8)) ||
           V.dot(V.cross(row.axes[0],row.axes[1]),row.axes[2])<1-1e-8)
         throw new TypeError('Invalid retained prefab array '+name);
+      if (row.parentFrame !== undefined) {
+        if (!fields(row.parentFrame,['instance','frame']) || !id(row.parentFrame.instance) ||
+            !fields(row.parentFrame.frame,['position','matrix']) ||
+            !vector(row.parentFrame.frame.position) || !Array.isArray(row.parentFrame.frame.matrix))
+          throw new TypeError('Invalid retained array parent frame '+name);
+        K.sceneGraph.transform(row.parentFrame.frame);
+      }
       layout(row.count,row.spacing,row.space);
     }
   }
@@ -51,8 +58,10 @@
     const source = {instance,instanceKind:'prefab',target:frame?.mesh.position ?? [0,0,0]};
     const axes = space === 'plane' ? A.constructionPlane.forScene(scene).axes : space === 'local' ?
       unit.map(axis => frame?.direction(axis) ?? axis) : unit;
+    const parentFrame = template.parent === undefined ? undefined :
+      {instance:template.parent,frame:frames.get(template.parent)?.mesh ?? K.sceneGraph.transform()};
     return {template,source,frames,retained:{version:1,instance,count:count.slice(),spacing:spacing.slice(),space,
-      origin:source.target,axes}};
+      origin:source.target,axes,...(parentFrame && {parentFrame})}};
   }
 
   function plan(scene,env,request) {
@@ -69,6 +78,13 @@
       ...(prior && {before:{count:prior.count,spacing:prior.spacing,space:prior.space}}),
       cells:[],retired:[],conflicts:[],instances:[]};
     const outside = cell => !prior || cell.some((index,axis) => index>=prior.count[axis]);
+    const oldParent = prior?.parentFrame;
+    let parentMotion;
+    if (oldParent && own(scene.instances,oldParent.instance)) {
+      const current = frames.get(oldParent.instance)?.mesh ?? K.sceneGraph.transform();
+      if (!equal(current,oldParent.frame))
+        parentMotion = K.sceneGraph.compose(current,K.sceneGraph.inverse(oldParent.frame));
+    }
     for (const cell of cells(retained.count)) {
       const seed = cell.every(n => n===0), instance = seed ? source.instance : id+'.'+cell.join('.');
       const nominal = position(retained,cell), key = JSON.stringify(nominal);
@@ -90,8 +106,11 @@
         continue;
       }
       const original = existing ?? template;
-      // Move a surviving copy by the change in its array offset, keeping its local edit.
-      const shift = V.sub(nominal,existing ? position(prior,cell) : retained.origin);
+      // Remove inherited motion from the layout change before adjusting a surviving copy.
+      let previous = existing ? position(prior,cell) : retained.origin;
+      if (existing && parentMotion && original.parent === oldParent.instance)
+        previous = K.sceneGraph.point(parentMotion,previous);
+      const shift = V.sub(nominal,previous);
       const moved = shift.some(Boolean);
       instances[instance] = original;
       shifts.set(instance,shift);
