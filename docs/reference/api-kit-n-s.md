@@ -1280,6 +1280,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.sceneMeshes` | namespace |  | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes) |
+| `KIT.sceneMeshes.bounds` | function | `(mesh)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.channelUV` | function | `(mesh, triangle, weights, selector = 'pigment')` | [guide](../mesh-uv.md#bind-separate-material-layouts), [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.clipUV` | function | `(mesh, {min,max,material,clip:limit,uvSet='pigment'})` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.create` | function | `({ id, objectId = id, partId, positions: authored, uvs: uvInput, uvSets, uvBindings, normals: normalInput, cornerTints, tintBlend, indices, materials, faceMaterials } = {})` | [guide](../compressed-scenery.md#pack-and-render-the-signal-house), [guide](../pbr-materials.md#carrier-channels), [guide](../semantic-texture-mipmaps.md), [guide](../simulation-material-layers.md), [guide](../sprite-reconstruction.md#mixed-representations-on-one-asset), [source](../../src/scene-meshes.js) |
@@ -1307,6 +1308,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.sceneMeshes.trianglePigment` | function | `(mesh,triangle)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.updateObjectTexels` | function | `(mesh, bake)` | [guide](../pbr-materials.md#carrier-channels), [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.uvAnchors` | function | `(mesh, {V, procedural:{spatial}}, selector = 'pigment')` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.valid` | function | `(mesh)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.withPose` | function | `(mesh, positions)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 
 ## KIT.screenPrint

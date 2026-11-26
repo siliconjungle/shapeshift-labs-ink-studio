@@ -643,6 +643,11 @@ const specifications = {
     props: { op: 'data.record', inputs: { prop: link('prop') } },
     objects: { op: 'data.collect', inputs: { source: link('props'), keys: ['prop'] } }
   }, inputs: { objects: link('objects') } },
+  'scene.materialMesh': { nodes: {
+    pigment: { op: 'image.declare', inputs: { source: rgba, descriptor: { intent: 'color', precision: 'unorm8' } } },
+    maps: { op: 'data.record', inputs: { baseColor: link('pigment') } },
+    packet: { op: 'material.pack', inputs: { maps: link('maps') } }
+  }, inputs: { source: { ...mesh, uvs: [0, 0, 1, 0, 0, 1, .5, .5] }, material: link('packet') } },
   'scene.render': { inputs: { options: { width: 16, height: 16 } } },
   'scene.deepLayer': { nodes: {
     source: { op: 'scene.diorama', inputs: { definition: diorama } },
@@ -655,6 +660,12 @@ const specifications = {
   'scene.bindControls': {inputs:{template:{cutaway:{planes:[{normal:[1,0,0],offset:0}]}},
     controls:{section:.2},targets:[{control:'section',path:'/cutaway/planes/0/offset'}]}},
   'scene.pass': { inputs: { channel: 'color' } },
+  'scene.colorTexture': { inputs: { frame: { w: 1, h: 1, rgb: [60, 135, 190] } } },
+  'scene.maskTexture': { nodes: {
+    source: { op: 'scene.diorama', inputs: { definition: diorama } },
+    captured: { op: 'scene.render', inputs: { source: link('source'), channels: ['coverage'],
+      options: { width: 16, height: 16 } } }
+  }, inputs: { frame: link('captured', 'frame') } },
   'rig.bindSprite': { inputs: { bones: [bone] } },
   'rig.skinSprite': { nodes: { binding: { op: 'rig.bindSprite', inputs: { source: rgba,
     bones: [bone] } } }, inputs: { bind: link('binding') } },

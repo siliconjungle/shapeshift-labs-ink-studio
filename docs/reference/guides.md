@@ -171,6 +171,7 @@ All checked-in guides, indexed by title and section headings.
 - [Groups and formations](../group-formations.md)
 - [Harmonic and percussive separation](../harmonic-percussive-separation.md)
 - [Headless procedural authoring](../headless-authoring.md)
+- [Headless image and scene graphs](../headless-scene-graphs.md)
 - [Headless worlds](../headless-worlds.md)
 - [Height-map flyovers](../heightmap-flyover.md)
 - [Native hero rendering](../hero-render.md)

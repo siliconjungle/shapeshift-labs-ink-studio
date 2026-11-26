@@ -50,15 +50,20 @@
     const strides=[1,shape[0],shape[0]*(shape[1]??1)];
     const offset=cut?strides[direction]*at:0, column=strides[u], row=strides[v]??0;
     return {width,height,axes,axis,at,channels:component===undefined?components:1,
+      offset:offset*components,contiguous:(!cut||direction===2)&&(component===undefined||components===1),
       sample(x,y,c){return source.data[(offset+x*column+y*row)*components+(component??c)];}};
   }
 
   function slice(source,options={}){
-    const info=sliceInfo(source,options), {width,height,axes,axis,at,channels,sample}=info;
-    const data=new Float64Array(width*height*channels);
-    for(let y=0,i=0;y<height;y++)for(let x=0;x<width;x++)for(let c=0;c<channels;c++)data[i++]=sample(x,y,c);
+    const {share=false}=options;
+    check(typeof share==='boolean','Field slice share must be a boolean');
+    const {width,height,axes,axis,at,channels,sample,offset,contiguous}=sliceInfo(source,options,['share']);
+    const borrowed=share&&contiguous&&source.data instanceof Float64Array, count=width*height*channels;
+    const data=borrowed?source.data.subarray(offset,offset+count):new Float64Array(count);
+    if(!borrowed)for(let y=0,i=0;y<height;y++)for(let x=0;x<width;x++)for(let c=0;c<channels;c++)data[i++]=sample(x,y,c);
     return {value:{width,height,channels,data},report:{axes,origin:axes.map(i=>source.origin[i]),
-      spacing:axes.map(i=>source.spacing[i]),unit:source.unit,frame:source.frame,...(axis!==undefined&&{axis,index:at})}};
+      spacing:axes.map(i=>source.spacing[i]),unit:source.unit,frame:source.frame,...(share&&{borrowed}),
+      ...(axis!==undefined&&{axis,index:at})}};
   }
 
   function surface(source,options={}){
@@ -67,17 +72,20 @@
     check(channels===1&&width>=2&&height>=2&&width*height<=250000&&[heightScale,heightOffset].every(Number.isFinite),
       'Field surface needs a scalar plane, finite height settings and at least a two-by-two grid');
     const positions=new Float64Array(width*height*3), triangles=new Uint32Array((width-1)*(height-1)*6);
+    const uvs=new Float32Array(width*height*2);
     const [u,v]=axes;
     for(let y=0,p=0,t=0;y<height;y++)for(let x=0;x<width;x++,p++){
       positions[p*3]=source.origin[u]+x*source.spacing[u];
       positions[p*3+1]=heightOffset+heightScale*sample(x,y,0);
       positions[p*3+2]=source.origin[v]+y*source.spacing[v];
+      uvs[p*2]=x/(width-1);
+      uvs[p*2+1]=y/(height-1);
       if(x+1<width&&y+1<height){
         triangles.set([p,p+width,p+1,p+1,p+width,p+width+1],t);
         t+=6;
       }
     }
-    return P.sceneGraph.mesh({positions,indices:triangles});
+    return P.sceneGraph.mesh({positions,indices:triangles,uvs});
   }
 
   function points(source,options={}){

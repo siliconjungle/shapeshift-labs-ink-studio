@@ -1,5 +1,8 @@
 # Editable render graph
 
+See [headless image and scene graphs](headless-scene-graphs.md) for software
+evaluation, typed texture capture, and graph-driven mesh materials.
+
 Set `look.renderGraph` on a scene or pass `renderGraph` to either renderer. The graph starts from the resolved scene image, including any world and screen-layer composition already configured on the frame. To place a screen layer anywhere in the graph, give it its own composite pass. The CPU and WebGL use the same pass definitions.
 
 The graph contains an ordered `passes` list of up to 32 entries and an optional `output` image ID. Each pass has a unique `id` and a `type`. The built-in image ID `scene` names the starting image. An image pass takes its `input` from the preceding image by default. Named inputs, sources and masks must refer to earlier outputs of the right type. The last image is the default output. Branches that do not contribute to the chosen output are skipped.

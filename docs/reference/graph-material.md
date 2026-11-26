@@ -127,7 +127,7 @@ Origin: toolkit.
 | Input | `metadata` | `record` | `{}` | Optional JSON metadata keyed by supplied channel. · {"layout":"Plain named object"} |
 | Output | `value` | `materialChannels` | — | {"layout":"Versioned named raster channels with independent grids and metadata","minItems":1,"maxItems":64} |
 
-Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes), [guide](../material-graph-ports.md#read-and-edit-maps)
+Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes), [guide](../headless-scene-graphs.md#build-a-scene-from-graph-outputs), [guide](../material-graph-ports.md#read-and-edit-maps)
 
 Get the runnable example with `ink-studio graph describe material.pack --example > example.json`.
 Run it with `ink-studio graph run example.json`.

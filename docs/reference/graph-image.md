@@ -237,7 +237,7 @@ A literal image intent selects the output type and the source raster contract.
 | Input | `descriptor` | `record` | Required | {"layout":"Plain named object"} |
 | Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
 
-Guides: [guide](../graph-image-types.md), [guide](../material-channel-paint.md)
+Guides: [guide](../graph-image-types.md), [guide](../headless-scene-graphs.md#build-a-scene-from-graph-outputs), [guide](../material-channel-paint.md)
 
 Get the runnable example with `ink-studio graph describe image.declare --example > example.json`.
 Run it with `ink-studio graph run example.json`.
@@ -1617,7 +1617,7 @@ Origin: toolkit.
 | Input | `source` | `typedImage` | Required | {"layout":"Versioned raster and declared image contract"} |
 | Output | `value` | `raster` | — | {"layout":"Interleaved samples on a positive integer grid","channels":[1,4],"finite":true} |
 
-Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes)
+Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes), [guide](../headless-scene-graphs.md#capture-and-reuse-textures)
 
 Get the runnable example with `ink-studio graph describe image.toRaster --example > example.json`.
 Run it with `ink-studio graph run example.json`.
