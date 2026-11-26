@@ -1,3 +1,4 @@
+const { openPbrBrdf } = require('./physical-openpbr-brdf.js');
 const { surface,coordinates } = require('./physical-reference-geometry.js');
 const { dot,along,clamp,sub,mul,scale,length,unit,luma,max,tau,distribution,frame,direction,mis,random } =
   require('./physical-reference-math.js');
@@ -56,8 +57,8 @@ function emitters(triangles) {
     const dir=scale(delta,1/distance), angle=cosine(t,scale(dir,-1));
     if(angle<=1e-8) return null;
     const uv=coordinates(t,u,v);
-    if(!t.material.visible(uv)) return null;
-    return { dir,distance,radiance:t.material.emitted(uv), pdf:selection.pdf(i)*distance*distance/(t.area*angle) };
+    if(!t.material.visible(uv,rng)) return null;
+    return { dir,distance,radiance:t.material.emitted(uv,angle), pdf:selection.pdf(i)*distance*distance/(t.area*angle) };
   }
   return {sample,pdf,count:lit.length};
 }
@@ -80,10 +81,10 @@ function makeTracer(scene) {
   const area=emitters(scene.triangles);
   const stats={cameraRays:0,shadowRays:0,continuationRays:0,transmittedEvents:0,emissiveTriangles:area.count};
   const trace=geometry.intersect;
-  function visible(hit,dir,distance=Infinity) {
+  function visible(hit,dir,distance=Infinity,rng) {
     const from=offset(hit.point,hit.ng,dir);
     stats.shadowRays++;
-    return !trace(from,dir,0,distance-4*length(sub(from,hit.point)),true);
+    return !trace(from,dir,0,distance-4*length(sub(from,hit.point)),true,rng);
   }
   function path(ray,rng) {
     stats.cameraRays++;
@@ -93,7 +94,7 @@ function makeTracer(scene) {
       for(let c=0;c<3;c++) result[c]+=value[c]*gain[c]*weight;
     }
     for(let bounce=0;bounce<=bounces;bounce++) {
-      const intersection=trace(origin,d);
+      const intersection=trace(origin,d,0,Infinity,false,rng);
       if(!intersection) {
         if(bounce||sky.background) add(sky.eval(d),last?mis(last.pdf,sky.pdf(d)):1);
         break;
@@ -102,8 +103,10 @@ function makeTracer(scene) {
       let interior;
       for(const medium of media.values()) interior=medium;
       if(interior) for(let c=0;c<3;c++) gain[c]*=Math.exp(-interior.absorption[c]*hit.distance);
-      if((hit.front||t.material.twoSidedEmission)&&max(m.emission)>0)
-        add(m.emission,last?mis(last.pdf,area.pdf(t,hit.point,last.point)):1);
+      if(hit.front||t.material.twoSidedEmission) {
+        const emission=m.openPbr?t.material.emitted(hit.uv,Math.abs(dot(hit.ng,d))):m.emission;
+        if(max(emission)>0) add(emission,last?mis(last.pdf,area.pdf(t,hit.point,last.point)):1);
+      }
 
       let next;
       if(m.glass) {
@@ -113,11 +116,11 @@ function makeTracer(scene) {
         if(dot(next,hit.ng)<0) stats.transmittedEvents++;
         last=null;
       } else {
-        const bsdf=brdf(hit,scale(d,-1));
+        const bsdf=(m.openPbr?openPbrBrdf:brdf)(hit,scale(d,-1));
         const light=sample=>{
           if(!sample||!sample.pdf||!max(sample.radiance)) return;
           const fit=bsdf.evaluate(sample.dir);
-          if(!fit||!visible(hit,sample.dir,sample.distance)) return;
+          if(!fit||!visible(hit,sample.dir,sample.distance,rng)) return;
           add(mul(fit.weight,sample.radiance),(bounce<bounces?mis(sample.pdf,fit.pdf):1)/sample.pdf);
         };
         light(area.sample(hit.point,rng));
@@ -126,7 +129,7 @@ function makeTracer(scene) {
           const delta=sub(row.position,hit.point), distance=length(delta);
           if(distance<=1e-6) continue;
           const dir=scale(delta,1/distance), fit=bsdf.evaluate(dir);
-          if(fit&&visible(hit,dir,distance)) add(mul(fit.weight,row.intensity),1/(distance*distance));
+          if(fit&&visible(hit,dir,distance,rng)) add(mul(fit.weight,row.intensity),1/(distance*distance));
         }
         if(bounce===bounces) break;
         next=bsdf.sample(rng);

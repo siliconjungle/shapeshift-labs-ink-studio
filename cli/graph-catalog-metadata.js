@@ -818,6 +818,11 @@ const notes = {
   'vector.path': ['Returns one sampled contour and all sampled contours separately. Sampling is independent of the retained SVG path data.'],
   'vector.fillMask': ['Bake one selected shape using its inherited winding rule and the chosen viewport.',
     'The mask describes geometric fill coverage. Use SVG export for stroke, gradient and clip styling.'],
+  'material.openPbr': [
+    'Use standard OpenPBR names for uniform controls and typed images. Bound images replace the matching uniform at the sampled UV.',
+    'Color uses explicit linear sRGB. Bind emissive luminance as scalar nits, and keep base and coat geometry maps independent.',
+    'Publish value for the physical reference renderer and report for defaults, authored values, units and map contracts.'
+  ],
   'material.validate': [
     'Read physical ranges, normal length, map conventions and predicted delivery clipping from a packet or a named image record.',
     'Use graph validate-material for actual paint and conversion clipping, interactive overlays and producer attribution.'
