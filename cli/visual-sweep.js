@@ -3,9 +3,10 @@ const path = require('node:path');
 const PNG = require('./png.js');
 const Assets = require('./asset-files.js');
 const FrameComposite = require('../src/frame-composite.js');
+const CameraLens = require('../src/camera-lens.js');
 
 const format = 'ink-studio/visual-sweep', pinFormat = 'ink-studio/sweep-pin';
-const maxRuns = 48, maxFrames = 120, maxPixels = 64e6;
+const maxRuns = 48, maxViews = 8, maxFrames = 120, maxPixels = 64e6;
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
 const integer = (n, min, max) => Number.isSafeInteger(n) && n >= min && n <= max;
@@ -20,10 +21,31 @@ function outputPath(opt, extra = []) {
   return path.resolve(opt.out);
 }
 
+function fixedViews(views, id) {
+  if (views === undefined) return;
+  check(Array.isArray(views) && views.length >= 1 && views.length <= maxViews,
+    'A scene sweep accepts 1–8 fixed camera views');
+  const used = new Set();
+  return views.map(view => {
+    check(fields(view, ['id', 'camera']) && id(view.id) && !used.has(view.id),
+      'Sweep camera views need distinct IDs');
+    const { camera } = view;
+    check(fields(camera, ['target', 'yaw', 'pitch', 'dist', 'ortho', 'fov']) &&
+      [camera.yaw, camera.pitch, camera.dist].every(Number.isFinite) &&
+      camera.dist > 0 && typeof camera.ortho === 'boolean' &&
+      Array.isArray(camera.target) && camera.target.length === 3 && camera.target.every(Number.isFinite),
+      'Sweep camera ' + view.id + ' needs target, yaw, pitch, positive dist and ortho');
+    used.add(view.id);
+    return { id: view.id, camera: { ...camera, fov: CameraLens.resolve(camera).fov } };
+  });
+}
+
 function visual(raw, { kit, mode, start = 0 }) {
-  check(fields(raw, ['width', 'height', 'pixelSize', 'columns', 'at', 'clip', 'title']), 'Invalid visual sweep settings');
-  const { width = 240, height = 144, pixelSize = 2, columns = 3, clip, title } = raw;
   const sim = mode === 'sim';
+  const keys = ['width', 'height', 'pixelSize', 'columns', 'at', 'clip', 'title'];
+  check(fields(raw, sim ? keys : [...keys, 'views']), 'Invalid visual sweep settings');
+  const views = fixedViews(raw.views, kit.world.data.id);
+  const { width = 240, height = 144, pixelSize = 2, columns = 3, clip, title } = raw;
   check(integer(width, 64, 1024) && integer(height, 32, 1024) && integer(pixelSize, 1, 16) &&
     width % pixelSize === 0 && height % pixelSize === 0 && integer(columns, 1, 8) &&
     (title === undefined || typeof title === 'string' && title.length <= 120),
@@ -49,7 +71,7 @@ function visual(raw, { kit, mode, start = 0 }) {
   check(finiteTime(at) && at >= start && (!sim || Number.isSafeInteger(at)),
     'The sweep poster must be at a valid time or tick at or after the start');
   const ordered = [...new Set([...times, at])].sort((a, b) => a - b);
-  return { width, height, pixelSize, columns, title, at, clip, fps, times, ordered };
+  return { width, height, pixelSize, columns: views?.length ?? columns, title, at, clip, fps, times, ordered, views };
 }
 
 function sizeOf(visual, count) {
@@ -65,17 +87,19 @@ function small(value) {
   return typeof value === 'number' ? String(Number(value.toPrecision(6))) :
     typeof value === 'string' ? value : JSON.stringify(value);
 }
-function sheet(kit, visual, tiles, title, anchor) {
+function sheet(kit, visual, tiles, title, anchor, cases) {
   const { width, height, columns, tileWidth, tileHeight } = sizeOf(visual, tiles.length);
   const draw = [], positions = [];
   const text = (value, x, y, size, color = '#eff3f5') => draw.push({ type: 'text', text: value, at: [x, y], size, color });
   const rect = (x, y, w, h, color) => draw.push({ type: 'rect', rect: [x, y, w, h], color });
-  function fit(s, pixels) {
-    const count = Math.max(6, Math.floor(pixels / 5.9));
+  function fit(s, pixels, fontSize = 10) {
+    const count = Math.max(6, Math.floor(pixels / (.89 * fontSize)));
     return s.length <= count ? s : s.slice(0, count - 3) + '...';
   }
-  text(fit(title, width - 36), width / 2, 19, width < 420 ? 13 : 17);
-  text(tiles.length + (tiles.length === 1 ? ' case' : ' cases') +
+  const titleSize = width < 420 ? 13 : 17;
+  text(fit(title, width - 36, titleSize), width / 2, 19, titleSize);
+  text(cases + (cases === 1 ? ' case' : ' cases') +
+    (visual.views ? '  /  ' + visual.views.length + ' views' : '') +
     (visual.fps ? '   /   ' + visual.fps + ' FPS, ' + visual.times.length + ' frames' : ''),
   width / 2, 40, 10, '#a6b7c2');
   const equal = kit.world.data.equal;
@@ -85,8 +109,9 @@ function sheet(kit, visual, tiles, title, anchor) {
     const pinned = anchor && tile.seed === anchor.seed && tile.case === anchor.case && equal(tile.parameters, anchor.parameters);
     rect(x + 4, y + 2, tileWidth - 8, tileHeight - 9, pinned ? '#385149' : '#263442');
     rect(x + 6, y + 4, tileWidth - 12, tileHeight - 13, '#121e2b');
-    text(fit(String(i + 1).padStart(2, '0') + '  /  seed ' + tile.seed + (pinned ? '  /  PIN' : ''), tileWidth - 18),
-      middle, y + 15, 10, pinned ? '#b8f2ca' : '#dce6ec');
+    const number = String(tile.number ?? i + 1).padStart(2, '0');
+    const heading = [number, tile.view ?? 'seed ' + tile.seed, pinned ? 'PIN' : null].filter(Boolean).join('  /  ');
+    text(fit(heading, tileWidth - 18), middle, y + 15, 10, pinned ? '#b8f2ca' : '#dce6ec');
     const parts = Object.entries(tile.parameters).map(([key,value]) => key + '=' + small(value));
     text(fit(parts.length ? parts.join('   ') : tile.case, tileWidth - 18), middle, top + visual.height + 11, 10, '#abbec9');
     positions.push({ left, top });
@@ -124,19 +149,24 @@ function publish(directory, write) {
 }
 function finish({ kit, directory, recipe, visual, tiles, numeric, name, anchor }) {
   const { ordered, times, fps, at, width, height } = visual;
-  for (const tile of tiles)
+  const lanes = visual.views ? tiles.flatMap((tile, i) => visual.views.map((view, j) =>
+    ({ ...tile, number: i + 1, view: view.id, frames: tile.frames[j] }))) : tiles;
+  for (const tile of lanes)
     check(ordered.every(time => {
-      const frame = tile.frames.get(time);
+      const frame = tile.frames?.get(time);
       return frame?.w === width && frame.h === height && frame.rgb.length === width * height * 3;
     }), 'Sweep renderer did not produce a matching tile at every sample');
-  const draw = sheet(kit, visual, tiles, visual.title || name, anchor);
+  const draw = sheet(kit, visual, lanes, visual.title || name, anchor, tiles.length);
   const sheetFiles = { image: 'sheet.png', ...(fps && { clip: 'sheet.apng' }) };
   const result = {
     format, version: 1, recipe, ...(anchor && { anchor }), sheet: sheetFiles,
     samples: { units: recipe.mode === 'sim' ? 'ticks' : 'seconds', poster: at, ...(fps && { frames: times, fps }) },
     tiles: tiles.map(({ frames, ...tile }, i) => {
       const file = 'cases/' + String(i + 1).padStart(3, '0');
-      return { ...tile, tile: i + 1, image: file + '.png', ...(fps && { clip: file + '.apng' }) };
+      const views = visual.views?.map(view => ({ ...view, image: file + '-' + view.id + '.png',
+        ...(fps && { clip: file + '-' + view.id + '.apng' }) }));
+      return { ...tile, tile: i + 1, image: views?.[0].image ?? file + '.png',
+        ...(fps && { clip: views?.[0].clip ?? file + '.apng' }), ...(views && { views }) };
     })
   };
   publish(directory, temp => {
@@ -147,10 +177,12 @@ function finish({ kit, directory, recipe, visual, tiles, numeric, name, anchor }
     }
     still(sheetFiles.image, draw(at));
     if (fps) clip(sheetFiles.clip, draw);
-    result.tiles.forEach(({ image, clip: movie }, i) => {
-      const frames = tiles[i].frames;
-      still(image, frames.get(at));
-      if (movie) clip(movie, time => frames.get(time));
+    result.tiles.forEach(({ image, clip: movie, views }, i) => {
+      (views ?? [{ image, clip: movie }]).forEach(({ image, clip: movie }, j) => {
+        const frames = views ? tiles[i].frames[j] : tiles[i].frames;
+        still(image, frames.get(at));
+        if (movie) clip(movie, time => frames.get(time));
+      });
     });
     Assets.json(path.join(temp, 'report.json'), numeric ? { ...numeric, visual: result } : result);
   });
@@ -160,7 +192,7 @@ function finish({ kit, directory, recipe, visual, tiles, numeric, name, anchor }
 
 function canonicalVisual(plan, settings) {
   const { width, height, columns, pixelSize, at } = settings;
-  return { ...plan, visual: { ...plan.visual, width, height, columns, pixelSize, at } };
+  return { ...plan, visual: { ...plan.visual, width, height, columns, pixelSize, at, ...(settings.views && { views: settings.views }) } };
 }
 function runScene({ kit, source, plan, directory, loadScene, renderCase, anchor }) {
   check(fields(plan, ['controls', 'visual', 'seeds', 'parameters', 'cases']) && record(plan.controls ?? {}),
@@ -168,7 +200,7 @@ function runScene({ kit, source, plan, directory, loadScene, renderCase, anchor 
   checkDirectory(directory);
   const settings = visual(plan.visual, { kit, mode: 'scene' });
   const { seeds, groups, runCount } = kit.world.observations.matrix(plan, { scene: true, limit: maxRuns });
-  sizeOf(settings, runCount);
+  sizeOf(settings, runCount * (settings.views?.length ?? 1));
   const scene = loadScene(source);
   const actualSeeds = seeds ?? [scene.seed ?? 0];
   check(actualSeeds.every(Number.isSafeInteger), 'Sweep seeds need distinct safe integers');

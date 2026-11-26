@@ -3229,25 +3229,35 @@ const CMD = {
     }
     const result = sweeps.runScene({ kit: lib().KIT, source, plan, directory, anchor, loadScene: scene,
       renderCase(id, { seed, controls }, settings) {
-        const { width: w, height: h, pixelSize: px, at, times } = settings;
+        const { width: w, height: h, pixelSize: px, at, times, views } = settings;
         const assemble = () => build(id, seed, { controls });
-        const frames = new Map();
+        const lanes = views?.map(({ camera }) => {
+          const { target, yaw, pitch, dist, fov, ortho } = camera;
+          return {
+            camera: { ...camera, pose: lib().CameraLens.orbitPose(yaw, pitch, dist, target) },
+            target, yaw, pitch, dist, fov, ortho, lockCamera: true, cameraStaging: false,
+            cameraOrbitOffset: undefined, focalLength: undefined, composition: [.5, .5]
+          };
+        }) ?? [{}];
+        const frames = lanes.map(() => new Map());
+        const keep = (time, images) => images.forEach((image, i) => frames[i].set(time, R.upscale(image, px)));
+        const samplers = motion => lanes.map(lane =>
+          view({ w, h, px, ...lane, ...(motion && sequenceHistory()), transparent: false }));
+        const draw = (world, options, t, resetRenderHistory) => {
+          pose(world, t);
+          return options.map(settings => R.render(world, { ...settings, t, resetRenderHistory }));
+        };
         if (times.length) {
-          const world = assemble(), options = view({ w, h, px, ...sequenceHistory(), transparent: false });
-          const replay = feedbackReplay(world, times[0], options);
-          function draw(t, resetRenderHistory) {
-            pose(world, t);
-            return R.render(world, { ...options, t, resetRenderHistory });
-          }
-          for (const t of times)
-            frames.set(t, R.upscale(replay ? replay.sample(t, draw) : draw(t), px));
+          const world = assemble(), options = samplers(true);
+          const replay = feedbackReplay(world, times[0], options[0]);
+          const sample = (t, reset) => draw(world, options, t, reset);
+          for (const t of times) keep(t, replay ? replay.sample(t, sample) : sample(t));
         }
-        if (!frames.has(at)) {
+        if (!frames[0].has(at)) {
           const world = assemble();
-          pose(world, at);
-          frames.set(at, R.upscale(R.render(world, view({ w, h, px, t: at, transparent: false })), px));
+          keep(at, draw(world, samplers(false), at));
         }
-        return frames;
+        return views ? frames : frames[0];
       }
     });
     console.log('wrote', result.report, '(' + result.cases + ' cases)');

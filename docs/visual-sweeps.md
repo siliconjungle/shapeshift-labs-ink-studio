@@ -44,6 +44,27 @@ Omit `clip` for a still-only sweep. Omit `at` to use the first clip
 sample or scene time zero. If seeds are omitted, the scene's authored
 seed is used, with zero as the fallback.
 
+### Compare fixed views
+
+List named fixed cameras in a scene plan's `visual.views`. Each camera
+specifies `target`, `yaw` and `pitch` in radians, positive `dist`, and
+`ortho`. Optional `fov` is in radians. Explicit view cameras hold
+framing across candidates regardless of the scene camera or animation.
+
+```sh
+ink-studio sweep examples/moss-bear-sweep.js examples/moss-bear-sweep.plan.json --out moss-bear-review
+ink-studio sweep pin moss-bear-review 5 --out bear-pin.json
+ink-studio sweep replay bear-pin.json --out moss-bear-pinned
+```
+
+Each row is one candidate. Columns follow the camera order, with up to
+eight cameras. The report lists each view's camera and artifact paths
+under its candidate. A pin retains all views. Clip frames pose each
+candidate once per sample and render each camera with independent
+history. A poster outside the clip samples starts from a fresh scene.
+The existing sheet budget applies across all views. Plans without
+`views` retain the original layout and filenames.
+
 ## Sweep runtime worlds
 
 Add a `visual` object to the existing [observation sweep plan](headless-worlds.md#scheduled-observations-and-parameter-sweeps).

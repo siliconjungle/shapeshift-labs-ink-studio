@@ -111,3 +111,47 @@ test('simulation sweep captures the same checkpoint branches and scheduled obser
   assert.notDeepEqual(f.bytes('stills','cases/001.png'),f.bytes('stills','cases/002.png'));
   assert.ok(!fs.existsSync(f.out('stills/sheet.apng')));
 });
+
+test('a fixed-view sweep reuses each candidate pose, and pins every camera lane', t => {
+  const f = fixtures(t), log = f.out('builds.txt');
+  const scene = f.write('fixed.js', `module.exports = ({KIT:K, makeBuilder}) => ({
+    id:'fixed', seed:17, build(seed, { controls } = {}) {
+      require('node:fs').appendFileSync(${JSON.stringify(log)}, controls.jaw + '\\n');
+      const B = makeBuilder(seed,[0x172337, 0x8096c6, 0xffbb69, 0x79db9b]);
+      B.iso(0,.04,0,.41,B.P[1],2.7);
+      B.iso(.25,0,controls.jaw,.22,B.P[2],2.7);
+      const marks = K.frameSplats(B, 1, (draw,_dt,t) =>
+        draw.point([.42,.45,Math.sin(t)*.3],{width:.15,color:3}));
+      const world = B.finish({ dither:0, cam:{target:[76,18,14],dist:5,yaw:-.7,pitch:0,sway:0} });
+      const stage=K.stage(world);stage.stateful=false;stage.add(marks);stage.update(0,0);return world;
+    }
+  });`);
+  const front = { target:[0,.24,.14], yaw:0, pitch:.13, dist:4, fov:.55, ortho:true };
+  const side = { ...front, yaw:Math.PI / 2 };
+  const settings = { width:96, height:64, pixelSize:2, columns:1,
+    views:[{id:'front',camera:front},{id:'side',camera:side}], clip:{from:0,to:1,fps:4} };
+  const source = { parameters:{jaw:{values:[.23,.43]}}, visual:settings };
+  const plan = f.write('fixed.json', source);
+  cli('sweep',scene,plan,'--out',f.out('fixed-review'));
+  const review = f.report('fixed-review');
+  assert.equal(fs.readFileSync(log,'utf8'),'0.23\n0.43\n');
+  assert.equal(review.tiles.length, 2);
+  assert.equal(PNG.read(f.out('fixed-review/sheet.png')).w,390);
+  assert.deepEqual(review.recipe.plan.visual.views, settings.views);
+  for (const [i, tile] of review.tiles.entries()) {
+    assert.equal(tile.tile, i + 1);
+    assert.deepEqual(tile.views.map(({id,camera}) => ({id,camera})), settings.views);
+    assert.equal(tile.image, tile.views[0].image);
+    assert.notDeepEqual(f.bytes('fixed-review', tile.views[0].image), f.bytes('fixed-review', tile.views[1].image));
+  }
+  cli('sweep','pin',f.out('fixed-review'),'2','--out',f.out('view-pin.json'));
+  cli('sweep','replay',f.out('view-pin.json'),'--out',f.out('fixed-replay'));
+  for (const [i, view] of f.report('fixed-replay').tiles[0].views.entries()) {
+    const original = review.tiles[1].views[i];
+    assert.deepEqual(f.bytes('fixed-replay',view.image), f.bytes('fixed-review',original.image));
+    assert.deepEqual(f.bytes('fixed-replay',view.clip), f.bytes('fixed-review',original.clip));
+  }
+  const invalid = f.write('duplicate.json', { ...source, visual:{ ...settings, views:[settings.views[0],settings.views[0]] } });
+  assert.match(run('sweep',scene,invalid,'--out',f.out('duplicate')).stderr,/distinct IDs/);
+  assert.ok(!fs.existsSync(f.out('duplicate')));
+});
