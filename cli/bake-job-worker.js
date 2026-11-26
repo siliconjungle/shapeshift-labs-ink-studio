@@ -10,6 +10,7 @@ const Meshes=require('./bake-job-mesh.js');
 const Projection=require('./bake-job-projection.js');
 const Surface=require('./bake-job-surface.js');
 const Occlusion=require('./bake-job-occlusion.js');
+const Thickness=require('./thickness.js');
 const Geometry=require('./geometry-masks.js');
 const UV=require('./material-preview-geometry.js');
 const bake=require('./glb-bake.js');
@@ -30,6 +31,8 @@ function interpretation(row) {
     return {intent:'normal',normalSpace:space,...(orientation&&{normalOrientation:orientation})};
   }
   if(row.output?.kind==='height')return {intent:'height',units:row.output.units,
+    ...(row.output.range&&{heightRange:row.output.range})};
+  if(row.output?.kind==='thickness'&&row.output.encoding!=='png8')return {intent:'height',units:row.output.units,
     ...(row.output.range&&{heightRange:row.output.range})};
   if(row.output?.kind==='direction')return {intent:'data',layout:'xyz'};
   if(['pigment','emission'].includes(row.map))return {intent:'color',colorSpace:'srgb'};
@@ -128,13 +131,20 @@ function steps(plan,model,library,K,onInput) {
 }
 
 function renderGeometry(task,K) {
-  const {tile,settings,selection,map}=task,{mesh,faces,normals,uvs,source}=tile;
+  const {tile,settings,selection,map,authored}=task,{mesh,faces,normals,uvs,source}=tile;
+  const parts=settings.thickness&&authored.thicknessParts;
+  if(parts&&Object.keys(parts).some(index=>!selection.asset.parts[index]))
+    throw new RangeError('Thickness part labels refer to an unknown submesh on '+authored.id);
+  const raw=map==='thickness'&&settings.encoding!=='png8'&&new Float32Array(settings.size**2);
   const kernel=settings.geometry&&Geometry.prepare(selection.points,selection.faces,selection.geometryNormals,
-    settings.geometry,K,[map]);
-  const geometry=kernel&&{calculate:{forFace:(i,layers)=>kernel.forFace(source[i],layers),report:kernel.report}};
+    settings.geometry,K,[map],{thickness:settings.thickness,raw,parts:parts&&selection.metadata.map(row=>parts[row.i])});
+  const geometry=kernel&&{calculate:{forFace:(i,layers)=>kernel.forFace(source[i],layers),report:kernel.report},
+    ...(raw&&{copy:(i,j)=>{raw[j]=raw[i];}})};
   const result=bake(mesh,faces,uvs,normals,settings.size,settings.padding,K,{registered:true,
     chartBake:{state:{faceCharts:faces.map(()=>0)},...(geometry&&{geometry})}});
-  return {bytes:mapBytes(result,map,settings),texels:result.sampledTexels,coverage:result.coverage,
+  const output=map==='thickness'?{...Thickness.output(result,raw,settings),validity:result.registeredMaps.masks['thickness-valid']}:
+    {bytes:mapBytes(result,map,settings)};
+  return {...output,texels:result.sampledTexels,coverage:result.coverage,
     ...(result.geometryMasks&&{geometry:result.geometryMasks})};
 }
 
@@ -237,13 +247,16 @@ function main(request,base) {
     const {map,tile,selection,authored,settings}=task;
     const detail={map,target:authored.id,tile:tile.label,total:pending.length};
     emit({event:'map-started',...detail,completed:i});
-    const {bytes,preview,...rest}=render(task);
+    const {bytes,preview,validity,...rest}=render(task);
     const [u,v]=tile.tile, stem='maps/'+authored.id+'/'+u+'_'+v+'/'+map, relative=stem+'.'+Surface.ext(settings.encoding);
     Assets.write(directory(out,relative),bytes);
     const previewFile=preview&&stem+'.preview.png';
     if(preview)Assets.write(directory(out,previewFile),preview);
+    const validityFile=validity&&stem+'.valid.png';
+    if(validity)Assets.write(directory(out,validityFile),validity);
     report.maps.push({target:authored.id,mesh:selection.mesh,meshIndex:selection.index,uvSet:authored.uvSet,
-      tile:tile.tile,tileLabel:tile.label,map,settings,file:relative,sha256:digest(bytes),...(previewFile&&{previewFile}),...rest});
+      tile:tile.tile,tileLabel:tile.label,map,settings,file:relative,sha256:digest(bytes),...(previewFile&&{previewFile}),
+      ...(validityFile&&{validityFile,validitySha256:digest(validity)}),...rest});
     emit({event:'map-finished',...detail,completed:i+1});
   }
   if(plan.sources.size||plan.skewMaps.size||plan.targets.some(row=>row.projection))
