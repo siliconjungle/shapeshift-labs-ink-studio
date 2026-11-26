@@ -52,6 +52,7 @@ All checked-in guides, indexed by title and section headings.
 - [Bake projection controls](../bake-projection.md)
 - [Opacity and texture transfer](../bake-texture-transfer.md)
 - [Thickness bakes](../bake-thickness.md)
+- [UV debug outputs](../bake-uv-debug.md)
 - [Batch spatial queries and occupancy](../batch-spatial-queries.md)
 - [Capture beat-level live performance](../beat-performance-captures.md)
 - [Bitmap resources](../bitmap-resources.md)
