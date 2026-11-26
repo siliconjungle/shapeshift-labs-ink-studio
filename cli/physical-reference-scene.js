@@ -4,6 +4,7 @@ const Camera = require('../src/camera-lens.js');
 const TextureAddress = require('../src/texture-address.js');
 const { readGraphProject } = require('./graph-project.js');
 const { readRoomEnvironment } = require('./material-lighting-room.js');
+const OpenPbr = require('./physical-openpbr.js');
 const { construct, traceGeometry } = require('./physical-reference-geometry.js');
 const { clamp,scale,luma,distribution,radians,tau } = require('./physical-reference-math.js');
 
@@ -125,19 +126,30 @@ async function graphMaps(spec,baseDir,toolkit,onFile) {
   const result=await project.previewFrame(spec.maps??{material:{output:spec.output}},run,{encodeArtifacts:false});
   for(const file of project.sourceFiles()) onFile(file);
   if(!result.report.passed) throw new RangeError('Graph assertions failed in physical reference material');
-  if(spec.maps) return result.values;
+  if(spec.maps) return {maps:result.values};
   const P=toolkit.KIT.procedural, output=result.values.material;
-  return P.materialChannels.valid(output)?
+  if(output?.format===P.openPbr.format) return {openPbr:P.openPbr.read(output)};
+  const maps=P.materialChannels.valid(output)?
     Object.fromEntries(mapNames.filter(name=>output.channels[name]).map(name=>[name,output.channels[name].raster])) :
     {baseColor:output};
+  return {maps};
 }
 
 async function loadMaterials(value,baseDir,toolkit,onFile,identity) {
   if(!record(value)||!integer(Object.keys(value).length,1,128)) throw new TypeError('Physical reference needs named materials');
-  const output=new Map(), budget={texels:0};
+  const output=new Map(), budget={texels:0}, P=toolkit.KIT.procedural;
   for(const [name,row] of Object.entries(value)) {
-    if(!id(name)||!fields(row,['baseColor','roughness','metalness','emission','twoSidedEmission','opacity','cutoff','glass','graph']))
+    if(!id(name)||!fields(row,['baseColor','roughness','metalness','emission','twoSidedEmission','opacity','cutoff','glass','graph','openPbr']))
       throw new TypeError('Unknown physical reference material fields for '+name);
+    const graph=row.graph?await graphMaps(row.graph,baseDir,toolkit,onFile):{};
+    if (Object.hasOwn(row,'openPbr') || graph.openPbr) {
+      const source=graph.openPbr?'graph':'openPbr';
+      if (Object.keys(row).length!==1 || !record(row[source]))
+        throw new TypeError('OpenPBR material '+name+' needs exactly one source: openPbr values or an OpenPBR graph output');
+      const packet=graph.openPbr??P.openPbr.define(row.openPbr);
+      output.set(name,OpenPbr.material(P,packet,name,output.size+1,identity,budget));
+      continue;
+    }
     const {baseColor=row.graph?[1,1,1]:[.64,.64,.64],roughness=.45,metalness=0,emission=[0,0,0],
       opacity=1,cutoff=.5,twoSidedEmission=false}=row;
     if(!vec(baseColor,3,0,1)||!range(roughness,0,1)||!range(metalness,0,1)||!vec(emission,3,0,1e4)||
@@ -150,7 +162,7 @@ async function loadMaterials(value,baseDir,toolkit,onFile,identity) {
       glass={ior:row.glass.ior??1.5,absorption:row.glass.absorption??[0,0,0]};
     }
     identity.update(JSON.stringify([name,baseColor,roughness,metalness,emission,opacity,cutoff,twoSidedEmission,glass]));
-    const mapRows=row.graph?await graphMaps(row.graph,baseDir,toolkit,onFile):{};
+    const mapRows=graph.maps??{};
     const maps=Object.fromEntries(Object.entries(mapRows).map(([key,image])=>[key,mapSampler(toolkit.KIT.procedural,image,key,identity,budget)]));
     function visible(uv) {
       const coverage=opacity*(maps.opacity?.read(uv)[0]??1)*(maps.baseColor?.read(uv)[3]??1);

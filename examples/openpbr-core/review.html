@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Storm dial · Ink Studio</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{color-scheme:dark;background:#10191b;color:#ebeadf;font:15px/1.5 system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0 auto;max-width:1200px;padding:35px 32px 42px}
+header{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:21px}
+h1{font:normal clamp(36px,5.8vw,67px)/1 Georgia,serif;letter-spacing:-.045em;margin:0}
+header p{color:#abbdbc;margin:7px 0 0}
+small,th{color:#9db4b2}
+a{color:#edc58c;text-underline-offset:3px}
+main{display:grid;grid-template-columns:minmax(0,2.1fr) minmax(237px,1fr);gap:24px}
+figure{margin:0;background:#0b1113;border:1px solid #344244;border-radius:9px;overflow:hidden}
+figure img{display:block;width:100%;image-rendering:pixelated}
+figcaption{min-height:54px;padding:13px 15px;color:#c5cfca}
+aside{border-top:1px solid #3b4d4d;padding-top:12px}
+nav,.modes{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 15px}
+button{font:inherit;color:#e8e8db;border:1px solid #4a5b59;background:#1d2b2c;border-radius:5px;padding:6px 9px;cursor:pointer}
+button[aria-pressed=true]{color:#2b1d0e;background:#edc58c;border-color:#edc58c}
+h2{font-size:1rem;margin:9px 0 5px}
+table{width:100%;font-size:.81rem;border-collapse:collapse}
+th,td{padding:6px 0;text-align:left;border-bottom:1px solid #314141}
+td{padding-left:8px}
+code{font-size:.83em}
+footer{margin-top:21px;color:#acbdb9;display:flex;flex-wrap:wrap;gap:18px}
+@media(max-width:680px){body{padding:22px 14px}header{align-items:start}header small{display:none}main{grid-template-columns:1fr}}
+</style>
+<header>
+  <div><h1>Storm dial</h1><p>OpenPBR core in Ink Studio’s physical reference renderer</p></div>
+  <small id="settings"></small>
+</header>
+<main>
+  <figure><img id="render" alt="Path-traced Storm dial"><figcaption id="caption" aria-live="polite"></figcaption></figure>
+  <aside>
+    <nav id="variants" aria-label="Material variants"></nav>
+    <div id="passes" class="modes" aria-label="Render passes"></div>
+    <h2>Selected material inputs</h2>
+    <table><tbody id="fields"></tbody></table>
+  </aside>
+</main>
+<footer>
+  <a id="plan">Render plan</a>
+  <a href="storm-dial.material.json">Editable material graph</a>
+  <a id="evidence">Render report</a>
+  <a id="linear">Linear EXR</a>
+</footer>
+<script>
+const data = /*REVIEW_DATA*/;
+let variant = data.variants.find(row => data.receipts[row.id]), pass = 'denoised';
+const passLabels = {denoised:'Beauty',albedo:'Albedo',normals:'Normals',depth:'Depth'};
+const fields = ['base_color','base_metalness','specular_roughness','coat_weight','geometry_normal',
+  'geometry_coat_normal','geometry_opacity','emission_luminance','emission_color'];
+const byId = id => document.getElementById(id);
+byId('settings').textContent = data.samples + ' samples per pixel · linear sRGB working space';
+function control(parent, label, active, change) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = label;
+  button.active = active;
+  button.addEventListener('click', () => { change(); draw(); });
+  parent.append(button);
+}
+for (const item of data.variants) if (data.receipts[item.id])
+  control(byId('variants'),item.label,() => item === variant,() => variant = item);
+for (const [id, label] of Object.entries(passLabels))
+  control(byId('passes'),label,() => pass === id,() => pass = id);
+function draw() {
+  for (const button of document.querySelectorAll('button')) button.setAttribute('aria-pressed',button.active());
+  const id = variant.id;
+  byId('render').src = id + '/' + pass + '.png';
+  byId('render').alt = 'Storm dial, ' + variant.label + ', ' + passLabels[pass] + ' pass';
+  byId('caption').textContent = variant.note;
+  byId('plan').href = id + '.plan.json';
+  byId('evidence').href = id + '/report.json';
+  byId('linear').href = id + '/raw.exr';
+  byId('fields').replaceChildren(...fields.map(name => {
+    const row = document.createElement('tr'), tag = document.createElement('code');
+    tag.textContent = name;
+    const head = document.createElement('th'), value = document.createElement('td');
+    head.append(tag);
+    const input = data.receipts[id][name];
+    const unit = input.units === 'nits' ? ' nits' : '';
+    value.textContent = input.map ? 'Map · ' + input.map.precision + unit : input.value === null ? 'Geometry' : input.value + unit;
+    row.append(head,value);
+    return row;
+  }));
+}
+draw();
+</script>
+</html>
