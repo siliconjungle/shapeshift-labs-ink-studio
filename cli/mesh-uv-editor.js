@@ -10,9 +10,11 @@ const { viewSettings, worldFor } = require('./mesh-native-view.js');
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const options = {
   layout: ['object','out','uv-set','channel','atlas'],
+  guide: ['object','out','uv-set','channel'],
   select: ['object','out','topology-out','topology-domain','view','preview','uv-set','channel'],
   edit: ['object','out','view','preview','report','selection','uv-set','channel']
 };
+const guideNames = {document:'guide.json',png:'guide.png',report:'report.json'};
 const imageNames = ['atlas-before.png', 'model-before.png', 'atlas-after.png', 'model-after.png', 'comparison.png'];
 const ink = { seam: '#f391a6', pin: '#ffcb78', pivot: '#f0b8ff', snap: '#ffe181', selected: '#75e2c8', held: '#a8beff', boundary: '#7393ac',
   continuous: '#456578', 'material-boundary': '#859cad', 'non-manifold': '#ed8c70' };
@@ -416,18 +418,29 @@ function editSelection(UV,document,plan,selectionFile) {
   return {...UV.select(document,{domain:'faces',uvSet,ids}),...inspection};
 }
 
+function writeGuide(result, directory) {
+  const Pixels = require('./pixel-art.js');
+  const {document,report} = result, image = PNG.encodePaint(Pixels.stamp(Pixels.compile(document)));
+  const output = {...report,files:guideNames};
+  files.publishJson(path.resolve(directory,guideNames.document),document,'A different editable UV guide already exists');
+  files.write(path.resolve(directory,guideNames.png),image);
+  files.json(path.resolve(directory,guideNames.report),output);
+  process.stdout.write(JSON.stringify(output,null,2)+'\n');
+}
+
 function command([action, file, input, ...rest], opt, kit, openEditor, {projectTexelsPerUnit} = {}) {
   if (!file || rest.length || (action === 'layout' ? input !== undefined : !input) ||
       Object.entries(opt).some(([key, value]) => !options[action].includes(key) || !name(value)) ||
-      opt.selection && !opt.preview)
-    throw new TypeError('Use mesh-uv layout, select, or edit on a retained mesh topology document');
+      opt.selection && !opt.preview || action==='guide' && !opt.out)
+    throw new TypeError('Use mesh-uv layout, guide, select, or edit on a retained mesh topology document');
   const { object, out, report, preview, 'topology-out': topologyOut } = opt;
   const topologyDomain = opt['topology-domain'];
   if (topologyDomain !== undefined && (!topologyOut || !['match','faces','edges','vertices'].includes(topologyDomain)))
     throw new TypeError('Use --topology-domain match, faces, edges, or vertices with --topology-out');
   const inputs = [file, input, opt.view, opt.selection].filter(Boolean).map(value => path.resolve(value));
   const paths = preview ? imageNames.map(name => path.resolve(preview, name)) : [];
-  const outputs = [...[out, report, topologyOut].filter(Boolean).map(value => path.resolve(value)), ...paths];
+  const outputs = action==='guide' ? Object.values(guideNames).map(name=>path.resolve(out,name)) :
+    [...[out, report, topologyOut].filter(Boolean).map(value => path.resolve(value)), ...paths];
   const separate = filenames => {
     if (new Set(filenames).size !== filenames.length || filenames.some(value => inputs.includes(value)))
       throw new RangeError('Write UV reports and edited documents separately from the source and request');
@@ -456,6 +469,8 @@ function command([action, file, input, ...rest], opt, kit, openEditor, {projectT
     if (selector!==undefined && authored?.uvSet!==undefined)
       throw new TypeError('Choose a UV layout in the request or on the command line');
     const request=selector===undefined ? authored : {...authored,uvSet:selector};
+    if (action==='guide')
+      return writeGuide(editor ? editor.guideMeshUV(object,request) : UV.guide(document,request),out);
     const settings = view(opt.view ? read(opt.view) : {}, !editor);
     const projecting = action === 'edit' && Array.isArray(request?.operations) &&
       request.operations.some(op=>op?.op==='project-camera');

@@ -1474,6 +1474,7 @@ const CMD = {
         '  mesh-uv inspect|simplify <mesh> [--uv-set n | --channel id] --out <directory|mesh.json>   inspect UV maps or reduce with seam locks',
         '  mesh-uv import <mesh> --out topology.json [--id id] [--uv-set n] [--join-coincident on|off]   retain triangle corner UVs for editing',
         '  mesh-uv layout <mesh-or-scene.json> [--object id] [--uv-set n | --channel id] [--atlas width,height] [--out file]   inspect normalized UVs and source texels on faces and seam sides',
+        '  mesh-uv guide <mesh-or-scene.json> <request.json> [--object id] [--uv-set n | --channel id] --out directory   draw chart and face outlines, solid fills, and checker fills into an editable pixel document and PNG',
         '  mesh-uv select <mesh-or-scene.json> <query.json> [--object id] [--view file] [--preview dir] [--out file] [--topology-out file] [--topology-domain match|faces|edges|vertices]   cross-select from atlas UVs, source texels, model pixels, or saved mesh components',
         '  mesh-uv edit <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file] [--preview dir] [--out file] [--report file]   flatten, scale, orient, normalize, snap or nudge UVs, set pivots, edit seams, unwrap connected faces, project from an approved view, pack connected charts, or budget texels',
         '  scenery pack <scene.js> --out asset.inkscenery   pack indexed meshes and textures from a scenery hook',
@@ -4290,7 +4291,7 @@ const CMD = {
     });
   },
   'mesh-uv'() {
-    if (['layout', 'select', 'edit'].includes(pos[0]))
+    if (['layout', 'guide', 'select', 'edit'].includes(pos[0]))
       return require('./mesh-uv-editor.js').command(pos, opt, lib(), openUVEditor, {projectTexelsPerUnit:cfg.texelsPerUnit});
     require('./mesh-uv.js').command(pos,opt,{num,list});
   },
@@ -5413,7 +5414,7 @@ async function run() {
   }
   const sceneFiles = cmd === 'snap' ? pos : cmd === 'pixel-art' ? pixelInputs :
     cmd === 'cable-route' && pos[0] === 'review' ? pos.slice(1, 2) :
-    cmd === 'mesh-uv' && ['layout', 'select', 'edit'].includes(pos[0]) && typeof opt.object === 'string' ? pos.slice(1, 2) :
+    cmd === 'mesh-uv' && ['layout', 'guide', 'select', 'edit'].includes(pos[0]) && typeof opt.object === 'string' ? pos.slice(1, 2) :
     cmd === 'mesh-topology' && pos[0] === 'modifiers' && typeof opt.object === 'string' ? pos.slice(2, 3) :
     cmd === 'mesh-topology' && (pos[0] === 'select' && typeof opt.view === 'string' ||
       ['transform', 'repair', 'cut', 'boolean', 'retopology', 'face-region', 'edge-edit', 'bevel', 'shading', 'skin', 'shape-keys'].includes(pos[0]) && typeof opt.object === 'string') ? pos.slice(1, 2) :

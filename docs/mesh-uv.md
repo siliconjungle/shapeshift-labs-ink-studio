@@ -2226,6 +2226,55 @@ editor's `planMeshUV` and `editMeshUV` methods. The
 [packing demo](../examples/tileset-pick/uv-pack-charts-demo.cjs) compares a
 successful pack with an undersized pool using the same source layout.
 
+## Draw UV guides into editable pixels
+
+Use `mesh-uv guide` with a retained mesh or a scene object to draw UV
+charts onto a transparent native pixel canvas. For a scene, Ink can use
+the registered material atlas size. Use `atlas: [width, height]` to set a
+standalone or custom grid. The editable canvas supports up to 512 pixels on
+each axis, the same limit as other native pixel documents.
+
+```json
+{
+  "atlas": [128, 96],
+  "outline": { "mode": "charts", "swatch": "trace" },
+  "fill": { "mode": "checker", "size": 8, "swatches": ["slate", "jade"] },
+  "palette": { "trace": "#f4dbac", "slate": "#31535d", "jade": "#618e92" }
+}
+```
+
+```sh
+ink-studio mesh-uv guide gate-topology.json guide-request.json --out gate-guide
+ink-studio mesh-uv guide gate-scene.json guide-request.json --object gate --channel pigment --out pigment-guide
+ink-studio pixel-art draw gate-guide/guide.json --layer uv-outline --out outline-only
+```
+
+The default traces chart outlines, including both sides of a UV cut.
+Choose `outline.mode: "faces"` to trace authored face edges as well.
+The fill uses actual triangle coverage on the atlas, so cutouts stay
+transparent. Choose `fill: { "mode": "solid", "swatch": "jade" }` for
+one named pigment. Checker cells use whole pixels and start at the atlas
+origin, so the pattern stays registered across different charts.
+Set `outline` or `fill` to `false` to omit that layer. The command supplies
+default swatches when the request omits color settings.
+
+Filter by `material`, pass island `ids`, set `domain: "faces"` for face IDs,
+or use a revision-checked face or island `selection` from `mesh-uv select`.
+A continuous edge at the boundary of a face selection becomes part of
+that selection's outline. Use `uvSet` in the request, `--uv-set`, or
+`--channel` to choose a layout.
+
+`guide.json` is an Ink pixel document with editable outline and fill
+layers. `guide.png` exports the visible composite at 1× with transparency.
+`report.json` identifies the source mesh revision, layout, charts, and
+drawn pixel counts. To regenerate after editing the guide document,
+choose a new output directory. Use `KIT.meshTopology.uv.guide` or
+`editor.guideMeshUV` from the SDK to get the document and report directly.
+
+Run the [gate guide demo](../examples/tileset-pick/uv-guide-demo.cjs) to
+compare outline, solid, and checker outputs and replay a pixel edit on
+one of the layers.
+
 ## Allocate texels for a shot
 
 A `texel-budget` operation redistributes space among named features on one

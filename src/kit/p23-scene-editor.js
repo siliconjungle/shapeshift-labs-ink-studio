@@ -1041,6 +1041,14 @@
       return freeze(K.meshTopology.uv.inspect(row.document,uvSet,{atlas,atlasFor}));
     }
 
+    function guideMeshUV(object, request, {part} = {}) {
+      const row = meshTopology(object,part);
+      const atlasFor = request?.atlas===undefined ?
+        A.meshTopologyScene.uvAtlases(snapshot(),row,request?.uvSet ?? request?.selection?.uvSet ?? 0) : undefined;
+      const result = K.meshTopology.uv.guide(row.document,request,{atlasFor});
+      return freeze({...result,report:{...result.report,object,...(row.part && {part:row.part})}});
+    }
+
     function selectMeshUV(object, query, {part} = {}) {
       const row = meshTopology(object,part);
       const atlasFor = query?.atlas?.texel === undefined ? undefined :
@@ -1267,6 +1275,7 @@
       planMeshAttachmentTransfer,
       transferMeshAttachments,
       inspectMeshUV,
+      guideMeshUV,
       selectMeshUV,
       planMeshUV,
       editMeshUV,
