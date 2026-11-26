@@ -87,11 +87,8 @@
   const presentation = Symbol('prefab presentation frames');
   const bakeFlags = ['INK_FINE', 'INK_PIXEL', 'INK_BOUNCE', 'INK_FOCUS', 'INK_FOLLOW', 'INK_ADAPTIVE_SAMPLING',
     'INK_LOOK_ALBEDO', 'INK_RETAIN_RENDER_SDF', 'INK_RETAIN_REFERENCE_SDF', 'INK_DECAL_NEXT'];
-  function bind(world, source, env, inputs) {
-    if (env.billboardFrames) {
-      world[presentation] = env.billboardFrames;
-      return;
-    }
+  function prepare(source, env, inputs) {
+    if (env.billboardFrames) return world => { world[presentation] = env.billboardFrames; };
     if (!Object.values(source.instances ?? {}).some(row => row.billboard !== undefined)) return;
     const rest = A.scenePrefabs.placements(source.instances);
     const flags = Object.fromEntries(bakeFlags.map(key => [key, globalThis[key]]));
@@ -99,7 +96,7 @@
     const numbers = frames => [...frames.values()].map(frame => frame?.mesh ?? identity);
     const base = numbers(rest), { equal } = K.world.data;
     let previous, baked;
-    world.prefabBillboards = Object.freeze({
+    const sampler = Object.freeze({
       sample(camera) {
         const frames = A.scenePrefabs.placements(source.instances, { camera }), key = numbers(frames);
         if (equal(key, base)) return null;
@@ -118,7 +115,8 @@
         }
       }
     });
+    return world => { world.prefabBillboards = sampler; };
   }
 
-  A.prefabBillboards = Object.freeze({ read, orient, plan, bind, frames: world => world[presentation] });
+  A.prefabBillboards = Object.freeze({ read, orient, plan, prepare, frames: world => world[presentation] });
 })(KIT);

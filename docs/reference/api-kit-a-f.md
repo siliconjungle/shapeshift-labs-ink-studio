@@ -868,10 +868,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.physicalMaterials.definition` | function | `(input,pack)` | [source](../../src/kit/p90-asset-materials.js) |
 | `KIT.authoring.physicalMaterials.profile` | function | `(entry,wetness=0)` | [source](../../src/kit/p90-asset-materials.js) |
 | `KIT.authoring.prefabBillboards` | namespace |  |  |
-| `KIT.authoring.prefabBillboards.bind` | function | `(world, source, env, inputs)` | [source](../../src/kit/p23-prefab-billboards.js) |
 | `KIT.authoring.prefabBillboards.frames` | function | `(world)` | [source](../../src/kit/p23-prefab-billboards.js) |
 | `KIT.authoring.prefabBillboards.orient` | function | `(frame, instance, rule, camera)` | [source](../../src/kit/p23-prefab-billboards.js) |
 | `KIT.authoring.prefabBillboards.plan` | function | `(scene, env, request)` | [source](../../src/kit/p23-prefab-billboards.js) |
+| `KIT.authoring.prefabBillboards.prepare` | function | `(source, env, inputs)` | [source](../../src/kit/p23-prefab-billboards.js) |
 | `KIT.authoring.prefabBillboards.read` | function | `(value)` | [source](../../src/kit/p23-prefab-billboards.js) |
 | `KIT.authoring.prefabCombination` | namespace |  |  |
 | `KIT.authoring.prefabCombination.plan` | function | `(scene,env,request)` | [source](../../src/kit/p23-scene-prefab-combine.js) |
