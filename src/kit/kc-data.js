@@ -239,6 +239,7 @@
     topologyMeshes: 'obj',
     prefabArrays: 'obj',
     sceneLayers: 'obj',
+    customProperties: 1,
     guidedOperations: 'list',
     paintings3d: 'list',
     constructionPlane: 'obj',
@@ -483,7 +484,10 @@
     }
   }
   function resolveParameters(source, env) {
-    let { spec: expanded, meshPlacements, instances } = K.authoring.scenePrefabs.expand(source, env);
+    let { spec: expanded, meshPlacements, instances, properties } = K.authoring.scenePrefabs.expand(source, env);
+    const customProperties = Object.keys(properties.definitions).length ?
+      K.procedural.data.freeze({project:{...properties.values},
+        instances:Object.fromEntries([...instances].map(([id,row])=>[id,{...row.propertyValues}]))}) : undefined;
     let hidden;
     try {
       hidden = K.authoring.sceneLayers.visibility(source,instances);
@@ -502,7 +506,7 @@
       }
     }
     if (expanded?.parameterBindings === undefined)
-      return { ...expandAuthoredGeometry(expanded, env?.parameterInputs?.time), dataInputs, meshPlacements, hidden };
+      return { ...expandAuthoredGeometry(expanded, env?.parameterInputs?.time), dataInputs, meshPlacements, hidden, customProperties };
     try {
       const { parameterBindings, timeline, dataInputs: authoredData, ...base } = expanded;
       const program = K.parameters.prepare(parameterBindings);
@@ -511,7 +515,7 @@
       const inputs = { ...env?.parameterInputs, ...(dataInputs && { dataInputs }) };
       const { document, values } = program.apply(base, inputs);
       const spec = timeline === undefined ? document : { ...document, timeline };
-      return { ...expandAuthoredGeometry(spec, inputs.time), program, values, inputs, dataInputs, meshPlacements, hidden };
+      return { ...expandAuthoredGeometry(spec, inputs.time), program, values, inputs, dataInputs, meshPlacements, hidden, customProperties };
     } catch (error) {
       error.problems ??= [{ level: 'error', path: 'parameterBindings', problem: error.message, hint: '' }];
       throw error;
@@ -1790,7 +1794,7 @@
       e.problems = problems;
       throw e;
     }
-    const review = env.assemblyReview, { dataInputs, anchors, layers, looseness, boils, reports } = resolved;
+    const review = env.assemblyReview, { dataInputs, anchors, layers, looseness, boils, reports, customProperties } = resolved;
     const hidden = modelOptions?.[brushField] ? undefined : resolved.hidden;
     const visibleEffect = (_,index) => !hidden?.effects.has(index);
     let { spec } = resolved;
@@ -1891,6 +1895,7 @@
         marksSystem = K.dataMarks.bind(world, marks, dataMarks, { first, query: marksQuery });
       }
       world.spec = source;
+      if (customProperties) world.customProperties = customProperties;
       bindSceneMeshes(world);
       bindBreakables(world);
       bindDecals(world);
@@ -2567,6 +2572,7 @@
         baked || {},
         { made, spec: source, paletteRoles: st0.roles, ...(dynamics && { parameters: dynamics.api }),
           ...(dataInputs && { dataInputs }),
+          ...(customProperties && {customProperties}),
           ...((review?.studio === true || st0.disableSun) ? { surfaceLight: st0.sun } :
             spec.light?.surfaceDirection !== undefined && { surfaceLight: spec.light.surfaceDirection }) }
       )
