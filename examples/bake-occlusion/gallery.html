@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Moonwater Cloister · Ink Studio</title>
+<style>
+:root{color-scheme:dark;font:15px/1.45 system-ui,sans-serif;background:#141e25;color:#f0e3cc;--line:#3b535e;--muted:#b4cbd1;--accent:#e4b789}
+*{box-sizing:border-box}body{margin:0}
+main{max-width:1270px;margin:auto;padding:29px clamp(16px,4vw,60px) 20px}
+header{display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:15px}
+h1{font:400 clamp(48px,8vw,96px)/.97 Georgia,serif;letter-spacing:-.067em;margin:0}
+p{color:var(--muted);margin:5px 0 0}a{color:var(--accent);text-underline-offset:3px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:16px 0}
+article{padding:12px;min-width:0;background:#1d2b34;border:1px solid var(--line)}
+label{display:grid;gap:3px;color:var(--muted);font-size:12px}
+select{min-width:0;max-width:100%;color:#f0e3cc;background:#142129;border:1px solid #506a74;border-radius:3px;padding:5px 8px;font:14px system-ui}
+select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+img{width:min(100%,481px);display:block;aspect-ratio:1;image-rendering:pixelated;margin:12px auto;background:#132129}
+footer{display:flex;justify-content:space-between;gap:5px 12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+@media(max-width:660px){.grid{grid-template-columns:1fr}}
+</style>
+<script defer src="data.js"></script>
+</head><body><main>
+<header><div><h1>Moonwater Cloister</h1><p>Occlusion and visibility directions baked onto the courtyard pavers</p></div>
+<a id="workstation">Bake workstation</a></header>
+<div class="grid" id="comparisons"></div>
+<template id="panel">
+  <article><label>Map<select></select></label><img><footer><span></span><a download>Download</a></footer></article>
+</template>
+<script>
+window.addEventListener('DOMContentLoaded',()=>{
+  const get=id=>document.getElementById(id), modes={
+    lit:'Shaded pavers',ao:'Ambient AO','ao-contact':'Contact AO','ao-directional':'Directional AO',
+    'bent-normal':'Bent normal · open sky','occlusion-direction':'Direction · toward blockers',
+    own:'Ambient AO · own mesh only',neighbors:'Ambient AO · neighbors only'
+  };
+  get('workstation').href=demo.workstation;
+  for(const value of ['lit','ao']){
+    const panel=get('panel').content.firstElementChild.cloneNode(true), select=panel.querySelector('select'),
+      image=panel.querySelector('img'), link=panel.querySelector('a'), caption=panel.querySelector('span');
+    select.replaceChildren(...Object.entries(modes).map(([id,label])=>new Option(label,id)));
+    select.value=value;
+    function render(){
+      const map=demo.maps[select.value];
+      image.src=map.preview;image.alt=modes[select.value];link.href=map.file;
+      caption.textContent=map.rays===undefined?'Lit from baked AO and bent normals':
+        map.blocked.toLocaleString()+' blocked of '+map.rays.toLocaleString()+' traced rays';
+    }
+    select.onchange=render;
+    get('comparisons').append(panel);
+    render();
+  }
+});
+</script></main></body></html>

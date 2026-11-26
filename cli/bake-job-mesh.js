@@ -86,7 +86,7 @@ function surfaces(model,asset,selected,K,images) {
       const normal=V.norm(cross), normals=part.normal?vertices.map(i=>vector(part.normal,i,3)):[normal,normal,normal];
       const charts=Object.fromEntries(Object.entries(part.uv).map(([set,flat])=>[set,vertices.map(i=>vector(flat,i,2))]));
       const d00=V.dot(ab,ab),d01=V.dot(ab,ac),d11=V.dot(ac,ac), denominator=d00*d11-d01*d01;
-      const row={i,vertices,selected:selected[i],normal,cross,normals,points:[a,b,c],charts};
+      const row={i,triangle:f/3,vertices,selected:selected[i],normal,cross,normals,points:[a,b,c],charts};
       row.weights=point=>{
         const ap=V.sub(point,a), e0=V.dot(ap,ab), e1=V.dot(ap,ac);
         const u=(d11*e0-d01*e1)/denominator, v=(d00*e1-d01*e0)/denominator;
@@ -128,9 +128,9 @@ function surfaces(model,asset,selected,K,images) {
   return {points,faces,geometryNormals,metadata};
 }
 
-function meshFor(model,selection,K,images) {
+function meshFor(model,selection,K,images,{sceneSpace=false}={}) {
   const {V}=K,index=chooseMesh(model,selection.mesh,selection.id), {uvSet}=selection;
-  const asset=selection.projection?sceneMesh(model,index,K):model.meshes[index];
+  const asset=selection.projection||sceneSpace?sceneMesh(model,index,K):model.meshes[index];
   if(selection.submeshes?.some(n=>!asset.parts[n])||selection.slots?.some(name=>!asset.parts.some(p=>slot(model,p)===name)))
     throw new RangeError('Unknown submesh or slot in '+selection.id);
   const selected=asset.parts.map((part,i)=>(!selection.submeshes||selection.submeshes.includes(i))&&

@@ -8,6 +8,7 @@ const normalizations = ['symmetric','minmax','manual','none'];
 const clamp = n => Math.min(1, Math.max(0, n));
 const maxCode = encoding => encoding === 'png16' ? 65535 : 255;
 const ext = encoding => encoding === 'exr' ? 'exr' : 'png';
+const depth = encoding => encoding === 'exr' ? 32 : encoding === 'png16' ? 16 : 8;
 const finiteFloat = n => Number.isFinite(n) && Number.isFinite(Math.fround(n));
 const validRange = range => Array.isArray(range) && range.length === 2 && Array.from(range).every(finiteFloat) &&
   range[0] <= 0 && range[1] >= 0 && range[1] > range[0];
@@ -36,26 +37,39 @@ function writePng(data, size, channels, encoding) {
 }
 const writeExr = (size,planes) => EXR.write({ width:size, height:size, planes });
 
+function vector(size,encoding,values) {
+  const count=size*size;
+  function unsigned(encoding) {
+    const Data=encoding==='png16'?Uint16Array:Uint8Array, max=maxCode(encoding);
+    return Data.from({length:count*3},(_,i)=>Math.round(clamp(.5+.5*values(Math.floor(i/3),i%3))*max));
+  }
+  if (encoding !== 'exr') return {bytes:writePng(unsigned(encoding),size,3,encoding)};
+  const planes=Object.fromEntries(['X','Y','Z'].map((name,c)=>[name,Float32Array.from({length:count},(_,p)=>values(p,c))]));
+  return {bytes:writeExr(size,planes),preview:writePng(unsigned('png8'),size,3,'png8')};
+}
+
+function scalar(size,encoding,data) {
+  function unsigned(encoding) {
+    const Data=encoding==='png16'?Uint16Array:Uint8Array,max=maxCode(encoding);
+    return writePng(Data.from(data,n=>Math.round(clamp(n)*max)),size,1,encoding);
+  }
+  return encoding==='exr'?{bytes:writeExr(size,{Y:data}),preview:unsigned('png8')}:{bytes:unsigned(encoding)};
+}
+
 function normal(result, {size,space,orientation,encoding}) {
   const {raster,textures}=result;
   const layout={kind:'normal',space,encoding,domain:encoding === 'exr'?'signed-unit':'unit',
-    bitDepth:encoding === 'exr'?32:encoding === 'png16'?16:8,...(orientation&&{orientation})};
+    bitDepth:depth(encoding),...(orientation&&{orientation})};
   if (space === 'tangent' && encoding === 'png8') {
     if (orientation !== 'directx') return {bytes:textures.normal,output:layout};
     const data=raster.pixels.normal.slice();
     for (let i=0;i<data.length;i+=3) if(data[i]||data[i+1]||data[i+2]) data[i+1]=255-data[i+1];
     return {bytes:PNG.encode(size,size,data),output:layout};
   }
-  const vectors=raster.samples[space], count=size*size;
+  const vectors=raster.samples[space];
   const flip=orientation === 'directx' ? -1 : 1;
   const values=(p,c)=>raster.owners[p] ? vectors[p*3+c] * (c === 1 ? flip : 1) : Number(c === 2);
-  function unsigned(encoding) {
-    const Data=encoding==='png16'?Uint16Array:Uint8Array, max=maxCode(encoding);
-    return Data.from({length:count*3},(_,i)=>Math.round(clamp(.5+.5*values(Math.floor(i/3),i%3))*max));
-  }
-  if (encoding !== 'exr') return {bytes:writePng(unsigned(encoding),size,3,encoding),output:layout};
-  const planes=Object.fromEntries(['X','Y','Z'].map((name,c)=>[name,Float32Array.from({length:count},(_,p)=>values(p,c))]));
-  return {bytes:writeExr(size,planes),preview:writePng(unsigned('png8'),size,3,'png8'),output:layout};
+  return {...vector(size,encoding,values),output:layout};
 }
 
 function measureHeight(result) {
@@ -99,4 +113,4 @@ function height(row, scale, { size, encoding, normalization }) {
   return {bytes:writeExr(size,{Y:plane}),preview:writePng(unsigned('png8'),size,1,'png8'),output};
 }
 
-module.exports={normalMaps,settings,normal,measureHeight,heightScale,height,ext};
+module.exports={normalMaps,encodings,settings,normal,measureHeight,heightScale,height,ext,depth,vector,scalar};

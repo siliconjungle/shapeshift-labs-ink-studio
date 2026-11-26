@@ -33,7 +33,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
   const worldNormals = samples?.world && new Float32Array(count * 3);
   const height = samples?.height && new Float32Array(count), heightValid = height && new Uint8Array(count);
   if(projection && count*projection.views>64000000)throw new RangeError('Paint views exceed the projected texel budget');
-  const { previous, state, dirty, reproject, geometry, layout, rebuild, release, transfer, cage, palette } = chartBake || {};
+  const { previous, state, dirty, reproject, geometry, layout, rebuild, release, transfer, cage, palette, visibility } = chartBake || {};
   const revised = Boolean(rebuild?.size || release?.size), layoutRows = new Map(layout?.charts.map(row => [row.id, row]));
   const retired = new Map(layout?.retired.map(row => [row.id, row]));
   const owners = (revised ? previous.owners.slice() : previous?.owners) ?? (registered && new Uint32Array(count));
@@ -94,6 +94,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
     if (previous && !dirty.has(chart)) continue;
     const rebuildChart = rebuild?.has(chart), layoutRow = layoutRows.get(chart);
     const geometrySample = geometry?.calculate?.forFace(f,geometryLayers);
+    const visibilitySample = visibility?.forFace(f);
     const t = uvs[f].map(p => p.map(x => x * size)), [a, b, c] = t, det = area2(a, b, c);
     if (Math.abs(det) < 1e-16) throw new Error('Cannot bake a degenerate UV triangle');
     const [pa, pb, pc] = face.map(i => mesh.points[i]);
@@ -128,6 +129,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
       used++;
       const n = V.norm(V.mad(V.mad(na, normAB, u), normAC, v));
       const p = V.mad(V.mad(pa, ab, u), ac, v);
+      visibilitySample?.(p,n,i);
       const receiver = mesh.sampleSurface?.(p, n, f) || fallback;
       const projected = cage?.sample(p,n,front,sourceFaces[f],[x,y]);
       const high = projected?.material;
@@ -237,6 +239,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
       for (let k = 0; k < 3; k++) layer[j * 3 + k] = layer[i * 3 + k];
     }
     for (const layer of masks.values()) layer[j]=layer[i];
+    visibility?.copy(i,j);
     if(height)height[j]=height[i];
     if(alpha)alpha[j]=alpha[i];
   };

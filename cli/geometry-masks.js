@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const Ray = require('./mesh-ray-index.js');
 
 const names = Object.freeze(['slope','cavity','exposure','thickness','thickness-valid']);
 const distances = ['cavityRadius','exposureDistance','thicknessScale','rayBias'];
@@ -77,29 +78,17 @@ function prepare(points, faces, normals, options, { V,procedural:{spatial} }, se
     return { face,a,ab,ac,normal,shell,closed:group.closed,epsilon:1e-12*V.len(ab)*V.len(ac),
       bounds:spatial.expand(spatial.boxOf([a,b,c]),rayBias*.1) };
   });
-  const lookup = spatial.pointIndex(rows), range = Math.max(cavityRadius,exposureDistance);
+  const nearest = Ray.build(rows,{V,procedural:{spatial}}), range = Math.max(cavityRadius,exposureDistance);
   let rayCount = 0, triangleTests = 0, texels = 0, valid = 0, clipped = 0, min = Infinity, max = 0;
   let hit;
   function trace(origin, direction, distance, face) {
     if (++rayCount > 26e6) throw new RangeError('Geometry masks exceed the ray budget. Use fewer samples or a smaller texture.');
-    let nearest = distance;
-    hit = undefined;
-    lookup.ray(origin,direction,distance,row => {
-      if (row.face === face) return;
+    const result=nearest(origin,direction,distance,rayBias*.1,row=>row.face!==face,()=>{
       if (++triangleTests > 120e6)
         throw new RangeError('Geometry masks exceed the triangle budget. Use fewer samples or simplify the geometry.');
-      const h = V.cross(direction,row.ac), det = V.dot(row.ab,h);
-      if (Math.abs(det) <= row.epsilon) return;
-      const offset = V.sub(origin,row.a), u = V.dot(offset,h)/det;
-      if (u < -1e-8 || u > 1+1e-8) return;
-      const q = V.cross(offset,row.ab), v = V.dot(direction,q)/det;
-      if (v < -1e-8 || u+v > 1+1e-8) return;
-      const t = V.dot(row.ac,q)/det;
-      if (t <= rayBias*.1 || t > nearest || t === nearest && hit && row.face >= hit.face) return;
-      nearest = t;
-      hit = row;
     });
-    return hit ? nearest : Infinity;
+    hit=result?.row;
+    return result?.distance??Infinity;
   }
 
   function forFace(face, layers) {
