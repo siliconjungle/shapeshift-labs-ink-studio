@@ -36,8 +36,11 @@ module.exports = function sculptSweep([verb, scene, file, ...rest], flags, kit, 
   const api = kit.KIT.procedural.shapeSweeps;
   if (inspect) {
     const { solid } = sweepNode(editor, id, target);
-    const { bounds, sampleCount, step } = api.prepare(solid);
-    console.log(JSON.stringify({ id, ...(target && { target }), sweep: solid, bounds, sampleCount, step }, null, 2));
+    const attachment = target && host(editor, target).solid.modifiers?.find(row => row.id === id)?.snap;
+    const snap = attachment && editor.inspectSculptSnap(target, id);
+    const { bounds, sampleCount, step } = api.prepare(snap?.resolvedPoses ? { ...solid, poses: snap.resolvedPoses } : solid);
+    console.log(JSON.stringify({ id, ...(target && { target }), sweep: solid, bounds, sampleCount, step,
+      ...(snap && { snap }) }, null, 2));
     return;
   }
 
