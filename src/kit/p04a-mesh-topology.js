@@ -172,10 +172,12 @@ const isMeshSmoothingGroup = value => typeof value === 'string' && Boolean(value
 
   function build(source, keepEdges = false) {
     if (documents.has(source)) return source;
-    const { format: type = format, version = 1, id, shading: authoredShading, skin: authoredSkin, vertices: inputVertices, edges: inputEdges = [], faces: inputFaces, uvBindings:inputBindings } = source ?? {};
+    const { format: type = format, version = 1, id, shading: authoredShading, skin: authoredSkin, vertices: inputVertices,
+      edges: inputEdges = [], faces: inputFaces, uvBindings:inputBindings, uvPivots:inputPivots } = source ?? {};
     if (type !== format || version !== 1 || !name(id))
       throw new TypeError('Use a version 1 mesh topology document with a mesh ID');
     const shading = shadingSettings(authoredShading), skin = skinSettings(authoredSkin), vertices = new Map(), uvBindings=MaterialUV.bindings(inputBindings);
+    const uvPivots = MaterialUV.pivots(inputPivots);
     for (const [key, { position, weights }] of index(inputVertices, 'Vertices')) {
       if (!vector(position, 3, value => Number.isFinite(value) && Number.isFinite(Math.fround(value))))
         throw new RangeError('Vertex ' + key + ' needs a finite XYZ position');
@@ -247,7 +249,7 @@ const isMeshSmoothingGroup = value => typeof value === 'string' && Boolean(value
       throw new RangeError('A bound UV layout needs authored coordinates on every face');
     const doc = frozen({ format, version, id, vertices: frozen([...vertices.values()]),
       edges: frozen(retainedEdges.map(({ uses, ...edge }) => frozen(edge))), faces: frozen(faces),
-      ...(shading && { shading }), ...(skin && { skin }), ...(uvBindings && {uvBindings}) });
+      ...(shading && { shading }), ...(skin && { skin }), ...(uvBindings && {uvBindings}), ...(uvPivots && {uvPivots}) });
     documents.set(doc, { vertices, triangles, edges: retainedEdges });
     return doc;
   }
@@ -267,7 +269,7 @@ const isMeshSmoothingGroup = value => typeof value === 'string' && Boolean(value
     return [...values.values()];
   }
 
-  function edit(source, { vertices = [], faces = [], removeVertices = [], removeFaces = [], edges = [], shading, uvBindings, skin } = {}) {
+  function edit(source, { vertices = [], faces = [], removeVertices = [], removeFaces = [], edges = [], shading, uvBindings, skin, uvPivots } = {}) {
     const doc = create(source), prior = new Map(doc.vertices.map(row => [row.id, row]));
     const updates = [...index(vertices, 'Updated vertices').values()].map(row => {
       const { id, position, weights = prior.get(row.id)?.weights } = row;
@@ -297,6 +299,7 @@ const isMeshSmoothingGroup = value => typeof value === 'string' && Boolean(value
       if (pending.size) throw new RangeError('No retained or newly created edge ' + pending.values().next().value);
     }
     return build({ ...doc, edges: edgeRows, uvBindings:uvBindings ?? doc.uvBindings, shading: shading === undefined ? doc.shading : shading,
+      uvPivots:uvPivots === undefined ? doc.uvPivots : uvPivots,
       skin: skin === undefined ? doc.skin : skin,
       vertices: apply(doc.vertices, updates, removeVertices, 'vertices'),
       faces: nextFaces
@@ -413,7 +416,9 @@ const isMeshSmoothingGroup = value => typeof value === 'string' && Boolean(value
   function revision(source) {
     const doc = create(source);
     if (!revisions.has(doc)) {
-      const text = JSON.stringify(doc), { hash } = K.procedural.data;
+      // Pivot placement alone leaves revision-checked geometry and UV selections usable.
+      const {uvPivots,...geometry} = doc;
+      const text = JSON.stringify(uvPivots ? geometry : doc), { hash } = K.procedural.data;
       revisions.set(doc, [text.length, hash(text), hash(text, 0x9e3779b9)].map(n => n.toString(36)).join('-'));
     }
     return revisions.get(doc);

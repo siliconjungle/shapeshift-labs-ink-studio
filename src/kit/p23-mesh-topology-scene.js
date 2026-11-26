@@ -258,6 +258,9 @@
     }
     const oldBakes = (before?.bakes ?? []).map(bakeState), newBakes = (after?.bakes ?? []).map(bakeState);
     changes.bakes = recordsChanged(index(oldBakes, 'Mesh bakes'), index(newBakes, 'Mesh bakes'));
+    const oldPivots = before?.document.uvPivots, newPivots = after?.document.uvPivots;
+    if (!same(oldPivots,newPivots)) changes.uvPivots = recordsChanged(new Map(Object.entries(oldPivots ?? {})),
+      new Map(Object.entries(newPivots ?? {}))).map(({id,...row})=>({uvSet:+id,...row}));
     if (before?.shapeKeys || after?.shapeKeys)
       changes.shapeKeys=recordsChanged(index(before?.shapeKeys?.keys??[],'Mesh shape keys'),
         index(after?.shapeKeys?.keys??[],'Mesh shape keys'));

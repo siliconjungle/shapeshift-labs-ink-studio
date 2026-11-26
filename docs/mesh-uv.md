@@ -1425,6 +1425,46 @@ resulting layout. For a retained scene mesh, add `--object ID` and write the
 revised scene beside the source. The scene editor journals the change in
 one undo step and invalidates material bakes for faces whose UVs moved.
 
+### Set a dedicated UV pivot
+
+Add a `set-pivot` operation to a UV edit request. It stores one normalized
+pivot for the selected UV set. Choose the target in the request.
+
+| Target | Placement |
+| --- | --- |
+| `{ "kind": "selection-center", "selection": savedSelection }` | Center of the selected corners' UV bounds. The saved selection can address corners, edges, faces, or islands. |
+| `{ "kind": "pinned", "corner": "panel/corner-0" }` | Exact coordinates of a corner pinned in the active layout. |
+| `{ "kind": "corner", "corner": "panel/corner-1" }` | Snap to an exact corner. Use a saved single-corner pick as `selection` in place of the ID. |
+| `{ "kind": "point", "uv": [0.25, 0.75] }` | Store an explicit normalized coordinate. |
+| `null` | Clear the dedicated pivot for this layout. |
+
+```json
+{
+  "uvSet": "pigment",
+  "operations": [
+    { "op": "set-pivot", "target": { "kind": "pinned", "corner": "panel/corner-0" } }
+  ]
+}
+```
+
+Pick a corner in the [atlas or model](#select-in-the-atlas-or-on-the-model)
+and save that selection to use the snapped target. Placement samples the
+anchor once. The stored pivot stays at that coordinate until it is set
+again or cleared. The layout report and the atlas preview show its
+position. Placement leaves the UVs and geometry revision intact, so saved
+selections can drive a later transform or a transform in the same request.
+
+An island transform uses its explicit `pivot` first, then the dedicated
+pivot. With neither, each island rotates or scales around its own bounds
+center. The transform receipt records the pivot applied to every island.
+UV pins still constrain the resulting move.
+
+```sh
+ink-studio mesh-uv edit field-case.json pivot.json --object box --preview pivot-review
+ink-studio mesh-uv edit field-case.json pivot.json --object box --out pivoted.json --report pivot-receipt.json
+node examples/tileset-pick/uv-pivot-demo.cjs uv-pivot-review
+```
+
 ### Move overlapping UV corners
 
 Use `move-corners` with an explicit scope and a normalized UV
