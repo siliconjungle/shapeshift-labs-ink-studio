@@ -775,6 +775,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   strand-pixel <id> --at x,y [--t seconds] [--previous seconds]   inspect visible strand hits on the native art grid
   strand-review <id> --w 160 --h 96 [--curve-quality file.json] [--from 0 --to 3 --camera-orbit 20] [--out directory]
   export-deep <id> [--t 0,1,2] [--layers 16] [--reflection id] --out file.exr|directory   export native deep OpenEXR
+  deep-shot inspect <plate.exr> [--pixel x,y --out receipt.json]   inspect native deep samples
+  deep-shot run <plan.json> --out directory   align, edit and composite a deep shot sequence
+  deep-shot operators   list native deep effect operators and their parameters
   export-layers <id> [--t 0,1,2 | --from 0 --to 2 --n 3] [--part-motion on] [--compositing file.json] [--out directory]   export RGBA and compositing layers
   export-scene <scene|world|take> --out directory [--formats still,loop,replay,embed]
     --audio soundtrack.json [--mux CODEC --adapters host.cjs]   export aligned WAV stems and optional video

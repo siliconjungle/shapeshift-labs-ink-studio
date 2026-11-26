@@ -93,6 +93,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.httpJsonAdapter` | function | `(location, { maxBytes = 1048576, timeout = 5000, headers = {} } = {})` | [guide](../graph-media.md#optional-host-adapters), [source](../../cli/graph-host.js) |
 | `node.importAxF` | function | `(bytes, options)` | [guide](../measured-materials.md#optional-axf-exchange), [source](../../cli/axf-material-adapter.js) |
 | `node.inspectBakeJob` | function | `(file,{signal=new AbortController().signal,...settings}={})` | [guide](../bake-jobs.md), [source](../../cli/bake-jobs.js) |
+| `node.inspectDeepPlate` | function | `(file, { pixel } = {})` | [guide](../deep-shot.md), [source](../../cli/deep-shot.js) |
 | `node.inspectEffectPixel` | function | `(world, { at, ...view } = {})` | [guide](../material-response.md#inspect-a-pixel), [source](../../cli/render.js) |
 | `node.inspectEnvironment` | function | `(world, options = {})` | [guide](../environment-inspector.md), [source](../../cli/environment-inspector.js) |
 | `node.inspectMaterialParameters` | function | `(source, { inputs, instance, kit = require('../index.js').load() } = {})` | [guide](../editable-material-graph.md#expose-and-reset-material-parameters), [source](../../cli/material-parameters.js) |
@@ -107,6 +108,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.lint` | function | `(files)` | [source](../../scripts/lint.js) |
 | `node.lint.CODEY` | value | `array` |  |
 | `node.lint.commentStart` | function | `(line, st)` | [source](../../scripts/lint.js) |
+| `node.listDeepEffects` | function | `(rows = registry())` | [source](../../cli/deep-shot-effects.js) |
 | `node.listGraphNodes` | function | `(settings = {})` | [guide](../headless-authoring.md#discover-registered-nodes), [source](../../cli/graph-catalog.js) |
 | `node.load` | function | `()` | [guide](../../README.md#using-the-library-in-node), [guide](../../README.md#importing-meshes), [guide](../animation-timeline.md#library), [guide](../art-passes.md#art-pixel-effects), [guide](../bounce-probes.md#use-bounce-in-a-palette-or-shot), [source](../../index.js) |
 | `node.loadSoundPack` | function | `(id)` | [source](../../cli/music-sound-library.js) |
@@ -146,6 +148,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.readAssetRevisionPart` | function | `(file, instance, placement, { onFile, decodeImage } = {})` | [source](../../cli/gltf-asset.js) |
 | `node.readAudiovisualTake` | function | `(file,{kit=require('../index.js').load(),...options}={})` | [guide](../audiovisual-takes.md#library), [source](../../cli/audiovisual-take.js) |
 | `node.readDataInputs` | function | `(file)` | [source](../../index.js) |
+| `node.readDeepEXR` | function | `(input, { sampleBudget = maxSlots } = {})` | [guide](../deep-openexr.md), [source](../../cli/deep-openexr.js) |
 | `node.readEffectClip` | function | `(file,options={})` | [guide](../effect-clips.md#run-headlessly-and-reuse-a-group), [source](../../cli/effect-clip.js) |
 | `node.readEnvironmentImage` | function | `(id, file)` | [guide](../environment-packs.md#package-artwork-and-revise-a-pack), [source](../../cli/horizon-bands.js) |
 | `node.readGaussianGltf` | function | `(file, { optional, onFile, decodeImage, ...options } = {})` | [guide](../gaussian-gltf.md#api), [source](../../cli/gltf-asset.js) |
@@ -206,6 +209,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.roomImpulseCapture.split` | function | `(response,edit)` | [guide](../room-impulse-capture.md), [source](../../src/room-impulse-capture.js) |
 | `node.roomImpulseCapture.sweep` | function | `(options={})` | [guide](../room-impulse-capture.md), [source](../../src/room-impulse-capture.js) |
 | `node.runBakeJob` | function | `(file,{directory,signal=new AbortController().signal,onProgress,...settings}={})` | [guide](../bake-jobs.md), [source](../../cli/bake-jobs.js) |
+| `node.runDeepShot` | function | `(file, { out, operators } = {})` | [guide](../deep-shot.md#register-a-node-effect), [guide](../deep-shot.md), [source](../../cli/deep-shot.js) |
 | `node.runReferenceExperiments` | function | `({ kit = module.exports.load(), ...options } = {})` | [guide](../reference-experiments.md), [source](../../index.js) |
 | `node.sampleReframe` | function | `(delivery, time)` | [guide](../subject-reframe.md), [source](../../cli/subject-reframe.js) |
 | `node.sampleSceneReplay` | function | `(document, seconds = 0, { loop = false } = {})` | [source](../../cli/scene-replay.js) |
