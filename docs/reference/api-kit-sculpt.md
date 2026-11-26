@@ -13,9 +13,11 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.sculpt().adaptiveSampling` | value | `boolean` | [guide](../../README.md#geometry-and-materials) |
 | `KIT.sculpt().add` | function | `(p, mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().addSurfacePigment` | function | `(entity, id, sample)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
+| `KIT.sculpt().addSurfaceRelief` | function | `(entity, sample)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().amb` | value | `number` | [guide](../../README.md#geometry-and-materials) |
 | `KIT.sculpt().aoK` | value | `number` | [guide](../../README.md#geometry-and-materials) |
 | `KIT.sculpt().aoR` | value | `number` | [guide](../../README.md#geometry-and-materials) |
+| `KIT.sculpt().applyPaintRecesses` | function | `(recesses)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().attr` | function | `(name, fn)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().bake` | function | `()` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().ball` | function | `(c, r, mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
@@ -82,6 +84,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.sculpt().rock` | function | `(c, r, mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().rough` | function | `(p0, fn, amp, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/kit/k3-shapes.js) |
 | `KIT.sculpt().sdf` | function | `(x, y, z)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
+| `KIT.sculpt().sdf.forShadow` | function | `(x, y, z)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().seen` | function | `(p, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/kit/k3-shapes.js) |
 | `KIT.sculpt().shEmptySpace` | value | `string` | [guide](../../README.md#geometry-and-materials) |
 | `KIT.sculpt().shK` | value | `number` | [guide](../../README.md#geometry-and-materials) |

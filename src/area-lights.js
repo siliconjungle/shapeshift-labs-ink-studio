@@ -266,7 +266,10 @@ const AreaLights = (() => {
               !world.anim?.rig?.bid?.[i];
           }
         }
-      if (current) sources.push(source);
+      if (current) {
+        const casters = source.shadowGeometry === undefined ? source : source.shadowGeometry;
+        if (casters) sources.push(casters);
+      }
     }
     return sources;
   }
