@@ -640,7 +640,8 @@
   const tileSampler=TypedTileSampler({tileGenerator,fields,requireImage,integerMax,convertColor,sampler:spatialSampler,
     hash:P.data.hash,hash01:P.data.hash01});
   const splatterBake=TypedShapeSplatter({V:KIT.V,M:KIT.M,planar:P.shapeLibrary.compile,
-    volume:(source,time)=>({box:P.sceneGraph.sdfExtent(source),read:P.sceneGraph.sdfSampler(source,time)}),
+    volume:(source,time)=>({box:P.sceneGraph.sdfExtent(source),read:P.sceneGraph.sdfSampler(source,time),
+      tags:P.sceneGraph.sdfTags(source,time)}),tagCatalog:sources=>P.sceneGraph.sdfTagCatalog(sources),
     scatter:options=>P.sampling.grid(options),descriptor,wrap,dimensions,fields,freeze:P.data.freeze,
     requireImage,integerMax,sampler:spatialSampler,hash:P.data.hash,hash01:P.data.hash01});
   const scatterMappers=TypedScatterMappers({requireImage,alignedGrid,descriptor,wrap,pack,storage,integerMax,convertColor,
@@ -1032,7 +1033,8 @@
         volumes:{type:'array<field>',default:[]},background:optional,density:optional,mask:optional,clip:optional,
         time:{type:'seconds',default:0},options:correctionOptions,edits:correctionOptions},
       outputs:{value:'heightImage',normal:'normalImage',instanceId:'typedImage',shapeId:'typedImage',
-        uv:'typedImage',coverage:'typedImage',layout:'record',surface:scatterSource},
+        uv:'typedImage',coverage:'typedImage',objectId:'typedImage',materialId:'typedImage',pigment:'colorImage',
+        layout:'record',surface:scatterSource},
       run({width,height,columns,rows,shapes,volumes,options,time,edits,...maps},{seed}) {
         return shapeSplatter(width,height,columns,rows,shapes,volumes,maps,options,seed,time,edits);
       }

@@ -85,7 +85,8 @@
         const fnOp = Object.hasOwn(fn.operations,spec.op) && fn.operations[spec.op] === template;
         const typedValue = spec.op === 'data.typed' && template === P.graph.arrays.operations['data.typed'] && fn.validType(spec.type);
         const fnCall = Object.hasOwn(groups,spec.op) && groups[spec.op] === template && fn.validResultType(template?.functionResult);
-        if (!fnOp && !typedValue && !fnCall)
+        const sdfOp = Object.hasOwn(P.sceneGraph.sdfOperations,spec.op) && P.sceneGraph.sdfOperations[spec.op] === template;
+        if (!fnOp && !typedValue && !fnCall && !sdfOp)
           throw new TypeError('Function graph node ' + name + ' needs a pure value operation or declared function call: ' + spec.op);
       }
       const operation = template?.specialize ? template.specialize(spec,groups) : template;

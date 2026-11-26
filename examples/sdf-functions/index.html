@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Moonlock · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--bg:#14131c;--panel:#211f2b;--screen:#171823;--edge:#413a4b;--text:#f3e5dc;--muted:#bbb0c4;--amber:#f0c484;--aqua:#8dd6c2}
+*{box-sizing:border-box}
+body{min-height:100vh;margin:0;background:radial-gradient(ellipse at 25% -18%,#493447,transparent 62%),var(--bg);color:var(--text);font:14px/1.4 system-ui,sans-serif}
+main{max-width:1218px;margin:auto;padding:35px clamp(16px,4vw,52px) 28px}
+header{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:23px}
+h1,h2,p{margin:0}h1,h2{font-family:Georgia,serif;font-weight:400}
+h1{font-size:clamp(59px,8vw,92px);line-height:.94;letter-spacing:-.071em;margin:6px 0 10px}
+h2{font-size:25px;letter-spacing:-.034em;line-height:1.12}
+p{color:var(--muted)}
+.eyebrow,output,small{font:11px ui-monospace,monospace;letter-spacing:.045em}
+.eyebrow{text-transform:uppercase;color:var(--amber)}
+output,small{color:var(--aqua)}
+.layout{display:grid;grid-template-columns:minmax(0,1.95fr) minmax(285px,1fr);align-items:start;gap:14px}
+.side{display:grid;gap:14px}
+.card{border:1px solid var(--edge);border-radius:9px;background:var(--panel);overflow:hidden}
+.card-head{padding:12px 15px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.canvas{background:var(--screen);display:grid;place-items:center;position:relative;border-block:1px solid #352f41}
+.orbit{min-height:432px;background:radial-gradient(ellipse,#3e3450,#262339 59%,#191a29 85%)}
+.orbit::before,.orbit::after{content:"";position:absolute;inset:15px;pointer-events:none}
+.orbit::before{border:1px solid #82749431;background:linear-gradient(90deg,transparent calc(50% - .5px),#ab9bb11c 50%,transparent calc(50% + .5px)),linear-gradient(0deg,transparent calc(50% - .5px),#ab9bb11c 50%,transparent calc(50% + .5px))}
+.orbit::after{inset:14px;background:
+  linear-gradient(var(--amber),var(--amber)) left top/7px 1px,
+  linear-gradient(var(--amber),var(--amber)) left top/1px 7px,
+  linear-gradient(var(--amber),var(--amber)) right bottom/7px 1px,
+  linear-gradient(var(--amber),var(--amber)) right bottom/1px 7px;background-repeat:no-repeat}
+canvas{display:block;image-rendering:pixelated;position:relative;max-width:100%;height:auto}
+#orbit{width:576px;cursor:grab;touch-action:none}
+#orbit[data-dragging=true]{cursor:grabbing}
+#slice{width:144px}
+#tile{width:224px}
+.specimen{min-height:158px;background:radial-gradient(ellipse,#37324a,#202031 76%)}
+.scatter{min-height:208px;background:#171b28}
+.select,button{font:inherit;color:var(--text);background:#312b3a;border:1px solid #675971;border-radius:5px}
+.select{padding:4px}
+button{padding:7px 11px;cursor:pointer}
+button:hover,.select:hover{border-color:var(--amber)}
+:focus-visible{outline:2px solid var(--aqua);outline-offset:3px}
+#download{background:var(--amber);color:#29202b;border-color:var(--amber);font-weight:650;white-space:nowrap}
+.fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px 16px;padding:13px 15px}
+.field{display:grid;grid-template-columns:1fr auto;gap:3px 5px;min-width:0}
+.field label{color:var(--muted);font-size:12px}
+.field input{grid-column:1/-1;width:100%;min-width:0;margin:0}
+input{accent-color:var(--amber)}
+.foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 15px;border-top:1px solid var(--edge);min-height:42px}
+.foot p{font-size:12px}.foot output{overflow-wrap:anywhere}
+.sliceField{padding:9px 15px}
+.key{display:flex;flex-wrap:wrap;gap:7px 14px;padding:12px 1px 0;color:var(--muted);font-size:11px}
+.swatch{display:inline-flex;gap:5px;align-items:center;text-transform:capitalize}
+.swatch i{display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--color);border:1px solid #ffffff42}
+#status{margin-top:6px;color:#ffaea5;font-size:12px}#status:empty{display:none}
+@media(max-width:1060px){.orbit{min-height:324px}#orbit{width:432px}.fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:800px){main{padding-top:24px}header{align-items:start;flex-direction:column}h1{margin-top:5px}.layout{grid-template-columns:1fr}.side{grid-template-columns:1fr 1fr}.foot p{font-size:11px}}
+@media(max-width:500px){#orbit{width:288px}.orbit{min-height:216px}.side{grid-template-columns:1fr}.foot{align-items:start}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <span class="eyebrow">Ink Studio · SDF functions</span>
+      <h1>Moonlock</h1>
+      <p>One editable field drives the orbit, cross-section and relief pattern.</p>
+    </div>
+    <button id="download" type="button">Download material</button>
+  </header>
+  <div class="layout">
+    <section class="card" aria-label="Orbit preview">
+      <div class="card-head">
+        <h2>Orbit</h2>
+        <select id="orbitMode" class="select" aria-label="Orbit pass">
+          <option value="color">Shaded</option>
+          <option value="material">Material IDs</option>
+          <option value="object">Object IDs</option>
+        </select>
+      </div>
+      <div class="canvas orbit">
+        <canvas id="orbit" width="144" height="108" tabindex="0" aria-label="Moonlock. Drag to orbit or use the arrow keys. Hover to inspect the surface."></canvas>
+      </div>
+      <div class="fields" id="controls"></div>
+      <div class="foot">
+        <div><p>Surface under cursor</p><output id="surface">—</output></div>
+        <button id="reset" type="button">Reset</button>
+      </div>
+    </section>
+    <div class="side">
+      <section class="card" aria-label="Cross-section preview">
+        <div class="card-head">
+          <h2>Cross-section</h2>
+          <select id="sliceMode" class="select" aria-label="Cross-section pass">
+            <option value="color">Pigment</option>
+            <option value="material">Material IDs</option>
+          </select>
+        </div>
+        <div class="canvas specimen"><canvas id="slice" width="72" height="72" aria-label="Selected horizontal section"></canvas></div>
+        <div class="sliceField field">
+          <label for="sliceIndex">Slice height</label><output for="sliceIndex" id="sliceLevel"></output>
+          <input id="sliceIndex" type="range" min="0" max="22" value="17">
+        </div>
+      </section>
+      <section class="card" aria-label="Relief preview">
+        <div class="card-head">
+          <h2>Relief pattern</h2>
+          <select id="scatterMode" class="select" aria-label="Relief pass">
+            <option value="color">Pigment</option>
+            <option value="height">Height</option>
+            <option value="material">Material IDs</option>
+          </select>
+        </div>
+        <div class="canvas scatter"><canvas id="tile" width="112" height="96" aria-label="Volumetric scatter on a repeating tile"></canvas></div>
+        <div class="foot"><p>Stamp instances</p><output id="stampCount"></output></div>
+      </section>
+    </div>
+  </div>
+  <div class="key" id="swatches" aria-label="Material colors"></div>
+  <p id="status" role="alert"></p>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="data.js"></script>
+<script src="live.js"></script>
+</body>
+</html>

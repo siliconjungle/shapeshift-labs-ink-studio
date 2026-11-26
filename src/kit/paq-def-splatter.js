@@ -1,5 +1,5 @@
 /* Scatter signed relief assets and resolve one coherent top surface on the native material grid. */
-const TypedShapeSplatter = ({V,M,planar,volume,scatter,descriptor,wrap,dimensions,fields,freeze,
+const TypedShapeSplatter = ({V,M,planar,volume,tagCatalog,scatter,descriptor,wrap,dimensions,fields,freeze,
   requireImage,integerMax,sampler,hash,hash01}) => {
   const geometry=SplatterGeometry({V,M,planar,volume}), up=[0,1,0], phaseUnits=2**40;
   const streams=['layout','density','shape','scale','rotation','height'];
@@ -164,6 +164,8 @@ const TypedShapeSplatter = ({V,M,planar,volume,scatter,descriptor,wrap,dimension
     const tiling={u:attrs[0],v:attrs[1]}, pixelPitchMm=units==='mm'?spacing:undefined;
     const yMap=new Float32Array(count), normals=new Float32Array(count*3), uv=new Float32Array(count*2);
     const coverage=new Float32Array(count), instanceId=new Float32Array(count), shapeId=new Float32Array(count);
+    const {objects,materials,objectIndex,materialIndex}=tagCatalog(volumes);
+    const objectId=new Float32Array(count), materialId=new Float32Array(count), pigment=new Float32Array(count*4);
     const at=project(bins,columns,rows,ground,cut,config);
     for(let y=0,p=0;y<height;y++)for(let x=0;x<width;x++,p++){
       const center=at(left+(x+.5)*du,top+(y+.5)*dv);
@@ -189,6 +191,14 @@ const TypedShapeSplatter = ({V,M,planar,volume,scatter,descriptor,wrap,dimension
         direction=geometry.normal(asset,q,config.epsilon);
         uv.set(geometry.uv(asset.shape,q,config.uv),2*p);
         instanceId[p]=asset.id; shapeId[p]=asset.shapeId;
+        const tags=asset.shape.tags?.(q);
+        if (tags) {
+          objectId[p]=objectIndex.get(tags.objectId); materialId[p]=materialIndex.get(tags.materialId);
+          if (tags.color) {
+            pigment.set(tags.color,p*4);
+            pigment[p*4+3]=coverage[p];
+          }
+        }
       } else direction=ground.normal(center.u,center.v);
       normals.set([direction[0],orientation==='directx'?direction[2]:-direction[2],direction[1]],3*p);
     }
@@ -198,7 +208,9 @@ const TypedShapeSplatter = ({V,M,planar,volume,scatter,descriptor,wrap,dimension
     }
     return {value:image(yMap,1,'height',{units}),normal:image(normals,3,'normal',{normalSpace:'tangent',normalOrientation:orientation}),
       instanceId:image(instanceId,1,'data'),shapeId:image(shapeId,1,'data'),uv:image(uv,2,'data',{units:'uv'}),
-      coverage:image(coverage,1,'mask'),layout:freeze({...layout,spacing,trace:{steps,epsilon:config.epsilon,samples},uv:config.uv})};
+      coverage:image(coverage,1,'mask'),objectId:image(objectId,1,'data'),materialId:image(materialId,1,'data'),
+      pigment:image(pigment,4,'color',{colorSpace:'srgb'}),
+      layout:freeze({...layout,spacing,objects,materials,trace:{steps,epsilon:config.epsilon,samples},uv:config.uv})};
   }
   return generate;
 };
