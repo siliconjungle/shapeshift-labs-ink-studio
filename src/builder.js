@@ -250,12 +250,14 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
 
   function describePaintFinish(first, end, row, spills) {
     const stride = PaintFinish.stride;
-    if (!paintFinish || paintFinish.length < end * stride) {
-      const next = new Float32Array(Math.max(256, 2 * (paintFinish?.length ?? 0), end * stride));
-      if (paintFinish) next.set(paintFinish);
-      paintFinish = next;
+    if (row) {
+      if (!paintFinish || paintFinish.length < end * stride) {
+        const next = new Float32Array(Math.max(256, 2 * (paintFinish?.length ?? 0), end * stride));
+        if (paintFinish) next.set(paintFinish);
+        paintFinish = next;
+      }
+      for (let i = first; i < end; i++) paintFinish.set(row, i * stride);
     }
-    for (let i = first; i < end; i++) paintFinish.set(row, i * stride);
     for (const [id, spill, weight] of spills ?? []) {
       if (!paintSpills.has(id)) paintSpills.set(id, { id, spill, rows: [] });
       paintSpills.get(id).rows.push(first, weight);

@@ -217,7 +217,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   sculpt-guide inspect <scene.json>   report generated copies and placements
   painting-3d plan <scene.json> <placement.json>   validate attachment slots and mark contacts
   painting-3d apply <scene.json> <placement.json> --out scene.json   retain a 3D painting
-  painting-3d update <scene.json> <edit.json> --out scene.json   edit marks, profiles, order or placement
+  painting-3d update <scene.json> <edit.json> --out scene.json   edit marks, profiles, erasers, order or placement
   painting-3d inspect <scene.json>   report marks and resolved attachments
   painting-3d extract <scene.json> --id painting --out painting.json   export a reusable painting
   sculpt-spray plan <scene.json> <brush.json>   capture receivers for a volumetric paint brush
@@ -538,7 +538,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   character-rig preview <rig.json> <binding.json> <pose.json> [--view view.json] --out directory   render and capture a bound pose
   character-motion catalog <rig.json> <motion.json> [--out index.json]   list clips, controls and resolved contact windows
   character-motion sample <rig.json> <motion.json> <clip> [--at seconds --out pose.json --free --require-solved]   mix clips and solve contacts
-  character-motion edit <rig.json> <motion.json> <edits.json> --out motion.json   edit curve keys or key saved rig controls
+  character-motion edit <rig.json> <motion.json> <edits.json> --out motion.json   edit keys, saved rig controls or layer erasers
   character-motion retarget <rig.json> <motion.json> <clip> <target-rig.json> <plan.json> --out motion.json [--report report.json --require-solved]   bake editable controls with transferred contacts
   skinned-crowd bake <plan.json> --out take.json [--require-contacts]   bake skinned agents, tissue, terrain contact and ragdoll poses
   skinned-crowd sample <plan.json> <take.json> [--frame N --out frame.json]   export the visible posed surfaces and diagnostics
