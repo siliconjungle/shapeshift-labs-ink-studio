@@ -502,6 +502,7 @@ function renderFrame(world, o, preparedPalettes) {
   const captureQuantization = styled && o.captureQuantization === true;
   const captureStages = styled && o.captureColorStages === true;
   const captureBasePaint = o.captureBasePaint === true && !o.samples && !o.captureCoverage;
+  const capturePaintFinish = captureBasePaint && o.capturePaintFinish === true && !probeView && !o.reflectionPlane;
   const lookInputs = !o.raw && (o.lookInputSession ?? LookInputs.session(t, () =>
     world.lookSnapshot?.query ?? world.surfaceEffects?.query ?? require('../index.js').load().KIT.world.query.fromScene(world, t)));
   const lookOptions = { palette: world.pal, roles: world.paletteRoles, context: world.surfaceEffects, lookInputs,
@@ -815,6 +816,7 @@ function renderFrame(world, o, preparedPalettes) {
     }
     if (o.captureScenePalette) frame.scenePalette = legacyLook && !tone ? basePalette : null;
     if (!o.captureMotion && !o.capturePartMotion && !o.captureStrandMotion && !o.captureSurfaceMotion) delete frame.motionReference;
+    if (capturePaintFinish && passes?.paintFinish) frame.paintFinish = passes.paintFinish;
     if (requestedPasses.length) frame.passes = ArtPasses.subset(requestedPasses.includes('inkMask') ?
       { w:frame.w, h:frame.h, ...passes, inkMask:frame.inkMask ?? new Uint8Array(frame.w*frame.h) } : passes,
       requestedPasses);
@@ -1237,6 +1239,7 @@ function renderFrame(world, o, preparedPalettes) {
   if (localProjectionHits) for (const sample of surfaceFragments) if (sample.localProjection) localProjectionHits[sample.p]=1;
   const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip,
     editable:sdfBrickFrames,sourceBinding:captureSourceSurface || !!pixelSelection,allow:isolate?.matches,coverage:fittedCoverage,
+    capturePaintFinish,
     overrideRows:sdfOverrides.length ? sdfOverrides : undefined,
     captureRestNormal:passSelection.has('sourceRestNormal'),trackSdf:trackFields && ((field,point)=>trackFields.set(JSON.stringify(field),point)),
     visible:geometryMask ? (row,x,y)=>spriteLOD.geometry(geometryMask.codes[row],x,y) : undefined}) : null;
@@ -3621,8 +3624,17 @@ function renderFrame(world, o, preparedPalettes) {
   }
   const effectSignals = effectRules && { rules: effectRules, sky: showSky && !!sky, backdropCloud, media: effectMedia,
     haze: hazeCoverage, darkAt: EffectPalettes.bindDarks(effectRules,world) };
+  function reviewPaintFinish(i, position, hit) {
+    const curve = i >= 0 ? world.curveMaterials?.[i * CurveSplat.materialStride] : 0;
+    const roughness = hit?.semantic?.roughness ?? hit?.paintFinish?.roughness ??
+      (curve ? curve - 1 : i >= 0 ? world.splatRoughness?.[i] ?? surface?.reviewRoughness(i) : undefined);
+    const metalness = hit?.semantic?.metalness ?? hit?.paintFinish?.metalness;
+    const material = hit?.pbrMaterial ?? (i >= 0 ? pbrTargets?.(i) : undefined);
+    return PbrMaterials.finish(pbr, material, position, roughness, metalness);
+  }
   let passes = art?.finalize(world, t, { x: X, y: Y, z: Z, scale:SC, rayAt, span: R,
     detail, sprM, surfaceGlint, centers, ditherView, motionFrom:o.resetRenderHistory ? undefined : o.surfaceMotionFrom ?? motionFrom,
+    paintFinish:capturePaintFinish && reviewPaintFinish,
     emissionMotionFrom:motionFrom, motionReference, ditherPixelStep: spatialFade ? artScale : 0,
     surfaceLabels:captureTexturedSurface ? SurfaceRaster.labels(surfaceLayers,brickFrames) : undefined,
     representationLabels:captureTexturedSurface && spriteLOD ? spriteLOD.labels(world) : undefined });

@@ -1594,7 +1594,7 @@ const CMD = {
         '  pixel-art correct <document.json> <plan.json> [--out report.json] [--review review.html] [--apply artifact.json] [--patch edit.json] [--approval digest]   apply approved edits to cels, rest charts, or shot keys',
         '  pixel-art reprobe <document.json> --binding id --before view.json [--after view.json] --selection id|--rect x,y,w,h [--out report.json] [--invalidate checked.json]   check edited source bindings',
         '  pixel-art multiview <document.json> <plan.json> [--out report.json] [--patch edit.json] [--review review.html]   combine approved view marks on a bound surface',
-        '  pixel-art paint-lighting <scene> [--subject object [--part name]] [--steps N] [--out directory]   review neutral paint, the shot and a moving light',
+        '  pixel-art paint-lighting <scene> [--subject object [--part name]] [--steps N] [--ranges .75,1,1.5] [--out directory]   compare paint, finish and lighting',
         '  pixel-art rules <design.json> [--frame id] [--layer id] [--art-shot id] [--out report.json]   inspect asset art rules and scene settings',
         '  pixel-art lint <design.json> [--frame id] [--art-shot id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings',
         '  pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint',
@@ -4640,21 +4640,25 @@ const CMD = {
       return;
     }
     if (pos[0] === 'paint-lighting') {
-      if (pos.length!==2 || ['subject','part','t','steps','out'].some(key=>opt[key]===true) ||
+      if (pos.length!==2 || ['subject','part','t','steps','ranges','out'].some(key=>opt[key]===true) ||
+          opt.ranges!==undefined && String(opt.ranges).split(',').some(value=>!value.trim()) ||
           opt.part!==undefined && opt.subject===undefined || artPixelSize!==undefined && artPixelSize!==1)
-        die('Use pixel-art paint-lighting <scene> [--subject object [--part name]] [--steps N] [--out directory] at px 1');
+        die('Use pixel-art paint-lighting <scene> [--subject object [--part name]] [--steps N] [--ranges .75,1,1.5] [--out directory] at px 1');
       const Review = require('./paint-lighting-review.js');
       const id=pos[1], t=num('t',0), directory=outputFile('paint-lighting');
       if (!Number.isFinite(t) || t<0) die('Paint lighting needs a finite, nonnegative scene time');
       const input=fs.statSync(path.resolve(id),{throwIfNoEntry:false});
-      const report=fs.statSync(path.join(directory,'review.json'),{throwIfNoEntry:false});
-      if (input && report && input.dev===report.dev && input.ino===report.ino)
+      const outputs = opt.ranges === undefined ? ['review.json'] : ['review.json','review.js','review-data.js','review.html'];
+      if (input && outputs.some(file => {
+        const output = fs.statSync(path.join(directory,file),{throwIfNoEntry:false});
+        return output && input.dev===output.dev && input.ino===output.ino;
+      }))
         die('Choose a paint lighting output directory separate from the scene input');
       const world=require('./look-preview.js').withAlbedo(()=>buildPreview(id));
       pose(world,t);
       const subject=opt.subject===undefined ? undefined : {object:opt.subject,...(opt.part!==undefined&&{part:opt.part})};
       const review=Review.reviewPaintLighting(world,{
-        view:view({w:num('w',160),h:num('h',96),t,px:1}),subject,steps:num('steps',5)
+        view:view({w:num('w',160),h:num('h',96),t,px:1}),subject,steps:num('steps',5),ranges:list('ranges')
       });
       console.log('wrote',Review.writeReview(directory,review));
       return;

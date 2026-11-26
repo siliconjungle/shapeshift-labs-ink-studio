@@ -342,6 +342,12 @@ function surfaceShading(world, options, camera) {
   return {
     has, normalAt, surfaceNormal, planar, environment, shade, palettes, constraints, paletteSlots,
     projected, viewColor, bevel, local, thin, paintsBase: i => materials[surfaceData[i * STRIDE] - 1]?.paintsBase,
+    reviewRoughness(i) {
+      const layers = materialFor(i)?.layers?.filter(layer => layer.type === 'specular');
+      if (layers?.length !== 1) return undefined;
+      const { roughness, mask, drive } = layers[0];
+      if (!mask && !drive && Array.isArray(roughness) && roughness[0] === roughness[1]) return roughness[0];
+    },
     finishBeforeFog: i => materials[surfaceData[i * STRIDE] - 1]?.finishBeforeFog,
     reveals: i => materials[surfaceData[i * STRIDE] - 1]?.reveals
   };
