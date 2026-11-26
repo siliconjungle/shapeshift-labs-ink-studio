@@ -5,7 +5,7 @@
   const record = value => K.world.data.record(value);
   const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
   const name = value => K.world.data.id(value) && /^[a-zA-Z0-9_-]{1,40}$/.test(value);
-  const channels = ['brush', 'step', 'blendRadius', 'pressureResponse', 'looseness', 'direction', 'grid', 'relief', 'finish', 'mat'];
+  const channels = ['brush', 'step', 'blendRadius', 'pressureResponse', 'looseness', 'direction', 'grid', 'relief', 'finish', 'mat', 'boil'];
   const editable = [...channels, 'preset', 'poses', 'path', 'res', 'transform', 'attachment', 'enabled', 'erasers'];
   const resources = ['profiles', 'flowMaps', 'presets'];
 
@@ -40,15 +40,16 @@
         P.markGrid.prepare(grid, flowMaps);
         P.paintRelief.prepare(relief);
         PaintFinish.prepare(style.finish);
+        P.paintBoil.prepare(style.boil);
       } catch (error) {
         throw new RangeError('Brush preset ' + id + ' — ' + error.message, { cause: error });
       }
     }
   }
 
-  function expand(source) {
-    const anchors = new Map(), layers = new Set(), looseness = new Map(), reports = [];
-    if (source?.paintings3d === undefined) return { spec: source, anchors, layers, looseness, reports };
+  function expand(source, time = 0) {
+    const anchors = new Map(), layers = new Set(), looseness = new Map(), boils = new Map(), reports = [];
+    if (source?.paintings3d === undefined) return { spec: source, anchors, layers, looseness, boils, reports };
     const { paintings3d, ...scene } = source;
     if (!Array.isArray(paintings3d) || paintings3d.length > 64 ||
         scene.solids !== undefined && !Array.isArray(scene.solids) || scene.brushRegion != null)
@@ -99,7 +100,7 @@
         const presetStyle = mark.preset === undefined ? {} : readPreset(presets, mark.preset);
         const { id: key, attachment = { kind: 'free' }, transform, enabled = true, looseness: authoredStyle, preset,
           direction: authoredDirection, grid: authoredGrid, relief: authoredRelief, finish: authoredFinish,
-          erasers: authoredErasers, ...stroke } = { ...presetStyle, ...mark };
+          erasers: authoredErasers, boil: authoredBoil, ...stroke } = { ...presetStyle, ...mark };
         if (stroke.mat === undefined && authoredFinish === undefined) throw new TypeError(id + ' mark ' + key + ' needs a material');
         ids.add(key);
         const solid = 'paint.' + id + '.' + key;
@@ -109,8 +110,10 @@
             (attachment.kind === 'free' ? attachment.slot !== undefined : !name(attachment.slot)) ||
             (attachment.kind === 'surface') !== (attachment.snap !== undefined))
           throw new TypeError(solid + ' needs a free, surface or part attachment');
-        let shape, style, direction, grid, relief, finish, erasers;
+        let shape, style, direction, grid, relief, finish, erasers, boil, drawing;
         try {
+          boil = K.procedural.paintBoil.prepare(authoredBoil);
+          if (boil?.active) ({ drawing } = K.procedural.paintBoil.state(boil, time));
           relief = K.procedural.paintRelief.prepare(authoredRelief);
           finish = PaintFinish.prepare(authoredFinish);
           erasers = K.procedural.channelEraser.surface(authoredErasers);
@@ -170,6 +173,7 @@
           }
           layers.add(solid);
           if (style) looseness.set(solid, style);
+          if (boil?.active) boils.set(solid, { plan: boil, drawing });
           marks.push({ ...shape, restAffine, ...(part && { part }) });
           if (marks.length > 4096) throw new RangeError('A scene can render up to 4096 painting marks');
         }
@@ -188,6 +192,7 @@
           ...(grid && { grid: grid.settings }),
           ...(relief && { relief }),
           ...(finish && { finish: authoredFinish }),
+          ...(boil && { boil: authoredBoil, ...(drawing !== undefined && { drawing }) }),
           ...(authoredErasers !== undefined && { erasers: authoredErasers }),
           ...(stroke.step !== undefined && { step: stroke.step }), ...(stroke.blendRadius !== undefined && { blendRadius: stroke.blendRadius }),
           ...(stroke.path !== undefined && { path: stroke.path }), ...(stroke.pressureResponse && { pressureResponse: stroke.pressureResponse }) });
@@ -196,7 +201,7 @@
         throw new RangeError(id + ' has no attachment slot ' + slot);
     }
     // Field ownership breaks a tie in insertion order, so later marks are built first.
-    return { spec: { ...scene, solids: [...solids, ...marks.reverse()] }, anchors, layers, looseness, reports };
+    return { spec: { ...scene, solids: [...solids, ...marks.reverse()] }, anchors, layers, looseness, boils, reports };
   }
 
   function editMarks(painting, edits, previousPresets) {
