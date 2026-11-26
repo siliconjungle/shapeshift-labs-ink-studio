@@ -152,6 +152,8 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
   }
   let ownerRows, materialRows, targetRows, muteEmission, materialAlbedo, materialPixelStyles, opticalSplats;
   let shadingNormals, paintedEmission, inkControls;
+  let paintFinish;
+  const paintSpills = new Map();
   let unnamedOwners = new WeakMap(), unnamedMaterials = new WeakMap();
   const ownerIds = new Map(), materialIds = new Map();
   const ownerNames = [null], materialNames = [null];
@@ -246,6 +248,20 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     inkControls=write(inkControls,controls);
   }
 
+  function describePaintFinish(first, end, row, spills) {
+    const stride = PaintFinish.stride;
+    if (!paintFinish || paintFinish.length < end * stride) {
+      const next = new Float32Array(Math.max(256, 2 * (paintFinish?.length ?? 0), end * stride));
+      if (paintFinish) next.set(paintFinish);
+      paintFinish = next;
+    }
+    for (let i = first; i < end; i++) paintFinish.set(row, i * stride);
+    for (const [id, spill, weight] of spills ?? []) {
+      if (!paintSpills.has(id)) paintSpills.set(id, { id, spill, rows: [] });
+      paintSpills.get(id).rows.push(first, weight);
+    }
+  }
+
   function describeSplats(first, end, { object, material, target } = {}) {
     if (!renderMetadata || first === end) return;
     if (!Number.isSafeInteger(first) || !Number.isSafeInteger(end) || first < 0 || end < first || end > n)
@@ -292,6 +308,8 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
       ...(shadingNormals && {shadingNormals:Float32Array.from({length:n*3},(_,i)=>shadingNormals[i]??0)}),
       ...(paintedEmission && {paintedEmission:Float32Array.from({length:n*3},(_,i)=>paintedEmission[i]??0)}),
       ...(inkControls && {inkControls:Float32Array.from({length:n*4},(_,i)=>inkControls[i]??0)}),
+      ...(paintFinish && { paintFinish: paintFinish.slice(0, n * PaintFinish.stride) }),
+      ...(paintSpills.size && { paintSpills: [...paintSpills.values()] }),
       muteEmission: muteEmission?.slice(0, n),
       objectIds: ownerRows?.slice(0, n),
       materialIds: materialRows?.slice(0, n),
@@ -1289,6 +1307,8 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     engravingRanges=undefined;
     ownerRows = materialRows = muteEmission = materialAlbedo = materialPixelStyles = opticalSplats = undefined;
     shadingNormals = paintedEmission = inkControls = undefined;
+    paintFinish = undefined;
+    paintSpills.clear();
     unnamedOwners = new WeakMap();
     unnamedMaterials = new WeakMap();
     ownerIds.clear();
@@ -1345,6 +1365,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     describeSplats: renderMetadata ? describeSplats : undefined,
     describeAlbedo,
     describePaintedShading,
+    describePaintFinish,
     describePixelStyle,
     describeFootprint,
     describeEngraving,

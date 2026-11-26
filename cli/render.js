@@ -106,6 +106,7 @@ const ProbeLighting = require('./bounce-probes.js');
 const AreaLights = require('../src/area-lights.js');
 const ShotLighting = require('../src/shot-lighting.js');
 const EmissiveFinishes = require('../src/emissive-finishes.js');
+const PaintFinish = require('../src/paint-finish.js');
 const LightingChannels = require('../src/lighting-channels.js');
 const AreaRaster = require('./area-lights.js');
 const ShadowCutouts = require('../src/shadow-cutouts.js');
@@ -1338,7 +1339,8 @@ function renderFrame(world, o, preparedPalettes) {
     ...depthBands.filter(band=>band.density>0).map(band=>band.depth[1]+depthOffset));
   const volumeLighting = o.volumeLighting ?? world.volumeLighting ?? (areaLights.length?{}:undefined);
   let localLighting;
-  const cutoutsForLight = areaLights.length || volumeLighting ? ShadowCutouts.prepare(world, {
+  const paintedSpills = o.areaLights !== false && world.renderMetadata?.paintSpills;
+  const cutoutsForLight = areaLights.length || volumeLighting || paintedSpills?.length ? ShadowCutouts.prepare(world, {
     time: t, interfaceTime: o.interfaceTime, enabled: o.cutoutShadows !== false, shadowShells: o.shadowShells,
     surfaces: o.spriteSurfaces === false ? false : spriteSurfaces,
     sprites: spriteAtlases, atlasMode: o.spriteAtlasMode
@@ -1728,7 +1730,12 @@ function renderFrame(world, o, preparedPalettes) {
   }
   const fitAlpha = (alpha,row)=>fittedCoverage?.[row]<1 ? Math.min(1,alpha)*fittedCoverage[row] : alpha;
   const occluderAlpha = fittedCoverage ? AL.map(fitAlpha) : AL;
-  const spillLights = o.areaLights === false ? [] : EmissiveFinishes.spillLights(emissive, { x:X, y:Y, z:Z, alpha:AL });
+  const spillPose = { x:X, y:Y, z:Z, alpha:AL };
+  const spillLights = o.areaLights === false ? [] : EmissiveFinishes.spillLights(emissive, spillPose);
+  if (paintedSpills?.length) {
+    const frames = sampleFrames(world, t);
+    spillLights.push(...PaintFinish.spillLights(paintedSpills, spillPose, i => frames(i).normal));
+  }
   const probes = ProbeLighting.create(world, o.bounceProbes, baseSky, sun, o[reconstructionSource], {
     time: t, emissiveTime: motion.emissive, lights: [...areaLights, ...spillLights], dynamic: o.dynamicBounce,
     bounceScale:shotLighting?.bounceScale, lighting:artLighting, spill:spillLights
@@ -2173,6 +2180,8 @@ function renderFrame(world, o, preparedPalettes) {
     let stageBase = paintStage && sprite.surface && !sprite.effect && i < 0 ? color : undefined;
     if (i>=0) {
       const pbrMaterial = pbrTargets && pbrTargets(i);
+      const paintedFinish = PaintFinish.at(renderMeta?.paintFinish, i);
+      const finishEmission = !renderMeta?.muteEmission?.[i] && PaintFinish.emission(paintedFinish);
       const packed=sprite.row.baseColor ?? d[i*16+7];
       color=live?.albedo(i) ?? fitPigment?.(i) ?? [(packed&255)/255, (packed>>8&255)/255, (packed>>16)/255];
       if (pbrMaterial) color=baseReference(i) ?? color;
@@ -2208,12 +2217,16 @@ function renderFrame(world, o, preparedPalettes) {
         const gain = contact.sample(receiver, sprite.p, position, sprite.normal);
         color = color.map(value => value*gain);
       }
-      if (pbrMaterial) color=PbrMaterials.shade(pbr,pbrMaterial,{
+      if (pbrMaterial) {
+        color=PbrMaterials.shade(pbr,pbrMaterial,{
         color:physicalPigment,position,restPosition:pbrRestPosition(pbrMaterial,i,position),normal:sprite.normal,roughness:world.splatRoughness?.[i],
         receiveShadow:pbr.shadows?.receives?.(i),
         highlightSamples:pbrPlaneSamples(sprite.p%W+.5,Math.floor(sprite.p/W)+.5,position,sprite.normal,undefined,z),
-        view:pbrView ?? eye.map((value,k)=>value-position[k])
-      });
+        view:pbrView ?? eye.map((value,k)=>value-position[k]), paintedFinish, finishEmission
+        });
+        if (sprite.normal && directLight?.finishSpill)
+          color = directLight.finishSpill(position, sprite.normal, color, i, sprite.inkControls?.[3]);
+      } else if (paintedFinish) color = PaintFinish.display(paintedFinish, color, finishEmission);
       if (emitted) color=addLinearTint(color,emitted.linear);
       claim = paletteClaim?.(sprite.p,i,paletteId,color[0],color[1],color[2],choices);
       if (contribution?.applies(i, paletteId)) {
@@ -2246,6 +2259,8 @@ function renderFrame(world, o, preparedPalettes) {
         view: pbrView ?? eye.map((value, k) => value - position[k]), roughness: sprite.semantic?.roughness,
         metalness: sprite.semantic?.metalness, emission: sprite.semantic?.emission
       });
+      if (sprite.normal && directLight?.finishSpill)
+        color = directLight.finishSpill(position, sprite.normal, color, artLighting ? sprite.lightingTarget : undefined);
     } else if(sprite.semantic && sprite.tilesetMaterial?.lighting!=='unlit')color=SemanticMipmaps.shade(color,sprite.normal,sprite.semanticView,sprite.semantic,sprite.semanticRule,
       sprite.scan ? {...scanFrame,scan:sprite.scan,position,...scanLight} :
         sprite.objectTexels || sprite.liveLight ? {sun,...scanLight} : undefined);
@@ -2452,9 +2467,13 @@ function renderFrame(world, o, preparedPalettes) {
     const hasEmission=(flags & 2)!==0&&!world.renderMetadata?.muteEmission?.[i];
     if(hasEmission&&emissionCurve)[r,g,b]=LightingChannels.emission(emissionCurve,[r,g,b]);
     const painted = art && !renderMeta?.muteEmission?.[i] && renderMeta?.paintedEmission?.subarray(i*3,i*3+3);
+    const paintedFinish = PaintFinish.at(renderMeta?.paintFinish, i);
+    const finishEmission = !renderMeta?.muteEmission?.[i] && PaintFinish.emission(paintedFinish);
+    const finishColor = (paintedFinish?.[0] & 1) || finishEmission;
     const emitted=splatEmission?.get(i);
     const inkEmission = painted && painted.some(Boolean) ? (emissionCurve ? LightingChannels.emission(emissionCurve,painted) : painted) : null;
-    const emissionTint = emitted && inkEmission ? addLinearTint(inkEmission,emitted.linear) : emitted?.tint ?? inkEmission;
+    const oldEmissionTint = emitted && inkEmission ? addLinearTint(inkEmission,emitted.linear) : emitted?.tint ?? inkEmission;
+    const emissionTint = finishEmission ? addLinearTint(oldEmissionTint ?? [0,0,0],finishEmission) : oldEmissionTint;
     const emits = art && (emissionTint?.some(Boolean) || Boolean(curveEmission) || hasEmission && (!emissionCurve || r>0 || g>0 || b>0));
     const automatic = kind === LightSchedule.emissionKind && d[q + 15] === LightSchedule.emissionMarker;
     const sourceScale = automatic ? LightSchedule.emissionScale(dusk) : 1;
@@ -2626,7 +2645,8 @@ function renderFrame(world, o, preparedPalettes) {
     const reflectInRaster = (planar || localProbeReflection || reflectedSky) && !pixelSurface;
     const finishBeforeFog = !!engrave || reflectInRaster || !pixelSurface && surface?.finishBeforeFog(i);
     const normal = fragmentSurface ? surface.surfaceNormal(i) : null;
-    const centerFog = !scanResidual && !emitted && !opticalActive && !finishBeforeFog && !staged?.lit && !liveNormal && !splatFlash && !relit && coverGain === 1;
+    const finishBeforeHaze = finishColor && !pbrMaterial && !pixelSurface;
+    const centerFog = !finishBeforeHaze && !scanResidual && !emitted && !opticalActive && !finishBeforeFog && !staged?.lit && !liveNormal && !splatFlash && !relit && coverGain === 1;
     if (fogMix && centerFog) {
       r += (fog[0] - r) * fogMix;
       g += (fog[1] - g) * fogMix;
@@ -2938,14 +2958,17 @@ function renderFrame(world, o, preparedPalettes) {
               return {position:at,normal:tap.normal,view:ray.direction.map(n=>-n),
                 coverage:Math.min(1,tap.alpha/Math.max(1e-5,curveHit.alpha))};
             }) : pbrPlaneSamples(ix+.5,iy+.5,position,normal,undefined,surfaceZ);
-          const rgb = PbrMaterials.shade(pbr, pbrMaterial, {
+          let rgb = PbrMaterials.shade(pbr, pbrMaterial, {
             color: physicalPigment, position, restPosition:pbrRestPosition(pbrMaterial,i,position), normal, tangent: curve?.axis,
             receiveShadow:pbrReceives,highlightSamples,
             view: ray.direction.map(n => -n), roughness: roughness ?? world.splatRoughness?.[i],
-            emission: curveEmission ? toLinearSrgb(Array.from(curveEmission)) : undefined
+            emission: curveEmission ? toLinearSrgb(Array.from(curveEmission)) : undefined,
+            paintedFinish, finishEmission
           });
+          if (normal && directLight?.finishSpill)
+            rgb = directLight.finishSpill(position, normal, rgb, i, exact?.inkControls?.[3]);
           [pr, pg, pb] = rgb.map((value, k) => value + (fog[k] - value) * fogMix);
-        }
+        } else if (finishBeforeHaze) [pr,pg,pb] = PaintFinish.display(paintedFinish, [pr,pg,pb], finishEmission);
         const scoped = contribution?.applies(i, paletteId);
         if (opticalActive) {
           const scatter = optical[opt + 1], reflection = optical[opt + 2], tint = optical[opt + 4] >= 0;
@@ -2995,7 +3018,7 @@ function renderFrame(world, o, preparedPalettes) {
           pg = Lightning.shade(pg, splatFlash[1]);
           pb = Lightning.shade(pb, splatFlash[2]);
         }
-        if (scanResidual || emitted || engrave || opticalActive || staged?.lit || (fragmentSurface && finishBeforeFog) || liveNormal || splatFlash || relit || coverGain < 1) {
+        if (finishBeforeHaze || scanResidual || emitted || engrave || opticalActive || staged?.lit || (fragmentSurface && finishBeforeFog) || liveNormal || splatFlash || relit || coverGain < 1) {
           pr += (fog[0] - pr) * fogMix;
           pg += (fog[1] - pg) * fogMix;
           pb += (fog[2] - pb) * fogMix;
@@ -3383,6 +3406,9 @@ function renderFrame(world, o, preparedPalettes) {
         const directional=scanSplatView ? world.gaussianAppearanceDelta(world,i,scanSplatView) : undefined;
         if (directional) rgb=addLinearTint(rgb,directional.map(value=>value*scanFrame.appearance));
         const emitted=splatEmission?.get(i);
+        const paintedFinish = PaintFinish.at(renderMeta?.paintFinish, i);
+        if (paintedFinish) rgb = PaintFinish.display(paintedFinish, rgb,
+          !renderMeta?.muteEmission?.[i] && PaintFinish.emission(paintedFinish));
         if (emitted) rgb=addLinearTint(rgb,emitted.linear);
         const claim = paletteClaim?.(p,i,c[5],rgb[0],rgb[1],rgb[2],choices);
         if (contribution?.applies(i, c[5])) {
