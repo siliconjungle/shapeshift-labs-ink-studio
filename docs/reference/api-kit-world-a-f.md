@@ -145,6 +145,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.world.apply` | function | `(source, operations, {validate = manifest} = {})` | [source](../../src/kit/pu0-world-data.js) |
 
+## KIT.world.atmosphere
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.world.atmosphere` | namespace |  |  |
+| `KIT.world.atmosphere.options` | function | `(raw={})` | [source](../../src/kit/pu4i-atmosphere-detail.js) |
+| `KIT.world.atmosphere.upRes` | function | `(source,raw,{seed=1,time=0}={})` | [source](../../src/kit/pu4i-atmosphere-detail.js) |
+
 ## KIT.world.audioPropagation
 
 | Member | Kind | Signature or value | Guides and source |

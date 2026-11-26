@@ -476,6 +476,7 @@ All checked-in guides, indexed by title and section headings.
 - [Smart masks from baked geometry](../smart-material-masks.md)
 - [Headless solver networks](../solver-networks.md)
 - [Sound design inserts](../sound-design-effects.md)
+- [Sparse combustion and clouds](../sparse-atmosphere.md)
 - [Sparse volume exchange](../sparse-volumes.md)
 - [Spatial audio and event cues](../spatial-audio.md)
 - [Spectral and standing-wave fields](../spectral-fields.md)
