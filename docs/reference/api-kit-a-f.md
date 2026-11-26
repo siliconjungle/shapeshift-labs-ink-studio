@@ -797,6 +797,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.data.patchDocumentView` | function | `(source, { metadata = {}, upserts = {}, removed = [] } = {})` | [source](../../src/kit/p23-authoring-document.js) |
 | `KIT.authoring.data.validate` | function | `(spec)` | [source](../../src/kit/p23-authoring-document.js) |
 | `KIT.authoring.data.version` | value | `number = 1` |  |
+| `KIT.authoring.deliveryHelpers` | namespace |  |  |
+| `KIT.authoring.deliveryHelpers.collect` | function | `(spec, { instances, meshPlacements }, hidden)` | [source](../../src/kit/p23-delivery-helpers.js) |
+| `KIT.authoring.deliveryHelpers.read` | function | `(row, points = {})` | [source](../../src/kit/p23-delivery-helpers.js) |
 | `KIT.authoring.document` | function | `(initial, options)` | [guide](../../README.md#retained-authoring), [guide](../procedural.md#optional-retained-authoring), [guide](../procedural.md#named-scene-library), [source](../../src/kit/p23-authoring-document.js) |
 | `KIT.authoring.environmentProfiles` | namespace |  |  |
 | `KIT.authoring.environmentProfiles.create` | function | `({ key, profiles, defaultId, defaults = {}, validate = () => {} })` | [guide](../procedural.md#retained-environment-profiles), [source](../../src/kit/p93-environment-profiles.js) |
