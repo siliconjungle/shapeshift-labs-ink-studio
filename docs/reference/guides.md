@@ -208,6 +208,7 @@ All checked-in guides, indexed by title and section headings.
 - [Joint picture and sound priorities under load](../joint-load-priorities.md)
 - [Jointed sprite chains](../jointed-sprite-chains.md)
 - [Layered horizon art](../layered-horizon.md)
+- [Layered scene stages](../layered-scene-stages.md)
 - [Learned cellular growth](../learned-cellular-growth.md)
 - [Additional light emitters](../light-emitters.md)
 - [Authored lightning](../lightning.md)

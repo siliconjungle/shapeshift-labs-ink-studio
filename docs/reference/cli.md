@@ -889,6 +889,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
     --w width --h height --still-scale 2 --t seconds --from 0 --to 2 --fps 12 --embed-config file.json
   scene-replay <recording.json> --out output.png [--at seconds]   save a frame from a replay
   scene-replay <recording.json> --embed --out embed.html [--embed-config file.json]   package a replay for the web
+  scene-stage resolve <stage.json> --out bundle.json [--root directory]   compose layers into a native project
+  scene-stage explain <stage.json> [--at /path --out report.json]   trace active layers and resolved values
+    Stage inputs accept --stage-selection <name>, --stage-variants <id=choice,...> and --stage-payloads <id=on|off,...>
   project pack <scene|take|experiment|story-pack|story-run.json> --out <bundle.json> [--root directory --revision N]
     [--asset-pack file --paint file --attachments file]
   project inspect <bundle.json>   show the bundle version, entry path and retained files

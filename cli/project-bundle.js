@@ -35,6 +35,14 @@ const inside = (root, file) => {
 };
 
 function packProject(scene, { out, root, revision, assetPack, paint, attachments } = {}) {
+  return pack(scene, { out, root, revision, assetPack, paint, attachments });
+}
+
+function packStage(stage, sceneSource, { out, root }) {
+  return pack(stage, { out, root, sceneSource });
+}
+
+function pack(scene, { out, root, revision, assetPack, paint, attachments, sceneSource }) {
   if (typeof scene !== 'string' || !/\.json$/i.test(scene) || typeof out !== 'string' || !/\.json$/i.test(out))
     throw new TypeError('Project packing needs a JSON scene, take, experiment or story recipe and a .json output file');
   if (revision !== undefined && (!Number.isSafeInteger(revision) || revision < 1)) throw new RangeError('Choose a positive project revision');
@@ -75,6 +83,12 @@ function packProject(scene, { out, root, revision, assetPack, paint, attachments
     return JSON.parse(record.encoding === 'utf8' ? record.data : Buffer.from(record.data, 'base64').toString('utf8'));
   }
   let spec = jsonFile(input);
+  if (sceneSource !== undefined) {
+    if (spec?.format !== require('./scene-stage.js').format || !sceneSource || typeof sceneSource !== 'object' ||
+        Array.isArray(sceneSource) || sceneSource.format !== undefined)
+      throw new TypeError('A stage project needs a resolved native diorama');
+    spec = sceneSource;
+  }
   if (spec?.format === bundles.format) throw new TypeError('Pack a source JSON diorama or save edits with withScene()');
   const take = spec?.format === 'ink-studio/take';
   const experiment = spec?.format === Experiment.format;
@@ -105,7 +119,7 @@ function packProject(scene, { out, root, revision, assetPack, paint, attachments
     spec = { ...spec, assetPack: path.posix.relative(path.posix.dirname(entry), pack) };
   } else if (assetPack !== undefined) spec = { ...spec, assetPacks: kit.authoring.assetPacks.merge(spec.assetPacks ?? [], jsonFile(assetPack)).packs };
   if (paint !== undefined) spec = { ...spec, finish: { ...spec.finish, paint: jsonFile(paint) } };
-  if (assetPack !== undefined || paint !== undefined) {
+  if (sceneSource !== undefined || assetPack !== undefined || paint !== undefined) {
     const record = records.get(entry);
     size -= Buffer.byteLength(record.data, record.encoding);
     records.delete(entry);
@@ -224,5 +238,5 @@ function writeProjectBundle(source, { out } = {}) {
   return { file, project };
 }
 
-module.exports = { packProject, readProjectBundle, writeProjectBundle, mountProject, unpackProject, withTakeSource, replayProjectShot,
+module.exports = { packProject, packStage, readProjectBundle, writeProjectBundle, mountProject, unpackProject, withTakeSource, replayProjectShot,
   experimentToolkit };
