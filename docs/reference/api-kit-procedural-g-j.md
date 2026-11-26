@@ -513,6 +513,44 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphFunctions.operations["fn.math"]` | namespace |  |  |
 | `KIT.procedural.graphFunctions.operations["fn.math"].description` | value | `string = "Evaluate a named numeric function or arithmetic operation in a declared scalar type."` |  |
 | `KIT.procedural.graphFunctions.operations["fn.math"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"]` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].description` | value | `string = "Sample a typed color texture at explicit UVs and return straight linear sRGB RGBA."` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].inputs` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].inputs.filter` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].inputs.filter.default` | value | `string = "image"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].inputs.filter.type` | value | `string = "string"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].inputs.mip` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].inputs.mip.default` | value | `number = 0` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].inputs.mip.type` | value | `string = "number"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].inputs.mipFilter` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].inputs.mipFilter.default` | value | `string = "linear"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].inputs.mipFilter.type` | value | `string = "string"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].inputs.source` | value | `string = "colorImage"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].inputs.uv` | value | `string = "vec2"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].inputs.wrapU` | alias | `Alias of KIT.procedural.graphFunctions.operations["fn.sampleColor"].inputs.filter` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].inputs.wrapV` | alias | `Alias of KIT.procedural.graphFunctions.operations["fn.sampleColor"].inputs.filter` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].outputs` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].outputs.value` | value | `string = "srgb-linear"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleColor"].run` | function | `({source,uv,...options},context)` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"]` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].description` | value | `string = "Sample a typed unitless grayscale texture or mask at explicit UVs."` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].inputs` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].inputs.filter` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].inputs.filter.default` | value | `string = "image"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].inputs.filter.type` | value | `string = "string"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].inputs.mip` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].inputs.mip.default` | value | `number = 0` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].inputs.mip.type` | value | `string = "number"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].inputs.mipFilter` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].inputs.mipFilter.default` | value | `string = "linear"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].inputs.mipFilter.type` | value | `string = "string"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].inputs.source` | value | `string = "grayImage"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].inputs.uv` | value | `string = "vec2"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].inputs.wrapU` | alias | `Alias of KIT.procedural.graphFunctions.operations["fn.sampleGray"].inputs.filter` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].inputs.wrapV` | alias | `Alias of KIT.procedural.graphFunctions.operations["fn.sampleGray"].inputs.filter` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].outputs` | namespace |  |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].outputs.value` | value | `string = "number"` |  |
+| `KIT.procedural.graphFunctions.operations["fn.sampleGray"].run` | function | `({source,uv,...options},context)` | [source](../../src/kit/paq-graph-functions.js) |
 | `KIT.procedural.graphFunctions.operations["fn.select"]` | namespace |  |  |
 | `KIT.procedural.graphFunctions.operations["fn.select"].description` | value | `string = "Choose one of two computed values that have the same declared type."` |  |
 | `KIT.procedural.graphFunctions.operations["fn.select"].specialize` | function | `({type})` | [source](../../src/kit/paq-graph-functions.js) |
@@ -532,8 +570,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphFunctions.operations["fn.vector"]` | namespace |  |  |
 | `KIT.procedural.graphFunctions.operations["fn.vector"].description` | value | `string = "Construct, swizzle, and operate on a declared two-, three-, or four-component vector."` |  |
 | `KIT.procedural.graphFunctions.operations["fn.vector"].specialize` | function | `(node)` | [source](../../src/kit/paq-graph-functions.js) |
+| `KIT.procedural.graphFunctions.textureType` | function | `(type)` | [source](../../src/kit/paq-graph-functions.js) |
 | `KIT.procedural.graphFunctions.typedOperations` | value | `array` |  |
 | `KIT.procedural.graphFunctions.types` | value | `array` |  |
+| `KIT.procedural.graphFunctions.validInputType` | function | `(type)` | [source](../../src/kit/paq-graph-functions.js) |
 | `KIT.procedural.graphFunctions.validType` | function | `(type)` | [source](../../src/kit/paq-graph-functions.js) |
 
 ## KIT.procedural.graphImages
@@ -1527,6 +1567,11 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.spatial.symmetry` | function | `(source, options = {})` | [source](../../src/kit/paq-coordinate-sampling.js) |
 | `KIT.procedural.graphImages.spatial.transform` | function | `(source, options = {})` | [source](../../src/kit/paq-coordinate-sampling.js) |
 | `KIT.procedural.graphImages.split` | function | `(source, channels)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.textureSampling` | namespace |  |  |
+| `KIT.procedural.graphImages.textureSampling.createCache` | function | `()` | [source](../../src/kit/paq-coordinate-sampling.js) |
+| `KIT.procedural.graphImages.textureSampling.sampleColor` | function | `(source,uv,options,cache)` | [source](../../src/kit/paq-coordinate-sampling.js) |
+| `KIT.procedural.graphImages.textureSampling.sampleGray` | function | `(source,uv,options,cache)` | [source](../../src/kit/paq-coordinate-sampling.js) |
+| `KIT.procedural.graphImages.textureSampling.valid` | function | `(type,source,cache)` | [source](../../src/kit/paq-coordinate-sampling.js) |
 | `KIT.procedural.graphImages.tileGenerator` | function | `(width,height,columns=4,rows=6,source=stamp,options={},seed=0)` | [guide](../material-tile-generator.md#outputs), [source](../../src/kit/paq-def-tile-generator.js) |
 | `KIT.procedural.graphImages.tileSampler` | function | `(width,height,columns=4,rows=6,stamps=stampDefaults,maps={},options={},controls={},seed=0)` | [guide](../material-tile-sampler.md#seeds-and-controls), [source](../../src/kit/paq-def-tile-sampler.js) |
 | `KIT.procedural.graphImages.toDisplay` | function | `(source, outOfRange = 'clamp')` | [source](../../src/kit/paq-graph-images.js) |
@@ -1540,6 +1585,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.transfers.ramp` | function | `(definition)` | [source](../../src/kit/paq-color-transfers.js) |
 | `KIT.procedural.graphImages.uniform` | function | `(value, width, height, settings)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.valid` | function | `(value, intent)` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.validGray` | function | `(source)` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.version` | value | `number = 1` |  |
 | `KIT.procedural.graphImages.warps` | namespace |  |  |
 | `KIT.procedural.graphImages.warps.directionalWarp` | function | `(source, map, options = {}, intensity = null)` | [source](../../src/kit/paq-displacement-images.js) |

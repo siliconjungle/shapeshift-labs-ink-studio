@@ -75,9 +75,10 @@
     };
     if (typeof group?.instantiate!=='function') throw new TypeError(spec.op+' needs a registered graph group');
     const item=socketType(group.inputs?.item), index=socketType(group.inputs?.index);
-    const value=socketType(group.outputs?.value), accumulator=socketType(group.inputs?.accumulator);
+    const resultPort=group.functionResult ? 'result' : 'value';
+    const value=socketType(group.outputs?.[resultPort]), accumulator=socketType(group.inputs?.accumulator);
     if (!validator(item) || !validator(value) || index!==undefined && !compatible('number',index))
-      throw new TypeError(spec.op+' groups need item input, value output and an optional numeric index');
+      throw new TypeError(spec.op+' groups need an item input, a value or function result output, and an optional numeric index');
     if (keyed && !compatible('record',item))
       throw new TypeError('array.mapById groups must accept a record item');
     if (reducing ? !validator(accumulator) || !compatible(value,accumulator) : accumulator!==undefined)
@@ -109,7 +110,7 @@
           truncate(0);
           prune();
         }
-        function run({items,...args},{time,seed,take,sequence},workers) {
+        function run({items,...args},{time,seed,take,sequence,textureCache},workers) {
           const cost=Math.max(1,group.expandedNodes??1);
           if (items.length*cost>maxRows) throw new RangeError('Array operation exceeds its '+maxRows+' node visit budget');
           let ids;
@@ -141,7 +142,7 @@
             }
             evaluate??=(lanes[i]??=group.instantiate());
             return evaluate({...args,item,...(index && {index:i}),...(reducing && {accumulator})},
-              {time,take,sequence,seed:P.data.hash(String(key),seed)},workers).value;
+              {time,take,sequence,textureCache,seed:P.data.hash(String(key),seed)},workers)[resultPort];
           };
           try {
             if (reducing) return {value:items.reduce((acc,item,i)=>apply(item,i,acc),start)};

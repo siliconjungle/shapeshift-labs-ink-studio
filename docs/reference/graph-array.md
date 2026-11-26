@@ -53,7 +53,7 @@ The group declares item, optional numeric index and value. Extra group inputs be
 | Input | `items` | `array<number>` | Required | {"items":"number"} |
 | Output | `value` | `array<number>` | — | {"items":"number"} |
 
-Guides: [guide](../headless-authoring.md#discover-registered-nodes), [guide](../headless-authoring.md#array-operations), [guide](../headless-authoring.md#flood-fill-and-connected-components)
+Guides: [guide](../function-texture-sampling.md#call-a-sampling-function), [guide](../headless-authoring.md#discover-registered-nodes), [guide](../headless-authoring.md#array-operations), [guide](../headless-authoring.md#flood-fill-and-connected-components)
 
 Get the runnable example with `ink-studio graph describe array.map --example > example.json`.
 Run it with `ink-studio graph run example.json`.

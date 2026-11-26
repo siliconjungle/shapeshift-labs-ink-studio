@@ -52,7 +52,7 @@ For spatial filtering, signed detail and edge reconstruction, see [Typed materia
 
 For nearest seeds, tile seams and mask shapes, see [Typed material distance, edges, and morphology](material-image-morphology.md).
 
-For matrix placement, crops, perspective and sampler controls, see [Typed material transforms and addressing](material-image-transforms.md).
+For matrix placement, crops, perspective and sampler controls, see [Typed material transforms and addressing](material-image-transforms.md). For typed point reads, see [Texture sampling inside functions](function-texture-sampling.md).
 
 For map-driven distortion, see [Typed material displacement filters](material-image-displacement.md).
 

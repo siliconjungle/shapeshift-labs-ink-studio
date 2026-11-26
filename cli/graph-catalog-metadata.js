@@ -22,6 +22,7 @@ const types = {
   scalarRaster: { layout: 'Single numeric channel with no color space tag' },
   typedImage: { layout: 'Versioned raster and declared image contract' },
   colorImage: { layout: 'Typed RGB or RGBA image' },
+  grayImage: { layout: 'Typed unitless single-channel data or mask' },
   heightImage: { layout: 'Typed floating-point height with units' },
   normalImage: { layout: 'Typed XYZ or XYZA normal map with signed float or biased integer samples' },
   regionField: { layout: 'Versioned stable label image, unwrapped image positions and per-region records', maxRegions: 32768 },
@@ -72,7 +73,15 @@ const namedNoise = oneOf('perlin','simplex','gaussian','white','blue','worley','
   'fractal','ridged','anisotropic','directional');
 const evolvingNoise = ['perlin','simplex','worley','voronoi','cellular','fractal','ridged','anisotropic','directional'];
 
+const texturePointPorts = {
+  uv:{unit:'normalized UV',constraints:{origin:'top-left edge'}},
+  filter:oneOf('image','nearest','linear'),mipFilter:oneOf('nearest','linear'),
+  mip:{unit:'mip levels',constraints:{min:0}},
+  ...Object.fromEntries(['wrapU','wrapV'].map(axis=>[axis,oneOf('image','clamp','wrap','mirror','transparent')]))
+};
 const ports = {
+  'fn.sampleColor':texturePointPorts,
+  'fn.sampleGray':texturePointPorts,
   'fn.toInteger': { rounding: oneOf('exact','floor','ceil','round','trunc') },
   'fn.cast': { from: oneOf('number','integer','boolean','unitScalar'), rounding: oneOf('exact','floor','ceil','round','trunc') },
   'fn.vector': { operands:{constraints:{lengths:[2],literal:true}}, pattern:{constraints:{minLength:1,maxLength:4,literal:true}} },
@@ -745,6 +754,10 @@ const specialization = {
   'anim.retime': { field: 'group', description: 'Uses the group’s inputs and outputs and adds a timing record. The group cannot declare timing.' }
 };
 const notes = {
+  'fn.sampleColor': ['Samples use top-left UVs and straight linear sRGB RGBA output. Filtering works in coverage-associated linear light.',
+    'Explicit mip levels clamp to the available chain. Fractional levels blend unless mipFilter is nearest.'],
+  'fn.sampleGray': ['Read a unitless one-channel data or mask texture. UNORM samples decode to unit values. Floating-point data retains signed and over-one values.',
+    'Use explicit UVs and a numeric mip level. The same settings can be shared across several bound textures.'],
   'fn.math': ['Integer division truncates toward zero. Modulo returns a signed remainder.',
     'Trigonometry uses radians. Division and remainder reject a zero divisor. Invalid domains and overflows fail.'],
   'fn.select': ['Both value branches are evaluated by the graph. The condition selects the returned value.'],
