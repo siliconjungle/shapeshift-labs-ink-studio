@@ -31,8 +31,8 @@ function inflate(bytes, expected) {
   if (out.length !== expected) throw new RangeError('Texture compressed block does not match its declared dimensions');
   return out;
 }
-function input(bytes) {
-  if (!(bytes instanceof Uint8Array) || bytes.length < 8 || bytes.length > maxBytes)
+function input(bytes, limit = maxBytes) {
+  if (!(bytes instanceof Uint8Array) || bytes.length < 8 || bytes.length > limit)
     throw new TypeError('Expected a bounded texture file');
   return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 }

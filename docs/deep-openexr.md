@@ -39,13 +39,14 @@ ink.exportDeepEXR(world, {
 
 `frame` comes from `ink.render(world, { deepComposite: { layers: 8 } })`. Both helpers accept `reflection` and `allowTruncated`. `exportDeepEXR` also accepts `pose(world, time)`, `layers`, and `coalesce` for its own captures.
 
-## Verify the handoff
+## Edit and replay native deep plates
 
-Run the Signal Relay example with the [OpenEXR Python bindings](https://openexr.com/en/latest/python.html) and Pillow installed. It reads the exported plate, writes a separate deep service key, inserts it between two partially transparent sheets, and reopens the merged EXR to verify the selected pixel.
+Use [headless deep shot compositing](deep-shot.md) to reopen a plate, align
+a separate take, edit selected samples, and verify the resulting deep ray.
 
 ```sh
-python3 examples/deep-openexr/compose.py relay-plates.exr relay-composite
-node examples/deep-openexr/review.cjs relay-composite relay-review.html
+node examples/deep-shot-prism-relay.cjs prism-relay
+ink-studio deep-shot run prism-relay/prism-relay.shot.json --out prism-replay
 ```
 
 The encoding follows the [OpenEXR file layout](https://openexr.com/en/latest/OpenEXRFileLayout.html) and its [deep sample conventions](https://openexr.com/en/latest/InterpretingDeepPixels.html).

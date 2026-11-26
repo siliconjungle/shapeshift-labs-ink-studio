@@ -27,13 +27,14 @@ function header(w, h, bits, color) {
   return hd;
 }
 const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-function image(hd, compressed, density) {
-  return Buffer.concat([signature, chunk('IHDR', hd), ...(density ? [chunk('pHYs', density)] : []),
+function image(hd, compressed, density, srgb = false) {
+  return Buffer.concat([signature, chunk('IHDR', hd), ...(srgb ? [chunk('sRGB', Buffer.from([0]))] : []),
+    ...(density ? [chunk('pHYs', density)] : []),
     chunk('IDAT', compressed), chunk('IEND', Buffer.alloc(0))]);
 }
-function encode(w, h, pixels, channels = 3) {
+function encode(w, h, pixels, channels = 3, { srgb = false } = {}) {
   if (![3,4].includes(channels)) throw new Error('PNG pixel count does not match its shape');
-  return image(header(w, h, 8, channels === 4 ? 6 : 2), scanlines(w, h, pixels, channels));
+  return image(header(w, h, 8, channels === 4 ? 6 : 2), scanlines(w, h, pixels, channels), undefined, srgb);
 }
 function encodeGray(w, h, values) {
   if (values instanceof Uint16Array) {

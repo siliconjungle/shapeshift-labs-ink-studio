@@ -92,7 +92,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.markProfiles` | namespace |  |  |
-| `KIT.procedural.markProfiles.place` | function | `({ profiles, range }, guide, limit)` | [source](../../src/kit/p26c-mark-profiles.js) |
+| `KIT.procedural.markProfiles.place` | function | `({ profiles, range }, guide, limit, looseness)` | [source](../../src/kit/p26c-mark-profiles.js) |
 | `KIT.procedural.markProfiles.prepare` | function | `(raw)` | [source](../../src/kit/p26c-mark-profiles.js) |
 | `KIT.procedural.markProfiles.prepareBrush` | function | `(raw)` | [source](../../src/kit/p26c-mark-profiles.js) |
 
