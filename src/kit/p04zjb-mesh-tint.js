@@ -1,4 +1,4 @@
-/* Paint optional RGB multipliers on authored mesh corners. */
+/* Paint optional color on authored mesh corners and set how it combines with pigment. */
 (function(K) {
   const T = K.meshTopology, {freeze} = K.procedural.data;
   const object = value=>value && Object.getPrototypeOf(value)===Object.prototype;
@@ -38,10 +38,20 @@
   }
 
   function planTint(source,request) {
-    if (!fields(request,['tool','color','corner','vertex','face','selection']) ||
-        !['paint','eyedropper','erase'].includes(request.tool) || request.tool!=='paint' && request.color!==undefined)
-      throw new TypeError('Choose a mesh tint paint, eyedropper, or erase request');
-    const doc = T.create(source), {tool} = request;
+    const doc = T.create(source), {tool,mode,opacity} = request ?? {};
+    const revision = T.revision(doc), beforeMode = doc.tintBlend ?? 'multiply';
+    const header = {format,version:1,mesh:doc.id,tool,beforeRevision:revision};
+    if (tool==='blend') {
+      if (!fields(request,['tool','mode']) || !meshCornerTint.modes.includes(mode))
+        throw new TypeError('Use blend with multiply, replace, alpha-blend, or midpoint mode');
+      const patch = mode===beforeMode ? {} : {tintBlend:mode};
+      const document = mode===beforeMode ? doc : T.edit(doc,patch);
+      return {patch,document,report:freeze({...header,beforeMode,mode,afterRevision:T.revision(document),changedCorners:0})};
+    }
+    if (!fields(request,['tool','color','corner','vertex','face','selection','opacity']) ||
+        !['paint','eyedropper','erase'].includes(tool) || tool!=='paint' && (request.color!==undefined || opacity!==undefined) ||
+        opacity!==undefined && (!Number.isFinite(opacity) || opacity<0 || opacity>1))
+      throw new TypeError('Choose a tint paint, eyedropper, or erase request. Paint accepts opacity in [0, 1]');
     const color = tool==='paint' ? pigment(request.color) : undefined;
     const {domain,ids} = target(doc,request), selected = new Set(ids);
     const samples = [], changes = [], faces = [];
@@ -53,16 +63,19 @@
         const {attributes,...rest} = corner, before = meshCornerTint.read(corner) ?? null;
         const hit = {face:face.id,corner:corner.id,vertex:corner.vertex};
         if (tool==='eyedropper') {
-          samples.push({...hit,tint:before,color:(before ?? [1,1,1]).slice(0,3)});
+          samples.push({...hit,tint:before,color:(before ?? (beforeMode==='midpoint' ? [.5,.5,.5] : [1,1,1])).slice(0,3),
+            ...(attributes?.tintCoverage!==undefined && {coverage:attributes.tintCoverage})});
           return corner;
         }
         if (tool==='paint' && attributes?.tint!==undefined && before===null)
           throw new RangeError('Corner '+corner.id+' uses tint as a generic attribute');
-        const after = tool==='erase' ? null : before?.length===4 ? [...color,before[3]] : color;
-        if (JSON.stringify(before)===JSON.stringify(after)) return corner;
-        changes.push({...hit,before,after});
+        const alpha = opacity ?? before?.[3];
+        const after = tool==='erase' ? null : alpha===undefined ? color : [...color,alpha];
+        const beforeCoverage = attributes?.tintCoverage;
+        if (JSON.stringify(before)===JSON.stringify(after) && beforeCoverage===undefined) return corner;
+        changes.push({...hit,before,after,...(beforeCoverage!==undefined && {beforeCoverage})});
         dirty=true;
-        const {tint,...other} = attributes ?? {};
+        const {tint,tintCoverage,...other} = attributes ?? {};
         if (after) other.tint=after;
         return {...rest,...(Object.keys(other).length && {attributes:other})};
       });
@@ -70,7 +83,7 @@
     }
     const patch = faces.length ? {faces} : {};
     const document = faces.length ? T.edit(doc,patch) : doc;
-    const report = {format,version:1,mesh:doc.id,tool,domain,ids,beforeRevision:T.revision(doc),
+    const report = {...header,domain,ids,...(doc.tintBlend && {mode:doc.tintBlend}),
       afterRevision:T.revision(document),
       ...(tool==='eyedropper' ? {samples,coveredCorners:samples.length} : {changes,changedCorners:changes.length})};
     return {patch,document,report:freeze(report)};

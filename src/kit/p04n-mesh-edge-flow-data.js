@@ -133,9 +133,9 @@ const meshEdgeFlowData = (function (K) {
         const size = sizes.values().next().value;
         return [key, size ? Array.from({ length: size }, (_, axis) => value(axis)) : value()];
       }));
-      const tint = meshCornerTint.sample(samples.map(([row])=>row),samples.map(([,weight])=>weight));
-      if (tint) attributes.tint=tint;
-      return { id: g.fresh('corner'), vertex: vertices[i], uv, ...((channels.size || tint) && { attributes }) };
+      const tint = meshCornerTint.sample(samples.map(([row])=>row),samples.map(([,weight])=>weight),g.doc.tintBlend);
+      Object.assign(attributes,tint);
+      return { id: g.fresh('corner'), vertex: vertices[i], uv, ...((channels.size || tint.tint) && { attributes }) };
     });
   }
 

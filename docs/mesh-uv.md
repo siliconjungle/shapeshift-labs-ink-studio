@@ -1686,12 +1686,11 @@ Use `mesh-topology tint` with an editable mesh or a scene and its
 | `selection` | Face, vertex, edge, or corner IDs, or a saved mesh or UV selection. Pass a saved selection inline or with `--selection`. |
 
 `eyedropper` returns each corner's authored tint and effective RGB.
-`erase` removes tint from the target and restores neutral white.
-Missing tint contributes white during interpolation. The headless and
-WebGL surface passes multiply the sampled pigment by interpolated tint
-before lighting. UVs, textures, and cutout alpha retain their existing
-values. Imported RGBA tint keeps its fourth channel as source metadata
-when painting RGB.
+`erase` removes tint from the target and restores the underlying pigment.
+By default, the headless and WebGL surface passes multiply the sampled
+pigment by interpolated tint before lighting. UVs, textures, and cutout
+alpha retain their existing values. Painting RGB keeps an existing
+fourth channel. Supply `opacity` to set that channel explicitly.
 
 ~~~sh
 ink-studio mesh-topology tint station.json paint.json --object panel --preview tint-review > review.json
@@ -1707,6 +1706,35 @@ restore the entire edit. In Node, use the scene editor's
 
 Run `node examples/tileset-pick/mesh-corner-tint-demo.cjs mesh-tint-demo`
 for a seam corner, a face selection, a shared vertex, and an erase.
+
+### Set tint blend behavior
+
+Set the blend mode on the editable mesh with
+`{"tool":"blend","mode":"alpha-blend"}`. A mode change reuses the
+existing corner colors and can be previewed and undone like a paint edit.
+
+| Mode | How it combines with the sampled pigment |
+| --- | --- |
+| `multiply` | Multiply the pigment by the tint RGB. White is neutral. This is the default for existing meshes. |
+| `replace` | Use the authored RGB at painted corners. An untouched corner contributes the original pigment. |
+| `alpha-blend` | Mix the pigment with the authored RGB using corner opacity in `[0, 1]`. Opacity defaults to 1 and can also come from imported RGBA. |
+| `midpoint` | Each channel below 0.5 shades toward black. Each channel above 0.5 shades toward white. Exactly 0.5 is neutral. |
+
+For example, paint a half-strength warm glaze with
+`{"tool":"paint","face":"sign","color":"#edaa72","opacity":0.5}`
+on a mesh set to `alpha-blend`. This opacity controls the pigment mix.
+The texture's cutout alpha still controls visibility. Replacement and
+alpha blend interpolate the tint and its contribution together so sparse
+corners fade into the existing pigment. Midpoint mode interpolates the
+tint value and uses 0.5 at untouched corners.
+
+~~~sh
+ink-studio mesh-topology tint station.json blend.json --object panel --preview blend-review > review.json
+ink-studio mesh-topology tint station.json blend.json --object panel --expect review.json --out station-blended.json
+~~~
+
+Run `node examples/tileset-pick/mesh-tint-blend-demo.cjs mesh-tint-blend-demo`
+for replacement, an alpha mix, and dark-to-light midpoint tint on the native grid.
 
 ### Inset brush UVs on each edge
 
