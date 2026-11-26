@@ -402,7 +402,7 @@
     return { translation: jsonVector(mesh.position), rotation: jsonVector([yaw, pitch, roll]), scale, pivot: [0, 0, 0] };
   }
 
-  DIO.solidFrames = Object.freeze({ authored: authoredFrame, reflection: reflectionFrame, inverse: inverseFrame,
+  DIO.solidFrames = Object.freeze({ authored: authoredFrame, reflection: reflectionFrame, inverse: inverseFrame, affine: affineFrame,
     compose: composeFrames, transform: frameTransform, rest(solid) {
       const rigid = authoredFrame(solid.transform, solid.at).mesh;
       return solid.restAffine === undefined ? rigid : K.sceneGraph.compose(K.sceneGraph.transform(solid.restAffine), rigid);
@@ -1901,6 +1901,7 @@
       const query = resolved.inputs?.query ?? env.parameterInputs?.query;
       return typeof query === 'function' ? query() : query;
     }
+    const bindBillboards = modelOptions ? undefined : K.authoring.prefabBillboards.prepare(source, env, resolved.inputs);
     const marks = !modelOptions && dataMarks?.sample(env.parameterInputs?.time ?? 0, { query: marksQuery });
     if (spec.brushRegion != null && !modelOptions?.[brushField]?.boundsIds) {
       if (modelOptions) throw new TypeError('Brush regions are baked as splat geometry');
@@ -1940,6 +1941,7 @@
         if (!stage.systems.length) stage.stateful = false;
         stage.add(marksSystem);
       }
+      bindBillboards?.(world);
       return world;
     }
     const cache = !review && !env.makeBuilder && !env.makeSculpt && env.bakeCache, cacheAPI = K.authoring.bakeCache;
@@ -2641,6 +2643,7 @@
         K.sprite.placeAtlas({ ...placement, atlas: env.resolveSpriteAtlas(placement.atlas) }) : placement);
     if (staticBake && !baked) cache.write('splats', bakeKey, cacheAPI.pack(W));
     bindSceneMeshes(W);
+    bindBillboards?.(W);
     if (pool) W.qualityParticleRanges = [{ first: pool.first, count: pool.n }];
     bindBreakables(W);
     const marksSystem = marks && K.dataMarks.bind(W, marks, dataMarks, { first: firstMark, query: marksQuery });

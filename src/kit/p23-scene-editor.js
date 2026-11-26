@@ -583,6 +583,25 @@
       return applyPrefabPlacement(A.scenePrefabs.planMirror,request,'Prefab mirror needs review');
     }
 
+    function planPrefabBillboards(request) {
+      return stagePrefabPlacement(A.prefabBillboards.plan,request).report;
+    }
+
+    function previewPrefabBillboards(request, settings) {
+      return previewPrefabPlacement(A.prefabBillboards.plan,request,settings);
+    }
+
+    function editPrefabBillboards(request) {
+      const {patch,report} = stagePrefabPlacement(A.prefabBillboards.plan,request);
+      if (!patch) throw Object.assign(new RangeError('Prefab billboard needs review'),{report});
+      if (!report.changed) return report;
+      const write = () => document.batchSession(() => {
+        writePlacementPatch(patch);
+        return report;
+      });
+      return document.pending() ? write() : document.transact('Edit prefab billboards',write);
+    }
+
     function planSceneLayers(request) {
       return stagePrefabPlacement(A.sceneLayers.plan,request).report;
     }
@@ -1956,6 +1975,7 @@
       planCustomProperties, previewCustomProperties, editCustomProperties,
       planPrefabReparent, previewPrefabReparent, reparentPrefab,
       planPrefabMirror, previewPrefabMirror, applyPrefabMirror,
+      planPrefabBillboards, previewPrefabBillboards, editPrefabBillboards,
       planPrefabCombination, previewPrefabCombination, combinePrefabs,
       planPrefabArray, previewPrefabArray, applyPrefabArray,
       planPrefabReplacement, previewPrefabReplacement, replacePrefabs,
