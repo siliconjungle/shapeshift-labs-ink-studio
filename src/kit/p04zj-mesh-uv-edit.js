@@ -1258,8 +1258,8 @@
     const {atlasFor} = options;
     if (operation?.op === 'set-pivot') return setPivot(g,operation);
     if (!operation || typeof operation !== 'object' ||
-        !['cut', 'stitch', 'pin', 'transform', 'orient', 'normalize-orientation', 'scale', 'move-corners', 'nudge', 'snap', 'unwrap', 'flatten', 'project-camera', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
-      throw new TypeError('Use a UV pivot, cut, stitch, pin, transform, orientation, reference normalization, scale, nudge, snap, flatten, camera projection, corner move, face remap, local solve or texel budget operation');
+        !['cut', 'stitch', 'pin', 'transform', 'orient', 'normalize-orientation', 'scale', 'move-corners', 'nudge', 'snap', 'unwrap', 'flatten', 'project-camera', 'pack-charts', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
+      throw new TypeError('Use a UV pivot, cut, stitch, pin, transform, orientation, reference normalization, scale, nudge, snap, flatten, camera projection, chart pack, corner move, face remap, local solve or texel budget operation');
     const points = new Map(), edges = new Map(), pins = new Map(), conflicts = [];
     let count = 0;
     function conflict(code, evidence) {
@@ -1269,7 +1269,7 @@
     let ids, evidence;
     const local = operation.op === 'unwrap' || operation.op === 'relax';
     const connected = operation.op==='unwrap' && operation.across==='geometry';
-    const precise = connected || ['remap-face','orient','normalize-orientation','scale','move-corners','nudge','snap','flatten','project-camera'].includes(operation.op);
+    const precise = connected || ['remap-face','orient','normalize-orientation','scale','move-corners','nudge','snap','flatten','project-camera','pack-charts'].includes(operation.op);
     const preserveWinding = local || ['stitch','scale','move-corners','nudge','snap'].includes(operation.op);
     if (local) {
       ids = targets(g, 'faces', operation);
@@ -1282,6 +1282,12 @@
       const faces = selection(g,domain,ids).faces;
       evidence = operation.op==='flatten' ? meshUVFlatten.projection(g,faces,operation,points,options,conflict) :
         projectCamera(g,faces,operation,options,points,conflict);
+    } else if (operation.op === 'pack-charts') {
+      const domain = operation.domain ?? operation.selection?.domain ?? 'islands';
+      if (!['faces','islands'].includes(domain)) throw new TypeError('Pack selected UV islands or islands containing selected faces');
+      ids = targets(g,domain,operation);
+      const islands = domain==='islands' ? ids : order(ids.map(id=>g.atIsland.get(id)));
+      evidence = meshUVPackCharts.pack(g,islands,operation,points,atlasFor,conflict);
     } else if (operation.op === 'texel-budget') {
       evidence = meshUVTexelBudget.assign(g, operation, points, conflict);
       ids = order((evidence.islands ?? []).map(row => row.id));
@@ -1327,6 +1333,18 @@
         conflict('flipped-uv-triangle', { face, corners });
     }
     if (!count && local && points.size) meshUVRegions.checkOverlaps(g, points, conflict);
+    if (!count && operation.op==='pack-charts' && points.size) {
+      for (const edge of g.edges.values()) {
+        if (edge.kind!=='continuous' && (edge.kind!=='seam' || edge.authored) ||
+            !edge.sides.some(side=>side.corners.some(id=>points.has(id)))) continue;
+        const [a,b] = edge.sides;
+        const uv = id=>points.get(id) ?? g.corners.get(id).uv;
+        const joins = a.corners.every((id,i)=>sameUV(uv(id),uv(b.corners[i])));
+        if (edge.kind==='continuous' && !joins) conflict('pack-would-split-chart',{edge:edge.id});
+        if (edge.kind==='seam' && joins) edges.set(edge.id,true);
+      }
+      evidence.retainedCuts = order(edges.keys());
+    }
     const report = { op: operation.op, ids, pointEdits: points.size, conflictCount: count, conflicts,
       ...(evidence && { evidence }) };
     if (count || !points.size && !edges.size && !pins.size) return { document: g.doc, report };
@@ -1366,7 +1384,7 @@
     let document = base.doc;
     const operations = [];
     for (const operation of request.operations ?? []) {
-      const local = ['unwrap', 'relax', 'texel-budget'].includes(operation?.op);
+      const local = ['unwrap', 'relax', 'texel-budget', 'pack-charts'].includes(operation?.op);
       if (local && request.protect !== undefined && operation.protect !== undefined)
         throw new TypeError('Choose transaction-wide or per-operation UV protection');
       const next = draft(graph(document,base.set), local && request.protect !== undefined ?

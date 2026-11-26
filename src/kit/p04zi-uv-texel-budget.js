@@ -26,15 +26,12 @@ const meshUVTexelBudget = (() => {
     return rows.filter((row, i) => !rows.some((other, j) => i !== j && contains(other, row)));
   }
 
-  function pack(open, charts, density, gutter, work) {
+  function place(open, entries, work, keepGoing = false) {
     let free = open;
-    const entries = charts.map(chart => {
-      const scale = density * chart.weight / chart.before.density;
-      const dims = chart.span.map(n => Math.max(1, Math.ceil(n * scale)) + gutter * 2);
-      return { id: chart.id, dims, scale };
-    }).sort((a, b) => b.dims[0] * b.dims[1] - a.dims[0] * a.dims[1] || (a.id < b.id ? -1 : 1));
-    const places = new Map();
-    for (const { id, dims: [w, h], scale } of entries) {
+    const placed = new Map(), missed = [];
+    const ordered = entries.slice().sort((a, b) =>
+      b.dims[0] * b.dims[1] - a.dims[0] * a.dims[1] || (a.id < b.id ? -1 : 1));
+    for (const { id, dims: [w, h] } of ordered) {
       let best, score = Infinity;
       for (const rect of free) {
         const [l, t, r, b] = rect;
@@ -45,12 +42,40 @@ const meshUVTexelBudget = (() => {
           best = rect;
         }
       }
-      if (!best) return null;
+      if (!best) {
+        if (!keepGoing) return null;
+        missed.push(id);
+        continue;
+      }
       const [x, y] = best;
-      places.set(id, { x: x + gutter, y: y + gutter, scale });
+      placed.set(id, [x, y]);
       free = subtract(free, [x, y, x + w, y + h], work);
     }
-    return places;
+    return { placed, missed };
+  }
+
+  function pack(open, charts, density, gutter, work) {
+    const entries = charts.map(chart => {
+      const scale = density * chart.weight / chart.before.density;
+      const dims = chart.span.map(n => Math.max(1, Math.ceil(n * scale)) + gutter * 2);
+      return { id: chart.id, dims, scale };
+    });
+    const result = place(open, entries, work);
+    if (!result) return null;
+    return new Map(entries.map(({id,scale})=>{
+      const [x,y] = result.placed.get(id);
+      return [id,{x:x+gutter,y:y+gutter,scale}];
+    }));
+  }
+
+  function freeSpace(pool, obstacles, work) {
+    const [x,y,w,h] = pool;
+    let free = [[x,y,x+w,y+h]];
+    for (const box of obstacles) {
+      if (validRect(box) && box[0] < x+w && box[1] < y+h && box[2] > x && box[3] > y)
+        free = subtract(free,box,work);
+    }
+    return free;
   }
 
   function assign(g, operation, points, conflict) {
@@ -109,11 +134,10 @@ const meshUVTexelBudget = (() => {
     const desired = weighted ? Math.sqrt((budget - reserved) / weighted) : 0;
     let places = new Map(), packingLimited = false;
     if (movable.length) {
-      const work = { remaining: 16e6 }, [x, y, w, h] = pool;
-      let free = [[x, y, x + w, y + h]];
+      const work = { remaining: 16e6 };
       const obstacles = [...g.islands.values()].filter(row => row.material === material && !moving.has(row.id));
-      for (const row of obstacles) free = subtract(free, row.bounds.map((n, a) =>
-        a < 2 ? Math.floor(n * atlas[a % 2]) - gutter : Math.ceil(n * atlas[a % 2]) + gutter), work);
+      const free = freeSpace(pool,obstacles.map(row=>row.bounds.map((n,a)=>
+        a < 2 ? Math.floor(n * atlas[a % 2]) - gutter : Math.ceil(n * atlas[a % 2]) + gutter)),work);
       places = pack(free, movable, desired, gutter, work);
       if (!places) {
         let low = 0, high = desired;
@@ -156,5 +180,5 @@ const meshUVTexelBudget = (() => {
     return { ...evidence, used, unallocated: Math.max(0, budget - used), packingLimited, features: featuresReport, islands: report };
   }
 
-  return Object.freeze({ assign });
+  return Object.freeze({ assign, place, freeSpace });
 })();
