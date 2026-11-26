@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { prepare,format } = require('./physical-reference-scene.js');
 const { makeTracer,auxiliaries,accumulate } = require('./physical-path-trace.js');
+const { whiteNits } = require('./physical-openpbr.js');
 const Film = require('./physical-reference-film.js');
 const PNG = require('./png.js');
 const EXR = require('./texture-exr.js');
@@ -58,6 +59,9 @@ async function writePhysicalReference(filename, { directory, resume, toolkit=req
     startSamples:start,totalSamples:end,signature:scene.signature,triangles:scene.triangles.length,
     stats:tracer.stats,progress,files:{raw:'raw.png',...(denoise!=='off'&&{denoised:'denoised.png'}),
       variance:'variance.png',albedo:'albedo.png',normals:'normals.png',depth:'depth.png',linear:'raw.exr',accumulation:'accumulation.bin'}};
+  const openPbr = Object.fromEntries([...scene.materials].flatMap(([name, material]) =>
+    material.openPbr ? [[name, material.openPbr]] : []));
+  if (Object.keys(openPbr).length) report.openPbr = { whiteNits, materials: openPbr };
   Assets.json(path.join(root,'report.json'),report);
   const template=fs.readFileSync(path.join(__dirname,'physical-reference.html'),'utf8');
   Assets.write(path.join(root,'index.html'),template.replace('/*PHYSICAL_REFERENCE*/',()=>JSON.stringify(report).replaceAll('<','\\u003c')));

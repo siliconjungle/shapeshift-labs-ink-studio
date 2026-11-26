@@ -24,6 +24,156 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.procedural.offsetRails` | function | `({path, halfWidth, up=[0,1,0], closed=false, miterLimit=2.5, shareSpan=false}={})` | [guide](../procedural.md#offset-rail-pairs), [source](../../src/kit/pac-offset-rails.js) |
 
+## KIT.procedural.openPbr
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.openPbr` | namespace |  |  |
+| `KIT.procedural.openPbr.colorSpace` | value | `string = "srgb-linear"` |  |
+| `KIT.procedural.openPbr.define` | function | `(parameters = empty, maps = empty)` | [source](../../src/kit/paq-openpbr.js) |
+| `KIT.procedural.openPbr.describe` | function | `(value)` | [source](../../src/kit/paq-openpbr.js) |
+| `KIT.procedural.openPbr.format` | value | `string = "ink-studio/openpbr-core"` |  |
+| `KIT.procedural.openPbr.inputs` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.base_color` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.base_color.default` | value | `array` |  |
+| `KIT.procedural.openPbr.inputs.base_color.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.base_color.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.base_color.type` | value | `string = "color3"` |  |
+| `KIT.procedural.openPbr.inputs.base_color.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.base_diffuse_roughness` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.base_diffuse_roughness.default` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.base_diffuse_roughness.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.base_diffuse_roughness.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.base_diffuse_roughness.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.base_diffuse_roughness.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.base_metalness` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.base_metalness.default` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.base_metalness.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.base_metalness.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.base_metalness.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.base_metalness.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.base_weight` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.base_weight.default` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.base_weight.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.base_weight.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.base_weight.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.base_weight.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.coat_color` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.coat_color.default` | value | `array` |  |
+| `KIT.procedural.openPbr.inputs.coat_color.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.coat_color.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.coat_color.type` | value | `string = "color3"` |  |
+| `KIT.procedural.openPbr.inputs.coat_color.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.coat_darkening` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.coat_darkening.default` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.coat_darkening.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.coat_darkening.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.coat_darkening.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.coat_darkening.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.coat_ior` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.coat_ior.default` | value | `number = 1.6` |  |
+| `KIT.procedural.openPbr.inputs.coat_ior.max` | value | `number = null` |  |
+| `KIT.procedural.openPbr.inputs.coat_ior.min` | value | `number = 5e-324` |  |
+| `KIT.procedural.openPbr.inputs.coat_ior.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.coat_ior.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.coat_roughness` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.coat_roughness.default` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.coat_roughness.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.coat_roughness.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.coat_roughness.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.coat_roughness.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.coat_roughness_anisotropy` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.coat_roughness_anisotropy.default` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.coat_roughness_anisotropy.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.coat_roughness_anisotropy.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.coat_roughness_anisotropy.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.coat_roughness_anisotropy.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.coat_weight` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.coat_weight.default` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.coat_weight.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.coat_weight.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.coat_weight.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.coat_weight.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.emission_color` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.emission_color.default` | value | `array` |  |
+| `KIT.procedural.openPbr.inputs.emission_color.max` | value | `number = null` |  |
+| `KIT.procedural.openPbr.inputs.emission_color.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.emission_color.type` | value | `string = "color3"` |  |
+| `KIT.procedural.openPbr.inputs.emission_color.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.emission_luminance` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.emission_luminance.default` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.emission_luminance.max` | value | `number = null` |  |
+| `KIT.procedural.openPbr.inputs.emission_luminance.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.emission_luminance.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.emission_luminance.units` | value | `string = "nits"` |  |
+| `KIT.procedural.openPbr.inputs.geometry_coat_normal` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.geometry_coat_normal.default` | value | `null` |  |
+| `KIT.procedural.openPbr.inputs.geometry_coat_normal.max` | value | `number = null` |  |
+| `KIT.procedural.openPbr.inputs.geometry_coat_normal.min` | value | `number = null` |  |
+| `KIT.procedural.openPbr.inputs.geometry_coat_normal.type` | value | `string = "vector3"` |  |
+| `KIT.procedural.openPbr.inputs.geometry_coat_normal.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.geometry_coat_tangent` | alias | `Alias of KIT.procedural.openPbr.inputs.geometry_coat_normal` |  |
+| `KIT.procedural.openPbr.inputs.geometry_normal` | alias | `Alias of KIT.procedural.openPbr.inputs.geometry_coat_normal` |  |
+| `KIT.procedural.openPbr.inputs.geometry_opacity` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.geometry_opacity.default` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.geometry_opacity.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.geometry_opacity.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.geometry_opacity.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.geometry_opacity.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.geometry_tangent` | alias | `Alias of KIT.procedural.openPbr.inputs.geometry_coat_normal` |  |
+| `KIT.procedural.openPbr.inputs.geometry_thin_walled` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.geometry_thin_walled.default` | value | `boolean = false` |  |
+| `KIT.procedural.openPbr.inputs.geometry_thin_walled.type` | value | `string = "boolean"` |  |
+| `KIT.procedural.openPbr.inputs.specular_color` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.specular_color.default` | value | `array` |  |
+| `KIT.procedural.openPbr.inputs.specular_color.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.specular_color.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.specular_color.type` | value | `string = "color3"` |  |
+| `KIT.procedural.openPbr.inputs.specular_color.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.specular_ior` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.specular_ior.default` | value | `number = 1.5` |  |
+| `KIT.procedural.openPbr.inputs.specular_ior.max` | value | `number = null` |  |
+| `KIT.procedural.openPbr.inputs.specular_ior.min` | value | `number = 5e-324` |  |
+| `KIT.procedural.openPbr.inputs.specular_ior.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.specular_ior.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.specular_roughness` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.specular_roughness.default` | value | `number = 0.3` |  |
+| `KIT.procedural.openPbr.inputs.specular_roughness.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.specular_roughness.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.specular_roughness.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.specular_roughness.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.specular_roughness_anisotropy` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.specular_roughness_anisotropy.default` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.specular_roughness_anisotropy.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.specular_roughness_anisotropy.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.specular_roughness_anisotropy.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.specular_roughness_anisotropy.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.specular_weight` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.specular_weight.default` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.specular_weight.max` | value | `number = null` |  |
+| `KIT.procedural.openPbr.inputs.specular_weight.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.specular_weight.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.specular_weight.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.operations` | namespace |  |  |
+| `KIT.procedural.openPbr.operations["material.openPbr"]` | namespace |  |  |
+| `KIT.procedural.openPbr.operations["material.openPbr"].description` | value | `string = "Author OpenPBR Surface core values and typed texture bindings using standard input names."` |  |
+| `KIT.procedural.openPbr.operations["material.openPbr"].inputs` | namespace |  |  |
+| `KIT.procedural.openPbr.operations["material.openPbr"].inputs.maps` | namespace |  |  |
+| `KIT.procedural.openPbr.operations["material.openPbr"].inputs.maps.default` | namespace |  |  |
+| `KIT.procedural.openPbr.operations["material.openPbr"].inputs.maps.description` | value | `string = "Typed image bindings by standard input name. A map overrides the uniform value."` |  |
+| `KIT.procedural.openPbr.operations["material.openPbr"].inputs.maps.type` | value | `string = "record"` |  |
+| `KIT.procedural.openPbr.operations["material.openPbr"].inputs.parameters` | namespace |  |  |
+| `KIT.procedural.openPbr.operations["material.openPbr"].inputs.parameters.default` | alias | `Alias of KIT.procedural.openPbr.operations["material.openPbr"].inputs.maps.default` |  |
+| `KIT.procedural.openPbr.operations["material.openPbr"].inputs.parameters.description` | value | `string = "Uniform OpenPBR inputs in linear sRGB; emission luminance is in nits."` |  |
+| `KIT.procedural.openPbr.operations["material.openPbr"].inputs.parameters.type` | value | `string = "record"` |  |
+| `KIT.procedural.openPbr.operations["material.openPbr"].outputs` | namespace |  |  |
+| `KIT.procedural.openPbr.operations["material.openPbr"].outputs.report` | value | `string = "record"` |  |
+| `KIT.procedural.openPbr.operations["material.openPbr"].outputs.value` | value | `string = "record"` |  |
+| `KIT.procedural.openPbr.operations["material.openPbr"].run` | function | `({ parameters, maps })` | [source](../../src/kit/paq-openpbr.js) |
+| `KIT.procedural.openPbr.read` | function | `(packet)` | [source](../../src/kit/paq-openpbr.js) |
+| `KIT.procedural.openPbr.spec` | value | `string = "1.1.2"` |  |
+| `KIT.procedural.openPbr.version` | value | `number = 1` |  |
+
 ## KIT.procedural.ornament
 
 | Member | Kind | Signature or value | Guides and source |

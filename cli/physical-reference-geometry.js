@@ -1,5 +1,5 @@
 const Geometry = require('./material-preview-geometry.js');
-const { dot,along,sub,cross,length,unit,scale,radians } = require('./physical-reference-math.js');
+const { dot,along,sub,cross,length,unit,scale,radians,frame } = require('./physical-reference-math.js');
 
 function transform({position,rotation,scale:size}) {
   const [a,b,c]=rotation.map(radians), [sx,sy,sz]=[a,b,c].map(Math.sin), [cx,cy,cz]=[a,b,c].map(Math.cos);
@@ -88,7 +88,7 @@ function coordinates(t,u,v) {
   return [a[0]+(b[0]-a[0])*u+(c[0]-a[0])*v,a[1]+(b[1]-a[1])*u+(c[1]-a[1])*v];
 }
 
-function intersection(t,o,d,near,far) {
+function intersection(t,o,d,near,far,rng) {
   const p=cross(d,t.e2), det=dot(t.e1,p);
   if(Math.abs(det)<1e-12) return null;
   const s=sub(o,t.a), u=dot(s,p)/det;
@@ -98,13 +98,13 @@ function intersection(t,o,d,near,far) {
   const distance=dot(t.e2,q)/det;
   if(distance<=near||distance>=far) return null;
   const uv=coordinates(t,u,v);
-  if(!t.material.visible(uv)) return null;
+  if(!t.material.visible(uv,rng)) return null;
   return {t,distance,u,v,uv};
 }
 
 function traceGeometry(triangles) {
   const root=hierarchy(triangles);
-  function intersect(origin,direction,near=0,far=Infinity,any=false) {
+  function intersect(origin,direction,near=0,far=Infinity,any=false,rng) {
     const inverse=direction.map(value=>1/value);
     const first=bounds(root,origin,inverse,near,far);
     if(first===Infinity) return null;
@@ -115,7 +115,7 @@ function traceGeometry(triangles) {
       if(entry>=far) continue;
       if(at.items) {
         for(const t of at.items) {
-          const hit=intersection(t,origin,direction,near,far);
+          const hit=intersection(t,origin,direction,near,far,rng);
           if(!hit) continue;
           if(any) return hit;
           closest=hit; far=hit.distance;
@@ -131,6 +131,38 @@ function traceGeometry(triangles) {
   return {intersect};
 }
 
+function openPbrFrame(p, t, n, ng, direction) {
+  const projected = (v, normal) => v && along(v, normal, -dot(v, normal));
+  const usable = v => v && length(v) > 1e-8;
+  const defaultX = projected(t.tangent, n);
+  const x = usable(defaultX) ? unit(defaultX) : frame(n)[0];
+  const perp = cross(n, x);
+  const y = t.bitangent ? scale(perp, dot(perp, t.bitangent) < 0 ? 1 : -1) : perp;
+  function decode(binding) {
+    if (!binding) return null;
+    const {value:[a,b,c],space}=binding;
+    if (space === 'world') {
+      const max = Math.max(Math.abs(a), Math.abs(b), Math.abs(c));
+      return [a/max,b/max,c/max];
+    }
+    return along(along(scale(n,c),x,a),y,b);
+  }
+  function normal(binding) {
+    const value=decode(binding);
+    if (!usable(value)) return n;
+    const mapped=unit(value);
+    return dot(mapped,ng)>.001 && dot(mapped,direction)<-.001 ? mapped : n;
+  }
+  function tangent(binding, normal) {
+    const value=projected(decode(binding),normal);
+    const fallback=projected(x,normal);
+    return usable(value) ? unit(value) : usable(fallback) ? unit(fallback) : frame(normal)[0];
+  }
+  const baseNormal=normal(p.geometry_normal), coatNormal=normal(p.geometry_coat_normal);
+  return {n:baseNormal,coatNormal,tangent:tangent(p.geometry_tangent,baseNormal),
+    coatTangent:tangent(p.geometry_coat_tangent,coatNormal)};
+}
+
 function surface(hit,origin,direction) {
   const {t,u,v,uv,distance}=hit, front=dot(t.ng,direction)<0, sign=front?1:-1;
   const m=t.material.at(uv);
@@ -139,6 +171,7 @@ function surface(hit,origin,direction) {
   const ng=scale(t.ng,sign);
   let n=scale(base,(dot(base,t.ng)<0?-1:1)*sign);
   if(dot(n,direction)>=0) n=ng;
+  if(m.openPbr) return {...hit,m,ng,front,point:along(origin,direction,distance),...openPbrFrame(m.openPbr,t,n,ng,direction)};
   if(m.normal&&t.tangent) {
     const x=unit(along(t.tangent,n,-dot(t.tangent,n))), perp=cross(n,x);
     const y=scale(perp,dot(perp,t.bitangent)<0?1:-1); // Normal green points opposite the top-down V axis.
