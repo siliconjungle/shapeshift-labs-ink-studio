@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Switchyard Glass · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--paper:#f4e8de;--muted:#b8adbf;--amber:#ffc78c;--teal:#a6dacb;--line:#41384a;--card:#22212d;--well:#171923}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 26% -20%,#4b3549,transparent 63%),#15141d;color:var(--paper);font:14px/1.45 system-ui,sans-serif}
+main{max-width:1200px;margin:auto;padding:35px clamp(16px,4vw,48px)}
+header{display:flex;justify-content:space-between;align-items:end;gap:12px;margin-bottom:21px}
+h1,h2,p{margin:0}h1,h2{font-family:Georgia,serif;font-weight:400}h1{font-size:clamp(50px,7.2vw,89px);letter-spacing:-.069em;line-height:.97;margin:4px 0 9px}h2{font-size:25px;letter-spacing:-.035em;line-height:1.05}
+p,label,dt{color:var(--muted)}.label,output,.status{font:11px ui-monospace,monospace;letter-spacing:.035em}.label{color:var(--amber);text-transform:uppercase}output,.status{color:var(--teal)}
+.layout{display:grid;grid-template-columns:minmax(0,1.58fr) minmax(310px,1fr);gap:14px;align-items:start}
+.card{background:var(--card);border:1px solid var(--line);border-radius:9px;overflow:hidden}.card+.card{margin-top:13px}
+.head,.foot,.toolstrip{padding:12px 15px;display:flex;align-items:center;justify-content:space-between;gap:9px}
+.foot,.toolstrip,.section{border-top:1px solid var(--line)}.foot p,.toolstrip label,.head label{font-size:12px}
+select,button{font:inherit;color:var(--paper);background:#322d3a;border:1px solid #625467;border-radius:5px;padding:6px 8px}
+button{cursor:pointer}button:disabled{cursor:default;opacity:.5}button:not(:disabled):hover,select:hover,button[aria-pressed=true]{border-color:var(--amber)}
+button[aria-pressed=true]{color:var(--amber);background:#392d3a}
+button:focus-visible,select:focus-visible,input:focus-visible,canvas:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+#download{background:var(--amber);color:#271f29;border-color:var(--amber);font-weight:650;white-space:nowrap;padding:8px 11px}
+.stage{display:grid;place-items:center;min-height:438px;position:relative;isolation:isolate;background:
+  radial-gradient(ellipse at 47% 42%,#46374d,transparent 64%),linear-gradient(140deg,#20202c,#1a1d2b);
+  border-top:1px solid var(--line)}
+.stage::before,.stage::after{content:"";position:absolute;inset:16px;z-index:-1;pointer-events:none}
+.stage::before{border:1px solid #ac91a536;background:repeating-linear-gradient(0deg,transparent 0 23px,#ced6e00a 23px 24px),repeating-linear-gradient(90deg,transparent 0 23px,#ced6e00a 23px 24px)}
+.stage::after{inset:15px;background:linear-gradient(var(--amber),var(--amber)) left top/7px 1px,linear-gradient(var(--amber),var(--amber)) left top/1px 7px,linear-gradient(var(--amber),var(--amber)) right bottom/7px 1px,linear-gradient(var(--amber),var(--amber)) right bottom/1px 7px;background-repeat:no-repeat}
+canvas{display:block;image-rendering:pixelated;height:auto;max-width:100%}#plate{width:480px;cursor:crosshair;touch-action:none;filter:drop-shadow(6px 10px 0 #0e12257d)}
+#plate[data-painting=true]{cursor:cell}.stack{display:grid;gap:9px}.bar{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.toolstrip{justify-content:start;flex-wrap:wrap}.toolstrip label{display:inline-flex;gap:5px;align-items:center}
+.toolstrip .hint{margin-left:auto;color:var(--muted);font-size:12px}input{accent-color:var(--amber)}#dab{width:32px;height:25px;padding:1px;background:#191926;border:1px solid #695971;border-radius:4px}
+.status[data-status=held],.status[data-status=blank],.status[data-status=error]{color:#ffc592}
+.section{padding:12px 15px}.section h2{margin-bottom:11px}.resources{display:grid;gap:6px;padding:0 15px 12px}
+.resource{width:100%;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:8px}.resource small{color:var(--muted);font-size:11px}
+.members{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.members[data-kind=tiles]{grid-template-columns:repeat(2,minmax(0,1fr))}
+.member{display:grid;gap:4px;justify-items:center;padding:5px 2px;font-size:12px;min-width:0}.member canvas{width:40px;border-radius:2px;background:#1a1b29}.member small{font:10px ui-monospace,monospace;color:var(--muted)}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:9px;align-items:center}.fields label{font-size:12px}.field{display:grid;gap:4px;min-width:0}
+.sliders{margin-top:11px;display:grid;grid-template-columns:1fr auto;gap:4px 8px;align-items:center}.sliders label{font-size:12px}.sliders input{grid-column:1/-1;width:100%;margin:0}
+.receipt{display:grid;gap:7px;margin:9px 0 0}.receipt div{display:flex;justify-content:space-between;gap:10px}.receipt dt{font-size:12px}.receipt dd{margin:0;text-align:right;overflow-wrap:anywhere}.full{grid-column:1/-1}
+#notice{margin-top:7px;font-size:12px;color:var(--amber)}#notice:empty{display:none}
+[hidden]{display:none!important}
+@media(max-width:1000px){.stage{min-height:367px}#plate{width:400px}}
+@media(max-width:760px){main{padding-top:22px}.layout{grid-template-columns:1fr}header{align-items:start;flex-direction:column}.stage{min-height:300px}#plate{width:320px}}
+@media(max-width:350px){#plate{width:240px}.stage{min-height:245px}.fields{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <span class="label">Ink Studio · Bitmap resources</span>
+      <h1>Switchyard Glass</h1>
+      <p>Inspect the native samples behind an animated railway signal.</p>
+    </div>
+    <button id="download" type="button">Download portable material</button>
+  </header>
+  <div class="layout">
+    <section class="card" aria-label="Bitmap preview">
+      <div class="head">
+        <h2 id="viewTitle">Lantern pulse</h2>
+        <output class="status" id="status" aria-live="polite"></output>
+      </div>
+      <div class="stage"><canvas id="plate" width="80" height="72" aria-label="Signal bitmap. Hover to inspect a pixel or enable Paint to edit one."></canvas></div>
+      <div class="toolstrip">
+        <label><input id="paint" type="checkbox"> Paint pixels</label>
+        <label><input id="dab" type="color" value="#ffd89e" aria-label="Paint color"></label>
+        <button id="undoPaint" type="button">Clear edits</button>
+        <span class="hint">Hover for native samples</span>
+      </div>
+      <div class="foot">
+        <p>Native pixel</p><output id="sample">—</output>
+      </div>
+    </section>
+    <aside>
+      <section class="card" aria-label="Bitmap sources">
+        <div class="head"><h2>Resources</h2></div>
+        <div class="resources" id="resources"></div>
+        <div class="section stack">
+          <div class="bar" id="sequenceControls">
+            <button id="play" type="button" aria-pressed="false">Play sequence</button>
+            <label for="playback">Playback</label>
+            <select id="playback"><option value="loop">Loop</option><option value="clamp">Clamp</option><option value="pingpong">Ping-pong</option></select>
+          </div>
+          <div class="members" id="members" aria-label="Frame or tile selection"></div>
+        </div>
+        <div class="section">
+          <div class="fields">
+            <label class="field">Color interpretation<select id="space">
+              <option value="srgb">sRGB</option><option value="srgb-linear">Linear sRGB</option>
+              <option value="display-p3">Display P3</option><option value="display-p3-linear">Linear Display P3</option>
+            </select></label>
+            <label class="field">Missing file<select id="fallback">
+              <option value="hold">Hold previous</option><option value="blank">Blank</option><option value="error">Error</option>
+            </select></label>
+          </div>
+          <div class="sliders">
+            <label for="exposure">Preview exposure</label><output id="ev" for="exposure">0 EV</output>
+            <input id="exposure" type="range" min="-4" max="2" step=".25" value="0">
+          </div>
+        </div>
+      </section>
+      <section class="card" aria-label="Source inspector">
+        <div class="head"><h2>Selected source</h2></div>
+        <div class="section">
+          <div class="bar">
+            <button id="embed" type="button">Embed</button>
+            <button id="relink" type="button">Relink origin</button>
+            <button id="reload" type="button">Reimport file</button>
+            <button id="replace" type="button">Replace</button>
+            <input id="file" type="file" accept=".png,.pfm" hidden>
+          </div>
+          <dl class="receipt">
+            <div><dt>Storage</dt><dd><output id="storage">—</output></dd></div>
+            <div><dt>Precision</dt><dd><output id="precision">—</output></dd></div>
+            <div><dt>Texels</dt><dd><output id="dims">—</output></dd></div>
+          </dl>
+          <p id="notice" role="status"></p>
+        </div>
+      </section>
+    </aside>
+  </div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="png-raster.js"></script>
+<script src="bitmap-resources.js"></script>
+<script src="data.js"></script>
+<script src="live.js"></script>
+</body>
+</html>

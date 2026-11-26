@@ -187,6 +187,7 @@ module.exports = {
   createGraphWorkers: require('./cli/graph-workers.js').createGraphWorkers,
   readGraphProject: require('./cli/graph-project.js').readGraphProject,
   openMaterialGraph: require('./cli/material-graph.js').openMaterialGraph,
+  ...require('./cli/material-bitmaps.js'),
   describeMaterialSubgraph: require('./cli/material-subgraphs.js').describeMaterialSubgraph,
   editMaterialSubgraph: require('./cli/material-subgraphs.js').editMaterialSubgraph,
   publishMaterialSubgraph: require('./cli/material-subgraphs.js').publishMaterialSubgraph,

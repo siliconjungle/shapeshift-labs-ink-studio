@@ -39,7 +39,12 @@ function estimateGraphMemory({ graph, groups, assets, overrides, kit, hostOperat
   }
 
   for (const [name, { format, value, type }] of assets) {
-    if (format === 'indexed-png') {
+    if (format === 'bitmap') {
+      const { width, height, channels, descriptor, decodedBytes } = value.info;
+      const bytes = { unorm8: 1, unorm16: 2, float32: 4 }[descriptor?.precision];
+      reserve(decodedBytes);
+      external.set(name, { value: raster(width, height, channels, bytes) });
+    } else if (format === 'indexed-png') {
       const index = raster(value.value.width, value.value.height, 1);
       const alpha = raster(index.width, index.height, 1);
       external.set(name, { value: index, alpha });
@@ -97,10 +102,11 @@ function estimateGraphMemory({ graph, groups, assets, overrides, kit, hostOperat
       }
       case 'data.collect':
         return { outputs: { value: Array.isArray(args.keys) ? args.keys.map(key => args.source?.[key]) : undefined } };
-      case 'pngAsset': case 'rasterAsset': case 'indexedPngAsset': {
+      case 'pngAsset': case 'rasterAsset': case 'indexedPngAsset': case 'bitmapAsset': {
         const outputs = external.get(args.name);
         return outputs && { outputs };
       }
+      case 'image.toDisplay': return source?.[rasterKind] && image(raster(source.width, source.height, 4));
       case 'raster.canvas': return image(raster(width, height));
       case 'draw.render': {
         const value = raster(width, height);
