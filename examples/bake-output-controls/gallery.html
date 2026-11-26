@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kiln &amp; Tide · Ink Studio</title>
+<style>
+:root{color-scheme:dark;font:15px/1.45 system-ui,sans-serif;color:#faecd6;background:#1a2029;--border:#555762;--muted:#c3c2c5;--accent:#ffc58e}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at 32% 0%,#3a353f,#1a2029 69%)}
+main{max-width:1180px;margin:auto;padding:clamp(20px,4vw,46px) clamp(14px,4.1vw,52px) 24px}
+header{display:flex;justify-content:space-between;align-items:end;flex-wrap:wrap;gap:12px;border-bottom:1px solid var(--border);padding-bottom:15px}
+h1{font:400 clamp(56px,7vw,90px)/.94 Georgia,serif;letter-spacing:-.061em;margin:0}
+p{color:var(--muted);margin:7px 0 0}a{color:var(--accent);text-underline-offset:3px}
+.controls{display:flex;gap:10px 17px;align-items:center;flex-wrap:wrap;padding:13px 0}
+label{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+select{color:inherit;background:#343441;border:1px solid var(--border);border-radius:3px;padding:5px 8px;font:inherit}
+a:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+article{border:1px solid var(--border);background:#292c36;padding:12px;min-width:0}
+h2{font:400 24px/1.1 Georgia,serif;margin:0 0 9px}
+figure{margin:0;display:grid;place-items:center;overflow:hidden;min-height:140px;aspect-ratio:1.55;
+background:conic-gradient(#20242d 25%,#2b303c 0 50%,#20242d 0 75%,#2b303c 0) 0 0/20px 20px}
+img{display:block;max-width:100%;max-height:100%;image-rendering:pixelated;width:100%;height:auto}
+footer{display:flex;justify-content:space-between;gap:6px 10px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+aside{border-top:1px solid var(--border);padding-top:10px;margin-top:16px;color:var(--muted);font-size:13px}
+@media(max-width:650px){.grid{grid-template-columns:1fr}}
+</style>
+<script defer src="data.js"></script>
+</head>
+<body><main>
+<header><div><h1>Kiln &amp; Tide</h1><p>Two enamel charts share a seam finer than one texel.</p></div>
+<a id="review">Open bake workstation</a></header>
+<div class="controls">
+<label>View<select id="view"><option value="pigment">Composited pigment</option><option value="rgb">Stored RGB and gutters</option>
+<option value="coverage">Geometric coverage</option><option value="normal">Normal map</option></select></label>
+<label>Level<select id="level"></select></label>
+</div>
+<section id="panels" class="grid" aria-label="Bake comparison"></section>
+<aside id="note"></aside>
+<template id="panel"><article><h2></h2><figure><img></figure><footer><span></span><a download>Download this level</a></footer></article></template>
+<script>
+window.addEventListener('DOMContentLoaded',()=>{
+  const get=id=>document.getElementById(id), view=get('view'), level=get('level'), panels=[];
+  get('review').href=demo.finished.review;
+  const settings={draft:'1 × 1 sampling · empty gutters',finished:'4 × 4 sampling · 5 px dilation · 5 diffusion passes'};
+  for(const [id,row] of Object.entries(demo)) {
+    const pane=get('panel').content.firstElementChild.cloneNode(true);
+    pane.querySelector('h2').textContent=row.label;
+    get('panels').append(pane);
+    panels.push({id,row,image:pane.querySelector('img'),caption:pane.querySelector('span'),link:pane.querySelector('a')});
+  }
+  function render() {
+    const type=view.value, map=type==='rgb'?'pigment':type;
+    const levels=demo.finished.maps[map], n=Math.min(+level.value,levels.length-1);
+    level.replaceChildren(...levels.map((m,i)=>new Option((i?'Mip '+i:'Base')+' · '+m.width+' × '+m.height,i)));
+    level.value=n;
+    for(const {id,row,image,caption,link} of panels) {
+      const selected=row.maps[map][n];
+      image.src=type==='rgb'?selected.rgb:selected.preview;
+      image.alt=row.label+' at '+(n?'mip '+n:'base level');
+      link.href=selected.file;
+      caption.textContent=type==='normal'?'97 × 61 at base · 16-bit float OpenEXR':settings[id];
+    }
+    get('note').textContent={
+      pigment:'At reduced levels, each texel takes its color from one chart. The file retains straight alpha.',
+      rgb:'This view reveals the stored colors under zero alpha. The finished map extends them into each chart’s gutter.',
+      coverage:'White is fully covered. Gray records partial coverage. Gutters stay outside the footprint.',
+      normal:'The normal pass has its own dimensions and float precision.'
+    }[type];
+  }
+  view.addEventListener('change',render);level.addEventListener('change',render);
+  render();
+});
+</script>
+</main></body></html>

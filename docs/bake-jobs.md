@@ -101,3 +101,7 @@ See [opacity and texture transfer](bake-texture-transfer.md) to move color and s
 ## Inspect and export UV diagnostics
 
 See [UV debug outputs](bake-uv-debug.md) for aligned chart outlines, footprint exports, ownership overlays, and tile navigation in the bake viewer.
+
+## Control each map's delivery
+
+See [bake output controls](bake-output-controls.md) for independent width and height, precision and format, chart-aware antialiasing, gutter treatment, and mip chains.
