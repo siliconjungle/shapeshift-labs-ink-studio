@@ -38,6 +38,10 @@ dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 9px;font
 #notice{white-space:pre-wrap;overflow-wrap:anywhere;color:#f5bca9;min-height:1.05em}
 [hidden]{display:none!important}
 @media(max-width:770px){.layout{grid-template-columns:1fr}.preview{height:290px}}
+#id-legend{margin:10px 0;color:var(--muted)}
+#id-swatches{padding:0;margin:6px 0 0;list-style:none;display:grid;gap:4px;max-height:180px;overflow:auto}
+#id-swatches li{display:flex;align-items:center;gap:8px;overflow-wrap:anywhere;font-size:12px}
+#id-swatches li span:first-child{width:11px;height:11px;flex:none;border:1px solid #fff4;border-radius:2px}
 </style>
 <script defer src="data.js"></script><script defer src="live.js"></script>
 </head><body><main>
@@ -64,6 +68,7 @@ dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 9px;font
 <section class="card">
 <h2>Baked map</h2><label>Map, target and tile<select id="result"></select></label>
 <div class="preview"><img id="image" alt="" hidden><p id="empty">Run a bake to preview its maps.</p></div><dl id="details"></dl>
+<details id="id-legend" hidden><summary>ID palette</summary><ul id="id-swatches"></ul></details>
 <div class="toolbar"><a id="download-map" download hidden>Download map</a><a id="download-validity" download hidden>Download paired validity</a></div>
 </section>
 <section class="card" id="refresh-wrap" hidden><h2>Refreshed resources</h2><div id="refresh"></div><a id="material" href="material.material.json" download>Material graph</a></section>

@@ -49,12 +49,13 @@ const BitmapResources = (() => {
     return source;
   }
   function interpretation(settings = {}) {
-    if (!fields(settings, ['intent', 'colorSpace', 'channel', 'units', 'alpha', 'sampling', 'tiling', 'normalSpace', 'normalOrientation', 'heightRange', 'valueRange', 'layout']))
+    if (!fields(settings, ['intent', 'colorSpace', 'channel', 'units', 'alpha', 'sampling', 'tiling', 'normalSpace', 'normalOrientation', 'heightRange', 'valueRange', 'layout', 'vectorDomain']))
       throw new TypeError('Invalid bitmap interpretation settings');
-    const { intent = 'color', colorSpace, channel, units, alpha, sampling, tiling, normalSpace, normalOrientation, heightRange, valueRange, layout } = settings;
+    const { intent = 'color', colorSpace, channel, units, alpha, sampling, tiling, normalSpace, normalOrientation, heightRange, valueRange, layout, vectorDomain } = settings;
     const range=heightRange??valueRange;
     if (!['color', 'data', 'mask', 'height', 'normal'].includes(intent) ||
         layout!==undefined&&(intent!=='data'||layout!=='xyz'||channel!==undefined) ||
+        vectorDomain!==undefined&&(layout!=='xyz'||!['signed-unit','raw'].includes(vectorDomain)) ||
         normalSpace !== undefined && (intent !== 'normal' || !['tangent','world'].includes(normalSpace)) ||
         normalOrientation !== undefined && (intent !== 'normal' || normalSpace==='world' || !['opengl','directx'].includes(normalOrientation)) ||
         heightRange !== undefined&&intent!=='height'||valueRange!==undefined&&(intent!=='data'||layout!==undefined)||
@@ -212,6 +213,7 @@ const BitmapResources = (() => {
         return range[0]+unit*(range[1]-range[0]);
       };
       function decodeVector(n) {
+        if(settings.vectorDomain==='raw')return n/sourceMax;
         if(sourceMax!==1)return n===Math.round(sourceMax/2)?0:n/sourceMax*2-1;
         if(n< -1||n>1)throw new RangeError('XYZ bitmap components must be in [-1, 1]');
         return n;
@@ -224,7 +226,7 @@ const BitmapResources = (() => {
     }
     for (const { x, y, value } of edits ?? []) {
       if (x >= width || y >= height || value.length !== channels || value.some((n, i) =>
-        !Number.isFinite(Math.fround(n)) || settings?.layout==='xyz'&&Math.abs(n)>1 ||
+        !Number.isFinite(Math.fround(n)) || settings?.layout==='xyz'&&settings.vectorDomain!=='raw'&&Math.abs(n)>1 ||
         (targetMax !== 1 || descriptor.intent === 'mask' || channels === 4 &&
           (i === 3 || !descriptor.colorSpace.endsWith('-linear'))) && (n < 0 || n > 1)))
         throw new RangeError('Bitmap pixel edit does not fit its source image or sample range at ' + x + ',' + y);

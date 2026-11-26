@@ -16,7 +16,7 @@ fs.mkdirSync(dir,{recursive:true});
 const {scene,panel} = fixture();
 const {prefabLibrary,instances,...base} = scene;
 json('source.json',{...base,id:'linked-station-run',topologyMeshes:{panel},
-  camera:{target:[-.1,.28,0],dist:9,yaw:-.17,pitch:.06,projection:'orthographic',sway:0}});
+  camera:{target:[.10,.28,0],dist:9,yaw:-.17,pitch:.06,projection:'orthographic',sway:0}});
 json('promote.json',{prefab:'painted-bay',instance:'source',faces:{panel:['sign','grille']},
   origin:{kind:'point',id:'threshold',at:[-.75,0,0]}});
 const flat = {origin:[-3.3,-.78,0],right:[1,0,0],up:[0,1,0],grid:[.5,.5]};
@@ -53,7 +53,7 @@ const panels = requests.map(([name,title,reference,options]) => {
   assert.deepEqual(report,preview);
   assert(report.canCommit);
   const png = name+'-1x.png';
-  run(['render',name+'-scene.json','--raw','--w','256','--h','114','--px','1','--zoom','1.65','--out',png]);
+  run(['render',name+'-scene.json','--raw','--w','256','--h','114','--px','1','--zoom','1.6','--out',png]);
   return {title,png,cells:report.placements.map(row => row.gridAt.join(',')).join('   ')};
 });
 

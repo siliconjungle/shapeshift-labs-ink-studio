@@ -6,7 +6,9 @@
     'cage-backface':'Projection backfaces','cage-distance':'Projection distance','cage-relief':'Signed projection relief',
     ao:'Ambient occlusion','ao-contact':'Contact AO','ao-directional':'Directional AO',
     'bent-normal':'Bent normal','occlusion-direction':'Occlusion direction',
-    curvature:'Signed curvature','curvature-convex':'Convex curvature','curvature-concave':'Concave curvature'};
+    curvature:'Signed curvature','curvature-convex':'Convex curvature','curvature-concave':'Concave curvature',
+    'position-object':'Object position','position-world':'World position','position-normalized':'Normalized position',
+    'vertex-id':'Vertex ID','material-id':'Material ID','part-id':'Part ID'};
   const geometry=['slope','cavity','exposure','thickness','thickness-valid'];
   const occlusionMaps=['ao','ao-contact','ao-directional','bent-normal','occlusion-direction'];
   const curvatureMaps=['curvature','curvature-convex','curvature-concave'];
@@ -325,10 +327,18 @@
       detail.open=i===0;detail.append(summary);
       const grid=node('div');grid.className='form';
       grid.append(field('Mesh',selected(catalog.map(m=>[m.index,m.name]),mesh.index,value=>{
-        row.mesh=+value;delete row.submeshes;delete row.slots;delete row.thicknessParts;row.uvSet=0;targetControls();
+        row.mesh=+value;delete row.submeshes;delete row.slots;delete row.thicknessParts;delete row.positionNode;row.uvSet=0;targetControls();
       })));
       const sets=[...new Set(mesh.submeshes.flatMap(p=>p.uvSets))].sort((a,b)=>a-b);
       grid.append(field('UV set',selected(sets.map(set=>[set,'TEXCOORD_'+set]),row.uvSet,value=>{row.uvSet=+value;})));
+      const placements=mesh.placements??[];
+      if(placements.length>1) {
+        const chosen=placements.find(({index,name})=>row.positionNode===index||row.positionNode===name)?.index;
+        grid.append(field('World position node',selected([['','Choose a node'],
+          ...placements.map(({index,name})=>[index,index+' · '+name])],chosen??'',value=>{
+          put(row,'positionNode',value===''?undefined:+value);
+        })));
+      }
       detail.append(grid);
       function checks(label,all,key) {
         detail.append(node('p',label));const list=node('div');list.className='partlist';
@@ -399,6 +409,8 @@
     const row=report?.maps[+el('result').value];
     el('image').hidden=!row;el('empty').hidden=!!row;el('download-map').hidden=!row;
     el('download-validity').hidden=!row?.validityFile;
+    const legend=el('id-legend');
+    legend.hidden=true;el('id-swatches').replaceChildren();
     if(!row)return;
     el('image').src=base+(row.previewFile??row.file);
     el('image').alt=(names[row.map]??row.map)+' on '+row.target+' tile '+row.tileLabel;
@@ -406,6 +418,14 @@
     el('download-validity').href=base+(row.validityFile??'');
     const output=row.output, number=n=>Number(n.toPrecision(6)).toString();
     const span=([lo,hi])=>number(lo)+' to '+number(hi);
+    if(output?.kind==='id') {
+      for(const row of output.palette) {
+        const chip=node('span');chip.style.backgroundColor=row.color;
+        const label=row.label??('Vertex '+row.vertex+' · primitive '+row.part);
+        const item=node('li');item.append(chip,node('span',row.id+' · '+label));el('id-swatches').append(item);
+      }
+      legend.hidden=!output.palette.length;
+    }
     const thickness=row.settings.thickness&&row.geometry?.thickness;
     const reasons={open:'Open',nonManifold:'Non-manifold',winding:'Winding',degenerate:'Zero volume',
       grazing:'Grazing ray',rangeMiss:'Out of range',bias:'Within bias',part:'Other part',shell:'Other shell',
@@ -417,6 +437,11 @@
       ...(output&&{'Encoding':encodings.find(([key])=>key===output.encoding)?.[1]}),
       ...(output?.kind==='normal'&&{'Normal space':title(output.space)}),
       ...(output?.kind==='direction'&&{'Direction space':'World XYZ'}),
+      ...(output?.kind==='position'&&{'Position space':title(output.space)+' XYZ',
+        ...(output.node&&{'Placed at':output.node.name+' · node '+output.node.index}),
+        'Bounds min':output.bounds.min.map(number).join(', '),'Bounds max':output.bounds.max.map(number).join(', ')}),
+      ...(output?.kind==='id'&&{'Identity':title(output.identity),'IDs on tile':output.distinct.toLocaleString(),
+        ...(output.distinct>output.palette.length&&{'Swatches shown':output.palette.length})}),
       ...(output?.kind==='height'&&{'Height range':output.range?span(output.range):'Raw signed scene units',
         ...(output.measured&&{'Measured on tile':span([output.measured.min,output.measured.max])}),
         ...(output.range&&{'Clipped samples':output.clippedLow+output.clippedHigh})}),

@@ -30,10 +30,10 @@ function access(doc,binary) {
       throw new RangeError('A glTF accessor crosses its buffer-view bounds');
     return from+offset;
   }
-  return (id,type)=>{
+  return (id,type,vertexId=false)=>{
     const a=doc.accessors?.[id], lanes=width[type], component=components[a?.componentType];
     if(!a||a.type!==type||!component||!Number.isSafeInteger(a.count)||a.count<1||a.count*lanes>5e6||
-       type==='SCALAR'&&(![5121,5123,5125].includes(a.componentType)||a.normalized)||
+       type==='SCALAR'&&(!(vertexId?[5121,5123,5126]:[5121,5123,5125]).includes(a.componentType)||a.normalized)||
        type!=='SCALAR'&&a.componentType!==5126&&!a.normalized)
       throw new TypeError('Unsupported or invalid glTF scene accessor '+id);
     if(cache.has(id)) return cache.get(id);
@@ -64,7 +64,7 @@ function access(doc,binary) {
   };
 }
 
-function materials(doc,binary,directory) {
+function materials(doc,binary,directory,bakeAttributes) {
   const images=new Map();
   function map(info,channel) {
     if(!info) return undefined;
@@ -92,7 +92,7 @@ function materials(doc,binary,directory) {
     const opacity=m.alphaMode&&m.alphaMode!=='OPAQUE'&&base?{...base,channel:'a'}:undefined;
     return {name:m.name??'Material '+(i+1),color:p.baseColorFactor??[1,1,1,1],roughness:p.roughnessFactor??1,
       metallic:p.metallicFactor??1,emission:m.emissiveFactor??[0,0,0],alphaMode:m.alphaMode??'OPAQUE',cutoff:m.alphaCutoff??.5,
-      doubleSided:m.doubleSided??false,maps:Object.fromEntries(Object.entries({base,normal,emissive,roughness,metallic,ao,opacity}).filter(([,value])=>value))};
+      doubleSided:m.doubleSided??false,...(bakeAttributes&&{inkId:m.extras?.inkStudio?.materialId}),maps:Object.fromEntries(Object.entries({base,normal,emissive,roughness,metallic,ao,opacity}).filter(([,value])=>value))};
   });
 }
 
@@ -107,10 +107,11 @@ function fromGltf(file,textureDir,onFile,{bakeAttributes=false}={}) {
     const {attributes={}}=p;
     if(p.mode!==undefined&&p.mode!==4||p.targets?.length||p.extensions||
        Object.keys(attributes).some(key=>!['POSITION','NORMAL','TANGENT'].includes(key)&&!/^TEXCOORD_\d+$/.test(key)&&
-         !(bakeAttributes&&key==='COLOR_0')))
+         !(bakeAttributes&&['COLOR_0','_INK_VERTEX_ID'].includes(key))))
       throw new TypeError('Scene resources support triangle positions, normals and UVs. Unsupported glTF vertex attributes or primitive mode.');
     // Tangents can be reconstructed by the consumer from normals and the selected UV chart.
     const position=read(attributes.POSITION,'VEC3'), count=position.length/3;
+    const vertexIds=attributes._INK_VERTEX_ID===undefined?undefined:read(attributes._INK_VERTEX_ID,'SCALAR',true);
     const indices=p.indices===undefined?position.filter((_,i)=>i%3===0).map((_,i)=>i):read(p.indices,'SCALAR');
     const normal=attributes.NORMAL===undefined?undefined:read(attributes.NORMAL,'VEC3');
     const colorType=doc.accessors?.[attributes.COLOR_0]?.type;
@@ -119,15 +120,17 @@ function fromGltf(file,textureDir,onFile,{bakeAttributes=false}={}) {
       .map(([key,id])=>[key.slice(9),read(id,'VEC2')]));
     total+=indices.length;
     if(!indices.length||indices.length%3||total>1_500_000||indices.some(i=>i>=count)||
-       normal&&normal.length!==position.length||color&&(color.length!==count*width[colorType]||color.some(n=>n<0||n>1))||
+       normal&&normal.length!==position.length||vertexIds&&vertexIds.length!==count||color&&(color.length!==count*width[colorType]||color.some(n=>n<0||n>1))||
        Object.values(uv).some(row=>row.length!==count*2))
       throw new RangeError('Invalid glTF triangle indices, normal count or UV count');
-    return {position,indices,...(normal&&{normal}),...(color&&{color,colorLanes:width[colorType]}),uv,material:p.material??null};
+    return {position,indices,...(normal&&{normal}),...(color&&{color,colorLanes:width[colorType]}),uv,material:p.material??null,
+      ...(bakeAttributes&&{positionAccessor:attributes.POSITION,vertexIds,inkId:p.extras?.inkStudio?.partId,
+        inkLabel:p.extras?.inkStudio?.partLabel})};
   })}));
   const active=asset.sample(), indices=new Map(active.map((row,i)=>[row.id,i]));
   const nodes=active.map(n=>({name:n.name??'Node '+n.id,parent:n.parent===null?null:indices.get(n.parent),matrix:n.local,mesh:n.mesh??null,
-    ...(bakeAttributes&&{world:n.world})}));
-  return {name:doc.scenes?.[doc.scene??0]?.name??path.basename(file,path.extname(file)),nodes,meshes,materials:materials(doc,binary,textureDir)};
+    ...(bakeAttributes&&{world:n.world,index:n.id})}));
+  return {name:doc.scenes?.[doc.scene??0]?.name??path.basename(file,path.extname(file)),nodes,meshes,materials:materials(doc,binary,textureDir,bakeAttributes)};
 }
 
 function packing(directory,maps,keys,channels) {
