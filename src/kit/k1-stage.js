@@ -506,18 +506,22 @@
         if(brushFrames)SplatFootprints.setFrames(st.W,brushFrames);
       };
       // where a part's splats sit at rest: middle and extent
-      rig.box = b => {
+      rig.box = (b, include) => {
         if (typeof b === 'string') b = ids[b];
         const L = list[b],
           lo = [1e9, 1e9, 1e9],
           hi = [-1e9, -1e9, -1e9];
-        for (let n = 0; n < L.length; n++)
+        let count = 0;
+        for (const index of L) {
+          if (include && !include(index)) continue;
+          count++;
           for (let k = 0; k < 3; k++) {
-            const v = st.base[L[n] * 16 + k];
+            const v = st.base[index * 16 + k];
             if (v < lo[k]) lo[k] = v;
             if (v > hi[k]) hi[k] = v;
           }
-        return { lo, hi, c: [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2], n: L.length };
+        }
+        return { lo, hi, c: [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2], n: count };
       };
       return rig;
     };

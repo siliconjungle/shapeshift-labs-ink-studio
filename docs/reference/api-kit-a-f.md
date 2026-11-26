@@ -838,6 +838,11 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.meshTopologyScene.revise` | function | `(row, patch, { projection, flatten=[], atlasForFlatten, ...transitionOptions } = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.transferAttachments` | function | `(row, patch, settings, projection)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.uvAtlases` | function | `(scene,row,selector,{tileGrid=false} = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
+| `KIT.authoring.paintings3d` | namespace |  |  |
+| `KIT.authoring.paintings3d.expand` | function | `(source)` | [source](../../src/kit/p23a-paintings-3d.js) |
+| `KIT.authoring.paintings3d.extract` | function | `(scene, id)` | [source](../../src/kit/p23a-paintings-3d.js) |
+| `KIT.authoring.paintings3d.format` | value | `string = "ink-studio/painting-3d"` |  |
+| `KIT.authoring.paintings3d.revise` | function | `(scene, input, update = false)` | [source](../../src/kit/p23a-paintings-3d.js) |
 | `KIT.authoring.physicalMaterials` | namespace |  |  |
 | `KIT.authoring.physicalMaterials.checkContactEffects` | function | `(value)` | [source](../../src/kit/p90-asset-materials.js) |
 | `KIT.authoring.physicalMaterials.checkStructural` | function | `(key,value,wet=true)` | [source](../../src/kit/p90-asset-materials.js) |
@@ -1727,6 +1732,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.diorama.kinds.warp.need` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.warp.need.of` | value | `string = "solid"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.operandFields` | function | `(solid)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
+| `KIT.diorama.paintingPlacements` | function | `(spec, env)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.report` | function | `(list)` | [guide](../../README.md#scenes-as-json), [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.roles` | value | `array` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.scene` | function | `(spec, env)` | [guide](../../README.md#scenes-as-json), [guide](../../README.md#editable-3d-drawing), [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
