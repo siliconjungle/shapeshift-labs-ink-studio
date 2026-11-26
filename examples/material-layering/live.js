@@ -23,7 +23,7 @@
         const glaze = { ...glazeSettings.default, height: entry('dominance').checked ? glazeSettings.default.height : null };
         const mark = { ...stampSettings.default, opacity: Number(entry('stamp').checked),
           transform: { ...stampSettings.default.transform, offset: [x / 100, .15], rotation: angle } };
-        material = runtime.evaluate({ enamelEdits, glazeSettings: glaze, stampSettings: mark }).material;
+        material = runtime.evaluate({ enamelEdits, glazeSettings: glaze, stampSettings: mark }).outputs.material;
         dirty = false;
       }
       const { width, height, pixels } = LanternRelay.render(material, mode, Number(entry('light').value));
