@@ -229,3 +229,96 @@ test('WebGL evaluates each blend mode and neutral midpoint like the headless ren
   },blendCases());
   checkBlendColors(result.samples);
 });
+
+const sharedTint = '#e5965a', replacementTint = '#449ee6';
+function remapScene() {
+  const original=scene(), row=original.topologyMeshes.wing;
+  const shared=plan(plain,{tool:'paint',face:'west',color:sharedTint,opacity:.55}).document;
+  const colored=mode(shared,'alpha-blend');
+  const linked={document:colored,materials:row.materials,bakes:row.bakes};
+  const revised=T.edit(colored,{faces:[{...colored.faces[0],corners:colored.faces[0].corners.map((corner,i)=>i===0 ?
+    {...corner,attributes:{...corner.attributes,tintCoverage:.4}} : corner)}]});
+  original.topologyMeshes.wing={...linked,document:revised,part:'panel',bindings:row.bindings,
+    attachments:T.attachments.create(revised,[])};
+  original.prefabLibrary='library.json';
+  original.instances={left:{prefab:'badge',transform:{translation:[-.8,0,.5]}},
+    offscreen:{prefab:'badge',transform:{translation:[15,0,0]},meshOverrides:{
+      face:{revision:2,base:T.revision(colored),mesh:linked}
+    }}};
+  return {original,prefabs:{badge:{revision:2,solids:{},usesTilesets:['paint'],topologyMeshes:{face:linked}}}};
+}
+
+test('find and remap shared scene tint through editable meshes and prefab placements in one undo',()=>{
+  const {original,prefabs}=remapScene();
+  const editor=ink.createSceneEditor(original,{env:{prefabs}}), old=editor.snapshot();
+  const find=editor.planMeshTintRemap({from:sharedTint});
+  assert.equal(find.matchedFaces,3);
+  assert.equal(find.matchedCorners,12);
+  assert.equal(find.changedCorners,0);
+  assert.deepEqual(find.meshes.map(row=>row.object),['left.face','offscreen.face','wing']);
+  assert(find.meshes.every(row=>row.faces[0].face==='west'));
+  assert.deepEqual(editor.planMeshTintRemap({from:'#e6965a',tolerance:.004}).meshes,find.meshes);
+  assert.equal(editor.planMeshTintRemap({from:'#e6965a'}).matchedFaces,0);
+  const request={from:sharedTint,to:replacementTint};
+  const preview=editor.planMeshTintRemap(request);
+  assert.equal(preview.changedFaces,3);
+  assert.equal(preview.changedCorners,12);
+  assert.deepEqual(editor.snapshot(),old);
+  assert.deepEqual(editor.editMeshTintRemap(request),preview);
+  const current=editor.snapshot();
+  assert.deepEqual(current.tilesets,old.tilesets);
+  assert.equal(current.topologyMeshes.wing.document.tintBlend,'alpha-blend');
+  assert.deepEqual(current.topologyMeshes.wing.bindings,old.topologyMeshes.wing.bindings);
+  assert.equal(current.topologyMeshes.wing.document.faces[0].corners[0].attributes.tintCoverage,.4);
+  assert.equal(current.topologyMeshes.wing.attachments.revision,preview.meshes.at(-1).afterRevision);
+  const copied=current.instances.left.meshOverrides.face;
+  assert.equal(copied.base,T.revision(prefabs.badge.topologyMeshes.face.document));
+  assert.equal(copied.revision,2);
+  assert.deepEqual(copied.mesh.document.faces[0].corners[0].attributes.tint,[68/255,158/255,230/255,.55]);
+  assert.equal(editor.planMeshTintRemap({from:sharedTint}).matchedCorners,0);
+  assert.equal(editor.planMeshTintRemap({from:replacementTint,to:replacementTint}).changedFaces,0);
+  assert(editor.undo());
+  assert.deepEqual(editor.snapshot(),old);
+  assert(editor.redo());
+  assert.deepEqual(editor.snapshot(),current);
+  assert.equal(editor.build().topologyMeshes['left.face'].document.tintBlend,'alpha-blend');
+});
+
+test('CLI emits exact source pigment and tint views and guards a scene-wide remap receipt',t=>{
+  const {original,prefabs}=remapScene(), dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-tint-remap-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const file=name=>path.join(dir,name), save=(name,value)=>fs.writeFileSync(file(name),JSON.stringify(value));
+  const run=(source,request,...args)=>JSON.parse(execFileSync(process.execPath,
+    [cli,'mesh-topology','tint-remap',source,request,...args],{cwd:dir,encoding:'utf8'}));
+  save('scene.json',original);
+  save('library.json',prefabs);
+  save('view.json',{w:100,h:64});
+  save('request.json',{from:sharedTint,to:replacementTint});
+  save('inspect.json',{});
+  const report=run('scene.json','request.json','--view','view.json','--preview','review');
+  save('receipt.json',report);
+  assert.equal(report.changedFaces,3);
+  assert(report.native.changedPixels>0);
+  assert.deepEqual(report.native.files,['before.png','after.png','diff.png','texture-only.png','tint-before.png','tint-after.png']);
+  assert.equal(run('scene.json','request.json','--expect','receipt.json','--out','remapped.json').changedCorners,12);
+  const check=run('remapped.json','inspect.json','--view','view.json','--preview','inspected');
+  assert.deepEqual(check.native.files,['texture-only.png','tint-only.png']);
+  const pixels=name=>PNG.raster(file(name)).data;
+  const color=pixels('review/texture-only.png'), tint=pixels('review/tint-before.png'), next=pixels('review/tint-after.png');
+  assert.deepEqual(color,pixels('inspected/texture-only.png'));
+  assert.deepEqual(next,pixels('inspected/tint-only.png'));
+  assert.notDeepEqual(tint,next);
+  const covered=[];
+  for (let i=0;i<color.length;i+=4) {
+    assert.equal(color[i+3],tint[i+3]);
+    assert.equal(color[i+3],next[i+3]);
+    if (color[i+3]) covered.push(i);
+  }
+  assert(covered.length>25 && covered.length<color.length/4);
+  assert(covered.some(i=>[220,231,206].every((n,k)=>color[i+k]===n)));
+  const stale=spawnSync(process.execPath,[cli,'mesh-topology','tint-remap','remapped.json','request.json',
+    '--expect','receipt.json','--out','stale.json'],{cwd:dir,encoding:'utf8'});
+  assert.equal(stale.status,1);
+  assert.equal(JSON.parse(stale.stdout).conflicts[0].code,'stale-preview');
+  assert(!fs.existsSync(file('stale.json')));
+});

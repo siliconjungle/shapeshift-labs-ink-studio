@@ -43,6 +43,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().editMeshShapeKeys` | function | `(object, request, options={})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().editMeshSkin` | function | `(object, request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().editMeshTint` | function | `(object, request, {part} = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().editMeshTintRemap` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().editMeshTopology` | function | `(object, patch, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().editMeshUV` | function | `(object, request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().editSculptContribution` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
@@ -92,6 +93,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().planMeshShapeKeys` | function | `(object, request, {part}={})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planMeshSkin` | function | `(object, request, { part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planMeshTint` | function | `(object, request, {part} = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().planMeshTintRemap` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planMeshTransform` | function | `(object, request, { part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planMeshUV` | function | `(object, request, { part, projectTexelsPerUnit, camera, projectionPositions } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planPainting3d` | function | `(request, { update = false } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |

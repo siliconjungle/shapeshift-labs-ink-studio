@@ -4,6 +4,7 @@ const fs = require('node:fs'), path = require('node:path');
 const files = require('./asset-files.js'), PNG = require('./png.js');
 const {digest,isRevision} = require('./pixel-edit-revisions.js');
 const {viewSettings,worldFor,render} = require('./mesh-native-view.js');
+const R = require('./render.js');
 
 const read = file=>JSON.parse(fs.readFileSync(path.resolve(file),'utf8'));
 const name = value=>typeof value==='string' && !!value.trim();
@@ -28,6 +29,10 @@ function preview(before,after,view,toolkit,editor,object,part,request,directory)
     right=before===after ? left : cage(after);
   }
   const a=render(left,view,toolkit,[]), b=right===left ? a : render(right,view,toolkit,[]);
+  return compareFrames(a,b,directory);
+}
+
+function compareFrames(a,b,directory) {
   const {w,h} = a, diff = new Uint8Array(a.rgb.length);
   let changedPixels = 0;
   for (let i=0;i<diff.length;i+=3) {
@@ -89,4 +94,70 @@ function command(file,input,rest,opt,toolkit,openEditor) {
   return print(report);
 }
 
-module.exports = {command};
+function remapPreview(editor,request,report,settings,toolkit,directory) {
+  const view=viewSettings({raw:true,...settings},false), {w,h,t,raw,camera}=view;
+  function capture(source) {
+    const world=source.build();
+    require('./diarama-pose.js').pose(world,t,{kit:toolkit,maxSteps:7200});
+    const frame=R.render(world,{w,h,t,raw,camera,px:1,passes:['depth'],captureMeshTint:true,
+      composite:false,renderGraph:false,renderGrid:false,inspection:false,shutter:false,cameraGuides:false});
+    const debug=frame.meshTintInspection;
+    if (frame.w!==w || frame.h!==h || debug?.texture.length!==w*h*4 || debug?.tint.length!==w*h*4)
+      throw new RangeError('Scene tint review needs matching native mesh inspection passes');
+    return {frame,...debug};
+  }
+  const before=capture(editor);
+  let after=before;
+  if (report.changedCorners) {
+    const draft=editor.fork();
+    draft.editMeshTintRemap(request);
+    after=capture(draft);
+  }
+  const editing=request.to!==undefined, images=[['texture-only.png',before.texture],
+    ...(editing ? [['tint-before.png',before.tint],['tint-after.png',after.tint]] : [['tint-only.png',before.tint]])];
+  for (const [name,rgba] of images) files.write(path.resolve(directory,name),PNG.encode(w,h,rgba,4));
+  const normal=editing ? compareFrames(before.frame,after.frame,directory) : {grid:[w,h],files:[]};
+  return {...normal,files:[...normal.files,...images.map(([name])=>name)]};
+}
+
+function remapCommand(file,input,rest,opt,toolkit,openEditor) {
+  const {out,preview:directory,view,expect}=opt;
+  if (rest.length || ![file,input].every(name) || !fields(opt,['out','preview','view','expect']) ||
+      !Object.values(opt).every(name) || view!==undefined && directory===undefined)
+    throw new TypeError('Use mesh-topology tint-remap <scene.json> <request.json> with optional view, preview, receipt and output');
+  const request=read(input), editing=request?.to!==undefined;
+  if (!editing && (out || expect)) throw new TypeError('A find or inspection request reads the scene without writing it');
+  const source=path.resolve(file), output=out && path.resolve(out);
+  if (output && (!/\.json$/i.test(output) || path.dirname(output)!==path.dirname(source)))
+    throw new RangeError('Write a new scene JSON beside its source to preserve relative scene assets');
+  const inputs=[file,input,view,expect].filter(Boolean).map(name=>path.resolve(name));
+  const images=directory ? ['texture-only.png',...(editing ? [...artifacts,'tint-before.png','tint-after.png'] : ['tint-only.png'])]
+    .map(name=>path.resolve(directory,name)) : [];
+  const outputs=output ? [output,...images] : images;
+  if (new Set(outputs).size!==outputs.length || outputs.some(name=>inputs.includes(name)))
+    throw new RangeError('Write tint captures and revised scenes separately from inputs');
+  const editor=openEditor(file), dependencies=editor.sourceDependencies?.();
+  if (editor.sourceDependencies && dependencies===undefined) throw new RangeError('Cannot verify tint scene dependencies');
+  const previewRevision=digest([editor.snapshot(),dependencies,request]), format='ink-studio/mesh-tint-remap';
+  const prior=expect && read(expect);
+  if (expect && (prior?.format!==format || prior.version!==1 || prior.canCommit!==true || !isRevision(prior.previewRevision)))
+    throw new TypeError('Expect a successful tint remap preview receipt');
+  if (prior && prior.previewRevision!==previewRevision) {
+    if (out) process.exitCode=1;
+    return print({format,version:1,previewRevision,canCommit:false,conflicts:[{code:'stale-preview'}]});
+  }
+  const report={...editor.planMeshTintRemap(request),previewRevision,canCommit:editing};
+  if (directory) {
+    const settings=view ? read(view) : {};
+    if (!fields(settings,['w','h','t','camera','raw']))
+      throw new TypeError('Use a native-grid tint view with optional size, time and camera');
+    report.native=remapPreview(editor,request,report,settings,toolkit,directory);
+  }
+  if (output) {
+    editor.editMeshTintRemap(request);
+    files.publishJson(output,editor.snapshot(),'A different scene exists at '+output);
+  }
+  return print(report);
+}
+
+module.exports = {command,remapCommand};

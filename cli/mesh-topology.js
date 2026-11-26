@@ -245,6 +245,7 @@ function command([action, file, input, ...rest], opt, toolkit, { build, openEdit
     return require('./mesh-material-transfer.js').command([file, input, ...rest], opt, meshTopology);
   if (action === 'modifiers')
     return require('./mesh-modifiers.js').command([file, input, ...rest], opt, toolkit, openEditor);
+  if (action === 'tint-remap') return require('./mesh-tint.js').remapCommand(file,input,rest,opt,toolkit,openEditor);
   if (action === 'tint') return require('./mesh-tint.js').command(file,input,rest,opt,toolkit,openEditor);
   if (action === 'shading') return require('./mesh-shading-preview.js').command(file, input, rest, opt, toolkit, openEditor);
   if (action === 'shape-keys') return require('./mesh-shape-keys.js').command(file,input,rest,opt,toolkit,openEditor);
