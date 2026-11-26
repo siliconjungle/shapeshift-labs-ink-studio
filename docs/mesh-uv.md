@@ -1484,6 +1484,16 @@ and optionally narrow the pick to a material or a face.
 { "domain": "faces", "atlas": { "at": [0.72, 0.42], "material": "enamel" } }
 ```
 
+To pick from the [source coordinates in a layout report](#inspect-source-texels-and-normalized-uvs-together),
+use `atlas.texel` in the same top-left texel-center coordinates. Specify a
+face or material to resolve its atlas from the scene. A standalone mesh
+can supply `atlas.size: [width, height]`. The optional `radius` is measured
+in the units of the pick and defaults to 0.75 texel for a source pick.
+
+```json
+{ "domain": "corners", "atlas": { "texel": [4.5, 13], "face": "sign" }, "uvSet": "pigment" }
+```
+
 A model pick uses integer art-pixel coordinates in the native capture.
 Provide `--view view.json` to set the camera and raster dimensions.
 
@@ -1497,11 +1507,32 @@ The atlas reports ambiguous overlapping picks with candidate IDs. Name
 a face or material to disambiguate. You can also select by `ids`, or pass
 a saved selection as `from` with the matching mesh revision and domain.
 
-Both views return the same stable component IDs and their related atlas
-elements. Use `--preview directory` for linked native views, or add
+Both views return stable face corner IDs and the physical vertex IDs they
+reference. An edge pick at a seam records its face side in `edgeSides`.
+Continuous edges link both incident UV sides. If both sides of a cut sit
+on top of each other in the atlas, the report lists the competing sides
+until the query specifies a face. Reopening a saved UV selection retains
+the picked side.
+
+Use `--topology-out vertices.json --topology-domain match` to save the
+matching mesh components. A UV corner maps to a mesh vertex, a UV edge to
+a mesh edge, and a face or chart to mesh faces. Choose `vertices`,
+`edges`, or `faces` explicitly to export the related components instead.
+Without `--topology-domain`, this export defaults to faces.
+
+To go from a saved mesh selection back to UVs, embed that selection in
+`topology.selection` with the corresponding UV domain. A saved vertex
+selection can match several UV corners. Set `topology.face` to inspect
+one face side at a seam.
+
+Use `--preview directory` for linked native views, or add
 `--selection selection.json` to a later edit preview on the same revision.
 The preview shows the authored cage, which keeps selection attached to
 editable corners when a scene uses modifiers.
+
+```sh
+node examples/tileset-pick/uv-cross-selection-demo.cjs uv-cross-selection-review
+```
 
 ### Select by island or vertex tint
 
@@ -1546,7 +1577,9 @@ node examples/tileset-pick/island-tint-selection-demo.cjs island-tint-review
 ```
 
 Use `KIT.meshTopology.uv.inspect`, `KIT.meshTopology.uv.select`,
-`KIT.meshTopology.uv.pickModel` and `KIT.meshTopology.uv.plan` for SDK access.
+`KIT.meshTopology.uv.toTopologySelection`, `KIT.meshTopology.uv.pickModel`
+and `KIT.meshTopology.uv.plan` for SDK access. Use `editor.selectMeshUV`
+to resolve source atlas dimensions from a scene.
 A plan returns a topology patch and its report. The scene editor exposes
 `editor.planMeshUV` and `editor.editMeshUV` for the same operation.
 

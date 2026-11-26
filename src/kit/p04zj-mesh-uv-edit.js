@@ -125,22 +125,44 @@
     return order(ids);
   }
 
-  function selection(g, domain, ids, hit) {
+  function edgeSides(g,ids,restrict) {
+    const byEdge = new Map(ids.map(id=>[id,new Set()]));
+    if (restrict !== undefined) {
+      if (!Array.isArray(restrict)) throw new TypeError('Use saved UV edge sides');
+      for (const {edge,face} of restrict) {
+        const seen = byEdge.get(edge);
+        if (!seen || seen.has(face) || !g.edges.get(edge).sides.some(side=>side.face===face))
+          throw new RangeError('Use existing distinct face sides of each selected UV edge');
+        seen.add(face);
+      }
+      if ([...byEdge.values()].some(seen=>!seen.size)) throw new RangeError('A selected UV edge needs at least one face side');
+    }
+    return ids.flatMap(edge=>g.edges.get(edge).sides
+      .filter(({face})=>restrict===undefined || byEdge.get(edge).has(face))
+      .map(({face,corners})=>({edge,face,corners:corners.slice()})));
+  }
+
+  function pickedSide(g,edge,face) {
+    return g.edges.get(edge).kind === 'continuous' ? undefined : [{edge,face}];
+  }
+
+  function selection(g, domain, ids, hit, restrict) {
+    const sides = domain === 'edges' ? edgeSides(g,ids,restrict) : undefined;
     const selectedFaces = domain === 'islands' ? ids.flatMap(id => g.islands.get(id).faces) :
       domain === 'corners' ? ids.map(id => g.corners.get(id).face) :
-      domain === 'edges' ? ids.flatMap(id => g.edges.get(id).sides.map(side => side.face)) : ids;
+      sides ? sides.map(side=>side.face) : ids;
     const faces = order(selectedFaces);
+    const corners = domain === 'corners' ? ids : order(sides ?
+      sides.flatMap(side=>side.corners) : faces.flatMap(id => g.faces.get(id).corners.map(row => row.id)));
     return { ...sourceInfo(g.doc, selectionFormat), ...(g.set && {uvSet:g.set}), domain, ids, faces,
       islands: order(faces.map(face => g.atIsland.get(face))),
-      corners: domain === 'corners' ? ids : order(domain === 'edges' ?
-        ids.flatMap(id => g.edges.get(id).sides.flatMap(side => side.corners)) :
-        faces.flatMap(id => g.faces.get(id).corners.map(row => row.id))),
+      corners, vertices:order(corners.map(id=>g.corners.get(id).vertex)),
       edges: domain === 'edges' ? ids : order(domain === 'corners' ?
         ids.flatMap(id => {
           const corner = g.corners.get(id);
           return g.faceEdges.get(corner.face).filter(edge => g.edges.get(edge).vertices.includes(corner.vertex));
         }) : faces.flatMap(id => g.faceEdges.get(id))),
-      ...(hit && { hit }) };
+      ...(sides && {edgeSides:sides}), ...(hit && { hit }) };
   }
 
   function segmentDistance(point, a, b) {
@@ -150,43 +172,81 @@
     return Math.hypot(...delta.map((n, i) => n - t * relative[i]));
   }
 
-  function atlasSelection(g, domain, { at, radius = .015, material, face }) {
-    if (!tuple(at, 2, unit) || !unit(radius) || radius > .25 ||
+  function atlasSelection(g, domain, { at, texel, size, radius, material, face }, atlasFor) {
+    if ((at === undefined) === (texel === undefined) || at !== undefined && (!tuple(at,2,unit) || size !== undefined) ||
         material !== undefined && ![...g.islands.values()].some(row => row.material === material) ||
         face !== undefined && (!g.faces.has(face) || material !== undefined && g.faces.get(face).material !== material))
-      throw new RangeError('Atlas selection needs normalized UV, a valid face or material, and a radius up to .25');
+      throw new RangeError('Atlas selection needs normalized UV or a source texel and an optional valid face or material');
+    const sheet = material ?? (face === undefined ? undefined : g.faces.get(face).material);
+    const dimensions = size === undefined && texel !== undefined && sheet !== undefined ? atlasFor?.(sheet)?.size : size;
+    if (texel !== undefined && (!tuple(dimensions,2,n=>Number.isSafeInteger(n) && n>0) || !tuple(texel,2) ||
+        texel.some((n,i)=>n<0 || n>dimensions[i]-1)))
+      throw new RangeError('A texel pick needs an in-bounds point and atlas dimensions from a face, material, or explicit size');
+    const point = texel ?? at, coordinate = dimensions ? uv=>MaterialUV.texel(uv,...dimensions) : uv=>uv;
+    const reach = radius === undefined ? (dimensions ? .75 : .015) : radius;
+    if (!Number.isFinite(reach) || reach < 0 || reach > (dimensions ? Math.max(...dimensions) : .25))
+      throw new RangeError('Atlas pick radius must be nonnegative and within the atlas coordinate range');
     const belongs = id => (face === undefined || face === id) && (material === undefined || g.faces.get(id).material === material);
     const candidates = [];
     if (domain === 'corners') for (const row of g.corners.values()) {
-      if (belongs(row.face)) candidates.push({ id: row.id, face: row.face, distance: Math.hypot(at[0] - row.uv[0], at[1] - row.uv[1]) });
+      if (belongs(row.face)) {
+        const [u,v] = coordinate(row.uv);
+        candidates.push({id:row.id,face:row.face,distance:Math.hypot(point[0]-u,point[1]-v)});
+      }
     } else if (domain === 'edges') for (const row of g.edges.values()) {
       for (const side of row.sides) if (belongs(side.face))
-        candidates.push({ id: row.id, face: side.face, distance: segmentDistance(at, ...side.uv) });
+        candidates.push({ id: row.id, face: side.face, distance: segmentDistance(point, ...side.uv.map(coordinate)) });
     } else {
       for (const row of g.triangles()) {
         if (!belongs(row.face)) continue;
-        const [a, b, c] = row.corners.map(id => g.corners.get(id).uv);
+        const [a, b, c] = row.corners.map(id => coordinate(g.corners.get(id).uv));
         const area = area2(a, b, c);
-        if (Math.abs(area) <= 1e-12) continue;
-        const inside = [area2(a, b, at), area2(b, c, at), area2(c, a, at)].every(n => n / area >= -1e-8);
+        const inside = Math.abs(area) <= 1e-12 ?
+          dimensions?.includes(1) && [[a,b],[b,c],[c,a]].some(([from,to])=>segmentDistance(point,from,to)<=1e-7) :
+          [area2(a,b,point),area2(b,c,point),area2(c,a,point)].every(n=>n/area>=-1e-8);
         if (inside) candidates.push({ id: domain === 'faces' ? row.face : g.atIsland.get(row.face), face: row.face, distance: 0 });
       }
     }
     let closest = Infinity;
     for (const row of candidates) closest = Math.min(closest, row.distance);
-    const tied = closest <= radius ? candidates.filter(row => row.distance <= closest + 1e-7) : [];
+    const tied = closest <= reach ? candidates.filter(row => row.distance <= closest + 1e-7) : [];
     const ids = order(tied.map(row => row.id));
     const welded = domain === 'corners' && new Set(ids.map(id => g.atWeld.get(id))).size === 1;
-    const status = !ids.length ? 'miss' : ids.length === 1 || welded ? 'hit' : 'ambiguous';
-    return selection(g, domain, status === 'hit' ? ids : [], { space: 'atlas', at: at.slice(), status,
-      candidates: ids, faces: order(tied.map(row => row.face)) });
+    const splitEdge = domain === 'edges' && ids.length === 1 && pickedSide(g,ids[0],tied[0].face);
+    const status = !ids.length ? 'miss' : (ids.length === 1 || welded) && !(splitEdge && tied.length>1) ? 'hit' : 'ambiguous';
+    return selection(g,domain,status === 'hit' ? ids : [],{
+      space:'atlas',...(dimensions ? {texel:texel.slice(),size:dimensions.slice()} : {at:at.slice()}),status,
+      candidates:ids,faces:order(tied.map(row=>row.face)),
+      ...(domain === 'edges' && {candidateSides:tied.map(({id:edge,face})=>({edge,face}))})
+    },status === 'hit' && splitEdge ? splitEdge : undefined);
   }
 
-  function select(source, query = {}) {
-    if (!fields(query, ['domain', 'ids', 'atlas', 'from', 'uvSet', 'tint']) || !domains.includes(query.domain) ||
-        [query.ids, query.atlas, query.from, query.tint].filter(n => n !== undefined).length !== 1)
+  const meshDomains = {corners:'vertices',edges:'edges',faces:'faces',islands:'faces'};
+
+  function fromTopology(g,domain,raw) {
+    if (!fields(raw,['selection','face']) || raw.selection?.domain !== meshDomains[domain] ||
+        raw.face !== undefined && !g.faces.has(raw.face))
+      throw new TypeError('Use a matching mesh component selection and an optional incident face');
+    const native = topology.select(g.doc,{from:raw.selection});
+    const selected = new Set(native.ids), face = raw.face;
+    const hit = {space:'topology',...(face !== undefined && {face})};
+    if (domain === 'corners') return selection(g,domain,order([...g.corners.values()]
+      .filter(row=>(face === undefined || row.face===face) && selected.has(row.vertex)).map(row=>row.id)),hit);
+    if (domain === 'edges') {
+      if (face === undefined) return selection(g,domain,native.ids,hit);
+      const ids = native.ids.filter(id=>g.edges.get(id).sides.some(side=>side.face===face));
+      return selection(g,domain,ids,hit,ids.map(edge=>({edge,face})));
+    }
+    const faces = face === undefined ? native.ids : native.ids.filter(id=>id===face);
+    return selection(g,domain,domain === 'islands' ? order(faces.map(id=>g.atIsland.get(id))) : faces,hit);
+  }
+
+  function select(source, query = {}, {atlasFor} = {}) {
+    if (!fields(query, ['domain', 'ids', 'atlas', 'from', 'uvSet', 'tint', 'topology']) || !domains.includes(query.domain) ||
+        [query.ids, query.atlas, query.from, query.tint, query.topology].filter(n => n !== undefined).length !== 1)
       throw new TypeError('Choose a UV selection domain and IDs, an atlas location, a tint, or a saved selection');
     const g = graph(source,query.uvSet ?? query.from?.uvSet ?? 0), { domain, ids, atlas, from, tint } = query;
+    if (query.topology !== undefined) return fromTopology(g,domain,query.topology);
     if (tint !== undefined) {
       if (domain !== 'faces' || !fields(tint, ['color', 'tolerance', 'match']))
         throw new TypeError('A vertex tint query needs the faces domain and a tint object');
@@ -205,13 +265,20 @@
       return { ...selection(g, domain, matched.map(row => row.face)), tint: { color: color.slice(), tolerance, match, matches: matched } };
     }
     if (atlas !== undefined) {
-      if (!fields(atlas, ['at', 'radius', 'face', 'material'])) throw new TypeError('Invalid UV atlas pick');
-      return atlasSelection(g, domain, atlas);
+      if (!fields(atlas, ['at', 'texel', 'size', 'radius', 'face', 'material'])) throw new TypeError('Invalid UV atlas pick');
+      return atlasSelection(g, domain, atlas,atlasFor);
     }
     if (from !== undefined && (from?.format !== selectionFormat || from.version !== 1 || from.mesh !== g.doc.id ||
         from.revision !== topology.revision(g.doc) || from.domain !== domain || (from.uvSet ?? 0)!==g.set))
       throw new RangeError('Use a UV selection from this mesh revision and domain');
-    return selection(g, domain, known(g, domain, from === undefined ? ids : from.ids), from?.hit);
+    return selection(g, domain, known(g, domain, from === undefined ? ids : from.ids), from?.hit, from?.edgeSides);
+  }
+
+  function toTopologySelection(source,saved,domain = 'match') {
+    const selected = select(source,{domain:saved?.domain,from:saved});
+    const target = domain === 'match' ? meshDomains[selected.domain] : domain;
+    if (!['vertices','edges','faces'].includes(target)) throw new TypeError('Choose a vertex, edge, face, or matching topology selection');
+    return topology.select(source,{domain:target,ids:selected[target]});
   }
 
   function modelHit(mesh, frame, x, y) {
@@ -249,7 +316,8 @@
       candidates.sort((a, b) => a[1] - b[1] || (a[0] < b[0] ? -1 : 1));
       id = candidates[0][0];
     }
-    return selection(g, domain, [id], { space: 'model', status: 'hit', pixel: pixel.slice(), face, triangle, weights, uv });
+    return selection(g, domain, [id], { space: 'model', status: 'hit', pixel: pixel.slice(), face, triangle, weights, uv },
+      domain === 'edges' ? pickedSide(g,id,face) : undefined);
   }
 
   function modelFaces(mesh, frame) {
@@ -655,5 +723,5 @@
     return topology.create({ id, vertices, faces, uvBindings, edges: [...cuts.values()] });
   }
 
-  K.meshTopology = Object.freeze({ ...topology, uv: Object.freeze({ fromTriangles, inspect, select, pickModel, modelFaces, readability, plan }) });
+  K.meshTopology = Object.freeze({ ...topology, uv: Object.freeze({ fromTriangles, inspect, select, toTopologySelection, pickModel, modelFaces, readability, plan }) });
 })(KIT);
