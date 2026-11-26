@@ -75,7 +75,8 @@ function replay(kit,directory,project,recipe){
         actual=Measurements.sourceResolver(kit,file,dependency).solve({file,value:input},'native');
         if(Number.isSafeInteger(actual.start)&&Number.isSafeInteger(actual.end))
           cursor={from:actual.start,to:actual.end};
-      }else if(row.kind==='measure')actual=Measurements.run(kit,input,file,dependency);
+      }else if(row.kind==='solver-network')actual=require('./solver-network.js').execute(kit,input,file,dependency).report;
+      else if(row.kind==='measure')actual=Measurements.run(kit,input,file,dependency);
       else if(row.kind==='fit')actual=require('./parameter-fit.js').run(kit,input,file,dependency);
       else actual=require('./modal-resonator.js').bake(kit,input,file,dependency);
       const selected=row.select===undefined?actual:get(actual,selector(row.select));
