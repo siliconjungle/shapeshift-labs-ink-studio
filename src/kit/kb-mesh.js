@@ -324,7 +324,7 @@
               T.push(base + e, base + e + 1, base + e + 2);
               TM.push(mi);
             }
-          if (visitPrimitive) visitPrimitive(pr, { firstVertex:base, vertexCount:pa.n,
+          if (visitPrimitive) visitPrimitive(pr, { node:n, firstVertex:base, vertexCount:pa.n,
             firstFace, faceCount:TM.length-firstFace, accessor:acc, matrix:m.slice() });
           if (allUVSets) registerUVs(pr,g.meshes[n.mesh],firstFace,base,pa.n);
           if (attributes) {
