@@ -77,10 +77,20 @@ function fileDigest(file, buffer, measure) {
     return { kind: 'directory', sha256: jsonDigest(entries), entries: entries.length };
   }
   check(info.isFile(), 'Task inputs and outputs must be ordinary files or directories');
-  const hash = createHash('sha256'), reader = fs.openSync(file, 'r');
+  const hash = createHash('sha256');
+  const reader = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   try {
-    let length;
-    while ((length = fs.readSync(reader, buffer)) > 0) hash.update(buffer.subarray(0, length));
+    const open = fs.fstatSync(reader);
+    check(open.isFile() && open.dev === info.dev && open.ino === info.ino &&
+      open.size === info.size && open.mtimeMs === info.mtimeMs, 'Task file changed while hashing');
+    for (let remaining = info.size; remaining > 0;) {
+      const length = fs.readSync(reader, buffer, 0, Math.min(remaining, buffer.length), null);
+      check(length > 0, 'Task file changed while hashing');
+      hash.update(buffer.subarray(0, length));
+      remaining -= length;
+    }
+    const end = fs.fstatSync(reader);
+    check(end.size === open.size && end.mtimeMs === open.mtimeMs, 'Task file changed while hashing');
   } finally {
     fs.closeSync(reader);
   }
