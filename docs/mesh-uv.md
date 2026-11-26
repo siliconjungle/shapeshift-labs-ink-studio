@@ -1291,6 +1291,57 @@ scene override, supply its shared density as `projectTexelsPerUnit`.
 Run `node examples/tileset-pick/world-scale-demo.cjs tile-world-scale-demo`
 to render the two sizes as editable mesh faces using the same atlas coordinates.
 
+### Paint a picked crop or the whole sheet
+
+Open a registered tileset in the native pixel canvas. Pass a saved
+`tileset pick` selection with `--selection` or put it under `selection` in
+the request. Omitting the pick opens the whole sheet. A brush opens its
+original atlas rectangle, including any spacing between tiles. The
+canvas uses the source sheet's orientation.
+
+```json
+{
+  "tileset": "enamel",
+  "grid": true,
+  "uv": { "object": "gate", "material": "enamel", "mode": "charts" }
+}
+```
+
+```sh
+ink-studio tileset paint open paint-request.json --scene gate.json --selection sign-pick.json --out sign-canvas
+ink-studio pixel-art edit sign-canvas/paint.json touchup.json --out painted-sign.json
+ink-studio tileset paint write sign-canvas/binding.json painted-sign.json --scene gate.json
+ink-studio tileset paint write sign-canvas/binding.json painted-sign.json --scene gate.json --out gate-painted.json
+```
+
+Both overlays are optional. The tile grid follows the registered tile
+size, padding, and offset. The UV overlay traces the specified object's
+pigment layout onto the crop. Set `uv.mode` to `"faces"` to include
+authored face edges. Ink stores both as reference layers, visible in
+the pixel canvas and in `overlay.png`. The plain `paint.png` and the
+tileset write use the visible paint composite with references hidden.
+
+The opened document uses frame `artwork` and paint layer `image`. Use
+the normal pixel editor, including pencils, fills, layer edits, sessions,
+and undo. The canvas supports up to 512 pixels per side and 255 used
+swatches, including the overlay colors. Open a smaller crop of a
+larger sheet.
+
+Write-back maps edited canvas pixels to their original atlas coordinates.
+The binding checks the atlas, grid, and optional source UV revision.
+The canvas dimensions must still match. Unchanged pixels, existing
+indexed slots, out-of-crop pixels, and UV coordinates retain their
+values. A new indexed color or opacity uses a matching slot or adds an
+entry if the source palette has room. The write receipt includes atlas
+coordinates and affected bake dependencies.
+
+In Node, use `ink.openTilesetPaint(editor, request)` and
+`ink.writeTilesetPaint(editor, binding, document, { apply: true })`.
+Omit `apply` to preview the write. One scene undo restores the atlas
+and affected dependencies. Run the
+[paint canvas demo](../examples/tileset-pick/tileset-paint-demo.cjs)
+to replay a crop edit followed by a full-sheet edit.
+
 ### Inset brush UVs on each edge
 
 Use inward distances measured in source texels. The top, bottom, left, and
