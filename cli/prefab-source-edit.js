@@ -81,10 +81,11 @@ function command(file,input,rest,opt,kit,openEditor) {
       [out,libraryOut].some(file => file && !/\.json$/i.test(file)) || libraryOut && !out)
     throw new TypeError('Use mesh-topology edit-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json [--library-out library.json]]');
   const source = path.resolve(file), editor = openEditor(source);
-  const libraryRef = editor.snapshot().prefabLibrary;
+  const {prefabLibrary:libraryRef,customProperties} = editor.snapshot();
   const librarySource = libraryRef && path.resolve(path.dirname(source),libraryRef);
   const output = out && path.resolve(out), libraryOutput = libraryOut && path.resolve(libraryOut);
-  const inputs = [source,path.resolve(input),librarySource,view && path.resolve(view)].filter(Boolean);
+  const inputs = [source,path.resolve(input),librarySource,view && path.resolve(view),
+    typeof customProperties==='string' && path.resolve(path.dirname(source),customProperties)].filter(Boolean);
   const outputs = [output,libraryOutput,...(preview ? images.map(file => path.resolve(preview,file)) : [])].filter(Boolean);
   if (new Set(outputs).size !== outputs.length || outputs.some(file => inputs.includes(file)) ||
       output && path.dirname(output) !== path.dirname(source) ||

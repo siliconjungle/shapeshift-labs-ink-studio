@@ -224,9 +224,17 @@
     return finish(report.canCommit ? {instances} : undefined);
   }
 
-  function expand(source, { prefabs: external } = {}, {only, origin} = {}) {
+  function expand(source, env = {}, {only, origin} = {}) {
+    const {prefabs:external} = env;
+    let properties;
+    try {
+      properties = A.customProperties.project(source,env);
+    } catch (error) {
+      error.problems = [{level:'error',path:'customProperties',problem:error.message,hint:''}];
+      throw error;
+    }
     if (!source || source.prefabs === undefined && source.instances === undefined && source.prefabLibrary === undefined)
-      return { spec: source, instances: new Map(), meshPlacements: new Map() };
+      return { spec: source, instances: new Map(), meshPlacements: new Map(), properties };
     const W = K.world, tasks = W.data, { check, own, record, id, selector } = tasks;
     const { prefabs = {}, instances = {}, prefabLibrary, ...rest } = source;
     check(record(prefabs) && record(instances) && (external === undefined || record(external)), 'Expected prefab and instance maps');
@@ -235,7 +243,7 @@
     const available = new Map();
     for (const [key, def] of [...Object.entries(external ?? {}), ...Object.entries(prefabs)]) {
       check(id(key) && record(def) && !available.has(key) && Number.isSafeInteger(def.revision) && def.revision >= 1 &&
-        Object.keys(def).every(field => field === 'revision' || field === 'generation' || field === 'provenance' || field === 'usesTilesets' || field === 'meshFrames' || tables.includes(field)) && record(def.solids),
+        Object.keys(def).every(field => field === 'revision' || field === 'generation' || field === 'provenance' || field === 'usesTilesets' || field === 'meshFrames' || field === 'properties' || tables.includes(field)) && record(def.solids),
       'Invalid or duplicate visual prefab ' + key);
       for (const field of tables)
         check(def[field] === undefined || record(def[field]) && Object.entries(def[field]).every(([key, row]) => id(key) && record(row)),
@@ -252,6 +260,7 @@
         check(new Set(sources.map(row => row.instance)).size===sources.length,'Combined prefab source IDs must be distinct');
       } else if (def.provenance !== undefined) checkProvenance(def.provenance);
       A.objectPoints.read(def.points);
+      A.customProperties.validate(def.properties,properties.definitions,'Prefab '+key);
       K.procedural.model.validate(def, 'visual');
       available.set(key, {definition:def,frames:memberFrames(def)});
     }
@@ -264,11 +273,14 @@
       try {
         const seed = raw.mirror && instances[raw.mirror.source];
         const instance = seed ? {prefab:seed.prefab,overrides:seed.overrides,meshOverrides:seed.meshOverrides,
-          ...(seed.origin && {origin:seed.origin})} : raw;
+          ...(seed.origin && {origin:seed.origin}),...(seed.properties && {properties:seed.properties})} : raw;
         check(id(key) && record(instance) &&
-          Object.keys(instance).every(field => ['prefab', 'parent', 'transform', 'overrides', 'meshOverrides','flipX','origin'].includes(field)) &&
+          Object.keys(instance).every(field => ['prefab', 'parent', 'transform', 'overrides', 'meshOverrides','flipX','origin','properties'].includes(field)) &&
           available.has(instance.prefab), 'Unknown visual prefab or invalid instance');
         const {definition,frames} = available.get(instance.prefab);
+        A.customProperties.validate(instance.properties,properties.definitions,'Instance '+key);
+        const resolvedProperties = Object.keys(properties.definitions).length ?
+          A.customProperties.resolve(properties,definition.properties,instance.properties) : undefined;
         for (const sheet of definition.usesTilesets ?? [])
           check(own(source.tilesets ?? {},sheet), 'Visual prefab ' + instance.prefab + ' requires tileset ' + sheet);
         const edits = instance.overrides ?? [];
@@ -363,12 +375,13 @@
           effectIndices.push(spec.effects.length);
           spec.effects.push(next);
         }
-        links.set(key, { instance, definition, resolved, revision: definition.revision, solids: ids, meshes, effectIndices, placement, frame: placement?.mesh, origin:objectOrigin, ...(raw.mirror && {mirror:raw.mirror}) });
+        links.set(key, { instance, definition, resolved, revision: definition.revision, solids: ids, meshes, effectIndices, placement, frame: placement?.mesh, origin:objectOrigin,
+          ...(resolvedProperties && {propertyValues:resolvedProperties.values,propertySources:resolvedProperties.sources}), ...(raw.mirror && {mirror:raw.mirror}) });
       } catch (error) {
         throw placementError(key,null,error.message);
       }
     }
-    return { spec, instances: links, meshPlacements };
+    return { spec, instances: links, meshPlacements, properties };
   }
 
   function planMirror(scene, env, request) {
@@ -395,9 +408,9 @@
       report.plane = guide;
     } else {
       if (!current?.mirror) return block('instance-is-not-a-live-mirror');
-      const {prefab,overrides,meshOverrides,origin} = current.instance;
+      const {prefab,overrides,meshOverrides,origin,properties} = current.instance;
       rows[instance] = {prefab,...savedPlacement(current.placement),...(origin && {origin}),
-        ...(overrides && {overrides}),...(meshOverrides && {meshOverrides})};
+        ...(overrides && {overrides}),...(meshOverrides && {meshOverrides}),...(properties && {properties})};
       report.plane = clone(current.mirror.plane);
     }
     try {

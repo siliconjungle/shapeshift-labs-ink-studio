@@ -865,3 +865,68 @@ mirror origins. One undo restores the entire batch. Run
 `node examples/tileset-pick/scene-layer-frames-demo.cjs station-frames`
 to inspect a layered station, center its construction frame, and
 review the changed origins over matched native-grid renders.
+
+### Store typed custom properties
+
+Declare custom property names and types at project scope using
+`customProperties` in the scene JSON. Use a relative JSON path
+instead of an inline object to share the same definitions and project
+defaults across scenes. Project bundles carry the referenced file.
+
+```json
+{
+  "customProperties": {
+    "version": 1,
+    "definitions": {
+      "powered": {"type":"boolean"},
+      "finish": {"type":"enum","choices":["steel","enamel","copper"]},
+      "gain": {"type":"number","min":0,"max":5},
+      "label": {"type":"string"}
+    },
+    "values": {"powered":true,"finish":"steel","gain":1,"label":"Station"}
+  }
+}
+```
+
+A prefab definition and a placed instance can each store a
+`properties` map. An instance value overrides a prefab value, which
+overrides a project default. An omitted value inherits. Schema keys
+without values stay unset. Booleans, finite numbers, strings, and
+enum choices are validated as authored. `false`, `0`, and `""`
+are explicit values. Transform parents and scene layers leave this
+precedence intact.
+
+```json
+{"scope":"instance","instance":"west","values":{"powered":false,"gain":0,"label":""}}
+```
+
+Use `mesh-topology custom-properties` with a request file to inspect or
+edit a scope. Omit `values` and `definitions` to inspect. The receipt
+lists the authored values, the effective value, and the scope that
+supplied it. For project edits, use `scope: "project"` and patch
+`definitions` and `values` together when needed. Use `scope: "prefab"`
+with a `prefab` ID for inline prefab edits. A `null` entry clears a value
+from the chosen scope or removes a project definition. Schema edits
+validate all saved values using those definitions before committing.
+
+```sh
+ink-studio mesh-topology custom-properties station.json request.json
+ink-studio mesh-topology custom-properties station.json request.json --out authored.json
+```
+
+Edit a shared project JSON file at its source. In the SDK, load that
+file into `env.customProperties` for scenes using a relative reference.
+To publish new properties in an external prefab library, use
+`mesh-topology edit-prefab` with `instance` and a `properties` patch,
+then publish the new library revision with `--library-out`.
+
+Live mirrors share the source's values until committed. Arrays and
+forks preserve authored properties. A combined module can carry
+matching overrides. A replacement that would discard different
+effective values reports those differences for review.
+
+In the SDK, use `planCustomProperties`, `previewCustomProperties`,
+and `editCustomProperties`. Built dioramas expose effective values
+under `world.customProperties.project` and `world.customProperties.instances`.
+Run `node examples/tileset-pick/custom-properties-demo.cjs station-properties`
+to inspect all three scopes and clear an instance override.

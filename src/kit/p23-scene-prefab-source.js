@@ -19,9 +19,9 @@
 
   function plan(scene, env, request, requireShapeOwner, authoredCamera) {
     const {id,own,equal} = K.world.data;
-    const {instance,revision,faces,edits=[],sourceEdits=[]} = request ?? {};
+    const {instance,revision,faces,edits=[],sourceEdits=[],properties:propertyChanges} = request ?? {};
     if (!request || Object.getPrototypeOf(request) !== Object.prototype ||
-        Object.keys(request).some(key => !['instance','revision','faces','edits','sourceEdits'].includes(key)) ||
+        Object.keys(request).some(key => !['instance','revision','faces','edits','sourceEdits','properties'].includes(key)) ||
         !id(instance) || ![edits,sourceEdits].every(list => Array.isArray(list) && list.length <= 256) ||
         revision !== undefined && (!Number.isSafeInteger(revision) || revision < 1))
       throw new TypeError('Choose a prefab instance, ordered edits, and an optional source revision');
@@ -38,7 +38,16 @@
       conflicts:[{reason:'edit-live-mirror-source',source:entry.mirror.source}]})};
     const properties = definitionEdits(definition,sourceEdits);
     report.sourcePaths = properties.paths;
-    const updated = {...definition};
+    let updated = {...definition};
+    if (propertyChanges!==undefined) {
+      const next = A.customProperties.patchMap(definition.properties,propertyChanges);
+      const project = A.customProperties.project(scene,env);
+      A.customProperties.validate(next,project.definitions,'Prefab '+prefab);
+      if (!equal(next,definition.properties ?? {})) {
+        updated = A.customProperties.stored(updated,next);
+        report.propertyChange = {before:definition.properties ?? {},after:next};
+      }
+    }
     for (const [table] of properties.paths) {
       if (updated[table] === properties.world[table]) continue;
       if (table === 'solids' || Object.keys(properties.world[table]).length) updated[table] = properties.world[table];
