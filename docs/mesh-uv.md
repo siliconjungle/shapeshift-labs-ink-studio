@@ -1377,6 +1377,46 @@ Run `node examples/tileset-pick/face-paint-demo.cjs relay-face-paint-demo`
 to paint one shared texel through a placed relay. The second relay
 rotates the same crop. The spare relay samples a different region.
 
+### Choose shared paint or a local face variant
+
+Set `"sharing": "edit-every-instance"` to paint the current sheet.
+This is the default. All faces sampling the texel can see the change,
+including faces on other prefab instances.
+
+Set `"sharing": "make-local-variant"` and give `variant` a fresh tileset
+ID to copy the paint and change the picked face alone. Use the same
+`tileset paint face` preview and commit commands.
+
+```json
+{
+  "at": [149, 52],
+  "object": "east.panel",
+  "face": "sign",
+  "rgba": [255, 166, 88, 255],
+  "view": { "w": 206, "h": 100, "camera": { "target": [0, 0.5, 0], "ortho": true, "zoom": 1.6 } },
+  "sharing": "make-local-variant",
+  "variant": "east-enamel"
+}
+```
+
+The copy retains the full sheet layout, exact indexed slots, and
+the face's UVs. This keeps inset edges, gutters, and other material
+channels registered. Ink copies any active material finish to the new
+slot and stores prefab bindings on the selected instance's mesh
+override. The receipt lists the new source, edited face,
+and any remaining uses of the shared paint. One undo removes the
+copy and restores the original binding. Use `edit-every-instance`
+on a face with a variant to continue painting its current sheet.
+
+Ink reports a conflict if the requested ID already exists or a
+modifier would share the new slot with generated faces or require
+rebinding deformation data. A retained
+variant with byte-identical paint and the same grid can use
+`tileset deduplicate` to share the original sheet again.
+
+Run `node examples/tileset-pick/face-paint-sharing-demo.cjs face-paint-sharing-demo`
+to preview and save both sharing choices from the same prefab scene.
+
 In Node, use `ink.openTilesetPaint(editor, request)` and
 `ink.writeTilesetPaint(editor, binding, document, { apply: true })`.
 Omit `apply` to preview the write. One scene undo restores the atlas

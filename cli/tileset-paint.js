@@ -211,13 +211,20 @@ function write(editor, binding, document, {apply=false} = {}, kit = require('..'
   return {...report,...planned.detail};
 }
 
-function planPixels(editor, tileset, before, rect, pixels) {
+function paintPixels(before, rect, pixels) {
   const {asset,changedTexels,samples,paletteFull} = revisedAsset(before,rect,pixels);
-  if (paletteFull) return {};
+  if (paletteFull) return;
   const detail = {encoding:asset.encoding,changedTexels,samples,
     sampleUnits:asset.encoding==='indexed8' ? 'palette-slot' : 'rgba32',
     paletteAdded:(asset.palette?.length ?? 0)-(before.palette?.length ?? 0)};
-  if (!changedTexels) return {detail:{...detail,canCommit:true,conflicts:[]}};
+  return {asset,detail};
+}
+
+function planPixels(editor, tileset, before, rect, pixels) {
+  const painted = paintPixels(before,rect,pixels);
+  if (!painted) return {};
+  const {asset,detail} = painted;
+  if (!detail.changedTexels) return {detail:{...detail,canCommit:true,conflicts:[]}};
   const request = {type:'replace',id:tileset,asset}, edit = editor.planTilesetRevision(request);
   return {request,edit,detail:{...detail,canCommit:edit.canCommit,conflicts:edit.blockers,revision:edit}};
 }
@@ -258,4 +265,4 @@ function command([action,...args], opt, kit, openEditor, sceneOutput) {
   process.stdout.write(JSON.stringify(result,null,2)+'\n');
 }
 
-module.exports = {open,write,command,planPixels};
+module.exports = {open,write,command,paintPixels,planPixels};
