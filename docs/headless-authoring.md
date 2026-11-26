@@ -2112,6 +2112,9 @@ Point records expose positions and available velocities or pin state. The
 report records the sampled tick, checkpoint used, and replayed steps. The
 liquid report also includes divergence before and after pressure projection.
 
+Use [volume liquid and spectral seas](liquid-3d.md) for an XYZ liquid grid,
+moving colliders, surface meshes, and a blended ocean patch.
+
 ### Replay from a saved checkpoint
 
 Export `sim.run.checkpoint` as JSON, then connect it to another

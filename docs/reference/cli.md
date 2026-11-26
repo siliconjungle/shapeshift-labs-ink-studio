@@ -116,6 +116,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   material-lab presets [--out presets.json]   list native elastic, grain and constraint profiles
   material-lab compile <plan.json> [--out world.json]   compose soft bodies, grains and contact surfaces
   material-lab run <plan.json> [--out directory]   record nonlinear strain, material pair impulses and work
+  liquid3d compile <plan.json> [--out world.json]   lower a volume liquid and spectral ocean to a native world
+  liquid3d run <plan.json> [--out directory]   simulate collider-driven 3D flow, spray and foam
+  liquid3d surface|ocean|density|particles|secondary <world|checkpoint|recording> [--out file]   extract a native frame
     sim run|resume|fork <file> [--branch ID]   name the branch in committed events
     sim run <world> --workers N [--profile]   advance eligible systems in deterministic Node worker partitions
     sim run <world> --record file.json [--observations plan.json]   retain reproducible execution evidence
