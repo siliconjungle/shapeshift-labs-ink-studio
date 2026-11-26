@@ -737,14 +737,28 @@ const SceneMeshes = (() => {
     return trace;
   }
 
-  function projector(mesh,{at,normal,up,size,depth,minFacing=.25},{V,procedural:{spatial}}) {
-    const {rest,indices}=read(mesh), right=V.cross(up,normal), faces=[];
-    const points=Array.from({length:rest.length/3},(_,i)=>{
+  function namedTriangles(data, face) {
+    if (face===undefined) return;
+    const {layer,drawTriangles}=data, triangles=[];
+    layer.featureFaces?.forEach((id,i)=>{if (id===face) triangles.push(drawTriangles[i]);});
+    if (!triangles.length) throw new RangeError('Unknown retained mesh face '+face);
+    return triangles.sort((a,b)=>a-b);
+  }
+
+  function projector(mesh,{at,normal,up,size,depth,minFacing=.25,face},{V,procedural:{spatial}}) {
+    const data=read(mesh), {rest,indices}=data, right=V.cross(up,normal), faces=[];
+    const scope=namedTriangles(data,face), points=new Map();
+    function point(i) {
+      if (points.has(i)) return points.get(i);
       const p=V.sub(rest.subarray(i*3,i*3+3),at);
-      return [V.dot(p,right),V.dot(p,up),V.dot(p,normal)];
-    });
-    for(let f=0;f<indices.length/3;f++) {
-      const a=points[indices[f*3]],b=points[indices[f*3+1]],c=points[indices[f*3+2]];
+      const value=[V.dot(p,right),V.dot(p,up),V.dot(p,normal)];
+      points.set(i,value);
+      return value;
+    }
+    const count=scope?.length ?? indices.length/3;
+    for(let i=0;i<count;i++) {
+      const f=scope ? scope[i] : i;
+      const a=point(indices[f*3]),b=point(indices[f*3+1]),c=point(indices[f*3+2]);
       const box=spatial.boxOf([a,b,c]);
       if (box.min[2]>depth || box.max[2]<-depth ||
           size.some((n,k)=>box.min[k]>n*.5 || box.max[k]<-n*.5)) continue;
@@ -771,7 +785,7 @@ const SceneMeshes = (() => {
     return {p:[0,1,2].map(k=>a[k]*weights[0]+b[k]*weights[1]+c[k]*weights[2]),n:V.norm(area)};
   }
 
-  function clipUV(mesh, {min,max,material,clip:limit,uvSet='pigment'}) {
+  function clipUV(mesh, {min,max,material,face,clip:limit,uvSet='pigment'}) {
     const valid=(min,max)=>[min,max].every(point=>Array.isArray(point)&&point.length===2&&Array.from(point).every(Number.isFinite)) &&
         max.every((value,k)=>value-min[k]>=1e-8);
     if (!valid(min,max) || limit!==undefined&&!valid(limit?.min,limit?.max))
@@ -794,10 +808,12 @@ const SceneMeshes = (() => {
       }
       return result;
     }
-    const count=hi.every((n,k)=>n>lo[k]) ? mesh.triangles : 0;
-    for (let face=0;face<count;face++) {
-      if (slot>=0 && (faceMaterials?.[face]??0)!==slot) continue;
-      const vertices=Array.from(indices.subarray(face*3,face*3+3));
+    const scope=namedTriangles(data,face);
+    const count=hi.every((n,k)=>n>lo[k]) ? scope?.length ?? mesh.triangles : 0;
+    for (let i=0;i<count;i++) {
+      const triangle=scope ? scope[i] : i;
+      if (slot>=0 && (faceMaterials?.[triangle]??0)!==slot) continue;
+      const vertices=Array.from(indices.subarray(triangle*3,triangle*3+3));
       let polygon=vertices.map((i,j)=>({uv:[uvs[i*2],uvs[i*2+1]],weights:[0,1,2].map(k=>Number(j===k))}));
       if ([0,1].some(axis=>polygon.every(({uv})=>uv[axis]<lo[axis]) || polygon.every(({uv})=>uv[axis]>hi[axis])))
         continue;

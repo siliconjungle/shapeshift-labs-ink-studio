@@ -8,6 +8,10 @@
   const range=(n,lo,hi)=>Number.isFinite(n) && n>=lo && n<=hi;
   const vector=(v,n,test=Number.isFinite)=>Array.isArray(v) && v.length===n && Array.from(v).every(test);
   const label=value=>TargetSelectors.name(value) && value.length<=128;
+  const receiverFace=a=>{
+    need(a.face===undefined || label(a.face),'a named mesh face needs a stable face ID');
+    return a.face===undefined ? {} : {face:a.face};
+  };
   const key=({object,part})=>JSON.stringify([object,part??null]);
   const matches=({object,part},row)=>row.object===object && (part===undefined || row.part===part);
   const reference=({node,socket})=>node===undefined ? undefined :
@@ -52,7 +56,7 @@
   }
 
   function restAnchor(a) {
-    need(fields(a,['object','part','node','socket','at','normal','up','size','depth','bias','maxStep','minFacing']),
+    need(fields(a,['object','part','face','node','socket','at','normal','up','size','depth','bias','maxStep','minFacing']),
       'an anchor needs a part-local projector');
     const {at,normal,up=[0,1,0],size,depth=.12,bias=.002,minFacing}=a;
     const maxStep=a.maxStep??Math.max(size?.[0]??1,size?.[1]??1)*.25;
@@ -64,12 +68,12 @@
     const attachment=reference(a);
     need(a.socket===undefined || attachment,'a socket needs an anchor node');
     const n=V.norm(normal), right=V.norm(V.cross(up,n));
-    return {...target(a),...attachment,at:at.slice(),normal:n,up:V.cross(n,right),size:size.slice(),depth,bias,maxStep,
+    return {...target(a),...receiverFace(a),...attachment,at:at.slice(),normal:n,up:V.cross(n,right),size:size.slice(),depth,bias,maxStep,
       ...(minFacing!==undefined&&{minFacing})};
   }
 
   function uvAnchor(a) {
-    need(fields(a,['object','part','uv','material','bias','chart','uvSet']) && fields(a.uv,['min','max']),
+    need(fields(a,['object','part','face','uv','material','bias','chart','uvSet']) && fields(a.uv,['min','max']),
       'a mesh UV anchor needs a receiver and a UV rectangle');
     const {uv:{min,max},material,bias=.002,chart,uvSet}=a;
     need([min,max].every(point=>vector(point,2,n=>range(n,-256,257))) &&
@@ -85,7 +89,7 @@
         'mesh brush padding must leave a writable UV rectangle');
       bounds={min:min.slice(),max:max.slice(),padding:padding.slice()};
     }
-    return {...target(a),uv:{min:min.slice(),max:max.slice()},...(material!==undefined&&{material}),bias,
+    return {...target(a),...receiverFace(a),uv:{min:min.slice(),max:max.slice()},...(material!==undefined&&{material}),bias,
       ...(uvSet!==undefined && {uvSet}),
       ...(bounds&&{chart:bounds})};
   }
@@ -123,6 +127,11 @@
       decals.reduce((n,row)=>n+(row.grid ? row.grid[0]*row.grid[1] : 0),0)<=32768,
       'decal IDs must be unique and fit the image and projection budgets');
     return K.procedural.data.freeze({format,version:1,decals});
+  }
+
+  function add(input,row) {
+    const current=input===undefined ? [] : create(input).decals;
+    return create({format,version:1,decals:[...current,row]});
   }
 
   function edit(input,id,operation) {
@@ -199,11 +208,13 @@
         need(graph,'a node anchor needs a scene graph');
         graph.frame(attachment);
       }
-      if (!a.uv) return {...buildEntry(spec,group),attachment};
       const mesh=group.sources.get('mesh')?.mesh;
+      if (a.face!==undefined) need(mesh && meshes.layer(mesh).featureFaces?.includes(a.face),
+        'no named mesh face '+a.face+' for '+spec.id);
+      if (!a.uv) return {...buildEntry(spec,group),attachment};
       need(mesh,'a UV decal needs an indexed mesh receiver');
       const chart=a.chart, clip=chart&&{min:chart.min.map((n,k)=>n+chart.padding[k]),max:chart.max.map((n,k)=>n-chart.padding[k])};
-      const geometry=meshes.clipUV(mesh,{...a.uv,material:a.material,clip,uvSet:a.uvSet ?? 'decal'});
+      const geometry=meshes.clipUV(mesh,{...a.uv,material:a.material,face:a.face,clip,uvSet:a.uvSet ?? 'decal'});
       uvTriangles+=geometry.triangles.length/3;
       need(uvTriangles<=32768,'the UV decal bundle exceeds 32768 clipped triangles');
       return {spec,group,geometry,triangles:0,
@@ -239,7 +250,7 @@
         const node=attachment && graph.has(attachment.node) &&
           (attachment.socket===undefined || graph.node(attachment.node).sockets.includes(attachment.socket)) &&
           graph.frame(attachment);
-        const visible=alpha>0 && source && (!a.uv || group.active==='mesh') && (showMeshes!==false || group.active!=='mesh') &&
+        const visible=alpha>0 && source && (!a.uv && a.face===undefined || group.active==='mesh') && (showMeshes!==false || group.active!=='mesh') &&
           (!attachment || node?.visible);
         if (visible) {
           if (a.uv) poseUV(entry,source.mesh);
@@ -249,7 +260,7 @@
             layers.push(entry.atlas);
           }
         }
-        report.push({id:spec.id,kind:spec.kind,...target(a),representation:group.active||null,opacity:alpha,
+        report.push({id:spec.id,kind:spec.kind,...target(a),...receiverFace(a),representation:group.active||null,opacity:alpha,
           triangles:visible ? entry.triangles : 0});
       }
       return {layers,report};
@@ -289,6 +300,7 @@
     });
     const atlas=builder.finish();
     atlas.frontOnly=true;
+    atlas.surfaceDecalId=spec.id;
     atlas.surfaceMotionKey='surface-decal:'+JSON.stringify([a.object,a.part,spec.id]);
     return atlas;
   }
@@ -389,5 +401,5 @@
     entry.triangles=count;
   }
 
-  K.surfaceDecals=Object.freeze({format,create,fromBrush,edit,bind});
+  K.surfaceDecals=Object.freeze({format,create,fromBrush,add,edit,bind});
 })(KIT);

@@ -1208,7 +1208,8 @@ function renderFrame(world, o, preparedPalettes) {
   },!reflectionPlane&&!probeView&&(!o.samples||o.worked)?o.reliefLODFrame:undefined) : [];
   const meshLayers = SceneMeshes.layers(world,o.meshes,reliefMeshes,o.scanPaint);
   const brickLayers=brickFrames.length ? brickAPI.layers(brickFrames) : [];
-  const decals = o.surfaceDecals !== false && world.surfaceDecals?.sample(sceneTime,o).layers;
+  const sampledDecals=o.surfaceDecals!==false && world.surfaceDecals?.sample(sceneTime,o);
+  const decals=sampledDecals?.layers;
   const surfaceLayers = meshLayers.length || brickLayers.length || decals?.length ?
     [spriteSurfaces].flat().concat(meshLayers,brickLayers,decals || []) : spriteSurfaces;
   if(pbr) pbr.shadows=PbrMaterials.shadows.prepare(pbr,world,pbrFrames,{
@@ -1226,6 +1227,15 @@ function renderFrame(world, o, preparedPalettes) {
   const localProjection=reflectionPlane || probeView || o.captureCoverage ? null :
     Multiprojection.frame(Multiprojection.prepare(o.multiprojection ?? look.multiprojection),surfaceLayers,
       {V,ortho,near,w:W,h:H,focal,time:t});
+  const decalProbe=boundaryView && o.decalDepthProbe;
+  if (decalProbe) {
+    const layer=decals?.find(row=>row.surfaceDecalId===decalProbe.id);
+    const depth=new Float32Array(W*H).fill(Infinity);
+    for (const {p,z} of SurfaceRaster.rasterize(layer,{V,W,H,focal,ortho,near,far:camera.clipFar,
+      clip:geometryClip,multiprojection:localProjection,surfaceNormals:false}))
+      depth[(H-1-Math.floor(p/W))*W+p%W]=z;
+    decalProbe.capture({w:W,h:H,depth,projection:sampledDecals?.report?.find(row=>row.id===decalProbe.id)});
+  }
   const trackMeshes = isolate && o.trackPixelSources ? new Map() : null;
   const trackFields = trackMeshes && new Map();
   const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { V, W, H, focal, ortho, near,simulationLayers,

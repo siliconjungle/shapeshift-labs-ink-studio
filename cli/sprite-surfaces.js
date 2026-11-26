@@ -230,7 +230,10 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
               depth[p]=z;
             continue;
           }
-          if (fragments[p] && z>=fragments[p].z) continue;
+          const previous=fragments[p];
+          // Preserve decal order when independent triangles differ only by depth roundoff.
+          if (previous && (z>=previous.z ||
+              layer.surfaceDecalId && previous.z-z<=1e-7*Math.max(1,z))) continue;
           const uvWeights = linearUV ? weights : w, uvSum = linearUV ? 1 : sum;
           const sample=k=>row.reduce((s,n,i)=>s+n.uv[k]*uvWeights[i]/uvSum,0);
           const s=sample(0),t=sample(1);
