@@ -60,3 +60,5 @@ tune the field intersection, `--trace-seed` to vary samples, and
 A run accepts up to 12 explicit times, an even sample count, and a combined
 budget of six million primary samples. For a dense scene, start with one small
 frame and raise the sample count for the final review.
+
+Use the [physical mesh and material reference](physical-reference.md) for triangle meshes, typed PBR material graphs, progressive accumulation, and denoising.
