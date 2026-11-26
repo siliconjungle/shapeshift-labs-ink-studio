@@ -1239,6 +1239,12 @@ const CMD = {
         '  attributes init <geometry.json> <request.json> [--out file.json]   initialize a named attribute asset for a geometry domain',
         '  attributes inspect <asset.json> [selection.json] [--out file.json]   report attribute ranges, labels and selected values',
         '  attributes edit <asset.json> <request.json> [--out file.json] [--report file.json]   edit typed values or channel metadata by name and ID',
+        '  volume inspect <volume.json> [--out file.json]   report sparse field ranges, bounds and storage',
+        '  volume sample <volume.json> <request.json> [--out file.json]   sample named fields at world positions',
+        '  volume pack <dense.json> [--max-cells N] [--out file.json] [--report file.json]   pack dense field buffers as sparse bricks',
+        '  volume combine <left.json> <right.json> <request.json> [--out file.json] [--report file.json]   combine aligned fields over active sites',
+        '  volume resample <volume.json> <request.json> [--out file.json] [--report file.json]   regrid selected fields within a cell budget',
+        '  volume export <volume.json> <request.json> [--out file.json] [--report file.json]   export sparse, dense, slice or isosurface data',
         '  ornament <pattern.json> [--format pigment|relief|tiles] [--out file]   export a wallpaper or frieze pattern',
         '  palette plot <plot.json> [--space rgb|oklab] [--orbit degrees] [--format png|data]   render a palette in 3D',
         '  palette extract <reference.png> [--size 32] [--alpha visible|opaque|all] [--out report.json]',
@@ -2032,6 +2038,9 @@ const CMD = {
   },
   surface() {
     return require('./geometry-authoring.js').surface(pos, opt, lib().KIT.procedural.rationalSurface);
+  },
+  volume() {
+    return require('./sparse-volume.js')(pos, opt, lib());
   },
   attributes() {
     return require('./geometry-authoring.js').attributes(pos, opt, lib().KIT.procedural.attributeAuthoring);

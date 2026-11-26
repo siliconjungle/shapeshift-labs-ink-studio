@@ -433,6 +433,7 @@ All checked-in guides, indexed by title and section headings.
 - [Deterministic simulation workers](../simulation-workers.md)
 - [Compose with recorded slices](../slice-composition.md)
 - [Sound design inserts](../sound-design-effects.md)
+- [Sparse volume exchange](../sparse-volumes.md)
 - [Spatial audio and event cues](../spatial-audio.md)
 - [Spectral and standing-wave fields](../spectral-fields.md)
 - [Spectral sidechain](../spectral-sidechain.md)

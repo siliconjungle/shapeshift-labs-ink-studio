@@ -2036,6 +2036,32 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sparseBricks.isSnapshot` | function | `(value)` | [source](../../src/kit/pcv-sparse-bricks.js) |
 | `KIT.procedural.sparseBricks.sharesBase` | function | `(a,b)` | [source](../../src/kit/pcv-sparse-bricks.js) |
 
+## KIT.procedural.sparseVolume
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.sparseVolume` | namespace |  | [guide](../sparse-volumes.md#native-field-adapters) |
+| `KIT.procedural.sparseVolume.bake` | function | `({ grid: target, brickSize = 8, fields: requested, maxCells = 250000 } = {}, sample)` | [guide](../sparse-volumes.md#native-field-adapters), [source](../../src/kit/pcv1-sparse-volumes.js) |
+| `KIT.procedural.sparseVolume.combine` | function | `(left, right, options = {})` | [guide](../sparse-volumes.md#native-field-adapters), [source](../../src/kit/pcv1-sparse-volumes.js) |
+| `KIT.procedural.sparseVolume.components` | namespace |  | [guide](../sparse-volumes.md#native-field-adapters) |
+| `KIT.procedural.sparseVolume.components.density` | value | `number = 1` | [guide](../sparse-volumes.md#native-field-adapters) |
+| `KIT.procedural.sparseVolume.components.signedDistance` | value | `number = 1` | [guide](../sparse-volumes.md#native-field-adapters) |
+| `KIT.procedural.sparseVolume.components.temperature` | value | `number = 1` | [guide](../sparse-volumes.md#native-field-adapters) |
+| `KIT.procedural.sparseVolume.components.velocity` | value | `number = 3` | [guide](../sparse-volumes.md#native-field-adapters) |
+| `KIT.procedural.sparseVolume.create` | function | `(source)` | [guide](../sparse-volumes.md#native-field-adapters), [source](../../src/kit/pcv1-sparse-volumes.js) |
+| `KIT.procedural.sparseVolume.dense` | function | `(source, { channels, maxCells = 250000 } = {})` | [guide](../sparse-volumes.md#native-field-adapters), [source](../../src/kit/pcv1-sparse-volumes.js) |
+| `KIT.procedural.sparseVolume.denseFormat` | value | `string = "ink-studio/dense-volume"` | [guide](../sparse-volumes.md#native-field-adapters) |
+| `KIT.procedural.sparseVolume.extract` | function | `(source, channels)` | [guide](../sparse-volumes.md#native-field-adapters), [source](../../src/kit/pcv1-sparse-volumes.js) |
+| `KIT.procedural.sparseVolume.format` | value | `string = "ink-studio/sparse-volume"` | [guide](../sparse-volumes.md#native-field-adapters) |
+| `KIT.procedural.sparseVolume.inspect` | function | `(source)` | [guide](../sparse-volumes.md#native-field-adapters), [source](../../src/kit/pcv1-sparse-volumes.js) |
+| `KIT.procedural.sparseVolume.limits` | namespace |  | [guide](../sparse-volumes.md#native-field-adapters) |
+| `KIT.procedural.sparseVolume.limits.bricks` | value | `number = 131072` | [guide](../sparse-volumes.md#native-field-adapters) |
+| `KIT.procedural.sparseVolume.limits.cells` | value | `number = 1000000` | [guide](../sparse-volumes.md#native-field-adapters) |
+| `KIT.procedural.sparseVolume.limits.storedComponents` | value | `number = 2000000` | [guide](../sparse-volumes.md#native-field-adapters) |
+| `KIT.procedural.sparseVolume.pack` | function | `(source, { maxCells = 250000 } = {})` | [guide](../sparse-volumes.md#native-field-adapters), [source](../../src/kit/pcv1-sparse-volumes.js) |
+| `KIT.procedural.sparseVolume.resample` | function | `(source, options)` | [guide](../sparse-volumes.md#native-field-adapters), [source](../../src/kit/pcv1-sparse-volumes.js) |
+| `KIT.procedural.sparseVolume.sampler` | function | `(source, { filter = 'linear' } = {})` | [guide](../sparse-volumes.md#native-field-adapters), [source](../../src/kit/pcv1-sparse-volumes.js) |
+
 ## KIT.procedural.spatial
 
 | Member | Kind | Signature or value | Guides and source |

@@ -25,6 +25,12 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   attributes init <geometry.json> <request.json> [--out file.json]   initialize a named attribute asset for a geometry domain
   attributes inspect <asset.json> [selection.json] [--out file.json]   report attribute ranges, labels and selected values
   attributes edit <asset.json> <request.json> [--out file.json] [--report file.json]   edit typed values or channel metadata by name and ID
+  volume inspect <volume.json> [--out file.json]   report sparse field ranges, bounds and storage
+  volume sample <volume.json> <request.json> [--out file.json]   sample named fields at world positions
+  volume pack <dense.json> [--max-cells N] [--out file.json] [--report file.json]   pack dense field buffers as sparse bricks
+  volume combine <left.json> <right.json> <request.json> [--out file.json] [--report file.json]   combine aligned fields over active sites
+  volume resample <volume.json> <request.json> [--out file.json] [--report file.json]   regrid selected fields within a cell budget
+  volume export <volume.json> <request.json> [--out file.json] [--report file.json]   export sparse, dense, slice or isosurface data
   ornament <pattern.json> [--format pigment|relief|tiles] [--out file]   export a wallpaper or frieze pattern
   palette plot <plot.json> [--space rgb|oklab] [--orbit degrees] [--format png|data]   render a palette in 3D
   palette extract <reference.png> [--size 32] [--alpha visible|opaque|all] [--out report.json]
@@ -1072,6 +1078,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 
 These options are read by CLI code. Follow each source link for the accepted values and command context.
 
+- `--action` · [cli/sparse-volume.js](../../cli/sparse-volume.js)
 - `--allow` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--allow-truncated` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--allow-unresolved` · [cli/music-editorial.js](../../cli/music-editorial.js)
@@ -1116,7 +1123,6 @@ These options are read by CLI code. Follow each source link for the accepted val
 - `--label` · [cli/music-critique-calibration.js](../../cli/music-critique-calibration.js), [cli/pixel-art.js](../../cli/pixel-art.js)
 - `--left-workers` · [cli/world.js](../../cli/world.js)
 - `--loopback-start` · [cli/room-impulse-capture.js](../../cli/room-impulse-capture.js)
-- `--max-cells` · [cli/render-grid.js](../../cli/render-grid.js)
 - `--max-checks` · [cli/mesh-uv.js](../../cli/mesh-uv.js)
 - `--max-deviation` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--max-error` · [cli/look-bake.js](../../cli/look-bake.js)
