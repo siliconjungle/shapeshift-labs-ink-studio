@@ -1665,7 +1665,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         sceneryBlockTextures:frame.sceneryBlockTextures,
         sceneryDeliveryFrame:reflectionCapture || plane!==zero ? undefined : frame.sceneryDeliveryFrame,
         onModelingWork:frame.onModelingWork,
-        tilesetLight:meshLayers.some(layer=>layer.tilesetMaterials) ?
+        tilesetLight:meshLayers.some(layer=>layer.tilesetMaterials || layer.tileWraps) ?
           spriteLOD.light(world.liveSun,frame.liveSun,t) ?? toolkit.SpriteSurface.tilesetLight : undefined,
         sun:spriteRows?.length || meshLayers.some(layer=>layer.semanticMipmaps?.some(row=>row.objectTexels||row.liveLight)) ?
           spriteLOD.light(world.liveSun,frame.liveSun,t) : undefined};

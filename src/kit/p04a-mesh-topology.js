@@ -455,7 +455,7 @@ const meshCornerTint = (() => {
     return geometry;
   }
 
-  function toSceneMesh(source, { materials, objectId, partId, meshId, frame } = {}) {
+  function toSceneMesh(source, { materials, objectId, partId, meshId, frame, tileWraps } = {}) {
     const doc = create(source);
     const { materials: slots, triangleSources, vertexSources, ...geometry } = renderGeometry(doc);
     if (!triangleSources.length) throw new RangeError('Add at least one polygon before rendering a mesh topology');
@@ -479,8 +479,9 @@ const meshCornerTint = (() => {
       }
     }
     const mesh = K.sceneMeshes.create({ id: meshId ?? doc.id, objectId, partId, ...geometry, materials: definitions });
-    K.sceneMeshes.layer(mesh).featureFaces=Array.from({length:mesh.triangles},(_,i)=>
-      triangleSources[K.sceneMeshes.sourceTriangle(mesh,i)].face);
+    const layer=K.sceneMeshes.layer(mesh);
+    layer.featureFaces=Array.from({length:mesh.triangles},(_,i)=>triangleSources[K.sceneMeshes.sourceTriangle(mesh,i)].face);
+    if (tileWraps?.size) K.sceneMeshes.bindTileWraps(mesh,tileWraps);
     renderSources.set(mesh, { document: doc, triangles: triangleSources, vertices: vertexSources });
     return mesh;
   }

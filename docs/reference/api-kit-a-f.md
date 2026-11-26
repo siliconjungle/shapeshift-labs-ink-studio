@@ -935,6 +935,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetFaceFromVertices` | namespace |  |  |
 | `KIT.authoring.tilesetFaceFromVertices.plan` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-face-from-vertices.js) |
 | `KIT.authoring.tilesetFaces` | namespace |  |  |
+| `KIT.authoring.tilesetFaces.activeWraps` | function | `(bindings, faces, materials, tilesets)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.append` | function | `(brush, stamps, brushes = [brush])` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.cornersFor` | function | `(brush, face, ids, slots = quadCorners)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.cropSource` | function | `(asset, crop, texelBounds = [crop.x,crop.y,crop.x+crop.width,crop.y+crop.height], paint)` | [source](../../src/kit/p23-tileset-faces.js) |
@@ -943,6 +944,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetFaces.isSourceBinding` | function | `(binding)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.joinSources` | function | `(original, remapped, before, after, correspondence)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.plan` | function | `(scene, request, options)` | [source](../../src/kit/p23-tileset-faces.js) |
+| `KIT.authoring.tilesetFaces.planWrap` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.polygonStamp` | function | `(brush, face, ids, vertices, uvCorners)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.prepare` | function | `(scene, request, {projectTexelsPerUnit} = {}, cellSize)` | [source](../../src/kit/p23-tileset-faces.js) |
 | `KIT.authoring.tilesetFaces.previewMerges` | function | `(row, steps)` | [source](../../src/kit/p23-tileset-faces.js) |

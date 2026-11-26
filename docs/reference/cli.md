@@ -366,6 +366,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   tileset select-atlas <pick.json> --scene <scene.json> --object <mesh-id> [--part <part-id>] [--mode match|inside|touch] [--out <selection.json>]   select faces by pigment UV coverage of a tileset rectangle
   tileset eyedrop --scene <scene.json> --object <mesh-id> --face <face-id> [--part ID] [--brush-size] [--out <pick.json>]   recover a reusable painted face pick for stamp --selection
   tileset reskin --scene <scene.json> --object <mesh-id> --face <face-id> --mode crop|tileset|relative (--selection <pick.json> | --id <tileset-id>) [--part ID] [--column N --row N] [--out <new-scene.json>]   change the paint on an existing mesh face
+  tileset wrap <request.json> --scene <scene.json> [--expect receipt.json] [--out <new-scene.json>]   clamp, repeat, or mirror an atlas crop on one face
   tileset material inspect --scene <scene.json> --id <tileset-id>   show saved material settings and active faces
   tileset material export --scene <scene.json> --id <tileset-id> --out <preset.json>   save a reusable tileset material preset
   tileset material set <settings.json> --scene <scene.json> --id <tileset-id> [--expect receipt.json] [--out <new-scene.json>]   preview or apply settings to a shared tileset

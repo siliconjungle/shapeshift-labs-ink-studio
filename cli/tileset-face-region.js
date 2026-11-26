@@ -18,6 +18,11 @@ function footprint(row, source, hit, asset, K) {
   const layer = K.sceneMeshes.layer(row.mesh);
   const chart = layer.surfaceCharts.find(row=>row.materialId===source.material);
   if (!chart || layer.sceneMeshId!==hit.mesh) return;
+  if (hit.wrapCrop) {
+    const [x,y,width,height]=hit.wrapCrop, at=[source.at[0]-x,source.at[1]-y];
+    if (!Selections.contains(width,height,at)) return;
+    return {rect:hit.wrapCrop,mask:new Uint8Array(width*height).fill(1),at};
+  }
   const {region,first,end} = chart, triangles = [];
   const low = [asset.width,asset.height], high = [0,0];
   const motion = layer[uvSlip]?.ranges ?? [];
@@ -174,7 +179,18 @@ function contact([x,y,width,height], mask) {
     counts[i+1] = counts[i]+mask[row*width+col];
   }
   const crop = {x,y,width,height}, work = {rows:0,limit:4000000};
-  return (layer,corner,{region})=>{
+  return (layer,corner,{region},wrap)=>{
+    if (wrap) {
+      const [left,top]=[wrap.start[0]-region.x,wrap.start[1]-region.y];
+      const from=Math.max(0,left-x), to=Math.min(width,left+wrap.size[0]-x);
+      if (from>=to) return false;
+      for (let row=Math.max(0,top-y);row<Math.min(height,top+wrap.size[1]-y);row++) {
+        const at=row*stride;
+        if (counts[at+to]>counts[at+from]) return true;
+        if (++work.rows>work.limit) throw new RangeError('Face paint impact review exceeds its scanline budget');
+      }
+      return false;
+    }
     let hit = false;
     const tri = localUV(layer,corner,region);
     const complete = MeshUV.scanSampled(tri,crop,work,(row,left,right)=>{

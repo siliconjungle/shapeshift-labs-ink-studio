@@ -3003,3 +3003,53 @@ undo for the edit.
 
 Run `node examples/tileset-pick/tileset-material-demo.cjs material-review`
 for a headless comparison and reusable presets.
+
+## Repeat a crop on one face
+
+Use a single painted quad for a straight wall, strip of trim, or floor run.
+Keep separate faces for corners, slopes, and changes to the silhouette.
+`tileset wrap` uses the face's retained source crop as the texture period
+and leaves its mesh, material slot, and atlas pixels in place.
+
+```json
+{
+  "object": "wall",
+  "face": "straight-run",
+  "wrap": {
+    "u": "repeat",
+    "v": "clamp",
+    "repeats": [6, 1],
+    "offset": [0, 0]
+  }
+}
+```
+
+- `u` and `v` follow the pigment UV axes, including any authored rotation.
+  `clamp` extends the edge texel, `repeat` starts the crop again, and
+  `mirror` alternates the direction of successive copies.
+- `repeats` sets the number of crop widths or heights across the
+  full source crop’s UV span. UV edits move the sampled phase. Fractional values allow a partial
+  period. `offset` shifts the start in crop units and can be negative.
+  Each axis defaults to clamp, one copy, and zero offset.
+- Nearest and linear sampling stay inside the crop. Linear filtering
+  addresses each tap using the selected wrap mode, including at seams.
+  Wrapped faces use the sheet's nearest or linear sampler when present
+  and nearest sampling on legacy sheets. Registered material maps use
+  their base level on wrapped faces.
+- A native-grid hit on a repeated copy resolves back to its source texel.
+  Bound region tools use the shared crop as their paint boundary.
+
+```sh
+ink-studio tileset wrap repeat.json --scene wall.json > wrap-review.json
+ink-studio tileset wrap repeat.json --scene wall.json --expect wrap-review.json --out repeated-wall.json
+ink-studio tileset eyedrop --scene repeated-wall.json --object wall --face straight-run
+```
+
+Use `"wrap": null` to restore the original sampling on the face. The
+SDK exposes `editor.planTilesetWrap(request)` and
+`editor.applyTilesetWrap(request)`. The edit is one undo, and the
+receipt includes the face, crop, and triangle counts. A compatible
+atlas swap or quad split carries the crop binding with the wrap settings.
+
+Run `node examples/tileset-pick/tileset-face-wrap-demo.cjs wrap-review`
+to compare all three modes on a wall with separately modeled end caps.
