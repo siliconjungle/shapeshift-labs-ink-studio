@@ -340,6 +340,15 @@
       const value = clone(state);
       return edit('Set rest surface state', targets, solid => patchFields(solid, { surfaceState: value }));
     }
+    const planSculptSpray = request => A.sculptSpray.plan(snapshot(), request, buildEnv).report;
+    function applySculptSpray(request) {
+      const plan = A.sculptSpray.plan(snapshot(), request, buildEnv);
+      const strokes = new Map(plan.targets.map((id, i) => [id, plan.strokes[i]]));
+      edit('Apply sculpt spray ' + plan.id, plan.targets.map(id => 'solid:' + id),
+        solid => ({ ...solid, sdfSpray: [...(solid.sdfSpray ?? []), strokes.get(solid.id)] }));
+      return plan.report;
+    }
+
     function setSdfPaint(paint, targets = selectedKeys()) {
       const value = clone(paint);
       return edit('Paint SDF material', targets, solid => patchFields(solid, { sdfPaint:value }));
@@ -1441,6 +1450,7 @@
       paintShadowBand,
       paintShadeNormal,
       setSurfaceState,
+      planSculptSpray, applySculptSpray, inspectSculptSprays: () => A.sculptSpray.inspect(snapshot()),
       setSdfPaint,
       setSdfProtection,
       editSurfaceDecal,

@@ -1,6 +1,7 @@
 'use strict';
 
 const UV = require('../src/material-uv.js');
+const {over} = require('../src/art-passes.js');
 const byte = value=>Number.isInteger(value) && value>=0 && value<=255;
 const rgbaValue = value=>Array.isArray(value) && value.length===4 && Array.from(value).every(byte);
 const rgbHex = rgb=>'#'+rgb.map(value=>value.toString(16).padStart(2,'0')).join('');
@@ -50,15 +51,21 @@ function ditherOptions(input) {
   return {pattern,mix,seed,colors:paintColors(colors)};
 }
 
-function operation({tool='pencil',rgba,color,alpha,slot,sample,channel,fill,spray,dither,drawing,selection}) {
+function operation({tool='pencil',rgba,color,alpha,slot,sample,channel,fill,spray,dither,drawing,selection,alphaMode,strength}) {
   const write = rgba!==undefined || color!==undefined || alpha!==undefined || slot!==undefined;
+  if (alphaMode!==undefined && (!['pencil','spray','fill','dither'].includes(tool) ||
+      !['replace','accumulate'].includes(alphaMode)))
+    throw new TypeError('Choose replace or accumulate alpha for pencil, spray, fill, or dither');
+  if (strength!==undefined && (tool!=='eraser' || !fraction(strength)))
+    throw new TypeError('Eraser strength must be between 0 and 1');
   if (selection!==undefined && !record(selection))
     throw new TypeError('Choose a native selection query or saved atlas pixel selection');
   if (drawing!==undefined && (!['pencil','eraser','spray'].includes(tool) ||
       !fields(drawing,['mirrorX','mirrorY']) || ![drawing.mirrorX,drawing.mirrorY].some(n=>n!==undefined) ||
       !Object.values(drawing).every(n=>n===undefined || typeof n==='number' && Number.isSafeInteger(n*2))))
     throw new TypeError('Use mirrorX or mirrorY in atlas texel coordinates with pencil, eraser, or spray');
-  const scope = {...(selection!==undefined && {selection}),...(drawing!==undefined && {drawing})};
+  const scope = {...(selection!==undefined && {selection}),...(drawing!==undefined && {drawing}),
+    ...(alphaMode!==undefined && {alphaMode}),...(strength!==undefined && {strength})};
   if (fill!==undefined && tool!=='fill' || spray!==undefined && tool!=='spray' || dither!==undefined && tool!=='dither')
     throw new TypeError('Pattern settings must match the selected tool');
   if (tool==='fill' || tool==='dither') {
@@ -93,16 +100,24 @@ function pixels(asset) {
 }
 
 function bindPaint(asset, edit) {
-  const {tool,slot,color,alpha,rgba} = edit;
+  const {tool,slot,color,alpha,rgba,alphaMode,strength=1} = edit;
   const indexed = asset.encoding==='indexed8';
   if (slot!==undefined && (!indexed || slot>=asset.palette.length)) return;
-  if (slot!==undefined || rgba || tool==='eraser') {
-    const value = slot!==undefined ? paletteValue(asset,slot) :
-      rgba ? rgba.reduce((packed,byte)=>packed*256+byte,0) : 0;
-    const pixel = {value,slot:slot!==undefined ? 'slot-'+slot : value===0 ? null : undefined};
+  if (tool==='eraser') {
+    if (strength===1) return {pixel:()=>({value:0,slot:null})};
+    return {needsSource:true,pixel:before=>({value:(before>>>8)*256+Math.round(over(0,before&255,strength))})};
+  }
+  const fixed = slot!==undefined ? paletteValue(asset,slot) : rgba?.reduce((packed,byte)=>packed*256+byte,0);
+  const rgb = fixed!==undefined ? fixed>>>8 : color===undefined ? undefined : Number.parseInt(color.slice(1),16);
+  const input = fixed!==undefined ? fixed&255 : alpha;
+  if (alphaMode==='accumulate' && input!==undefined) return {needsSource:true,pixel:before=>({
+    value:(rgb ?? (before>>>8))*256+Math.round(over(255,before&255,input/255)),
+    ...(slot!==undefined && {slot:'slot-'+slot})
+  })};
+  if (fixed!==undefined) {
+    const pixel = {value:fixed,slot:slot!==undefined ? 'slot-'+slot : fixed===0 ? null : undefined};
     return {pixel:()=>pixel};
   }
-  const rgb = color===undefined ? undefined : Number.parseInt(color.slice(1),16);
   return {needsSource:rgb===undefined || alpha===undefined,pixel:before=>({
     value:(rgb ?? (before>>>8))*256+(alpha ?? (before&255))
   })};
@@ -150,4 +165,5 @@ function eyedrop(K, row, source, hit, asset, {sample:mode,channel}) {
     ...(paletteSlot!==undefined && {paletteSlot}),provenance:{kind:'tileset',id:source.tileset}};
 }
 
-module.exports = {operation,pencilOrEraser,eyedrop,bindPaint,pixels};
+const previewsCoverage = op=>op.alphaMode!==undefined || op.strength!==undefined;
+module.exports = {operation,pencilOrEraser,eyedrop,bindPaint,pixels,previewsCoverage};

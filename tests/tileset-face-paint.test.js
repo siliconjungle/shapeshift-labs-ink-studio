@@ -480,3 +480,93 @@ test('mirror a pencil dab through crop-local saved pixels without painting the e
   const painted = JSON.parse(fs.readFileSync(file('painted.json'))), bytes = Buffer.from(painted.tilesets.enamel.data,'base64');
   assert.deepEqual([...bytes.subarray((8*width+12)*4,(8*width+13)*4)],[71,105,89,255]);
 });
+
+test('replace or accumulate the same input alpha and measure the source and native coverage separately',()=>{
+  const scene = fixture(), asset = scene.tilesets.enamel, offset = (6*width+9)*4;
+  const bytes = Buffer.from(asset.data,'base64');
+  bytes[offset+3] = 160;
+  asset.data = bytes.toString('base64');
+  const editor = ink.createSceneEditor(scene);
+  const request = {...stroke,rgba:[71,105,89,120],alphaMode:'replace'};
+  const replaced = ink.paintTilesetFace(editor,request);
+  assert(replaced.report.canCommit,JSON.stringify(replaced.report.conflicts));
+  assert.deepEqual(replaced.report.coverage.samples,[{at:[9,6],before:160,after:120}]);
+  assert.deepEqual(replaced.images['coverage-before'].rgb,Uint8Array.of(160,160,160));
+  assert.deepEqual(replaced.images['coverage-after'].rgb,Uint8Array.of(120,120,120));
+  const lost = replaced.report.coverage.native;
+  assert(lost.lostPixels>0);
+  assert.equal(lost.afterPixels,lost.beforePixels-lost.lostPixels);
+
+  const accumulate = {...request,alphaMode:'accumulate'};
+  const added = ink.paintTilesetFace(editor,accumulate);
+  assert.equal(added.report.changedPixels,0);
+  assert.equal(added.report.coverage.native.lostPixels,0);
+  assert.deepEqual(added.report.coverage.samples,[{at:[9,6],before:160,after:205}]);
+  assert.equal(ink.paintTilesetFace(editor,accumulate,{apply:true,expect:replaced.report.previewRevision}).report.conflicts[0].code,'stale-preview');
+  assert.deepEqual(editor.snapshot(),scene);
+  assert.deepEqual(ink.paintTilesetFace(editor,accumulate,{apply:true,expect:added.report.previewRevision}).report,added.report);
+  const second = ink.paintTilesetFace(editor,accumulate,{apply:true}).report;
+  assert.deepEqual(second.coverage.samples,[{at:[9,6],before:205,after:229}]);
+  assert.deepEqual([...Buffer.from(editor.snapshot().tilesets.enamel.data,'base64').subarray(offset,offset+4)],[71,105,89,229]);
+  assert(editor.undo());
+  assert(editor.undo());
+  assert.deepEqual(editor.snapshot(),scene);
+});
+
+test('scale indexed alpha with eraser strength and scope a partial erasure to a local variant',()=>{
+  const scene = fixture(true), asset = scene.tilesets.enamel;
+  asset.alpha = [230];
+  const editor = ink.createSceneEditor(scene), {rgba,...hit} = stroke;
+  const request = {...hit,tool:'eraser',strength:.25};
+  const idle = ink.paintTilesetFace(editor,{...request,strength:0},{apply:true}).report;
+  assert.equal(idle.coverage.changedTexels,0);
+  assert.deepEqual(editor.snapshot(),scene);
+  const local = {...request,sharing:'make-local-variant',variant:'soft-cutout'};
+  const preview = ink.paintTilesetFace(editor,local).report;
+  assert.deepEqual(preview.coverage.samples,[{at:[9,6],before:230,after:173}]);
+  assert.equal(preview.coverage.native.lostPixels,0);
+  assert.equal(ink.paintTilesetFace(editor,{...local,strength:.75},{apply:true,expect:preview.previewRevision}).report.conflicts[0].code,'stale-preview');
+  assert.deepEqual(ink.paintTilesetFace(editor,local,{apply:true,expect:preview.previewRevision}).report,preview);
+  const variant = editor.snapshot().tilesets['soft-cutout'];
+  assert.deepEqual(variant.palette,[0x476959,0x476959]);
+  assert.deepEqual(variant.alpha,[230,173]);
+  assert.deepEqual(editor.snapshot().tilesets.enamel,asset);
+  const another = ink.paintTilesetFace(editor,request,{apply:true}).report;
+  assert.deepEqual(another.coverage.samples,[{at:[9,6],before:173,after:130}]);
+  const third = ink.paintTilesetFace(editor,request,{apply:true}).report;
+  assert.deepEqual(third.coverage.samples,[{at:[9,6],before:130,after:98}]);
+  assert(third.coverage.native.lostPixels>0);
+  assert(editor.undo());
+  assert(editor.undo());
+  assert(editor.undo());
+  assert.deepEqual(editor.snapshot(),scene);
+});
+
+test('apply alpha accumulation to both dither colors inside a selection and export coverage evidence',t=>{
+  const scene = fixture(), dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-bound-alpha-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const file = name=>path.join(dir,name);
+  const write = (name,value)=>fs.writeFileSync(file(name),JSON.stringify(value));
+  const run = args=>JSON.parse(execFileSync(process.execPath,[cli,'tileset','paint','face','stroke.json','--scene','scene.json',...args],
+    {cwd:dir,encoding:'utf8'}));
+  const original = Buffer.from(scene.tilesets.enamel.data,'base64');
+  for (let i=3;i<original.length;i+=4) original[i] = 160;
+  scene.tilesets.enamel.data = original.toString('base64');
+  const {rgba,...hit} = stroke;
+  write('scene.json',scene);
+  write('stroke.json',{...hit,tool:'dither',alphaMode:'accumulate',selection:{type:'rectangle',rect:[8,5,3,2]},
+    dither:{colors:[{alpha:60},{rgba:[230,147,90,120]}]}});
+  const preview = run(['--preview','review']);
+  assert(preview.canCommit,JSON.stringify(preview.conflicts));
+  assert.equal(preview.coverage.increased,6);
+  assert.deepEqual([...new Set(preview.coverage.samples.map(row=>row.after))].sort((a,b)=>a-b),[182,205]);
+  assert.deepEqual(preview.files,['before.png','after.png','diff.png','texels.png','coverage-before.png','coverage-after.png']);
+  const a = PNG.raster(file('review/coverage-before.png')), b = PNG.raster(file('review/coverage-after.png'));
+  assert.deepEqual([a.w,a.h,b.w,b.h],[15,15,15,15]);
+  assert.notDeepEqual(a.data,b.data);
+  write('receipt.json',preview);
+  assert.deepEqual(run(['--expect','receipt.json','--out','painted.json']).coverage,preview.coverage);
+  const updated = JSON.parse(fs.readFileSync(file('painted.json'))), bytes = Buffer.from(updated.tilesets.enamel.data,'base64');
+  assert.equal(bytes[(5*width+7)*4+3],160);
+  assert.equal(bytes[(7*width+10)*4+3],160);
+});

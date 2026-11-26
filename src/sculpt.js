@@ -182,17 +182,24 @@ function makeSculpt(B, rest) {
     const state = selected.surfaceState, hit = state?.locate(point, normal);
     return hit ? state.apply(selected, hit, point, normal) : selected;
   }
+  function paintAppearance(material, point, normal, cap, program = material.sdfSpray) {
+    const paint = !cap && material.sdfPaint?.locate(point, normal);
+    const surface = !cap && material.sdfNewSurface?.locate(point, normal);
+    const appearance = surface ? KIT.procedural.sdfBrushSurfaces.appearance(surface, paint) : paint;
+    const spray = program?.locate(point, normal);
+    if (!spray) return surface ? { ...appearance, surface } : appearance;
+    const under = appearance?.tint;
+    return { ...appearance, ...(surface && { surface }), spray, tint: under ? rgb => spray(under(rgb)) : spray };
+  }
   S.materialAt = (material, point, normal) => {
     if (!material) return material;
     const cap = material.cutSurface?.locate(point,normal);
-    if (cap) return cap;
-    const base = baseMaterialAt(material,point,normal), paint = material.sdfPaint?.locate(point,normal);
-    const surface = material.sdfNewSurface?.locate(point,normal);
-    const appearance=surface ? KIT.procedural.sdfBrushSurfaces.appearance(surface,paint) : paint;
+    const base = cap ?? baseMaterialAt(material,point,normal);
+    const appearance = paintAppearance(material, point, normal, cap);
     if (!appearance) return base;
     const { material:role,masks,tint }=appearance;
     const next={ ...base,...(role && { materialId:role }),
-      ...(surface && { surfaceUV:surface.uv,generatedSurface:surface.details }) };
+      ...(appearance.surface && { surfaceUV:appearance.surface.uv,generatedSurface:appearance.surface.details }) };
     if (masks || tint) {
       const model=(typeof base.model==='function' ? base.model(point,normal) : base.model) ?? {};
       const changed={ ...model.masks };
@@ -204,13 +211,14 @@ function makeSculpt(B, rest) {
   };
   S.mapSurfaceState = (material, inverse, pullNormal, pushNormal) => {
     const state = material?.surfaceState, paint = material?.sdfPaint, surface = material?.sdfNewSurface;
-    const cut = material?.cutSurface;
-    if (!state && !paint && !surface && !cut) return material;
+    const cut = material?.cutSurface, spray = material?.sdfSpray;
+    if (!state && !paint && !surface && !cut && !spray) return material;
     const map = program=>({ locate(point,normal,...options) {
       const rest = inverse(point);
       return program.locate(rest,pullNormal ? pullNormal(normal,rest,point) : normal,...options);
     } });
-    return { ...material,...(paint && { sdfPaint:map(paint) }),...(surface && {sdfNewSurface:map(surface)}),
+    return { ...material,...(paint && { sdfPaint:map(paint) }),...(spray && { sdfSpray:map(spray) }),
+      ...(surface && {sdfNewSurface:map(surface)}),
       ...(cut && { cutSurface:map(cut) }),
       ...(state && { surfaceState: { ...state, locate(point, normal) {
       const rest = inverse(point);
@@ -251,7 +259,7 @@ function makeSculpt(B, rest) {
       else if (lowerBound) solid.lowerBound = (x, y, z, limit) => scale * lowerBound(...inverse([x, y, z]), limit / scale);
       if (along) solid.along = (x, y, z) => along(...inverse([x, y, z]));
       if (mat.rf) solid.mat = { ...mat, rf: (x, y, z) => mat.rf(...inverse([x, y, z])) };
-      if (mat.surfaceState || mat.sdfPaint || mat.sdfNewSurface || mat.cutSurface) {
+      if (mat.surfaceState || mat.sdfPaint || mat.sdfSpray || mat.sdfNewSurface || mat.cutSurface) {
         const axes = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map(direction);
         solid.mat = S.mapSurfaceState(solid.mat, inverse,
           space.affine ? space.inverseDirection : normal => axes.map(axis => axis[0] * normal[0] + axis[1] * normal[1] + axis[2] * normal[2]),
@@ -1705,10 +1713,15 @@ function makeSculpt(B, rest) {
   S.proxySdf = () => hasOptionalProxy ? (x, y, z) => fieldAll(x, y, z, true) : S.sdf;
   /* Material and part ownership at a rest-pose surface. The distance field
      is retained even when the renderer samples it at a different resolution. */
+  function cutMaterial(material, body) {
+    const spray = body?.mat.sdfSpray;
+    return spray ? { ...material, sdfSpray: spray } : material;
+  }
   S.surfaceAt = (x, y, z, provenance = false) => {
     const distance = fieldAll(x, y, z), cut = ownNeg;
     const source = cut?.mat?.r ? cut : own;
-    return { distance, material: source?.mat, tag: cut?.tag || own?.tag || null,
+    const material = source && source === cut ? cutMaterial(source.mat, own) : source?.mat;
+    return { distance, material, tag: cut?.tag || own?.tag || null,
       ...(provenance && { owner: source?.renderOwner, target: source?.renderTarget }) };
   };
   /* (before a bake the field does not yet know where its solids are: S.ready() tells it, for whoever needs to ask early) */
@@ -1790,7 +1803,8 @@ function makeSculpt(B, rest) {
         return { bounds, distance: field.sdf, accepts, surface(point, normal) {
           const hit = field.renderSurface(...point), owner = hit.owner;
           if (!owner) return null;
-          const base = controlled(S.materialAt(owner.mat, point, normal));
+          const material = hit.body === owner ? owner.mat : cutMaterial(owner.mat, hit.body);
+          const base = controlled(S.materialAt(material, point, normal));
           const top = base.top && normal[1] > base.top.min +
             .35 * (n3(point[0]*1.9, point[1]*1.9, point[2]*1.9) - .5);
           return { owner, material: top ? base.top : base };
@@ -1906,6 +1920,7 @@ function makeSculpt(B, rest) {
   }
 
   function shadeOwned(owner, material, ...sample) {
+    const spray = material.sdfSpray;
     const cap = material.cutSurface?.locate(sample.slice(1, 4), sample.slice(4, 7));
     if (cap) material = cap;
     else if (material.materialAt || material.surfaceState)
@@ -1963,12 +1978,9 @@ function makeSculpt(B, rest) {
     if (style) B.describePixelStyle?.(first, end, style, pair);
     const surfaceId = effective.surfaceId ?? (effective === material ? undefined : effective.surface?.id) ?? material.surfaceId;
     const baseId = effective.materialId ?? material.materialId;
-    let appearance;
-    if (!cap && first<end && (owner?.mat?.sdfPaint || owner?.mat?.sdfNewSurface)) {
-      const point=sample.slice(1,4), normal=sample.slice(4,7);
-      const paint=owner.mat.sdfPaint?.locate(point,normal), surface=owner.mat.sdfNewSurface?.locate(point,normal);
-      appearance=surface ? KIT.procedural.sdfBrushSurfaces.appearance(surface,paint) : paint;
-    }
+    const ownerMat = owner?.mat;
+    const appearance = first < end && ownerMat && (ownerMat.sdfPaint || ownerMat.sdfNewSurface || spray) &&
+      paintAppearance(ownerMat, sample.slice(1, 4), sample.slice(4, 7), cap, spray);
     if (appearance?.tint && B.tintSplatColors)
       B.tintSplatColors(first,end,appearance.tint,owner.sdfPaintBase??=new Map(),baseId);
     B.describeSplats?.(first, end, {
@@ -1977,7 +1989,13 @@ function makeSculpt(B, rest) {
       target: renderTarget(owner, surfaceId)
     });
     const albedo = pigment ?? effective.albedo ?? effective.r?.at(-1) ?? material.albedo ?? material.r?.at(-1);
-    if (capture && albedo !== undefined) B.describeAlbedo(first, end, albedo);
+    if (capture && albedo !== undefined) {
+      if (appearance?.spray) {
+        const color = typeof albedo === 'number' ? P[albedo] : typeof albedo === 'string' ?
+          [1, 3, 5].map(i => Number.parseInt(albedo.slice(i, i + 2), 16)) : null;
+        B.describeAlbedo(first, end, appearance.spray(color ? color.map(n => n / 255) : albedo));
+      } else B.describeAlbedo(first, end, albedo);
+    }
   }
   function sampleAt(solid, spacing, visit) {
     const original = solid.res;
@@ -2081,7 +2099,7 @@ function makeSculpt(B, rest) {
         nz = g3[2];
       field(x, y, z);
       if (!own) return;
-      const m = ownNeg && ownNeg.mat.r ? ownNeg.mat : own.mat;
+      const m = ownNeg && ownNeg.mat.r ? cutMaterial(ownNeg.mat, own) : own.mat;
       if (!m.r || m.skip) return;
       if (S.capture) {
         const pr = ownNeg && ownNeg.mat.r ? ownNeg : own;

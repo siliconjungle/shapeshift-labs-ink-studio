@@ -1528,6 +1528,38 @@ at atlas coordinates that remain selected.
 Run `node examples/tileset-pick/bound-tile-stroke-demo.cjs bound-tile-stroke-demo`
 to compare spray, dither, and mirrored paint on a prefab sign.
 
+### Replace, accumulate, and erase alpha
+
+Set `alphaMode` on pencil, spray, fill, or dither. Existing requests
+default to replacement.
+
+| Request fields | Coverage operation |
+| --- | --- |
+| `"tool": "pencil", "alpha": 120, "alphaMode": "replace"` | Store alpha 120 at the hit. |
+| `"tool": "pencil", "alpha": 120, "alphaMode": "accumulate"` | Add the incoming coverage over the stored coverage. Alpha 160 becomes 205. |
+| `"tool": "eraser", "strength": 0.25` | Remove one quarter of the current alpha. Alpha 160 becomes 120 and keeps its stored color. |
+
+Accumulation uses source-over for alpha, rounded to the nearest byte
+after each write. Color still follows the paint input, so an alpha-only
+operation keeps the stored RGB. A color-only input keeps the stored alpha.
+RGBA and indexed palette slots supply an incoming alpha. For fill and
+dither, the mode applies to each authored color.
+
+Eraser strength runs from 0 through 1. The default strength is 1 for a
+full clear. Partial erasures scale the current alpha by the fraction
+left after erasing. Indexed sheets reuse or add a slot with the resulting
+color and alpha, subject to the existing palette limit.
+
+An explicit `alphaMode` or `strength` adds `coverage-before.png` and
+`coverage-after.png` to the preview. These show source alpha in grayscale
+over the reported atlas rectangle. The JSON receipt records alpha changes
+and the picked face's gained or lost native pixels. The native render
+still applies the material's alpha cutoff, so source alpha can change
+while the visible pixels stay the same.
+
+Run `node examples/tileset-pick/bound-tile-alpha-demo.cjs bound-tile-alpha-demo`
+for a matched comparison of the three operations on a prefab sign.
+
 In Node, use `ink.openTilesetPaint(editor, request)` and
 `ink.writeTilesetPaint(editor, binding, document, { apply: true })`.
 Omit `apply` to preview the write. One scene undo restores the atlas

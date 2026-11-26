@@ -110,7 +110,7 @@ function usesRegion(op) {
 
 function plan(row, source, hit, asset, op, K) {
   const colors = op.fill?.colors ?? op.dither?.colors ?? [op];
-  const paints = colors.map(color=>Tools.bindPaint(asset,color));
+  const paints = colors.map(color=>Tools.bindPaint(asset,{...color,alphaMode:op.alphaMode}));
   if (paints.some(paint=>!paint)) return {conflict:'palette-slot-unavailable'};
   const bounded = footprint(row,source,hit,asset,K);
   if (!bounded) return {conflict:op.fill ? 'unresolved-fill-footprint' : 'unresolved-paint-footprint'};

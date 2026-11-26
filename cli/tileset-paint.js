@@ -228,9 +228,9 @@ function planPixels(editor, tileset, before, rect, pixels, changedMask) {
   const painted = paintPixels(before,rect,pixels,changedMask);
   if (!painted) return {};
   const {asset,detail} = painted;
-  if (!detail.changedTexels) return {detail:{...detail,canCommit:true,conflicts:[]}};
+  if (!detail.changedTexels) return {asset,detail:{...detail,canCommit:true,conflicts:[]}};
   const request = {type:'replace',id:tileset,asset}, edit = editor.planTilesetRevision(request);
-  return {request,edit,detail:{...detail,canCommit:edit.canCommit,conflicts:edit.blockers,revision:edit}};
+  return {asset,request,edit,detail:{...detail,canCommit:edit.canCommit,conflicts:edit.blockers,revision:edit}};
 }
 
 function command([action,...args], opt, kit, openEditor, sceneOutput) {
