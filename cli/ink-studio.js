@@ -1426,6 +1426,10 @@ const CMD = {
         '  splat-fit <scene> --plan approvals.json --out asset.json',
         '  gaussian-train capture <scene> <plan.json> --out directory   capture registered RGBA views',
         '  gaussian-train train <dataset.json> --out directory   fit and evaluate a Gaussian cloud',
+        '  cloud-materials recover <cloud.ply|cloud.spz> [--plan plan.json] --out directory   recover editable material channels',
+        '  cloud-materials override <material.json> <patch.json> --out directory   compose source-bound edits',
+        '  cloud-materials render <material.json> <view.json> --out image.png   relight, restore capture or inspect channels',
+        '  cloud-materials inspect <material.json> [--row N]   report recovery and override evidence',
         '  splat-groups <scene> --plan groups.json --out fit.json [--base fit.json --report report.json]',
         '  splat-redistribute <scene> --plan operations.json --out fit.json --report review.json [--base fit.json]',
         '  render/clip --shot-corrections file.json|off   load or bypass native shot corrections',
@@ -3750,6 +3754,9 @@ const CMD = {
   },
   liquid3d() {
     return require('./liquid3d.js').command(pos,opt,lib());
+  },
+  'cloud-materials'() {
+    return require('./cloud-materials.js').command(pos,opt);
   },
   'gaussian-train'() {
     return require('./gaussian-training.js').command(pos,opt,lib().KIT,
