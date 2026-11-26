@@ -81,3 +81,7 @@ See [normal and height bakes](bake-normal-height.md) for tangent and world vecto
 ## Bake visibility and directions
 
 See [occlusion bakes](bake-occlusion.md) for ambient, contact and directional AO, scene ray controls, self-occlusion policies, bent normals and blocker directions.
+
+## Measure thickness
+
+See [thickness bakes](bake-thickness.md) for search range, inward ray directions, strict shell and part checks, float and 16-bit outputs, and paired validity.

@@ -384,6 +384,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.SpriteSurface.samplingGLSL` | value | `string` |  |
 | `toolkit.SpriteSurface.samplingPlan` | function | `(atlas)` | [source](../../src/sprite-surface.js) |
 | `toolkit.SpriteSurface.setShadowShell` | function | `(atlas, id, definition)` | [source](../../src/sprite-surface.js) |
+| `toolkit.SpriteSurface.tileWrap` | function | `(value)` | [source](../../src/sprite-surface.js) |
+| `toolkit.SpriteSurface.tileWrapIndex` | function | `(index, start, size, mode)` | [source](../../src/sprite-surface.js) |
+| `toolkit.SpriteSurface.tileWrapPoint` | function | `(wrap,x,y)` | [source](../../src/sprite-surface.js) |
+| `toolkit.SpriteSurface.tileWrapRegion` | function | `(rect, rule)` | [source](../../src/sprite-surface.js) |
 | `toolkit.SpriteSurface.tilesetLight` | namespace |  |  |
 | `toolkit.SpriteSurface.tilesetLight.ambient` | value | `number = 0.32` |  |
 | `toolkit.SpriteSurface.tilesetLight.direction` | value | `array` |  |

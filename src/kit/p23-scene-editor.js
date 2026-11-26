@@ -769,6 +769,14 @@
       return problems.length ? {report:freeze({...report,canCommit:false,problems})} : {patch,remove,report};
     }
 
+    function planTilesetWrap(request) {
+      return stageTilesetFaceEdit(A.tilesetFaces.planWrap,request).report;
+    }
+
+    function applyTilesetWrap(request) {
+      return commitTilesetFaceEdit(A.tilesetFaces.planWrap,request,undefined,'wrap');
+    }
+
     function planTilesetStroke(request, options) {
       return stageTilesetFaceEdit(A.tilesetStrokes.plan,request,options).report;
     }
@@ -1535,7 +1543,7 @@
       setTilesetGrid,
       setTilesetTexelsPerUnit,
       constructionPlane, setConstructionPlane, planConstructionOrigin, snapConstructionOrigin,
-      planTilesetFace, placeTilesetFace, planTilesetFaceVariant, applyTilesetFaceVariant,
+      planTilesetWrap, applyTilesetWrap, planTilesetFace, placeTilesetFace, planTilesetFaceVariant, applyTilesetFaceVariant,
       eyedropTilesetFace, planTilesetStroke, applyTilesetStroke,
       planTilesetRectangle, applyTilesetRectangle, planTilesetBrushRun, applyTilesetBrushRun,
       planTilesetReskin, applyTilesetReskin, planTilesetAssignment, applyTilesetAssignment,

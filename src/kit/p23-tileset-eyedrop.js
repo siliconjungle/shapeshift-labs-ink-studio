@@ -105,7 +105,7 @@
       ...(Object.values(uvInset).some(Boolean) && {uvInset}),
       ...(brushSize && size && {worldSize:size})};
     return freeze({...report,...recovered,canStamp:true,...(slots.length === 3 && {uvCorners:slots}),
-      ...(binding && {binding:binding.id}),stamp});
+      ...(binding && {binding:binding.id,...(binding.data.wrap && {wrap:binding.data.wrap})}),stamp});
   }
 
   A.tilesetEyedrop = Object.freeze({inspect,recover,orientationOf,sourceBinding});

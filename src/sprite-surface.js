@@ -3,6 +3,7 @@ const SpriteSurface = (() => {
   const slips = Symbol.for('ink-studio.spriteSurface.uvSlip');
   const namedFaces = new WeakMap(), sampledAtlases = new WeakMap();
   const shells = typeof ShadowShell === 'undefined' ? require('./shadow-shell.js') : ShadowShell;
+  const addressing = typeof TextureAddress === 'undefined' ? require('./texture-address.js') : TextureAddress;
   const resampling = typeof PaletteResampling === 'undefined' ? require('./palette-resampling.js') : PaletteResampling;
   const validSnap = n => n === 0 || Number.isFinite(n) && n >= .25 && n <= 16;
   const validSubdivision = n => Number.isSafeInteger(n) && n >= 1 && n <= 16;
@@ -371,6 +372,36 @@ const SpriteSurface = (() => {
     if (faces) namedFaces.set(copy, new Map(faces));
     return copy;
   }
+  const wrapModes = ['clamp','repeat','mirror'];
+  const textureAxes = ['clamp','transparent','wrap','mirror'].map(addressing.axis);
+  function tileWrap(value) {
+    if (!value || Object.getPrototypeOf(value)!==Object.prototype ||
+        Object.keys(value).some(key=>!['u','v','repeats','offset'].includes(key)))
+      throw new TypeError('Use tileset wrap settings with u, v, repeats and offset');
+    const {u='clamp',v='clamp',repeats=[1,1],offset=[0,0]} = value;
+    const pair = row=>Array.isArray(row) && row.length===2 && Array.from(row).every(Number.isFinite);
+    if (![u,v].every(mode=>wrapModes.includes(mode)) || !pair(repeats) || !pair(offset) ||
+        repeats.some(count=>count<=0 || count>4096) || offset.some(at=>Math.abs(at)>4096))
+      throw new RangeError('Wrap modes are clamp, repeat or mirror. Repeats must be positive and phase values bounded.');
+    return Object.freeze({u,v,repeats:Object.freeze(repeats.slice()),offset:Object.freeze(offset.slice())});
+  }
+
+  function tileWrapRegion(rect, rule) {
+    const start=[rect.x,rect.y], size=[rect.width,rect.height];
+    const scale=size.map((n,i)=>n===1 ? 0 : n*rule.repeats[i]/(n-1));
+    const phase=size.map((n,i)=>n*rule.offset[i]);
+    const codes={clamp:0,repeat:2,mirror:3};
+    return {start,size,scale,phase,modes:[codes[rule.u],codes[rule.v]]};
+  }
+
+  function tileWrapIndex(index, start, size, mode) {
+    return start+textureAxes[mode](index-start,size);
+  }
+
+  function tileWrapPoint(wrap,x,y) {
+    return [x,y].map((value,k)=>wrap.start[k]+(value-wrap.start[k]-.5)*wrap.scale[k]+wrap.phase[k]);
+  }
+
   const tilesetMaterialDefaults = Object.freeze({lighting:'lit',emissiveGain:0,alphaMode:'mask',alphaCutoff:.5,
     sidedness:'double',minFilter:'nearest',magFilter:'nearest'});
   function tilesetMaterial(value) {
@@ -388,7 +419,7 @@ const SpriteSurface = (() => {
   }
 
   const tilesetLight = Object.freeze({direction:Object.freeze([-.48,.64,.6]),ambient:.32,intensity:.68});
-  return Object.freeze({ tilesetMaterial, tilesetLight, make, setShadowShell, markDirty, updatesSince, update, markGeometryDirty, geometryUpdatesSince, forkGeometry,
+  return Object.freeze({ tilesetMaterial, tilesetLight, tileWrap, tileWrapRegion, tileWrapIndex, tileWrapPoint, make, setShadowShell, markDirty, updatesSince, update, markGeometryDirty, geometryUpdatesSince, forkGeometry,
     uvSlip, projectionPlan, samplingPlan, samplingGLSL: resampling.glsl });
 })();
 if (typeof module !== 'undefined') module.exports = SpriteSurface;

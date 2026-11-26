@@ -1,11 +1,12 @@
 /* Prepare shared directional maps from the same posed geometry in either renderer. */
 const PbrShadows = (() => {
-  let maps, art, curves, cutouts, patterns;
+  let maps, art, curves, cutouts, patterns, sprites;
   try { maps=DirectionalShadowMap; } catch { maps=require('./directional-shadow-map.js'); }
   try { art=ShadowArt; } catch { art=require('./shadow-art.js'); }
   try { curves=CurveSplat; } catch { curves=require('./curve-splat.js'); }
   try { cutouts=ShadowCutouts; } catch { cutouts=require('./shadow-cutouts.js'); }
   try { patterns=CurvePattern; } catch { patterns=require('./curve-pattern.js'); }
+  try { sprites=SpriteSurface; } catch { sprites=require('./sprite-surface.js'); }
   const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
   const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
   const slip=Symbol.for('ink-studio.spriteSurface.uvSlip');
@@ -19,7 +20,7 @@ const PbrShadows = (() => {
       if (!(layer?.sceneMeshId || layer?.brickField)) continue;
       const {vertices,pixels,width,height,surfaceCharts:charts=[]}=layer;
       const shifts=layer[slip]?.vertices===vertices ? layer[slip].ranges : [];
-      let chart=0, shift=0, tile=0;
+      let chart=0, shift=0, tile=0, wrapIndex=0;
       for (let first=0;first<vertices.length/5;first+=3) {
         while(charts[chart]?.end<=first)chart++;
         const target=charts[chart]?.first<=first ? charts[chart] : null;
@@ -28,6 +29,8 @@ const PbrShadows = (() => {
         const change=shifts[shift]?.first<=first?shifts[shift]:null;
         while(layer.tilesetMaterials?.[tile]?.end<=first)tile++;
         const material=layer.tilesetMaterials?.[tile]?.first<=first ? layer.tilesetMaterials[tile].settings : null;
+        while(layer.tileWraps?.[wrapIndex]?.end<=first)wrapIndex++;
+        const wrap=layer.tileWraps?.[wrapIndex]?.first<=first ? layer.tileWraps[wrapIndex].mapping : null;
         const points=[],uv=[];
         for (let k=0;k<3;k++){
           const at=(first+k)*5;
@@ -40,7 +43,10 @@ const PbrShadows = (() => {
             x=Math.max(loX,Math.min(hiX+.99999,x*sx+tx));
             y=Math.max(loY,Math.min(hiY+.99999,y*sy+ty));
           }
-          const i=Math.floor(Math.max(0,Math.min(width-1,x))),j=Math.floor(Math.max(0,Math.min(height-1,y)));
+          if (wrap) [x,y]=sprites.tileWrapPoint(wrap,x,y);
+          const pixel=(value,k)=>wrap ? sprites.tileWrapIndex(Math.floor(value),wrap.start[k],wrap.size[k],wrap.modes[k]) :
+            Math.floor(Math.max(0,Math.min((k ? height : width)-1,value)));
+          const i=pixel(x,0),j=pixel(y,1);
           return material?.alphaMode==='opaque' ||
             pixels[(j*width+i)*4+3]/255>=(material?.alphaMode==='mask' ? material.alphaCutoff : .5);
         };

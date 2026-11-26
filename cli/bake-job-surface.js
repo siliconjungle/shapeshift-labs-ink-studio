@@ -48,12 +48,12 @@ function vector(size,encoding,values) {
   return {bytes:writeExr(size,planes),preview:writePng(unsigned('png8'),size,3,'png8')};
 }
 
-function scalar(size,encoding,data) {
-  function unsigned(encoding) {
+function scalar(size,encoding,data,display=data) {
+  function unsigned(encoding,values) {
     const Data=encoding==='png16'?Uint16Array:Uint8Array,max=maxCode(encoding);
-    return writePng(Data.from(data,n=>Math.round(clamp(n)*max)),size,1,encoding);
+    return writePng(Data.from(values,n=>Math.round(clamp(n)*max)),size,1,encoding);
   }
-  return encoding==='exr'?{bytes:writeExr(size,{Y:data}),preview:unsigned('png8')}:{bytes:unsigned(encoding)};
+  return encoding==='exr'?{bytes:writeExr(size,{Y:data}),preview:unsigned('png8',display)}:{bytes:unsigned(encoding,data)};
 }
 
 function normal(result, {size,space,orientation,encoding}) {

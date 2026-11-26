@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Halcyon Gauge · Ink Studio</title>
+<style>
+:root{color-scheme:dark;font:15px/1.42 system-ui,sans-serif;background:#171e25;color:#f1e4cf;--line:#41515a;--muted:#bbc9cd;--accent:#edb886}
+*{box-sizing:border-box}body{margin:0}
+main{max-width:1250px;margin:auto;padding:27px clamp(16px,4vw,60px) 32px}
+header{display:flex;justify-content:space-between;align-items:end;gap:13px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:15px}
+h1,h2{font-family:Georgia,serif;font-weight:400;margin:0}
+h1{font-size:clamp(48px,8vw,96px);letter-spacing:-.07em;line-height:.96}h2{font-size:23px}
+p{color:var(--muted);margin:5px 0 0}a{color:var(--accent);text-underline-offset:3px}
+.toolbar{display:flex;gap:10px 18px;align-items:end;flex-wrap:wrap;margin:15px 0}
+label{display:grid;gap:3px;color:var(--muted);font-size:12px}
+select{color:inherit;background:#1b2a31;border:1px solid #546979;border-radius:3px;padding:6px 8px;font:14px system-ui}
+select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+article{padding:12px;min-width:0;background:#202b33;border:1px solid var(--line)}
+figure{padding:0;margin:8px 0 4px}img{display:block;width:min(100%,420px);aspect-ratio:1;margin:auto;image-rendering:pixelated;background:#152028}
+footer{display:flex;gap:6px 15px;flex-wrap:wrap;justify-content:space-between;color:var(--muted);font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:14px}
+th,td{padding:6px 8px;text-align:left;border-block-end:1px solid var(--line)}
+th:last-child,td:last-child{text-align:right}td:last-child{font-variant-numeric:tabular-nums}
+@media(max-width:680px){.grid{grid-template-columns:1fr}}
+</style>
+<script defer src="data.js"></script>
+</head><body><main>
+<header><div><h1>Halcyon Gauge</h1><p>Thickness and paired validity across eight test coupons</p></div><a id="workstation">Bake workstation</a></header>
+<div class="toolbar"><label>Measurement preset<select id="preset"></select></label><span id="totals"></span></div>
+<div class="grid">
+<article><h2>Thickness</h2><figure><img id="measured" alt="Colorized baked thickness atlas"></figure><footer><span id="encoding"></span><a id="physical" download>Download thickness</a></footer></article>
+<article><h2>Paired validity</h2><figure><img id="validity" alt="Paired validity atlas"></figure><footer><span>White marks valid measurements</span><a id="mask" download>Download validity</a></footer></article>
+</div>
+<table><thead><tr><th>Coupon</th><th>Center sample (mesh units)</th></tr></thead><tbody id="coupons"></tbody></table>
+<script>
+window.addEventListener('DOMContentLoaded',()=>{
+  const el=id=>document.getElementById(id), select=el('preset');
+  select.replaceChildren(...Object.entries(demo.presets).map(([id,row])=>new Option(row.label,id)));
+  function show() {
+    const {preview,validity,original,readings,stats,workstation,encoding}=demo.presets[select.value];
+    el('measured').src=preview;el('validity').src=validity;el('physical').href=original;el('mask').href=validity;
+    el('workstation').href=workstation;
+    el('encoding').textContent=encoding==='exr'?'Raw float OpenEXR':'Normalized 16-bit PNG';
+    el('totals').textContent=stats.valid.toLocaleString()+' valid · '+stats.unknown.toLocaleString()+' unknown';
+    el('coupons').replaceChildren(...demo.coupons.map(({label},i)=>{
+      const row=document.createElement('tr');
+      for(const value of [label,readings[i]===null?'Unknown':Number(readings[i].toPrecision(6)).toString()]){
+        const cell=document.createElement('td');cell.textContent=value;row.append(cell);
+      }
+      return row;
+    }));
+  }
+  select.onchange=show;show();
+});
+</script></main></body></html>

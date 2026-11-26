@@ -75,8 +75,8 @@
       let id = base;
       for (let n=2;used.has(id) || reserved.has(id) && id!==prior?.id;n++) id = base+'/'+n;
       used.add(id);
-      const placement = prior?.data.placement;
-      replacements.set(face,{id,domain:'faces',element:face,data:{...source,...(placement && {placement})}});
+      const {placement,wrap} = prior?.data ?? {};
+      replacements.set(face,{id,domain:'faces',element:face,data:{...source,...(placement && {placement}),...(wrap && {wrap})}});
     }
     const result = all.flatMap(entry=>{
       if (!related(entry)) return [entry];
