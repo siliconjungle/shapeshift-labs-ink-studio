@@ -357,6 +357,7 @@ All checked-in guides, indexed by title and section headings.
 - [Maintain the public reference](../reference-maintenance.md)
 - [Region revisions](../region-revisions.md)
 - [Registered material baking](../registered-material-bake.md)
+- [Registered part and LOD baking](../registered-part-bakes.md)
 - [Relightable scan materials](../relightable-scans.md)
 - [Editable render graph](../render-graph.md)
 - [Tessellated render grids](../render-grids.md)

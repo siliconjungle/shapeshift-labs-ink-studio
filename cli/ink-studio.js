@@ -1544,6 +1544,9 @@ const CMD = {
         '    --bake-dir <folder> [--paint-views <plan.json> | --capture-paint <cameras.json>]   export registered UV material maps',
         '    --geometry-masks [settings.json|off]   bake slope, cavity, exposure and thickness into the registered atlas',
         '    --cage-bake <plan.json>   project a detailed mesh, signed field or scan proxy onto registered receiver UVs',
+        '  material-bake inspect <plan.json>   preview registered page targets and automatic cage bounds',
+        '  material-bake run <plan.json> --out directory   bake registered material pages across parts and levels of detail',
+        '  material-bake preset <review|compact|indexed> [--out file.json]   export a reusable native bake preset',
         '    --rebake-from <material-bake.json> [--chart-edits <plan.json>] [--rebake-report <file.json>]   update selected or changed UV charts',
         '  interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets',
         '  scene-resource inspect|validate <scene> [--python path --blender path]',
@@ -2957,6 +2960,9 @@ const CMD = {
   },
   'asset-part'() {
     return require('./asset-part.js').command(pos, opt, lib());
+  },
+  'material-bake'() {
+    return require('./registered-part-bakes.js')(pos, opt, lib());
   },
   async 'bake-job'() {
     const [action,input]=pos, {out,preset,port}=opt;
