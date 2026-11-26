@@ -7,10 +7,11 @@ const Surface=require('./bake-job-surface.js');
 const Occlusion=require('./bake-job-occlusion.js');
 const Thickness=require('./thickness.js');
 const Curvature=require('./bake-job-curvature.js');
+const Attributes=require('./bake-job-attributes.js');
 
 const format='ink-studio/bake-job', presetFormat='ink-studio/bake-preset';
 const names=Object.freeze(['pigment','normal','world-normal','height','roughness','metalness','emission','opacity','coverage',...Geometry.names,
-  ...projectionMaps,...Occlusion.names,...Curvature.names]);
+  ...projectionMaps,...Occlusion.names,...Curvature.names,...Attributes.names]);
 const geometryFields=['up','samples','cavityRadius','exposureDistance','thicknessScale','rayBias'];
 const mapGeometry={slope:['up'],cavity:['samples','cavityRadius','rayBias'],
   exposure:['samples','exposureDistance','rayBias'],thickness:['thicknessScale','rayBias'],'thickness-valid':['rayBias']};
@@ -148,8 +149,8 @@ function targets(rows,{sources,skewMaps}) {
   if(!Array.isArray(rows)||!integer(rows.length,1,24))throw new RangeError('A bake job needs 1–24 targets');
   const ids=new Set();
   return Array.from(rows,row=>{
-    if(!fields(row,['id','mesh','submeshes','slots','uvSet','tiles','projection','thicknessParts'])||!id(row.id)||ids.has(row.id.toLowerCase())||
-      !mesh(row.mesh)||
+    if(!fields(row,['id','mesh','submeshes','slots','uvSet','tiles','projection','thicknessParts','positionNode'])||!id(row.id)||ids.has(row.id.toLowerCase())||
+      !mesh(row.mesh)||row.positionNode!==undefined&&!(integer(row.positionNode,0,Number.MAX_SAFE_INTEGER)||text(row.positionNode))||
       row.submeshes!==undefined&&(!Array.isArray(row.submeshes)||!row.submeshes.length||
         !Array.from(row.submeshes).every(n=>integer(n,0,255))||new Set(row.submeshes).size!==row.submeshes.length)||
       row.slots!==undefined&&(!Array.isArray(row.slots)||!row.slots.length||!Array.from(row.slots).every(text)||
@@ -211,7 +212,7 @@ function effective(preset,row) {
   const {size=128,padding=3,...tuning}={...preset.defaults,...shared,...row.overrides};
   if(padding*2>=size)throw new RangeError('Map padding must be less than half its size');
   return {size,padding,...Surface.settings(row.id,tuning),...Occlusion.settings(row.id,tuning),...Thickness.settings(row.id,tuning),
-    ...Curvature.settings(row.id,tuning),
+    ...Curvature.settings(row.id,tuning),...Attributes.settings(row.id),
     ...(Geometry.names.includes(row.id)&&{geometry:Geometry.settings(Object.fromEntries(
       Object.entries(tuning).filter(([key])=>geometryFields.includes(key))))})};
 }
