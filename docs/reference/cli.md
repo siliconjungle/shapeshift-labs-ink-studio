@@ -176,6 +176,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   sdf-reference <scene> --out directory [--t 0,1.2 --w 192 --h 120 --samples 32 --bounces 3]
   hybrid-cage <scene.js> --plan file.json [--out directory --w pixels --h pixels --raw]   preview a shared mesh, strand, and splat deformation
   sculpt-detail <scene> --plan file.json [--out directory --object id --t 1.2]   review and reproject sculpt relief
+  sculpt-contribution list <scene.json> --solid id   list retained contributions in order
+  sculpt-contribution inspect <scene.json> --solid id --id contribution   compare with the contribution muted
+  sculpt-contribution edit <scene.json> <edit.json> --out scene.json   edit one contribution and report dependencies
   sculpt-stamp place <scene.json> <stamp.json> <placement.json> --out scene.json   add and carve one compound stamp
   sculpt-sweep add <scene.json> <sweep.json> [--target solid] --out scene.json   add a retained shaped sweep
   sculpt-sweep cut <scene.json> <sweep.json> --target solid --out scene.json   carve a retained sweep into a solid

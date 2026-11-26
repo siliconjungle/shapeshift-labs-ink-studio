@@ -153,7 +153,7 @@
       need: { of: 'solid' },
       may: { polar: 'pos', mirror: ['x', 'y', 'z'], repeat: 'vec3', count: 'vec3', centre: 'vec3', axis: 'vec3' }
     },
-    warp: { need: { of: 'solid' }, may: { twist: 'num', bend: 'num', taper: 'num', centre: 'vec3', wide: 'pos' } },
+    warp: { need: { of: 'solid' }, may: { twist: 'num', bend: 'num', taper: 'num', stretch: 'vec3', centre: 'vec3', wide: 'pos' } },
     shell: { need: { of: 'solid', t: 'pos' } },
     swell: { need: { of: 'solid', by: 'num' } },
     rough: { need: { of: 'solid', by: 'pos' }, may: { scale: 'pos' } },
@@ -257,6 +257,7 @@
   };
 
   // ---------------- checking ----------------
+  const validStretch = value => isVec(value, 3) && Array.from(value).every(n => n >= .02 && n <= 20);
   const isNum = v => typeof v === 'number' && Number.isFinite(v),
     isVec = (v, n) => Array.isArray(v) && v.length === n && v.every(isNum);
   function solidTransform(value) {
@@ -1169,9 +1170,11 @@
             bad(at + '.count', 'repeat counts must be positive whole numbers');
         }
         if (kind === 'warp') {
-          const { twist, bend, taper } = modifier;
-          if ([twist, bend, taper].filter(value => value !== undefined).length !== 1 || twist === 0 || bend === 0)
-            bad(at, 'a warp needs one nonzero twist or bend, or a taper');
+          const { twist, bend, taper, stretch } = modifier;
+          if ([twist, bend, taper, stretch].filter(value => value !== undefined).length !== 1 || twist === 0 || bend === 0)
+            bad(at, 'a warp needs one nonzero twist or bend, a taper, or a stretch');
+          if (stretch !== undefined && !validStretch(stretch))
+            bad(at + '.stretch', 'a stretch needs three axis factors from 0.02 to 20');
           if (taper !== undefined && (!isVec(taper, 2) || !Array.from(taper).every(n => n > 0)))
             bad(at + '.taper', 'taper needs two positive scale factors');
         }
@@ -1260,8 +1263,13 @@
             ? 'meshes: ' + Object.keys(assets).join(', ')
             : 'pass { assets: { "' + s.asset + '": mesh } } when building'
         );
-      if (s.kind === 'warp' && s.twist === undefined && s.bend === undefined && s.taper === undefined)
-        bad(path, 'a warp needs one of twist, bend, taper');
+      if (s.kind === 'warp') {
+        const { twist, bend, taper, stretch } = s;
+        if ([twist, bend, taper, stretch].every(value => value === undefined))
+          bad(path, 'a warp needs a twist, bend, taper, or stretch');
+        if (stretch !== undefined && (!validStretch(stretch) || [twist, bend, taper].some(value => value !== undefined)))
+          bad(path + '.stretch', 'a stretch needs three axis factors from 0.02 to 20 and its own warp');
+      }
       if (s.kind === 'fold' && s.polar === undefined && s.mirror === undefined && s.repeat === undefined)
         bad(path, 'a fold needs one of polar, mirror, repeat');
       if (s.res !== undefined && isNum(s.res) && s.res < 0.03)
@@ -1587,8 +1595,20 @@
     };
   }
 
+  function traceBounds(solid) {
+    const { bc, br } = solid;
+    if (Number.isFinite(br) && br < 1e8)
+      return { min: bc.map(c => c - br), max: bc.map(c => c + br) };
+  }
+
   const brushField = Symbol('brush field');
   DIO.brushField = (spec, env) => DIO.build(spec, env, { [brushField]: true });
+  DIO.sculptRestTrace = (spec, solid, env) => {
+    const trace = { solid, stages: new Map() };
+    DIO.build(spec, env, { [brushField]: trace });
+    if (!trace.output) throw new RangeError('The resolved scene is missing the sculpt solid ' + solid);
+    return trace;
+  };
   DIO.build = (source, env, modelOptions) => {
     env = env || {};
     const presentation = {};
@@ -1813,7 +1833,7 @@
           : { repeat: s.repeat, count: s.count || [1, 1, 1] }, o);
       if (s.kind === 'warp') return S.warp(base, {
         c: s.centre || [0, 0, 0],
-        ...(s.twist !== undefined ? { twist: s.twist } : s.bend !== undefined ? { bend: s.bend } : { taper: s.taper }),
+        ...(s.stretch !== undefined ? { stretch: s.stretch } : s.twist !== undefined ? { twist: s.twist } : s.bend !== undefined ? { bend: s.bend } : { taper: s.taper }),
         ...(s.wide && { wide: s.wide })
       }, o);
       if (s.kind === 'shell') return S.shell(base, s.t, o);
@@ -1834,6 +1854,8 @@
       },
       makeSolid = (s, held) => {
         const modifiers = activeModifiers(s);
+        const audit = modelOptions?.[brushField];
+        const trace = s.id !== undefined && audit?.solid === s.id ? audit : null;
         const o = { res: s.res, objectId: s.part ?? s.id };
         if (s.id || s.part || s.surfaceId || s.tags?.length || s.prefabs?.length) o.target = {
           ...(s.id && { entity: s.id }), ...(s.part && { part:s.part }),
@@ -1857,7 +1879,7 @@
         const paint = s.sdfPaint && K.procedural.sdfMaterialPaint.prepare(s.sdfPaint,st0.roles,B.P);
         const m = locate ? charts.bind(matOf(s.mat), locate, B.P) : matOf(s.mat);
         const sub = q => make(q, true), k = s.kind;
-        const baseOptions = modifiers.length ? { ...o, hold: true } : o;
+        const baseOptions = modifiers.length || trace ? { ...o, hold: true } : o;
         if (s.mat !== undefined && (k === 'join' || unaryKinds.includes(k))) baseOptions.mat = m;
         let p;
         if (k === 'ground') p = S.ground(m, Object.assign({ rad: s.rad || 8 }, s.stretch ? { zs: s.stretch } : {}, baseOptions));
@@ -1921,10 +1943,13 @@
           const res = p.res;
           for (const modifier of modifiers) {
             const options = { hold: true };
-            let reach = p.reach;
+            const before = trace && { ...p };
+            let reach = p.reach, tool;
             if (modifier.kind === 'grid-brush' && modifier.brush.version===3) {
               const api=K.procedural.freeformSculpt, {mode,brush:{stamps,settings}}=modifier;
-              p=api.solid(S,p,api.prepare({mode,stamps,strength:settings.strength,depth:settings.depth}),options);
+              const form = api.prepare({mode,stamps,strength:settings.strength,depth:settings.depth});
+              if (trace) tool = form.bounds;
+              p=api.solid(S,p,form,options);
               reach=0;
             } else if (modifier.kind === 'grid-brush') {
               const { brush,mode } = modifier, api = K.procedural.gridSculptBrush;
@@ -1932,6 +1957,7 @@
               for (const change of changes) {
                 const before=p, psd=S.psd, field=api.prepare(brush,mode,change);
                 const cut=change==='cut', operand=field.solid(S,before.mat);
+                if (trace && (!tool || cut)) tool = field.bounds;
                 const surface=K.procedural.sdfBrushSurfaces.attach(brush.settings?.surface,modifier.id,change,brush.grid,
                   field,(x,y,z)=>psd(before,x,y,z),before.mat.sdfNewSurface,st0.roles,B.P);
                 p = S.join(cut ? 'cut' : 'union',before,operand,{ ...options,r:0,mat:before.mat,mask:cut });
@@ -1939,6 +1965,7 @@
               }
             } else if (modifier.kind === 'join' || modifier.kind === 'mask') {
               const operand = sub(modifier.shape);
+              if (trace) tool = operand.geometryBounds ?? traceBounds(operand);
               reach = Math.max(reach, operand.reach);
               if (modifier.kind === 'join') {
                 const exact = ['union', 'cut', 'common'].includes(modifier.how);
@@ -1951,15 +1978,31 @@
               }
             } else p = deform(p, modifier, options);
             p.reach += reach;
+            if (trace) trace.stages.set(modifier.id, { before, after: { ...p }, tool });
           }
           p = S.add(p, p.mat, { ...o, res, bump: undefined, reach: p.reach });
         }
         if (paint && p?.mat) p.mat = { ...p.mat,sdfPaint:paint };
+        if (trace) {
+          trace.output = { ...p };
+          trace.distance = (shape, point) => S.psd(shape, ...point);
+          trace.materialAt = (point, normal) => {
+            const { mat } = trace.output;
+            const { materialId, generatedSurface } = S.materialAt(mat, point, normal);
+            const pickedRamp = mat.rf?.(...point);
+            const rampRole = pickedRamp && Object.keys(st0.roles).find(key => st0.roles[key] === pickedRamp);
+            const chart = mat.surfaceState?.locate(point, normal)?.chart;
+            const paintIds = [];
+            paint?.locate(point, normal, 0, id => paintIds.push(id));
+            return { role: materialId === mat.materialId ? rampRole ?? materialId : materialId,
+              chart, generatedSurface, paintIds };
+          };
+        }
         return p;
       };
     if (modelOptions?.[brushField]) {
       for (const solid of spec.solids) make(solid);
-      S.ready();
+      if (modelOptions[brushField] === true) S.ready();
       return S;
     }
     if (modelOptions) {

@@ -864,6 +864,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.scenePrefabs.expand` | function | `(source, { prefabs: external } = {})` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.origin` | function | `(transform)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.review` | function | `(source, before, after)` | [source](../../src/kit/p23-scene-prefabs.js) |
+| `KIT.authoring.sculptContributions` | namespace |  |  |
+| `KIT.authoring.sculptContributions.inspect` | function | `(scene, solid, id, env)` | [source](../../src/kit/p23a-sculpt-contributions.js) |
+| `KIT.authoring.sculptContributions.list` | function | `(scene, id)` | [source](../../src/kit/p23a-sculpt-contributions.js) |
+| `KIT.authoring.sculptContributions.plan` | function | `(scene, input, env)` | [source](../../src/kit/p23a-sculpt-contributions.js) |
 | `KIT.authoring.sculptStamps` | namespace |  |  |
 | `KIT.authoring.sculptStamps.format` | value | `string = "ink-studio/sculpt-stamp"` |  |
 | `KIT.authoring.sculptStamps.place` | function | `(scene, stamp, placement)` | [source](../../src/kit/p23a-sculpt-stamps.js) |
@@ -1680,6 +1684,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.diorama.kinds.warp.may` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.warp.may.bend` | value | `string = "num"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.warp.may.centre` | value | `string = "vec3"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.kinds.warp.may.stretch` | value | `string = "vec3"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.warp.may.taper` | value | `string = "num"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.warp.may.twist` | value | `string = "num"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.warp.may.wide` | value | `string = "pos"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
@@ -1691,6 +1696,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.diorama.scene` | function | `(spec, env)` | [guide](../../README.md#scenes-as-json), [guide](../../README.md#editable-3d-drawing), [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.sceneLook` | function | `(spec)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.sceneMaterials` | function | `(spec)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
+| `KIT.diorama.sculptRestTrace` | function | `(spec, solid, env)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidFrames` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.solidFrames.authored` | function | `(raw, fallback)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidFrames.compose` | function | `(outer, inner)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |

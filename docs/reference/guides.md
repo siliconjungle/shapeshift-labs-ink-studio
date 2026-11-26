@@ -375,6 +375,7 @@ All checked-in guides, indexed by title and section headings.
 - [Scene publishing](../scene-publishing.md)
 - [Unified scene timeline](../scene-timeline.md)
 - [Halftone and layered screen printing](../screen-print.md)
+- [Edit a sculpt contribution](../sculpt-contributions.md)
 - [Compound sculpt stamps](../sculpt-stamps.md)
 - [Retained sculpt sweeps](../sculpt-sweeps.md)
 - [SDF-assisted rendering](../sdf-assist.md)

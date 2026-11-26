@@ -55,7 +55,7 @@
     });
     if (!palette) return;
     const tones = new Map();
-    function locate(point,normal,epsilon=0) {
+    function locate(point,normal,epsilon=0,onRegion) {
       let material, masks;
       for (const stroke of strokes) {
         const { grid:[w,h],projection,axes,cells }=stroke;
@@ -67,6 +67,7 @@
         const cell=cells.get(y*w+x);
         if (!cell || V.dot(cell.normal,normal)<.6 ||
             Math.abs(V.dot(cell.normal,V.sub(point,cell.point)))>cell.band+epsilon) continue;
+        onRegion?.(stroke.id);
         if (stroke.material!==undefined) material=stroke.material;
         if (stroke.masks) Object.assign(masks??={},stroke.masks);
       }
