@@ -19,9 +19,9 @@ const PixelSelections = (() => {
     ['invert',[]],['grow',['amount']],['shrink',['amount']],['outline',['amount','side']]
   ]);
 
-  function gridSize(width,height) {
-    if (!integer(width,1,512) || !integer(height,1,512))
-      throw new RangeError('Pixel selections need a canvas from 1 to 512 pixels on each axis');
+  function gridSize(width,height,large) {
+    if (!tools.dimensions(width,height,large))
+      throw new RangeError(large ? 'Selection exceeds the material canvas budget' : 'Pixel selections need a canvas from 1 to 512 pixels on each axis');
     return width*height;
   }
 
@@ -30,8 +30,8 @@ const PixelSelections = (() => {
       integer(value[0],0,width-1) && integer(value[1],0,height-1);
   }
 
-  function fromPixels(width,height,pixels) {
-    const result = new Uint8Array(gridSize(width,height));
+  function fromPixels(width,height,pixels,large = false) {
+    const result = new Uint8Array(gridSize(width,height,large));
     if (!Array.isArray(pixels) || pixels.length > result.length)
       throw new TypeError('A pixel mask needs a list of native coordinates');
     for (const at of pixels) {
@@ -43,8 +43,8 @@ const PixelSelections = (() => {
     return result;
   }
 
-  function mask(width,height,query,read,recall,matches,intent) {
-    const size = gridSize(width,height);
+  function mask(width,height,query,read,recall,matches,intent,large = false) {
+    const size = gridSize(width,height,large);
     let remaining = 32;
     function evaluate(query) {
       if (--remaining < 0) throw new RangeError('A selection query supports at most 32 operations');
@@ -52,11 +52,11 @@ const PixelSelections = (() => {
       if (type === 'recall') {
         if (!fields(query,['type','id']) || typeof query.id !== 'string' || typeof recall !== 'function')
           throw new TypeError('Recall needs a saved selection ID');
-        return fromPixels(width,height,recall(query.id));
+        return fromPixels(width,height,recall(query.id),large);
       }
       if (type === 'pixels') {
         if (!fields(query,['type','pixels'])) throw new TypeError('A literal selection needs native pixels');
-        return fromPixels(width,height,query.pixels);
+        return fromPixels(width,height,query.pixels,large);
       }
       if (mergeTypes.includes(type)) {
         if (!fields(query,['type','base','with'])) throw new TypeError('Combine, subtract and intersect need base and with masks');
@@ -66,7 +66,7 @@ const PixelSelections = (() => {
         const { source,...operation } = query;
         if (!fields(query,['type','source',...modifyTypes.get(type)]))
           throw new TypeError('A selection modifier needs a source mask and valid options');
-        return modify(width,height,evaluate(source),operation);
+        return modify(width,height,evaluate(source),operation,large);
       }
       if (type === 'cluster') {
         if (!fields(query,['type','at','source','connectivity']) || !contains(width,height,query.at) ||
@@ -164,8 +164,8 @@ const PixelSelections = (() => {
     return result;
   }
 
-  function modify(width,height,mask,operation) {
-    requireMask(mask,gridSize(width,height));
+  function modify(width,height,mask,operation,large = false) {
+    requireMask(mask,gridSize(width,height,large));
     const keys = modifyTypes.get(operation?.type);
     if (!keys || !fields(operation,['type',...keys]))
       throw new TypeError('Choose invert, grow, shrink or outline for the selection');

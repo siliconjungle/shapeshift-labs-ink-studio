@@ -441,6 +441,18 @@ const specifications = {
   'image.inspect': { nodes: { color: declareColor }, inputs: { source: link('color') } },
   'material.image': { nodes: { color: declareColor, maps: { op: 'data.record', inputs: { baseColor: link('color') } },
     packed: { op: 'material.pack', inputs: { maps: link('maps') } } }, inputs: { source: link('packed'), name: 'baseColor' } },
+  'material.paint': {
+    nodes: {
+      base: { op: 'image.uniform', inputs: { width: 8, height: 4, value: [.03, .08, .16],
+        descriptor: { intent: 'color', layout: 'rgb', colorSpace: 'srgb-linear', precision: 'float32' } } },
+      maps: { op: 'data.record', inputs: { baseColor: link('base') } },
+      packet: { op: 'material.pack', inputs: { maps: link('maps') } }
+    },
+    inputs: { source: link('packet'), session: { format: 'ink-studio/material-paint', version: 1,
+      layers: [{ id: 'ink', channel: 'baseColor', strokes: [{
+        space: 'uv', samples: [[.25, .5], [.75, .5]], value: [.7, .32, .14], brush: { radius: 1.5 }
+      }] }] } }
+  },
   'material.pack': { inputs: materialSource.inputs },
   'material.channel': { nodes: { material: materialSource }, inputs: { source: link('material'), name: 'mask.wear' } },
   'material.replace': { nodes: { material: materialSource }, inputs: {

@@ -237,7 +237,7 @@ A literal image intent selects the output type and the source raster contract.
 | Input | `descriptor` | `record` | Required | {"layout":"Plain named object"} |
 | Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
 
-Guides: [guide](../graph-image-types.md)
+Guides: [guide](../graph-image-types.md), [guide](../material-channel-paint.md)
 
 Get the runnable example with `ink-studio graph describe image.declare --example > example.json`.
 Run it with `ink-studio graph run example.json`.
