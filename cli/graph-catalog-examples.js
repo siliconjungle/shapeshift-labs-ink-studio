@@ -197,7 +197,15 @@ const increment={result:'number',inputs:{state:'number'},nodes:{
   next:{op:'fn.math',inputs:{a:param('state'),b:.25}}
 },outputs:{result:link('next')}};
 const hold={result:'number',inputs:increment.inputs,nodes:{},outputs:{result:param('state')}};
+const processorData={intent:'data',layout:'r',precision:'float32'};
+const processorExample={format:'ink-studio/pixel-processor',version:1,precision:'f32',
+  resources:{grain:processorData},parameters:{gain:{type:'f32',default:.8}},
+  outputs:{value:{descriptor:processorData}},
+  body:[{let:'sample',value:['load','grain',['x'],['y']]}],
+  result:{value:['mul',['get','sample'],['param','gain']]}};
 const dynamic = {
+  'image.pixelProcessor': {nodes:{grain:{op:'image.uniform',inputs:{width:3,height:2,value:.375,descriptor:processorData}}},
+    inputs:{width:3,height:2,program:processorExample,grain:link('grain')}},
   'fn.scope': {inputs:counterScope.inputs},
   'fn.get': {type:'number',nodes:{local:counterScope},inputs:{name:'charge',scope:link('local')}},
   'fn.set': {type:'number',nodes:{local:counterScope},inputs:{name:'charge',scope:link('local'),value:.75}},

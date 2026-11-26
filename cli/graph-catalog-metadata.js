@@ -82,6 +82,9 @@ const texturePointPorts = {
 };
 const systemVariableNames = oneOf('position','size','time','seed','context');
 const ports = {
+  'image.pixelProcessor':{width:dimension,height:dimension,program:{constraints:{
+    format:'ink-studio/pixel-processor',version:1,precision:'f32',literal:true
+  }}},
   'fn.scope': {variables:{constraints:{maxProperties:32,literal:true}}},
   'fn.get': {name:{constraints:{literal:true}}},
   'fn.set': {name:{constraints:{literal:true}}},
@@ -762,6 +765,7 @@ const specialization = {
   'image.split': { field: 'channels', description: 'The literal selector keys become typed scalar output ports.' },
   'image.shuffle': { field: 'descriptor', description: 'The optional literal descriptor selects the output image type.' },
   'image.pack': { field: 'descriptor', description: 'The optional literal descriptor selects the output image type.' },
+  'image.pixelProcessor': {field:'program',description:'The literal program declares image resource, uniform parameter and output sockets.'},
   'image.declare': { field: 'descriptor', description: 'A literal image intent selects the output type and the source raster contract.' },
   'array.map': { field: 'group', description: 'The group declares item, optional numeric index and value. Extra group inputs become ports.' },
   'array.mapById': {field: 'group', description: 'The group takes a record item and optional numeric index. Each result carries the source ID and optional split ancestry.'},
@@ -773,6 +777,9 @@ const specialization = {
   'anim.retime': { field: 'group', description: 'Uses the group’s inputs and outputs and adds a timing record. The group cannot declare timing.' }
 };
 const notes = {
+  'image.pixelProcessor': ['Each texel runs independently. A loop counts up from zero and clamps its runtime count to the authored limit of 1 through 64.',
+    'f32 compute preserves named image contracts. Native output storage supports UNORM8, UNORM16, and float32.',
+    'The WebGPU module compares raw values within editable absolute and relative tolerances and separately reports changed stored samples.'],
   'fn.scope': ['A child can shadow a parent binding. All initial values are explicit.'],
   'fn.set': ['Updates the nearest binding and returns a new scope. Earlier scope outputs retain their values.'],
   'fn.system': ['Position defaults to [0,0]. Size uses the effective material extent when available and otherwise defaults to [1,1]. Time is in seconds. Seed is the project seed.'],

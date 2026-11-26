@@ -391,3 +391,5 @@ RGBA bytes in the same tile layout. Encode them with
 `encodeGaussianTurntableNormalPNG(sheet)`.
 
 Format references. [Graphdeco PLY implementation](https://github.com/graphdeco-inria/gaussian-splatting/blob/main/scene/gaussian_model.py) · [Niantic SPZ](https://github.com/nianticlabs/spz) · [WebGPU specification](https://www.w3.org/TR/webgpu/)
+
+See [Pixel Processor](pixel-processor.md) to run a portable typed image program on CPU and WebGPU and compare its samples.
