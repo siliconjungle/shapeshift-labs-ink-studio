@@ -295,6 +295,58 @@ faces, their receivers and the construction plane. Use
 Run `node examples/tileset-pick/prefab-promotion-demo.cjs bay-demo` for a
 replayable selection, promotion and reuse example.
 
+### Stamp linked prefab instances on the working plane
+
+`tileset stamp-prefab` places an inline or library prefab at a grid
+address on the current construction plane. A run repeats it at a
+declared interval. Each placement keeps a link to the same definition.
+
+```json
+{
+  "prefab": "painted-bay",
+  "id": "east-row",
+  "at": [0.75, 1],
+  "count": 4,
+  "step": [3.5, 0],
+  "rounding": "floor",
+  "orientation": "plane",
+  "angle": 0
+}
+```
+
+```sh
+ink-studio tileset stamp-prefab stamp.json --scene station.json
+ink-studio tileset stamp-prefab stamp.json --scene station.json --out stamped.json
+```
+
+Use `at` for a plane grid address or `point: [x, y, z]` to project a world
+point onto the plane. Both axes use the plane's grid intervals. The
+optional `normalOffset` is measured in scene units along the plane
+normal. Positions use the current plane, including a camera-picked
+plane or a retained edge hinge.
+
+The first address and signed `step` define the unrounded run. Snap
+each position with the plane's rounding mode, or override it with
+`nearest`, `floor`, or `ceiling`. Set `snapGrid: false` to use fractional
+addresses directly. A stamp that rounds two placements to the same
+position reports the conflict and leaves the scene intact.
+
+The default `orientation: "plane"` aligns prefab local X, Y and Z
+with the plane's right, up and normal. Use `orientation: "world"` to
+keep the world axes as the orientation basis while still placing on
+the plane. `angle` rotates about the resulting local Z in degrees.
+
+Use `id` as the instance ID for one stamp. For a run, Ink appends
+zero-based suffixes such as `east-row.0` and `east-row.1`. The receipt
+lists the prefab revision, requested and rounded addresses, and saved
+transforms. It also reports existing ID conflicts. Omit `--out` to
+preview without making a scene. In the SDK, call
+`editor.planPrefabStamp(request)` or `editor.stampPrefab(request)`. One
+undo removes the entire run.
+
+Run `node examples/tileset-pick/prefab-stamp-demo.cjs stamp-demo` to
+compare floor and ceiling rounding with placement on a tilted plane.
+
 ## Breakable groups
 
 Use `editor.suggestBreakable({ at, radius, voxel })` to query a nearby

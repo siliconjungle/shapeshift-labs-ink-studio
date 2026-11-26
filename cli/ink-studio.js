@@ -1580,6 +1580,7 @@ const CMD = {
         '  tileset select-atlas <pick.json> --scene <scene.json> --object <mesh-id> [--part <part-id>] [--mode match|inside|touch] [--out <selection.json>]   select faces by pigment UV coverage of a tileset rectangle',
         '  tileset eyedrop --scene <scene.json> --object <mesh-id> --face <face-id> [--part ID] [--brush-size] [--out <pick.json>]   recover a reusable painted face pick for stamp --selection',
         '  tileset reskin --scene <scene.json> --object <mesh-id> --face <face-id> --mode crop|tileset|relative (--selection <pick.json> | --id <tileset-id>) [--part ID] [--column N --row N] [--out <new-scene.json>]   change the paint on an existing mesh face',
+        '  tileset stamp-prefab <request.json> --scene <scene.json> [--out <new-scene.json>]   stamp linked prefab placements on the construction plane',
         '  tileset promote-prefab <request.json> --scene <scene.json> [--selection faces.json] [--out new-scene.json]   promote selected tile faces into a linked visual prefab',
         '  tileset coverage-review <review.json> --scene <scene.json> --out <directory>   inspect opaque, cutout, and blended coverage across native camera samples',
         '  tileset decal <decal.json> --scene <scene.json> [--image art.png] [--view view.json --preview dir] [--expect receipt.json] [--out <new-scene.json>]   place a decal on a named mesh face and review depth conflicts',
