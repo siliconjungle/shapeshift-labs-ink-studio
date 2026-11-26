@@ -3,7 +3,7 @@
   const P = K.procedural;
   const { freeze } = P.data;
   const format = 'ink-studio/sparse-volume', denseFormat = 'ink-studio/dense-volume';
-  const components = Object.freeze({ density: 1, temperature: 1, velocity: 3, signedDistance: 1 });
+  const components = Object.freeze({ density: 1, temperature: 1, velocity: 3, signedDistance: 1, fuel: 1, vapor: 1 });
   const names = Object.keys(components), states = new WeakMap();
   const limits = Object.freeze({ cells: 1000000, storedComponents: 2000000, bricks: 131072 });
   const integer = (n, low, high) => Number.isSafeInteger(n) && n >= low && n <= high;
@@ -31,7 +31,7 @@
 
   function normalize(name, value) {
     const n = Math.fround(typeof value === 'number' ? value : NaN);
-    need(Number.isFinite(n) && (name !== 'density' || value >= 0), 'invalid ' + name + ' component');
+    need(Number.isFinite(n) && (!['density', 'fuel', 'vapor'].includes(name) || value >= 0), 'invalid ' + name + ' component');
     return n || 0;
   }
 
@@ -260,9 +260,10 @@
     return Object.freeze({ sample, field, density });
   }
 
-  const defaults = { density: 'max', temperature: 'lerp', velocity: 'lerp', signedDistance: 'union' };
+  const defaults = { density: 'max', temperature: 'lerp', velocity: 'lerp', signedDistance: 'union', fuel: 'add', vapor: 'add' };
   const ops = { density: ['min', 'max', 'add', 'multiply', 'lerp'], temperature: ['min', 'max', 'add', 'lerp'],
-    velocity: ['add', 'lerp'], signedDistance: ['union', 'intersect', 'subtract'] };
+    velocity: ['add', 'lerp'], signedDistance: ['union', 'intersect', 'subtract'],
+    fuel: ['min', 'max', 'add', 'multiply', 'lerp'], vapor: ['min', 'max', 'add', 'multiply', 'lerp'] };
 
   function combine(left, right, options = {}) {
     const a = create(left), b = create(right);
@@ -341,6 +342,24 @@
       storedComponents: states.get(document).stored } };
   }
 
+  function bakeSparse({ grid: target, brickSize = 8, fields: requested, maxCells = 250000 } = {}, indices, sample) {
+    const grid = lattice(target), fields = specifications(requested), logicalCells = product(grid.size);
+    need(integer(maxCells, 1, limits.cells) && indices && typeof indices[Symbol.iterator] === 'function' &&
+      typeof sample === 'function', 'sparse bake needs a cell budget, ordered indices and sampler');
+    const out = writer(grid, brickSize, fields), channels = Object.keys(fields);
+    let visited = 0, previous = -1;
+    for (const slot of indices) {
+      need(integer(slot, previous + 1, logicalCells - 1), 'sparse bake indices must increase within the grid');
+      need(++visited <= maxCells, 'sparse bake exceeds its cell visit budget');
+      const index = xyz(slot, grid.size), point = index.map((n, k) => grid.origin[k] + (n + .5) * grid.spacing[k]);
+      for (const name of channels) out.set(index, name, sample(name, point, slot));
+      previous = slot;
+    }
+    const document = out.finish();
+    return { document, report: { logicalCells, visited, maxCells, fieldSamples: visited * channels.length,
+      bricks: document.bricks.length, storedComponents: states.get(document).stored } };
+  }
+
   function resample(source, options) {
     const doc = create(source);
     need(fieldsOnly(options, ['grid', 'brickSize', 'channels', 'filter', 'maxCells']), 'unknown resample setting');
@@ -399,6 +418,6 @@
     return create({ ...doc, fields, bricks });
   }
 
-  P.sparseVolume = Object.freeze({ format, denseFormat, components, limits, create, inspect, sampler, bake,
+  P.sparseVolume = Object.freeze({ format, denseFormat, components, limits, create, inspect, sampler, bake, bakeSparse,
     combine, resample, dense, pack, extract });
 })(KIT);

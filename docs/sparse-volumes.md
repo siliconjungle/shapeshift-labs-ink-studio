@@ -1,7 +1,7 @@
 # Sparse volume exchange
 
-An Ink sparse volume stores sampled density, temperature, velocity, and signed
-distance on one world-aligned lattice. Use it to move fields between bounded
+An Ink sparse volume stores sampled density, temperature, velocity, fuel, vapor, and
+signed distance on one world-aligned lattice. Use it to move fields between bounded
 headless workflows, combine aligned assets, or bake results at a new spacing.
 [Ember Vent](../examples/sparse-volume-ember-vent.cjs) shows the same data as a
 lit volume, a signed-distance surface, and diagnostic slices.
@@ -33,9 +33,10 @@ voxel and a constant outside signed distance.
   differ by axis. Grid sizes are positive and each axis permits up to 100,000
   cells.
 - Supported field keys are `density` (nonnegative scalar), `temperature`
-  (scalar), `velocity` (XYZ vector in world axes), and `signedDistance`
+  (scalar), `velocity` (XYZ vector in world axes), `fuel` and `vapor`
+  (nonnegative scalars), and `signedDistance`
   (scalar, negative inside). Each field can declare a `background` and a
-  `units` string. Omitted backgrounds are zero for density and temperature,
+  `units` string. Omitted backgrounds are zero for density, temperature, fuel and vapor,
   `[0,0,0]` for velocity, and `1` for signed distance. Signed distance must
   have a strictly positive background. Units are preserved verbatim.
 - Bricks are identified by nonnegative XYZ coordinates in brick units. The
@@ -86,6 +87,7 @@ Each operator also combines the two background values.
 | Temperature | `min`, `max`, `add`, `lerp` | `lerp` |
 | Velocity | `add`, `lerp` per component | `lerp` |
 | Signed distance | `union` (min), `intersect` (max), `subtract` (max of left and negated right) | `union` |
+| Fuel and vapor | `min`, `max`, `add`, `multiply`, `lerp` | `add` |
 
 `resample` takes a target `grid`, optional `channels`, `brickSize`,
 `filter`, and `maxCells`. To crop or rebrick, keep the same spacing and
@@ -126,7 +128,11 @@ receipts on `pack`, `combine`, `resample`, and `export`.
 `KIT.procedural.sparseVolume.bake(options, sample)` samples an existing
 bounded field. The callback receives the channel name, world-space
 cell center, and dense cell index. Return the field background for
-unoccupied cells. `sampler(volume).field(name)` adapts an exported field
+unoccupied cells. `bakeSparse(options, indices, sample)` visits only strictly
+increasing X-fastest cell indices. Its cell budget counts the supplied
+indices. [Sparse combustion and clouds](sparse-atmosphere.md) uses this
+path to write active cells on a larger logical lattice.
+`sampler(volume).field(name)` adapts an exported field
 for Ink's slices, streamlines, or isosurfaces. Use `sampler(volume).density()`
 to attach density with a zero background to native atmosphere rendering.
 The adapter frames occupied bricks with enough padding for interpolation.
