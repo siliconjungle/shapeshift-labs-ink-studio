@@ -24,7 +24,7 @@ function pigment() {
     const t=clamp(.20+.55*wave+.2*glow), spot=t<.6?(t/.6):(t-.6)/.4,j=t<.6?0:1;
     const rgb=ramp[j].map((value,c)=>value+(ramp[j+1][c]-value)*spot);
     const accent=left?[255,212,120]:[176,242,225], grain=.96+.046*Math.sin(x*81.1-y*71.22)*Math.cos(y*.84);
-    data.set((gilt||stripe?accent:rgb).map(n=>Math.round(n*grain)),(x+y*width)*3);
+    data.set((gilt||stripe?accent:rgb).map(n=>Math.min(255,Math.round(n*grain))),(x+y*width)*3);
   }
   return PNG.encode(width,height,data,3,{srgb:true});
 }
