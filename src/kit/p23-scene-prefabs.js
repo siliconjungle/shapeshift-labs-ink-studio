@@ -22,6 +22,30 @@
     return next;
   }
 
+  function tilesetRequirements(definition, meshes) {
+    const sheets = new Set(definition.usesTilesets ?? []);
+    for (const row of Object.values(meshes ?? {})) {
+      for (const material of row.materials ?? []) if (material.texture?.tileset) sheets.add(material.texture.tileset);
+      for (const binding of row.bindings ?? []) {
+        const sheet = binding.data?.selection?.tileset;
+        if (!binding.review && sheet && A.tilesetFaces.isSourceBinding(binding)) sheets.add(sheet);
+      }
+      for (const bake of row.bakes ?? []) if (bake.maps.texture?.tileset) sheets.add(bake.maps.texture.tileset);
+    }
+    return sheets.size ? [...sheets].sort() : definition.usesTilesets;
+  }
+
+  function checkProvenance(row, mesh = false) {
+    const {id,record,check} = K.world.data;
+    const keys = ['prefab','instance','revision','library','model',...(mesh ? ['member','meshRevision'] : [])];
+    check(record(row) && Object.keys(row).every(key => keys.includes(key)) &&
+      id(row.prefab) && id(row.instance) && Number.isSafeInteger(row.revision) && row.revision >= 1 &&
+      (row.library === undefined || typeof row.library === 'string' && row.library.length > 0) &&
+      (row.model === undefined || id(row.model)) &&
+      (!mesh || id(row.member) && typeof row.meshRevision === 'string' && row.meshRevision.length > 0),
+    'Invalid prefab source provenance');
+  }
+
   function expand(source, { prefabs: external } = {}) {
     if (!source || source.prefabs === undefined && source.instances === undefined && source.prefabLibrary === undefined)
       return { spec: source, instances: new Map(), meshPlacements: new Map() };
@@ -33,7 +57,7 @@
     const available = new Map();
     for (const [key, def] of [...Object.entries(external ?? {}), ...Object.entries(prefabs)]) {
       check(id(key) && record(def) && !available.has(key) && Number.isSafeInteger(def.revision) && def.revision >= 1 &&
-        Object.keys(def).every(field => field === 'revision' || field === 'generation' || field === 'usesTilesets' || tables.includes(field)) && record(def.solids),
+        Object.keys(def).every(field => field === 'revision' || field === 'generation' || field === 'provenance' || field === 'usesTilesets' || tables.includes(field)) && record(def.solids),
       'Invalid or duplicate visual prefab ' + key);
       for (const field of tables)
         check(def[field] === undefined || record(def[field]) && Object.entries(def[field]).every(([key, row]) => id(key) && record(row)),
@@ -43,6 +67,7 @@
         check(Array.isArray(uses) && Array.from(uses).every(A.tilesets.validId) && new Set(uses).size === uses.length,
           'Expected distinct tileset requirements in prefab ' + key);
       }
+      if (def.provenance !== undefined) checkProvenance(def.provenance);
       K.procedural.model.validate(def, 'visual');
       available.set(key, def);
     }
@@ -141,7 +166,7 @@
           }
           spec.effects.push(next);
         }
-        links.set(key, { instance, revision: definition.revision, solids: ids, meshes, frame: placement?.mesh });
+        links.set(key, { instance, definition, resolved, revision: definition.revision, solids: ids, meshes, frame: placement?.mesh });
       } catch (error) {
         const problem = { level: 'error', path: 'instances.' + key, problem: error.message, hint: '' };
         const failure = new Error(DIO.report([problem]));
@@ -175,5 +200,5 @@
     return authored(transform).point([0, 0, 0]);
   }
 
-  A.scenePrefabs = Object.freeze({ expand, review, origin });
+  A.scenePrefabs = Object.freeze({ expand, review, origin, checkProvenance, tilesetRequirements });
 })(KIT);

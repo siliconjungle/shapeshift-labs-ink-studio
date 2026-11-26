@@ -17,19 +17,6 @@
     return W.apply(source,edits,{validate:null});
   }
 
-  function requirements(definition, meshes) {
-    const sheets = new Set(definition.usesTilesets ?? []);
-    for (const row of Object.values(meshes ?? {})) {
-      for (const material of row.materials ?? []) if (material.texture?.tileset) sheets.add(material.texture.tileset);
-      for (const binding of row.bindings ?? []) {
-        const sheet = binding.data?.selection?.tileset;
-        if (!binding.review && sheet && A.tilesetFaces.isSourceBinding(binding)) sheets.add(sheet);
-      }
-      for (const bake of row.bakes ?? []) if (bake.maps.texture?.tileset) sheets.add(bake.maps.texture.tileset);
-    }
-    return sheets.size ? [...sheets].sort() : definition.usesTilesets;
-  }
-
   function plan(scene, env, request, requireShapeOwner, authoredCamera) {
     const {id,own,equal} = K.world.data;
     const {instance,revision,faces,edits=[],sourceEdits=[]} = request ?? {};
@@ -65,7 +52,7 @@
         updated.topologyMeshes = {...updated.topologyMeshes};
         for (const [member,override] of Object.entries(planned.instance.meshOverrides))
           updated.topologyMeshes[member] = override.mesh;
-        const uses = requirements(updated,updated.topologyMeshes);
+        const uses = A.scenePrefabs.tilesetRequirements(updated,updated.topologyMeshes);
         if (uses !== undefined) updated.usesTilesets = uses;
       }
     }
