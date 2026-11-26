@@ -973,12 +973,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetSwap` | namespace |  |  |
 | `KIT.authoring.tilesetSwap.plan` | function | `(scene, id, operation)` | [source](../../src/kit/p23-tileset-swap.js) |
 | `KIT.authoring.tilesets` | namespace |  |  |
+| `KIT.authoring.tilesets.appendSwatch` | function | `(metadata,preferred)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.blank` | function | `({ width, height, background = 'transparent' } = {})` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.dimensions` | function | `(width, height)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.encodeRaster` | function | `(bytes)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.extract` | function | `(scene, sourceId, targetId, rectangle)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.gridPatch` | function | `(scene, key, size)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.maxEdge` | value | `number = 2048` |  |
+| `KIT.authoring.tilesets.namedPalette` | function | `({palette,paletteMetadata})` | [source](../../src/kit/p23-tilesets.js) |
+| `KIT.authoring.tilesets.paletteMetadata` | function | `(palette)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.positiveScale` | function | `(value, label)` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.prepare` | function | `(sources = {}, defaults = {})` | [source](../../src/kit/p23-tilesets.js) |
 | `KIT.authoring.tilesets.register` | function | `(scene, key, source)` | [source](../../src/kit/p23-tilesets.js) |

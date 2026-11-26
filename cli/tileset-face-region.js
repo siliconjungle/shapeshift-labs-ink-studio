@@ -132,7 +132,7 @@ function transform(rect, mask, active, raster, asset, op, K) {
     if (from>=0) {
       const at = (top+Math.floor(from/width))*asset.width+left+from%width;
       const slot = raster.index?.(at);
-      return {value:raster.read(at),...(slot!==undefined && {slot:'slot-'+slot})};
+      return {value:raster.read(at),...(slot!==undefined && {index:slot})};
     }
     if (op.mode==='move' && active[i]) return {value:0,slot:null};
   };

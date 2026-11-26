@@ -39,25 +39,47 @@
       /^[A-Za-z0-9+/]+={0,2}$/.test(value);
   }
 
+  function namedPalette({palette,paletteMetadata}) {
+    if (!palette) throw new TypeError('A named tileset palette needs an indexed image');
+    return PixelPalette.fromStamp({swatchIds:palette.map((_,i)=>'slot-'+i),...paletteMetadata,
+      palette:palette.map(color=>'#'+color.toString(16).padStart(6,'0'))},{max:256});
+  }
+
+  const paletteMetadata = palette=>({swatchIds:palette.swatches.map(row=>row.id),...PixelPalette.stampMetadata(palette)});
+
+  function appendSwatch(metadata,preferred) {
+    const ids = metadata.swatchIds, stem = preferred ?? 'slot-'+ids.length;
+    let next = stem, suffix = 2;
+    while (ids.includes(next)) {
+      const tail = '-'+suffix++;
+      next = stem.slice(0,64-tail.length)+tail;
+    }
+    return {...metadata,swatchIds:[...ids,next]};
+  }
+
   function image(source) {
     if (!record(source) || source.version !== 1 || !['rgba8','indexed8'].includes(source.encoding))
       throw new TypeError('Expected a version 1 tileset image');
-    const {width,height,encoding,data,palette,alpha} = source;
+    const {width,height,encoding,data,palette,alpha,paletteMetadata:metadata} = source;
     dimensions(width,height);
     const tileSize = tileDimensions(source.tileSize), indexed = encoding === 'indexed8';
-    if (Object.keys(source).some(key => !['version','width','height','encoding','data','tileSize',...(indexed ? ['palette','alpha'] : [])].includes(key)) ||
+    if (Object.keys(source).some(key => !['version','width','height','encoding','data','tileSize',...(indexed ? ['palette','alpha','paletteMetadata'] : [])].includes(key)) ||
         !packed(data,width*height*(indexed ? 1 : 4)) ||
         indexed && (!Array.isArray(palette) || !palette.length || palette.length > 256 ||
           !Array.from(palette).every(color => Number.isInteger(color) && color >= 0 && color <= 0xffffff) ||
           alpha !== undefined && (!Array.isArray(alpha) || alpha.length > palette.length || !Array.from(alpha).every(byte))))
       throw new TypeError('Invalid '+encoding+' tileset image data');
+    if (metadata!==undefined && (!record(metadata) || !Array.isArray(metadata.swatchIds) ||
+        Object.keys(metadata).some(key=>!['swatchIds','swatchLabels','lockedSwatches','ramps'].includes(key))))
+      throw new TypeError('Indexed tileset palette metadata needs swatch IDs and optional labels, locks, and ramps');
+    const named = metadata!==undefined && paletteMetadata(namedPalette(source));
     if (indexed) {
       const slots = atob(data);
       for (let i=0;i<slots.length;i++) if (slots.charCodeAt(i) >= palette.length)
         throw new RangeError('Tileset image uses an index outside its palette');
     }
     return freeze({version:1,width,height,encoding,data,...(tileSize && {tileSize}),
-      ...(indexed && {palette:[...palette],...(alpha !== undefined && {alpha:[...alpha]})})});
+      ...(indexed && {palette:[...palette],...(alpha !== undefined && {alpha:[...alpha]}),...(named && {paletteMetadata:named})})});
   }
 
   function prepare(sources = {}, defaults = {}) {
@@ -140,14 +162,14 @@
     if (sourceId === targetId) throw new RangeError('Extract the crop under a different tileset ID');
     const source = prepare(scene.tilesets,scene.tilesetDefaults).source(sourceId);
     const {x,y,width,height} = TilesetSelection.pick(sourceId,source,rectangle);
-    const {encoding,palette,alpha} = source;
+    const {encoding,palette,alpha,paletteMetadata} = source;
     const channels = encoding === 'indexed8' ? 1 : 4, pixels = atob(source.data), rows = [];
     for (let row=0;row<height;row++) {
       const start = ((y+row)*source.width+x)*channels;
       rows.push(pixels.slice(start,start+width*channels));
     }
     const asset = {version:1,width,height,encoding,data:btoa(rows.join('')),tileSize:{width,height},
-      ...(palette && {palette}),...(alpha !== undefined && {alpha})};
+      ...(palette && {palette}),...(alpha !== undefined && {alpha}),...(paletteMetadata && {paletteMetadata})};
     return register(scene,targetId,asset);
   }
 
@@ -173,5 +195,5 @@
     return {tilesetDefaults:{...scene.tilesetDefaults,texelsPerUnit:density}};
   }
 
-  A.tilesets = Object.freeze({ maxEdge, validId:id, dimensions, encodeRaster, blank, prepare, register, extract, gridPatch, positiveScale, scalePatch });
+  A.tilesets = Object.freeze({ maxEdge, validId:id, dimensions, encodeRaster, blank, prepare, register, extract, gridPatch, positiveScale, scalePatch, namedPalette, paletteMetadata, appendSwatch });
 })(KIT);

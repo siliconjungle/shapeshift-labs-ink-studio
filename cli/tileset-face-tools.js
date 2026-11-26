@@ -5,6 +5,7 @@ const {over} = require('../src/art-passes.js');
 const byte = value=>Number.isInteger(value) && value>=0 && value<=255;
 const rgbaValue = value=>Array.isArray(value) && value.length===4 && Array.from(value).every(byte);
 const rgbHex = rgb=>'#'+rgb.map(value=>value.toString(16).padStart(2,'0')).join('');
+const slotId = value=>typeof value==='string' && /^[a-z][a-z0-9-]{0,63}$/.test(value);
 const integerSlot = value=>Number.isSafeInteger(value) && value>=0 && value<256;
 const channelLayouts = Object.freeze({normal:'normal',roughness:'metallicRoughness',metalness:'metallicRoughness',emission:'emission'});
 const record = value=>value && Object.getPrototypeOf(value)===Object.prototype;
@@ -12,7 +13,7 @@ const fields = (value,keys)=>record(value) && Object.keys(value).every(key=>keys
 
 function pencil({rgba,color,alpha,slot}) {
   if (rgba!==undefined && color===undefined && alpha===undefined && slot===undefined && rgbaValue(rgba)) return {rgba};
-  if (slot!==undefined && rgba===undefined && color===undefined && alpha===undefined && integerSlot(slot)) return {slot};
+  if (slot!==undefined && rgba===undefined && color===undefined && alpha===undefined && (integerSlot(slot) || slotId(slot))) return {slot};
   if (rgba===undefined && slot===undefined && (color!==undefined || alpha!==undefined) &&
       (color===undefined || typeof color==='string' && /^#[0-9a-f]{6}$/i.test(color)) && (alpha===undefined || byte(alpha)))
     return {...(color!==undefined && {color:color.toLowerCase()}),...(alpha!==undefined && {alpha})};
@@ -109,9 +110,11 @@ function pixels(asset) {
 }
 
 function bindPaint(asset, edit) {
-  const {tool,slot,color,alpha,rgba,alphaMode,strength=1} = edit;
+  const {tool,slot:requested,color,alpha,rgba,alphaMode,strength=1} = edit;
   const indexed = asset.encoding==='indexed8';
-  if (slot!==undefined && (!indexed || slot>=asset.palette.length)) return;
+  const slot = typeof requested==='string' ? asset.paletteMetadata?.swatchIds.indexOf(requested) ??
+    (indexed ? asset.palette.findIndex((_,i)=>requested==='slot-'+i) : -1) : requested;
+  if (slot!==undefined && (!indexed || slot<0 || slot>=asset.palette.length)) return;
   if (tool==='eraser') {
     if (strength===1) return {pixel:()=>({value:0,slot:null})};
     return {needsSource:true,pixel:before=>({value:(before>>>8)*256+Math.round(over(0,before&255,strength))})};
@@ -121,10 +124,10 @@ function bindPaint(asset, edit) {
   const input = fixed!==undefined ? fixed&255 : alpha;
   if (alphaMode==='accumulate' && input!==undefined) return {needsSource:true,pixel:before=>({
     value:(rgb ?? (before>>>8))*256+Math.round(over(255,before&255,input/255)),
-    ...(slot!==undefined && {slot:'slot-'+slot})
+    ...(slot!==undefined && {index:slot})
   })};
   if (fixed!==undefined) {
-    const pixel = {value:fixed,slot:slot!==undefined ? 'slot-'+slot : fixed===0 ? null : undefined};
+    const pixel = {value:fixed,...(slot!==undefined ? {index:slot} : fixed===0 && {slot:null})};
     return {pixel:()=>pixel};
   }
   return {needsSource:rgb===undefined || alpha===undefined,pixel:before=>({
@@ -171,7 +174,8 @@ function eyedrop(K, row, source, hit, asset, {sample:mode,channel}) {
   const color = rgbHex(rgba.slice(0,3)), alpha = rgba[3];
   const [units,value] = mode==='color' ? ['rgb-hex',color] : mode==='alpha' ? ['byte',alpha] : ['rgba8',rgba];
   return {mode,...(channel && {channel}),at:source.at,uv:source.uv,units,value,rgba,
-    ...(paletteSlot!==undefined && {paletteSlot}),provenance:{kind:'tileset',id:source.tileset}};
+    ...(paletteSlot!==undefined && {paletteSlot}),
+    ...(asset.paletteMetadata && {swatchId:asset.paletteMetadata.swatchIds[paletteSlot]}),provenance:{kind:'tileset',id:source.tileset}};
 }
 
 const previewsCoverage = op=>op.alphaMode!==undefined || op.strength!==undefined;
