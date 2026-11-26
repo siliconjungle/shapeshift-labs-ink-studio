@@ -1469,6 +1469,7 @@ are visible during checkpoint and replay review.
 | `logistics` | Resource stocks, atomic recipes, scheduled shipments, conservative accounting, and upstream shortage traces. |
 | `water` | Bounded XZ shallow water with live bed edits, editable boundaries, fractional face openings, conservative pump transfer, and optional sediment transport, deposition and gate silting. An `obstacle` field may supply signed solid clearance. |
 | `mechanics` | Boxes, capsules and convex compounds with swept contact and shared clearance and support queries. Fixed and powered mounts, transmission ratios and stall reports, physical separation, configurable box fracture, wheel traction, buoyancy, thrust and sail forces. |
+| `material-failure` | [Feature-guided fracture](progressive-fracture.md) with yielding seams, progressive damage, native collision handoff, and replayable piece lineage. |
 | `deformables` | Checkpointed XPBD cloth and rope with scene attachments, terrain and solid contact, loads, tears, support queries and rain collection. |
 | `routed-links` | Socket-to-socket cables, hoses and belt loops with guide points, slack, tension, break limits, typed signals, torque transmission and conservative transfers. |
 | `navigation` | Bounded walking, swimming or flying route traces. Ground search can take depth, clearance and wear into account. Hosts can also expose the volumetric traversal graph. |
