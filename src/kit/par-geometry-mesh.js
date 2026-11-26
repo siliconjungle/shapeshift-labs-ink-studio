@@ -1,7 +1,7 @@
 /* Geometry adapters around Ink's construction, transforms and clipping. */
 (function (K) {
   const P = K.procedural, A = P.sceneGraph, G = P.geometry, T = P.transforms;
-  const { integer, range, vector, color, indexed, fromStream, toStream } = P.sceneGraphSupport;
+  const { integer, range, vector, list, color, indexed, fromStream, toStream } = P.sceneGraphSupport;
 
   function box({ center = [0, 0, 0], half = [.5, .5, .5], color: tint = '#b7bccb' } = {}) {
     if (!vector(center, 3) || !vector(half, 3) || half.some(n => n <= 0)) throw new RangeError('Box needs a center and positive half sizes');
@@ -18,6 +18,28 @@
     if (!range(z, -1e6, 1e6)) throw new RangeError('Invalid triangulation Z coordinate');
     const { points, triangles } = G.triangulatePolygon(rings);
     return indexed({ points: points.map(p => [...p, z]), faces: triangles, mats: [{ name: 'surface', rgb: color(tint) }] });
+  }
+
+  function measure(source) {
+    const { points, faces } = G.topology(source);
+    const { min, max } = P.spatial.boxOf(points);
+    const attributes = [{ name: 'position', domain: 'vertex', components: 3, samples: points.length }];
+    for (const [name, values, domain, components] of [
+      ['normal', source.normals, 'vertex', 3], ['uv', source.uvs, 'vertex', 2],
+      ['color', source.vcol, 'vertex', 3], ['material', source.tmat ?? source.faceMaterials, 'face', 1]
+    ]) {
+      const count = domain === 'vertex' ? points.length : faces.length;
+      if (list(values) && values.length === count * components && Number.isFinite(values[0]))
+        attributes.push({ name, domain, components, samples: count });
+    }
+    const authored = source.mats ?? source.materials;
+    const materials = Array.isArray(authored) ? authored : [];
+    return {
+      bounds: { min, max }, vertices: points.length, faces: faces.length,
+      triangles: faces.reduce((total, face) => total + face.length - 2, 0),
+      attributes, materialCount: materials.length,
+      materials: materials.slice(0, 64).map((row, index) => row?.name ?? row?.id ?? (typeof row === 'string' ? row : String(index)))
+    };
   }
 
   function transform(source, options = {}) {
@@ -83,5 +105,5 @@
     return fromStream(result, cap ? [...mesh.mats, { name: 'cap', rgb: color(capColor) }] : mesh.mats);
   }
 
-  Object.assign(A, { mesh: indexed, box, tube, triangulate, transform, merge, clip });
+  Object.assign(A, { mesh: indexed, box, tube, triangulate, measure, transform, merge, clip });
 })(KIT);

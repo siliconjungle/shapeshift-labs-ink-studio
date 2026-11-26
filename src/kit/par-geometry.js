@@ -11,6 +11,15 @@
 
   const zero = param('vec3', [0, 0, 0]), one = param('vec3', [1, 1, 1]);
   const has = (spec, name) => Object.hasOwn(spec.inputs ?? {}, name) || Object.hasOwn(spec.params ?? {}, name);
+  const geometryOptions = (inputs, typed, build) => {
+    const config = spec => ({
+      inputs: { ...inputs, options, ...typed },
+      ...value('mesh', ({ options, ...given }) =>
+        build(given, { ...options, ...Object.fromEntries(Object.keys(typed)
+          .filter(key => spec ? has(spec, key) : Object.hasOwn(given, key)).map(key => [key, given[key]])) }))
+    });
+    return { ...config(), specialize: config };
+  };
   const primitiveInputs = {
     sphere: { radius: param('number', .7) },
     box: { half: param('vec3', [.6, .6, .6]), round: param('number', 0) },
@@ -122,18 +131,32 @@
       ...value('world', ({ source, options }) => K.textile.world(source, options))
     },
     'geo.mesh': { inputs: { source: 'mesh' }, ...value('mesh', ({ source }) => A.mesh(source)) },
-    'geo.box': { inputs: { options }, ...value('mesh', ({ options }) => A.box(options)) },
+    'geo.box': {
+      description: 'Build an indexed box with typed center and half sizes.',
+      ...geometryOptions({}, { center: zero, half: param('vec3', [.5, .5, .5]) }, (_, settings) => A.box(settings))
+    },
     'geo.tube': {
-      inputs: { start: 'worldPosition', end: 'worldPosition', options },
-      ...value('mesh', ({ start, end, options }) => A.tube(start, end, options))
+      description: 'Construct an indexed tube with typed endpoints, radius and side count.',
+      ...geometryOptions({ start: 'worldPosition', end: 'worldPosition' },
+        { radius: param('number', .2), sides: param('integer', 12) },
+        ({ start, end }, settings) => A.tube(start, end, settings))
     },
     'geo.triangulate': {
       inputs: { rings: 'array<points>', options },
       ...value('mesh', ({ rings, options }) => A.triangulate(rings, options))
     },
     'geo.transform': {
-      inputs: { source: 'mesh', options },
-      ...value('mesh', ({ source, options }) => A.transform(source, options))
+      description: 'Transform an indexed mesh with typed translation, rotation and scale.',
+      ...geometryOptions({ source: 'mesh' }, { position: zero, rotation: zero, scale: one },
+        ({ source }, settings) => A.transform(source, settings))
+    },
+    'geo.measure': {
+      description: 'Measure indexed geometry bounds, topology counts, materials and attribute channels.',
+      inputs: { source: 'mesh' }, outputs: { value: 'record', min: 'vec3', max: 'vec3', center: 'vec3', size: 'vec3' },
+      run({ source }) {
+        const value = A.measure(source), { min, max } = value.bounds;
+        return { value, min, max, center: max.map((n, i) => (n + min[i]) / 2), size: max.map((n, i) => n - min[i]) };
+      }
     },
     'geo.merge': { inputs: { sources: 'array<mesh>' }, ...value('mesh', ({ sources }) => A.merge(sources)) },
     'geo.clip': {

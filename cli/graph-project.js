@@ -19,6 +19,7 @@ const { loadGraphGroups, groupFor, groupsFor, groupUsage, groupDependencies } = 
 const { snapshotFormat } = require('./graph-diff.js');
 const { fingerprint } = require('./graph-artifact-cache.js');
 const { estimateGraphMemory } = require('./graph-memory.js');
+const GraphGeometry = require('./graph-geometry.js');
 const Assets = require('./asset-references.js');
 const { resolveTakeFile } = require('./take-document.js');
 const materialGraph = require('./material-graph.js');
@@ -805,6 +806,17 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
         artifacts:artifact ? [{file:artifact.file,format:artifact.format,sha256:artifact.sha256,bytes:artifact.bytes.length}] : []}};
   }
 
+  let inspectGeometry;
+  async function geometry(capture, options) {
+    const targets = GraphGeometry.captures(capture);
+    const { frame, report } = await evaluateAsync({ ...request(options), modeling: true, trace: true });
+    inspectGeometry ??= GraphGeometry.inspector(kit.KIT, {
+      preview, summaryArtifact: (value, shape) => encode('preview', shape ?? describe(value), 'json')
+    });
+    const { nodes, captured, artifacts } = inspectGeometry(frame, report, targets);
+    return { artifacts, report: { ...report, kind: 'geometry', ...prepareFrameChecks(frame), nodes, captured } };
+  }
+
   function audioTaps(targets,options={}) {
     const rows=named(targets,'audio taps');
     if (!rows.length || rows.length>2 || rows.some(([name])=>!['dry','wet'].includes(name)))
@@ -948,6 +960,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     artifactIdentity,
     snapshot,
     run:options=>run(request(options)),
+    geometry,
     clip(options, { frameInputs } = {}) {
       const { inputs, seed, ...settings } = fields(options,
         ['output','from','to','warmup','format','clock','renderOptions','capture','inputs','seed'], 'graph clip options');

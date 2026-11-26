@@ -191,7 +191,7 @@
       return schedule;
     }
 
-    function begin(input, { take, sequence, time = take?.start ?? 0, seed = 0, workers, modeling = false, textureCache: inheritedTextureCache,
+    function begin(input, { take, sequence, time = take?.start ?? 0, seed = 0, workers, modeling = false, trace = false, textureCache: inheritedTextureCache,
       functionExecution: inheritedExecution, systemSize }) {
       if (take !== undefined) {
         P.takeTime.requireFrame(take);
@@ -203,7 +203,7 @@
       const textureCache = inheritedTextureCache ?? (()=>textures ??= P.graphImages.textureSampling.createCache());
       const values = parameters(input,declared ? textureCache : undefined);
       const functionExecution = inheritedExecution ?? control.execution(time,seed,systemSize);
-      const pending = new Map();
+      const pending = new Map(), receipts = trace ? new Map() : undefined;
       function prepare(name) {
         const config = configs.get(name), { bindings, clock } = config;
         const entries = bindings.map(([key, socket, link, valid]) => {
@@ -213,17 +213,35 @@
           return [key, value];
         });
         const previous = marks.get(name), comparable = entries.map(([, value]) => value);
+        const matches = (value, i) => {
+          const prior = previous.values[i];
+          return Object.is(value, prior) || bindings[i][2].kind === 'track' && Array.isArray(value) &&
+            Array.isArray(prior) && value.length === prior.length && value.every((n, k) => Object.is(n, prior[k]));
+        };
+        const sameSystem = !config.system || previous && control.sameSystem(previous.system, functionExecution.system);
         const reused = previous?.seed === seed && (!clock || previous.time === time && previous.take === take && previous.sequence === sequence) &&
-          (!config.system || control.sameSystem(previous.system,functionExecution.system)) &&
-          comparable.every((value, i) => {
-            const prior = previous.values[i];
-            return Object.is(value, prior) || bindings[i][2].kind === 'track' && Array.isArray(value) &&
-              Array.isArray(prior) && value.length === prior.length && value.every((n, k) => Object.is(n, prior[k]));
-          });
+          sameSystem && comparable.every(matches);
+        const receipt = trace ? { computeMs: 0, invalidated: [] } : undefined;
+        if (receipt && !reused) {
+          const reasons = receipt.invalidated;
+          if (!previous) reasons.push({ kind: 'cold' });
+          else {
+            if (previous.seed !== seed) reasons.push({ kind: 'seed' });
+            if (clock && previous.time !== time) reasons.push({ kind: 'time' });
+            if (clock && previous.take !== take) reasons.push({ kind: 'take' });
+            if (clock && previous.sequence !== sequence) reasons.push({ kind: 'sequence' });
+            if (!sameSystem) reasons.push({ kind: 'system' });
+            for (const [i, [socket, , link]] of bindings.entries()) {
+              if (matches(comparable[i], i)) continue;
+              reasons.push({ kind: link.kind, socket, ...(link.kind === 'input' && { input: link.id }),
+                ...(link.kind === 'node' && { node: link.id, port: link.port }) });
+            }
+          }
+        }
         const work = modeling && !reused ? [] : undefined;
         const evidence=work && {};
         const context = reused ? undefined : { time, ...(take !== undefined && { take }),
-          ...(sequence !== undefined && { sequence }), seed: P.data.hash(name, seed), node: name,
+          ...(sequence !== undefined && { sequence }), seed: P.data.hash(name, seed), node: name, ...(trace && { trace }),
           ...(work && {modeling, recordWork(receipt) {
             if (work.length<256) work.push(P.modelingDiagnostics.receipt(receipt));
             else evidence.workOmitted=(evidence.workOmitted??0)+1;
@@ -231,7 +249,7 @@
         if (context) Object.defineProperties(context,{
           textureCache:{value:textureCache},functionExecution:{value:functionExecution}
         });
-        return { config, inputs: reused ? undefined : Object.fromEntries(entries), context, comparable, reused, previous, work,evidence };
+        return { config, inputs: reused ? undefined : Object.fromEntries(entries), context, comparable, reused, previous, work,evidence,receipt };
       }
       function invoke(row, asynchronous = false) {
         const { config: { run, nested }, inputs, context } = row;
@@ -239,10 +257,13 @@
         return nested && workers ? run(inputs, context, workers) : run(inputs, context);
       }
       function complete(row, ...answers) {
-        const { config: { name, run, outputs, system }, comparable, reused, previous, work,evidence } = row;
+        const { config: { name, run, outputs, system }, comparable, reused, previous, work,evidence,receipt } = row;
+        if (receipt) receipts.set(name, receipt);
         if (reused) pending.set(name, previous);
         else {
+          const started = receipt && !answers.length ? performance.now() : undefined;
           const produced = answers.length ? answers[0] : invoke(row);
+          if (started !== undefined) receipt.computeMs = performance.now() - started;
           if (produced?.then) {
             void Promise.resolve(produced).catch(() => {});
             throw new TypeError('Graph node ' + name + ' needs asynchronous evaluation');
@@ -277,13 +298,16 @@
           if (nested.length) {
             if (!result.subgraph) throw new RangeError('Unknown graph stage '+node);
             const stage=result.subgraph.stage(nested.join('/'));
-            return status[name]==='cached' ? {...stage,status:'cached',work:[],workOmitted:0} : stage;
+            return status[name]==='cached' ? {...stage,status:'cached',work:[],workOmitted:0,
+              ...(trace && {receipt:{computeMs:0,invalidated:[]}})} : stage;
           }
-          const {op,bindings}=configs.get(name);
+          const {op,bindings,outputs}=configs.get(name);
           const cached=status[name]==='cached';
           return {op,status:status[name],outputs:result.outputs,work:cached?[]:(result.work??[]),
             workOmitted:cached?0:result.workOmitted,modeling:result.modeling,
-            inputs:Object.fromEntries(bindings.map(([key,,link],i)=>[key,{value:result.values[i],
+            ...(trace && {receipt:receipts.get(name)}),
+            outputTypes:Object.fromEntries(Object.entries(outputs).map(([port,{type}])=>[port,type])),
+            inputs:Object.fromEntries(bindings.map(([key,{type},link],i)=>[key,{type,kind:link.kind,value:result.values[i],
               ...(link.kind==='node' && {node:link.id,port:link.port}),
               ...(link.kind==='input' && {input:link.id})}]))};
         }, inspectGroup(name) { return snapshot.get(name)?.subgraph || null; } };
@@ -325,8 +349,11 @@
           const row = prepare(name);
           if (row.reused) complete(row);
           else {
+            const started = row.receipt ? performance.now() : 0;
             const answer = invoke(row, true);
-            complete(row, answer?.then ? await answer : answer);
+            const produced = answer?.then ? await answer : answer;
+            if (row.receipt) row.receipt.computeMs = performance.now() - started;
+            complete(row, produced);
           }
           if (profile) timings[name] = performance.now() - start;
         }

@@ -217,6 +217,9 @@ const quadrantExample={format:'ink-studio/fx-map',version:1,root:'divide',
 const exampleField = { op:'sdf.primitive', inputs:{kind:'sphere',radius:.45} };
 const fieldExample = inputs => ({ nodes:{shape:exampleField}, inputs:{source:link('shape'),...inputs} });
 const dynamic = {
+  'geo.box': { inputs: { center: [0, .25, 0], half: [.7, .35, .5] } },
+  'geo.tube': { inputs: { start: [0, 0, 0], end: [0, 1, 0], radius: .18, sides: 8 } },
+  'geo.transform': { inputs: { source: mesh, position: [1, 0, 0], scale: [1, 2, 1] } },
   'sdf.primitive': {inputs:{kind:'cylinder',radius:.45,length:1.25}},
   'sdf.bound': fieldExample({min:[-.75,-.75,-.75],max:[.75,.75,.75]}),
   'sdf.transform': fieldExample({position:[.25,0,.1],scale:[1,.6,1]}),
@@ -590,6 +593,7 @@ const specifications = {
   'proc.parallax': { inputs: { layers: [{ source: rgba }], options: { width: 4, height: 4 } } },
   'proc.horizon': { inputs: { bands: [{ id: 'shore', radius: 20, height: [0, 4], source: rgba }] } },
   'geo.triangulate': { inputs: { rings: [triangle] } },
+  'geo.measure': { inputs: { source: mesh } },
   'geo.clip': { inputs: { planes: [{ normal: [1, 0, 0], offset: .3 }] } },
   'motion.landmarks': {
     nodes: { observations: { op: 'fx.regionObservations', inputs: { frames: [mask, mask], options: { contours: true } } } },
