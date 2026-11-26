@@ -1,10 +1,11 @@
 (() => {
   const el=id=>document.getElementById(id), title=s=>s.replaceAll('-',' ').replace(/^./,c=>c.toUpperCase());
-  const names={pigment:'Pigment',normal:'Normal',roughness:'Roughness',metalness:'Metalness',emission:'Emission',
+  const names={pigment:'Pigment',normal:'Normal','world-normal':'World normal',height:'Height',roughness:'Roughness',metalness:'Metalness',emission:'Emission',
     opacity:'Opacity',coverage:'Coverage',slope:'Slope',cavity:'Cavity',exposure:'Exposure',thickness:'Thickness',
     'thickness-valid':'Thickness validity','cage-hit':'Projection hits','cage-miss':'Projection misses',
     'cage-backface':'Projection backfaces','cage-distance':'Projection distance','cage-relief':'Signed projection relief'};
   const geometry=['slope','cavity','exposure','thickness','thickness-valid'];
+  const encodings=[['png8','8-bit PNG'],['png16','16-bit PNG'],['exr','32-bit OpenEXR']];
   const {label,catalog,token}=bakeJob;
   function withAvailableMaps(value) {
     const chosen=new Set(value.maps.map(row=>row.id));
@@ -145,6 +146,43 @@
       el(key).oninput=()=>put(preset.defaults,key,el(key).value===''?undefined:+el(key).value);
     }
   }
+  function surfaceControls(row,extra) {
+    const options=row.overrides, controls=node('div');
+    controls.className='map-controls';
+    extra.append(controls);
+    function draw() {
+      const encoding=options.encoding??(row.id==='normal'?'png8':'png16');
+      controls.replaceChildren(field('Encoding',selected(encodings,encoding,value=>{
+        options.encoding=value;
+        if(value!=='exr'&&options.normalization==='none')delete options.normalization;
+        draw();
+      })));
+      if(row.id==='height') {
+        const normalization=options.normalization??(encoding==='exr'?'none':'symmetric');
+        const modes=[['symmetric','Symmetric about zero'],['minmax','Fit extrema and zero'],['manual','Manual range']];
+        if(encoding==='exr')modes.push(['none','Raw signed height']);
+        controls.append(field('Height normalization',selected(modes,normalization,value=>{
+          options.normalization=value;
+          if(value==='manual')options.range??=[-.1,.1];else delete options.range;
+          draw();
+        })));
+        if(normalization==='manual') {
+          for(const [i,label] of ['Minimum height','Maximum height'].entries())
+            controls.append(field(label,numeric(label,options.range?.[i],value=>{options.range[i]=value;},{step:'any'})));
+        }
+      } else if(row.id==='normal') {
+        const space=options.space??'tangent';
+        controls.append(field('Normal space',selected([['tangent','Tangent'],['world','World XYZ']],space,value=>{
+          options.space=value;
+          if(value==='world')delete options.orientation;
+          draw();
+        })));
+        if(space==='tangent')controls.append(field('Tangent orientation',
+          selected([['opengl','OpenGL'],['directx','DirectX']],options.orientation??'opengl',value=>{options.orientation=value;})));
+      }
+    }
+    draw();
+  }
   function maps() {
     const list=preset.maps, rows=el('rows');rows.replaceChildren();
     for(const [i,row] of list.entries()) {
@@ -165,8 +203,7 @@
       const more=button('⋯',()=>{extra.hidden=!extra.hidden;more.setAttribute('aria-expanded',String(!extra.hidden));},'Overrides for '+names[row.id]);
       more.setAttribute('aria-expanded','false');
       extra.append(field('Padding',numeric('Map padding',row.overrides?.padding,n=>put(row.overrides,'padding',n),{min:0,max:32,step:1})));
-      if(row.id==='normal')extra.append(field('Tangent orientation',selected([['','OpenGL (default)'],['opengl','OpenGL'],['directx','DirectX']],
-        row.overrides?.orientation??'',value=>put(row.overrides,'orientation',value))));
+      if(['normal','world-normal','height'].includes(row.id))surfaceControls(row,extra);
       if(geometry.includes(row.id)) {
         const tuning={slope:[],cavity:['samples','cavityRadius','rayBias'],exposure:['samples','exposureDistance','rayBias'],
           thickness:['thicknessScale','rayBias'],'thickness-valid':['rayBias']};
@@ -255,12 +292,20 @@
   }
   function showMap() {
     const row=report?.maps[+el('result').value];
-    el('image').hidden=!row;el('empty').hidden=!!row;
+    el('image').hidden=!row;el('empty').hidden=!!row;el('download-map').hidden=!row;
     if(!row)return;
-    el('image').src=base+row.file;
+    el('image').src=base+(row.previewFile??row.file);
     el('image').alt=(names[row.map]??row.map)+' on '+row.target+' tile '+row.tileLabel;
+    el('download-map').href=base+row.file;
+    const output=row.output, number=n=>Number(n.toPrecision(6)).toString();
+    const span=([lo,hi])=>number(lo)+' to '+number(hi);
     properties(el('details'),{'UV set':row.uvSet,'Grid':row.settings.size+' × '+row.settings.size,
       'Padding':row.settings.padding+' px','Surface coverage':(row.coverage*100).toFixed(1)+'%',
+      ...(output&&{'Encoding':encodings.find(([key])=>key===output.encoding)?.[1]}),
+      ...(output?.kind==='normal'&&{'Normal space':title(output.space)}),
+      ...(output?.kind==='height'&&{'Height range':output.range?span(output.range):'Raw signed scene units',
+        ...(output.measured&&{'Measured on tile':span([output.measured.min,output.measured.max])}),
+        ...(output.range&&{'Clipped samples':output.clippedLow+output.clippedHigh})}),
       ...(row.settings.orientation&&{'Orientation':title(row.settings.orientation)}),
       ...(row.geometry&&{'Probe rays':row.geometry.rayCount.toLocaleString()}),
       ...(row.projection&&{'Projection':row.projection.mode==='self'?'Self-bake':row.projection.highMeshes.join(', '),

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nacre Signal · Ink Studio</title>
+<style>
+:root{color-scheme:dark;font:15px/1.45 system-ui,sans-serif;background:#142128;color:#eee2cf;--line:#3e5864;--muted:#b8cbd3;--accent:#e1ba89}
+*{box-sizing:border-box}body{margin:0}
+main{max-width:1280px;margin:auto;padding:28px clamp(16px,4vw,60px) 32px}
+header{display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:13px}
+h1,h2{font-family:Georgia,serif;font-weight:400;margin:0}h1{font-size:clamp(56px,8vw,99px);letter-spacing:-.07em;line-height:.96}
+h2{font-size:24px}p{color:var(--muted);margin:4px 0 0}a{color:var(--accent);text-underline-offset:3px}
+nav{display:flex;gap:14px;flex-wrap:wrap}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:15px 0}
+article{padding:12px;min-width:0;background:#1c2c34;border:1px solid var(--line)}
+.options{display:grid;grid-template-columns:minmax(110px,1fr) minmax(118px,auto);gap:8px}
+label{display:grid;gap:3px;color:var(--muted);font-size:12px}
+select{min-width:0;max-width:100%;color:#eee2cf;background:#142229;border:1px solid #506c77;border-radius:3px;padding:5px 8px;font:14px system-ui}
+select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+img{width:min(100%,494px);display:block;aspect-ratio:1;image-rendering:pixelated;margin:12px auto;background:#132027}
+footer{display:flex;justify-content:space-between;gap:5px 12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+@media(max-width:660px){.grid{grid-template-columns:1fr}}
+</style>
+<script defer src="data.js"></script>
+</head><body><main>
+<header><div><h1>Nacre Signal</h1><p>Normal and signed-height bakes on mirrored UV tiles</p></div>
+<nav><a id="workstation">Bake workstation</a><a id="reference">Known-plane fixture</a></nav></header>
+<div class="grid" id="comparisons"></div>
+<template id="panel">
+  <article><div class="options"><label>Map<select class="map"></select></label><label>UV tile<select class="tile"></select></label></div>
+    <img><footer><span></span><a download>Download</a></footer></article>
+</template>
+<script>
+window.addEventListener('DOMContentLoaded',()=>{
+  const get=id=>document.getElementById(id);
+  get('workstation').href=demo.workstation;
+  get('reference').href=demo.referencePage;
+  const maps={lit:'Lit relief',tangent:'Tangent normal · OpenGL',directx:'Tangent normal · DirectX',
+    world:'World normal',height:'Signed height',normalized:'Normalized height'};
+  for(const [tile,map] of [['1001','lit'],['1002','height']]){
+    const panel=get('panel').content.firstElementChild.cloneNode(true), controls=panel.querySelectorAll('select');
+    const [which,where]=controls, image=panel.querySelector('img'), file=panel.querySelector('a'), caption=panel.querySelector('span');
+    which.replaceChildren(...Object.entries(maps).map(([id,name])=>new Option(name,id)));
+    where.replaceChildren(new Option('1001 · Regular','1001'),new Option('1002 · Mirrored','1002'));
+    which.value=map;where.value=tile;
+    function render(){
+      const item=demo.cards[where.value][which.value], output=item.row?.output;
+      image.src=item.preview;image.alt=maps[which.value]+' on tile '+where.value;file.href=item.raw;
+      const label=output?output.bitDepth+'-bit '+(output.encoding==='exr'?'OpenEXR':'PNG'):'';
+      const range=output?.range?.map(n=>Number(n.toPrecision(5))).join(' to ');
+      caption.textContent=item.label??(label+(output.kind==='height'?' · '+(range??'Raw signed scene units'):''));
+    }
+    for(const select of controls)select.onchange=render;
+    get('comparisons').append(panel);
+    render();
+  }
+});
+</script></main></body></html>

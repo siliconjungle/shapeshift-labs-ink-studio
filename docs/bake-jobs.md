@@ -59,9 +59,9 @@ Maps are `pigment`, `normal`, `roughness`, `metalness`, `emission`, `opacity`, `
 
 ## Review and refresh
 
-A completed bake writes PNGs, the report, a portable browser review, and the refreshed material graph when a refresh was configured. Every run gets a revision folder. Use the output directory's `latest.json` to locate the latest successful revision. An incomplete, failed or cancelled bake leaves the prior revision available.
+A completed bake writes the map files, the report, a portable browser review, and the refreshed material graph when a refresh was configured. Every run gets a revision folder. Use the output directory's `latest.json` to locate the latest successful revision. An incomplete, failed or cancelled bake leaves the prior revision available.
 
-A linked resource points to the new revision's PNGs. An embedded member stores the new PNG bytes with an origin path for later reimport. Existing resource IDs and unwritten tiles carry forward. Tiles in one resource share extent, precision and interpretation. If an override changes that contract, include every tile of that resource in the bake. The seed material is kept as authored.
+A linked resource points to the new revision's image files. An embedded member stores the new image bytes with an origin path for later reimport. Existing resource IDs and unwritten tiles carry forward. Tiles in one resource share extent, precision and interpretation. If an override changes that contract, include every tile of that resource in the bake. The seed material is kept as authored.
 
 ```sh
 node examples/bake-jobs/demo.cjs brineglass-demo
@@ -73,3 +73,7 @@ Brineglass Signal bakes two enamel designs from UV0 onto two tiles in UV1 and in
 ## Project high detail onto a receiver
 
 See [projection controls](bake-projection.md) for high and low source selection, self-bake, distance units, cage meshes, ray direction, name matching, backfaces and UV skew. Projection-enabled targets use scene placements. Regular direct bakes retain their mesh-local behavior.
+
+## Deliver normals and signed height
+
+See [normal and height bakes](bake-normal-height.md) for tangent and world vectors, DirectX or OpenGL orientation, shared signed relief ranges and PNG or OpenEXR encodings.

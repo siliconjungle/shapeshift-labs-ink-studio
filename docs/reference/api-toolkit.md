@@ -341,7 +341,6 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.ScreenPrint` | alias | `Alias of KIT.engraving.print` |  |
 | `toolkit.SemanticTextureMipmaps` | namespace |  |  |
 | `toolkit.SemanticTextureMipmaps.build` | function | `({width,height,pigment,normal,roughness=.65,metalness,emission,emissionStrength=1,indices,palette,scan}, config=true)` | [guide](../semantic-texture-mipmaps.md), [source](../../src/semantic-texture-mipmaps.js) |
-| `toolkit.SemanticTextureMipmaps.combineLight` | function | `(color,pigment,diffuse,gain)` | [guide](../semantic-texture-mipmaps.md), [source](../../src/semantic-texture-mipmaps.js) |
 | `toolkit.SemanticTextureMipmaps.filterNormal` | function | `(mean, roughnessSquared, variance = 1)` | [guide](../semantic-texture-mipmaps.md), [source](../../src/semantic-texture-mipmaps.js) |
 | `toolkit.SemanticTextureMipmaps.fromSRGBByte` | function | `(value)` | [guide](../semantic-texture-mipmaps.md), [source](../../src/semantic-texture-mipmaps.js) |
 | `toolkit.SemanticTextureMipmaps.levelAt` | function | `(chain,footprint)` | [guide](../semantic-texture-mipmaps.md), [source](../../src/semantic-texture-mipmaps.js) |

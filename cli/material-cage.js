@@ -229,7 +229,7 @@ function prepare(spec, mesh, studio, kit) {
         .map(key=>[fields[key],hit.material[fields[key]]]));
       if (channels.includes('masks') && hit.material.masks) material.masks=hit.material.masks;
     }
-    return { material, diagnostic:{
+    return { material, ...(accepted&&{offset:hit.offset}), diagnostic:{
       'cage-hit':Number(accepted),'cage-miss':Number(!hit),'cage-cross-part':Number(Boolean(cross)),
       'cage-backface':Number(Boolean(backface)), 'cage-distance':hit ? unit(Math.abs(hit.offset)/range) : 0,
       'cage-relief':accepted ? unit(.5+hit.offset/(2*range)) : .5

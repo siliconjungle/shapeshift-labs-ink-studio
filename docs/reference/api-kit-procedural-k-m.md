@@ -87,6 +87,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.logicalParts.compile` | function | `(parts, identify)` | [source](../../src/kit/pal-logical-parts.js) |
 | `KIT.procedural.logicalParts.edits` | function | `(keys = [], anchors = [], locate)` | [source](../../src/kit/pal-logical-parts.js) |
 
+## KIT.procedural.markProfiles
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.markProfiles` | namespace |  |  |
+| `KIT.procedural.markProfiles.place` | function | `({ profiles, range }, guide, limit)` | [source](../../src/kit/p26c-mark-profiles.js) |
+| `KIT.procedural.markProfiles.prepare` | function | `(raw)` | [source](../../src/kit/p26c-mark-profiles.js) |
+| `KIT.procedural.markProfiles.prepareBrush` | function | `(raw)` | [source](../../src/kit/p26c-mark-profiles.js) |
+
 ## KIT.procedural.masks
 
 | Member | Kind | Signature or value | Guides and source |
