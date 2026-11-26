@@ -1386,6 +1386,10 @@ const CMD = {
         '  sdf-reference <scene> --out directory [--t 0,1.2 --w 192 --h 120 --samples 32 --bounces 3]',
         '  hybrid-cage <scene.js> --plan file.json [--out directory --w pixels --h pixels --raw]   preview a shared mesh, strand, and splat deformation',
         '  sculpt-detail <scene> --plan file.json [--out directory --object id --t 1.2]   review and reproject sculpt relief',
+        '  sculpt-sweep add <scene.json> <sweep.json> [--target solid] --out scene.json   add a retained shaped sweep',
+        '  sculpt-sweep cut <scene.json> <sweep.json> --target solid --out scene.json   carve a retained sweep into a solid',
+        '  sculpt-sweep update <scene.json> <edit.json> [--target solid] --out scene.json   revise a saved sweep',
+        '  sculpt-sweep inspect <scene.json> --id sweep [--target solid]   report retained poses and sampling',
         '  sculpt-masks <scene> [--plan file.json --out directory --object id --t 1.2]   apply and review retained sculpt masks',
         '  sdf-shape-review <scene> [--out directory --object id --profile file.json --t 1.2 --fail-on-flags]   compare direct and remeshed SDF views',
         '  pose-correctives capture <scene> --plan sculpt.json --t 1 --out correction.json',
@@ -2593,6 +2597,14 @@ const CMD = {
     pose(world,time);
     const report=require('./sculpt-detail.js').run(world,plan,directory,{kit:lib(),time,objectId:opt.object,inputs:[pos[0],file]});
     console.log(report.object,'·',report.counts.applied,'eligible chart samples ·',report.changedSamples,'updated lattice samples. Wrote',directory);
+  },
+  'sculpt-sweep'() {
+    return require('./sculpt-sweep.js')(pos, opt, lib(), file => {
+      if (!file.endsWith('.json')) throw new TypeError('Sculpt sweeps need a plain editable JSON scene');
+      const descriptor = dataScene(file, undefined, { refreshTilesets: false });
+      if (!descriptor.openEditor) throw new TypeError('Sculpt sweeps need a plain editable JSON scene');
+      return descriptor.openEditor();
+    });
   },
   'sculpt-masks'() {
     if (pos.length!==1 || opt.out!==undefined && typeof opt.out!=='string' ||
