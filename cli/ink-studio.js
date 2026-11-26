@@ -1580,6 +1580,7 @@ const CMD = {
         '  tileset select-atlas <pick.json> --scene <scene.json> --object <mesh-id> [--part <part-id>] [--mode match|inside|touch] [--out <selection.json>]   select faces by pigment UV coverage of a tileset rectangle',
         '  tileset eyedrop --scene <scene.json> --object <mesh-id> --face <face-id> [--part ID] [--brush-size] [--out <pick.json>]   recover a reusable painted face pick for stamp --selection',
         '  tileset reskin --scene <scene.json> --object <mesh-id> --face <face-id> --mode crop|tileset|relative (--selection <pick.json> | --id <tileset-id>) [--part ID] [--column N --row N] [--out <new-scene.json>]   change the paint on an existing mesh face',
+        '  tileset coverage-review <review.json> --scene <scene.json> --out <directory>   inspect opaque, cutout, and blended coverage across native camera samples',
         '  tileset decal <decal.json> --scene <scene.json> [--image art.png] [--view view.json --preview dir] [--expect receipt.json] [--out <new-scene.json>]   place a decal on a named mesh face and review depth conflicts',
         '  tileset wrap <request.json> --scene <scene.json> [--expect receipt.json] [--out <new-scene.json>]   clamp, repeat, or mirror an atlas crop on one face',
         '  tileset material inspect --scene <scene.json> --id <tileset-id>   show saved material settings and active faces',
@@ -1738,6 +1739,10 @@ const CMD = {
         '  character-rig solve <rig.json> <targets.json> [--out pose.json --require-solved]   solve whole-body IK',
         '  character-rig bind <rig.json> <bind-plan.json> --out binding.json   bind meshes, splats and proxies to one rig',
         '  character-rig preview <rig.json> <binding.json> <pose.json> [--view view.json] --out directory   render and capture a bound pose',
+        '  character-motion catalog <rig.json> <motion.json> [--out index.json]   list clips, controls and resolved contact windows',
+        '  character-motion sample <rig.json> <motion.json> <clip> [--at seconds --out pose.json --free --require-solved]   mix clips and solve contacts',
+        '  character-motion edit <rig.json> <motion.json> <edits.json> --out motion.json   edit curve keys or key saved rig controls',
+        '  character-motion retarget <rig.json> <motion.json> <clip> <target-rig.json> <plan.json> --out motion.json [--report report.json --require-solved]   bake editable controls with transferred contacts',
         '  motion-review <id> [--finding kind-or-id] [--out report.json]  inspect motion findings and focused playback ranges',
         '  clip-sequence <id> [--handoff 0] [--out report.json]  inspect clip instances, retimed cues, and handoffs',
         '  animation-graph <graph.json> [--at seconds] [--inputs file.json] [--out report.json]  inspect poses and event responses',
@@ -3639,6 +3644,9 @@ const CMD = {
   },
   'character-rig'() {
     return require('./character-rig.js').command(pos,opt,lib());
+  },
+  'character-motion'() {
+    return require('./character-motion.js').command(pos,opt,lib());
   },
   'pose-review'() {
     const w = build(pos[0]);

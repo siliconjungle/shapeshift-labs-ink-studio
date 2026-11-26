@@ -3,6 +3,8 @@
 Build a skeleton from reusable components, solve several contacts and
 directions together, and use one pose on the character's meshes, splats
 and depth proxies. Rig plans, bindings, IK requests and poses are JSON.
+Use [layered character motion](character-motion.md) to mix clips,
+retarget contacts, and record edited controls back to curves.
 
 ```sh
 ink-studio character-rig templates
