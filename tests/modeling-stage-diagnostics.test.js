@@ -83,6 +83,7 @@ test('patch and modifier CLIs write legible stage receipts independently of thei
   const watched=await ink.createGraphProject(spec).previewFrame({forge:{node:'edit',modeling:true}},{},
     {encodeArtifacts:false});
   assert.deepEqual(watched.outputs.report,ordinary);
+  assert(watched.values.forge.modifiers[1].evidence.facing.length>0);
   assert(watched.values.forge.modifiers[1].diagnostics.changes.faces.affected.includes('panel'));
   const report=run(['mesh-topology','modifiers','inspect',file('stack.json'),'--targets',file('targets.json'),
     '--diagnostics','--preview',file('stack-view')]);

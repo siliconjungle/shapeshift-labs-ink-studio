@@ -6,16 +6,19 @@ Ports, defaults, and constraints come from the registered operations. Use `graph
 
 ### geo.box
 
-
+Build an indexed box with typed center and half sizes.
 
 Origin: toolkit.
+Ports are resolved from the node definition.
 
 | Direction | Port | Type | Default | Details |
 | --- | --- | --- | --- | --- |
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
+| Input | `center` | `vec3` | `[0,0,0]` | {"dimensions":3,"finite":true} |
+| Input | `half` | `vec3` | `[0.5,0.5,0.5]` | {"dimensions":3,"finite":true} |
 | Output | `value` | `mesh` | — | {"layout":"XYZ vertices with in-range indices"} |
 
-Guides: [guide](../headless-authoring.md#meshes-and-image-defined-solids)
+Guides: [guide](../headless-authoring.md#meshes-and-image-defined-solids), [guide](../headless-authoring.md#geometry-and-attributes)
 
 Get the runnable example with `ink-studio graph describe geo.box --example > example.json`.
 Run it with `ink-studio graph run example.json`.
@@ -56,6 +59,26 @@ Origin: toolkit.
 Guides: [guide](../headless-authoring.md#meshes-and-image-defined-solids)
 
 Get the runnable example with `ink-studio graph describe geo.extrudeImage --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### geo.measure
+
+Measure indexed geometry bounds, topology counts, materials and attribute channels.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `mesh` | Required | {"layout":"XYZ vertices with in-range indices"} |
+| Output | `value` | `record` | — | {"layout":"Plain named object"} |
+| Output | `min` | `vec3` | — | {"dimensions":3,"finite":true} |
+| Output | `max` | `vec3` | — | {"dimensions":3,"finite":true} |
+| Output | `center` | `vec3` | — | {"dimensions":3,"finite":true} |
+| Output | `size` | `vec3` | — | {"dimensions":3,"finite":true} |
+
+Guides: [guide](../headless-authoring.md#geometry-and-attributes)
+
+Get the runnable example with `ink-studio graph describe geo.measure --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### geo.merge
@@ -148,17 +171,21 @@ Run it with `ink-studio graph run example.json`.
 
 ### geo.transform
 
-
+Transform an indexed mesh with typed translation, rotation and scale.
 
 Origin: toolkit.
+Ports are resolved from the node definition.
 
 | Direction | Port | Type | Default | Details |
 | --- | --- | --- | --- | --- |
 | Input | `source` | `mesh` | Required | {"layout":"XYZ vertices with in-range indices"} |
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
+| Input | `position` | `vec3` | `[0,0,0]` | {"dimensions":3,"finite":true} |
+| Input | `rotation` | `vec3` | `[0,0,0]` | {"dimensions":3,"finite":true} |
+| Input | `scale` | `vec3` | `[1,1,1]` | {"dimensions":3,"finite":true} |
 | Output | `value` | `mesh` | — | {"layout":"XYZ vertices with in-range indices"} |
 
-Guides: [guide](../headless-authoring.md#meshes-and-image-defined-solids)
+Guides: [guide](../headless-authoring.md#meshes-and-image-defined-solids), [guide](../headless-authoring.md#geometry-and-attributes)
 
 Get the runnable example with `ink-studio graph describe geo.transform --example > example.json`.
 Run it with `ink-studio graph run example.json`.
@@ -182,18 +209,21 @@ Run it with `ink-studio graph run example.json`.
 
 ### geo.tube
 
-
+Construct an indexed tube with typed endpoints, radius and side count.
 
 Origin: toolkit.
+Ports are resolved from the node definition.
 
 | Direction | Port | Type | Default | Details |
 | --- | --- | --- | --- | --- |
 | Input | `start` | `worldPosition` | Required | world units · {"dimensions":3,"finite":true,"axes":"XYZ"} |
 | Input | `end` | `worldPosition` | Required | world units · {"dimensions":3,"finite":true,"axes":"XYZ"} |
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
+| Input | `radius` | `number` | `0.2` | {"finite":true} |
+| Input | `sides` | `integer` | `12` | {"integer":true,"safe":true,"signed":true} |
 | Output | `value` | `mesh` | — | {"layout":"XYZ vertices with in-range indices"} |
 
-Guides: [guide](../headless-authoring.md#meshes-and-image-defined-solids)
+Guides: [guide](../headless-authoring.md#meshes-and-image-defined-solids), [guide](../headless-authoring.md#geometry-and-attributes)
 
 Get the runnable example with `ink-studio graph describe geo.tube --example > example.json`.
 Run it with `ink-studio graph run example.json`.

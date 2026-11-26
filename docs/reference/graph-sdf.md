@@ -133,7 +133,7 @@ Samples the graph clock.
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
 | Output | `value` | `mesh` | — | {"layout":"XYZ vertices with in-range indices"} |
 
-Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes), [guide](../patch-tooling.md#attribute-downstream-work)
+Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes), [guide](../headless-authoring.md#inspect-geometry-and-replay-a-control-edit), [guide](../patch-tooling.md#attribute-downstream-work)
 
 Get the runnable example with `ink-studio graph describe sdf.mesh --example > example.json`.
 Run it with `ink-studio graph run example.json`.
@@ -260,7 +260,7 @@ Samples the graph clock.
 
 - Object and material ID layers use the name tables in layout. ID zero is untagged or empty.
 
-Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes), [guide](../sdf-functions.md)
+Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes), [guide](../headless-authoring.md#inspect-geometry-and-replay-a-control-edit), [guide](../sdf-functions.md)
 
 Get the runnable example with `ink-studio graph describe sdf.slices --example > example.json`.
 Run it with `ink-studio graph run example.json`.
