@@ -9,6 +9,7 @@ const TrueTypeFont = (() => {
       if (!Number.isSafeInteger(p) || p < 0 || p + n > d.byteLength) fail('truncated or invalid table offset');
     };
     return {
+      bytes,
       length: bytes.length,
       u8(p) {
         range(p, 1);
@@ -36,7 +37,7 @@ const TrueTypeFont = (() => {
       }
     };
   }
-  function read(input, createFont, { name = 'TrueType', kerning: overrides = {} } = {}) {
+  function tableDirectory(input) {
     const bytes =
       input instanceof ArrayBuffer
         ? new Uint8Array(input)
@@ -57,6 +58,38 @@ const TrueTypeFont = (() => {
       if (tables.has(tag)) fail('duplicate table');
       tables.set(tag, r.slice(r.u32(p + 8), r.u32(p + 12)));
     }
+    return tables;
+  }
+
+  function names(input) {
+    const name = tableDirectory(input).get('name');
+    if (!name) return {};
+    const version = name.u16(0), count = name.u16(2), storage = name.u16(4);
+    if (![0, 1].includes(version) || count > 4096 || storage < 6 + 12 * count)
+      fail('invalid naming table directory');
+    name.slice(0, storage);
+    const preferred = new Map(), unicodeDecoder = new TextDecoder('utf-16be', { fatal: true }),
+      romanDecoder = new TextDecoder('macintosh');
+    for (let i = 0; i < count; i++) {
+      const offset = 6 + i * 12, platform = name.u16(offset), encoding = name.u16(offset + 2),
+        language = name.u16(offset + 4), id = name.u16(offset + 6), length = name.u16(offset + 8),
+        first = storage + name.u16(offset + 10);
+      const unicode = platform === 0 || platform === 3 && [0, 1, 10].includes(encoding);
+      const roman = platform === 1 && encoding === 0;
+      if (![1, 2, 16, 17].includes(id) || !(unicode || roman) ||
+          !length || length > 512 || unicode && length % 2) continue;
+      const rank = platform === 3 && language === 0x0409 ? 4 : platform === 0 ? 3 : unicode ? 2 : 1;
+      if ((preferred.get(id)?.rank ?? 0) >= rank) continue;
+      const bytes = name.slice(first, length).bytes;
+      const label = (unicode ? unicodeDecoder : romanDecoder).decode(bytes).trim();
+      if (label && !/[\x00-\x1f\x7f]/.test(label)) preferred.set(id, { label, rank });
+    }
+    const label = id => preferred.get(id)?.label;
+    return { family: label(16) ?? label(1), style: label(17) ?? label(2) };
+  }
+
+  function read(input, createFont, { name = 'TrueType', kerning: overrides = {} } = {}) {
+    const tables = tableDirectory(input);
     const table = tag => tables.get(tag) ?? fail('missing ' + tag + ' table'),
       head = table('head'),
       hhea = table('hhea'),
@@ -337,7 +370,7 @@ const TrueTypeFont = (() => {
         p += length;
       }
     }
-    const pairLookups = positioning(tables.get('GPOS'));
+    const pairLookups = positioning(tables.get('GPOS'), tables.get('GDEF'));
     return createFont({
       name,
       unitsPerEm,
@@ -367,7 +400,7 @@ const TrueTypeFont = (() => {
       }
     });
   }
-  function positioning(g) {
+  function positioning(g, gdef) {
     if (!g) return [];
     const features = g.u16(6),
       lookups = g.u16(8),
@@ -395,21 +428,21 @@ const TrueTypeFont = (() => {
       }
       fail('unsupported GPOS coverage');
     };
-    const cls = (base, id) => {
-      const format = g.u16(base);
+    const cls = (table, base, id) => {
+      const format = table.u16(base);
       if (format === 1) {
-        const start = g.u16(base + 2),
-          n = g.u16(base + 4);
-        return id >= start && id < start + n ? g.u16(base + 6 + (id - start) * 2) : 0;
+        const start = table.u16(base + 2),
+          n = table.u16(base + 4);
+        return id >= start && id < start + n ? table.u16(base + 6 + (id - start) * 2) : 0;
       }
       if (format === 2) {
-        for (let i = 0; i < g.u16(base + 2); i++) {
+        for (let i = 0; i < table.u16(base + 2); i++) {
           const p = base + 4 + i * 6;
-          if (id >= g.u16(p) && id <= g.u16(p + 2)) return g.u16(p + 4);
+          if (id >= table.u16(p) && id <= table.u16(p + 2)) return table.u16(p + 4);
         }
         return 0;
       }
-      fail('unsupported GPOS class definition');
+      fail('unsupported OpenType class definition');
     };
     const value = (p, format) => {
       let x = 0;
@@ -444,8 +477,8 @@ const TrueTypeFont = (() => {
         return null;
       }
       if (format === 2) {
-        const c1 = cls(p + g.u16(p + 8), a),
-          c2 = cls(p + g.u16(p + 10), b),
+        const c1 = cls(g, p + g.u16(p + 8), a),
+          c2 = cls(g, p + g.u16(p + 10), b),
           n1 = g.u16(p + 12),
           n2 = g.u16(p + 14);
         if (c1 >= n1 || c2 >= n2) fail('invalid GPOS class index');
@@ -461,7 +494,9 @@ const TrueTypeFont = (() => {
       const l = lookups + g.u16(lookups + 2 + index * 2),
         type = g.u16(l),
         flags = g.u16(l + 2);
-      if (flags !== 0 || ![2, 9].includes(type)) continue;
+      // This API measures adjacent glyph pairs. IgnoreMarks can exclude either member using GDEF.
+      const glyphClasses = flags === 8 ? gdef?.u16(4) : undefined;
+      if (flags !== 0 && !glyphClasses || ![2, 9].includes(type)) continue;
       const subs = [];
       for (let j = 0; j < g.u16(l + 4); j++) {
         let p = l + g.u16(l + 6 + j * 2);
@@ -472,6 +507,7 @@ const TrueTypeFont = (() => {
         subs.push(p);
       }
       result.push((a, b) => {
+        if (glyphClasses && (cls(gdef, glyphClasses, a) === 3 || cls(gdef, glyphClasses, b) === 3)) return null;
         for (const p of subs) {
           const n = pair(p, a, b);
           if (n !== null) return n;
@@ -481,6 +517,6 @@ const TrueTypeFont = (() => {
     }
     return result;
   }
-  return Object.freeze({ read });
+  return Object.freeze({ read, names });
 })();
 if (typeof module !== 'undefined') module.exports = TrueTypeFont;

@@ -55,7 +55,7 @@ Input names are the record keys you declare on the node.
 | Input | `count` | `any` | Required |  |
 | Output | `value` | `record` | — | {"layout":"Plain named object"} |
 
-Guides: [guide](../field-sprite-materials.md#build-a-material-slot), [guide](../graph-media.md#per-stem-control-signals), [guide](../headless-authoring.md#array-operations), [guide](../headless-authoring.md#layers-depth-and-height), [guide](../headless-authoring.md#drawing-layout-and-regions)
+Guides: [guide](../field-sprite-materials.md#build-a-material-slot), [guide](../font-resources.md#use-text-in-a-material-graph), [guide](../graph-media.md#per-stem-control-signals), [guide](../headless-authoring.md#array-operations), [guide](../headless-authoring.md#layers-depth-and-height)
 
 Get the runnable example with `ink-studio graph describe data.record --example > example.json`.
 Run it with `ink-studio graph run example.json`.

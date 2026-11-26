@@ -740,6 +740,8 @@ pixel adjustment after a specific pair, such as `{ AV: -2 }`. The
 `anchors` output gives the zero-based line and glyph origins on their
 source baselines, using names such as `line:0` and `glyph:0:1`.
 
+Use [Font resources](font-resources.md) and `draw.fontText` for linked or embedded TrueType faces and per-glyph fallback.
+
 ### Tracked drawing anchors
 
 Connect `fx.regionObservations` to `draw.trackedAnchors.observations`

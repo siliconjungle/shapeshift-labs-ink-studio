@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Night Atlas · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--ink:#ede1cb;--muted:#bbb6bf;--gold:#f5d398;--teal:#a5ddcc;--bg:#171724;--panel:#232334;--line:#474355}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 20% 0,#303047,transparent 62%),var(--bg);color:var(--ink);font:14px/1.5 system-ui,sans-serif;min-height:100vh}
+main{max-width:1290px;margin:auto;padding:40px clamp(16px,5vw,52px)}p,h1,h2{margin:0}h1,h2{font-family:Georgia,serif;font-weight:400;letter-spacing:-.045em}
+header{display:flex;justify-content:space-between;align-items:end;gap:14px;margin-bottom:25px}h1{font-size:clamp(50px,7vw,84px);line-height:.98;margin:5px 0 12px}
+.kicker,.meter{font:11px ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}p,small,label{color:var(--muted)}
+.actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+button,select,input,textarea{font:inherit;color:var(--ink);background:#2e2b40;border:1px solid #605a74;border-radius:6px;min-width:0;padding:6px 9px}
+button{cursor:pointer}button:hover,select:hover{border-color:var(--teal)}:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+#save{background:var(--gold);color:#302334;border-color:var(--gold);font-weight:650}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 323px;align-items:start;gap:14px}.card{border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 15px}h2{font-size:25px}
+.board{display:grid;place-items:center;min-height:441px;padding:28px 24px;border-block:1px solid var(--line);
+  background:radial-gradient(ellipse at 53% 45%,#493b59,transparent 78%),#1a1b29}
+.plate{width:100%;max-width:760px;aspect-ratio:760/350;position:relative;isolation:isolate;overflow:hidden;
+  border:1px solid #ebbc79;outline:1px solid #8f6570;outline-offset:5px;border-radius:8px;box-shadow:0 17px 34px #11111fa8;
+  background:radial-gradient(ellipse at 50% 12%,#414069,#202238 75%)}
+.plate::before{content:"";position:absolute;inset:8px;border:1px solid #a9877988;border-radius:3px;z-index:-1;
+  background:radial-gradient(circle at 50% 0,#a197d537,transparent 68%),repeating-linear-gradient(0deg,#d8b89004 0 1px,transparent 1px 3px)}
+.plate::after{content:"";position:absolute;inset:17px;border:1px solid #ad8d693d;border-radius:50% / 70%;z-index:-1}
+#plate{position:absolute;inset:0;width:100%;height:100%;display:block}
+.side{padding:0 15px 15px}.field{display:grid;gap:4px;font-size:12px}.paired{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}
+textarea{min-height:74px;resize:vertical}input[type=checkbox]{accent-color:var(--teal)}
+.checks{display:flex;justify-content:space-between;align-items:center;gap:9px;margin:12px 0 0}.checks label{display:flex;gap:5px;align-items:center}
+.foot{padding:14px 15px}.used{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}.badge{padding:4px 8px;border:1px solid #516d71;border-radius:5px;background:#222e3a;color:#b7e7d6;font-size:12px}
+#message{color:#eeb2ab;padding:0 15px 10px}#message:empty{display:none}
+@media(max-width:880px){.layout{grid-template-columns:1fr}header{flex-wrap:wrap}.board{min-height:330px}}
+@media(max-width:520px){main{padding-top:20px}.board{min-height:222px;padding:20px 13px}.bar{align-items:start}.meter{text-align:right}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div><div class="kicker">Ink Studio · Font resources</div><h1>The Night Atlas</h1><p>Set the lettering on an observatory plaque, then save it as an editable graph group.</p></div>
+  <div class="actions">
+    <button id="open" type="button">Open group</button><input id="file" type="file" accept=".json,application/json" hidden>
+    <button id="save" type="button">Save group</button>
+  </div>
+</header>
+<div class="layout">
+  <section class="card">
+    <div class="bar"><h2>Proof</h2><output class="meter" id="revision"></output></div>
+    <div class="board"><div class="plate"><canvas id="plate" width="760" height="350" aria-label="Raster proof of the published font graph"></canvas></div></div>
+    <div class="foot">
+      <p id="facesHeading">Faces in this proof</p>
+      <div class="used" id="used"></div>
+    </div>
+    <p id="message" role="alert"></p>
+  </section>
+  <section class="card">
+    <div class="bar"><h2>Typography</h2><button id="reset" type="button">Reset</button></div>
+    <div class="side">
+      <label class="field">Text<textarea id="text" maxlength="256" spellcheck="false"></textarea></label>
+      <div class="paired">
+        <label class="field">Family<select id="family"><option>Source Serif 4</option><option>Night Marks</option></select></label>
+        <label class="field">Style<select id="style"><option>Regular</option><option>Italic</option></select></label>
+        <label class="field">Size<input type="number" id="size" min="12" max="100" step="1"></label>
+        <label class="field">Tracking<input type="number" id="tracking" min="-4" max="18" step=".25"></label>
+        <label class="field">Line height<input type="number" id="lineHeight" min="22" max="125" step="1"></label>
+        <label class="field">Wrap width<input type="number" id="maxWidth" min="100" max="640" step="1"></label>
+        <label class="field">Alignment<select id="align"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
+        <label class="field">Wrapping<select id="wrap"><option value="word">Word</option><option value="character">Character</option><option value="none">None</option></select></label>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="fallback"> Glyph fallback</label>
+        <label><input type="checkbox" id="kerning"> Pair kerning</label>
+      </div>
+    </div>
+  </section>
+</div>
+</main>
+<script src="ink-studio.browser.js"></script><script src="publication.js"></script><script src="live.js"></script>
+</body>
+</html>

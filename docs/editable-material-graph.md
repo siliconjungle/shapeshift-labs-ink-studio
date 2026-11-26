@@ -48,6 +48,7 @@ Opening checks document structure and references. Executing additionally checks 
 
 See [Bitmap resources](bitmap-resources.md) for linked and embedded images, native precision, editable pixels, and sequence or tile policies.
 See [SVG and vector resources](vector-resources.md) for editable path geometry, graph contour and mask nodes, and standalone SVG exports.
+See [Font resources](font-resources.md) for linked and embedded TrueType faces, editable text layout, and font pins in published groups.
 
 ## Publish and edit reusable subgraphs
 

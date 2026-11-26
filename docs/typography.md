@@ -83,6 +83,8 @@ attachment, nonzero lookup flags and script/language feature selection are
 outside this simple horizontal layout API. Supply already shaped glyph geometry
 through an adapter for those cases. Only use font assets you can distribute.
 
+Use [Font resources](font-resources.md) to keep TrueType face selections and editable text in a material graph or published group.
+
 ## Seekable glyph animation and curve placement
 
 ```js

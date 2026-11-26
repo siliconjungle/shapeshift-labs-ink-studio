@@ -57,6 +57,7 @@ The keyword search includes the curated features, CLI usages, public API members
 - [data](graph-data.md)
 - [draw](graph-draw.md)
 - [fn](graph-fn.md)
+- [font](graph-font.md)
 - [fx](graph-fx.md)
 - [geo](graph-geo.md)
 - [image](graph-image.md)
