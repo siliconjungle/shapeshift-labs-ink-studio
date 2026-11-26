@@ -613,7 +613,12 @@ function apply(frame, edit, route, context, readMarks) {
     const options = { part: binding.part, projection: operation?.projection };
     let evidence;
     if (fields(operation, ['transform', 'projection']) && Object.hasOwn(operation, 'transform')) {
-      evidence = source.editor.transformMeshTopology(binding.object, operation.transform, options);
+      try {
+        evidence = source.editor.transformMeshTopology(binding.object, operation.transform, options);
+      } catch (error) {
+        if (!error.report) throw error;
+        throw conflict('mesh-transform-blocked', error.message, {transform:error.report});
+      }
     } else if (fields(operation, ['cut', 'projection']) && Object.hasOwn(operation, 'cut')) {
       evidence = source.editor.cutMeshTopology(binding.object, operation.cut, options);
     } else if (fields(operation, ['retopology', 'projection']) && Object.hasOwn(operation, 'retopology')) {
