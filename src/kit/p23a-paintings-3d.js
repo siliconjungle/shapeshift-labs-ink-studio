@@ -6,7 +6,7 @@
   const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
   const name = value => K.world.data.id(value) && /^[a-zA-Z0-9_-]{1,40}$/.test(value);
   const channels = ['brush', 'step', 'blendRadius', 'pressureResponse', 'looseness', 'direction', 'grid', 'relief', 'finish', 'mat'];
-  const editable = [...channels, 'preset', 'poses', 'path', 'res', 'transform', 'attachment', 'enabled'];
+  const editable = [...channels, 'preset', 'poses', 'path', 'res', 'transform', 'attachment', 'enabled', 'erasers'];
   const resources = ['profiles', 'flowMaps', 'presets'];
 
   function resolveBrush(brush, profiles) {
@@ -98,7 +98,8 @@
           throw new TypeError(id + ' mark ' + order + ' needs a unique ID, brush, poses and material');
         const presetStyle = mark.preset === undefined ? {} : readPreset(presets, mark.preset);
         const { id: key, attachment = { kind: 'free' }, transform, enabled = true, looseness: authoredStyle, preset,
-          direction: authoredDirection, grid: authoredGrid, relief: authoredRelief, finish: authoredFinish, ...stroke } = { ...presetStyle, ...mark };
+          direction: authoredDirection, grid: authoredGrid, relief: authoredRelief, finish: authoredFinish,
+          erasers: authoredErasers, ...stroke } = { ...presetStyle, ...mark };
         if (stroke.mat === undefined && authoredFinish === undefined) throw new TypeError(id + ' mark ' + key + ' needs a material');
         ids.add(key);
         const solid = 'paint.' + id + '.' + key;
@@ -108,10 +109,13 @@
             (attachment.kind === 'free' ? attachment.slot !== undefined : !name(attachment.slot)) ||
             (attachment.kind === 'surface') !== (attachment.snap !== undefined))
           throw new TypeError(solid + ' needs a free, surface or part attachment');
-        let shape, style, direction, grid, relief, finish;
+        let shape, style, direction, grid, relief, finish, erasers;
         try {
           relief = K.procedural.paintRelief.prepare(authoredRelief);
           finish = PaintFinish.prepare(authoredFinish);
+          erasers = K.procedural.channelEraser.surface(authoredErasers);
+          if (erasers && (attachment.kind !== 'surface' || attachment.snap.mode !== 'surface'))
+            throw new TypeError('Channel erasers need a surface attachment in surface snap mode');
           if (finish && (attachment.kind !== 'surface' || attachment.snap.mode !== 'surface' || relief?.mode === 'volume'))
             throw new TypeError('Finish paint needs surface snap mode and can share flat or shading relief');
           if (relief && (attachment.kind !== 'surface' || attachment.snap.mode !== 'surface'))
@@ -122,6 +126,11 @@
           if (grid && (attachment.kind !== 'surface' || grid.settings.kind !== 'direction' && attachment.snap.mode !== 'surface'))
             throw new TypeError('A mark grid needs a surface attachment and positional grids need surface snap mode');
           style = K.procedural.paintLooseness.prepare(authoredStyle);
+          if (authoredErasers?.some(row => row.channels.includes('paint')) &&
+              (finish || relief?.mode === 'volume' || !relief && style?.silhouetteAllowance !== 0))
+            throw new TypeError('Paint erasers need a flat pigment or shading-relief stroke');
+          if (relief?.mode === 'volume' && authoredErasers?.some(row => row.channels.includes('relief')))
+            throw new TypeError('The relief eraser controls shading relief');
           if (style && !relief && !finish && (attachment.kind === 'surface') !== (style.silhouetteAllowance !== undefined))
             throw new TypeError(attachment.kind === 'surface' ? 'State a silhouette allowance for surface looseness'
               : 'A silhouette allowance needs a surface receiver');
@@ -152,6 +161,7 @@
             anchors.set(solid, { host, guideFrame, snap: attachment.snap,
               ...(relief && { relief }),
               ...(finish && { finish }),
+              ...(erasers && { erasers }),
               ...(direction && { direction, flowAsset: typeof map === 'string' ? flowMaps[map] : map }),
               ...(grid && { grid, gridFlow: typeof gridMap === 'string' ? flowMaps[gridMap] : gridMap }) });
           } else if (attachment.kind === 'part') {
@@ -178,6 +188,7 @@
           ...(grid && { grid: grid.settings }),
           ...(relief && { relief }),
           ...(finish && { finish: authoredFinish }),
+          ...(authoredErasers !== undefined && { erasers: authoredErasers }),
           ...(stroke.step !== undefined && { step: stroke.step }), ...(stroke.blendRadius !== undefined && { blendRadius: stroke.blendRadius }),
           ...(stroke.path !== undefined && { path: stroke.path }), ...(stroke.pressureResponse && { pressureResponse: stroke.pressureResponse }) });
       }
@@ -212,6 +223,12 @@
         const finish = { ...prior, ...change.patch };
         for (const [key, value] of Object.entries(change.patch)) if (value === null) delete finish[key];
         marks[index] = { ...current, finish };
+      } else if (change.op === 'set-eraser' && fields(change, ['op', 'id', 'eraser', 'patch'])) {
+        const current = marks[index], erasers = K.procedural.channelEraser.revise(current.erasers, change.eraser, change.patch);
+        const updated = { ...current };
+        if (erasers.length) updated.erasers = erasers;
+        else delete updated.erasers;
+        marks[index] = updated;
       } else if (change.op === 'apply-preset' && fields(change, ['op', 'id', 'preset'])) {
         const current = marks[index], preset = readPreset(painting.presets, change.preset);
         const available = Object.hasOwn(painting.presets ?? {}, current.preset) ? painting.presets : previousPresets;
@@ -224,7 +241,7 @@
         const before = change.before === undefined ? marks.length : marks.findIndex(row => row.id === change.before);
         if (before < 0) throw new RangeError('Unknown destination mark ' + change.before);
         marks.splice(before, 0, mark);
-      } else throw new TypeError('Use add, remove, set, set-finish, move or apply-preset to edit a mark');
+      } else throw new TypeError('Use add, remove, set, set-finish, set-eraser, move or apply-preset to edit a mark');
     }
     return { ...painting, marks };
   }

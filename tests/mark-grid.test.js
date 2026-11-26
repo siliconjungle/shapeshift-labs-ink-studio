@@ -40,6 +40,27 @@ test('tangent grids use authored axes, phase and stagger while retaining the raw
   assert.deepEqual(editor.extractPainting3d('detail').marks[0].poses, mark.poses);
 });
 
+test('style erasers follow their rest coordinates, including on a warped receiver', () => {
+  const host = {id:'plate',kind:'warp',twist:.64,centre:[0,-.5,0],of:{...plate,id:'stock'}};
+  const editor = ink.createSceneEditor({...scene,solids:[host]});
+  const mark = dab('pattern',[-.36,.39],{kind:'tangent',spacing:[.20,.30]});
+  mark.direction = {field:{kind:'axis',axis:[0,1,0]},strength:1};
+  mark.poses.push(xy([.48,.39]));
+  const before = editor.applyPainting3d(placement([mark])).marks[0].orientation;
+  assert.equal(before.warped,true);
+  near(heading(before.frames[0]),90);
+  const report = editor.applyPainting3d({id:'detail',edits:[{op:'set-eraser',id:mark.id,eraser:'local',
+    patch:{points:[[-.36,.39,.2]],radius:.22,channels:['style']}
+  }]},{update:true}).marks[0].orientation;
+  const frame = report.frames[0];
+  assert.equal(frame.grid.status,'erased');
+  same(frame.rest,frame.grid.before);
+  near(heading(frame),33);
+  assert(K.V.dist(frame.point,frame.rest)>.02);
+  assert(report.gridResults.aligned>0);
+  assert.deepEqual(editor.extractPainting3d('detail').marks[0].poses,mark.poses);
+});
+
 test('the grid reprojects onto curved receivers, and a failed snap is reported without moving a dab', () => {
   const ball = { id: 'plate', kind: 'ball', at: [0, 0, 0], r: 1, mat: 'stone', res: .05 };
   const editor = ink.createSceneEditor({ ...scene, solids: [ball] });

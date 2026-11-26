@@ -49,29 +49,34 @@ const PaintFinish = (() => {
     return plan;
   }
 
-  function add(row, plan, w) {
+  function add(row, plan, w, remaining) {
     row ??= [0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     const { tint, hueShift, roughness, coating, emission } = plan;
-    const over = (lane, n) => row[lane] = row[lane] * (1 - w) + n * w;
-    if (tint || hueShift) {
+    const weight = channel => w * (remaining?.(channel) ?? 1);
+    const over = (lane, n, a) => row[lane] = row[lane] * (1 - a) + n * a;
+    const tintWeight = tint && weight('tint'), hueWeight = hueShift && weight('hueShift');
+    if (tintWeight || hueWeight) {
       row[0] |= 1;
-      if (tint) for (let i = 0; i < 3; i++) row[i + 1] *= 1 + (tint.rgb[i] - 1) * w * tint.strength;
-      row[4] = (row[4] + (hueShift ?? 0) * w) % 360;
+      if (tintWeight) for (let i = 0; i < 3; i++) row[i + 1] *= 1 + (tint.rgb[i] - 1) * tintWeight * tint.strength;
+      if (hueWeight) row[4] = (row[4] + hueShift * hueWeight) % 360;
     }
-    if (roughness !== undefined) {
+    const roughnessWeight = roughness !== undefined && weight('roughness');
+    if (roughnessWeight) {
       row[0] |= 2;
-      over(5, 1);
-      over(6, roughness);
+      over(5, 1, roughnessWeight);
+      over(6, roughness, roughnessWeight);
     }
-    if (coating) {
+    const coatWeight = coating && weight('coating');
+    if (coatWeight) {
       row[0] |= 4;
-      over(7, 1);
-      over(8, coating.weight);
-      over(9, coating.roughness);
+      over(7, 1, coatWeight);
+      over(8, coating.weight, coatWeight);
+      over(9, coating.roughness, coatWeight);
     }
-    if (emission?.some(Boolean)) {
+    const emissionWeight = emission?.some(Boolean) && weight('emission');
+    if (emissionWeight) {
       row[0] |= 8;
-      for (let i = 0; i < 3; i++) row[10 + i] = Math.min(64, row[10 + i] + emission[i] * w);
+      for (let i = 0; i < 3; i++) row[10 + i] = Math.min(64, row[10 + i] + emission[i] * emissionWeight);
     }
     return row;
   }

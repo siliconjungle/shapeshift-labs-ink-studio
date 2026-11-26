@@ -2014,7 +2014,7 @@
           try {
             const carrier = carriers.get(anchor.host.id) ?? makeSolid(anchor.host, true);
             const psd = S.psd, distance = (x, y, z) => psd(carrier, x, y, z);
-            const { direction: comb, grid, relief, finish } = anchor;
+            const { direction: comb, grid, relief, finish, erasers } = anchor;
             const volume = relief?.mode === 'volume';
             const caps = [style?.silhouetteAllowance, relief?.silhouetteAllowance].filter(n => n !== undefined);
             const allowance = finish || relief && !volume ? 0 : caps.length ? Math.min(...caps) : undefined;
@@ -2028,6 +2028,14 @@
               }
             }
             const restDistance = warp ? (x, y, z) => psd(warp.base, x, y, z) : distance;
+            const guideFrame = affineSolidSpace(anchor.guideFrame);
+            const localMask = channel => erasers?.has(channel) ? point => erasers.remaining(channel, point) : undefined;
+            const paintMask = localMask('paint'), reliefMask = localMask('relief');
+            const finishMasked = finish && ['tint', 'hueShift', 'roughness', 'coating', 'emission', 'spill']
+              .some(channel => erasers?.has(channel));
+            const hostFrame = warp || (pigmentOnly && anchor.snap.direction) ? affineSolidSpace(DIO.solidFrames.rest(anchor.host)) : null;
+            const markFrame = paintMask || reliefMask || finishMasked ? affineSolidSpace(s.restAffine) : null;
+            const maskPoint = point => warp ? guideFrame.inverse(warp.inverse(hostFrame.inverse(point))) : markFrame.inverse(point);
             const gridDab = grid && K.procedural.markGrid.align(grid, { chart, distance: restDistance,
               reach: anchor.snap.maxDistance, minFacing: anchor.snap.minFacing ?? .25 });
             const { poses, contacts } = K.procedural.sweepSnap.resolve({ ...s, restAffine: anchor.guideFrame },
@@ -2041,6 +2049,7 @@
               if (report) paintDirections.set(s.id, report);
               orient = K.procedural.markDirection.align(comb, { frame: anchor.guideFrame, distance: restDistance,
                 forward: warp?.forward, root: anchor.snap.mode === 'root' ? contacts[0] : undefined, grid: gridDab,
+                directionAt: comb && localMask('direction'), gridAt: gridDab && localMask('grid'),
                 spacing: comb?.brush.probe ?? grid?.brush?.probe ?? s.res ?? S.res, mark: s.id,
                 ...(report && { observe(frame) {
                   report.samples++;
@@ -2052,12 +2061,12 @@
                 } })
               });
             }
-            if (allowance !== undefined || relief) {
-              const frame = affineSolidSpace(anchor.guideFrame), facing = anchor.snap.minFacing ?? .25;
+            const loosenessAt = style && localMask('looseness');
+            if (allowance !== undefined || relief || loosenessAt) {
+              const facing = anchor.snap.minFacing ?? .25;
               const direction = anchor.snap.direction && V.norm(anchor.snap.direction);
               let accepts;
               if (pigmentOnly && direction) {
-                const hostFrame = affineSolidSpace(DIO.solidFrames.rest(anchor.host));
                 accepts = (point, normal) => {
                   const n = hostFrame.inverseDirection(normal);
                   if (!warp) return V.dot(n, direction) >= facing;
@@ -2066,9 +2075,12 @@
                   return V.dot(V.norm(M.app(M.tr(jac), n)), direction) >= facing;
                 };
               }
-              guard = { entity: anchor.host.id, pigmentOnly, accepts, relief, finish,
+              guard = { entity: anchor.host.id, pigmentOnly, accepts, relief, finish, loosenessAt,
+                paintMask: paintMask && (point => paintMask(maskPoint(point))),
+                reliefMask: reliefMask && (point => reliefMask(maskPoint(point))),
+                finishMask: finishMasked && ((channel, point) => erasers.has(channel) ? erasers.remaining(channel, maskPoint(point)) : 1),
                 ...(allowance !== undefined && (!volume || relief.height > 0) && {
-                  signed: (x, y, z) => (distance(...frame.point([x, y, z])) - allowance) / frame.boundScale
+                  signed: (x, y, z) => (distance(...guideFrame.point([x, y, z])) - allowance) / guideFrame.boundScale
                 }) };
             }
           } catch (error) {
@@ -2143,7 +2155,8 @@
         else if (k === 'sweep') {
           const relief = guard?.relief, volume = relief?.mode === 'volume', recess = volume && relief.height < 0;
           const band = volume && (recess ? [relief.height, relief.seat] : [-relief.seat, relief.height]);
-          const form = K.procedural.shapeSweeps.prepare(style ? { ...s, looseness: style } : s, { orient, band });
+          const form = K.procedural.shapeSweeps.prepare(style ? { ...s, looseness: style } : s,
+            { orient, band, loosenessAt: guard?.loosenessAt });
           const paintOverlay = guard?.pigmentOnly || recess || !volume && (style || form.opacityAt) &&
             !held && !s.hold && !s.carve && !s.ghost && !s.group && !modifiers.length;
           const material = form.opacityAt ? { ...m, opacityAt: form.opacityAt } : m;
@@ -2156,11 +2169,12 @@
               if (guard.accepts && !guard.accepts(point, normal)) return;
               return form.opacityAt?.(...local) ?? 1;
             };
-            if (guard.finish) S.addPaintFinish(guard.entity, s.id, guard.finish, coverage);
+            if (guard.finish) S.addPaintFinish(guard.entity, s.id, guard.finish, coverage, guard.finishMask);
             else if (relief?.tint !== false) {
               const color = B.P[m.r[Math.floor(m.r.length / 2)]].map(n => n / 255);
               S.addSurfacePigment(guard.entity, s.id, (point, normal, onHit) => {
-                const weight = coverage(point, normal);
+                let weight = coverage(point, normal);
+                if (weight && guard.paintMask) weight *= guard.paintMask(point);
                 if (!weight) return;
                 onHit(weight);
                 return rgb => {
@@ -2171,7 +2185,7 @@
             }
           }
           if (relief?.mode === 'shading') S.addSurfaceRelief(guard.entity,
-            K.procedural.paintRelief.gradient(relief, form, affineSolidSpace(s.restAffine), guard.accepts));
+            K.procedural.paintRelief.gradient(relief, form, affineSolidSpace(s.restAffine), guard.accepts, guard.reliefMask));
           const clipped = guard?.signed ? { ...form, sd: (x, y, z) => Math.max(form.sd(x, y, z), guard.signed(x, y, z)) } : form;
           if (volume && !recess && !relief.castShadow) baseOptions.target = { ...baseOptions.target, castsShadow: false };
           p = S.implicitForm(clipped, material, paintOverlay ?

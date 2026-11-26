@@ -76,6 +76,7 @@ All checked-in guides, indexed by title and section headings.
 - [Place paint by cause](../caused-marks.md)
 - [Celestial tracks](../celestial-tracks.md)
 - [Cellular rules and lattices](../cellular-lattices.md)
+- [Erase a local paint or animation contribution](../channel-erasers.md)
 - [Headless channel routing](../channel-routing.md)
 - [Headless layered character motion](../character-motion.md)
 - [Headless character rigs](../character-rigs.md)

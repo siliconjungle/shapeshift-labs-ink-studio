@@ -58,6 +58,30 @@ test('flat and signed shading relief keep splat geometry and use the existing sh
   assert(mate.shadowSdf(0, 0, .32) > 0);
 });
 
+test('the paint and shading erasers expose the underlying receiver independently', () => {
+  const editor = author({mode:'shading',height:.06,feather:.055}), before = editor.build();
+  const bare = ink.createSceneEditor(scene).build();
+  const erase = (id, channels) => editor.applyPainting3d({id:'detail',edits:[{
+    op:'set-eraser',id:'ridge',eraser:id,patch:{points:[[-.16,0,.26],[.16,0,.26]],radius:.29,feather:.25,channels}
+  }]},{update:true});
+  erase('pigment',['paint']);
+  const colorless = editor.build();
+  assert.deepEqual(colorless.renderMetadata.shadingNormals,before.renderMetadata.shadingNormals);
+  let erased = 0, preserved = 0;
+  for (let i=0; i<before.count; i++) {
+    const o=i*16;
+    if (before.data[o+7]===bare.data[o+7] || before.data[o+2]<.25) continue;
+    if (Math.abs(before.data[o])<.14 && Math.abs(before.data[o+1])<.07 && colorless.data[o+7]!==before.data[o+7]) erased++;
+    if (before.data[o]>.55 && colorless.data[o+7]===before.data[o+7]) preserved++;
+  }
+  assert(erased>5 && preserved>5, JSON.stringify({erased,preserved}));
+  erase('ridge',['relief']);
+  const local = field(editor), point = [0,.13,.26], far = [.57,.13,.26];
+  const material = at => local.materialAt(local.surfaceAt(...at).material,at,[0,0,1]);
+  assert.equal(material(point).model?.normal?.[1] ?? 0,0);
+  assert(material(far).model.normal[1]>.4);
+});
+
 test('volume has a finite silhouette budget and casts only when enabled', () => {
   const open = author({ mode: 'volume', height: .24 }, [.86]);
   const off = field(open), at = [.86, 0, .42];
