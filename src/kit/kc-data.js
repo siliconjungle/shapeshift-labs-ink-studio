@@ -1901,7 +1901,7 @@
       st0.finish.volumeLighting?.spots?.some(light => light.surfaceIntensity && light.castsShadow !== false);
     const shadowMarch = st0.finish.shadowMarch === undefined ? null : bakedShadowMarch(st0.finish.shadowMarch);
     const carrierIds = new Set([...anchors.values()].map(anchor => anchor.host.id));
-    const carriers = new Map(), paintContacts = new Map();
+    const carriers = new Map(), paintContacts = new Map(), paintDirections = new Map();
     let S, grp;
     function startSculpt() {
       carriers.clear();
@@ -2002,20 +2002,45 @@
     const made = {},
       make = (s, held) => {
         const anchor = anchors.get(s.id), style = looseness.get(s.id);
-        let guard;
+        let guard, orient;
         if (anchor) {
           try {
             const carrier = carriers.get(anchor.host.id) ?? makeSolid(anchor.host, true);
             const psd = S.psd, distance = (x, y, z) => psd(carrier, x, y, z), allowance = style?.silhouetteAllowance;
             const pigmentOnly = allowance === 0;
+            const warp = anchor.direction && carrier.markWarp;
+            const restDistance = warp ? (x, y, z) => psd(warp.base, x, y, z) : distance;
             const { poses, contacts } = K.procedural.sweepSnap.resolve({ ...s, restAffine: anchor.guideFrame },
-              pigmentOnly ? { ...anchor.snap, offset: 0 } : anchor.snap, distance);
+              pigmentOnly ? { ...anchor.snap, offset: 0 } : anchor.snap, restDistance);
             s = { ...s, poses, path: 'free' };
             paintContacts.set(s.id, contacts.length);
+            if (anchor.direction) {
+              const report = modelOptions?.[brushField] === 'paintings' && { space: 'receiver-rest', warped: !!warp, samples: 0, frames: [] };
+              if (report) paintDirections.set(s.id, report);
+              orient = K.procedural.markDirection.align(anchor.direction, { frame: anchor.guideFrame, distance: restDistance,
+                forward: warp?.forward, root: anchor.snap.mode === 'root' ? contacts[0] : undefined,
+                spacing: anchor.direction.brush.probe ?? s.res ?? S.res, mark: s.id,
+                ...(report && { observe(frame) {
+                  report.samples++;
+                  if (report.frames.length < 8) report.frames.push(frame);
+                } })
+              });
+            }
             if (allowance !== undefined) {
-              const frame = affineSolidSpace(anchor.guideFrame);
-              const direction = anchor.snap.direction && affineSolidSpace(DIO.solidFrames.rest(anchor.host)).pushNormal(anchor.snap.direction);
-              guard = { entity: anchor.host.id, pigmentOnly, direction, minFacing: anchor.snap.minFacing ?? .25,
+              const frame = affineSolidSpace(anchor.guideFrame), facing = anchor.snap.minFacing ?? .25;
+              const direction = anchor.snap.direction && V.norm(anchor.snap.direction);
+              let accepts;
+              if (pigmentOnly && direction) {
+                const hostFrame = affineSolidSpace(DIO.solidFrames.rest(anchor.host));
+                accepts = (point, normal) => {
+                  const n = hostFrame.inverseDirection(normal);
+                  if (!warp) return V.dot(n, direction) >= facing;
+                  const rest = warp.inverse(hostFrame.inverse(point));
+                  const jac = K.deform.jac(warp.forward, rest);
+                  return V.dot(V.norm(M.app(M.tr(jac), n)), direction) >= facing;
+                };
+              }
+              guard = { entity: anchor.host.id, pigmentOnly, accepts,
                 signed: (x, y, z) => (distance(...frame.point([x, y, z])) - allowance) / frame.boundScale };
             }
           } catch (error) {
@@ -2023,7 +2048,7 @@
           }
         }
         const rigid = uniformSolidSpace(s, B.frame), rest = affineSolidSpace(s.restAffine);
-        const recipe = () => makeSolid(s, held, style, guard);
+        const recipe = () => makeSolid(s, held, style, guard, orient);
         const trackModifierSpace = Boolean(s.id && (env.retainRenderSdf || env.retainPartRenderSdf));
         const placed = () => rigid ? S.transformSolids(rigid, recipe, trackModifierSpace) : recipe();
         const p = rest ? S.transformSolids(rest, placed, trackModifierSpace) : placed();
@@ -2031,7 +2056,7 @@
         if (s.id) made[s.id] = p;
         return p;
       },
-      makeSolid = (s, held, style, guard) => {
+      makeSolid = (s, held, style, guard, orient) => {
         const modifiers = activeModifiers(s);
         const request = modelOptions?.[brushField];
         const audit = typeof request === 'object' ? request : null;
@@ -2084,17 +2109,17 @@
           p = S.lathe(s.at, s.h, Array.isArray(s.r) && Array.isArray(s.r[0]) ? t => K.kf(t, s.r.flat()) : s.r, m, baseOptions);
         else if (k === 'torus') p = S.torus(s.at, s.R, s.r, m, baseOptions);
         else if (k === 'sweep') {
-          const form = K.procedural.shapeSweeps.prepare(style ? { ...s, looseness: style } : s);
+          const form = K.procedural.shapeSweeps.prepare(style ? { ...s, looseness: style } : s, orient && { orient });
           const paintOverlay = (style || form.opacityAt) && !held && !s.hold && !s.carve && !s.ghost && !s.group && !modifiers.length;
           const material = form.opacityAt ? { ...m, opacityAt: form.opacityAt } : m;
           if (guard?.pigmentOnly) {
             const { inverse } = affineSolidSpace(s.restAffine);
             const color = B.P[m.r[Math.floor(m.r.length / 2)]].map(n => n / 255);
             S.addSurfacePigment(guard.entity, s.id, (point, normal, onHit) => {
-              if (guard.direction && V.dot(normal, guard.direction) < guard.minFacing) return;
               const local = inverse(point);
               if (local.some((n, i) => n < form.bounds.min[i] - 1e-6 || n > form.bounds.max[i] + 1e-6)) return;
               if (form.sd(...local) > 1e-6) return;
+              if (guard.accepts && !guard.accepts(point, normal)) return;
               const weight = form.opacityAt?.(...local) ?? 1;
               if (!weight) return;
               onHit(weight);
@@ -2266,7 +2291,8 @@
       if (request === 'paintings' && !anchors.size) return reports;
       for (const solid of spec.solids) make(solid);
       if (request === 'paintings') return reports.map(report => ({ ...report, marks: report.marks.map(mark =>
-        paintContacts.has(mark.solid) ? { ...mark, contacts: paintContacts.get(mark.solid) } : mark) }));
+        paintContacts.has(mark.solid) ? { ...mark, contacts: paintContacts.get(mark.solid),
+          ...(paintDirections.has(mark.solid) && { orientation: paintDirections.get(mark.solid) }) } : mark) }));
       if (request === true || request === 'receivers') S.ready();
       if (request === 'receivers') return { field: S, frames: new Map(spec.solids.filter(s => s.id)
         .map(s => [s.id, DIO.solidFrames.rest(s)])) };

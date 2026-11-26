@@ -1989,7 +1989,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.shapeSweeps` | namespace |  |  |
-| `KIT.procedural.shapeSweeps.prepare` | function | `({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse, looseness })` | [guide](../sculpt-sweeps.md), [source](../../src/kit/p26a-shape-sweeps.js) |
+| `KIT.procedural.shapeSweeps.prepare` | function | `({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse, looseness }, { orient } = {})` | [guide](../sculpt-sweeps.md), [source](../../src/kit/p26a-shape-sweeps.js) |
 
 ## KIT.procedural.signalRecovery
 

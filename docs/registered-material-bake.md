@@ -420,3 +420,5 @@ rest-space cages, native UV pages, seam checks, and pinned palette exports.
 Use [bake jobs and presets](bake-jobs.md) to select mesh primitives, slots, UV sets and tiles, then run ordered maps with individual settings and refresh graph resources when the bake completes.
 
 Use [bake projection controls](bake-projection.md) to configure mesh-to-mesh or self-bake projection from the tiled bake-job workstation.
+
+[Thickness bake jobs](bake-thickness.md) expose the same validity checks with customizable inward rays, part labels, and high-precision delivery.

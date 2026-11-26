@@ -5,6 +5,7 @@ const UV=require('./material-preview-geometry.js');
 const {maps:projectionMaps}=require('./bake-job-projection.js');
 const Surface=require('./bake-job-surface.js');
 const Occlusion=require('./bake-job-occlusion.js');
+const Thickness=require('./thickness.js');
 
 const format='ink-studio/bake-job', presetFormat='ink-studio/bake-preset';
 const names=Object.freeze(['pigment','normal','world-normal','height','roughness','metalness','emission','opacity','coverage',...Geometry.names,
@@ -48,9 +49,11 @@ function preset(value) {
       throw new TypeError('Use each supported bake map once and set enabled to a boolean');
     seen.add(row.id);
     const overrides=options(row.overrides??{},['size','padding',...(mapSurface[row.id]??[]),...(mapGeometry[row.id]??[]),
-      ...(Occlusion.names.includes(row.id)?Occlusion.fields:[])]);
+      ...(Occlusion.names.includes(row.id)?Occlusion.fields:[]),...(Thickness.names.includes(row.id)?Thickness.fields:[]),
+      ...(row.id==='thickness'?['encoding']:[])]);
     Surface.settings(row.id,overrides);
     Occlusion.settings(row.id,overrides);
+    Thickness.settings(row.id,overrides);
     return {id:row.id,enabled:row.enabled??true,overrides};
   });
   if(!maps.some(row=>row.enabled))throw new RangeError('Enable at least one bake map');
@@ -120,12 +123,14 @@ function targets(rows,{sources,skewMaps}) {
   if(!Array.isArray(rows)||!integer(rows.length,1,24))throw new RangeError('A bake job needs 1–24 targets');
   const ids=new Set();
   return Array.from(rows,row=>{
-    if(!fields(row,['id','mesh','submeshes','slots','uvSet','tiles','projection'])||!id(row.id)||ids.has(row.id.toLowerCase())||
+    if(!fields(row,['id','mesh','submeshes','slots','uvSet','tiles','projection','thicknessParts'])||!id(row.id)||ids.has(row.id.toLowerCase())||
       !mesh(row.mesh)||
       row.submeshes!==undefined&&(!Array.isArray(row.submeshes)||!row.submeshes.length||
         !Array.from(row.submeshes).every(n=>integer(n,0,255))||new Set(row.submeshes).size!==row.submeshes.length)||
       row.slots!==undefined&&(!Array.isArray(row.slots)||!row.slots.length||!Array.from(row.slots).every(text)||
         new Set(row.slots).size!==row.slots.length)||
+      row.thicknessParts!==undefined&&(!row.thicknessParts||Object.getPrototypeOf(row.thicknessParts)!==Object.prototype||
+        Object.entries(row.thicknessParts).some(([key,value])=>!/^(0|[1-9][0-9]{0,2})$/.test(key)||+key>255||!text(value)))||
       row.uvSet!==undefined&&!integer(row.uvSet,0,31)||row.tiles!==undefined&&
         (!Array.isArray(row.tiles)||!integer(row.tiles.length,1,32)))
       throw new TypeError('Targets need unique IDs, a mesh and optional submesh, slot, UV set and tile selectors');
@@ -172,9 +177,13 @@ function readPlan(filename,{presetFile,presetValue,targetValues,onInput=()=>{}}=
 }
 
 function effective(preset,row) {
-  const {size=128,padding=3,...tuning}={...preset.defaults,...row.overrides};
+  const thickness=row.id==='thickness-valid'&&preset.maps.find(other=>other.id==='thickness'&&other.enabled);
+  const shared=thickness&&Object.fromEntries(Object.entries(thickness.overrides)
+    .filter(([key])=>['size','padding','rayBias',...Thickness.fields].includes(key)));
+  const {size=128,padding=3,...tuning}={...preset.defaults,...shared,...row.overrides};
   if(padding*2>=size)throw new RangeError('Map padding must be less than half its size');
-  return {size,padding,...Surface.settings(row.id,tuning),...Occlusion.settings(row.id,tuning),
-    ...(Geometry.names.includes(row.id)&&{geometry:Geometry.settings(tuning)})};
+  return {size,padding,...Surface.settings(row.id,tuning),...Occlusion.settings(row.id,tuning),...Thickness.settings(row.id,tuning),
+    ...(Geometry.names.includes(row.id)&&{geometry:Geometry.settings(Object.fromEntries(
+      Object.entries(tuning).filter(([key])=>geometryFields.includes(key))))})};
 }
 module.exports={format,presetFormat,names,preset,readPlan,effective,id};

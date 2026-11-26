@@ -209,6 +209,32 @@
     const encoding=options.encoding??(row.id==='bent-normal'?'png16':row.id==='occlusion-direction'?'exr':'png8');
     controls.append(field('Encoding',selected(encodings,encoding,value=>{options.encoding=value;})));
   }
+  function thicknessControls(row,extra) {
+    const options=row.overrides, controls=node('div');
+    controls.className='map-controls';
+    extra.append(controls);
+    function draw() {
+      const direction=options.thicknessDirection??'geometric';
+      controls.replaceChildren(field('Search range',numeric('Thickness search range',options.thicknessRange,
+        n=>put(options,'thicknessRange',n),{min:0,step:'any',placeholder:'Mesh diagonal'})));
+      controls.append(field('Ray direction',selected([
+        ['geometric','Inward geometric normal'],['shading','Inward shading normal'],['axis','Fixed axis']
+      ],direction,value=>{
+        options.thicknessDirection=value;
+        if(value==='axis')options.thicknessAxis??=[0,0,1];else delete options.thicknessAxis;
+        draw();
+      })));
+      if(direction==='axis') {
+        const axis=node('input');
+        axis.value=(Array.isArray(options.thicknessAxis)?options.thicknessAxis:[0,0,1]).join(', ');
+        axis.oninput=()=>{options.thicknessAxis=axis.value.split(',').map(value=>value.trim()?Number(value):NaN);};
+        controls.append(field('Fixed axis (XYZ)',axis));
+      }
+      if(row.id==='thickness')controls.append(field('Encoding',selected(encodings,options.encoding??'png8',
+        value=>{options.encoding=value;})));
+    }
+    draw();
+  }
   function maps() {
     const list=preset.maps, rows=el('rows');rows.replaceChildren();
     for(const [i,row] of list.entries()) {
@@ -231,6 +257,7 @@
       extra.append(field('Padding',numeric('Map padding',row.overrides?.padding,n=>put(row.overrides,'padding',n),{min:0,max:32,step:1})));
       if(['normal','world-normal','height'].includes(row.id))surfaceControls(row,extra);
       if(occlusionMaps.includes(row.id))occlusionControls(row,extra);
+      if(['thickness','thickness-valid'].includes(row.id))thicknessControls(row,extra);
       if(geometry.includes(row.id)) {
         const tuning={slope:[],cavity:['samples','cavityRadius','rayBias'],exposure:['samples','exposureDistance','rayBias'],
           thickness:['thicknessScale','rayBias'],'thickness-valid':['rayBias']};
@@ -257,7 +284,7 @@
       detail.open=i===0;detail.append(summary);
       const grid=node('div');grid.className='form';
       grid.append(field('Mesh',selected(catalog.map(m=>[m.index,m.name]),mesh.index,value=>{
-        row.mesh=+value;delete row.submeshes;delete row.slots;row.uvSet=0;targetControls();
+        row.mesh=+value;delete row.submeshes;delete row.slots;delete row.thicknessParts;row.uvSet=0;targetControls();
       })));
       const sets=[...new Set(mesh.submeshes.flatMap(p=>p.uvSets))].sort((a,b)=>a-b);
       grid.append(field('UV set',selected(sets.map(set=>[set,'TEXCOORD_'+set]),row.uvSet,value=>{row.uvSet=+value;})));
@@ -285,6 +312,16 @@
       tile.oninput=()=>{row.tiles=tile.value.split(',').map(s=>s.trim()).filter(Boolean).map(s=>s.includes(':')?s.split(':').map(Number):Number(s));};
       detail.append(field('Tiles · UDIM or u:v',tile));
       detail.append(projectionControls(row));
+      const parts=node('details'), partList=node('div');
+      partList.className='form';
+      for(const primitive of mesh.submeshes) {
+        const input=node('input');input.placeholder='Shared shell group';input.maxLength=140;
+        input.value=row.thicknessParts?.[primitive.index]??'';
+        input.oninput=()=>put(row.thicknessParts??={},primitive.index,input.value.trim());
+        partList.append(field(primitive.index+' · '+primitive.slot,input));
+      }
+      parts.append(node('summary','Thickness part labels'),partList);
+      detail.append(parts);
       pane.append(detail);
     }
   }
@@ -320,12 +357,20 @@
   function showMap() {
     const row=report?.maps[+el('result').value];
     el('image').hidden=!row;el('empty').hidden=!!row;el('download-map').hidden=!row;
+    el('download-validity').hidden=!row?.validityFile;
     if(!row)return;
     el('image').src=base+(row.previewFile??row.file);
     el('image').alt=(names[row.map]??row.map)+' on '+row.target+' tile '+row.tileLabel;
     el('download-map').href=base+row.file;
+    el('download-validity').href=base+(row.validityFile??'');
     const output=row.output, number=n=>Number(n.toPrecision(6)).toString();
     const span=([lo,hi])=>number(lo)+' to '+number(hi);
+    const thickness=row.settings.thickness&&row.geometry?.thickness;
+    const reasons={open:'Open',nonManifold:'Non-manifold',winding:'Winding',degenerate:'Zero volume',
+      grazing:'Grazing ray',rangeMiss:'Out of range',bias:'Within bias',part:'Other part',shell:'Other shell',
+      ambiguous:'Coincident exits',orientation:'Wrong exit orientation'};
+    const rejected=thickness&&Object.entries(thickness.rejected).filter(([,n])=>n)
+      .map(([key,n])=>reasons[key]+' '+n.toLocaleString()).join(' · ');
     properties(el('details'),{'UV set':row.uvSet,'Grid':row.settings.size+' × '+row.settings.size,
       'Padding':row.settings.padding+' px','Surface coverage':(row.coverage*100).toFixed(1)+'%',
       ...(output&&{'Encoding':encodings.find(([key])=>key===output.encoding)?.[1]}),
@@ -334,6 +379,12 @@
       ...(output?.kind==='height'&&{'Height range':output.range?span(output.range):'Raw signed scene units',
         ...(output.measured&&{'Measured on tile':span([output.measured.min,output.measured.max])}),
         ...(output.range&&{'Clipped samples':output.clippedLow+output.clippedHigh})}),
+      ...(thickness&&{'Search range':number(thickness.range),'Thickness rays':title(thickness.direction),
+        'Valid samples':thickness.valid.toLocaleString(),'Unknown samples':thickness.unknown.toLocaleString(),
+        ...(rejected&&{'Unknown reasons':rejected}),
+        ...(thickness.valid&&{'Measured thickness':span([thickness.min,thickness.max])}),
+        ...(output?.kind==='thickness'&&{'Encoding range':output.range?span(output.range):'Raw physical distance',
+          'Clipped samples':output.clipped})}),
       ...(row.settings.orientation&&{'Orientation':title(row.settings.orientation)}),
       ...(row.geometry&&{'Probe rays':row.geometry.rayCount.toLocaleString()}),
       ...(row.occlusion&&{'Occlusion rays':row.occlusion.rayCount.toLocaleString(),
