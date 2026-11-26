@@ -7,14 +7,17 @@ const PNGBytes = (() => {
     for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
     crcTable[i] = c >>> 0;
   }
+  function crc32(bytes) {
+    let crc = 0xffffffff;
+    for (const byte of bytes) crc = crcTable[(crc ^ byte) & 255] ^ (crc >>> 8);
+    return (crc ^ 0xffffffff) >>> 0;
+  }
   function chunk(type, data) {
     const bytes = new Uint8Array(data.length + 12), view = new DataView(bytes.buffer);
     view.setUint32(0, data.length);
     for (let i = 0; i < 4; i++) bytes[4 + i] = type.charCodeAt(i);
     bytes.set(data, 8);
-    let crc = 0xffffffff;
-    for (let i = 4; i < bytes.length - 4; i++) crc = crcTable[(crc ^ bytes[i]) & 255] ^ (crc >>> 8);
-    view.setUint32(bytes.length - 4, (crc ^ 0xffffffff) >>> 0);
+    view.setUint32(bytes.length - 4, crc32(bytes.subarray(4,-4)));
     return bytes;
   }
   function scanlines(width, height, pixels, channels = 1) {
@@ -46,7 +49,7 @@ const PNGBytes = (() => {
     return [signature, chunk('IHDR', hd), ...(ink ? [chunk('inKD',ink)] : []),
       chunk('IDAT', deflated), chunk('IEND', new Uint8Array(0))];
   }
-  return Object.freeze({ chunk, scanlines, indexed, rgba });
+  return Object.freeze({ crc32, chunk, scanlines, indexed, rgba });
 })();
 if (typeof module !== 'undefined') module.exports = PNGBytes;
 else globalThis[Symbol.for('ink-studio.png-bytes')] = PNGBytes;

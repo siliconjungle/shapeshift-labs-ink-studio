@@ -37,7 +37,7 @@ Origin: toolkit.
 
 - The key must exist in the input record.
 
-Guides: [guide](../audio-mixer.md#export-and-inspect), [guide](../gesture-scores.md#run-and-connect), [guide](../graph-media.md#per-stem-control-signals), [guide](../headless-authoring.md#relative-boxes), [guide](../physical-audio.md#build-an-audio-graph)
+Guides: [guide](../audio-mixer.md#export-and-inspect), [guide](../gesture-scores.md#run-and-connect), [guide](../graph-media.md#per-stem-control-signals), [guide](../headless-authoring.md#relative-boxes), [guide](../material-texture-formats.md#write-an-export)
 
 Get the runnable example with `ink-studio graph describe data.get --example > example.json`.
 Run it with `ink-studio graph run example.json`.

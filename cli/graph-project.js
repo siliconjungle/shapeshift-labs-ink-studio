@@ -7,6 +7,7 @@ const Bitmap = require('../src/bitmap-resources.js');
 const bitmapFiles = require('./bitmap-resources.js');
 const vectorFiles = require('./vector-resources.js');
 const fontFiles = require('./font-resources.js');
+const textureFiles = require('./texture-files.js');
 const { literal } = require('../src/graph-control-references.js');
 const WAV = require('./wav.js');
 const Sound = require('./sound-source.js');
@@ -459,11 +460,17 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const {compiled,plan:rootPlan}=compile(spec,groupTree.scope);
   const exports=named(exportsSpec,'exports').map(([name,definition])=>{
     const {output,format,encoding,type,codec,options}=fields(definition,definition?.format==='wav' ?
-      ['output','format','encoding'] : definition?.format==='codec' ? ['output','format','type','codec','options'] :
+      ['output','format','encoding'] : definition?.format==='codec' ? ['output','format','type','codec','options'] : definition?.format==='texture' ?
+      ['output','format','options'] :
       ['output','format'],'graph export '+name);
-    if (!id(output) || !Object.hasOwn(rootPlan.outputs,output) || !['png','json','atlas','wav','codec','material-image','svg'].includes(format))
-      throw new TypeError('Graph export '+name+' needs a known output and png, json, atlas, wav, codec, material-image or svg format');
+    if (!id(output) || !Object.hasOwn(rootPlan.outputs,output) || !['png','json','atlas','wav','codec','material-image','svg','texture'].includes(format))
+      throw new TypeError('Graph export '+name+' needs a known output and png, json, atlas, wav, codec, material-image, svg or texture format');
     const port=rootPlan.outputs[output].type, compatible=kit.KIT.procedural.graphTypes.compatible;
+    if (format==='texture') {
+      const {encoding}=textureFiles.exportOptions(options);
+      if (!(port==='record'||textureFiles.typed.includes(port)&&encoding!=='psd'||port==='materialChannels'&&encoding==='exr'))
+        throw new TypeError('Texture export '+name+' needs a typed image, aligned EXR material channels or a layered PSD record');
+    }
     if (format==='material-image' && (!base || !['typedImage','colorImage','grayImage','heightImage'].includes(port)))
       throw new TypeError('Material image export '+name+' needs shared base settings and a typed image output');
     if ((format==='png' || format==='codec' && type==='raster') && port==='linearRaster')
@@ -478,7 +485,8 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     if (format==='codec' && (!['audio','raster'].includes(type) || !compatible(port,type) || !id(codec) ||
         options!==undefined && !record(options))) throw new TypeError('Graph codec export '+name+' needs typed media and a named codec');
     if (format==='codec') host.requireCodec(codec,'encode');
-    return {name,output,format,...(encoding && {encoding}),...(codec && {type,codec,...(options && {options})})};
+    return {name,output,format,...(encoding && {encoding}),...(format==='texture' && {options}),
+      ...(codec && {type,codec,...(options && {options})})};
   });
   const maps=data.freeze(outputUsages===undefined ? [] : OutputUsages.normalize(outputUsages,rootPlan.outputs));
   OutputUsages.checkPorts(maps,rootPlan.outputs);
@@ -732,6 +740,10 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     const {assertions:checks,passed}=prepareFrameChecks(frame);
     const artifacts=exports.flatMap(({name,output,format,...settings})=>{
       const value=frame.outputs[output];
+      if (format==='texture') {
+        const delivery=settings.options.encoding, bytes=textureFiles.encodeTexture(procedural,value,settings.options);
+        return [{name,output,file:'artifacts/'+name+'.'+delivery,format:delivery,sha256:sha256(bytes),bytes}];
+      }
       if (format==='material-image') {
         const effective=report.base;
         const image=kit.KIT.procedural.materialBase.fit(value,effective), delivery=effective.output.format;
@@ -746,7 +758,9 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       const value=image(row.id), details={...row,image:describe(value)};
       if (!row.export) return details;
       const {format,bitDepth}=row.format, file='artifacts/'+row.id+'.'+format;
-      const bytes=format==='png' ? OutputUsages.png(procedural,value,bitDepth) : jsonBytes(value), hash=sha256(bytes);
+      const bytes=format==='png' ? OutputUsages.png(procedural,value,bitDepth) : format==='json' ? jsonBytes(value) :
+        textureFiles.encodeTexture(procedural,value,{encoding:format,bitDepth});
+      const hash=sha256(bytes);
       artifacts.push({name:row.id,file,format,sha256:hash,bytes,usage:row.usage,...(row.source && {output:row.source.output})});
       return {...details,artifact:{file,sha256:hash}};
     });

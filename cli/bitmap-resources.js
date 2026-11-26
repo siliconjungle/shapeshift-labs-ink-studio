@@ -2,7 +2,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const Bitmap = require('../src/bitmap-resources.js');
-const PNG = require('./png.js');
+const { readTexture } = require('./texture-files.js');
+const PNG = require('./texture-png.js');
 
 const absent = error => ['ENOENT', 'ENOTDIR'].includes(error.code);
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -27,6 +28,16 @@ function bytesFor(member, baseDir) {
   }
 }
 
+function decode(bytes, encoding, row, layoutOnly) {
+  const texture = encoding === 'png' ? PNG.read(bytes, {layoutOnly, allowAnimation:true}) :
+    readTexture(bytes,{encoding, layoutOnly,
+      ...(row.page!==undefined&&{page:row.page}),...(row.channels&&{channels:row.channels}),
+      ...(row.rowOrder&&{rowOrder:row.rowOrder})});
+  const precision = encoding === 'exr' || texture.bitDepth === 32 ? 'float32' :
+    texture.bitDepth === 16 ? 'unorm16' : 'unorm8';
+  return { ...texture,precision };
+}
+
 function load(definition, { baseDir = process.cwd(), declare, onFile = () => {} } = {}) {
   const { rows } = Bitmap.layout(definition);
   const encoded = new Map(), preview = new Map();
@@ -38,7 +49,7 @@ function load(definition, { baseDir = process.cwd(), declare, onFile = () => {} 
     try {
       if (bytes.length > Bitmap.maxFileBytes || (fileBytes += bytes.length) > Bitmap.maxResourceBytes)
         throw new RangeError('Bitmap resource exceeds its file byte budget');
-      const header = codec === 'png' ? Bitmap.png(PNG.nativeLayout(bytes)) : Bitmap.pfm(bytes, { layoutOnly: true });
+      const header = decode(bytes,codec,row,true);
       const rawBytes = header.width * header.height * header.channels *
         (header.precision === 'float32' ? 4 : header.precision === 'unorm16' ? 2 : 1);
       if ((decodedBytes += rawBytes) > Bitmap.maxResourceBytes)
@@ -57,7 +68,7 @@ function load(definition, { baseDir = process.cwd(), declare, onFile = () => {} 
     const decoded = new Map();
     for (const [key, { row, bytes, codec }] of encoded) {
       try {
-        const raw = codec === 'png' ? Bitmap.png(PNG.raster(bytes)) : Bitmap.pfm(bytes, { rowOrder: row.rowOrder });
+        const raw = decode(bytes,codec,row,false);
         decoded.set(key, raw);
       } catch (error) {
         throw new Error('Bitmap member ' + key + ': ' + error.message, { cause: error });

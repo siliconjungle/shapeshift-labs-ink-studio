@@ -2,6 +2,7 @@ const { isDeepStrictEqual } = require('node:util');
 const Base = require('../src/material-base-settings.js');
 const PNG = require('./png.js');
 const { typedPng } = require('./material-image-export.js');
+const textures = require('./texture-files.js');
 
 const own = Object.hasOwn;
 const record = value => value && [Object.prototype, null].includes(Object.getPrototypeOf(value));
@@ -33,8 +34,14 @@ function normalize(spec, outputs) {
       throw new TypeError('Material map ' + key + ' needs a usage, label, nonnegative order and format');
     fields(row.format, ['format', 'bitDepth'], 'delivery format for material map ' + key);
     if (!own(row.format, 'format')) throw new TypeError('Material map ' + key + ' needs an explicit delivery format');
-    const { output: format } = Base.resolve({ output: row.format });
+    const format = ['tiff','exr','pfm'].includes(row.format.format) ? {
+      format:row.format.format, ...(row.format.bitDepth!==undefined&&{bitDepth:row.format.bitDepth})
+    } : Base.resolve({ output: row.format }).output;
+    if (['tiff','exr','pfm'].includes(format.format))
+      textures.exportOptions({encoding:format.format,bitDepth:format.bitDepth});
     if (usage === 'packed') {
+      if (format.format==='pfm' && own(packing??{}, 'a'))
+        throw new TypeError('Packed PFM needs exactly three data lanes');
       if (source !== undefined) throw new TypeError('Packed material map ' + key + ' needs channel assignments');
       fields(packing, components, 'packing for material map ' + key);
       const assignments = components.filter(component => own(packing, component));
@@ -56,7 +63,7 @@ function normalize(spec, outputs) {
     if (!id(source.output) || !own(outputs, source.output) || source.channel !== undefined && !id(source.channel))
       throw new TypeError('Material map ' + key + ' needs a declared graph output and an optional packet channel');
     if (usage === 'height' && format.format === 'png' && delivery)
-      throw new TypeError('Physical height map ' + key + ' needs a JSON delivery format');
+      throw new TypeError('Physical height map ' + key + ' needs a JSON delivery format or a floating-point texture');
     return { id: key, usage, label, order, format, source, export: delivery };
   });
   const byId = new Map(rows.map(row => [row.id, row]));
@@ -121,13 +128,14 @@ function imagesFor(P, rows, outputs) {
       }
       const { width, height, pivot, pixelPitchMm, tiling, sampling } = expected, channels = assignments.length;
       const bits = row.format.bitDepth;
-      const Samples = bits === 8 ? Uint8Array : bits === 16 ? Uint16Array : Float64Array;
-      const data = new Samples(width * height * channels), bound = bits === undefined ? 1 : 2 ** bits - 1;
+      const integer = row.format.format!=='exr' && (bits===8 || bits===16);
+      const Samples = integer ? bits===8 ? Uint8Array : Uint16Array : Float64Array;
+      const data = new Samples(width * height * channels), bound = integer ? 2 ** bits - 1 : 1;
       for (let c = 0; c < channels; c++) {
         const { source, value, divisor } = assignments[c];
         for (let p = 0; p < width * height; p++) {
           const sample = source ? source.raster.data[p] / divisor : value;
-          data[p * channels + c] = bits === undefined ? sample : Math.round(sample * bound);
+          data[p * channels + c] = integer ? Math.round(sample * bound) : sample;
         }
       }
       image = P.graphImages.declare({ width, height, channels, data, pivot },
