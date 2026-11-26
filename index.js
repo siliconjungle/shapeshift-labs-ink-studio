@@ -109,6 +109,8 @@ module.exports = {
   ...require('./cli/material-displacement-preview.js'),
   ...require('./cli/material-lighting-room.js'),
   ...require('./cli/physical-reference.js'),
+  inspectSceneResource: require('./cli/scene-resources.js').inspectSceneResource,
+  convertSceneResource: require('./cli/scene-resources.js').convertSceneResource,
   exportAxF: require('./cli/axf-material-adapter.js').exportAxF,
   bakeSplatFit: require('./cli/splat-fit-asset.js').bake,
   planSplatGroups: require('./cli/splat-fit-asset.js').planSplatGroups,

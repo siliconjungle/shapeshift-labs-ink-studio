@@ -1531,6 +1531,8 @@ const CMD = {
         '    --cage-bake <plan.json>   project a detailed mesh, signed field or scan proxy onto registered receiver UVs',
         '    --rebake-from <material-bake.json> [--chart-edits <plan.json>] [--rebake-report <file.json>]   update selected or changed UV charts',
         '  interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets',
+        '  scene-resource inspect|validate <scene> [--python path --blender path]',
+        '  scene-resource convert <scene> --out <file> [--materialx look.mtlx --python path --blender path]',
         '    --manifest <revision.json>   attach an Ink asset revision to tagged glTF data',
         '  hybrid-ownership inspect <scene.json> [--out file.json]   list authored channels and derived outputs',
         '  hybrid-ownership route <scene.json> <object> <part> <channel>   resolve the authored edit destination',
@@ -2929,6 +2931,19 @@ const CMD = {
   },
   'asset-part'() {
     return require('./asset-part.js').command(pos, opt, lib());
+  },
+  'scene-resource'() {
+    const [action,input]=pos, {out,materialx,python,blender}=opt;
+    const convert=action==='convert';
+    if(pos.length!==2||!['inspect','validate','convert'].includes(action)||
+       (convert?typeof out!=='string':out!==undefined||materialx!==undefined)||
+       Object.entries(opt).some(([key,value])=>!['out','materialx','python','blender'].includes(key)||
+         typeof value!=='string'||!value.trim()))
+      die('Use scene-resource inspect|validate <file> or scene-resource convert <file> --out <file> [--materialx look.mtlx --python path --blender path]');
+    const api=require('./scene-resources.js');
+    const result=convert?api.convertSceneResource(input,{out,materialx,python,blender}):
+      api.inspectSceneResource(input,{python,blender});
+    console.log(JSON.stringify(action==='validate'?{passed:true,...result}:result,null,2));
   },
   interchange() {
     const [input] = pos, { out } = opt;

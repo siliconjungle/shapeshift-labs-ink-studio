@@ -132,3 +132,5 @@ Use `readRasterAsset(file)` and `writeRasterAsset(asset, { out })` for layered r
 Use `readSpriteAtlas(file)` and `writeSpriteAtlas(asset, { out })` for direction and elevation atlases. The sprite manifest keeps view rectangles, pivots, timing, map encodings, and cel replacements and holds. Its `snapshot()` returns the original channel pixels and authoring metadata.
 
 PNG companions store straight 8-bit RGBA pixels. The manifest carries the information needed to reconstruct the full asset.
+
+For validated static mesh resources, USD and USDZ exchange, MaterialX looks, and explicit Blender conversions, use [scene resources](scene-resources.md).

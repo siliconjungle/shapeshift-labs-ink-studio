@@ -317,6 +317,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
     --cage-bake <plan.json>   project a detailed mesh, signed field or scan proxy onto registered receiver UVs
     --rebake-from <material-bake.json> [--chart-edits <plan.json>] [--rebake-report <file.json>]   update selected or changed UV charts
   interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets
+  scene-resource inspect|validate <scene> [--python path --blender path]
+  scene-resource convert <scene> --out <file> [--materialx look.mtlx --python path --blender path]
     --manifest <revision.json>   attach an Ink asset revision to tagged glTF data
   hybrid-ownership inspect <scene.json> [--out file.json]   list authored channels and derived outputs
   hybrid-ownership route <scene.json> <object> <part> <channel>   resolve the authored edit destination
