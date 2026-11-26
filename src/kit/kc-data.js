@@ -237,6 +237,7 @@
     assetPacks: 'list',
     assetParts: 'obj',
     topologyMeshes: 'obj',
+    prefabArrays: 'obj',
     guidedOperations: 'list',
     paintings3d: 'list',
     constructionPlane: 'obj',
@@ -531,6 +532,10 @@
         }
     };
     keys(spec, '', TOP);
+    if (spec.prefabArrays !== undefined) {
+      try { K.authoring.prefabInstanceArray.check(spec.prefabArrays); }
+      catch (error) { bad('prefabArrays', error.message); }
+    }
     if (spec.assetParts !== undefined) {
       try {
         K.authoring.assetRevisions.checkScene(spec, env?.assetPartImports);
