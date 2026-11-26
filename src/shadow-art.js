@@ -59,11 +59,12 @@ const ShadowArt = (() => {
   }
   function bind(art, world, mode) {
     const mask = art?.[mode];
-    if (!mask) return;
+    const respectCasters = mode === 'cast' && world.renderMetadata?.targets?.some(target => target?.castsShadow === false);
+    if (!mask && !respectCasters) return;
     const { row } = selectors.index(world), cache = new WeakMap();
     return i => {
       const target = row(i);
-      if (!cache.has(target)) cache.set(target, allows(mask, target));
+      if (!cache.has(target)) cache.set(target, (!respectCasters || target.castsShadow !== false) && allows(mask, target));
       return cache.get(target);
     };
   }

@@ -1902,9 +1902,10 @@
     const shadowMarch = st0.finish.shadowMarch === undefined ? null : bakedShadowMarch(st0.finish.shadowMarch);
     const carrierIds = new Set([...anchors.values()].map(anchor => anchor.host.id));
     const carriers = new Map(), paintContacts = new Map(), paintDirections = new Map();
-    let S, grp;
+    let S, grp, recesses;
     function startSculpt() {
       carriers.clear();
+      recesses = new Map();
       const measureBounds = modelOptions?.[brushField]?.measureBounds;
       S = K.sculpt((env.makeSculpt || makeSculpt)(B, measureBounds ? { measureBounds } : undefined));
       S.sun = B.norm(st0.sun);
@@ -2006,10 +2007,13 @@
         if (anchor) {
           try {
             const carrier = carriers.get(anchor.host.id) ?? makeSolid(anchor.host, true);
-            const psd = S.psd, distance = (x, y, z) => psd(carrier, x, y, z), allowance = style?.silhouetteAllowance;
-            const pigmentOnly = allowance === 0;
-            const { direction: comb, grid } = anchor;
-            let warp = (comb || grid) && carrier.markWarp, chart;
+            const psd = S.psd, distance = (x, y, z) => psd(carrier, x, y, z);
+            const { direction: comb, grid, relief } = anchor;
+            const volume = relief?.mode === 'volume';
+            const caps = [style?.silhouetteAllowance, relief?.silhouetteAllowance].filter(n => n !== undefined);
+            const allowance = relief && !volume ? 0 : caps.length ? Math.min(...caps) : undefined;
+            const pigmentOnly = allowance === 0 && !volume;
+            let warp = (comb || grid || relief) && carrier.markWarp, chart;
             if (grid?.settings.kind === 'uv') {
               chart = warp?.base.markCharts?.(grid.settings.chart);
               if (!chart) {
@@ -2021,11 +2025,11 @@
             const gridDab = grid && K.procedural.markGrid.align(grid, { chart, distance: restDistance,
               reach: anchor.snap.maxDistance, minFacing: anchor.snap.minFacing ?? .25 });
             const { poses, contacts } = K.procedural.sweepSnap.resolve({ ...s, restAffine: anchor.guideFrame },
-              pigmentOnly ? { ...anchor.snap, offset: 0 } : anchor.snap, restDistance);
+              pigmentOnly || relief ? { ...anchor.snap, offset: 0 } : anchor.snap, restDistance);
             s = { ...s, poses, path: 'free' };
             paintContacts.set(s.id, contacts.length);
-            if (comb || gridDab) {
-              const report = modelOptions?.[brushField] === 'paintings' && {
+            if (comb || gridDab || relief) {
+              const report = (comb || gridDab) && modelOptions?.[brushField] === 'paintings' && {
                 space: 'receiver-rest', warped: !!warp, samples: 0, frames: [], ...(gridDab && { gridResults: {} })
               };
               if (report) paintDirections.set(s.id, report);
@@ -2042,7 +2046,7 @@
                 } })
               });
             }
-            if (allowance !== undefined) {
+            if (allowance !== undefined || relief) {
               const frame = affineSolidSpace(anchor.guideFrame), facing = anchor.snap.minFacing ?? .25;
               const direction = anchor.snap.direction && V.norm(anchor.snap.direction);
               let accepts;
@@ -2056,8 +2060,10 @@
                   return V.dot(V.norm(M.app(M.tr(jac), n)), direction) >= facing;
                 };
               }
-              guard = { entity: anchor.host.id, pigmentOnly, accepts,
-                signed: (x, y, z) => (distance(...frame.point([x, y, z])) - allowance) / frame.boundScale };
+              guard = { entity: anchor.host.id, pigmentOnly, accepts, relief,
+                ...(allowance !== undefined && (!volume || relief.height > 0) && {
+                  signed: (x, y, z) => (distance(...frame.point([x, y, z])) - allowance) / frame.boundScale
+                }) };
             }
           } catch (error) {
             throw new RangeError(s.id + ' on ' + anchor.host.id + ' — ' + error.message, { cause: error });
@@ -2068,6 +2074,10 @@
         const trackModifierSpace = Boolean(s.id && (env.retainRenderSdf || env.retainPartRenderSdf));
         const placed = () => rigid ? S.transformSolids(rigid, recipe, trackModifierSpace) : recipe();
         const p = rest ? S.transformSolids(rest, placed, trackModifierSpace) : placed();
+        if (guard?.relief?.mode === 'volume' && guard.relief.height < 0) {
+          if (!recesses.has(guard.entity)) recesses.set(guard.entity, []);
+          recesses.get(guard.entity).push(p);
+        }
         if (rest && trackModifierSpace && p?.sd) p.modifierSpace = solidSpace(s, B.frame);
         if (s.id) made[s.id] = p;
         return p;
@@ -2125,10 +2135,13 @@
           p = S.lathe(s.at, s.h, Array.isArray(s.r) && Array.isArray(s.r[0]) ? t => K.kf(t, s.r.flat()) : s.r, m, baseOptions);
         else if (k === 'torus') p = S.torus(s.at, s.R, s.r, m, baseOptions);
         else if (k === 'sweep') {
-          const form = K.procedural.shapeSweeps.prepare(style ? { ...s, looseness: style } : s, orient && { orient });
-          const paintOverlay = (style || form.opacityAt) && !held && !s.hold && !s.carve && !s.ghost && !s.group && !modifiers.length;
+          const relief = guard?.relief, volume = relief?.mode === 'volume', recess = volume && relief.height < 0;
+          const band = volume && (recess ? [relief.height, relief.seat] : [-relief.seat, relief.height]);
+          const form = K.procedural.shapeSweeps.prepare(style ? { ...s, looseness: style } : s, { orient, band });
+          const paintOverlay = guard?.pigmentOnly || recess || !volume && (style || form.opacityAt) &&
+            !held && !s.hold && !s.carve && !s.ghost && !s.group && !modifiers.length;
           const material = form.opacityAt ? { ...m, opacityAt: form.opacityAt } : m;
-          if (guard?.pigmentOnly) {
+          if (guard?.pigmentOnly && relief?.tint !== false) {
             const { inverse } = affineSolidSpace(s.restAffine);
             const color = B.P[m.r[Math.floor(m.r.length / 2)]].map(n => n / 255);
             S.addSurfacePigment(guard.entity, s.id, (point, normal, onHit) => {
@@ -2145,11 +2158,14 @@
               };
             });
           }
-          const clipped = guard ? { ...form, sd: (x, y, z) => Math.max(form.sd(x, y, z), guard.signed(x, y, z)) } : form;
+          if (relief?.mode === 'shading') S.addSurfaceRelief(guard.entity,
+            K.procedural.paintRelief.gradient(relief, form, affineSolidSpace(s.restAffine), guard.accepts));
+          const clipped = guard?.signed ? { ...form, sd: (x, y, z) => Math.max(form.sd(x, y, z), guard.signed(x, y, z)) } : form;
+          if (volume && !recess && !relief.castShadow) baseOptions.target = { ...baseOptions.target, castsShadow: false };
           p = S.implicitForm(clipped, material, paintOverlay ?
-            { ...baseOptions, whole: true, paintOverlay, ...(guard?.pigmentOnly && { hold: true }) } : baseOptions);
+            { ...baseOptions, whole: true, paintOverlay, ...((guard?.pigmentOnly || recess) && { hold: true }) } : baseOptions);
           if (paintOverlay) p.geometryBounds = form.bounds;
-          if (guard && !guard.pigmentOnly) p.clippedPaint = true;
+          if (guard?.signed && !guard.pigmentOnly) p.clippedPaint = true;
         }
         else if (k === 'tube')
           p = S.tube(s.pts, Array.isArray(s.r) ? s.r[0] : s.r, Array.isArray(s.r) ? s.r[1] : s.r, m, baseOptions);
@@ -2308,6 +2324,7 @@
       const request = modelOptions[brushField];
       if (request === 'paintings' && !anchors.size) return reports;
       for (const solid of spec.solids) make(solid);
+      if (recesses.size) S.applyPaintRecesses(recesses);
       if (request === 'paintings') return reports.map(report => ({ ...report, marks: report.marks.map(mark =>
         paintContacts.has(mark.solid) ? { ...mark, contacts: paintContacts.get(mark.solid),
           ...(paintDirections.has(mark.solid) && { orientation: paintDirections.get(mark.solid) }) } : mark) }));
@@ -2348,9 +2365,10 @@
         if (!groups.has(name)) continue;
         startSculpt();
         const members = groups.get(name), built = members.map(solid => make(solid));
+        if (recesses.size) S.applyPaintRecesses(recesses);
         let detail = name === null ? resolution ?? 0.08 :
           Math.min(resolution ?? 0.08, ...groups.get(name).map(solid => solid.res ?? Infinity));
-        const hasBody = members.some((solid, i) => (!solid.separate || activeModifiers(solid).length) && !solid.carve &&
+        const hasBody = members.some((solid, i) => (!solid.separate || activeModifiers(solid).length || built[i]?.paintRecess) && !solid.carve &&
           !built[i]?.paintOverlay);
         const restBounds = (name === null ? bounds : undefined) ?? (hasBody ? S.modelBounds(detail * 2) : undefined);
         if (resolution === undefined && name === null && restBounds) {
@@ -2425,12 +2443,17 @@
       }
     }
     for (const s of spec.solids) if (!s.part) placeSolid(s);
+    if (recesses.size) {
+      S.applyPaintRecesses(recesses);
+      recesses.clear();
+    }
     if (!baked) {
       S.bake();
       if (candidateKeys) S.sampleCandidates = undefined;
     }
     if (moving.length) {
       for (const s of moving) placeSolid(s);
+      if (recesses.size) S.applyPaintRecesses(recesses);
       S.bake();
     }
     const firstMark = marks && K.dataMarks.stamp(B, marks, { reserve: dataMarks.dynamic });
