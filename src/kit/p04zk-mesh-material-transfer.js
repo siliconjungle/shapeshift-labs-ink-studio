@@ -8,7 +8,7 @@
   const unit = n => Number.isFinite(n) && n >= 0 && n <= 1;
   const mix = (vectors, weights) => vectors[0].map((_, k) =>
     weights.reduce((sum, weight, i) => sum + vectors[i][k] * weight, 0));
-  const attrs = row => Object.entries(row.attributes ?? {}).filter(([key])=>key!=='tint').sort(([a], [b]) => a < b ? -1 : 1);
+  const attrs = row => Object.entries(meshCornerTint.generic(row) ?? {}).sort(([a], [b]) => a < b ? -1 : 1);
   const layout = row => JSON.stringify(attrs(row).map(([name, value]) => [name, Array.isArray(value) ? value.length : 0]));
   const close = (a, b) => a === b || Array.isArray(a) && Array.isArray(b) && a.length === b.length &&
     a.every((value, i) => close(value, b[i])) || typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) < 1e-6;
@@ -52,12 +52,12 @@
 
   function surface({ rows, normal }, weights) {
     const active = rows.filter((_, i) => weights[i] > 1e-8);
-    const { attributes } = rows[0];
+    const attributes = meshCornerTint.generic(rows[0]);
     const blend = data => Array.isArray(data[0]) ? mix(data, weights) :
       data.reduce((n, value, i) => n + value * weights[i], 0);
     if (active.some(row => row.attributes?.paletteIndex !== active[0].attributes?.paletteIndex)) return null;
     const authored = active.some(row => row.normal);
-    const values = Object.fromEntries(Object.keys(attributes ?? {}).filter(key=>key!=='tint').map(key=>[key,
+    const values = Object.fromEntries(Object.keys(attributes ?? {}).map(key=>[key,
       key === 'paletteIndex' ? active[0].attributes[key] : blend(rows.map(row => row.attributes[key]))]));
     const sampledTint = meshCornerTint.sample(rows,weights);
     if (sampledTint) values.tint=sampledTint;

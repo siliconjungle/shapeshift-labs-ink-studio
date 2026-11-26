@@ -80,7 +80,7 @@ const retainedMeshRepair = (function (K) {
     };
   }
 
-  const layout = corner => Object.entries(corner.attributes ?? {}).filter(([key])=>key!=='tint').map(([key,value])=>
+  const layout = corner => Object.entries(meshCornerTint.generic(corner) ?? {}).map(([key,value])=>
     [key,Array.isArray(value) ? value.length : 0]);
   const weights = (g,corner) => g.vertices.get(corner.vertex).weights ?? {};
   const weight = (g,corner,channel) => Object.hasOwn(weights(g,corner),channel) ? weights(g,corner)[channel] : 0;

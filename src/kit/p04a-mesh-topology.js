@@ -17,13 +17,18 @@ const meshCornerTint = (() => {
     return Array.isArray(tint) && [3,4].includes(tint.length) && tint.every(unit) ? tint : undefined;
   };
   const effective = corner=>read(corner) ?? neutral;
+  function generic(corner) {
+    if (!read(corner)) return corner.attributes;
+    const {tint,...attributes} = corner.attributes;
+    return attributes;
+  }
   function sample(rows,weights) {
     const tints=rows.map(read);
     const size=tints.reduce((n,tint,i)=>weights[i]>0 ? Math.max(n,tint?.length ?? 0) : n,0);
     if (!size) return;
     return Array.from({length:size},(_,k)=>Math.min(1,Math.max(0,weights.reduce((total,n,i)=>total+n*(tints[i]?.[k] ?? 1),0))));
   }
-  return Object.freeze({read,effective,sample});
+  return Object.freeze({read,effective,generic,sample});
 })();
 
 (function (K) {
@@ -232,7 +237,7 @@ const meshCornerTint = (() => {
         const uvPins=MaterialUV.flags(corner.uvPins);
         if (uvPins && Object.keys(uvPins).some(set=>!attributes?.[MaterialUV.key(set)]))
           throw new RangeError('Pin an authored UV layout on corner '+cornerId);
-        const shape = JSON.stringify(Object.entries(attributes ?? {}).filter(([id])=>id!=='tint')
+        const shape = JSON.stringify(Object.entries(meshCornerTint.generic({attributes}) ?? {})
           .map(([id, data]) => [id, Array.isArray(data) ? data.length : 0]));
         if (layout !== undefined && layout !== shape) throw new TypeError('Face ' + key + ' must use one corner attribute layout');
         layout = shape;

@@ -127,6 +127,75 @@
     return { look, material, forEntity, validate };
   }
 
+  const defaultBodyRamp = [1, 2, 3, 4, 5, 6], defaultEntityRamp = [19, 20, 21, 22, 23];
+  const bodyRound = half => Math.min(.055, ...half) * .4;
+  function bodyMaterial(entry, visual) {
+    return { r: entry.look ?? defaultBodyRamp, materialId: visual?.materialId ?? visual?.material ?? entry.material ?? 'body' };
+  }
+  function entityMaterial(visual) {
+    return { r: visual.ramp ?? defaultEntityRamp, surface: visual.surface, albedo: visual.albedo,
+      materialId: visual.materialId ?? visual.material ?? 'entity' };
+  }
+  function physicalRamp({ dry, wet = dry }, rgbPalette, weight) {
+    const rgb = swatch => {
+      const packed = parseInt(swatch.slice(1), 16);
+      return [packed >> 16 & 255, packed >> 8 & 255, packed & 255];
+    };
+    return dry.map((color, i) => PixelLook.nearest(V.lerp(rgb(color), rgb(wet[i]), weight), rgbPalette, true));
+  }
+
+  function promotionSnapshot(view, query) {
+    const time = view.time ?? view.tick * view.world.dt;
+    const { world } = visualParameters(view.world, { time, query });
+    const frame = sceneTimeline(view.world)?.sample(time);
+    const edits = frame?.edits.filter(edit => edit.path[0] === 'visual');
+    const presented = edits?.length ? W.apply(world, edits, { validate: false }).world : world;
+    const catalog = W.materials.catalog(presented), config = visualEnvironment(presented, catalog);
+    const looks = visualLooks(presented, catalog, config), colors = config.palette ?? palette;
+    const rgb = colors.map(color => [color >> 16 & 255, color >> 8 & 255, color & 255]);
+    const { entities } = presented, bodies = [], objects = [];
+    const sources = config.fields?.bodies ?? Object.keys(presented.systems).filter(id => presented.systems[id].kind === 'mechanics')
+      .map(id => id + '/bodies');
+    const fields = [...new Set([sources].flat().filter(Boolean).map(field => query.field(field)?.name ?? field))];
+    const bounds = W.fields.bounds(config.bounds ?? { min: [-5, -1, -5], max: [5, 5, 5] });
+    const resolution = config.resolution ?? Math.max(.08, Math.max(
+      bounds.max[0] - bounds.min[0], bounds.max[2] - bounds.min[2], 1) / 100);
+    function finish(base, entity, extra = {}) {
+      const physical = W.materials.forBody(catalog, presented, { entity, ...extra });
+      const ramp = physical?.appearance ? physicalRamp(physical.appearance, rgb, Math.round(physical.wetness * 32) / 32) : base.r;
+      const lookAsset = looks.forEntity(entity);
+      return { ...base, r: ramp, materialId: physical?.id ?? base.materialId, ...(lookAsset !== undefined && { lookAsset }) };
+    }
+    for (const field of fields) {
+      const reading = query.probe(field);
+      if (reading.status !== 'ok') continue;
+      const atlas = () => query.probe(field.slice(0, field.lastIndexOf('/')) + '/surface-charts').value;
+      let surfaceAtlas;
+      for (const entry of Object.values(reading.value)) {
+        if (!entry.half || !entry.position) continue;
+        const entity = entry.entity ?? entry.id, visual = entities[entity]?.visual;
+        bodies.push({ type: 'body', field, id: entry.id, entity, position: entry.position, rotation: entry.rotation ?? M.id(),
+          half: entry.half, round: bodyRound(entry.half), material: finish(bodyMaterial(entry, visual), entity, entry),
+          ...((entry.collider || entry.bend) && { shape: { ...(entry.collider && { collider: entry.collider }), ...(entry.bend && { bend: entry.bend }) } }),
+          ...(entry.surfaceState && { surface: { mapping: entry.surfaceState, atlas: surfaceAtlas ??= atlas() } }),
+          ...(visual?.surfaceId && { surfaceId: visual.surfaceId }), tags: entities[entity]?.tags, sockets: entities[entity]?.sockets });
+      }
+    }
+    for (const [id, entity] of Object.entries(entities)) {
+      if (!entity.visual?.half) continue;
+      const frame = query.frame({ entity: id });
+      if (!frame) continue;
+      objects.push({ type: 'entity', id, entity: id, position: frame.point, rotation: frame.rotation ?? M.id(),
+        half: entity.visual.half, material: finish(entityMaterial(entity.visual), id),
+        sockets: entity.sockets, tags: entity.tags, surfaceId: entity.visual.surfaceId });
+    }
+    const camera = frame?.edits.filter(({ path }) => path[0] === 'camera') ?? [];
+    const baseCamera = { target: bounds.min.map((n, i) => (n + bounds.max[i]) / 2), dist: 12, yaw: .55, pitch: .42, ...config.camera };
+    return { world: presented, tick: view.tick, time, colors, resolution: resolution * .72, roles: config.paletteRoles ?? {},
+      camera: camera.length ? CameraLens.view(baseCamera, Object.fromEntries(camera.map(({ path, value }) => [path[1], value]))) : baseCamera,
+      bodies, objects };
+  }
+
   function visual({makeBuilder,makeSculpt},view,query,{ controls, take, time: presentationTime, eventEffects, visualConsequences = true } = {}) {
     const time = take?.start ?? presentationTime ?? view.time ?? view.tick * view.world.dt;
     const effects = W.eventVisualEffects;
@@ -185,11 +254,7 @@
       const dry=appearance.dry, wet=appearance.wet??dry, weight=wet===dry?0:Math.round(profile.wetness*32);
       const key=id+'/'+weight;
       if (!ramps.has(key)) {
-        const rgb=swatch=>{
-          const packed=parseInt(swatch.slice(1),16);
-          return [(packed>>16)&255,(packed>>8)&255,packed&255];
-        };
-        ramps.set(key,dry.map((color,i)=>PixelLook.nearest(V.lerp(rgb(color),rgb(wet[i]),weight/32),B.P,true)));
+        ramps.set(key,physicalRamp({dry,wet},B.P,weight/32));
       }
       return {...base,materialId:id,r:ramps.get(key)};
     }
@@ -241,12 +306,11 @@
     if(!volume)S.implicitForm({bounds:{min,max},sd:groundDistance},earth,{res:resolution,target:{surface:'terrain'}});
     function drawBody(entry,surfaceAtlas) {
       if (!entry.half || !entry.position) return;
-      const ramp=entry.look??[1,2,3,4,5,6];
       const rotation=entry.rotation??M.id();
       const axis=[0,1,2].map(i=>[rotation[i],rotation[i+3],rotation[i+6]]);
       const entityId=entry.entity??entry.id, visual=entities[entityId]?.visual;
       const physical=W.materials.forBody(catalog,view.world,entry);
-      let finish=looks.material(finishFor({r:ramp,materialId:visual?.materialId??visual?.material??entry.material??'body'},physical),
+      let finish=looks.material(finishFor(bodyMaterial(entry,visual),physical),
         looks.forEntity(entityId));
       const sample=W.surfaceState.materialSampler(entry,surfaceAtlas,finish,B.P);
       const target=targetFor(entityId);
@@ -260,7 +324,7 @@
         return;
       }
       S.box(entry.position,entry.half,finish,{ax:axis,res:resolution*.72,
-        rd:Math.min(.055,...entry.half)*.4,tag:entry.id,target:sample?{...target,surface:undefined}:target});
+        rd:bodyRound(entry.half),tag:entry.id,target:sample?{...target,surface:undefined}:target});
     }
     const bodyFields=Array.isArray(fields.bodies)?fields.bodies:fields.bodies?[fields.bodies]:[];
     for(const source of bodyFields) {
@@ -274,17 +338,15 @@
       }
       for(const body of bodies)drawBody(body,surfaceAtlas);
     }
-    const managed=view[W.entityLifecycle?.projection]?.entities;
     for (const [id,entity] of Object.entries(view.world.entities)) {
       if (!entity.visual?.half) continue;
-      const pose=query.target({entity:id}), point=pose?.point;
+      const pose=query.frame({entity:id}), point=pose?.point;
       if (!point) continue;
-      const {half,ramp,surface}=entity.visual;
+      const {half}=entity.visual;
       const physical=W.materials.forBody(catalog,view.world,{entity:id});
-      const finish=looks.material(finishFor({r:ramp??[19,20,21,22,23],surface,albedo:entity.visual.albedo,
-        materialId:entity.visual.materialId??entity.visual.material??'entity'},physical),looks.forEntity(id));
+      const finish=looks.material(finishFor(entityMaterial(entity.visual),physical),looks.forEntity(id));
       hasSurface ||= Boolean(finish.surface);
-      const rotation=managed&&Object.hasOwn(managed,id)?query.frame({entity:id})?.rotation:null;
+      const rotation=pose.rotation;
       S.box(point,half,finish,{res:resolution*.72,tag:id,target:targetFor(id),
         ...(rotation&&{ax:[0,1,2].map(i=>[rotation[i],rotation[i+3],rotation[i+6]])})});
     }
@@ -492,6 +554,7 @@
     return rig ? K.cameraRig.bind(result, rig, { query }) : result;
   }
   W.visual = visual;
+  W.promotionSnapshot = promotionSnapshot;
   W.sceneTimeline = sceneTimeline;
   W.visualEnvironment = visualEnvironment;
   W.validateLooks = (world, catalog) => {

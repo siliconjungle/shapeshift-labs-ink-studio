@@ -223,6 +223,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.world.presentationCues.project` | function | `(recording,plan)` | [guide](../story-documents.md#project-presentation-cues), [source](../../src/kit/pu23w-world-presentation-cues.js) |
 | `KIT.world.presentationCues.read` | function | `(sheet)` | [source](../../src/kit/pu23w-world-presentation-cues.js) |
 
+## KIT.world.promotionSnapshot
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.world.promotionSnapshot` | function | `(view, query)` | [source](../../src/kit/pu8-world-visual.js) |
+
 ## KIT.world.query
 
 | Member | Kind | Signature or value | Guides and source |
@@ -947,6 +953,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.world.surfaceState` | namespace |  |  |
 | `KIT.world.surfaceState.apply` | function | `(state,args,definitions,ctx)` | [source](../../src/kit/pu38-world-surface-state.js) |
+| `KIT.world.surfaceState.bindCaptured` | function | `(base, capture, palette, restChart)` | [source](../../src/kit/pu38-world-surface-state.js) |
+| `KIT.world.surfaceState.captured` | function | `(definition, shape)` | [source](../../src/kit/pu38-world-surface-state.js) |
 | `KIT.world.surfaceState.checkStamp` | function | `(args,definitions)` | [source](../../src/kit/pu38-world-surface-state.js) |
 | `KIT.world.surfaceState.fragment` | function | `(parent,child,axis,index,parts,charts)` | [source](../../src/kit/pu38-world-surface-state.js) |
 | `KIT.world.surfaceState.frame` | function | `(body)` | [source](../../src/kit/pu38-world-surface-state.js) |

@@ -1303,6 +1303,8 @@ const CMD = {
         '  authoring suggest-breakable <scene> --at x,y,z [--radius 1] [--voxel .1] [--ids]   suggest a connected breakable part',
         '  --params JSON --parameter-time SEC   supply shared controls and choose the material bake time for a diorama',
         '  --asset-cache DIR   reuse diorama bake data across CLI invocations',
+        '  scene inspect-entities <source> [--place ID]   list promotable objects in a committed frame',
+        '  scene promote-entities <source> <selection.json> [--into scene.json] [--place ID] --out new.json   retain editable objects',
         '  scene apply|stamp|remix|capture|upgrade|sync-prefab|history|promote <world> ...  edit or derive a world manifest',
         '    scene upgrade <world|checkpoint> <instance> --to PREFAB [--migration FILE] [--dry-run]',
         '    scene sync-prefab <release.json> <world ...> --out NEW_DIRECTORY | --dry-run',

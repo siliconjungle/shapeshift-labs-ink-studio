@@ -144,6 +144,34 @@
         hit,palette,[x,y,z]);
     };
   }
-  W.surfaceState=Object.freeze({init,fragment,prune,checkStamp,apply,validate,frame,sample,materialSampler,
+  function captured(definition, shape) {
+    check(keys(definition, ['faces', 'fresh', 'charts', 'channels']), 'Invalid retained body surface');
+    const { faces, fresh, charts, channels } = definition;
+    check(record(charts) && Object.keys(charts).length <= 6, 'Retain only the charts used by this body');
+    const definitions = S.channels(channels);
+    const body = { ...shape, position: shape.at, rotation: M.id(), surfaceState: { faces, fresh } };
+    validate({ bodies: { captured: body }, surfaceCharts: charts }, definitions);
+    return { body, charts, definitions };
+  }
+  function bindCaptured(base, capture, palette, restChart) {
+    const { body, charts, definitions } = capture, locateFace = frame(body);
+    const fresh = body.surfaceState.fresh;
+    return { ...base, surfaceState: {
+      ...(restChart && { maskNames: restChart.maskNames, hasOpacity: restChart.hasOpacity,
+        hasNormal: restChart.hasNormal, hasInkControls: restChart.hasInkControls }),
+      locate(point, normal) {
+        const edited = restChart?.(point, normal);
+        if (edited) return edited;
+        const { face, uv } = locateFace(point, normal);
+        return { ...sample(body, charts, definitions, face, uv), captured: true };
+      },
+      apply(material, hit, point) {
+        const selected = hit.captured && hit.fresh ?
+          { ...material, r: fresh.ramp ?? material.r, materialId: fresh.material ?? material.materialId } : material;
+        return S.appearance(selected, hit, palette, point);
+      }
+    } };
+  }
+  W.surfaceState=Object.freeze({init,fragment,prune,checkStamp,apply,validate,frame,sample,materialSampler,captured,bindCaptured,
     isFace:face=>faces.includes(face)});
 })(KIT);

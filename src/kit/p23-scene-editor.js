@@ -412,6 +412,20 @@
       return { world: Object.assign(world, { spec: source }), review, time: sampleTime };
     }
 
+    function planEntityPromotion(source, request, options = {}) {
+      return K.world.entityPromotion.plan(source, request, { ...options, base: snapshot(), env: buildEnv });
+    }
+
+    function applyEntityPromotion(source, request, options) {
+      const { scene, report } = planEntityPromotion(source, request, options);
+      const { solids, groups, palette, roles, assetPacks } = scene;
+      const write = () => document.setEnvironment({ solids, groups, palette,
+        ...(roles && { roles }), ...(assetPacks && { assetPacks }) });
+      if (document.pending()) write();
+      else document.transact('Promote scene objects ' + report.group, write);
+      return report;
+    }
+
     function preparePrefabRefresh(prefabs, assets) {
       const bindings = { ...buildEnv, assets, prefabs: freeze(clone(prefabs)) };
       const source = snapshot();
@@ -1415,6 +1429,7 @@
       inspectAssemblyReview: (definition = reviewPreset) => A.assemblyReview.plan(snapshot(), definition, buildEnv).report,
       checkAssemblyReview: (candidate, definition = reviewPreset) => checkReview(snapshot(), candidate, definition),
       buildAssemblyReview,
+      planEntityPromotion, applyEntityPromotion,
       sourceDependencies: () => A.bakeCache.signature([
         buildEnv.assets ?? {},buildEnv.prefabs ?? {},buildEnv.parameterInputs ?? {}
       ]),

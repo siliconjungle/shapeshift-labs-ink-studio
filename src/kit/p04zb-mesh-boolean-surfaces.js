@@ -8,7 +8,7 @@ const meshBooleanSurfaces = (function(K) {
   const unit=q=>Math.min(1,Math.max(0,q));
   const combine=(rows,weights)=>rows.reduce((sum,n,i)=>sum+n*weights[i],0);
   const vector=(rows,weights)=>rows[0].map((_,i)=>combine(rows.map(row=>row[i]),weights));
-  const blend=(rows,weights)=>Object.fromEntries(Object.keys(rows[0] ?? {}).filter(k=>k!=='tint').map(k=>
+  const blend=(rows,weights)=>Object.fromEntries(Object.keys(rows[0] ?? {}).map(k=>
     [k,Array.isArray(rows[0][k]) ? vector(rows.map(row=>row[k]),weights) : combine(rows.map(row=>row[k]),weights)]));
 
   function input(api,document,selection,side) {
@@ -43,7 +43,7 @@ const meshBooleanSurfaces = (function(K) {
   function cornerData(meta,weights,flipped,shade) {
     const rows=meta.attributes;
     const uv=vector(rows.map(row=>row.uv),weights).map(unit);
-    const attributes=blend(rows.map(row=>row.attributes),weights), tint=meshCornerTint.sample(rows,weights);
+    const attributes=blend(rows.map(meshCornerTint.generic),weights), tint=meshCornerTint.sample(rows,weights);
     if (tint) attributes.tint=tint;
     const normal=shade && rows.some(row=>row.normal) &&
       V.norm(vector(rows.map(row=>row.normal ?? meta.normal),weights));

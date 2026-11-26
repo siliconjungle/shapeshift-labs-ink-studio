@@ -156,8 +156,8 @@
       return { ...corner, id };
     }
     const uv = [0, 1].map(axis => Math.max(0, Math.min(1, weighted(triangle.loop.map(row => row.uv[axis]), weights))));
-    const layout = triangle.loop[0].attributes;
-    const attributes = Object.fromEntries(Object.entries(layout ?? {}).filter(([key])=>key!=='tint').map(([key, value]) => {
+    const layout = meshCornerTint.generic(triangle.loop[0]);
+    const attributes = Object.fromEntries(Object.entries(layout ?? {}).map(([key, value]) => {
       const values = triangle.loop.map(row => row.attributes[key]);
       return [key, Array.isArray(value) ? value.map((_, i) => weighted(values.map(data => data[i]), weights)) : weighted(values, weights)];
     }));

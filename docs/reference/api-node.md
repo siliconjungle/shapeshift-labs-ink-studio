@@ -137,6 +137,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.preflightStoryDocument` | function | `(document, {story} = {})` | [source](../../cli/story-document.js) |
 | `node.prepareModelingBenchmark` | function | `(...args)` | [source](../../index.js) |
 | `node.previewTimeline` | function | `(world, { timeline = world.animationTimeline, width, height, frames, before = false, maps = ['silhouette'], view = {}, yaw, pivot } = {})` | [guide](../animation-timeline.md#library), [guide](../animation-timeline.md), [source](../../cli/animation-timeline.js) |
+| `node.promoteSceneEntities` | function | `(source, selection, options)` | [guide](../entity-promotion.md), [source](../../index.js) |
 | `node.publishMaterialLibrary` | function | `(file, { out, ...options } = {})` | [guide](../editable-material-graph.md#describe-and-publish-material-metadata), [source](../../cli/material-library.js) |
 | `node.publishMaterialSubgraph` | function | `(file, source, { revision = 1, baseDir = path.dirname(path.resolve(file)), ...options } = {})` | [guide](../editable-material-graph.md#publish-and-edit-reusable-subgraphs), [source](../../cli/material-subgraphs.js) |
 | `node.rasterizeTilesetBrush` | function | `(scene, brush, toolkit = require('..').load())` | [guide](../mesh-uv.md#pick-a-brush-of-neighboring-tiles), [source](../../cli/tileset-image.js) |
