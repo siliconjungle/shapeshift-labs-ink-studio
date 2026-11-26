@@ -18,11 +18,18 @@
     const {id} = K.world.data;
     if (!record(arrays)) throw new TypeError('Prefab arrays need a named record map');
     for (const [name,row] of Object.entries(arrays)) {
-      if (!id(name) || !fields(row,['version','instance','count','spacing','space','origin','axes']) ||
+      if (!id(name) || !fields(row,['version','instance','count','spacing','space','origin','axes','parentFrame']) ||
           row.version !== 1 || !id(row.instance) || !vector(row.origin) || !vector(row.axes,axis => vector(axis)) ||
           row.axes.some((axis,i) => row.axes.some((other,j) => Math.abs(V.dot(axis,other)-(i===j ? 1 : 0))>1e-8)) ||
           V.dot(V.cross(row.axes[0],row.axes[1]),row.axes[2])<1-1e-8)
         throw new TypeError('Invalid retained prefab array '+name);
+      if (row.parentFrame !== undefined) {
+        if (!fields(row.parentFrame,['instance','frame']) || !id(row.parentFrame.instance) ||
+            !fields(row.parentFrame.frame,['position','matrix']) ||
+            !vector(row.parentFrame.frame.position) || !Array.isArray(row.parentFrame.frame.matrix))
+          throw new TypeError('Invalid retained array parent frame '+name);
+        K.sceneGraph.transform(row.parentFrame.frame);
+      }
       layout(row.count,row.spacing,row.space);
     }
   }
@@ -45,11 +52,16 @@
     if (!id(instance) || prior && prior.instance !== instance)
       throw new TypeError('Name the source prefab instance when creating an array and keep that identity when resizing it');
     layout(count,spacing,space);
-    const source = A.sceneInstances.select(scene,{kind:'prefab',ids:[instance]})[0], template = scene.instances[instance];
+    const template = Object.hasOwn(scene.instances ?? {},instance) && scene.instances[instance];
+    if (!template) throw new RangeError('Unknown scene instance '+instance);
+    const frames = A.scenePrefabs.placements(scene.instances), frame = frames.get(instance);
+    const source = {instance,instanceKind:'prefab',target:frame?.mesh.position ?? [0,0,0]};
     const axes = space === 'plane' ? A.constructionPlane.forScene(scene).axes : space === 'local' ?
-      unit.map(axis => M.app(K.diorama.solidFrames.authored(template.transform).basis,axis)) : unit;
-    return {template,source,retained:{version:1,instance,count:count.slice(),spacing:spacing.slice(),space,
-      origin:source.target,axes}};
+      unit.map(axis => frame?.direction(axis) ?? axis) : unit;
+    const parentFrame = template.parent === undefined ? undefined :
+      {instance:template.parent,frame:frames.get(template.parent)?.mesh ?? K.sceneGraph.transform()};
+    return {template,source,frames,retained:{version:1,instance,count:count.slice(),spacing:spacing.slice(),space,
+      origin:source.target,axes,...(parentFrame && {parentFrame})}};
   }
 
   function plan(scene,env,request) {
@@ -59,13 +71,20 @@
       throw new TypeError('Choose a named prefab array with a source placement and XYZ counts and spacing');
     const {id} = request, registry = scene.prefabArrays ?? {};
     const prior = own(registry,id) ? registry[id] : undefined;
-    const {template,source,retained} = state(scene,request,prior);
-    const instances = {...scene.instances}, coordinates = new Set(), occupied = new Map();
+    const {template,source,frames,retained} = state(scene,request,prior);
+    const instances = {...scene.instances}, coordinates = new Set(), occupied = new Map(), shifts = new Map([[source.instance,[0,0,0]]]);
     const report = {format:'ink-studio/prefab-instance-array',version:1,scene:scene.id,id,source,
       count:retained.count,spacing:retained.spacing,space:retained.space,axes:retained.axes,
       ...(prior && {before:{count:prior.count,spacing:prior.spacing,space:prior.space}}),
       cells:[],retired:[],conflicts:[],instances:[]};
     const outside = cell => !prior || cell.some((index,axis) => index>=prior.count[axis]);
+    const oldParent = prior?.parentFrame;
+    let parentMotion;
+    if (oldParent && own(scene.instances,oldParent.instance)) {
+      const current = frames.get(oldParent.instance)?.mesh ?? K.sceneGraph.transform();
+      if (!equal(current,oldParent.frame))
+        parentMotion = K.sceneGraph.compose(current,K.sceneGraph.inverse(oldParent.frame));
+    }
     for (const cell of cells(retained.count)) {
       const seed = cell.every(n => n===0), instance = seed ? source.instance : id+'.'+cell.join('.');
       const nominal = position(retained,cell), key = JSON.stringify(nominal);
@@ -87,15 +106,26 @@
         continue;
       }
       const original = existing ?? template;
-      // Move a surviving copy by the change in its array offset, keeping its local edit.
-      const shift = V.sub(nominal,existing ? position(prior,cell) : retained.origin);
-      const at = V.add(original.transform?.translation ?? [0,0,0],shift);
-      if (!vector(at)) throw new RangeError('Prefab array placement exceeds world coordinate bounds');
-      const moved = !existing || shift.some(Boolean);
-      const updated = moved ? {...original,transform:{...original.transform,translation:at}} : original;
-      instances[instance] = updated;
+      // Remove inherited motion from the layout change before adjusting a surviving copy.
+      let previous = existing ? position(prior,cell) : retained.origin;
+      if (existing && parentMotion && original.parent === oldParent.instance)
+        previous = K.sceneGraph.point(parentMotion,previous);
+      const shift = V.sub(nominal,previous);
+      const moved = shift.some(Boolean);
+      instances[instance] = original;
+      shifts.set(instance,shift);
       report.cells.push({cell,instance,status:existing ? moved ? 'moved' : 'retained' : 'added',
-        prefab:updated.prefab,at:A.scenePrefabs.origin(updated.transform)});
+        prefab:original.prefab});
+    }
+    for (const [id,shift] of shifts) {
+      const entry = instances[id], carrier = frames.get(entry.parent);
+      let ancestor = entry.parent;
+      while (ancestor !== undefined && !shifts.has(ancestor)) ancestor = instances[ancestor]?.parent;
+      const displacement = ancestor === undefined ? shift : V.sub(shift,shifts.get(ancestor));
+      if (!displacement.some(Boolean) && own(scene.instances,id)) continue;
+      const local = carrier ? V.mul(M.app(M.tr(carrier.basis),displacement),1/carrier.scale) : displacement;
+      const translation = V.add(entry.transform?.translation ?? [0,0,0],local);
+      instances[id] = {...entry,transform:{...entry.transform,translation}};
     }
     if (prior) for (const cell of cells(prior.count)) {
       if (cell.every(n => n===0)) continue;
@@ -115,6 +145,8 @@
       try {
         const after = A.scenePrefabs.expand({...scene,...patch},env);
         report.conflicts.push(...A.scenePrefabs.indexedTargets(scene,before,after));
+        for (const row of report.cells) if (row.status !== 'missing')
+          row.at = after.instances.get(row.instance).frame?.position ?? [0,0,0];
         const objects = link => link ? [...link.solids,...[...link.meshes.values()].map(row => row.object)] : [];
         report.instances = [...report.cells,...report.retired].map(({instance}) => ({instance,
           objects:[...new Set([...objects(before.instances.get(instance)),...objects(after.instances.get(instance))])]}));

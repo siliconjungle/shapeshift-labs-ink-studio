@@ -1,16 +1,10 @@
 /* Build a reusable definition from effective visual placements in a common origin. */
 (function (K) {
-  const A = K.authoring, {V} = K, {freeze} = K.procedural.data;
-
-  function localize(entry,origin) {
-    if (!entry.transform && !origin.some(Boolean)) return entry;
-    return {...entry,transform:{...entry.transform,translation:V.sub(entry.transform?.translation ?? [0,0,0],origin)}};
-  }
+  const A = K.authoring, {freeze} = K.procedural.data;
 
   function compose(scene,env,links,origin,report) {
-    const inputs = Object.fromEntries(links.map(([id,link]) => [id,localize(link.instance,origin)]));
     const {spec,meshPlacements} = A.scenePrefabs.expand({prefabs:scene.prefabs,tilesets:scene.tilesets,
-      prefabLibrary:scene.prefabLibrary,instances:inputs},env);
+      prefabLibrary:scene.prefabLibrary,instances:scene.instances},env,{only:new Set(links.map(([id]) => id)),origin});
     const topologyMeshes = spec.topologyMeshes ?? {}, sheets = new Set();
     for (const [,link] of links)
       for (const sheet of A.scenePrefabs.tilesetRequirements(link.definition,
@@ -68,7 +62,7 @@
     if (selection.length<2) throw new RangeError('Choose at least two linked prefab placements');
     const before = A.scenePrefabs.expand(scene,env), ids = new Set(selection.map(row => row.instance));
     const links = [...before.instances].filter(([id]) => ids.has(id));
-    const origin = point?.slice() ?? A.scenePrefabs.origin(links[0][1].instance.transform);
+    const origin = point?.slice() ?? links[0][1].frame?.position ?? [0,0,0];
     const provenance = links.map(([instance,link]) => ({instance,prefab:link.instance.prefab,revision:link.revision,
       ...(!own(scene.prefabs,link.instance.prefab) && scene.prefabLibrary && {library:scene.prefabLibrary})}));
     const report = {format:'ink-studio/prefab-combination',version:1,scene:scene.id,prefab,mode,origin,
@@ -78,6 +72,9 @@
     if (mode === 'replace') {
       if (own(scene.instances,instance) && !ids.has(instance))
         report.conflicts.push({reason:'instance-in-use',instance});
+      for (const [child,row] of Object.entries(scene.instances))
+        if (ids.has(row.parent) && !ids.has(child))
+          report.conflicts.push({reason:'child-needs-reparent',instance:child,parent:row.parent});
       for (const [name,array] of Object.entries(scene.prefabArrays ?? {}))
         if (ids.has(array.instance) && array.instance !== instance) report.conflicts.push({reason:'array-source-would-be-removed',array:name,instance:array.instance});
     }
