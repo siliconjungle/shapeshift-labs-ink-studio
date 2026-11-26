@@ -1650,6 +1650,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.diorama.kinds.stroke.may.width` | value | `string = "pos"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.stroke.need` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.stroke.need.points` | value | `string = "list"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.kinds.sweep` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.kinds.sweep.may` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.kinds.sweep.may.blendRadius` | value | `string = "num"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.kinds.sweep.may.step` | value | `string = "pos"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.kinds.sweep.need` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.kinds.sweep.need.brush` | value | `string = "obj"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.kinds.sweep.need.poses` | value | `string = "list"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.swell` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.swell.need` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.kinds.swell.need.by` | value | `string = "num"` | [guide](../build-profiles.md#bake-and-render-in-the-browser) |

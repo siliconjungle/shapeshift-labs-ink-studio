@@ -1920,6 +1920,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.shapeLibrary.valid` | function | `(value)` | [source](../../src/kit/paq-def-shape.js) |
 | `KIT.procedural.shapeLibrary.validShape` | function | `(value)` | [source](../../src/kit/paq-def-shape.js) |
 
+## KIT.procedural.shapeSweeps
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.shapeSweeps` | namespace |  |  |
+| `KIT.procedural.shapeSweeps.prepare` | function | `({ brush, poses, step, blendRadius = 0 })` | [guide](../sculpt-sweeps.md), [source](../../src/kit/p26a-shape-sweeps.js) |
+
 ## KIT.procedural.signalRecovery
 
 | Member | Kind | Signature or value | Guides and source |
