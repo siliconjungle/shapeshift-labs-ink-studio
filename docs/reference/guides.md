@@ -512,6 +512,7 @@ All checked-in guides, indexed by title and section headings.
 - [Moving weather fronts](../weather-fronts.md)
 - [Weaving and braiding](../weaving-braiding.md)
 - [WebGPU texture and geometry graphs](../webgpu-graphs.md)
+- [Whole-asset UV preparation](../whole-asset-uv.md)
 - [Shared wind and local shelter](../wind-field.md)
 - [World views and intervention permissions](../world-access.md)
 - [World-space rain and snow](../world-precipitation.md)

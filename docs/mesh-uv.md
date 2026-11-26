@@ -1724,6 +1724,12 @@ for maintaining gutters in baked channels, and run the
 [tileset motion demo](../examples/tileset-pick/uv-gutter-bleed-demo.cjs)
 to compare a UV inset and a painted gutter during an orbit and zoom.
 
+## Prepare a whole asset
+
+Use [Whole-asset UV preparation](whole-asset-uv.md) to propose seams,
+repair and paginate movable charts, and review batch density while
+retaining pinned and painted islands.
+
 ## Edit an authored layout
 
 A [polygon topology document](mesh-topology.md) keeps stable face, edge and

@@ -223,6 +223,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.MeshUV.overlaps` | function | `(a,b,epsilon=uvEpsilon)` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
 | `toolkit.MeshUV.sameUV` | function | `(a,b)` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
 | `toolkit.MeshUV.sampleCoverage` | function | `(faces, crop, image, maxRows = 4000000)` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
+| `toolkit.MeshUV.scanOverlaps` | function | `(rows, coordinates, maxChecks, visit)` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
 | `toolkit.MeshUV.scanSampled` | function | `(tri, {x,y,width,height}, work, emit)` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
 | `toolkit.MeshUV.texelMask` | function | `(triangles, width, height, {sampled=false} = {})` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
 | `toolkit.MeshUV.topology` | function | `(points, triangles, uvs, protectedSeams = [], cutSeams = [])` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
