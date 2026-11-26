@@ -5,6 +5,7 @@ const files = require('./asset-files.js'), PNG = require('./png.js'), R = requir
 const {viewSettings} = require('./mesh-native-view.js');
 const {digest,isRevision} = require('./pixel-edit-revisions.js');
 const {paintPixels,planPixels} = require('./tileset-paint.js');
+const Tools = require('./tileset-face-tools.js');
 
 const format = 'ink-studio/tileset-face-paint';
 const read = file=>JSON.parse(fs.readFileSync(file,'utf8'));
@@ -15,14 +16,13 @@ const viewKeys = ['w','h','t','raw','camera','cameraShot','cameraTime','lockCame
 const key = (object,face)=>JSON.stringify([object,face]);
 
 function settings(request) {
-  const {at,rgba,object,face,view={}} = request ?? {};
-  if (!fields(request,['at','rgba','object','face','view','sharing','variant']) || !fields(view,viewKeys) ||
+  const {at,object,face,view={}} = request ?? {};
+  if (!fields(request,['at','rgba','object','face','view','sharing','variant','tool','color','alpha','slot','sample','channel']) || !fields(view,viewKeys) ||
       object!==undefined && !name(object) || face!==undefined && !name(face) ||
-      !Array.isArray(rgba) || rgba.length!==4 || !Array.from(rgba).every(n=>Number.isInteger(n) && n>=0 && n<=255) ||
       view.cameraShot!==undefined && !name(view.cameraShot) ||
       view.cameraTime!==undefined && (!Number.isFinite(view.cameraTime) || view.cameraTime<0) ||
       view.lockCamera!==undefined && typeof view.lockCamera!=='boolean')
-    throw new TypeError('Face paint needs a native pixel coordinate, four RGBA bytes, and optional target and view');
+    throw new TypeError('A bound tile tool needs a native pixel coordinate and optional target and view');
   const {materials,...base} = viewSettings(view,false);
   const {w,h} = base;
   if (!Array.isArray(at) || at.length!==2 || !Array.from(at).every((n,i)=>Number.isSafeInteger(n) && n>=0 && n<[w,h][i]))
@@ -108,16 +108,23 @@ function planChange(editor, source, asset, pixels, variant) {
 function paint(editor, request, {apply=false,expect} = {}, kit = require('..').load()) {
   if (typeof apply!=='boolean' || expect!==undefined && !isRevision(expect))
     throw new TypeError('Face paint options need an apply flag and optional preview revision');
-  const view = settings(request), {at,rgba,object,face,sharing='edit-every-instance',variant} = request, scene = editor.snapshot();
+  const view = settings(request), op = Tools.operation(request), {tool,rgba} = op;
+  const {at,object,face,sharing='edit-every-instance',variant} = request, scene = editor.snapshot();
+  const sampling = tool==='eyedropper';
+  if (sampling && (apply || expect!==undefined || request.sharing!==undefined || variant!==undefined))
+    throw new TypeError('The eyedropper reads a source. Use paint and sharing options with the pencil or eraser.');
   const K = kit.KIT, local = sharing==='make-local-variant';
   if (!['edit-every-instance','make-local-variant'].includes(sharing) ||
       (local ? !K.authoring.tilesets.validId(variant) : variant!==undefined))
     throw new TypeError('Choose edit-every-instance or make-local-variant with a new tileset ID');
   const dependencies = editor.sourceDependencies?.();
   if (editor.sourceDependencies && dependencies===undefined) throw new RangeError('Cannot verify face paint scene dependencies');
-  const previewRevision = digest([scene,dependencies,at,rgba,object,face,view,...(local ? [sharing,variant] : [])]);
-  const head = {format,version:1,scene:scene.id,at,view,sharing,...(local && {variant}),previewRevision};
-  const blocked = (code,detail={})=>({report:{...head,...detail,canCommit:false,conflicts:[{code}]}});
+  // Explicit RGBA pencil requests also accept receipts produced before the tool field was added.
+  const previewRevision = digest([scene,dependencies,at,rgba,object,face,view,...(local ? [sharing,variant] : []),
+    ...(rgba===undefined ? [op] : [])]);
+  const head = {format,version:1,scene:scene.id,at,view,tool,...(!sampling && {sharing}),...(local && {variant}),previewRevision};
+  const blocked = (code,detail={})=>({report:{...head,...detail,...(sampling && {sampled:false}),
+    canCommit:false,conflicts:[{code}]}});
   if (expect!==undefined && expect!==previewRevision) return blocked('stale-preview');
   const before = capture(editor,view,at,kit), {hits,truncated} = before.frame.pixelFragments, front = hits[0];
   if (truncated) return blocked('truncated-hit');
@@ -125,7 +132,7 @@ function paint(editor, request, {apply=false,expect} = {}, kit = require('..').l
   const {paint:sample} = front;
   if (object!==undefined && object!==front.object || face!==undefined && face!==sample?.face)
     return blocked('target-not-visible',{front});
-  const tileset = before.world.topologyMeshes?.[front.object]?.tilesetMaterials?.get(front.material);
+  const row = before.world.topologyMeshes?.[front.object], tileset = row?.tilesetMaterials?.get(front.material);
   if (!sample || !tileset) return blocked('no-registered-tileset-hit',{front});
   if (sample.mode!=='texel') return blocked('filtered-hit',{front,tileset});
   const source = {tileset,at:sample.at,uv:sample.uv,object:front.object,part:front.part,face:sample.face,material:front.material};
@@ -133,10 +140,16 @@ function paint(editor, request, {apply=false,expect} = {}, kit = require('..').l
   const [x,y] = source.at;
   if (![x,y].every(Number.isSafeInteger) || x<0 || y<0 || x>=asset.width || y>=asset.height)
     return blocked('texel-outside-source',{front,tileset});
-  const value = rgba.reduce((packed,byte)=>packed*256+byte,0);
-  const planned = planChange(editor,source,asset,[{value,slot:value===0 ? null : undefined}],variant);
+  if (sampling) {
+    const picked = Tools.eyedrop(K,row,source,sample,asset,op);
+    if (!picked) return blocked('missing-source-channel',{source,channel:op.channel});
+    return {report:{...head,source,sample:picked,sampled:true,canCommit:false,conflicts:[]}};
+  }
+  const write = Tools.pencilOrEraser(asset,source.at,op);
+  if (!write) return blocked('palette-slot-unavailable',{source,slot:op.slot});
+  const planned = planChange(editor,source,asset,[write.pixel],variant);
   if (!planned.detail) return blocked('indexed-palette-full',{source});
-  const detail = {...head,source,rgba,...planned.detail};
+  const detail = {...head,source,rgba:write.rgba,...(op.slot!==undefined && {slot:op.slot}),...planned.detail};
   if (!detail.canCommit) return {report:detail};
   let after = before;
   if (planned.commit) {
@@ -171,14 +184,17 @@ function command([file,...rest], options, kit, openEditor, sceneOutput) {
   const prior = expect && read(expect);
   if (expect && (prior?.format!==format || prior.version!==1 || prior.canCommit!==true || !isRevision(prior.previewRevision)))
     throw new TypeError('Expect a successful face paint preview receipt');
+  const request = read(file);
+  if (request?.tool==='eyedropper' && (output || preview || expect))
+    throw new TypeError('Run the eyedropper with --scene and read the JSON sample from stdout');
   const editor = openEditor(scene);
-  const {report,images} = paint(editor,read(file),{apply:!!output,expect:prior?.previewRevision},kit);
+  const {report,images} = paint(editor,request,{apply:!!output,expect:prior?.previewRevision},kit);
   if (preview && images) for (const [name,file] of artifacts) {
     const {w,h,rgb} = images[name];
     files.write(file,PNG.encode(w,h,rgb));
   }
   if (output && report.canCommit) files.publishJson(output,editor.snapshot(),'A different scene already exists at '+output);
-  if (output && !report.canCommit) process.exitCode = 1;
+  if (output && !report.canCommit || report.sampled===false) process.exitCode = 1;
   process.stdout.write(JSON.stringify({...report,...(preview && images && {files:artifacts.map(([name])=>name+'.png')})},null,2)+'\n');
 }
 

@@ -120,8 +120,8 @@
     }
     const mesh = topology.toSceneMesh(document, { objectId: object, partId: row.part, meshId: 'topology/' + object, frame,
       materials: [...active.values()].map(input => material(input, tilesets)) });
-    const tilesetMaterials = new Map([...active].flatMap(([id,entry])=>
-      entry.texture?.tileset ? [[id,entry.texture.tileset]] : []));
+    const tilesetMaterialSources = new Map([...active].filter(([,entry])=>entry.texture?.tileset));
+    const tilesetMaterials = new Map([...tilesetMaterialSources].map(([id,entry])=>[id,entry.texture.tileset]));
     const moved = document !== cage && bindings.size ?
       remapBindings([...bindings.values()], topology.correspond(cage, document, { lineage: evaluation.lineage })) : [...bindings.values()];
     const visible = bindings.size && (frame || document !== cage) ? elements(document, frame) : records;
@@ -137,7 +137,7 @@
     const shapeKeyStatus=row.shapeKeys!==undefined && K.meshTopology.shapeKeys.status(document,row.shapeKeys);
     const shapeKeys=shapeKeyStatus==='ready' && K.meshTopology.shapeKeys.bind(mesh,row.shapeKeys,frame);
     return { mesh, document, bindings: moved, resolvedBindings, bakes: [...bakes.values()],
-      ...(tilesetMaterials.size && {tilesetMaterials}), ...(skin && {skin}),
+      ...(tilesetMaterials.size && {tilesetMaterials,tilesetMaterialSources}), ...(skin && {skin}),
       ...(shapeKeyStatus && {shapeKeyStatus}), ...(shapeKeys && {shapeKeys}),
       ...(attachmentStatus && {attachmentStatus}), ...(attachmentBinding && {attachments:attachmentBinding}),
       ...(evaluation && { cage, modifierReport: evaluation.report }) };

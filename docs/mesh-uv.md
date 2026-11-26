@@ -1417,6 +1417,41 @@ variant with byte-identical paint and the same grid can use
 Run `node examples/tileset-pick/face-paint-sharing-demo.cjs face-paint-sharing-demo`
 to preview and save both sharing choices from the same prefab scene.
 
+### Pencil, eraser, and eyedropper on bound tiles
+
+Use the same `at`, `object`, `face`, and `view` fields to target a
+visible face. Add the fields for the tool you want to run.
+
+| Request fields | Result |
+| --- | --- |
+| `"tool": "pencil", "color": "#ffa658"` | Replace RGB and keep the source alpha. |
+| `"tool": "pencil", "alpha": 176` | Replace alpha and keep the source RGB. Alpha is a byte from 0 through 255. |
+| `"tool": "pencil", "color": "#ffa658", "alpha": 176` | Set both values. The original `rgba` request also works. |
+| `"tool": "pencil", "slot": 3` | Set exact indexed palette slot 3, including its alpha. This distinguishes duplicate colors. |
+| `"tool": "eraser"` | Clear the texel's coverage. Indexed sheets reuse a transparent slot when one is available. |
+| `"tool": "eyedropper", "sample": "color"` | Read the stored RGB as a hex color. |
+| `"tool": "eyedropper", "sample": "alpha"` | Read the stored alpha byte. |
+| `"tool": "eyedropper", "sample": "source", "channel": "roughness"` | Read the registered channel at the hit. |
+
+Pencil and eraser use the same shared or local scope and revision-checked
+preview as face paint. If erasing makes a texel invisible, use the
+tileset canvas to paint into the hole directly.
+
+The eyedropper writes a JSON sample to stdout. Use `--scene` and a request
+file. Color and alpha reads also include the stored RGBA and, for an
+indexed sheet, its palette slot. These are the values in the source
+image before lighting and palette grading.
+
+Source reads support `pigment`, `normal`, `roughness`, `metalness`, and
+`emission`. Pigment returns the tileset RGBA. The other channels use the
+registered UV set, report the sampled texel for a texture map, and
+identify a material bake when it supplies the value. Roughness and
+metalness use 0–1 units. Normal and emission maps return their stored
+bytes. A missing channel returns a conflict.
+
+Run `node examples/tileset-pick/bound-tile-tools-demo.cjs bound-tile-tools-demo`
+to sample a placed sign, pencil a texel, and erase it in a local variant.
+
 In Node, use `ink.openTilesetPaint(editor, request)` and
 `ink.writeTilesetPaint(editor, binding, document, { apply: true })`.
 Omit `apply` to preview the write. One scene undo restores the atlas

@@ -286,7 +286,9 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             const uv = [(S-region.x-.5)/Math.max(1,region.width-1),(T-region.y-.5)/Math.max(1,region.height-1)];
             const at = material ? [region.width,region.height].map((n,k)=>Math.max(0,Math.min(n-1,
               Math.floor(.5+uv[k]*(n-1))))) : [tx-region.x,ty-region.y];
-            paint = {face:faceId,mode,uv,...(mode==='texel' && {at})};
+            paint = {face:faceId,mode,uv,...(mode==='texel' && {
+              at,drawTriangle:first/3,barycentric:weights3,mesh:layer.sceneMeshId
+            })};
           }
           fragments[p]={p,z,alpha:1,color:material?.color ?? [ink >>> 16, (ink >>> 8) & 255, ink & 255].map(n=>n/255),position,
             ...(pbrMaterial && {pbrMaterial,pbrReceives,pbrTangent:axes?.right}),
