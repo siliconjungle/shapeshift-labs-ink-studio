@@ -192,7 +192,7 @@
     }
 
     function begin(input, { take, sequence, time = take?.start ?? 0, seed = 0, workers, modeling = false, trace = false, textureCache: inheritedTextureCache,
-      functionExecution: inheritedExecution, systemSize }) {
+      functionExecution: inheritedExecution, systemSize, materialDiagnostics = false }) {
       if (take !== undefined) {
         P.takeTime.requireFrame(take);
         if (time !== take.start) throw new RangeError('Graph seconds must match the take frame start');
@@ -219,7 +219,8 @@
             Array.isArray(prior) && value.length === prior.length && value.every((n, k) => Object.is(n, prior[k]));
         };
         const sameSystem = !config.system || previous && control.sameSystem(previous.system, functionExecution.system);
-        const reused = previous?.seed === seed && (!clock || previous.time === time && previous.take === take && previous.sequence === sequence) &&
+        const diagnostics = materialDiagnostics && (config.nested || config.op === 'material.paint' || config.op === 'image.convert');
+        const reused = previous?.seed === seed && previous.diagnostics === diagnostics && (!clock || previous.time === time && previous.take === take && previous.sequence === sequence) &&
           sameSystem && comparable.every(matches);
         const receipt = trace ? { computeMs: 0, invalidated: [] } : undefined;
         if (receipt && !reused) {
@@ -241,7 +242,7 @@
         const work = modeling && !reused ? [] : undefined;
         const evidence=work && {};
         const context = reused ? undefined : { time, ...(take !== undefined && { take }),
-          ...(sequence !== undefined && { sequence }), seed: P.data.hash(name, seed), node: name, ...(trace && { trace }),
+          ...(sequence !== undefined && { sequence }), seed: P.data.hash(name, seed), node: name, ...(materialDiagnostics && { materialDiagnostics }), ...(trace && { trace }),
           ...(work && {modeling, recordWork(receipt) {
             if (work.length<256) work.push(P.modelingDiagnostics.receipt(receipt));
             else evidence.workOmitted=(evidence.workOmitted??0)+1;
@@ -249,15 +250,21 @@
         if (context) Object.defineProperties(context,{
           textureCache:{value:textureCache},functionExecution:{value:functionExecution}
         });
-        return { config, inputs: reused ? undefined : Object.fromEntries(entries), context, comparable, reused, previous, work,evidence,receipt };
+        return { config, inputs: reused ? undefined : Object.fromEntries(entries), context, comparable, reused, previous, work,evidence,receipt,diagnostics };
       }
       function invoke(row, asynchronous = false) {
         const { config: { run, nested }, inputs, context } = row;
-        if (asynchronous && run.async) return run.async(inputs, context);
-        return nested && workers ? run(inputs, context, workers) : run(inputs, context);
+        try {
+          if (asynchronous && run.async) return run.async(inputs, context);
+          return nested && workers ? run(inputs, context, workers) : run(inputs, context);
+        } catch (error) {
+          if (materialDiagnostics && error instanceof Error && Object.isExtensible(error))
+            error.graphMaterialNode = [row.config.name, error.graphMaterialNode].filter(Boolean).join('/');
+          throw error;
+        }
       }
       function complete(row, ...answers) {
-        const { config: { name, run, outputs, system }, comparable, reused, previous, work,evidence,receipt } = row;
+        const { config: { name, run, outputs, system }, comparable, reused, previous, work,evidence,receipt,diagnostics } = row;
         if (receipt) receipts.set(name, receipt);
         if (reused) pending.set(name, previous);
         else {
@@ -269,10 +276,12 @@
             throw new TypeError('Graph node ' + name + ' needs asynchronous evaluation');
           }
           if (!record(produced)) throw new TypeError('Graph node must return named outputs: ' + name);
-          for (const [key, socket] of Object.entries(outputs))
-            if (!Object.hasOwn(produced, key) || !validator(socket.type)(produced[key]))
-              throw new TypeError('Wrong output from graph node ' + name + '.' + key);
-          pending.set(name, { seed, time, take, sequence, ...(system && {system:functionExecution.system}), values: comparable, outputs: produced, work:work && Object.freeze(work),
+          for (const [key, socket] of Object.entries(outputs)) if (!Object.hasOwn(produced, key) || !validator(socket.type)(produced[key])) {
+            const error = new TypeError('Wrong output from graph node ' + name + '.' + key);
+            if (materialDiagnostics) { error.graphMaterialNode = name; error.graphMaterialPort = key; }
+            throw error;
+          }
+          pending.set(name, { seed, diagnostics, time, take, sequence, ...(system && {system:functionExecution.system}), values: comparable, outputs: produced, work:work && Object.freeze(work),
             modeling:evidence?.modeling,workOmitted:evidence?.workOmitted,
             subgraph: run.inspect?.() });
         }
@@ -285,7 +294,11 @@
         const snapshot = new Map(pending);
         for (const [name, item] of snapshot) marks.set(name, item);
         textures = undefined; // Inspectable frames retain values, while working mip levels are scoped to evaluation.
-        return { outputs, status, preview(node, port = 'value') {
+        return { outputs, status, outputSource(name) {
+          const link = results.find(([key]) => key === name)?.[1];
+          return link && { kind: link.kind, ...(link.kind === 'node' && { node: link.id, port: link.port }),
+            ...(link.kind === 'input' && { input: link.id }) };
+        }, preview(node, port = 'value') {
           const [name, ...nested] = node.split('/');
           const result = snapshot.get(name);
           if (nested.length && result?.subgraph) return result.subgraph.preview(nested.join('/'), port);

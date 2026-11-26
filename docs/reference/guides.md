@@ -251,6 +251,7 @@ All checked-in guides, indexed by title and section headings.
 - [Material texture file formats](../material-texture-formats.md)
 - [Material Tile Generator](../material-tile-generator.md)
 - [Map-driven Tile Sampler](../material-tile-sampler.md)
+- [Material validation](../material-validation.md)
 - [Surface materialisation](../materialisation.md)
 - [Procedural math fields](../math-fields.md)
 - [Measured materials from planar captures](../measured-materials.md)

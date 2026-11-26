@@ -782,6 +782,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   graph lighting-room <project.json> <plan.json> --out directory   review a material under HDRI and reusable camera rigs
   graph displacement-preview <project.json> <plan.json> --out directory   compare flat, parallax and tessellated graph height
   graph material-preview <project.json> <plan.json> --out directory   link a native material carrier to its UV maps
+  graph validate-material <project.json> [--output NAME | --node PATH --port NAME] [--channel NAME] [--profile profile.json] [--out directory]
   graph inspect <project.json> [--output NAME | --node PATH --port NAME | --map ID [--component r|g|b|a]] [--out directory]
   graph geometry <project.json> [--inputs values.json --at seconds --seed N --capture NODE[:PORT],... --out directory]   inspect typed geometry and node work
   graph evaluate <project.json> [--inputs values.json --at seconds --seed N --capture NODE[:PORT],... --out directory]   evaluate in software and record texture and port work
@@ -969,6 +970,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio graph subgraph` · `--out`, `--adapters` · [source](../../cli/graph-cli.js)
 - `ink-studio graph texture-info` · `--page`, `--channels` · [source](../../cli/graph-cli.js)
 - `ink-studio graph validate` · `--inputs`, `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
+- `ink-studio graph validate-material` · `--inputs`, `--at`, `--seed`, `--out`, `--output`, `--node`, `--port`, `--channel`, `--profile`, `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph verify-pxc` · `--out`, `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio music analyze` · [source](../../cli/music-composer.js)
 - `ink-studio music arrange` · [source](../../cli/music-composer.js)

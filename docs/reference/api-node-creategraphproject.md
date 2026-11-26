@@ -26,3 +26,4 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createGraphProject().sockets` | function | `(node)` | [guide](../headless-authoring.md), [source](../../src/kit/paq-node-graph.js) |
 | `node.createGraphProject().sourceFiles` | function | `()` | [guide](../headless-authoring.md), [source](../../cli/graph-project.js) |
 | `node.createGraphProject().validate` | function | `(inputs)` | [guide](../headless-authoring.md), [source](../../cli/graph-project.js) |
+| `node.createGraphProject().validateMaterial` | function | `(target = {}, profile = {}, options, { preview = true } = {})` | [guide](../headless-authoring.md), [source](../../cli/graph-project.js) |

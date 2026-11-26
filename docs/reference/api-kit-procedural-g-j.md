@@ -641,7 +641,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphImages.advancedTexture.slopeBlur` | function | `(source, slopeSource, options = {})` | [source](../../src/kit/paq-advanced-texture-images.js) |
 | `KIT.procedural.graphImages.blend` | function | `(background, foreground, { mode = 'copy', opacity = 1, mask = null, crop = {}, alpha = 'source', clamp = 'auto' } = {})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.channelMath` | function | `(a, b, operation, { precision = 'float64', outOfRange = 'error' } = {})` | [source](../../src/kit/paq-graph-images.js) |
-| `KIT.procedural.graphImages.convert` | function | `(source, target, { outOfRange = 'error', dropAlpha = false } = {})` | [source](../../src/kit/paq-graph-images.js) |
+| `KIT.procedural.graphImages.convert` | function | `(source, target, { outOfRange = 'error', dropAlpha = false, onClip } = {})` | [source](../../src/kit/paq-graph-images.js) |
 | `KIT.procedural.graphImages.corrections` | namespace |  |  |
 | `KIT.procedural.graphImages.corrections.autoLevels` | function | `(source, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
 | `KIT.procedural.graphImages.corrections.colorReplace` | function | `(source, from, to, options = {})` | [source](../../src/kit/paq-color-corrections.js) |
