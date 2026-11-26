@@ -12,6 +12,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.sculpt().AZ` | value | `array` | [guide](../../README.md#geometry-and-materials) |
 | `KIT.sculpt().adaptiveSampling` | value | `boolean` | [guide](../../README.md#geometry-and-materials) |
 | `KIT.sculpt().add` | function | `(p, mat, o)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
+| `KIT.sculpt().addPaintFinish` | function | `(entity, id, plan, coverage)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().addSurfacePigment` | function | `(entity, id, sample)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().addSurfaceRelief` | function | `(entity, sample)` | [guide](../../README.md#geometry-and-materials), [source](../../src/sculpt.js) |
 | `KIT.sculpt().amb` | value | `number` | [guide](../../README.md#geometry-and-materials) |

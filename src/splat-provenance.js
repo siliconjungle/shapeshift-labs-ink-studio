@@ -2,7 +2,17 @@
 const SplatProvenance = (() => {
   const tables = [['objectIds', 'objects'], ['materialIds', 'materials'], ['targetIds', 'targets']];
   const channels = [['normals', 3, Float32Array], ['shadingNormals',3,Float32Array], ['paintedEmission',3,Float32Array],
-    ['inkControls',4,Float32Array], ['muteEmission', 1, Uint8Array]];
+    ['inkControls',4,Float32Array], ['muteEmission', 1, Uint8Array], ['paintFinish', 13, Float32Array]];
+  function remapSpills(sources, to) {
+    return sources.flatMap(source => {
+      const rows = [];
+      for (let k = 0; k < source.rows.length; k += 2) {
+        const index = to(source.rows[k]);
+        if (index !== undefined) rows.push(index, source.rows[k + 1]);
+      }
+      return rows.length ? [{ ...source, rows }] : [];
+    });
+  }
   const identityCache = new WeakMap();
   const curveLod = (records, indexAt) => records?.length ?
     (typeof CurveLod === 'undefined' ? require('./curve-lod.js') : CurveLod).remap(records, indexAt) : [];
@@ -112,6 +122,14 @@ const SplatProvenance = (() => {
       }
       result[key] = out;
     }
+    const spills = [];
+    let offset = 0;
+    for (const part of parts) {
+      if (part.renderMetadata?.paintSpills)
+        spills.push(...remapSpills(part.renderMetadata.paintSpills, index => index + offset));
+      offset += part.count;
+    }
+    if (spills.length) result.paintSpills = spills;
     return result;
   }
 
@@ -246,6 +264,7 @@ const SplatProvenance = (() => {
     if (world.renderMetadata) {
       const source = world.renderMetadata, meta = result.renderMetadata = { ...source };
       for (const [key, stride, Type] of channels) if (source[key]) meta[key] = take(source[key], stride, Type);
+      if (source.paintSpills) meta.paintSpills = remapSpills(source.paintSpills, index => remap.get(index));
       for (const [key] of tables) if (source[key]) meta[key] = take(source[key], 1, Uint32Array);
     }
     for (const key of ['moving', 'back']) result[key] = Int32Array.from(Array.from(world[key] ?? []).filter(i => remap.has(i)), i => remap.get(i));
