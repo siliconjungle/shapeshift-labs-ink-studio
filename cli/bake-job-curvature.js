@@ -1,3 +1,4 @@
+const Grid=require('./uv-bake-grid.js');
 const path=require('node:path');
 const Surface=require('./bake-job-surface.js');
 const {readTexture}=require('./texture-files.js');
@@ -83,7 +84,8 @@ function faceFrame(tile,f,V) {
 }
 
 function measure(tile,settings,prepared,read,K) {
-  const {V}=K,{size,padding,curvature:{source,normalInput,scale,edgePolicy}}=settings, count=size*size;
+  const size=Grid.rasterGrid(settings), {width,height}=Grid.dimensions(size), {V}=K,
+    {padding,curvature:{source,normalInput,scale,edgePolicy}}=settings, count=width*height;
   const convex=new Float32Array(count),concave=new Float32Array(count),valid=new Uint8Array(count);
   const face=new Uint32Array(count), gutter=new Uint32Array(count), isNormal=source==='normal';
   const sampler=isNormal&&read(normalInput,tile);
@@ -105,14 +107,14 @@ function measure(tile,settings,prepared,read,K) {
     chartBake:{state:{faceCharts},visibility}});
   if(isNormal) {
     const vectors=new Array(count),frames=tile.faces.map((_,i)=>faceFrame(tile,i,V));
-    for(let i=0;i<count;i++)if(face[i])vectors[i]=sampler.sample((i%size+.5)/size,(Math.floor(i/size)+.5)/size);
+    for(let i=0;i<count;i++)if(face[i])vectors[i]=sampler.sample((i%width+.5)/width,(Math.floor(i/width)+.5)/height);
     const {owners}=raster.raster;
     function find(i,x,y,dx,dy) {
       let j=i,n=0;
       for(let k=1;k<=scale;k++) {
         const u=x+k*dx,v=y+k*dy;
-        if(u<0||u>=size||v<0||v>=size)break;
-        const next=u+v*size;
+        if(u<0||u>=width||v<0||v>=height)break;
+        const next=u+v*width;
         if(!vectors[next]||owners[next]!==owners[i])break;
         j=next;n=k;
       }
@@ -120,11 +122,11 @@ function measure(tile,settings,prepared,read,K) {
     }
     for(let i=0;i<count;i++) {
       if(!vectors[i])continue;
-      const x=i%size,y=Math.floor(i/size), frame=frames[face[i]-1],uv=[(x+.5)/size,(y+.5)/size];
+      const x=i%width,y=Math.floor(i/width), frame=frames[face[i]-1],uv=[(x+.5)/width,(y+.5)/height];
       function diff(dx,dy) {
         const [lo,a]=find(i,x,y,-dx,-dy),[hi,b]=find(i,x,y,dx,dy);
         if(!a&&!b||edgePolicy==='strict'&&(a!==scale||b!==scale))return;
-        const raw=V.mul(V.sub(vectors[hi],vectors[lo]),size/(a+b));
+        const raw=V.mul(V.sub(vectors[hi],vectors[lo]),(dx?width:height)/(a+b));
         return sampler.space==='world'?raw:frame.tangentVector(raw,uv);
       }
       const du=diff(1,0),dv=diff(0,1);
@@ -155,7 +157,7 @@ function render(tasks,libraries,onInput,K) {
     const {authored,settings}=task;
     if(!settings.curvature)continue;
     const {source,scale,edgePolicy,normalInput}=settings.curvature;
-    const key=JSON.stringify([authored.id,settings.size,settings.padding,source,scale,edgePolicy,normalInput]);
+    const key=JSON.stringify([authored.id,Grid.rasterGrid(settings),settings.padding,source,scale,edgePolicy,normalInput]);
     if(!groups.has(key))groups.set(key,{tasks:[],tiles:new Map()});
     groups.get(key).tasks.push(task);
     byTask.set(task,key);
@@ -182,7 +184,7 @@ function render(tasks,libraries,onInput,K) {
     let clipped=0;
     if(!physical)for(let i=0;i<raw.length;i++)if(row.valid[i]&&Math.abs(raw[i])>limit)clipped++;
     const display=Float32Array.from(raw,n=>clamp(signed?.5+.5*n/limit:n/limit));
-    const encoded=Surface.scalar(settings.size,settings.encoding,physical?raw:display,display);
+    const encoded=Surface.scalar(Grid.rasterGrid(settings),settings.encoding,physical?raw:display,display);
     if(--group.remaining===0)groups.delete(key);
     return {...encoded,texels:row.covered,coverage:row.coverage,
       output:{kind:'curvature',encoding:settings.encoding,bitDepth:Surface.depth(settings.encoding),units:'inverse-shape-units',

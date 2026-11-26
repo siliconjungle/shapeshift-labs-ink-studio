@@ -1,3 +1,4 @@
+const Grid=require('./uv-bake-grid.js');
 const Surface = require('./bake-job-surface.js');
 const EXR = require('./texture-exr.js');
 const PNG = require('./texture-png.js');
@@ -150,8 +151,8 @@ function inputs(library, onInput) {
 }
 
 function capture(task, linked) {
-  const {map,settings:{size,transfer}} = task, color = colorMap(map);
-  const count = size * size, channels = color ? 4 : 1;
+  const {map,settings} = task, {transfer}=settings, size=Grid.rasterGrid(settings), color = colorMap(map);
+  const count = Grid.count(size), channels = color ? 4 : 1;
   const data = new Float32Array(count * channels);
   const reader = transfer.textureInput && linked(transfer,map);
   return {
@@ -192,7 +193,7 @@ function capture(task, linked) {
 }
 
 function deliver(task, target, raster) {
-  const {map,settings:{size,encoding}} = task;
+  const {map,settings} = task, size=Grid.rasterGrid(settings), {encoding}=settings;
   const color = colorMap(map), alpha = color ? 'straight' : 'none', { data, channels } = target;
   const output = { kind: 'texture-transfer', intent: color ? 'color' : map === name ? 'data' : 'mask',
     encoding, bitDepth: Surface.depth(encoding),
@@ -214,22 +215,22 @@ function deliver(task, target, raster) {
   }
   function png(depth) {
     const data = depth===16 ? pixels(Uint16Array,65535) : pixels(Uint8Array,255);
-    return PNG.write({width:size,height:size,channels,data,alpha},color ? {srgb:0} : undefined);
+    return PNG.write({...Grid.dimensions(size),channels,data,alpha},color ? {srgb:0} : undefined);
   }
   const report = { ...target.report(), clipped, ...(min!==Infinity&&{range:[min,max]}) };
   const info = { output, textureTransfer: report, texels: raster.sampledTexels, coverage: raster.coverage,
     ...(raster.cageBake && !task.settings.transfer.textureInput && { projection: raster.cageBake }) };
   if (encoding !== 'exr') return { ...info, bytes: png(output.bitDepth) };
   const keys = color ? ['R','G','B','A'] : ['Y'];
-  const planes = Object.fromEntries(keys.map((key,c)=>[key,Float32Array.from({length:size*size},(_,i)=>data[i*channels+c])]));
-  return { ...info, bytes: EXR.write({width:size,height:size,planes,alpha}), preview: png(8) };
+  const planes = Object.fromEntries(keys.map((key,c)=>[key,Float32Array.from({length:Grid.count(size)},(_,i)=>data[i*channels+c])]));
+  return { ...info, bytes: EXR.write({...Grid.dimensions(size),planes,alpha}), preview: png(8) };
 }
 
 function render(tasks, library, onInput, K) {
   const linked = inputs(library,onInput), groups = new Map(), byTask = new Map();
   for (const task of tasks) {
     if (!task.settings.transfer) continue;
-    const {authored,tile,settings:{size,padding}} = task;
+    const {authored,tile,settings} = task, size=Grid.rasterGrid(settings), {padding}=settings;
     const key = JSON.stringify([authored.id,tile.tile,size,padding]);
     if (!groups.has(key)) groups.set(key,{ tasks: [] });
     const group = groups.get(key);
@@ -239,7 +240,7 @@ function render(tasks, library, onInput, K) {
   return task => {
     const group = byTask.get(task);
     if (!group.rows) {
-      const { selection,tile,cast,settings:{size,padding} } = task;
+      const { selection,tile,cast,settings } = task, size=Grid.rasterGrid(settings), {padding}=settings;
       group.rows = new Map(group.tasks.map(member=>[member,capture(member,linked)]));
       const channels = [...group.rows.values()];
       const native = group.tasks.filter(member=>!member.settings.transfer.textureInput).map(member=>group.rows.get(member));

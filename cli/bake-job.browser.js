@@ -329,6 +329,50 @@
     }
     draw();
   }
+  function outputControls(row,extra) {
+    const options=row.overrides, pane=node('div');
+    pane.className='map-controls';
+    extra.append(pane);
+    const formats={png:['unorm8','unorm16'],tiff:['unorm8','unorm16','float32'],exr:['float16','float32']};
+    const titles={unorm8:'8-bit integer',unorm16:'16-bit integer',float16:'16-bit float',float32:'32-bit float'};
+    const outline=row.id==='uv-outline', category=row.id.endsWith('-id')||['thickness-valid','cage-hit','cage-miss','cage-backface'].includes(row.id);
+    const defaultFormat=()=>options.encoding==='exr'||!options.encoding&&(/^(position-|.*-id$)/.test(row.id)||row.id==='occlusion-direction')?'exr':'png';
+    function draw() {
+      const size=options.size??preset.defaults.size??128;
+      pane.replaceChildren(...['width','height'].map(key=>{
+        const name='Output '+key;
+        return field(name,numeric(name,options[key],value=>put(options,key,value),
+          {min:8,max:1024,step:1,placeholder:preset.defaults[key]??size}));
+      }));
+      if(outline)return;
+      function choice(label,key,values,value,change) {
+        pane.append(field(label,selected(values,value,value=>{put(options,key,value);change?.(value);})));
+      }
+      choice('Output format','format',[['','Map default'],['png','PNG'],['tiff','TIFF'],['exr','OpenEXR']],options.format??'',()=>{
+        if(!formats[options.format??defaultFormat()].includes(options.precision))delete options.precision;
+        draw();
+      });
+      const compatible=formats[options.format??defaultFormat()].filter(precision=>row.id.endsWith('-id')?
+        precision==='float32':/position-(object|world)$/.test(row.id)?precision.startsWith('float'):true);
+      choice('Output precision','precision',[['','Map default'],...compatible.map(id=>[id,titles[id]])],options.precision??'');
+      choice('Antialiasing','antialiasing',[['','Map default'],['1','1 × 1'],['2','2 × 2'],['4','4 × 4']],
+        options.antialiasing??'',value=>put(options,'antialiasing',value?+value:undefined));
+      choice('Gutters','gutters',[['','Map default'],['copy','Copy samples'],['transparent','Keep alpha clear'],['empty','Reserve only']],
+        options.gutters??'',value=>{
+          if(value==='empty'){delete options.dilation;delete options.diffusion;}
+          draw();
+        });
+      if(options.gutters!=='empty') {
+        pane.append(field('Dilation',numeric('Dilation',options.dilation,value=>put(options,'dilation',value),
+          {min:0,max:32,step:1,placeholder:options.padding??preset.defaults.padding??3})));
+        if(!category)pane.append(field('Diffusion passes',numeric('Diffusion passes',options.diffusion,value=>put(options,'diffusion',value),
+          {min:0,max:16,step:1,placeholder:0})));
+      }
+      choice('Mip levels','mipmaps',[['','None'],...Array.from({length:10},(_,i)=>[i+1,String(i+1)]),['full','Full chain']],
+        options.mipmaps||'',value=>put(options,'mipmaps',value&&value!=='full'?+value:value));
+    }
+    draw();
+  }
   function maps() {
     const list=preset.maps, rows=el('rows');rows.replaceChildren();
     for(const [i,row] of list.entries()) {
@@ -368,6 +412,7 @@
           thicknessScale:'Thickness scale',rayBias:'Ray bias'})[key],numeric(key,row.overrides?.[key],n=>put(row.overrides,key,n),
             key==='samples'?{min:4,max:64,step:1}:{min:.000001,step:'any'})));
       }
+      outputControls(row,extra);
       const name=node('label',names[row.id]??row.id);box.id='enabled-'+row.id;name.htmlFor=box.id;
       head.append(box,name,size,up,down,more);line.append(head,extra);rows.append(line);
     }
@@ -505,18 +550,26 @@
     }
   }
   function showMap() {
-    const row=report?.maps[+el('result').value];
+    const row=report?.maps[+el('result').value], mip=el('mip-level'), key=row&&base+row.file;
+    if(mip.dataset.map!==String(key)) {
+      mip.dataset.map=String(key);
+      mip.replaceChildren(new Option('Base level','0'),...(row?.mips??[]).map(item=>
+        new Option('Mip '+item.level+' · '+item.width+' × '+item.height,item.level)));
+      mip.value='0';
+    }
+    el('mip-control').hidden=!row?.mips?.length;
+    const level=Number(mip.value), shown=level?row.mips[level-1]:row;
     el('image').hidden=!row;el('empty').hidden=!!row;el('download-map').hidden=!row;
-    el('download-validity').hidden=!row?.validityFile;
-    const legend=el('id-legend');
-    legend.hidden=true;el('id-swatches').replaceChildren();
-    const debug=report?.uvDebug?.[row?.uvDebug];
+    el('download-validity').hidden=!shown?.validityFile;
+    const debug=level?undefined:report?.uvDebug?.[row?.uvDebug];
     uvOverlays(row,debug);
     if(!row)return;
-    el('image').src=base+(row.previewFile??row.file);
+    el('map-frame').style.setProperty('--map-aspect',(shown.width??row.settings.size)/(shown.height??row.settings.size));
+    el('image').src=base+(shown.previewFile??shown.file);
     el('image').alt=(names[row.map]??row.map)+' on '+row.target+' tile '+row.tileLabel;
-    el('download-map').href=base+row.file;
-    el('download-validity').href=base+(row.validityFile??'');
+    el('download-map').href=base+shown.file;
+    el('download-validity').href=base+(shown.validityFile??'');
+    const delivery=row.settings.delivery;
     const output=row.output, number=n=>Number(n.toPrecision(6)).toString();
     const span=([lo,hi])=>number(lo)+' to '+number(hi);
     if(output?.kind==='id') {
@@ -533,11 +586,15 @@
       ambiguous:'Coincident exits',orientation:'Wrong exit orientation'};
     const rejected=thickness&&Object.entries(thickness.rejected).filter(([,n])=>n)
       .map(([key,n])=>reasons[key]+' '+n.toLocaleString()).join(' · ');
-    properties(el('details'),{'UV set':row.uvSet,'Grid':row.settings.size+' × '+row.settings.size,
+    properties(el('details'),{'UV set':row.uvSet,'Grid':(shown.width??row.settings.size)+' × '+(shown.height??row.settings.size),
       'Padding':row.settings.padding+' px','Surface coverage':(row.coverage*100).toFixed(1)+'%',
       ...(debug&&{'UV charts':debug.charts,'Gutter texels':debug.gutters.toLocaleString(),
         'Overlap texels':debug.overlaps.toLocaleString()}),
-      ...(output&&{'Encoding':encodings.find(([key])=>key===output.encoding)?.[1]}),
+      ...(output&&{'Encoding':delivery?delivery.format.toUpperCase()+' · '+output.bitDepth+'-bit':
+        encodings.find(([key])=>key===output.encoding)?.[1]}),
+      ...(delivery&&{'Antialiasing':delivery.antialiasing+' × '+delivery.antialiasing,
+        'Dilation':delivery.dilation+' px','Diffusion':delivery.diffusion,'Gutters':title(delivery.gutters),
+        ...(row.mips?.length&&{'Mip levels':row.mips.length})}),
       ...(output?.kind==='normal'&&{'Normal space':title(output.space)}),
       ...(output?.kind==='direction'&&{'Direction space':'World XYZ'}),
       ...(output?.kind==='position'&&{'Position space':title(output.space)+' XYZ',
@@ -619,7 +676,7 @@
       update(state);
     } catch(error) {notify(error.message);}
   }
-  el('result').onchange=showMap;
+  el('result').onchange=showMap;el('mip-level').onchange=showMap;
   for(const id of ['show-uv-outlines','show-uv-ownership','show-uv-bounds'])el(id).onchange=showMap;
   fillDefaults();maps();targetControls();results();
   status(report?{event:'completed',completed:report.maps.length,total:report.maps.length}:{event:'idle'},false);

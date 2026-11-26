@@ -10,6 +10,7 @@ const Curvature=require('./bake-job-curvature.js');
 const Attributes=require('./bake-job-attributes.js');
 const Transfer=require('./bake-job-transfer.js');
 const UVDebug=require('./bake-job-uv-debug.js');
+const Output=require('./bake-output-controls.js');
 
 const format='ink-studio/bake-job', presetFormat='ink-studio/bake-preset';
 const names=Object.freeze(['pigment','normal','world-normal','height','roughness','metalness','emission','opacity','coverage',...Geometry.names,
@@ -46,13 +47,13 @@ function preset(value) {
   if(!fields(value,['format','version','label','defaults','maps'])||value.format!==presetFormat||value.version!==1||
       !text(value.label)||!Array.isArray(value.maps)||!integer(value.maps.length,1,names.length))
     throw new TypeError('Expected a named version 1 bake preset with ordered maps');
-  const defaults=options(value.defaults??{},['size','padding',...geometryFields]);
+  const defaults=options(value.defaults??{},['size','padding','width','height',...geometryFields]);
   const seen=new Set(), maps=Array.from(value.maps,row=>{
     if(!fields(row,['id','enabled','overrides'])||!names.includes(row.id)||seen.has(row.id)||
       row.enabled!==undefined&&typeof row.enabled!=='boolean')
       throw new TypeError('Use each supported bake map once and set enabled to a boolean');
     seen.add(row.id);
-    const overrides=options(row.overrides??{},['size','padding',...(mapSurface[row.id]??[]),...(mapGeometry[row.id]??[]),
+    const overrides=options(row.overrides??{},['size','padding',...Output.fields,...(mapSurface[row.id]??[]),...(mapGeometry[row.id]??[]),
       ...(Occlusion.names.includes(row.id)?Occlusion.fields:[]),...(Thickness.names.includes(row.id)?Thickness.fields:[]),
       ...(row.id==='thickness'?['encoding']:[]),...(Curvature.names.includes(row.id)?Curvature.fields:[]),...Transfer.fields(row.id)]);
     Surface.settings(row.id,overrides);
@@ -60,7 +61,10 @@ function preset(value) {
     Thickness.settings(row.id,overrides);
     Curvature.settings(row.id,overrides);
     Transfer.settings(row.id,overrides);
-    return {id:row.id,enabled:row.enabled??true,overrides};
+    const validated={id:row.id,enabled:row.enabled??true,overrides};
+    if(validated.enabled&&Output.fields.some(key=>overrides[key]!==undefined||defaults[key]!==undefined))
+      effective({defaults,maps:[]},validated);
+    return validated;
   });
   if(!maps.some(row=>row.enabled))throw new RangeError('Enable at least one bake map');
   return {format:presetFormat,version:1,label:value.label,defaults,maps};
@@ -234,12 +238,14 @@ function readPlan(filename,{presetFile,presetValue,targetValues,onInput=()=>{}}=
 function effective(preset,row) {
   const thickness=row.id==='thickness-valid'&&preset.maps.find(other=>other.id==='thickness'&&other.enabled);
   const shared=thickness&&Object.fromEntries(Object.entries(thickness.overrides)
-    .filter(([key])=>['size','padding','rayBias',...Thickness.fields].includes(key)));
+    .filter(([key])=>['size','width','height','padding','antialiasing','dilation','gutters','mipmaps','rayBias',...Thickness.fields].includes(key)));
   const {size=128,padding=3,...tuning}={...preset.defaults,...shared,...row.overrides};
-  if(padding*2>=size)throw new RangeError('Map padding must be less than half its size');
-  return {size,padding,...Surface.settings(row.id,tuning),...Occlusion.settings(row.id,tuning),...Thickness.settings(row.id,tuning),
+  const base={size,padding,...Surface.settings(row.id,tuning),...Occlusion.settings(row.id,tuning),...Thickness.settings(row.id,tuning),
     ...Curvature.settings(row.id,tuning),...Attributes.settings(row.id),...Transfer.settings(row.id,tuning),
     ...(Geometry.names.includes(row.id)&&{geometry:Geometry.settings(Object.fromEntries(
       Object.entries(tuning).filter(([key])=>geometryFields.includes(key))))})};
+  const delivery=Output.controls(row.id,base,tuning);
+  if(!delivery&&padding*2>=size)throw new RangeError('Map padding must be less than half its size');
+  return {...base,...(delivery&&{delivery})};
 }
 module.exports={format,presetFormat,names,preset,readPlan,effective,id};
