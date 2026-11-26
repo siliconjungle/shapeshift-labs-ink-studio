@@ -88,8 +88,9 @@ function meshWriter(doc, mesh, rig, kit, options) {
   });
   const normals = (mesh.normals || vertexNormals).map(n => V.norm(n));
   const { uvMargin } = options;
-  const textureSize = options.textureSize === 0 ? 0 : mesh.textureSize ?? options.textureSize ?? source?.row.width ?? 1024;
-  if (![0, 256, 512, 1024, 2048, 4096].includes(textureSize)) throw new Error('Invalid texture size on ' + name);
+  const registeredPage=registered?.page(registeredIndex);
+  const textureSize = registeredPage?.size ?? (options.textureSize === 0 ? 0 : mesh.textureSize ?? options.textureSize ?? source?.row.width ?? 1024);
+  if (!registeredPage && ![0, 256, 512, 1024, 2048, 4096].includes(textureSize)) throw new Error('Invalid texture size on ' + name);
   const generated = !mesh.uvs, atlases=new Map();
   function atlasAt(set) {
     if (!atlases.has(set)) {
@@ -98,7 +99,7 @@ function meshWriter(doc, mesh, rig, kit, options) {
         uvs:saved.state.uvs,padding:saved.row.padding,charts:saved.state.chartCount,utilization:saved.state.utilization
       } : !set && generated ? unwrap(points, faces, faceNormals, {
         size: textureSize || 1024, margin: uvMargin, groups: mesh.chartGroups ? sourceFaces.map(i => mesh.chartGroups[i]) : undefined
-      }) : {uvs:set ? cornerSets.get(set) : corners,padding:saved?.row.padding ?? Math.max(2,Math.ceil(textureSize*uvMargin/2))};
+      }) : {uvs:set ? cornerSets.get(set) : corners,padding:saved?.row.padding ?? registeredPage?.padding ?? Math.max(2,Math.ceil(textureSize*uvMargin/2))};
       if (registered) atlas.uvs=atlas.uvs.map(face=>face.map(uv=>uv.map(Math.fround)));
       if (atlas.uvs.some(uv=>Math.abs(area2(...uv))<1e-15)) throw new Error('Degenerate UV mapping on '+name+' set '+set);
       atlases.set(set,atlas);
@@ -146,7 +147,8 @@ function meshWriter(doc, mesh, rig, kit, options) {
     if (sets.size*textureSize**2>16777216) throw new RangeError('Channel UV atlases exceed the material pixel budget');
     const sample=mesh.sampleSurface;
     const bakeNormals=hardNormals.length ? hardNormals : mesh.smooth===false ? faceNormals.map(n=>[n,n,n]) : undefined;
-    const bakedBySet=new Map(), pigmentUVs=atlas.uvs;
+    const bakedBySet=new Map(), pigmentUVs=registeredPage?.pigmentUVs ?
+      sourceFaces.map((face,i)=>registeredPage.pigmentUVs[face] ?? atlas.uvs[i]) : atlas.uvs;
     for (const set of sets) {
       const current=atlasAt(set), saved=baseline(set), {uvs}=current;
       if (uvs.some(face=>face.some(uv=>uv.some(x=>x<0||x>1))))
@@ -163,7 +165,7 @@ function meshWriter(doc, mesh, rig, kit, options) {
         size:textureSize,source:saved,set,primary,pigmentUVs
       },kit) ?? {};
       const baked=bake(bakeMesh,faces,uvs,normals,textureSize,current.padding,{V},
-        {registered:Boolean(registered),projection,chartBake,sourceFaces,...(sets.size>1 && {pigmentUVs})});
+        {registered:Boolean(registered),projection,chartBake,sourceFaces,...((sets.size>1 || registeredPage?.pigmentUVs) && {pigmentUVs})});
       bakedBySet.set(set,baked);
       if (registered) {
         const report=registered.record(registeredIndex,mesh,faces,uvs,textureSize,current.padding,baked,chartBake,
