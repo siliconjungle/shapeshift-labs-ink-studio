@@ -1,26 +1,28 @@
 #!/usr/bin/env node
 import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import ink from '../index.js';
 import { gaussianSplatWorld } from '../src/gaussian-splats.mjs';
 import { gaussianRecordFloats, inspectGaussianChunkManifest, packGaussianChunks } from '../src/gaussian-chunks.mjs';
 
-const hash = bytes => createHash('sha256').update(bytes).digest('hex').slice(0,20);
-const littleEndian = new Uint8Array(Uint16Array.of(1).buffer)[0] === 1;
+import packFiles from '../cli/gaussian-pack-files.js';
+import batch from '../cli/graph-batch.js';
 
-function rawPayload(data) {
-  if (littleEndian) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-  const bytes = Buffer.allocUnsafe(data.byteLength);
-  for (let i = 0; i < data.length; i++) bytes.writeFloatLE(data[i], i * 4);
-  return bytes;
+const { shortHash:hash,chunkId,levelName,rawPayload } = packFiles;
+
+export async function writeGaussianPack(world, output, settings = {}) {
+  const release=batch.claim(output,'Gaussian pack');
+  try { return await writePack(world, output, settings); }
+  finally { release(); }
 }
 
-export async function writeGaussianPack(world, output, { splatFit,...settings } = {}) {
+async function writePack(world, output, { splatFit,...settings }) {
   const manifestPath=path.join(output,'manifest.json');
   const previous=await readFile(manifestPath,'utf8').then(value=>inspectGaussianChunkManifest(JSON.parse(value)),
     error=>{if (error.code!=='ENOENT') throw error;});
+  if (previous?.edit) throw new RangeError('Use stream-splats edit on an indexed pack or choose a new output directory');
   const packed = packGaussianChunks(ink.bakeSplatFit(world,splatFit),{...settings,previousFootprints:previous?.footprints});
   let lastRevision=previous?.epoch??0;
   for (const chunk of previous?.chunks??[]) {
@@ -28,7 +30,7 @@ export async function writeGaussianPack(world, output, { splatFit,...settings } 
   }
   const epoch=lastRevision+1;
   if (!Number.isSafeInteger(epoch)) throw new RangeError('Gaussian pack revision limit reached');
-  const manifest = { schema: packed.schema, world: packed.world, chunks: [],epoch,
+  const manifest = { schema: packed.schema, world: packed.world, chunks: [],epoch,packing:packed.packing,
     ...(packed.footprints&&{footprints:packed.footprints}) };
   const oldChunks=new Map(previous?.chunks.map(chunk=>[chunk.id,chunk]));
   await mkdir(output, { recursive: true });
@@ -37,8 +39,8 @@ export async function writeGaussianPack(world, output, { splatFit,...settings } 
     await writeFile(temporary, bytes);
     await rename(temporary, path.join(output, name));
   }
-  for (const {layer,cell,bounds,levels:source,footprints} of packed.chunks()) {
-    const id='chunk-'+hash(JSON.stringify([layer,cell])), old=oldChunks.get(id), levels=[];
+  for (const {layer,cell,bounds,levels:source,footprints,locked} of packed.chunks()) {
+    const id=chunkId(layer,cell), old=oldChunks.get(id), levels=[];
     let footprintRevision;
     if (footprints) {
       const slots=new Set(), finest=source.at(-1).data;
@@ -47,7 +49,7 @@ export async function writeGaussianPack(world, output, { splatFit,...settings } 
     }
     for (const { data, payload, file: sourceFile, id: lod, splats, error, encoding, payloadBytes } of source) {
       const bytes = payload ?? rawPayload(data);
-      const file=id+'-'+lod+'-'+hash(bytes)+path.extname(sourceFile), prior=old?.levels.find(level=>level.id===lod);
+      const file=levelName(id,lod,bytes,sourceFile), prior=old?.levels.find(level=>level.id===lod);
       const existing=await stat(path.join(output,file)).catch(error=>{if(error.code!=='ENOENT') throw error;});
       if (!existing || existing.size!==bytes.length) await publish(file,bytes);
       const unchanged=prior?.file===file && prior.error===error && old.footprints===footprints &&
@@ -55,7 +57,7 @@ export async function writeGaussianPack(world, output, { splatFit,...settings } 
         JSON.stringify(old.bounds)===JSON.stringify(bounds);
       levels.push({id:lod,file,splats,error,encoding,payloadBytes,revision:unchanged ? prior.revision : epoch});
     }
-    manifest.chunks.push({id,layer,cell,bounds,levels,...(footprints&&{footprints,footprintRevision})});
+    manifest.chunks.push({id,layer,cell,bounds,levels,...(footprints&&{footprints,footprintRevision}),...(locked&&{locked})});
   }
   inspectGaussianChunkManifest(manifest);
   await publish('manifest.json', JSON.stringify(manifest, null, 2) + '\n');

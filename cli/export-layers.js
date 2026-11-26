@@ -201,4 +201,4 @@ function exportLayers(world, { out, view = {}, times = [view.time ?? view.t ?? w
   }
 }
 
-module.exports = { exportLayers };
+module.exports = { exportLayers, writeFrame, encodings };

@@ -27,7 +27,8 @@ export function gaussianChunkData(input, count) {
 export function decodeGaussianChunkPayload(bytes, count, encoding) {
   return encoding === 'irc1'
     ? codec.decode(bytes, { expectedCount: count }).data
-    : gaussianChunkData(bytes.buffer, count);
+    : gaussianChunkData(bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength ? bytes.buffer :
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), count);
 }
 
 function validPayload(level) {
@@ -101,6 +102,31 @@ function coarsen(source, voxel, protect) {
   return { data, error };
 }
 
+export function buildGaussianCellLevels(raw, protect, {voxelSizes,encoding,lossless,name,footprints}) {
+  const compressed = encoding === 'irc1', extension = compressed ? '.irc' : '.bin';
+  const bounds = { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] };
+  const levels = [];
+  let prior = 0;
+  for (let i = voxelSizes.length - 1; i >= 0; i--) {
+    const level = voxelSizes[i] ? coarsen(raw, voxelSizes[i],protect) : { data: raw, error: 0 };
+    const splats = level.data.length / gaussianRecordFloats;
+    if (levels[0]?.splats === splats) continue;
+    const payload = compressed ? codec.encode(level.data, splats, lossless ? losslessOptions : undefined) : undefined;
+    const decoded = compressed && !lossless ? decodeGaussianChunkPayload(payload, splats, encoding) : level.data;
+    let encodingError = 0;
+    if (decoded !== level.data) for (let at = 0; at < decoded.length; at += gaussianRecordFloats) {
+      encodingError = Math.max(encodingError, Math.hypot(decoded[at] - level.data[at],
+        decoded[at + 1] - level.data[at + 1], decoded[at + 2] - level.data[at + 2]));
+    }
+    prior = Math.max(prior, level.error + encodingError);
+    setBounds(bounds, decoded, footprints);
+    levels.unshift({ id: 'lod-' + i, file: name + '-' + i + extension, revision: 1, splats,
+      error: prior, encoding, payloadBytes: payload?.byteLength ?? level.data.byteLength,
+      data: level.data, ...(payload && { payload }) });
+  }
+  return {bounds,levels};
+}
+
 export function packGaussianChunks(world, { cellSize = 2, voxelSizes = [.2, .1, .05, 0], layer = 'main',
   previousFootprints = [], encoding = 'raw', lossless = false } = {}) {
   const { count, data, cam, radius, bg } = world ?? {};
@@ -115,7 +141,6 @@ export function packGaussianChunks(world, { cellSize = 2, voxelSizes = [.2, .1, 
 
   if (!['raw', 'irc1'].includes(encoding) || typeof lossless !== 'boolean' || lossless && encoding !== 'irc1')
     throw new RangeError('Gaussian chunks accept raw or irc1 encoding, with lossless available for irc1');
-  const compressed = encoding === 'irc1', extension = compressed ? '.irc' : '.bin';
 
   if (!Array.isArray(previousFootprints) || previousFootprints.length > 64)
     throw new TypeError('Invalid previous Gaussian footprint registry');
@@ -169,30 +194,12 @@ export function packGaussianChunks(world, { cellSize = 2, voxelSizes = [.2, .1, 
         }
       }
       const name = 'chunk-' + String(++id).padStart(5, '0');
-      const bounds = { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] };
-      const levels = [];
-      let prior = 0;
-      for (let i = voxelSizes.length - 1; i >= 0; i--) {
-        const level = voxelSizes[i] ? coarsen(raw, voxelSizes[i],protect) : { data: raw, error: 0 };
-        const splats = level.data.length / gaussianRecordFloats;
-        if (levels[0]?.splats === splats) continue;
-        const payload = compressed ? codec.encode(level.data, splats, lossless ? losslessOptions : undefined) : undefined;
-        const decoded = compressed && !lossless ? decodeGaussianChunkPayload(payload, splats, encoding) : level.data;
-        let encodingError = 0;
-        if (decoded !== level.data) for (let at = 0; at < decoded.length; at += gaussianRecordFloats) {
-          encodingError = Math.max(encodingError, Math.hypot(decoded[at] - level.data[at],
-            decoded[at + 1] - level.data[at + 1], decoded[at + 2] - level.data[at + 2]));
-        }
-        prior = Math.max(prior, level.error + encodingError);
-        setBounds(bounds, decoded, shaped);
-        levels.unshift({ id: 'lod-' + i, file: name + '-' + i + extension, revision: 1, splats,
-          error: prior, encoding, payloadBytes: payload?.byteLength ?? level.data.byteLength,
-          data: level.data, ...(payload && { payload }) });
-      }
-      yield { id: name, layer, cell, bounds, levels,...(shaped&&{footprints:true}) };
+      const {bounds,levels}=buildGaussianCellLevels(raw,protect,{voxelSizes,encoding,lossless,name,footprints:shaped});
+      const locked=indices.flatMap((n,i)=>world.splatLodProtected?.[n] ? [i] : []);
+      yield { id: name, layer, cell, bounds, levels,...(shaped&&{footprints:true}),...(locked.length&&{locked}) };
     }
   }
-  return { schema: gaussianChunkSchema, world: { cam, radius, bg }, chunks,...(footprints.length&&{footprints}) };
+  return { schema: gaussianChunkSchema, world: { cam, radius, bg }, chunks, packing:{cellSize,voxelSizes:voxelSizes.slice(),encoding,lossless},...(footprints.length&&{footprints}) };
 }
 
 export function inspectGaussianChunkManifest(manifest) {

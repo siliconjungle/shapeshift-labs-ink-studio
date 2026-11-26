@@ -1168,6 +1168,8 @@ Build [WebGPU texture and geometry graphs](docs/webgpu-graphs.md) with reusable 
 
 [Shared splat attributes](docs/shared-splat-attributes.md) retains named selections and deformation weights through outlier cleanup, headless rendering, and native cloud export.
 
+[Streamed splat editing](docs/streamed-splat-editing.md) patches stable rows across packed cells, then exports registered layers and measures residency and image quality.
+
 ```sh
 npx ink-studio render scan.spz --raw --out preview.png
 ```

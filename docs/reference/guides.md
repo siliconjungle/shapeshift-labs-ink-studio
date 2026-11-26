@@ -508,6 +508,7 @@ All checked-in guides, indexed by title and section headings.
 - [Story presentation packs](../story-presentation-pack.md)
 - [Rehearse against story beats](../story-rehearsal.md)
 - [Scene markers from a committed run](../story-scene-timeline.md)
+- [Edit a streamed splat pack](../streamed-splat-editing.md)
 - [Subject-aware shot reframing](../subject-reframe.md)
 - [Subtractive synth voices](../subtractive-synth.md)
 - [Surface-aligned brush strokes](../surface-brush.md)
