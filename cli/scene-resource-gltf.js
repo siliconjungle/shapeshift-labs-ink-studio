@@ -5,7 +5,7 @@ const { readGltfAsset,writeGltfAsset } = require('./gltf-asset.js');
 const PNG = require('./png.js');
 const { createHash } = require('node:crypto');
 
-const width = {SCALAR:1,VEC2:2,VEC3:3};
+const width = {SCALAR:1,VEC2:2,VEC3:3,VEC4:4};
 const components = {5120:[1,'getInt8',127],5121:[1,'getUint8',255],5122:[2,'getInt16',32767],
   5123:[2,'getUint16',65535],5125:[4,'getUint32',4294967295],5126:[4,'getFloat32',1]};
 const wraps = {33071:'clamp',33648:'mirror',10497:'repeat'};
@@ -96,7 +96,7 @@ function materials(doc,binary,directory) {
   });
 }
 
-function fromGltf(file,textureDir,onFile) {
+function fromGltf(file,textureDir,onFile,{bakeAttributes=false}={}) {
   const asset=readGltfAsset(file,{onFile}), {document:doc,binary}=asset.snapshot();
   if(doc.animations?.length||doc.skins?.length||doc.cameras?.length||doc.extensionsRequired?.length||
      doc.nodes?.some(n=>n.extensions||n.camera!==undefined||n.weights))
@@ -106,22 +106,27 @@ function fromGltf(file,textureDir,onFile) {
   const meshes=(doc.meshes??[]).map((mesh,i)=>({name:mesh.name??'Mesh '+(i+1),parts:mesh.primitives.map(p=>{
     const {attributes={}}=p;
     if(p.mode!==undefined&&p.mode!==4||p.targets?.length||p.extensions||
-       Object.keys(attributes).some(key=>!['POSITION','NORMAL','TANGENT'].includes(key)&&!/^TEXCOORD_\d+$/.test(key)))
+       Object.keys(attributes).some(key=>!['POSITION','NORMAL','TANGENT'].includes(key)&&!/^TEXCOORD_\d+$/.test(key)&&
+         !(bakeAttributes&&key==='COLOR_0')))
       throw new TypeError('Scene resources support triangle positions, normals and UVs. Unsupported glTF vertex attributes or primitive mode.');
     // Tangents can be reconstructed by the consumer from normals and the selected UV chart.
     const position=read(attributes.POSITION,'VEC3'), count=position.length/3;
     const indices=p.indices===undefined?position.filter((_,i)=>i%3===0).map((_,i)=>i):read(p.indices,'SCALAR');
     const normal=attributes.NORMAL===undefined?undefined:read(attributes.NORMAL,'VEC3');
+    const colorType=doc.accessors?.[attributes.COLOR_0]?.type;
+    const color=attributes.COLOR_0===undefined?undefined:read(attributes.COLOR_0,colorType==='VEC3'?'VEC3':'VEC4');
     const uv=Object.fromEntries(Object.entries(attributes).filter(([key])=>key.startsWith('TEXCOORD_'))
       .map(([key,id])=>[key.slice(9),read(id,'VEC2')]));
     total+=indices.length;
     if(!indices.length||indices.length%3||total>1_500_000||indices.some(i=>i>=count)||
-       normal&&normal.length!==position.length||Object.values(uv).some(row=>row.length!==count*2))
+       normal&&normal.length!==position.length||color&&(color.length!==count*width[colorType]||color.some(n=>n<0||n>1))||
+       Object.values(uv).some(row=>row.length!==count*2))
       throw new RangeError('Invalid glTF triangle indices, normal count or UV count');
-    return {position,indices,...(normal&&{normal}),uv,material:p.material??null};
+    return {position,indices,...(normal&&{normal}),...(color&&{color,colorLanes:width[colorType]}),uv,material:p.material??null};
   })}));
   const active=asset.sample(), indices=new Map(active.map((row,i)=>[row.id,i]));
-  const nodes=active.map(n=>({name:n.name??'Node '+n.id,parent:n.parent===null?null:indices.get(n.parent),matrix:n.local,mesh:n.mesh??null}));
+  const nodes=active.map(n=>({name:n.name??'Node '+n.id,parent:n.parent===null?null:indices.get(n.parent),matrix:n.local,mesh:n.mesh??null,
+    ...(bakeAttributes&&{world:n.world})}));
   return {name:doc.scenes?.[doc.scene??0]?.name??path.basename(file,path.extname(file)),nodes,meshes,materials:materials(doc,binary,textureDir)};
 }
 
