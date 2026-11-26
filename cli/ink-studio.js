@@ -20,6 +20,7 @@ const argv = process.argv.slice(2),
   pos = [],
   opt = {};
 const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' || cmd === 'effect-recipe' ? ['json'] :
+  cmd === 'tasks' ? ['resume', 'progress', 'wait'] :
   cmd === 'modeling-benchmark' ? ['repairs-complete'] : cmd === 'mesh-topology' ? ['from-camera', 'detach-edge', 'coincident', 'replay'] : cmd === 'tileset' ? ['brush', 'clear', 'accept-external', 'snap-grid', 'paint-flip-x', 'paint-flip-y', 'brush-size'] : [];
 for (let i = 1; i < argv.length; i++) {
   const a = argv[i];
@@ -1641,7 +1642,12 @@ const CMD = {
         '  lint <id ...> [--map]              pixel-art lint: orphans, doubles, jaggies, banding, pillow shading, noise, colours',
         '  review <id> [--ref pic --px 2]     a sheet of fixed shots (four sides, top, low, far, near, close), beside the last one',
         '  tasks plan <plan.json>   validate native artifact tasks and show dependency order',
-        '  tasks run <plan.json> --out directory [--resume]   execute and cache native artifact tasks',
+        '  tasks run <plan.json> --out directory [--resume --budget limits.json --progress]   execute and cache native artifact tasks',
+        '  tasks serve <plan.json> --out directory [--port N --host IP --budget limits.json --tls-cert CERT --tls-key KEY]   host an approved task recipe',
+        '  tasks manifest <worker-url>   show the registered recipe, declared assets and limits',
+        '  tasks submit <worker-url> <plan.json> [--budget limits.json --wait]   queue a task job',
+        '  tasks status|cancel <worker-url> <job-id>   inspect progress and receipts or cancel a job',
+        '  tasks fetch <worker-url> <job-id> <task-id> <artifact-id> --out path   download and verify an artifact',
         '  sweep <scene> <plan.json> --out directory   render still and clip contact sheets across settings and seeds',
         '  sweep pin <report-or-directory> <run-id|sample-id|tile> --out pin.json   save one exact case',
         '  sweep compare <report> <left> <right> --out directory   export matched view differences',
@@ -3248,21 +3254,7 @@ const CMD = {
     shot?.finish(file,{suffixes});
   },
   tasks() {
-    const [mode, file] = pos;
-    if (pos.length !== 2 || !['plan', 'run'].includes(mode) ||
-        Object.keys(opt).some(key => mode !== 'run' || !['out', 'resume'].includes(key)) ||
-        mode === 'run' && (typeof opt.out !== 'string' || opt.resume !== undefined && opt.resume !== true))
-      die('Use tasks plan <plan.json> or tasks run <plan.json> --out directory [--resume]');
-    const graph = require('./task-graph.js');
-    const plan = graph.prepare(file);
-    if (mode === 'plan') {
-      console.log(JSON.stringify(plan.order.map(id => ({ id, dependencies: plan.tasks.get(id).dependencies })), null, 2));
-      return;
-    }
-    const out = path.resolve(opt.out);
-    const report = graph.run(plan, out, { kit:lib(), entry:__filename, resume:opt.resume === true });
-    console.log('wrote', path.join(out, 'report.json'));
-    if (!report.passed) process.exitCode = 2;
+    return require('./task-worker-command.js').command(pos, opt, { load: lib, entry: __filename });
   },
   sweep() {
     const sweeps = require('./visual-sweep.js');
