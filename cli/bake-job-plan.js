@@ -8,10 +8,11 @@ const Occlusion=require('./bake-job-occlusion.js');
 const Thickness=require('./thickness.js');
 const Curvature=require('./bake-job-curvature.js');
 const Attributes=require('./bake-job-attributes.js');
+const Transfer=require('./bake-job-transfer.js');
 
 const format='ink-studio/bake-job', presetFormat='ink-studio/bake-preset';
 const names=Object.freeze(['pigment','normal','world-normal','height','roughness','metalness','emission','opacity','coverage',...Geometry.names,
-  ...projectionMaps,...Occlusion.names,...Curvature.names,...Attributes.names]);
+  ...projectionMaps,...Occlusion.names,...Curvature.names,...Attributes.names,Transfer.name]);
 const geometryFields=['up','samples','cavityRadius','exposureDistance','thicknessScale','rayBias'];
 const mapGeometry={slope:['up'],cavity:['samples','cavityRadius','rayBias'],
   exposure:['samples','exposureDistance','rayBias'],thickness:['thicknessScale','rayBias'],'thickness-valid':['rayBias']};
@@ -52,11 +53,12 @@ function preset(value) {
     seen.add(row.id);
     const overrides=options(row.overrides??{},['size','padding',...(mapSurface[row.id]??[]),...(mapGeometry[row.id]??[]),
       ...(Occlusion.names.includes(row.id)?Occlusion.fields:[]),...(Thickness.names.includes(row.id)?Thickness.fields:[]),
-      ...(row.id==='thickness'?['encoding']:[]),...(Curvature.names.includes(row.id)?Curvature.fields:[])]);
+      ...(row.id==='thickness'?['encoding']:[]),...(Curvature.names.includes(row.id)?Curvature.fields:[]),...Transfer.fields(row.id)]);
     Surface.settings(row.id,overrides);
     Occlusion.settings(row.id,overrides);
     Thickness.settings(row.id,overrides);
     Curvature.settings(row.id,overrides);
+    Transfer.settings(row.id,overrides);
     return {id:row.id,enabled:row.enabled??true,overrides};
   });
   if(!maps.some(row=>row.enabled))throw new RangeError('Enable at least one bake map');
@@ -143,7 +145,25 @@ function libraries(source,baseDir) {
     }
     return {...descriptor,tiles};
   });
-  return {sources,skewMaps,normalInputs};
+  const textureInputs=entries(source.textureInputs,'bake texture inputs',value=>{
+    if(!fields(value,['file','tiles'])||Object.hasOwn(value,'file')===Object.hasOwn(value,'tiles'))
+      throw new TypeError('Texture inputs need a file or a tile set');
+    function locate(name) {
+      if(!file(name)||!(/\.(png|tiff?|exr)$/i.test(name)))throw new TypeError('Texture inputs need PNG, TIFF or OpenEXR files');
+      return path.resolve(baseDir,name);
+    }
+    if(value.file!==undefined)return {file:locate(value.file)};
+    if(!Array.isArray(value.tiles)||!integer(value.tiles.length,1,32))throw new TypeError('Use 1–32 texture input tiles');
+    const tiles=new Map();
+    for(const row of value.tiles) {
+      if(!fields(row,['tile','file']))throw new TypeError('Texture tiles need a tile coordinate and filename');
+      const key=UV.tileKey(coord(row.tile));
+      if(tiles.has(key))throw new RangeError('Duplicate texture input tile '+key);
+      tiles.set(key,locate(row.file));
+    }
+    return {tiles};
+  });
+  return {sources,skewMaps,normalInputs,textureInputs};
 }
 function targets(rows,{sources,skewMaps}) {
   if(!Array.isArray(rows)||!integer(rows.length,1,24))throw new RangeError('A bake job needs 1–24 targets');
@@ -187,7 +207,7 @@ function readPlan(filename,{presetFile,presetValue,targetValues,onInput=()=>{}}=
   const location=path.resolve(filename), baseDir=path.dirname(location);
   onInput(location);
   const source=json(location);
-  if(!fields(source,['format','version','label','source','targets','preset','refresh','projectionSources','skewMaps','normalInputs'])||
+  if(!fields(source,['format','version','label','source','targets','preset','refresh','projectionSources','skewMaps','normalInputs','textureInputs'])||
     source.format!==format||source.version!==1||!text(source.label)||!meshFile(source.source))
     throw new TypeError('Expected a version 1 bake job with a GLB or glTF source');
   let settings=presetValue??presetFile??source.preset;
@@ -199,8 +219,13 @@ function readPlan(filename,{presetFile,presetValue,targetValues,onInput=()=>{}}=
   const catalogs=libraries(source,baseDir), selected=targets(targetValues??source.targets,catalogs), receiver=path.resolve(baseDir,source.source);
   onInput(receiver);
   const chosen=settings===undefined?defaults():preset(settings);
-  for(const row of chosen.maps)if(row.enabled&&row.overrides.curvatureSource==='normal'&&!catalogs.normalInputs.has(row.overrides.normalInput))
-    throw new RangeError('Unknown curvature normal input '+row.overrides.normalInput);
+  for(const row of chosen.maps)if(row.enabled) {
+    if(row.overrides.curvatureSource==='normal'&&!catalogs.normalInputs.has(row.overrides.normalInput))
+      throw new RangeError('Unknown curvature normal input '+row.overrides.normalInput);
+    const {textureInput}=row.overrides;
+    if(row.id===Transfer.name&&!textureInput)throw new RangeError('Texture transfer needs a named texture input');
+    if(textureInput&&!catalogs.textureInputs.has(textureInput))throw new RangeError('Unknown bake texture input '+textureInput);
+  }
   return {location,label:source.label,source:receiver,targets:selected,...catalogs,preset:chosen,
     refresh:bindings(source.refresh,baseDir,selected,onInput)};
 }
@@ -212,7 +237,7 @@ function effective(preset,row) {
   const {size=128,padding=3,...tuning}={...preset.defaults,...shared,...row.overrides};
   if(padding*2>=size)throw new RangeError('Map padding must be less than half its size');
   return {size,padding,...Surface.settings(row.id,tuning),...Occlusion.settings(row.id,tuning),...Thickness.settings(row.id,tuning),
-    ...Curvature.settings(row.id,tuning),...Attributes.settings(row.id),
+    ...Curvature.settings(row.id,tuning),...Attributes.settings(row.id),...Transfer.settings(row.id,tuning),
     ...(Geometry.names.includes(row.id)&&{geometry:Geometry.settings(Object.fromEntries(
       Object.entries(tuning).filter(([key])=>geometryFields.includes(key))))})};
 }

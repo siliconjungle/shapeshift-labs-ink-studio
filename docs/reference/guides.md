@@ -50,6 +50,7 @@ All checked-in guides, indexed by title and section headings.
 - [Ambient occlusion, bent normals and direction bakes](../bake-occlusion.md)
 - [Position and ID bakes](../bake-position-id.md)
 - [Bake projection controls](../bake-projection.md)
+- [Opacity and texture transfer](../bake-texture-transfer.md)
 - [Thickness bakes](../bake-thickness.md)
 - [Batch spatial queries and occupancy](../batch-spatial-queries.md)
 - [Capture beat-level live performance](../beat-performance-captures.md)
