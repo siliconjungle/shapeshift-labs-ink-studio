@@ -323,6 +323,7 @@ All checked-in guides, indexed by title and section headings.
 - [Boil retained painting marks](../painting-boil.md)
 - [Animate retained 3D painting cels](../painting-cels.md)
 - [Flow retained paint along a painted field](../painting-flow.md)
+- [Painting wave](../painting-wave.md)
 - [Palette recipes and color paths](../palette-recipes.md)
 - [Layered cut paper and relief](../paper-relief.md)
 - [Shared parameter bindings](../parameter-bindings.md)
