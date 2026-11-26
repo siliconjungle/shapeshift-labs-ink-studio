@@ -159,11 +159,10 @@ function renderOcclusion(tasks,scene,K) {
         chartBake:{state:{faceCharts:faces.map(()=>0)},visibility:buffers}});
       // The output-texel budget also bounds these buffers. Keep no material raster
       // while waiting for later maps that share this ray pass.
-      cache.set(key,{buffers,texels:result.sampledTexels,coverage:result.coverage});
+      cache.set(key,{buffers,texels:result.sampledTexels,coverage:result.coverage,remaining:requested.length});
     }
-    const {buffers,texels,coverage}=cache.get(key);
-    group.requested.pop();
-    if(!group.requested.length)cache.delete(key);
+    const entry=cache.get(key), {buffers,texels,coverage}=entry;
+    if(--entry.remaining===0)cache.delete(key);
     return {...Occlusion.encode(map,buffers,settings),texels,coverage,occlusion:buffers.report()};
   };
 }

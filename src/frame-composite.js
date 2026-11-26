@@ -423,11 +423,25 @@ const FrameComposite = (() => {
     for (let p = 0; p < w * h; p++) {
       const a = data[p * 4 + 3];
       if (alpha) alpha[p] = a;
-      if (a) for (let c = 0; c < 3; c++) rgb[p * 3 + c] = Math.round(data[p * 4 + c] * 255 / a);
+      unassociate(data, p * 4, rgb, p * 3, a);
     }
     return { w, h, rgb, ...(alpha && { alpha }) };
   }
 
-  return Object.freeze({ settings, prepare, layers, compose, image, pixels, sample, samplePlaced, blend, straight, paintMap, screenDrawing, textureSource });
+  function unassociate(data, from, output, to, alpha) {
+    if (alpha) for (let c = 0; c < 3; c++) output[to + c] = Math.round(data[from + c] * 255 / alpha);
+  }
+
+  function straightRGBA(data) {
+    const output = new Uint8Array(data.length);
+    for (let at = 0; at < data.length; at += 4) {
+      output[at + 3] = data[at + 3];
+      unassociate(data, at, output, at, output[at + 3]);
+    }
+    return output;
+  }
+
+  return Object.freeze({ settings, prepare, layers, compose, image, pixels, sample, samplePlaced, blend, straight,
+    straightRGBA, paintMap, screenDrawing, textureSource });
 })();
 if (typeof module !== 'undefined') module.exports = FrameComposite;

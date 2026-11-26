@@ -173,6 +173,7 @@
     reliefHeight: value => value === null || scalarRaster(value) ||
       K.procedural.graphImages.valid(value, 'height') && value.descriptor.units === 'art-px',
     materialChannels: value => K.procedural.materialChannels.valid(value),
+    sceneMesh: value => K.sceneMeshes.valid(value),
     fieldSpriteMaterial: value => value?.format === 'ink-studio/field-sprite-material' && typeof value.sample === 'function',
     fieldSpriteSurface: value => value?.format === 'ink-studio/field-sprite-surface' &&
       raster(value.value) && raster(value.position) && raster(value.normal) &&
@@ -229,6 +230,7 @@
     functionLocals: ['typed function local scope'],
     reliefHeight: ['height in art pixels'],
     materialChannels: ['material channel packet'],
+    sceneMesh: ['UV-mapped scene mesh handle'],
     cameraGrid: ['camera grid with view and viewport', 'record']
   };
   const description = type => Object.hasOwn(semantics, type) ? semantics[type][0] : type;

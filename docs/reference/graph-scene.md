@@ -80,6 +80,24 @@ Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes)
 Get the runnable example with `ink-studio graph describe scene.cameraTrack --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### scene.colorTexture
+
+Expose the rendered scene or a captured screen image as straight sRGB without copying sample bytes.
+
+Origin: headless.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `frame` | `renderFrame` | Required | {"layout":"Headless frame with width, height and RGB buffer"} |
+| Input | `channel` | `string` | `"color"` |  |
+| Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
+| Output | `report` | `record` | — | {"layout":"Plain named object"} |
+
+Guides: [guide](../headless-scene-graphs.md#capture-and-reuse-textures)
+
+Get the runnable example with `ink-studio graph describe scene.colorTexture --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### scene.deepLayer
 
 Read an isolated depth fragment from the camera, through glass, or in a planar reflection.
@@ -161,6 +179,43 @@ Origin: toolkit.
 Guides: [guide](../headless-authoring.md#signed-fields-and-render-passes)
 
 Get the runnable example with `ink-studio graph describe scene.light --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### scene.maskTexture
+
+Expose native coverage or a captured screen mask as a typed image with its original precision.
+
+Origin: headless.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `frame` | `renderFrame` | Required | {"layout":"Headless frame with width, height and RGB buffer"} |
+| Input | `channel` | `string` | `"coverage"` |  |
+| Output | `value` | `grayImage` | — | {"layout":"Typed unitless single-channel data or mask"} |
+| Output | `report` | `record` | — | {"layout":"Plain named object"} |
+
+Guides: [guide](../headless-scene-graphs.md#capture-and-reuse-textures)
+
+Get the runnable example with `ink-studio graph describe scene.maskTexture --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
+### scene.materialMesh
+
+Bind aligned typed material maps to a UV-mapped mesh for native scene rendering.
+
+Origin: headless.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `mesh` | Required | {"layout":"XYZ vertices with in-range indices"} |
+| Input | `material` | `materialChannels` | Required | {"layout":"Versioned named raster channels with independent grids and metadata","minItems":1,"maxItems":64} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
+| Output | `value` | `sceneMesh` | — |  |
+| Output | `report` | `record` | — | {"layout":"Plain named object"} |
+
+Guides: [guide](../headless-scene-graphs.md#build-a-scene-from-graph-outputs)
+
+Get the runnable example with `ink-studio graph describe scene.materialMesh --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
 ### scene.motionSplats
@@ -277,7 +332,8 @@ Origin: toolkit.
 
 | Direction | Port | Type | Default | Details |
 | --- | --- | --- | --- | --- |
-| Input | `objects` | `array<record>` | Required | {"items":"record","minItems":1,"maxItems":32} |
+| Input | `objects` | `array<record>` | `[]` | {"items":"record","minItems":1,"maxItems":32} |
+| Input | `meshes` | `array<sceneMesh>` | `[]` | {"items":"sceneMesh"} |
 | Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
 | Output | `value` | `world` | — | {"layout":"Native world with 16 samples per splat row"} |
 

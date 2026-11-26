@@ -18,7 +18,7 @@ Origin: toolkit.
 
 - All requested keys must exist in the input record.
 
-Guides: [guide](../field-sprite-materials.md#build-a-material-slot), [guide](../headless-authoring.md#layers-depth-and-height), [guide](../headless-authoring.md#drawing-layout-and-regions), [guide](../headless-authoring.md#procedural-generation-and-recipes), [guide](../material-shape-splatter.md#shape-sources)
+Guides: [guide](../field-sprite-materials.md#build-a-material-slot), [guide](../headless-authoring.md#layers-depth-and-height), [guide](../headless-authoring.md#drawing-layout-and-regions), [guide](../headless-authoring.md#procedural-generation-and-recipes), [guide](../headless-scene-graphs.md#build-a-scene-from-graph-outputs)
 
 Get the runnable example with `ink-studio graph describe data.collect --example > example.json`.
 Run it with `ink-studio graph run example.json`.
