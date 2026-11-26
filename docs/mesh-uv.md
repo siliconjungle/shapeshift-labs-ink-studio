@@ -1772,6 +1772,48 @@ ink-studio tileset assign assignment.json --scene siding.json --out assigned.jso
 node examples/tileset-pick/uv-assignment-demo.cjs uv-assignment-demo
 ```
 
+### Flatten faces at the project texel density
+
+Use `flatten` with face IDs or a saved face or island selection.
+Ink unfolds the triangles of each face into its own flat pattern, using
+the first directed face edge as the U axis. This preserves the rendered
+triangle edge lengths through bends. Each pattern starts at the minimum
+texel coordinate of its current UVs. Supply `origin: [x, y]` in source
+texels to set the minimum explicitly. Patterns with the same origin
+share atlas space.
+
+```json
+{
+  "uvSet": "pigment",
+  "operations": [
+    { "op": "flatten", "ids": ["panel"], "refit": true }
+  ]
+}
+```
+
+The operation uses its explicit `texelsPerUnit`, the scene’s tileset
+density, or the CLI project’s density, in that order. Ink defaults to
+16 texels per authored mesh unit. Scene edits use the selected material
+layout’s source dimensions. Provide `atlas: [width, height]` for a
+standalone topology document or an explicit override. The preview
+shows the flattened footprint, density and stretch. A collapsed,
+self-overlapping, pinned or out-of-atlas fit blocks the flatten.
+
+Set `refit: true` in a scene to retain the density, atlas, edge and
+origin for future geometry edits. Moving retained vertices refits the
+opted-in faces in the same transaction. Rigid motion preserves the flat
+pattern. Pose and animation evaluation use the authored UVs. When pins,
+atlas changes, manual UV overrides or topology changes prevent a refit,
+the geometry edit can proceed and the receipt marks the binding for
+review. Run flatten again to renew the binding or use `refit: false`
+to keep a static layout.
+
+```sh
+ink-studio mesh-uv edit panels.json flatten.json --object panels --preview flatten-review
+ink-studio mesh-uv edit panels.json flatten.json --object panels --out flattened.json --report flatten-receipt.json
+node examples/tileset-pick/uv-flatten-demo.cjs uv-flatten-demo
+```
+
 ## Bind separate material layouts
 
 A retained mesh part can use a different UV set for each material channel.

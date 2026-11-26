@@ -329,8 +329,20 @@
     return { row: updated, correspondence, ...diff(row, updated) };
   }
 
-  function revise(row, patch, { projection, ...transitionOptions } = {}) {
+  function revise(row, patch, { projection, flatten=[], atlasForFlatten, ...transitionOptions } = {}) {
     const before = topology.create(row.document);
+    if (flatten.length || row.bindings?.some(meshUVFlatten.isBinding)) {
+      const requested = topology.edit(before,patch), refit = meshUVFlatten.updateBindings(row,before,requested,flatten,atlasForFlatten);
+      const {document} = refit, correspondence = topology.correspond(before,document,{lineage:patch?.lineage,projection});
+      const result = transition(row,before,document,correspondence,transitionOptions);
+      if (flatten.length || refit.changed.size) {
+        const previous = result.row.bindings ?? [];
+        const bindings = meshUVFlatten.install(previous,document,flatten,refit.changed);
+        if (bindings.length || result.row.bindings) result.row.bindings = bindings;
+        Object.assign(result,diff(row,result.row));
+      }
+      return {...result,...(refit.evidence.length && {uvRefits:refit.evidence})};
+    }
     const { document, correspondence } = topology.editWithCorrespondence(before, patch, { projection });
     return transition(row, before, document, correspondence, transitionOptions);
   }

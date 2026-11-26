@@ -1177,11 +1177,12 @@
     return [id];
   }
 
-  function draft(g, operation, atlasFor) {
+  function draft(g, operation, options) {
+    const {atlasFor} = options;
     if (operation?.op === 'set-pivot') return setPivot(g,operation);
     if (!operation || typeof operation !== 'object' ||
-        !['cut', 'stitch', 'pin', 'transform', 'orient', 'normalize-orientation', 'scale', 'move-corners', 'nudge', 'snap', 'unwrap', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
-      throw new TypeError('Use a UV pivot, cut, stitch, pin, transform, orientation, reference normalization, scale, nudge, snap, corner move, face remap, local solve or texel budget operation');
+        !['cut', 'stitch', 'pin', 'transform', 'orient', 'normalize-orientation', 'scale', 'move-corners', 'nudge', 'snap', 'unwrap', 'flatten', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
+      throw new TypeError('Use a UV pivot, cut, stitch, pin, transform, orientation, reference normalization, scale, nudge, snap, flatten, corner move, face remap, local solve or texel budget operation');
     const points = new Map(), edges = new Map(), pins = new Map(), conflicts = [];
     let count = 0;
     function conflict(code, evidence) {
@@ -1190,11 +1191,16 @@
     }
     let ids, evidence;
     const local = operation.op === 'unwrap' || operation.op === 'relax';
-    const precise = ['remap-face','orient','normalize-orientation','scale','move-corners','nudge','snap'].includes(operation.op);
+    const precise = ['remap-face','orient','normalize-orientation','scale','move-corners','nudge','snap','flatten'].includes(operation.op);
     const preserveWinding = local || ['stitch','scale','move-corners','nudge','snap'].includes(operation.op);
     if (local) {
       ids = targets(g, 'faces', operation);
       evidence = meshUVRegions.local(g, ids, operation, points, conflict);
+    } else if (operation.op==='flatten') {
+      const domain = operation.domain ?? operation.selection?.domain ?? 'faces';
+      if (!['faces','islands'].includes(domain)) throw new TypeError('Flatten selected faces or UV islands');
+      ids = targets(g,domain,operation);
+      evidence = meshUVFlatten.projection(g,selection(g,domain,ids).faces,operation,points,options,conflict);
     } else if (operation.op === 'texel-budget') {
       evidence = meshUVTexelBudget.assign(g, operation, points, conflict);
       ids = order((evidence.islands ?? []).map(row => row.id));
@@ -1267,7 +1273,7 @@
     return { document, report };
   }
 
-  function plan(source, request, {atlasFor} = {}) {
+  function plan(source, request, options = {}) {
     if (!fields(request, ['revision', 'operations', 'protect','uvSet','bindings']) ||
         !Array.isArray(request.operations ?? []) || (request.operations?.length ?? 0)>32 ||
         (!request.operations?.length && request.bindings===undefined))
@@ -1283,7 +1289,7 @@
       if (local && request.protect !== undefined && operation.protect !== undefined)
         throw new TypeError('Choose transaction-wide or per-operation UV protection');
       const next = draft(graph(document,base.set), local && request.protect !== undefined ?
-        { ...operation, protect: request.protect } : operation,atlasFor);
+        { ...operation, protect: request.protect } : operation,options);
       operations.push(next.report);
       if (next.report.conflictCount) break;
       document = next.document;
@@ -1315,7 +1321,9 @@
     const pivotChanged = JSON.stringify(pivotBefore)!==JSON.stringify(pivotAfter);
     const patch = { ...(faceChanges.length && { faces: faceChanges }), ...(seamPatch.length && { edges: seamPatch }),
       ...(bindingsChanged && {uvBindings:document.uvBindings}), ...(pivotChanged && {uvPivots:document.uvPivots ?? {}}) };
-    return { document, patch, report: { canCommit, mesh: document.id, revision, outputRevision: topology.revision(document),
+    const flatten = canCommit && options.retainFlatten ? operations.filter(row=>row.op==='flatten').flatMap(row=>
+      row.evidence.faces.map(({face,binding})=>({face,uvSet:base.set,binding}))) : [];
+    return { document, patch, ...(flatten.length && {flatten}), report: { canCommit, mesh: document.id, revision, outputRevision: topology.revision(document),
       ...(base.set && {uvSet:base.set}), ...(bindingsChanged && {bindingsBefore:base.doc.uvBindings ?? {},bindingsAfter:document.uvBindings}),
       ...(pivotChanged && {pivot:{before:pivotBefore,after:pivotAfter}}),
       operations, corners: cornerChanges, seams: seamChanges, islandsBefore: base.islands.size, islandsAfter: next.islands.size } };
