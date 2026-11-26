@@ -1,6 +1,6 @@
 /* Bounded, reusable brush silhouettes with pigment and relief in mark-local space. */
 (function (K) {
-  const P = K.procedural, { V, Q } = K, { boxOf } = P.spatial;
+  const P = K.procedural, { boxOf } = P.spatial;
   const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
   const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
   const finite = (n, lo, hi) => Number.isFinite(n) && n >= lo && n <= hi;
@@ -96,33 +96,16 @@
     return { profiles: [first, prepare(profile)], range };
   }
 
-  function place({ profiles, range }, guide, limit) {
-    let length = 0;
-    const offsets = guide.map((pose, i) => i ? length += V.dist(pose.point, guide[i - 1].point) : 0);
-    let candidates = 0;
+  function place({ profiles, range }, guide, limit, looseness) {
+    let remaining = limit;
     return profiles.map(({ spacing, stamp }, family) => {
-      const wholeSteps = Math.floor(length / spacing + 1e-9);
-      const includeEnd = length - wholeSteps * spacing > 1e-8;
-      const count = 1 + wholeSteps + Number(includeEnd);
-      candidates += count;
-      if (candidates > limit) throw new RangeError('A profiled stroke exceeds 4096 evaluated dabs; increase profile spacing or shorten the path');
-      const dabs = [];
-      let i = 1;
-      for (let ordinal = 0; ordinal < count; ordinal++) {
-        const d = Math.min(length, ordinal * spacing), t = length ? d / length : 0;
-        const blend = range ? smooth(K.clamp((t - range[0]) / (range[1] - range[0]), 0, 1)) : 0;
+      const rows = P.paintLooseness.dabs(guide, spacing, looseness, remaining);
+      remaining -= rows.length;
+      return rows.flatMap(row => {
+        const blend = range ? smooth(K.clamp((row.progress - range[0]) / (range[1] - range[0]), 0, 1)) : 0;
         const weight = family === 0 ? 1 - blend : blend;
-        if (weight <= 1e-6) continue;
-        while (i < offsets.length - 1 && offsets[i] <= d) i++;
-        let pose = guide[0];
-        if (length) {
-          const a = guide[i - 1], b = guide[i], span = offsets[i] - offsets[i - 1];
-          const f = span > 1e-10 ? (d - offsets[i - 1]) / span : 1;
-          pose = { point: V.lerp(a.point, b.point, f), rotation: Q.slerp(a.rotation, b.rotation, f), pressure: mix(a.pressure, b.pressure, f) };
-        }
-        dabs.push({ pose, ...stamp(weight, ordinal) });
-      }
-      return dabs;
+        return weight > 1e-6 ? [{ ...row, ...stamp(weight, row.ordinal) }] : [];
+      });
     });
   }
 
