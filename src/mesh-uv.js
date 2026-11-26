@@ -222,34 +222,61 @@ const MeshUV = (() => {
     return true;
   }
 
+  // UV coordinates are expressed in native texel centers before scanning.
+  function scanTriangle(tri, {x,y,width,height}, work, emit) {
+    const [,t,,b] = bounds(tri), epsilon = 1e-8;
+    for (let r=Math.max(y,Math.ceil(t-epsilon));r<=Math.min(y+height-1,Math.floor(b+epsilon));r++) {
+      if (work.rows>=work.limit) return false;
+      work.rows++;
+      const hits = [];
+      for (let i=0;i<3;i++) {
+        const [u,v] = tri[i], [a,b] = tri[(i+1)%3];
+        if (r<Math.min(v,b)-epsilon || r>Math.max(v,b)+epsilon) continue;
+        if (Math.abs(b-v)<=epsilon) hits.push(u,a);
+        else hits.push(u+(a-u)*Math.max(0,Math.min(1,(r-v)/(b-v))));
+      }
+      if (!hits.length) continue;
+      const l = Math.max(0,Math.ceil(Math.min(...hits)-epsilon)-x);
+      const right = Math.min(width-1,Math.floor(Math.max(...hits)+epsilon)-x);
+      if (l<=right) emit(r,l,right);
+    }
+    return true;
+  }
+
+  function texelMask(triangles, width, height) {
+    const stride = width+1, counts = new Int32Array(stride*height);
+    const crop = {x:0,y:0,width,height}, work = {rows:0,limit:4000000};
+    for (const tri of triangles) if (!scanTriangle(tri,crop,work,(row,left,right)=>{
+      counts[row*stride+left]++;
+      counts[row*stride+right+1]--;
+    })) throw new RangeError('UV guide fill exceeds its scanline budget. Choose fewer charts or a smaller canvas.');
+    const mask = new Uint8Array(width*height);
+    for (let y=0;y<height;y++) {
+      let active = 0;
+      for (let x=0;x<width;x++) {
+        active += counts[y*stride+x];
+        mask[y*width+x] = active>0;
+      }
+    }
+    return {mask,scanlines:work.rows};
+  }
+
   function sampleCoverage(faces, crop, image, maxRows = 4000000) {
     const {x,y,width,height} = crop, stride = width+1;
     const counts = new Int32Array(stride*height), perFace = [];
-    let rows = 0, complete = true;
-    const epsilon = 1e-8;
+    const work = {rows:0,limit:maxRows};
+    let complete = true;
     for (const triangles of faces) {
       const spans = new Map();
       let faceComplete = complete;
       if (complete) for (const tri of triangles) {
-        const [,t,,b] = bounds(tri);
-        for (let r=Math.max(y,Math.ceil(t-epsilon));r<=Math.min(y+height-1,Math.floor(b+epsilon));r++) {
-          if (rows>=maxRows) { complete = faceComplete = false; break; }
-          rows++;
-          const hits = [];
-          for (let i=0;i<3;i++) {
-            const [u,v] = tri[i], [a,b] = tri[(i+1)%3];
-            if (r<Math.min(v,b)-epsilon || r>Math.max(v,b)+epsilon) continue;
-            if (Math.abs(b-v)<=epsilon) hits.push(u,a);
-            else hits.push(u+(a-u)*Math.max(0,Math.min(1,(r-v)/(b-v))));
-          }
-          if (!hits.length) continue;
-          const l = Math.max(0,Math.ceil(Math.min(...hits)-epsilon)-x);
-          const rBound = Math.min(width-1,Math.floor(Math.max(...hits)+epsilon)-x);
-          if (l>rBound) continue;
+        if (!scanTriangle(tri,crop,work,(r,l,right)=>{
           if (!spans.has(r)) spans.set(r,[]);
-          spans.get(r).push([l,rBound]);
+          spans.get(r).push([l,right]);
+        })) {
+          complete = faceComplete = false;
+          break;
         }
-        if (!complete) break;
       }
       let texels = 0;
       for (const [r,ranges] of spans) {
@@ -283,9 +310,9 @@ const MeshUV = (() => {
       }
     }
     return {texels:width*height,covered,shared,transparent,translucent,opaque:covered-transparent-translucent,
-      fraction:covered/(width*height),complete,scanlines:rows,perFace};
+      fraction:covered/(width*height),complete,scanlines:work.rows,perFace};
   }
 
-  return Object.freeze({ area2, sameUV, validate, topology, overlaps, metrics, changedOverlaps, inspect, sampleCoverage });
+  return Object.freeze({ area2, sameUV, validate, topology, overlaps, metrics, changedOverlaps, inspect, sampleCoverage, texelMask });
 })();
 if (typeof module !== 'undefined') module.exports = MeshUV;
