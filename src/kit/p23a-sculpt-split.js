@@ -137,7 +137,9 @@
         charts.push({ id: name, ...(solid.id && { solid: solid.id }), retained: 'both' });
     const decals = (scene.surfaceDecals?.decals ?? []).filter(row => row.anchor.object === source.id)
       .map(row => ({ id: row.id, owner: source.id, retained: 'original-receiver', reviewExtraction: true }));
-    return { strokes, charts, decals, ...(source.sdfProtection && { protection: 'both' }), newFaces: 'no-sculpt-paint' };
+    const sprays = source.sdfSpray?.map(row => ({ id: row.id, retained: 'both', occlusion: row.occlusion }));
+    return { strokes, charts, decals, ...(sprays && { sprays }), ...(source.sdfProtection && { protection: 'both' }),
+      newFaces: sprays ? 'evaluate-retained-spray' : 'no-sculpt-paint' };
   }
 
   function materialIds(source) {
