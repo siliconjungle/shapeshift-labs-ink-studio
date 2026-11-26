@@ -110,6 +110,9 @@ function paint(editor, request, {apply=false,expect} = {}, kit = require('..').l
   if (sample.mode!=='texel') return blocked('filtered-hit',{front,tileset});
   const source = {tileset,at:sample.at,uv:sample.uv,object:front.object,part:front.part,face:sample.face,material:front.material};
   const K = kit.KIT, asset = K.authoring.tilesets.prepare(scene.tilesets,scene.tilesetDefaults).source(tileset);
+  const [x,y] = source.at;
+  if (![x,y].every(Number.isSafeInteger) || x<0 || y<0 || x>=asset.width || y>=asset.height)
+    return blocked('texel-outside-source',{front,tileset});
   const value = rgba.reduce((packed,byte)=>packed*256+byte,0), rect = [...source.at,1,1];
   const planned = planPixels(editor,tileset,asset,rect,[{value,slot:value===0 ? null : undefined}]);
   if (!planned.detail) return blocked('indexed-palette-full',{source});
