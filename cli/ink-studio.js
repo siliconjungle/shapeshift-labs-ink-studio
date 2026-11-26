@@ -35,6 +35,7 @@ for (let i = 1; i < argv.length; i++) {
   } else pos.push(a);
 }
 const Shot = require('./shot-recipes.js');
+const Stage = require('./scene-stage.js');
 let shot, shotReplay, shotRender;
 const outputFile = name => opt.out ? path.resolve(opt.out) : path.join(OUT,name);
 const num = (k, d) => (opt[k] === undefined ? d : +opt[k]),
@@ -46,6 +47,7 @@ const gaussianFile = file => /\.(ply|spz|gsz)$/i.test(file);
 const gaussianScenes = new Map();
 const gaussianGltfScenes = new Map();
 const sceneAssetParts = new Map();
+const resolvedStages = new Map();
 const sceneryFile = file => /\.inkscenery$/i.test(file);
 const sceneryScenes = new Map();
 const lib = () => A || (A = cfg.load ? cfg.load() : require('../index.js').load());
@@ -93,11 +95,18 @@ function meshScene(file) {
     }
   };
 }
+function stageScene(file, raw) {
+  if (raw?.format !== Stage.format) return raw;
+  const input = path.resolve(file);
+  if (!resolvedStages.has(input)) resolvedStages.set(input,
+    Stage.resolve(input, lib().KIT, { options: opt, onFile: shot?.dependency }).scene);
+  return resolvedStages.get(input);
+}
 /* a diorama written as data (see lab/data-shrine.json). --style puts it in another style; meshes it names are looked for beside the file */
 function dataScene(file, override, { installedPacks = false, refreshTilesets = true } = {}) {
   const K = lib().KIT, Assets = require('./asset-references.js'),
     raw = override ?? JSON.parse(fs.readFileSync(path.resolve(file), 'utf8')),
-    source = Assets.visual(K.authoring.assetReferences, raw, 'scene', file, shot?.dependency);
+    source = Assets.visual(K.authoring.assetReferences, stageScene(file, raw), 'scene', file, shot?.dependency);
   if (source?.format === K.curveSplats.format)
     return { id: source.id, name: source.name ?? source.id, seed: source.seed, build: seed => K.curveSplats.world({
       ...source, seed: seed ?? source.seed
@@ -2088,6 +2097,9 @@ const CMD = {
         '    --w width --h height --still-scale 2 --t seconds --from 0 --to 2 --fps 12 --embed-config file.json',
         '  scene-replay <recording.json> --out output.png [--at seconds]   save a frame from a replay',
         '  scene-replay <recording.json> --embed --out embed.html [--embed-config file.json]   package a replay for the web',
+        '  scene-stage resolve <stage.json> --out bundle.json [--root directory]   compose layers into a native project',
+        '  scene-stage explain <stage.json> [--at /path --out report.json]   trace active layers and resolved values',
+        '    Stage inputs accept --stage-selection <name>, --stage-variants <id=choice,...> and --stage-payloads <id=on|off,...>',
         '  project pack <scene|take|experiment|story-pack|story-run.json> --out <bundle.json> [--root directory --revision N]',
         '    [--asset-pack file --paint file --attachments file]',
         '  project inspect <bundle.json>   show the bundle version, entry path and retained files',
@@ -4429,6 +4441,9 @@ const CMD = {
     }
     console.log('wrote', file);
   },
+  'scene-stage'() {
+    return Stage.command(pos, opt, lib().KIT);
+  },
   async project() {
     const [mode, input] = pos, api = require('./project-bundle.js');
     if (mode === 'author') return require('./agent-project.js').command(pos.slice(1), opt);
@@ -5916,6 +5931,7 @@ async function run() {
     if (!fs.existsSync(file)) continue;
     let source;
     try { source = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { continue; }
+    source = stageScene(file, source);
     if (source?.assetParts === undefined) continue;
     const onFile = shot?.dependency;
     const imported = await require('./asset-part.js').loadSceneParts(source, file, { toolkit: lib(), onFile });

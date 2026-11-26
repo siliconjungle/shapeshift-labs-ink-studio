@@ -915,6 +915,8 @@ covers reachable activity choices and confirmed arrivals.
 Draw and revise exact indexed layers for sprites, projected paint and masks with the [native pixel-art authoring CLI](docs/pixel-art-authoring.md).
 Approve a highlight, contour, or gap at a reference frame and propagate it through verified scene matches with [tracked pixel corrections](docs/pixel-art-authoring.md#approve-and-apply-a-tracked-correction).
 
+Compose shot-ready scene variants from ordered sources and optional payloads with [layered scene stages](docs/layered-scene-stages.md).
+
 Use the [standard render comparison suite](docs/render-suite.md) to measure matched camera moves on the gatehouse, signal coil, and Saltgate night watch.
 
 The CLI and Node `render()` use the CPU renderer. Use the [browser renderer](docs/browser-renderer.md) for an interactive WebGL canvas. The two backends share scene data and several pixel-art controls. Use the same backend when recording and checking exact image baselines.
