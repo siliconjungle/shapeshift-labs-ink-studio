@@ -73,6 +73,8 @@ Marks use native [sweep brushes and pressure poses](sculpt-sweeps.md). They rend
 
 [Paint evaporation](paint-evaporation.md) releases selected painted regions into a timed particle layer.
 
+[Paint throb](paint-throb.md) pulses width, relief height, coverage and emission from separate cue, oscillator or audio drivers.
+
 ## Dabs, pressure, and ruled strokes
 
 Use one pose for a precise dab or multiple poses for a stroke. Both use the same brush, quaternion orientation, pressure, and edit operations. Set `path: "ruled"` to lay the recorded poses along a straight line between the first and last points. Ink distributes the poses along the line by their original spacing along the stroke. A surface-bound mark rules the guide before projecting it onto the receiver.

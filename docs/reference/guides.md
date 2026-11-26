@@ -323,6 +323,7 @@ All checked-in guides, indexed by title and section headings.
 - [Apply multiple paint channels with a brush preset](../paint-presets.md)
 - [Raise, flatten, or recess retained paint](../paint-relief.md)
 - [Choose paint fallbacks at sprite size](../paint-survival.md)
+- [Paint throb](../paint-throb.md)
 - [Shadows from painted cutouts](../painted-cutout-shadows.md)
 - [Retain and edit a 3D painting](../painting-3d.md)
 - [Boil retained painting marks](../painting-boil.md)

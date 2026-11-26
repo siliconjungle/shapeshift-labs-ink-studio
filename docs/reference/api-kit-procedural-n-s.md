@@ -346,6 +346,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.paintRelief.gradient` | function | `(relief, form, space, accepts, remaining)` | [source](../../src/kit/p26g-paint-relief.js) |
 | `KIT.procedural.paintRelief.prepare` | function | `(raw)` | [source](../../src/kit/p26g-paint-relief.js) |
 
+## KIT.procedural.paintThrob
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.paintThrob` | namespace |  |  |
+| `KIT.procedural.paintThrob.bake` | function | `(raw,readAudio)` | [source](../../src/kit/p26m-paint-throb.js) |
+| `KIT.procedural.paintThrob.format` | value | `string = "ink-studio/paint-throb"` |  |
+| `KIT.procedural.paintThrob.prepare` | function | `(raw, timeline)` | [source](../../src/kit/p26m-paint-throb.js) |
+| `KIT.procedural.paintThrob.scene` | function | `(source,time=0)` | [source](../../src/kit/p26m-paint-throb.js) |
+
 ## KIT.procedural.paintWave
 
 | Member | Kind | Signature or value | Guides and source |

@@ -47,7 +47,7 @@
     }
   }
 
-  function expand(source, time = 0, waveMarks) {
+  function expand(source, time = 0, waveMarks, throbMarks) {
     const anchors = new Map(), layers = new Set(), looseness = new Map(), boils = new Map(), reports = [];
     if (source?.paintings3d === undefined) return { spec: source, anchors, layers, looseness, boils, reports };
     const { paintings3d, ...scene } = source;
@@ -105,7 +105,7 @@
         ids.add(key);
         const solid = 'paint.' + id + '.' + key;
         const markFrame = graph.transform(transform), guideFrame = graph.compose(frame, markFrame);
-        const wave = waveMarks?.get(solid);
+        const wave = waveMarks?.get(solid), pulse = throbMarks?.get(solid);
         let restAffine = guideFrame, part, target;
         if (!fields(attachment, ['kind', 'slot', 'snap']) || !['free', 'surface', 'part'].includes(attachment.kind) ||
             (attachment.kind === 'free' ? attachment.slot !== undefined : !name(attachment.slot)) ||
@@ -117,6 +117,17 @@
           if (boil?.active) ({ drawing } = K.procedural.paintBoil.state(boil, time));
           relief = K.procedural.paintRelief.prepare(authoredRelief);
           finish = PaintFinish.prepare(authoredFinish);
+          if (pulse?.height !== undefined) {
+            if (!relief || relief.mode==='flat') throw new TypeError('Height pulses need shading or volume relief');
+            relief={...relief,height:relief.height*pulse.height};
+          }
+          if (pulse?.emission !== undefined) {
+            if (!finish?.emission) throw new TypeError('Emission pulses need a finish with authored emission');
+            finish={...finish,emission:finish.emission.map(n=>n*pulse.emission),
+              ...(finish.spill && {spill:{...finish.spill,intensity:finish.spill.intensity*pulse.emission}})};
+          }
+          if (pulse?.coverage !== undefined && relief?.mode==='volume' && relief.height<0)
+            throw new TypeError('Coverage pulses need additive or surface paint');
           erasers = K.procedural.channelEraser.surface(authoredErasers);
           if (erasers && (attachment.kind !== 'surface' || attachment.snap.mode !== 'surface'))
             throw new TypeError('Channel erasers need a surface attachment in surface snap mode');
@@ -201,6 +212,7 @@
           ...(finish && { finish: authoredFinish }),
           ...(boil && { boil: authoredBoil, ...(drawing !== undefined && { drawing }) }),
           ...(wave && { wave: wave.id }),
+          ...(pulse && { pulse }),
           ...(authoredErasers !== undefined && { erasers: authoredErasers }),
           ...(stroke.step !== undefined && { step: stroke.step }), ...(stroke.blendRadius !== undefined && { blendRadius: stroke.blendRadius }),
           ...(stroke.path !== undefined && { path: stroke.path }), ...(stroke.pressureResponse && { pressureResponse: stroke.pressureResponse }) });

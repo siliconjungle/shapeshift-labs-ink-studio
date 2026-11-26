@@ -858,7 +858,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.objectPoints.socketFrames` | function | `(points)` | [source](../../src/kit/p23-object-points.js) |
 | `KIT.authoring.objectPoints.transform` | function | `(row, frame)` | [source](../../src/kit/p23-object-points.js) |
 | `KIT.authoring.paintings3d` | namespace |  |  |
-| `KIT.authoring.paintings3d.expand` | function | `(source, time = 0, waveMarks)` | [source](../../src/kit/p23a-paintings-3d.js) |
+| `KIT.authoring.paintings3d.expand` | function | `(source, time = 0, waveMarks, throbMarks)` | [source](../../src/kit/p23a-paintings-3d.js) |
 | `KIT.authoring.paintings3d.extract` | function | `(scene, id)` | [source](../../src/kit/p23a-paintings-3d.js) |
 | `KIT.authoring.paintings3d.format` | value | `string = "ink-studio/painting-3d"` |  |
 | `KIT.authoring.paintings3d.revise` | function | `(scene, input, update = false)` | [source](../../src/kit/p23a-paintings-3d.js) |
