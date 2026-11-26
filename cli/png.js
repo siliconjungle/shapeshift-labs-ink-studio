@@ -180,9 +180,46 @@ function encodeAnimation(frames, fps) {
   out.push(chunk('IEND', Buffer.alloc(0)));
   return Buffer.concat(out);
 }
+// Read the full-canvas RGB frames written by Ink's sweep encoder.
+function readFullFrameAnimation(file, { w, h, count, fps }) {
+  const fail = () => { throw new Error('Expected an Ink sweep clip with matching frames, dimensions, and cadence'); };
+  if (![w,h,count,fps].every(Number.isSafeInteger) || w < 1 || h < 1 || count < 1 || count > 120 ||
+      fps < 1 || fps > 120 || w * h * count > 64e6 || fs.statSync(file).size > 1024 + count * (4 * w * h + 128)) fail();
+  const bytes = fs.readFileSync(file);
+  if (!bytes.subarray(0, signature.length).equals(signature)) fail();
+  let offset = signature.length, seq = 0;
+  function take(type, length) {
+    if (offset + 12 > bytes.length || bytes.toString('ascii', offset + 4, offset + 8) !== type) fail();
+    const size = bytes.readUInt32BE(offset);
+    if (size !== (length ?? size) || offset + size + 12 > bytes.length) fail();
+    const data = bytes.subarray(offset + 8, offset + 8 + size);
+    offset += size + 12;
+    return data;
+  }
+  const hd = take('IHDR', 13);
+  if (!hd.equals(header(w, h, 8, 2)) || take('acTL', 8).readUInt32BE(0) !== count) fail();
+  const frames = [];
+  for (let i = 0; i < count; i++) {
+    const control = take('fcTL', 26);
+    if (control.readUInt32BE(0) !== seq++ || !control.subarray(4,12).equals(hd.subarray(0,8)) ||
+        control.readUInt32BE(12) || control.readUInt32BE(16) || control.readUInt16BE(20) !== 1 ||
+        control.readUInt16BE(22) !== fps || control[24] || control[25]) fail();
+    let compressed = take(i === 0 ? 'IDAT' : 'fdAT');
+    if (i) {
+      if (compressed.length <= 4 || compressed.readUInt32BE(0) !== seq++) fail();
+      compressed = compressed.subarray(4);
+    }
+    if (!compressed.length) fail();
+    frames.push({ header: hd, compressed });
+  }
+  take('IEND', 0);
+  if (offset !== bytes.length) fail();
+  return frames;
+}
+
 function animate(file, frames, fps) {
   fs.writeFileSync(file, encodeAnimation(frames.map(packFrame), fps));
 }
 module.exports = { paintRaster, encodePaint, encode, encodeGray, encodeMaterial, encodeIndexed, write, writeIndexed,
   read, raster, layout, nativeLayout, sheetRaster, tilesetRaster, indexedRaster, paletteSource,
-  animate, packFrame, packRGBA, encodeFrame, encodeAnimation, animationDelay };
+  animate, packFrame, packRGBA, encodeFrame, encodeAnimation, readFullFrameAnimation, animationDelay };
