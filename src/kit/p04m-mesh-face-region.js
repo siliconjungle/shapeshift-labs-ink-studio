@@ -8,7 +8,7 @@
   const validName = value => typeof value === 'string' && Boolean(value.trim());
   const positive = value => Number.isFinite(value) && value > 0;
 
-  function settings(doc, request) {
+  function settings(doc, request, resolveBrush) {
     if (!record(request, ['id', 'revision', 'selection', 'operation', 'rim', 'interior', 'minWall', 'tolerance']) ||
         typeof request.id !== 'string' || !/^[\w.-]{1,96}$/.test(request.id))
       throw new TypeError('Face-region edit needs an operation ID, revision, and saved face selection');
@@ -27,18 +27,22 @@
     if (normalMode !== undefined && (operation.kind !== 'extrude' || operation.direction !== undefined ||
         !['face','vertex'].includes(normalMode)))
       throw new TypeError('Choose face or vertex normals for extrusion, or provide a direction');
-    if (!record(rim, ['uv', 'material', 'uvSets']) || !record(interior, ['uv', 'material']) ||
-        rim.uv !== undefined && !['strip', 'per-edge'].includes(rim.uv) ||
+    if (!record(rim, ['uv', 'material', 'uvSets', 'brush']) || !record(interior, ['uv', 'material']) ||
+        rim.uv !== undefined && !meshExtrusionUV.modes.includes(rim.uv) ||
         interior.uv !== undefined && !['preserve', 'planar'].includes(interior.uv) ||
         [rim.material, interior.material].some(value => value !== undefined && !validName(value)))
-      throw new TypeError('Use strip or per-edge rim UVs and preserve or planar interior UVs, with optional material IDs');
+      throw new TypeError('Use strip, per-edge, extend, or brush rim UVs and preserve or planar interior UVs');
+    if ((rim.uv === 'brush') !== (rim.brush !== undefined) ||
+        ['extend','brush'].includes(rim.uv) && operation.kind !== 'extrude' ||
+        rim.uv === 'extend' && (rim.material !== undefined || interior.material !== undefined || interior.uv === 'planar'))
+      throw new TypeError('Choose a sidewall brush for brush extrusion, or preserve the cap UVs and material with extend');
     if (rim.uvSets !== undefined && (!Array.isArray(rim.uvSets) || !Array.from(rim.uvSets).every(MaterialUV.layout) ||
         new Set(rim.uvSets).size !== rim.uvSets.length))
       throw new TypeError('Rim UV sets must be distinct layout numbers from 0 to 31');
-    const rimSets = (rim.uvSets ?? (normalMode ? [...new Set(Object.values(doc.uvBindings ?? {}))] : []))
-      .filter(Boolean).sort((a,b)=>a-b);
+    const bound = normalMode || ['extend','brush'].includes(rim.uv) ? Object.values(doc.uvBindings ?? {}) : [];
+    const mapping = meshExtrusionUV.prepare(doc,rim,bound,resolveBrush);
     const shading = normalMode === 'vertex' ? meshTopologyShading.resolve(doc,topology.inspect(doc).edges,index(doc.vertices)) : undefined;
-    return { selection, kind: operation.kind, distance: operation.distance, rim, rimSets, interior, tolerance, normalMode, shading,
+    return { selection, kind: operation.kind, distance: operation.distance, rim, mapping, interior, tolerance, normalMode, shading,
       minWall: minWall ?? Math.max(tolerance * 4, Math.abs(operation.distance) * .05),
       direction: operation.direction === undefined ? undefined : unit(operation.direction, 'Extrusion direction') };
   }
@@ -112,22 +116,18 @@
         const lengths = loop.map(({ a, b }) => V.dist(original(a.vertex), original(b.vertex)));
         const total = lengths.reduce((sum, length) => sum + length, 0);
         let length = 0;
-        for (const [i, { a, b, face }] of loop.entries()) {
-          const strip = config.rim.uv !== 'per-edge';
+        for (const [i, { a, b, face, edge }] of loop.entries()) {
+          const strip = config.mapping.mode === 'strip';
           const u = strip ? length / total : 0;
           length += lengths[i];
           const v = strip ? length / total : 1;
-          const id = fresh('rim'), list = [
-            [a, a.vertex, [u, 0]], [b, b.vertex, [v, 0]],
-            [b, raised.get(b.vertex).id, [v, 1]], [a, raised.get(a.vertex).id, [u, 1]]
-          ];
+          const id = fresh('rim'), parent = originalFaces.get(face);
+          const list = meshExtrusionUV.corners(config.mapping,{id,face:parent,edge,a,b,
+            outer:[raised.get(a.vertex).id,raised.get(b.vertex).id],at:original,
+            offsets:[a,b].map(({vertex})=>V.mul(offsets.get(vertex),-1)),span:[u,v],seamAtOuter:true});
           if (shell) list.reverse();
-          const corners = list.map(([corner, vertex, uv]) => {
-            const attributes = config.rimSets.length ? {...corner.attributes,
-              ...Object.fromEntries(config.rimSets.map(set=>[MaterialUV.key(set),uv]))} : corner.attributes;
-            return {id:fresh('corner'),vertex,uv,...(attributes && {attributes})};
-          });
-          faceRows.push({ id, material: config.rim.material ?? originalFaces.get(face).material, corners });
+          const corners = list.map(corner=>({id:fresh('corner'),...corner}));
+          faceRows.push({ id, material: config.mapping.brush?.material ?? config.rim.material ?? parent.material, corners });
           group.rimFaces.push(id);
         }
       }
@@ -136,8 +136,8 @@
     return { vertexRows, faceRows, moves, affected, lineage, inverted, sourceOf, translations, deformations, motion };
   }
 
-  function planFaceRegion(source, request) {
-    const doc = topology.create(source), config = settings(doc, request), fresh = identifiers(doc, request.id);
+  function planFaceRegion(source, request, {resolveBrush} = {}) {
+    const doc = topology.create(source), config = settings(doc, request, resolveBrush), fresh = identifiers(doc, request.id);
     const { vertexRows, faceRows, moves, affected, lineage, inverted, sourceOf, translations, deformations, motion } =
       assemble(doc, config, fresh);
     const patch = { vertices: vertexRows, faces: faceRows };
@@ -155,7 +155,7 @@
     const wall = document && walls(document, regionFaces, config.minWall, config.tolerance);
     const sweep = config.kind === 'inset' ? null : swept(doc, moves,
       new Set(config.kind === 'thicken' ? [] : config.selection.ids), translations, config.tolerance, deformations);
-    const issues = [];
+    const issues = config.mapping.issues;
     if (invalid) issues.push({ kind: 'invalid-polygon', message: invalid });
     if (inverted.length) issues.push({ kind: 'flipped-region', faces: inverted });
     if (health && (health.counts.selfIntersections || health.counts.nonManifold || health.counts.winding))
@@ -174,13 +174,16 @@
       }
     }
     if (Object.values(lineage).some(rows => rows.length)) patch.lineage = lineage;
+    const sidewallUVs = meshExtrusionUV.report(config.mapping);
     const report = {
       format: 'ink-studio/mesh-face-region', version: 1, mesh: doc.id, kind: config.kind, request: clone(request),
       beforeRevision: topology.revision(doc), afterRevision: document && topology.revision(document),
       canCommit: !issues.length, issues, regions: affected, health, wall, sweep,
       ...(config.normalMode && {extrusion:{normals:config.normalMode,distance:config.distance,motion,
         cap:{uv:config.interior.uv ?? 'preserve',material:config.interior.material ?? null},
-        sidewall:{uv:config.rim.uv ?? 'strip',material:config.rim.material ?? null,uvSets:[0,...config.rimSets]}}}),
+        sidewall:{uv:config.mapping.mode,material:config.mapping.brush?.material ?? config.rim.material ?? null,
+          uvSets:config.mapping.sets}}}),
+      ...(sidewallUVs && {sidewallUVs}),
       vertices: [...sourceOf].map(([id, from]) => ({ id, from })), lineage
     };
     return freeze({ document, patch, report });

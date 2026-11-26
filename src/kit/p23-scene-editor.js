@@ -670,11 +670,13 @@
       return writeMeshTopology(object,patch,options);
     }
 
-    function writeMeshTopology(object, patch, { part, projection, label, materials } = {}, transitionOptions) {
+    function writeMeshTopology(object, patch, { part, projection, label, materials } = {}, {sidewallUVs,...transitionOptions} = {}) {
       const before = meshTopology(object, part);
-      const { row, ...evidence } = A.meshTopologyScene.revise(before, patch, { projection, ...transitionOptions });
+      const {addBindings,materials:brushMaterials} = A.tilesetFaces.extrusionUpdates(before,sidewallUVs);
+      const { row, ...evidence } = A.meshTopologyScene.revise(before, patch, { projection, ...transitionOptions,addBindings });
+      const definitions = brushMaterials ?? materials;
       function write() {
-        const next = { topologyMeshes: { ...snapshot().topologyMeshes, [object]: materials===undefined ? row : {...row,materials} } };
+        const next = { topologyMeshes: { ...snapshot().topologyMeshes, [object]: definitions===undefined ? row : {...row,materials:definitions} } };
         validate({ ...snapshot(), ...next });
         document.setEnvironment(next);
         return freeze(evidence);
@@ -885,15 +887,19 @@
 
     function planMeshFaceRegion(object, request, { part } = {}) {
       const row = meshTopology(object, part);
-      requireMeshShapeOwner(object, row.part, snapshot(), 'Edit');
-      return K.meshTopology.planFaceRegion(row.document, request);
+      const scene = snapshot();
+      requireMeshShapeOwner(object, row.part, scene, 'Edit');
+      return K.meshTopology.planFaceRegion(row.document, request, {
+        resolveBrush:(brush,material)=>A.tilesetFaces.extrusionBrush(scene,row,brush,material)
+      });
     }
 
     function editMeshFaceRegion(object, request, options) {
       const plan = planMeshFaceRegion(object, request, options);
       if (!plan.report.canCommit)
         throw Object.assign(new RangeError('Face-region edit failed geometry or wall clearance checks'), { report: plan.report });
-      return freeze({ faceRegion: plan.report, topology: editMeshTopology(object, plan.patch, options) });
+      return freeze({ faceRegion: plan.report,
+        topology:writeMeshTopology(object,plan.patch,options,{sidewallUVs:plan.report.sidewallUVs}) });
     }
 
     function meshEdgeEditPlan(object, request, { part } = {}) {
@@ -904,7 +910,8 @@
       const operation = request?.operation;
       const settings = {
         ...(operation?.kind === 'subdivide-texels' && {texelAtlas:face=>(atlas=A.tilesetPickedSplit.atlasFor(scene,row,face))}),
-        ...(operation?.basis === 'camera' && operation.camera === undefined && {camera:authoredTransformCamera})
+        ...(operation?.basis === 'camera' && operation.camera === undefined && {camera:authoredTransformCamera}),
+        resolveBrush:(brush,material)=>A.tilesetFaces.extrusionBrush(scene,row,brush,material)
       };
       const plan = K.meshTopology.planEdgeEdit(row.document, request, settings);
       return ['split-face','subdivide-face','subdivide-texels'].includes(plan.report.kind) ?
@@ -920,7 +927,7 @@
       if (!plan.report.canCommit)
         throw Object.assign(new RangeError('Edge edit failed geometry checks'), { report: plan.report });
       return freeze({ edgeEdit: plan.report, ...(Object.keys(plan.patch).length && {
-        topology: writeMeshTopology(object, plan.patch, options, {sourceSplit})
+        topology: writeMeshTopology(object,plan.patch,options,{sourceSplit,sidewallUVs:plan.report.detail?.sidewallUVs})
       }) });
     }
 
