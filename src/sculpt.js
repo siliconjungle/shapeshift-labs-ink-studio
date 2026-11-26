@@ -2154,7 +2154,7 @@ function makeSculpt(B, rest) {
     const ownerMat = owner?.mat;
     const appearance = first < end && ownerMat && (ownerMat.sdfPaint || ownerMat.sdfNewSurface || spray) &&
       paintAppearance(ownerMat, sample.slice(1, 4), sample.slice(4, 7), cap, spray,
-        paintCapture && !paintSource && (id => { if (paintCapture.sources.has(id)) paintSource = id; }));
+        paintCapture && !paintSource ? (id => { if (paintCapture.sources.has(id)) paintSource = id; }) : undefined);
     if (appearance?.tint && B.tintSplatColors)
       B.tintSplatColors(first,end,appearance.tint,owner.sdfPaintBase??=new Map(),baseId);
     B.describeSplats?.(first, end, {
