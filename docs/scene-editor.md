@@ -238,6 +238,63 @@ node examples/tileset-pick/prefab-isolation-demo.cjs prefab-isolation-demo
 See [shared parameter bindings](parameter-bindings.md) for named controls, expressions, fields, and signals in editor builds.
 See the [unified scene timeline](scene-timeline.md) for animating those builds and inspecting their markers and audio cues.
 
+### Promote painted tile faces into a prefab
+
+Use `tileset promote-prefab` to turn selected faces on one or more loose
+editable meshes into an inline visual prefab. The initial linked
+instance occupies the original position. Any unselected faces stay on
+their source mesh. The promotion keeps face, corner, vertex and edge
+IDs, UVs, paint bindings and the material slots used by the selected
+faces. Tileset dependencies are listed under `usesTilesets`. A boundary
+shared with the unselected mesh keeps its IDs in both meshes. Resolved
+corner normals are retained when a split crosses a smooth fan.
+
+```json
+{
+  "prefab": "painted-bay",
+  "instance": "west",
+  "origin": { "kind": "plane" },
+  "faces": { "bay-panel": ["sign", "grille"] }
+}
+```
+
+```sh
+ink-studio tileset promote-prefab promote.json --scene station.json
+ink-studio tileset promote-prefab promote.json --scene station.json --out promoted.json
+```
+
+Omit `--out` to preview the promotion receipt. It gives the origin,
+source and destination object IDs, original selection revisions,
+remaining face counts, shared edges, and any conflicts. The origin
+defaults to the current construction plane origin. Use
+`{"kind":"point","id":"threshold","at":[1,0,2]}` to record a named XYZ point
+or `{"kind":"vertex","object":"bay-panel","vertex":"sign/v0"}` to take the
+position of a named scene vertex. The prefab uses the scene axes and
+stores the selected vertices relative to that origin. If the
+construction plane's retained edge moves into the prefab exclusively,
+the plane keeps its resolved frame and the receipt records the detached edge.
+
+A `faces` value may be a saved native face selection from
+`tileset select --topology-out`. To pass it by filename with
+`--selection faces.json`, declare a single source such as
+`"faces": {"bay-panel": null}`. Saved selections must match the current
+topology revision.
+
+Sources must be static meshes with live tile-face bindings. Motion parts,
+active modifiers, topology-dependent attachments and hybrid ownership
+require review. A named face decal in the scene follows the first
+instance when its receiving face moves. Assign a face to an object-wide
+decal before promoting only part of its receiver. The decal stays a
+scene-level edit.
+
+In the SDK, use `editor.planTilesetPrefab(request)` and
+`editor.promoteTilesetPrefab(request)`. One undo restores the original
+faces, their receivers and the construction plane. Use
+`editor.setPrefabInstance` to add another placement of the saved definition.
+
+Run `node examples/tileset-pick/prefab-promotion-demo.cjs bay-demo` for a
+replayable selection, promotion and reuse example.
+
 ## Breakable groups
 
 Use `editor.suggestBreakable({ at, radius, voxel })` to query a nearby
