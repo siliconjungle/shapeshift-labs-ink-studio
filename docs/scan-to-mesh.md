@@ -1,7 +1,7 @@
 # Scan to mesh with residual splats
 
 A registered depth and color capture can become one glTF asset with an opaque indexed mesh and a smaller set of Gaussian splats. The native surface supplies depth, picking, texture, and normals. Splats carry fine pigment, real relief, or measured edge detail where the surface alone loses it. This workflow keeps the observed part of a scan in its calibrated camera coordinates.
-Use [registered scan fusion](#fuse-registered-rgb-d-views) when you have several calibrated captures.
+Use [registered scan fusion](#fuse-registered-rgb-d-views) when you have several calibrated captures. Use [measured material recovery](measured-materials.md) to prepare calibrated pigment, relief, and normal maps from photographed surface samples.
 
 ```sh
 ink-studio scan-mesh globe-depth.json --image globe-capture.png \

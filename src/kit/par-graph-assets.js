@@ -269,6 +269,7 @@
     ...P.motionDeformation.operations,
     ...P.rasterColor.operations,
     ...P.materialChannels.operations,
+    ...P.measuredMaterials.operations,
     ...P.materialPaint.operations,
     ...P.vectorResources.operations,
     ...P.fontResources.operations,
