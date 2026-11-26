@@ -423,6 +423,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   review <id> [--ref pic --px 2]     a sheet of fixed shots (four sides, top, low, far, near, close), beside the last one
   sweep <scene> <plan.json> --out directory   render still and clip contact sheets across settings and seeds
   sweep pin <report-or-directory> <run-id-or-tile> --out pin.json   save one exact case
+  sweep compare <report> <left> <right> --out directory   export matched view differences
+  sweep rank <report> --out ranking.json   order candidates by approval results
+  sweep apply <pin.json> --out controls.json [--scene]   write selected scene controls
   sweep replay <pin.json> --out directory   render the saved case
   sweep nearby <pin.json> <offsets.json> --out directory   vary numeric settings around the saved case
   variants <id> --seeds 3,7,12 [--group silhouette|openness|wear --motion]  render a ranked seed contact sheet

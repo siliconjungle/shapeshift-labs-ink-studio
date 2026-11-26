@@ -1,0 +1,14 @@
+{
+  "controls": { "parameters": { "b": -2.1, "d": -2.1 } },
+  "seeds": [37],
+  "parameters": {
+    "a": { "path": "/parameters/a", "range": { "min": 0.7, "max": 2.7 } },
+    "c": { "path": "/parameters/c", "range": { "min": 1.2, "max": 3.3 } }
+  },
+  "sampling": { "seed": 118, "count": 6 },
+  "constraints": [
+    { "left": "a", "op": "lt", "right": { "parameter": "c" } }
+  ],
+  "runBudget": 6,
+  "visual": { "width": 256, "height": 160, "pixelSize": 2, "columns": 3, "at": 0.5, "title": "Attractor / constrained sample" }
+}

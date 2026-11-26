@@ -1633,6 +1633,9 @@ const CMD = {
         '  review <id> [--ref pic --px 2]     a sheet of fixed shots (four sides, top, low, far, near, close), beside the last one',
         '  sweep <scene> <plan.json> --out directory   render still and clip contact sheets across settings and seeds',
         '  sweep pin <report-or-directory> <run-id-or-tile> --out pin.json   save one exact case',
+        '  sweep compare <report> <left> <right> --out directory   export matched view differences',
+        '  sweep rank <report> --out ranking.json   order candidates by approval results',
+        '  sweep apply <pin.json> --out controls.json [--scene]   write selected scene controls',
         '  sweep replay <pin.json> --out directory   render the saved case',
         '  sweep nearby <pin.json> <offsets.json> --out directory   vary numeric settings around the saved case',
         '  variants <id> --seeds 3,7,12 [--group silhouette|openness|wear --motion]  render a ranked seed contact sheet',
@@ -3215,13 +3218,24 @@ const CMD = {
   },
   sweep() {
     const sweeps = require('./visual-sweep.js');
-    const directory = sweeps.outputPath(opt);
-    if (pos[0] === 'pin') {
+    const command = pos[0];
+    const directory = sweeps.outputPath(opt, command === 'pin' ? ['note'] : command === 'apply' ? ['scene'] : []);
+    if (command === 'compare' || command === 'rank' || command === 'apply') {
+      const review = require('./sweep-review.js');
+      if (command === 'compare' && pos.length === 4) review.compare(lib().KIT, pos[1], pos[2], pos[3], directory);
+      else if (command === 'rank' && pos.length === 2) review.rank(pos[1], directory);
+      else if (command === 'apply' && pos.length === 2 && (opt.scene === undefined || opt.scene === true))
+        review.apply(lib().KIT, pos[1], directory, opt.scene === true);
+      else die('Use sweep compare <report> <left> <right>, rank <report>, or apply <pin.json> with --out');
+      console.log('wrote', directory);
+      return;
+    }
+    if (command === 'pin') {
       if (pos.length !== 3) die('Use sweep pin <report-or-directory> <run-id-or-tile> --out pin.json');
       const input = path.resolve(pos[1]);
       const report = fs.statSync(input).isDirectory() ? path.join(input, 'report.json') : input;
       if (report === directory) die('Choose a separate filename for the pin');
-      require('./asset-files.js').json(directory, sweeps.pin(sweeps.read(report),pos[2]));
+      require('./asset-files.js').json(directory, sweeps.pin(sweeps.read(report),pos[2],opt.note));
       console.log('wrote', directory);
       return;
     }
@@ -3243,29 +3257,49 @@ const CMD = {
       plan = sweeps.read(pos[1]);
     }
     const result = sweeps.runScene({ kit: lib().KIT, source, plan, directory, anchor, loadScene: scene,
-      renderCase(id, { seed, controls }, settings) {
-        const { width: w, height: h, pixelSize: px, at, times } = settings;
+      renderCase(id, { seed, controls }, settings, approval) {
+        const { width: w, height: h, pixelSize: px, at, times, views } = settings;
         const assemble = () => build(id, seed, { controls });
-        const frames = new Map();
-        if (times.length) {
-          const world = assemble(), options = view({ w, h, px, ...sequenceHistory(), transparent: false });
-          const replay = feedbackReplay(world, times[0], options);
-          function draw(t, resetRenderHistory) {
-            pose(world, t);
-            return R.render(world, { ...options, t, resetRenderHistory });
-          }
-          for (const t of times)
-            frames.set(t, R.upscale(replay ? replay.sample(t, draw) : draw(t), px));
+        const lanes = views?.map(({ camera }) => {
+          const { target, yaw, pitch, dist, fov, ortho } = camera;
+          return {
+            camera: { ...camera, pose: lib().CameraLens.orbitPose(yaw, pitch, dist, target) },
+            target, yaw, pitch, dist, fov, ortho, lockCamera: true, cameraStaging: false,
+            cameraOrbitOffset: undefined, focalLength: undefined, composition: [.5, .5]
+          };
+        }) ?? [{}];
+        const frames = lanes.map(() => new Map());
+        const keep = (time, images) => images.forEach((image, i) => frames[i].set(time, R.upscale(image, px)));
+        const samplers = motion => lanes.map(lane =>
+          view({ w, h, px, ...lane, ...(motion && sequenceHistory()), transparent: false }));
+        const draw = (world, options, t, resetRenderHistory) => {
+          pose(world, t);
+          return options.map(settings => R.render(world, { ...settings, t, resetRenderHistory }));
+        };
+        let approvals;
+        if (approval) {
+          const { approveShot } = require('./shot-approval.js');
+          const options = samplers(false);
+          approvals = approval.map((plan, i) => approveShot(assemble(), {
+            plan, view: options[i], pose, kit: lib(), capture(image, sample) {
+              frames[i].set(times[sample.frame] ?? at, R.upscale(image, px));
+            }
+          }));
+        } else if (times.length) {
+          const world = assemble(), options = samplers(true);
+          const replay = feedbackReplay(world, times[0], options[0]);
+          const sample = (t, reset) => draw(world, options, t, reset);
+          for (const t of times) keep(t, replay ? replay.sample(t, sample) : sample(t));
         }
-        if (!frames.has(at)) {
+        if (!frames[0].has(at)) {
           const world = assemble();
-          pose(world, at);
-          frames.set(at, R.upscale(R.render(world, view({ w, h, px, t: at, transparent: false })), px));
+          keep(at, draw(world, samplers(false), at));
         }
-        return frames;
+        return { frames: views ? frames : frames[0], approvals };
       }
     });
     console.log('wrote', result.report, '(' + result.cases + ' cases)');
+    if (result.passed === false) process.exitCode = 2;
   },
   variants() {
     const seeds = list('seeds', [3, 7, 12, 19, 22, 27]), group = opt.group || 'silhouette';

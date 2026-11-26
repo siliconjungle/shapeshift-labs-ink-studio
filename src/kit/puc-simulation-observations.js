@@ -49,18 +49,101 @@
     return {observations,slots,reader};
   }
 
+  const comparison = {
+    eq: W.data.equal,
+    ne: (a,b) => !W.data.equal(a,b),
+    lt: (a,b) => a < b,
+    lte: (a,b) => a <= b,
+    gt: (a,b) => a > b,
+    gte: (a,b) => a >= b
+  };
+
+  function constraintsFor(rows, parameters) {
+    const names = new Set(parameters.map(row => row.name));
+    check(Array.isArray(rows) && rows.length <= 64, 'A sweep accepts up to 64 constraints');
+    return rows.map(row => {
+      check(shape(row,['left','op','right']) && names.has(row.left) && own(comparison,row.op) &&
+        shape(row.right,['parameter','value']) && (own(row.right,'parameter') !== own(row.right,'value')) &&
+        (!own(row.right,'parameter') || names.has(row.right.parameter)),
+      'Sweep constraints need named parameters, a supported comparison and a parameter or value');
+      const { left, op, right } = row;
+      return values => {
+        const a = values[left], b = own(right,'parameter') ? values[right.parameter] : right.value;
+        return (op === 'eq' || op === 'ne' || Number.isFinite(a) && Number.isFinite(b)) && comparison[op](a,b);
+      };
+    });
+  }
+
+  function parameterValues(row, random) {
+    if (row.values !== undefined) return row.values;
+    const { min, max, steps } = row.range;
+    check(shape(row.range,['min','max','steps']) && Number.isFinite(min) && Number.isFinite(max) &&
+      Number.isFinite(max - min) && max > min &&
+      (steps === undefined ? random : Number.isSafeInteger(steps) && steps >= 2 && steps <= maxRuns),
+    'Invalid sweep range for ' + row.name);
+    if (steps === undefined) return;
+    return Array.from({ length:steps }, (_, i) => i === steps - 1 ? max : min + (max - min) * (i / (steps - 1)));
+  }
+
+  function combinationsFor(parameters, constraints, sampling, capacity) {
+    const random = sampling !== undefined;
+    const accepts = row => {
+      if (!constraints.length) return true;
+      const values = Object.fromEntries(row.map(({ name,value }) => [name,value]));
+      return constraints.every(test => test(values));
+    };
+    const axes = parameters.map(parameter => ({ ...parameter, values: parameterValues(parameter,random) }));
+    if (!random) {
+      check(axes.reduce((count,row) => count * row.values.length,1) <= (constraints.length ? maxRuns : capacity),
+        'Sweep exceeds the run or constraint search budget');
+      const grid = axes.reduce((rows,{ values,...axis }) =>
+        rows.flatMap(row => values.map(value => [...row,{ ...axis,value }])),[[]]);
+      const result = grid.filter(accepts);
+      check(result.length && result.length <= capacity, 'Sweep has no eligible runs or exceeds the run budget');
+      return result;
+    }
+    check(shape(sampling,['count','seed']) && parameters.length && Number.isSafeInteger(sampling.seed) &&
+      Number.isSafeInteger(sampling.count) && sampling.count > 0 && sampling.count <= capacity,
+    'Random sweep needs a safe seed and a sample count within the run budget');
+    const rng = K.random.create(sampling.seed);
+    const draw = axes.map(axis => {
+      const stream = rng.stream('sweep',axis.name);
+      return index => {
+        const sample = stream.at(index);
+        const values = axis.values;
+        const value = values ? values[Math.floor(sample * values.length)] :
+          axis.range.min + sample * (axis.range.max - axis.range.min);
+        return { ...axis,value };
+      };
+    });
+    const rows = [], seen = new Set();
+    const attempts = Math.min(65536,Math.max(256,sampling.count * 96));
+    for (let attempt = 0; attempt < attempts && rows.length < sampling.count; attempt++) {
+      const row = draw.map(sample => sample(attempt));
+      if (!accepts(row)) continue;
+      const key = JSON.stringify(row.map(entry => entry.value));
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push(row);
+    }
+    check(rows.length === sampling.count, 'Random sweep could not fill its distinct sample count inside the search budget');
+    return rows;
+  }
+
   function matrix(input,{scene=false,limit=maxRuns}={}) {
-    const {seeds,parameters:bindings={},cases=[{id:'base'}]}=copy(input);
-    check(Number.isSafeInteger(limit)&&limit>0&&limit<=maxRuns,'Invalid sweep run limit');
+    const {seeds,parameters:bindings={},cases=[{id:'base'}],constraints=[],sampling,runBudget=limit}=copy(input);
+    check(Number.isSafeInteger(limit)&&limit>0&&limit<=maxRuns&&Number.isSafeInteger(runBudget)&&runBudget>0&&runBudget<=limit,
+      'Invalid sweep run budget');
     check(seeds===undefined||Array.isArray(seeds)&&seeds.length>0&&seeds.length<=maxRuns&&
       seeds.every(Number.isSafeInteger)&&new Set(seeds).size===seeds.length,'Sweep seeds need distinct safe integers');
 
     check(record(bindings)&&Object.keys(bindings).length<=16,'Invalid sweep parameter bindings');
     const parameters=Object.entries(bindings).map(([name,item])=>{
-      const binding=scene?shape(item,['path','values']):
-        shape(item,['path','port','tick','values'])&&(item.path===undefined)!==(item.port===undefined)&&
+      const binding=scene?shape(item,['path','values','range']):
+        shape(item,['path','port','tick','values','range'])&&(item.path===undefined)!==(item.port===undefined)&&
         (item.tick===undefined||item.port!==undefined&&tickOK(item.tick)&&item.tick>0);
-      check(id(name)&&binding&&Array.isArray(item.values)&&item.values.length>0&&item.values.length<=maxRuns,
+      check(id(name)&&binding&&(own(item,'values')!==own(item,'range'))&&
+        (own(item,'values') ? Array.isArray(item.values)&&item.values.length>0&&item.values.length<=maxRuns : record(item.range)),
         'Invalid sweep parameter '+name);
       if(item.port!==undefined)endpoint(item.port);
       const path=item.path===undefined&&scene?[name]:item.path;
@@ -73,12 +156,9 @@
       shape(row,caseShape)&&id(row.id)&&(scene?record(row.controls??{}):
         Array.isArray(row.edits??[])&&Array.isArray(row.actions??[])))&&
       new Set(cases.map(row=>row.id)).size===cases.length,'Sweep cases need distinct IDs and valid case settings');
-    const runCount=parameters.reduce((n,item)=>n*item.values.length,cases.length*(seeds?.length??1));
-    check(runCount<=limit,'Sweep exceeds the run budget');
-
-    let combinations=[[]];
-    for(const parameter of parameters)combinations=combinations.flatMap(items=>parameter.values.map(value=>
-      [...items,{name:parameter.name,path:parameter.path,port:parameter.port,tick:parameter.tick,value}]));
+    const repeats=cases.length*(seeds?.length??1);
+    const combinations=combinationsFor(parameters,constraintsFor(constraints,parameters),sampling,Math.floor(runBudget/repeats));
+    const runCount=combinations.length*repeats;
     const groups=cases.flatMap(row=>combinations.map((entries,index)=>({
       id:parameters.length?row.id+':'+(index+1):row.id, case:row.id,
       parameters:Object.fromEntries(entries.map(({name,value})=>[name,value])),
@@ -90,7 +170,7 @@
   }
 
   function prepare(input,{visual=false,limit=maxRuns}={}) {
-    check(shape(input,['ticks','observations','seeds','parameters','cases','actions']),'Invalid observation sweep plan');
+    check(shape(input,['ticks','observations','seeds','parameters','cases','actions','constraints','sampling','runBudget']),'Invalid observation sweep plan');
     const spec=copy(input), {actions=[]}=spec;
     const {observations,slots,reader}=visual&&spec.observations===undefined
       ? {observations:[],slots:[],reader:null}:measurements(spec);
