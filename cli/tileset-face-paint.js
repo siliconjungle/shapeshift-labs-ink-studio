@@ -19,7 +19,7 @@ const key = (object,face)=>JSON.stringify([object,face]);
 function settings(request) {
   const {at,object,face,view={}} = request ?? {};
   if (!fields(request,['at','rgba','object','face','view','sharing','variant','tool','color','alpha','slot','sample','channel',
-    'fill','spray','dither','drawing','selection']) || !fields(view,viewKeys) ||
+    'fill','spray','dither','drawing','selection','alphaMode','strength']) || !fields(view,viewKeys) ||
       object!==undefined && !name(object) || face!==undefined && !name(face) ||
       view.cameraShot!==undefined && !name(view.cameraShot) ||
       view.cameraTime!==undefined && (!Number.isFinite(view.cameraTime) || view.cameraTime<0) ||
@@ -71,8 +71,9 @@ function usesOf(world, tileset, at, K, area) {
   return result;
 }
 
-function compare(before, after, uses) {
+function compare(before, after, uses, focus) {
   const {w,h} = before, diff = new Uint8Array(before.rgb.length);
+  const coverage = focus && {beforePixels:0,afterPixels:0,gainedPixels:0,lostPixels:0};
   const lookup = frame=>{
     const {sourceSurface,sourceTriangle,surfaceSources} = frame.passes;
     const faces = surfaceSources.map(source=>source?.faces && Object.fromEntries(
@@ -84,13 +85,38 @@ function compare(before, after, uses) {
   for (let i=0;i<w*h;i++) {
     const oldUse = oldOwner(i), nextUse = newOwner(i), p = i*3;
     if (oldUse) oldUse.visiblePixels++;
+    if (coverage) {
+      const was = oldUse===focus, now = nextUse===focus;
+      if (was) coverage.beforePixels++;
+      if (now) coverage.afterPixels++;
+      if (was && !now) coverage.lostPixels++;
+      if (now && !was) coverage.gainedPixels++;
+    }
     if (before.rgb[p]===after.rgb[p] && before.rgb[p+1]===after.rgb[p+1] && before.rgb[p+2]===after.rgb[p+2]) continue;
     changedPixels++;
     if (oldUse) oldUse.changedPixels++;
     if (nextUse && nextUse!==oldUse) nextUse.changedPixels++;
     diff.set([250,195,89],p);
   }
-  return {changedPixels,diff:{w,h,rgb:diff}};
+  return {changedPixels,diff:{w,h,rgb:diff},coverage};
+}
+
+function alphaPreview(asset, next, rect) {
+  const [x,y,w,h] = rect, before = Tools.pixels(asset), after = next===asset ? before : Tools.pixels(next);
+  const oldImage = new Uint8Array(w*h*3), newImage = new Uint8Array(oldImage.length), samples = [];
+  let increased = 0, decreased = 0;
+  for (let row=0;row<h;row++) for (let col=0;col<w;col++) {
+    const at = (y+row)*asset.width+x+col, p = (row*w+col)*3;
+    const a = before.read(at)&255, b = after.read(at)&255;
+    oldImage.fill(a,p,p+3);
+    newImage.fill(b,p,p+3);
+    if (a===b) continue;
+    if (b>a) increased++;
+    else decreased++;
+    if (samples.length<32) samples.push({at:[x+col,y+row],before:a,after:b});
+  }
+  return {report:{rect,units:'alpha-byte',changedTexels:increased+decreased,increased,decreased,samples},
+    images:{'coverage-before':{w,h,rgb:oldImage},'coverage-after':{w,h,rgb:newImage}}};
 }
 
 function planChange(editor, source, asset, {rect,pixels,changedMask}, variant) {
@@ -105,7 +131,7 @@ function planChange(editor, source, asset, {rect,pixels,changedMask}, variant) {
   const {canCommit,conflicts} = edit;
   const detail = {...painted.detail,variantEdit:edit,canCommit,conflicts,
     ...(canCommit && {destination:{...source,tileset:variant,material:edit.material}})};
-  return {detail,...(canCommit && {commit:target=>target.applyTilesetFaceVariant(request)})};
+  return {asset:painted.asset,detail,...(canCommit && {commit:target=>target.applyTilesetFaceVariant(request)})};
 }
 
 function paint(editor, request, {apply=false,expect} = {}, kit = require('..').load()) {
@@ -123,10 +149,13 @@ function paint(editor, request, {apply=false,expect} = {}, kit = require('..').l
   const dependencies = editor.sourceDependencies?.();
   if (editor.sourceDependencies && dependencies===undefined) throw new RangeError('Cannot verify face paint scene dependencies');
   // Explicit RGBA pencil requests also accept receipts produced before the tool field was added.
-  const legacy = tool==='pencil' && rgba!==undefined && !Region.usesRegion(op);
+  const showCoverage = Tools.previewsCoverage(op);
+  const legacy = tool==='pencil' && rgba!==undefined && !Region.usesRegion(op) && !showCoverage;
   const previewRevision = digest([scene,dependencies,at,rgba,object,face,view,...(local ? [sharing,variant] : []),
     ...(legacy ? [] : [op])]);
-  const head = {format,version:1,scene:scene.id,at,view,tool,...(!sampling && {sharing}),...(local && {variant}),previewRevision};
+  const head = {format,version:1,scene:scene.id,at,view,tool,...(!sampling && {sharing}),...(local && {variant}),
+    ...(op.alphaMode!==undefined && {alphaMode:op.alphaMode}),...(op.strength!==undefined && {strength:op.strength}),
+    previewRevision};
   const blocked = (code,detail={})=>({report:{...head,...detail,...(sampling && {sampled:false}),
     canCommit:false,conflicts:[{code}]}});
   if (expect!==undefined && expect!==previewRevision) return blocked('stale-preview');
@@ -170,14 +199,17 @@ function paint(editor, request, {apply=false,expect} = {}, kit = require('..').l
   const picked = key(source.object,source.face);
   uses.set(picked,{object:source.object,...(source.part!==null && {part:source.part}),
     face:source.face,material:source.material,sampling:'picked-texel',visiblePixels:0,changedPixels:0});
-  const {changedPixels,diff} = compare(before.frame,after.frame,uses);
+  const {changedPixels,diff,coverage} = compare(before.frame,after.frame,uses,showCoverage && uses.get(picked));
+  const alpha = showCoverage && alphaPreview(asset,planned.asset,region.rect);
+  const alphaCutoff = row.tilesetMaterialSources.get(source.material)?.alphaCutoff ?? .5;
   const refs = planned.edit?.before[0] ?? editor.tilesetDependencies(tileset).sheets[0];
   if (apply) planned.commit?.(editor);
   return {report:{...detail,uses:local ? [uses.get(picked)] : [...uses.values()],
     ...(local && {sharedPaintUses:[...uses.entries()].filter(([id])=>id!==picked).map(([,row])=>row)}),
+    ...(alpha && {coverage:{...alpha.report,alphaCutoff,native:coverage}}),
     prefabDependencies:refs.prefabs,changedPixels},
     images:{before:before.frame,after:after.frame,diff,
-      ...(area && {texels:Region.preview(area.rect,area.selection,area.changedMask)})}};
+      ...(area && {texels:Region.preview(area.rect,area.selection,area.changedMask)}),...alpha?.images}};
 }
 
 function command([file,...rest], options, kit, openEditor, sceneOutput) {
@@ -193,7 +225,8 @@ function command([file,...rest], options, kit, openEditor, sceneOutput) {
       throw new TypeError('Provide an inline selection or use --selection');
     request = {...request,selection:read(selection)};
   }
-  const artifacts = ['before','after','diff',...(request && Region.usesRegion(request) ? ['texels'] : [])]
+  const artifacts = ['before','after','diff',...(request && Region.usesRegion(request) ? ['texels'] : []),
+    ...(request && Tools.previewsCoverage(request) ? ['coverage-before','coverage-after'] : [])]
     .map(name=>[name,preview && path.resolve(preview,name+'.png')]);
   if (output && inputs.includes(output) || preview && artifacts.some(([,file])=>inputs.includes(file) || file===output))
     throw new RangeError('Write face paint output separately from its inputs');
