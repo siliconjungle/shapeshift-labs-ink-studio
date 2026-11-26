@@ -310,6 +310,7 @@ All checked-in guides, indexed by title and section headings.
 - [Shared destination fields](../navigation-flow.md)
 - [Incremental navigation tiles](../navigation-tiles.md)
 - [Linear and bracketed nonlinear solves](../numerical-solvers.md)
+- [OpenPBR advanced lobes](../openpbr-advanced.md)
 - [OpenPBR core](../openpbr-core.md)
 - [Orbits and attractors](../orbit-attractors.md)
 - [Calibrate display and speaker latency](../output-latency.md)

@@ -1,3 +1,5 @@
+const OpenTransport = require('./physical-openpbr-transport.js');
+const { layer } = require('./physical-openpbr-optics.js');
 const { openPbrBrdf } = require('./physical-openpbr-brdf.js');
 const { surface,coordinates } = require('./physical-reference-geometry.js');
 const { dot,along,clamp,sub,mul,scale,length,unit,luma,max,tau,distribution,frame,direction,mis,random } =
@@ -77,66 +79,121 @@ function glassBounce(hit,d,media,rng) {
 }
 
 function makeTracer(scene) {
-  const {geometry,sky,options:{bounces},lights}=scene;
+  const {geometry,sky,options:{bounces},lights,metersPerUnit}=scene;
   const area=emitters(scene.triangles);
-  const stats={cameraRays:0,shadowRays:0,continuationRays:0,transmittedEvents:0,emissiveTriangles:area.count};
+  const stats={cameraRays:0,shadowRays:0,continuationRays:0,transmittedEvents:0,emissiveTriangles:area.count,
+    volumeScatters:0,subsurfaceScatters:0,dispersionPaths:0,thinSpecularEvents:0,thinDiffuseEvents:0};
   const trace=geometry.intersect;
-  function visible(hit,dir,distance=Infinity,rng) {
-    const from=offset(hit.point,hit.ng,dir);
+  function visible(point,normal,dir,distance,rng) {
+    const from=offset(point,normal ?? dir,dir);
     stats.shadowRays++;
-    return !trace(from,dir,0,distance-4*length(sub(from,hit.point)),true,rng);
+    return !trace(from,dir,0,distance-4*length(sub(from,point)),true,rng);
   }
-  function path(ray,rng) {
+
+  function direct(point, normal, medium, evaluate, rng, bounce, add) {
+    const weight = (sample, fit, misWeight) => {
+      if(!fit || !visible(point,normal,sample.dir,sample.distance??Infinity,rng)) return;
+      const radiance=medium ? mul(sample.radiance,OpenTransport.attenuation(medium.extinction,sample.distance??Infinity)) :
+        sample.radiance;
+      add(mul(fit.weight,radiance),misWeight/sample.pdf);
+    };
+    const light=sample=>{
+      if(!sample||!sample.pdf||!max(sample.radiance)) return;
+      const fit=evaluate(sample.dir);
+      if(fit) weight(sample,fit,bounce<bounces?mis(sample.pdf,fit.pdf):1);
+    };
+    light(area.sample(point,rng));
+    light(sky.sample(rng));
+    for(const row of lights) {
+      const delta=sub(row.position,point), distance=length(delta);
+      if(distance<=1e-6) continue;
+      const dir=scale(delta,1/distance);
+      weight({dir,distance,radiance:row.intensity,pdf:distance*distance},evaluate(dir),1);
+    }
+  }
+
+  function path(ray,rng,dispersionSample=null) {
     stats.cameraRays++;
-    let {origin,direction:d}=ray, gain=[1,1,1], last=null;
+    let {origin,direction:d}=ray, gain=[1,1,1], last=null, channel=null;
     const result=[0,0,0], media=new Map();
     function add(value,weight=1) {
       for(let c=0;c<3;c++) result[c]+=value[c]*gain[c]*weight;
     }
     for(let bounce=0;bounce<=bounces;bounce++) {
       const intersection=trace(origin,d,0,Infinity,false,rng);
-      if(!intersection) {
-        if(bounce||sky.background) add(sky.eval(d),last?mis(last.pdf,sky.pdf(d)):1);
-        break;
-      }
-      const hit=surface(intersection,origin,d), {m,t}=hit;
-      let interior;
-      for(const medium of media.values()) interior=medium;
-      if(interior) for(let c=0;c<3;c++) gain[c]*=Math.exp(-interior.absorption[c]*hit.distance);
-      if(hit.front||t.material.twoSidedEmission) {
-        const emission=m.openPbr?t.material.emitted(hit.uv,Math.abs(dot(hit.ng,d))):m.emission;
-        if(max(emission)>0) add(emission,last?mis(last.pdf,area.pdf(t,hit.point,last.point)):1);
-      }
+      let owner, interior;
+      for(const [id,medium] of media) { owner=id; interior=medium; }
+      const volume=interior?.kind ? interior : null;
+      const flight=volume && OpenTransport.freeFlight(volume,intersection?.distance??Infinity,channel,rng);
+      if(flight) gain=mul(gain,flight.weight);
+      else if(interior && intersection)
+        for(let c=0;c<3;c++) gain[c]*=Math.exp(-interior.absorption[c]*intersection.distance);
+      if(max(gain)<=0) break;
 
-      let next;
-      if(m.glass) {
+      let next, point, normal;
+      if(flight?.scatter) {
+        point=along(origin,d,flight.distance);
+        stats[volume.kind==='subsurface'?'subsurfaceScatters':'volumeScatters']++;
+        const scatter=OpenTransport.phase(d,volume);
+        direct(point,null,volume,scatter.evaluate,rng,bounce,add);
         if(bounce===bounces) break;
-        const result=glassBounce(hit,d,media,rng);
-        next=result.dir; gain=scale(gain,result.gain);
-        if(dot(next,hit.ng)<0) stats.transmittedEvents++;
-        last=null;
+        next=scatter.sample(rng);
+        last={point,pdf:scatter.evaluate(next).pdf};
       } else {
-        const bsdf=(m.openPbr?openPbrBrdf:brdf)(hit,scale(d,-1));
-        const light=sample=>{
-          if(!sample||!sample.pdf||!max(sample.radiance)) return;
-          const fit=bsdf.evaluate(sample.dir);
-          if(!fit||!visible(hit,sample.dir,sample.distance,rng)) return;
-          add(mul(fit.weight,sample.radiance),(bounce<bounces?mis(sample.pdf,fit.pdf):1)/sample.pdf);
-        };
-        light(area.sample(hit.point,rng));
-        light(sky.sample(rng));
-        for(const row of lights) {
-          const delta=sub(row.position,hit.point), distance=length(delta);
-          if(distance<=1e-6) continue;
-          const dir=scale(delta,1/distance), fit=bsdf.evaluate(dir);
-          if(fit&&visible(hit,dir,distance,rng)) add(mul(fit.weight,row.intensity),1/(distance*distance));
+        if(!intersection) {
+          if(bounce||sky.background) add(sky.eval(d),last?mis(last.pdf,sky.pdf(d)):1);
+          break;
         }
-        if(bounce===bounces) break;
-        next=bsdf.sample(rng);
-        const fit=next&&bsdf.evaluate(next);
-        if(!fit||!fit.pdf) break;
-        gain=mul(gain,scale(fit.weight,1/fit.pdf));
-        last={point:hit.point,pdf:fit.pdf};
+        const hit=surface(intersection,origin,d), {m,t}=hit, view=scale(d,-1);
+        point=hit.point; normal=hit.ng;
+        if(hit.front||t.material.twoSidedEmission) {
+          const emission=m.openPbr?t.material.emitted(hit.uv,Math.abs(dot(hit.ng,d))):m.emission;
+          if(max(emission)>0) add(emission,last?mis(last.pdf,area.pdf(t,point,last.point)):1);
+        }
+
+        if(volume && owner===t.object && !hit.front) {
+          if(bounce===bounces) break;
+          const outside=[...media.values()].at(-2)?.ior??1;
+          const exit=OpenTransport.leave(hit,view,volume,outside,channel,rng);
+          if(!exit) break;
+          if(exit.exit) { media.delete(owner); stats.transmittedEvents++; }
+          next=exit.dir; gain=mul(gain,exit.weight); last=null;
+        } else if(m.glass) {
+          if(bounce===bounces) break;
+          const event=glassBounce(hit,d,media,rng);
+          next=event.dir; gain=scale(gain,event.gain);
+          if(dot(next,hit.ng)<0) stats.transmittedEvents++;
+          last=null;
+        } else {
+          const ambient=interior?.ior??1, optics=m.openPbr?layer(m.openPbr,ambient):null;
+          const bsdf=optics?openPbrBrdf(hit,view,ambient,optics):brdf(hit,view);
+          const transport=optics?OpenTransport.transmission(hit,view,ambient,optics):null;
+          const surfaceChance=1-(transport?.probability??0);
+          const evaluate=surfaceChance<1 ? out=>{
+            const fit=bsdf.evaluate(out);
+            return fit && {weight:fit.weight,pdf:fit.pdf*surfaceChance};
+          } : bsdf.evaluate;
+          direct(point,normal,volume,evaluate,rng,bounce,add);
+          if(bounce===bounces) break;
+          if(transport && (surfaceChance===0 || rng()<transport.probability)) {
+            const event=transport.sample(rng,channel,metersPerUnit,dispersionSample);
+            if(!event) break;
+            next=event.dir; gain=mul(gain,event.weight); last=null;
+            if(event.medium) {
+              channel=event.channel;
+              media.set(t.object,event.medium);
+              if(event.disperses) stats.dispersionPaths++;
+            } else stats.thinSpecularEvents++;
+            stats.transmittedEvents++;
+          } else {
+            next=bsdf.sample(rng);
+            const fit=next&&evaluate(next);
+            if(!fit||!fit.pdf) break;
+            if(dot(next,normal)<0) stats.thinDiffuseEvents++;
+            gain=mul(gain,scale(fit.weight,1/fit.pdf));
+            last={point,pdf:fit.pdf};
+          }
+        }
       }
       if(max(gain)<=0) break;
       if(bounce>=3) {
@@ -144,7 +201,7 @@ function makeTracer(scene) {
         if(rng()>=survive) break;
         gain=scale(gain,1/survive);
       }
-      origin=offset(hit.point,hit.ng,next); d=next;
+      origin=offset(point,normal??next,next); d=next;
       stats.continuationRays++;
     }
     return result;
@@ -175,7 +232,8 @@ function accumulate(scene,tracer,state,count) {
     const x=p%width, y=Math.floor(p/width), at=p*4;
     for(let i=samples;i<samples+count;i++) {
       const rng=random(seed,p,i);
-      const value=tracer.path(scene.lens.ray(x+rng(),height-y-rng()),rng);
+      const dispersionSample=(i+(Math.imul(p+1,1013904223)>>>0))%3;
+      const value=tracer.path(scene.lens.ray(x+rng(),height-y-rng()),rng,dispersionSample);
       for(let c=0;c<3;c++) sums[at+c]+=value[c];
       sums[at+3]+=luma(value)**2;
     }

@@ -1,17 +1,12 @@
 const TextureAddress = require('../src/texture-address.js');
-const { clamp, scale, luma } = require('./physical-reference-math.js');
+const { dielectric, fuzzEnergy, iorLimit, transmittedCosine } = require('./physical-openpbr-optics.js');
+const { clamp, scale } = require('./physical-reference-math.js');
 
 const whiteNits = 100;
 const maxRadiance = 1e8;
 const mix = (a, b, t) => a + (b - a) * t;
 
-function fresnel0(ior) {
-  const ratio = ior >= 1 ? 1 / ior : ior;
-  return ((1 - ratio) / (1 + ratio)) ** 2;
-}
-
 const fresnel = (f0, cosine) => mix(f0, 1, (1 - clamp(cosine)) ** 5);
-const dielectricFresnel = (f0, cosine) => f0 ? fresnel(f0, cosine) : 0;
 
 function texture(P, image, name, identity, budget) {
   const { width, height } = image.raster;
@@ -81,9 +76,13 @@ function material(P, packet, name, id, identity, budget) {
     if (!brightness) return [0, 0, 0];
     const luminance = read('emission_luminance', uv) / whiteNits;
     const weight = read('coat_weight', uv);
-    const transmission = weight ? 1 - dielectricFresnel(fresnel0(read('coat_ior', uv)), cosine) : 1;
+    const ior = weight ? iorLimit(read('coat_ior', uv)) : 1;
+    const transmission = 1 - dielectric(cosine, 1, ior);
+    const passCos = Math.max(.01, transmittedCosine(cosine, 1, ior));
     const tint = weight ? read('coat_color', uv) : [1, 1, 1];
-    return read('emission_color', uv).map((n, c) => luminance * n * mix(1, Math.sqrt(tint[c]) * transmission, weight));
+    const fuzz = 1 - fuzzEnergy({fuzz_weight:read('fuzz_weight', uv),fuzz_roughness:read('fuzz_roughness', uv)},cosine);
+    return read('emission_color', uv).map((n, c) => luminance * n * fuzz *
+      mix(1, tint[c] ** (.5 / passCos) * transmission, weight));
   }
 
   const surfaceMaps = Object.keys(maps).filter(name => name !== 'geometry_opacity' && !name.startsWith('emission_'));
@@ -102,4 +101,4 @@ function material(P, packet, name, id, identity, budget) {
   };
 }
 
-module.exports = { material, fresnel, fresnel0, dielectricFresnel, whiteNits };
+module.exports = { material, fresnel, whiteNits };
