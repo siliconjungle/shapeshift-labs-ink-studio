@@ -1669,6 +1669,45 @@ indices together. In Node, use `ink.inspectTilesetPalette` and
 Run `node examples/tileset-pick/named-palette-demo.cjs named-palette-demo`
 for a reviewed consolidation and matched native renders.
 
+### Paint mesh corner and vertex tint
+
+Use `mesh-topology tint` with an editable mesh or a scene and its
+`--object`. Paint takes normalized RGB or a six-digit hex color.
+
+~~~json
+{ "tool": "paint", "corner": "sign/top-left", "color": "#f2ad71" }
+~~~
+
+| Target | Scope |
+| --- | --- |
+| `corner` | One authored corner by ID. The other face at a shared vertex keeps its own tint. |
+| `face` | Every corner of that face. |
+| `vertex` | All authored corners incident to the vertex. |
+| `selection` | Face, vertex, edge, or corner IDs, or a saved mesh or UV selection. Pass a saved selection inline or with `--selection`. |
+
+`eyedropper` returns each corner's authored tint and effective RGB.
+`erase` removes tint from the target and restores neutral white.
+Missing tint contributes white during interpolation. The headless and
+WebGL surface passes multiply the sampled pigment by interpolated tint
+before lighting. UVs, textures, and cutout alpha retain their existing
+values. Imported RGBA tint keeps its fourth channel as source metadata
+when painting RGB.
+
+~~~sh
+ink-studio mesh-topology tint station.json paint.json --object panel --preview tint-review > review.json
+ink-studio mesh-topology tint station.json paint.json --object panel --expect review.json --out station-tinted.json
+ink-studio mesh-topology tint station-tinted.json eyedrop.json --object panel
+~~~
+
+The preview includes native before, after, and diff PNGs. The receipt
+records the stable corner IDs and their before and after values.
+Selections and receipts are revision-checked. Use one scene undo to
+restore the entire edit. In Node, use the scene editor's
+`planMeshTint` and `editMeshTint`.
+
+Run `node examples/tileset-pick/mesh-corner-tint-demo.cjs mesh-tint-demo`
+for a seam corner, a face selection, a shared vertex, and an erase.
+
 ### Inset brush UVs on each edge
 
 Use inward distances measured in source texels. The top, bottom, left, and

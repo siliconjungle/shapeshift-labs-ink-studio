@@ -116,6 +116,7 @@ const meshEdgeFlowData = (function (K) {
     for (const { samples } of data) for (const [corner, influence] of samples) {
       if (!influence) continue;
       for (const [key, value] of Object.entries(corner.attributes ?? {})) {
+        if (key==='tint') continue;
         if (!channels.has(key)) channels.set(key, new Set());
         channels.get(key).add(Array.isArray(value) ? value.length : 0);
       }
@@ -133,7 +134,9 @@ const meshEdgeFlowData = (function (K) {
         const size = sizes.values().next().value;
         return [key, size ? Array.from({ length: size }, (_, axis) => value(axis)) : value()];
       }));
-      return { id: g.fresh('corner'), vertex: vertices[i], uv, ...(channels.size && { attributes }) };
+      const tint = meshCornerTint.sample(samples.map(([row])=>row),samples.map(([,weight])=>weight));
+      if (tint) attributes.tint=tint;
+      return { id: g.fresh('corner'), vertex: vertices[i], uv, ...((channels.size || tint) && { attributes }) };
     });
   }
 

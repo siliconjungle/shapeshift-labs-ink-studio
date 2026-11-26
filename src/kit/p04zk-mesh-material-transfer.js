@@ -8,11 +8,15 @@
   const unit = n => Number.isFinite(n) && n >= 0 && n <= 1;
   const mix = (vectors, weights) => vectors[0].map((_, k) =>
     weights.reduce((sum, weight, i) => sum + vectors[i][k] * weight, 0));
-  const attrs = row => Object.entries(row.attributes ?? {}).sort(([a], [b]) => a < b ? -1 : 1);
+  const attrs = row => Object.entries(row.attributes ?? {}).filter(([key])=>key!=='tint').sort(([a], [b]) => a < b ? -1 : 1);
   const layout = row => JSON.stringify(attrs(row).map(([name, value]) => [name, Array.isArray(value) ? value.length : 0]));
   const close = (a, b) => a === b || Array.isArray(a) && Array.isArray(b) && a.length === b.length &&
     a.every((value, i) => close(value, b[i])) || typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) < 1e-6;
-  const sameSurface = (a, b) => close(a.uv, b.uv) && close(a.normal, b.normal) && close(attrs(a), attrs(b));
+  const tint = row => {
+    const color=meshCornerTint.effective(row);
+    return [color[0],color[1],color[2],color[3] ?? 1];
+  };
+  const sameSurface = (a, b) => close(a.uv,b.uv) && close(a.normal,b.normal) && close(attrs(a),attrs(b)) && close(tint(a),tint(b));
   const strong = link => link.confidence === 1 && !link.evidence.method.startsWith('projected-');
 
   function catalog(doc) {
@@ -53,11 +57,14 @@
       data.reduce((n, value, i) => n + value * weights[i], 0);
     if (active.some(row => row.attributes?.paletteIndex !== active[0].attributes?.paletteIndex)) return null;
     const authored = active.some(row => row.normal);
+    const values = Object.fromEntries(Object.keys(attributes ?? {}).filter(key=>key!=='tint').map(key=>[key,
+      key === 'paletteIndex' ? active[0].attributes[key] : blend(rows.map(row => row.attributes[key]))]));
+    const sampledTint = meshCornerTint.sample(rows,weights);
+    if (sampledTint) values.tint=sampledTint;
     return {
       uv: mix(rows.map(row => row.uv), weights).map(n => Math.max(0, Math.min(1, n))),
       ...(authored && { normal: V.norm(mix(rows.map(row => row.normal ?? normal), weights), normal) }),
-      ...(attributes && { attributes: Object.fromEntries(Object.keys(attributes).map(key => [key,
-        key === 'paletteIndex' ? active[0].attributes[key] : blend(rows.map(row => row.attributes[key]))])) })
+      ...((attributes || sampledTint) && {attributes:values})
     };
   }
 
@@ -234,7 +241,7 @@
           }
           const expected = surface({ rows: samples, normal: triangle.normal }, barycentric), actual = hit.sample;
           const uvError = expected && Math.hypot(expected.uv[0] - actual.uv[0], expected.uv[1] - actual.uv[1]);
-          if (!expected || uvError > maxUVError || !close(attrs(expected), attrs(actual)) ||
+          if (!expected || uvError > maxUVError || !close(attrs(expected), attrs(actual)) || !close(tint(expected),tint(actual)) ||
               !close(expected.normal, actual.normal) && !(expected.normal && actual.normal &&
                 V.dot(expected.normal, actual.normal) >= .999)) {
             const reason = uvError > maxUVError ? 'uv-interpolation-error' : 'corner-channel-interpolation-error';

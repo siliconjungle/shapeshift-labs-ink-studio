@@ -54,11 +54,12 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
     if (!layer) continue;
     const code=meshMask?.get(layer.sceneMeshId);
     if (code && spriteLOD.hidden(code)) continue;
-    const {vertices,pixels,normalPixels,cornerNormals,width,height}=layer;
+    const {vertices,pixels,normalPixels,cornerNormals,cornerTints,width,height}=layer;
     if(!(vertices instanceof Float32Array)||vertices.length%15||!Number.isSafeInteger(width)||width<1||
       !Number.isSafeInteger(height)||height<1||!(pixels instanceof Uint8Array)||pixels.length!==width*height*4||
       (normalPixels!==undefined&&(!(normalPixels instanceof Uint8Array)||normalPixels.length!==pixels.length))||
       (cornerNormals!==undefined&&(!(cornerNormals instanceof Float32Array)||cornerNormals.length!==vertices.length/5*3))||
+      (cornerTints!==undefined&&(!(cornerTints instanceof Float32Array)||cornerTints.length!==vertices.length/5*3))||
       !vertices.every(Number.isFinite))throw new RangeError('Invalid sprite surface atlas');
     const plan=depthOnly ? null : layer[uvSlip];
     const ranges=plan?.vertices===vertices&&plan.width===width&&plan.height===height ? plan.ranges : [];
@@ -96,7 +97,9 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
         object:chart.objectId,entity:chart.objectId,material:chart.materialId,part:chart.partId
       };
       const authored = !depthOnly && surfaceNormals && cornerNormals?.subarray(first * 3, first * 3 + 9);
-      const trackWeights=authored || sourceBinding || motion || chart && (sampleCharts || pbr?.materials[pbrMaterial-1]?.readBand);
+      const cornerColor = !depthOnly && cornerTints?.subarray(first*3,first*3+9);
+      const tint = cornerColor && cornerColor.some(value=>value!==1) ? cornerColor : null;
+      const trackWeights=authored || tint || sourceBinding || motion || chart && (sampleCharts || pbr?.materials[pbrMaterial-1]?.readBand);
       const input=identity.map((weights,i)=>transform(Array.from(vertices.subarray(offset+i*5,offset+i*5+5)),step,
         trackWeights ? weights : undefined,local));
       const mesh=capture && {object:chart?.objectId,material:chart?.materialId,part:chart?.partId,
@@ -225,6 +228,10 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
           const position=[0,1,2].map(k=>row.reduce((s,n,i)=>s+n.p[k]*w[i]/sum,0));
           if(clip&&!clip(position) || omitLayer && omit(omitLayer,chart?.materialId,position))continue;
           const weights3=trackWeights && identity.map((_,k)=>row.reduce((s,v,i)=>s+v.weights[k]*w[i]/sum,0));
+          const pigment = material?.color ?? [ink>>>16,(ink>>>8)&255,ink&255].map(n=>n/255);
+          const tinted = tint ? pigment.map((channel,k)=>channel*Math.max(0,Math.min(1,
+            weights3[0]*tint[k]+weights3[1]*tint[3+k]+weights3[2]*tint[6+k]))) : pigment;
+          if (tint && material) material.color=tinted;
           let base = normal, mapped;
           if (authored) {
             const mixed = unit(normal.map((_, k) => weights3.reduce((sum, weight, i) => sum + authored[i * 3 + k] * weight, 0)));
@@ -290,7 +297,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
               at,drawTriangle:first/3,barycentric:weights3,mesh:layer.sceneMeshId
             })};
           }
-          fragments[p]={p,z,alpha:1,color:material?.color ?? [ink >>> 16, (ink >>> 8) & 255, ink & 255].map(n=>n/255),position,
+          fragments[p]={p,z,alpha:1,color:material?.color ?? tinted,position,
             ...(pbrMaterial && {pbrMaterial,pbrReceives,pbrTangent:axes?.right}),
             ...(material && {semantic:material,semanticRule:mip.chain.rule,scan:mip.chain.scan,objectTexels:mip.objectTexels,liveLight:mip.liveLight,
               semanticView:ortho ? [V[2],V[6],V[10]] : unit(sub(eye,position))}),

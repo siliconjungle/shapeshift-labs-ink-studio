@@ -80,12 +80,16 @@ const retainedMeshRepair = (function (K) {
     };
   }
 
-  const layout = corner => Object.entries(corner.attributes ?? {}).map(([key,value])=>
+  const layout = corner => Object.entries(corner.attributes ?? {}).filter(([key])=>key!=='tint').map(([key,value])=>
     [key,Array.isArray(value) ? value.length : 0]);
   const weights = (g,corner) => g.vertices.get(corner.vertex).weights ?? {};
   const weight = (g,corner,channel) => Object.hasOwn(weights(g,corner),channel) ? weights(g,corner)[channel] : 0;
   const affine = (a,b,c,x,y) => a+x*(b-a)+y*(c-a);
   const blend = ([a,b,c],x,y) => a.map((n,i)=>affine(n,b[i],c[i],x,y));
+  const tint = row => {
+    const values = meshCornerTint.effective(row);
+    return [values[0],values[1],values[2],values[3] ?? 1];
+  };
 
   function dissolveMapping(doc, g, face, corners, tolerance) {
     const triangle = topology.triangulate(doc).triangleSources.find(row => row.face === face.id);
@@ -107,6 +111,8 @@ const retainedMeshRepair = (function (K) {
             y * (values[2][i] - start)) > 1e-6))
           throw new RangeError('Dissolve would change corner attribute interpolation for ' + channel);
       }
+      if (!sameUV(tint(corner),blend([a,b,c].map(tint),x,y),1e-6))
+        throw new RangeError('Dissolve would change corner tint interpolation');
       for (const channel of channels) {
         const expected = affine(weight(g,a,channel),weight(g,b,channel),weight(g,c,channel),x,y);
         if (Math.abs(weight(g,corner,channel) - expected) > 1e-6)
@@ -473,6 +479,7 @@ const retainedMeshRepair = (function (K) {
         const value = row=>width ? row.attributes[key] : [row.attributes[key]];
         compare('attribute-interpolation',{attribute:key},reference.map(value),value(corner));
       }
+      compare('attribute-interpolation',{attribute:'tint'},reference.map(tint),tint(corner));
       for (const joint of joints) {
         const value = row=>[weight(g,row,joint)];
         compare('weight-interpolation',{joint},reference.map(value),value(corner));

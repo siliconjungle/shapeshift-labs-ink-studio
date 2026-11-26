@@ -8,6 +8,24 @@ const meshQuadDiagonal = Object.freeze({
 const isMeshSmoothingGroup = value => typeof value === 'string' && Boolean(value.trim()) ||
   Number.isSafeInteger(value) && value >= 0;
 
+// A missing corner tint contributes neutral white when sampling a face.
+const meshCornerTint = (() => {
+  const neutral = Object.freeze([1,1,1,1]);
+  const unit = n=>Number.isFinite(n) && n>=0 && n<=1;
+  const read = ({attributes} = {})=>{
+    const tint=attributes?.tint;
+    return Array.isArray(tint) && [3,4].includes(tint.length) && tint.every(unit) ? tint : undefined;
+  };
+  const effective = corner=>read(corner) ?? neutral;
+  function sample(rows,weights) {
+    const tints=rows.map(read);
+    const size=tints.reduce((n,tint,i)=>weights[i]>0 ? Math.max(n,tint?.length ?? 0) : n,0);
+    if (!size) return;
+    return Array.from({length:size},(_,k)=>Math.min(1,Math.max(0,weights.reduce((total,n,i)=>total+n*(tints[i]?.[k] ?? 1),0))));
+  }
+  return Object.freeze({read,effective,sample});
+})();
+
 (function (K) {
   const format = 'ink-studio/mesh-topology';
   const maxTriangles = 250000;
@@ -214,7 +232,8 @@ const isMeshSmoothingGroup = value => typeof value === 'string' && Boolean(value
         const uvPins=MaterialUV.flags(corner.uvPins);
         if (uvPins && Object.keys(uvPins).some(set=>!attributes?.[MaterialUV.key(set)]))
           throw new RangeError('Pin an authored UV layout on corner '+cornerId);
-        const shape = JSON.stringify(Object.entries(attributes ?? {}).map(([id, data]) => [id, Array.isArray(data) ? data.length : 0]));
+        const shape = JSON.stringify(Object.entries(attributes ?? {}).filter(([id])=>id!=='tint')
+          .map(([id, data]) => [id, Array.isArray(data) ? data.length : 0]));
         if (layout !== undefined && layout !== shape) throw new TypeError('Face ' + key + ' must use one corner attribute layout');
         layout = shape;
         return frozen({ id: cornerId, vertex, uv: frozen(Array.from(uv)), ...(attributes && { attributes }),
@@ -346,6 +365,7 @@ const isMeshSmoothingGroup = value => typeof value === 'string' && Boolean(value
     const sets=new Set(doc.faces.flatMap(row=>MaterialUV.setsOf(row.corners[0])));
     const uvSets=Object.fromEntries([...sets].sort((a,b)=>a-b).map(set=>[set,[]]));
     const renderVertices = new Map(), vertexSources = [], slots = new Map();
+    let cornerTints;
     for (const { face, local } of triangles) {
       if (!slots.has(face.material)) {
         slots.set(face.material, materials.length);
@@ -367,11 +387,15 @@ const isMeshSmoothingGroup = value => typeof value === 'string' && Boolean(value
           Object.values(uvSets).forEach((rows,i)=>rows.push(...(alternate[i] ?? [0,0])));
           if (directions) normals.push(...(normal || [0, 0, 0]));
         }
+        const color = meshCornerTint.effective({attributes});
+        if (!cornerTints && (color[0]!==1 || color[1]!==1 || color[2]!==1))
+          cornerTints = new Array(indices.length*3).fill(1);
+        if (cornerTints) cornerTints.push(color[0],color[1],color[2]);
         indices.push(renderVertices.get(key));
       }
       triangleSources.push(frozen({ face: face.id, corners: frozen(corners.map(corner => corner.id)) }));
     }
-    return { positions, uvs, ...(sets.size && {uvSets}), ...(doc.uvBindings && {uvBindings:doc.uvBindings}), ...(directions && { normals }), indices, materials, faceMaterials, triangleSources, vertexSources };
+    return { positions, uvs, ...(sets.size && {uvSets}), ...(doc.uvBindings && {uvBindings:doc.uvBindings}), ...(directions && { normals }), ...(cornerTints && {cornerTints}), indices, materials, faceMaterials, triangleSources, vertexSources };
   }
 
   function triangulate(source) {
