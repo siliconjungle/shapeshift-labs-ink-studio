@@ -135,12 +135,13 @@ const retainedMeshRepair = (function (K) {
     }
     const [a, b] = uses.map(use => g.faces.get(use.face));
     if (a.material !== b.material) throw new RangeError('Dissolve would remove a material boundary');
+    if (a.smoothingGroup !== b.smoothingGroup) throw new RangeError('Dissolve would remove a smoothing group boundary');
     if (crossesWinding(...uses, g.corners)) throw new RangeError('Repair face winding before dissolving this edge');
     if (edgeSeam(edge, g.corners).seam) throw new RangeError('Dissolve would remove a UV seam');
     dissolveMapping(doc, g, a, [...a.corners, ...b.corners], tolerance);
     const first = outside(a, uses[0]), second = outside(b, uses[1]);
     const corners = [...first, ...second.slice(1, -1)];
-    const next = topology.edit(doc, { faces: [{ id:a.id, material:a.material, corners }], removeFaces: [b.id] });
+    const next = topology.edit(doc, { faces: [{ id:a.id, material:a.material, smoothingGroup:a.smoothingGroup, corners }], removeFaces: [b.id] });
     return { document: next,
       links: { faces: [{ from: b.id, to: a.id }], corners: [
         { from: second[0].id, to: first.at(-1).id }, { from: second.at(-1).id, to: first[0].id }
@@ -339,7 +340,8 @@ const retainedMeshRepair = (function (K) {
           }
           return {from,to};
         });
-        const polygon = {id:child,material:face.material,corners:corners.map(({from,to})=>({...g.corners.get(from),id:to})),
+        const polygon = {id:child,material:face.material,smoothingGroup:face.smoothingGroup,
+          corners:corners.map(({from,to})=>({...g.corners.get(from),id:to})),
           sourceQuad:{mesh:doc.id,face:id,revision,corners:ring}};
         faces.push(polygon);
         return {face:child,corners};
@@ -401,6 +403,8 @@ const retainedMeshRepair = (function (K) {
       throw new RangeError('Join triangles needs two triangular faces with four distinct vertices');
     if (crossesWinding(...uses,g.corners)) throw new RangeError('Repair face winding before joining triangles');
     if (faces[0].material !== faces[1].material) throw new RangeError('Join triangles would remove a material boundary');
+    if (faces[0].smoothingGroup !== faces[1].smoothingGroup)
+      throw new RangeError('Join triangles would remove a smoothing group boundary');
     if (edge.smooth === false || edge.crease > 0)
       throw new RangeError('Join triangles would remove an authored hard edge or subdivision crease');
     if (!equal(layout(faces[0].corners[0]),layout(faces[1].corners[0])))
@@ -427,7 +431,7 @@ const retainedMeshRepair = (function (K) {
     const start = corners.findIndex(corner=>corner.id === keep.corners[0].id);
     const ring = [...corners.slice(start),...corners.slice(0,start)];
     const diagonal = shared.map(({kept})=>kept.id).sort();
-    const quad = {id:keep.id,material:keep.material,corners:ring,diagonal};
+    const quad = {id:keep.id,material:keep.material,smoothingGroup:keep.smoothingGroup,corners:ring,diagonal};
     const joined = topology.edit(doc,{faces:[quad],removeFaces:[remove.id]});
     const links = {faces:[{from:remove.id,to:keep.id}],
       corners:shared.map(({kept,lost})=>({from:lost.id,to:kept.id}))};
@@ -500,6 +504,8 @@ const retainedMeshRepair = (function (K) {
     const discarded = tileRegistration(g,faces,reference);
     if (keep.material !== remove.material)
       discarded.push({kind:'material',face:remove.id,before:remove.material,after:keep.material});
+    if (keep.smoothingGroup !== remove.smoothingGroup)
+      discarded.push({kind:'smoothing-group',face:remove.id,before:remove.smoothingGroup ?? null,after:keep.smoothingGroup ?? null});
     const {id,vertices,uses:incidents,...settings} = edge;
     if (Object.keys(settings).length) discarded.push({kind:'authored-edge',edge:{id,vertices,...settings}});
     const [first,second] = faces.map((face,i)=>outside(face,uses[i]));
@@ -513,7 +519,8 @@ const retainedMeshRepair = (function (K) {
       keepPins.has(corner.id) ? retainPins(corner,keepPins.get(corner.id)) : corner);
     const start = corners.findIndex(corner=>corner.id === keep.corners[0].id);
     const ring = [...corners.slice(start),...corners.slice(0,start)];
-    const polygon = {id:keep.id,material:keep.material,corners:ring};
+    const polygon = {id:keep.id,material:keep.material,corners:ring,
+      ...(keep.smoothingGroup !== undefined && {smoothingGroup:keep.smoothingGroup})};
     const document = topology.edit(doc,{faces:[polygon],removeFaces:[remove.id]});
     const links = {faces:[{from:remove.id,to:keep.id}],
       corners:shared.map(({kept,lost})=>({from:lost.id,to:kept.id}))};

@@ -5,6 +5,9 @@ const meshQuadDiagonal = Object.freeze({
   }
 });
 
+const isMeshSmoothingGroup = value => typeof value === 'string' && Boolean(value.trim()) ||
+  Number.isSafeInteger(value) && value >= 0;
+
 (function (K) {
   const format = 'ink-studio/mesh-topology';
   const maxTriangles = 250000;
@@ -189,7 +192,9 @@ const meshQuadDiagonal = Object.freeze({
 
     const corners = new Set(), edges = new Map(), faces = [], triangles = [];
     for (const [key, row] of index(inputFaces, 'Faces')) {
-      const { material = 'default' } = row;
+      const { material = 'default', smoothingGroup } = row;
+      if (smoothingGroup !== undefined && !isMeshSmoothingGroup(smoothingGroup))
+        throw new TypeError('A face smoothing group needs a nonempty name or nonnegative integer');
       if (!name(material) || !Array.isArray(row.corners) || row.corners.length < 3 || row.corners.length > maxCornersPerFace)
         throw new RangeError('Face ' + key + ' needs a material ID and 3 to ' + maxCornersPerFace + ' corners');
       if (triangles.length + row.corners.length - 2 > maxTriangles)
@@ -215,7 +220,8 @@ const meshQuadDiagonal = Object.freeze({
       }));
       const diagonal = quadDiagonal(key,row.diagonal,ring);
       const sourceQuad = quadSource(row.sourceQuad);
-      const face = frozen({ id: key, material, corners:ring, ...(diagonal && {diagonal}), ...(sourceQuad && {sourceQuad}) });
+      const face = frozen({ id: key, material, corners:ring, ...(diagonal && {diagonal}), ...(sourceQuad && {sourceQuad}),
+        ...(smoothingGroup !== undefined && {smoothingGroup}) });
       for (const [i, corner] of face.corners.entries()) {
         const next = face.corners[(i + 1) % face.corners.length];
         const endpoints = edgeKey(corner.vertex, next.vertex);

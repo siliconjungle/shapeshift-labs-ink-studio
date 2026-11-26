@@ -5,7 +5,7 @@
   const visibilityFormat = 'ink-studio/mesh-component-visibility';
   const domains = ['vertices', 'edges', 'faces'];
   const modes = ['loop', 'ring', 'boundary', 'island', 'open-edges', 'normal-patch'];
-  const filterKeys = ['materials', 'seam', 'crease', 'visibility', 'backfaces', 'facing'];
+  const filterKeys = ['materials', 'smoothingGroups', 'seam', 'crease', 'visibility', 'backfaces', 'facing'];
   const degreeRange = n => Number.isFinite(n) && n >= 0 && n <= 180;
   const withinAngle = (a, b, cosine) => V.dot(a, b) >= cosine - 16 * Number.EPSILON;
   const graphs = new WeakMap();
@@ -192,11 +192,14 @@
   function filtered(doc, g, domain, selection, filter, { visibility, object, part }) {
     if (filter === undefined) return selection;
     if (!record(filter, filterKeys)) throw new TypeError('Invalid mesh selection filter');
-    const { materials, seam: uv, crease, visibility: view, backfaces, facing } = filter;
+    const { materials, smoothingGroups, seam: uv, crease, visibility: view, backfaces, facing } = filter;
     const facesDirection = facingTest(domain, facing);
     if (materials !== undefined && (!Array.isArray(materials) || !materials.length ||
         !Array.from(materials).every(id => typeof id === 'string' && id.trim())))
       throw new TypeError('Material filters need one or more material IDs');
+    if (smoothingGroups !== undefined && (domain !== 'faces' || !Array.isArray(smoothingGroups) || !smoothingGroups.length ||
+        !Array.from(smoothingGroups).every(id => id === null || isMeshSmoothingGroup(id))))
+      throw new TypeError('Filter faces by one or more smoothing group names or numbers, or null for unassigned faces');
     if (uv !== undefined && typeof uv !== 'boolean') throw new TypeError('Use a boolean seam filter');
     if (crease !== undefined && !record(crease, ['min', 'max'])) throw new TypeError('Creases need a degree range');
     const { min = 0, max = 180 } = crease ?? {};
@@ -221,7 +224,7 @@
       eligible = ids((needsParticipation ? participation[lane] : visibility.visible)?.[domain], g.components[domain]);
     }
 
-    const materialIds = materials && new Set(materials), matches = new Map();
+    const materialIds = materials && new Set(materials), groups = smoothingGroups && new Set(smoothingGroups), matches = new Map();
     function edgeMatches(id) {
       if (matches.has(id)) return matches.get(id);
       const edge = g.components.edges.get(id);
@@ -237,6 +240,7 @@
     return new Set([...selection].filter(id => {
       if (eligible && eligible.has(id) !== (view !== 'hidden')) return false;
       if (facesDirection && !facesDirection(g, id)) return false;
+      if (groups && !groups.has(g.components.faces.get(id).smoothingGroup ?? null)) return false;
       if (materialIds) {
         const faces = domain === 'faces' ? [id] : g.related(domain, id, 'faces');
         if (!faces.some(face => materialIds.has(g.components.faces.get(face).material))) return false;

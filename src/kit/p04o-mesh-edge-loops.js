@@ -50,7 +50,7 @@ const meshEdgeLoops = (function (K) {
     }
     for (const id of touched) {
       const face = g.faces.get(id), ring = [];
-      const polygon = {id,material:face.material};
+      const polygon = {id,material:face.material,...(face.smoothingGroup !== undefined && {smoothingGroup:face.smoothingGroup})};
       for (const [i, a] of face.corners.entries()) {
         const b = cyclic(face.corners, i + 1), edge = edgeOf(g, a.vertex, b.vertex), cut = cuts.get(edge.id);
         ring.push(a);

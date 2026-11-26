@@ -46,7 +46,7 @@ const meshTopologySubdivision = (function (K) {
         lineage?.edges.push({ from: edge.id, to: child });
         edges.push({ id: child, vertices: [vertex, id],
           ...(edge.smooth !== undefined && { smooth: edge.smooth }), ...(edge.crease !== undefined && { crease: edge.crease }),
-          ...(edge.uvSeam && { uvSeam: true }) });
+          ...(edge.uvSeam && { uvSeam: true }), ...(edge.uvSeams && {uvSeams:edge.uvSeams}) });
       }
     }
     for (const [id, row] of atVertex) {
@@ -87,7 +87,7 @@ const meshTopologySubdivision = (function (K) {
         const child = g.fresh('face');
         lineage?.faces.push({ from: face.id, to: child });
         lineage?.corners.push({ from: corner.id, to: rows[0].id });
-        faces.push({ id: child, material: face.material, corners: rows });
+        faces.push({ id: child, material: face.material, smoothingGroup:face.smoothingGroup, corners: rows });
       }
     }
     const next = topology.create({ ...doc, id: doc.id + '/subdivision-' + level, vertices, edges, faces });

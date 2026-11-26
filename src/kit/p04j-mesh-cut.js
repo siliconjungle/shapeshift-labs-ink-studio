@@ -200,7 +200,7 @@
       for (const [i, { row, corners }] of fragments.entries()) {
         const id = i === 0 ? face.id : fresh('face');
         if (i) faceLinks.push({ from: face.id, to: id });
-        faces.push({ id, material: face.material,
+        faces.push({ id, material: face.material, ...(face.smoothingGroup !== undefined && {smoothingGroup:face.smoothingGroup}),
           corners: corners.map(corner => cornerAt(row, corner, fresh, retainedCorners, cornerLinks)) });
       }
     }
