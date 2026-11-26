@@ -1501,6 +1501,46 @@ ink-studio mesh-uv edit field-case.json move.json --object box --out moved.json 
 node examples/tileset-pick/uv-corner-scope-demo.cjs corner-scope-review
 ```
 
+### Nudge UVs in source pixels
+
+Use `nudge` to translate UVs by signed integer step counts along the atlas
+axes. Positive X moves right and positive Y moves down. The default
+increment is `"pixel"`. Use a positive number such as `0.25` for finer
+steps, or a pair such as `[0.25, 0.5]` to set each axis separately.
+
+```json
+{
+  "operations": [
+    { "op": "nudge", "ids": ["panel"], "steps": [1, -1], "increment": "pixel" }
+  ]
+}
+```
+
+Use `"increment": "tile"` to step by the declared tileset grid. Each step
+spans a tile plus the gutter on that axis. The sheet's grid takes
+precedence over the project default. A standalone topology document
+needs `"atlas": [width, height]`, and a standalone tile nudge also
+needs `"tileSize": { "width": 8, "height": 8, "paddingX": 2 }`. A scene
+request can supply either field as an override.
+
+Ink uses each selected material's active source dimensions for the
+requested channel. One texel is `1 / (width - 1)` or `1 / (height - 1)`
+in normalized UV coordinates. An axis one texel wide only accepts zero
+steps. The receipt lists both the source texel displacement and the
+normalized translation for every affected material.
+
+IDs address islands by default. To move corners, edges, or faces,
+declare `domain` or pass a saved `selection` and set `scope` to
+`"together"` or `"independent"`. An edge selection saved from the
+atlas can retain a specific side of a seam. Pins, atlas limits, and
+triangle checks apply to the preview and commit.
+
+```sh
+ink-studio mesh-uv edit panel.json nudge.json --object sign --channel pigment --preview nudge-review
+ink-studio mesh-uv edit panel.json nudge.json --object sign --channel pigment --out shifted.json --report nudge-receipt.json
+node examples/tileset-pick/uv-nudge-demo.cjs uv-nudge-demo
+```
+
 ## Bind separate material layouts
 
 A retained mesh part can use a different UV set for each material channel.

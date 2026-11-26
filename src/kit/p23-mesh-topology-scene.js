@@ -55,7 +55,7 @@
     return value;
   }
 
-  function uvAtlases(scene,row,selector) {
+  function uvAtlases(scene,row,selector,{tileGrid=false} = {}) {
     const pigmentSet = MaterialUV.resolve(row.document.uvBindings,'pigment');
     const channel = typeof selector === 'string' ? selector : selector === pigmentSet ? 'pigment' : undefined;
     const maps = {pigment:['texture'],normal:['normal'],emission:['emission'],metallicRoughness:['roughness','metalness']};
@@ -77,7 +77,7 @@
           const baked = channel === 'pigment' ? Boolean(bake?.maps.texture) : fields.some(key=>Array.isArray(bake?.maps[key]));
           const kind = baked ? 'material-bake' : channel === 'pigment' && tileset ? 'tileset' : 'material-texture';
           sources.set(materialId,{kind,channel,size:[image?.width ?? 1,image?.height ?? 1],
-            ...(tileset && {tileset}),...(baked && {bake:bake.id})});
+            ...(tileset && {tileset,...(tileGrid && {grid:registry.grid(tileset)})}),...(baked && {bake:bake.id})});
         } else sources.set(materialId,undefined);
       }
       return sources.get(materialId);

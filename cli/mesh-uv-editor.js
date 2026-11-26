@@ -262,7 +262,8 @@ function editSelection(UV,document,plan,selectionFile) {
     const saved = read(selectionFile);
     return UV.select(document,{domain:saved.domain,from:saved,uvSet});
   }
-  const scopes = plan.report.operations.filter(row=>row.op==='move-corners').map(row=>row.evidence);
+  const scopes = plan.report.operations.filter(row=>row.op==='move-corners' ||
+    row.op==='nudge' && row.evidence.scope!==undefined).map(row=>row.evidence);
   if (scopes.length) {
     const moving = new Set(scopes.flatMap(row=>row.moving.map(corner=>corner.id)));
     const held = [...new Set(scopes.flatMap(row=>row.held.map(corner=>corner.id)))].filter(id=>!moving.has(id)).sort();
