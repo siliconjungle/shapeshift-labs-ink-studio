@@ -410,6 +410,53 @@ to commit an inline revision with one undo.
 Run `node examples/tileset-pick/prefab-source-edit-demo.cjs bay-review`
 to review three linked bays and a blocked overlap.
 
+### Make a local prefab variant
+
+Use `mesh-topology variant-prefab` with a placed instance. Set `mode`
+to `fork` for a new inline, reusable definition or to `detach` to convert
+the instance into editable scene members. Either operation incorporates
+the instance's effective overrides and keeps the qualified scene object
+IDs, so a decal on `west.panel` still refers to that panel.
+
+```json
+{"instance":"west","revision":3,"mode":"fork","prefab":"west-enamel"}
+```
+
+```json
+{"instance":"center","revision":3,"mode":"detach"}
+```
+
+```sh
+ink-studio mesh-topology variant-prefab station.json fork.json --preview review --view view.json
+ink-studio mesh-topology variant-prefab station.json fork.json --out forked.json
+```
+
+A fork keeps the placement and starts the new prefab at revision 1.
+It preserves the effective members and records the source prefab,
+source revision, and originating instance in `provenance`. A detach
+moves the members into the scene. For static tile geometry, Ink bakes
+the placement into the authored vertices and pivot and rotates authored
+normals. It preserves face, edge and corner IDs, UVs, tile bindings and
+material slots. Detached meshes record the effective source mesh
+revision alongside their prefab provenance.
+
+The receipt shows which overrides became part of the variant, along
+with source and destination identities. Use `--preview` for matched
+native-grid before, after and change images. A detach that would move a
+mesh with active modifiers, skin, shape keys or topology attachments
+into a new coordinate space reports the dependency for review. A
+detach also checks for indexed parameter bindings that would address a
+different scene member.
+
+Forks and loose tiles still use the registered sheets from the original.
+To change the sheet pixels for only one face, use the existing
+[local paint variation](mesh-uv.md#choose-shared-paint-or-a-local-face-variant) workflow.
+
+In the SDK, use `planPrefabVariant`, `previewPrefabVariant`, and
+`applyPrefabVariant`. Each conversion is one undo. Run
+`node examples/tileset-pick/prefab-variant-demo.cjs variant-demo`
+for a replay that edits a fork, detached tiles, and the source independently.
+
 ## Breakable groups
 
 Use `editor.suggestBreakable({ at, radius, voxel })` to query a nearby

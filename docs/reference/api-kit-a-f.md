@@ -853,6 +853,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.prefabSourceEdit.plan` | function | `(scene, env, request, requireShapeOwner, authoredCamera)` | [source](../../src/kit/p23-scene-prefab-source.js) |
 | `KIT.authoring.prefabStamp` | namespace |  |  |
 | `KIT.authoring.prefabStamp.plan` | function | `(scene, request, env)` | [source](../../src/kit/p23-scene-prefab-stamp.js) |
+| `KIT.authoring.prefabVariant` | namespace |  |  |
+| `KIT.authoring.prefabVariant.plan` | function | `(scene, env, request)` | [source](../../src/kit/p23-scene-prefab-variant.js) |
 | `KIT.authoring.projectBundles` | namespace |  |  |
 | `KIT.authoring.projectBundles.collect` | function | `(entry, get, attachments, { validate = true } = {})` | [source](../../src/kit/p24-project-bundles.js) |
 | `KIT.authoring.projectBundles.collectAttachment` | function | `(file, get)` | [source](../../src/kit/p24-project-bundles.js) |
@@ -879,9 +881,11 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.sceneLibrary` | namespace |  |  |
 | `KIT.authoring.sceneLibrary.create` | function | `(storage, { key, backups = 8, prepareSnapshot } = {})` | [guide](../procedural.md#named-scene-library), [source](../../src/kit/p88-scene-library.js) |
 | `KIT.authoring.scenePrefabs` | namespace |  |  |
+| `KIT.authoring.scenePrefabs.checkProvenance` | function | `(row, mesh = false)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.expand` | function | `(source, { prefabs: external } = {})` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.origin` | function | `(transform)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.review` | function | `(source, before, after)` | [source](../../src/kit/p23-scene-prefabs.js) |
+| `KIT.authoring.scenePrefabs.tilesetRequirements` | function | `(definition, meshes)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.sculptContributions` | namespace |  |  |
 | `KIT.authoring.sculptContributions.inspect` | function | `(scene, solid, id, env)` | [source](../../src/kit/p23a-sculpt-contributions.js) |
 | `KIT.authoring.sculptContributions.list` | function | `(scene, id)` | [source](../../src/kit/p23a-sculpt-contributions.js) |

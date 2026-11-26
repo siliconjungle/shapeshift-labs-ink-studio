@@ -510,6 +510,42 @@
       else document.transact('Edit prefab instance ' + id, write);
     }
 
+    function stagePrefabVariant(request) {
+      const before = snapshot(), {patch,report} = A.prefabVariant.plan(before,buildEnv,request);
+      if (!patch) return {before,report};
+      const candidate = {...before,...patch};
+      const problems = DIO.check(candidate,buildEnv).filter(row => row.level === 'error');
+      try {
+        if (!problems.length) requireReviewEdit(before,candidate);
+      } catch (error) {
+        problems.push({level:'error',problem:error.message});
+      }
+      if (problems.length) return {before,report:freeze({...report,canCommit:false,problems})};
+      return {before,candidate,patch,report};
+    }
+
+    function planPrefabVariant(request) {
+      return stagePrefabVariant(request).report;
+    }
+
+    function previewPrefabVariant(request, {time=0} = {}) {
+      if (!Number.isFinite(time) || time < 0) throw new RangeError('Prefab preview time must be nonnegative');
+      const {before,candidate,report} = stagePrefabVariant(request);
+      const env = {...buildEnv,parameterInputs:{...buildEnv.parameterInputs,time}};
+      return {report,before:DIO.build(before,env),after:candidate && DIO.build(candidate,env)};
+    }
+
+    function applyPrefabVariant(request) {
+      const {patch,report} = stagePrefabVariant(request);
+      if (!patch) throw Object.assign(new RangeError('Prefab variant needs review'),{report});
+      const write = () => document.batchSession(() => {
+        document.setEnvironment({instances:null});
+        document.setEnvironment(patch);
+        return report;
+      });
+      return document.pending() ? write() : document.transact('Make prefab variant of '+report.instance,write);
+    }
+
     function stagePrefabSourceEdit(request) {
       const before = snapshot();
       const {candidate,bindings,library,report} = A.prefabSourceEdit.plan(
@@ -1649,6 +1685,7 @@
       planPainting3d, applyPainting3d, inspectPaintings3d,
       extractPainting3d: id => A.paintings3d.extract(snapshot(), id),
       placeSculptStamp, planSculptSplit, splitSculpt, planAssemblyStretch, stretchAssembly,
+      planPrefabVariant, previewPrefabVariant, applyPrefabVariant,
       planPrefabSourceEdit, previewPrefabSourceEdit, editPrefabSource,
       setPrefabInstance, planPrefabStamp, stampPrefab, planTilesetPrefab, promoteTilesetPrefab,
       planPrefabIsolation, previewPrefabIsolation, editIsolatedPrefab,

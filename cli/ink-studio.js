@@ -1511,6 +1511,7 @@ const CMD = {
         '  mesh-topology transform <mesh-or-scene.json> <random-receipt.json> --replay [--object id] [--out file] [--report file]   replay recorded positions on the source revision',
         '  mesh-topology health <mesh-or-scene.json> [settings.json] [--object id] [--out report.json]   locate local topology and geometry problems',
         '  mesh-topology overlaps <mesh-or-scene.json> [settings.json] [--object id] [--part id] [--out report.json | --selection-out faces.json]   review same-facing coincident polygons',
+        '  mesh-topology variant-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   fork a linked prefab or detach one instance into editable members',
         '  mesh-topology edit-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json [--library-out library.json]]   review a visual prefab source edit across its instances',
         '  mesh-topology isolate-prefab <scene.json> <request.json> [--preview image.png] [--view settings.json] [--out scene.json]   limit prefab instance edits to active faces',
         '  mesh-topology repair <mesh-or-scene.json> <request.json> [--object id] [--out file] [--report file]   preview or apply weld, dissolve, winding, flip-diagonal, split-quad, join-triangles, merge-tiles and straighten-quad edits',
