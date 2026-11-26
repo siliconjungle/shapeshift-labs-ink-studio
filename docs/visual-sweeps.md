@@ -151,10 +151,10 @@ Numeric-only sweeps still take a report filename.
 
 ## Review and apply a candidate
 
-Run `sweep compare` with two tile numbers or run IDs to write matched
-still comparisons and signed differences per view. Clip sweeps also
-write synchronized comparison and difference APNGs per view, using
-the saved frames and cadence. The report gives changed pixel counts
+Run `sweep compare` with two candidates identified by tile number, run ID,
+or sample ID to write matched still comparisons and signed differences per
+view. Clip sweeps also write synchronized comparison and difference APNGs
+using the saved frames and cadence. The report gives changed pixel counts
 and RGB RMS error for the poster and each clip sample.
 `sweep rank` lists passed candidates first, then candidates with failed
 checks, then unchecked candidates. Fewer recorded findings break ties
