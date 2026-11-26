@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ink Studio · Bake batch</title>
+<style>
+:root{color-scheme:dark;font:15px/1.4 system-ui,sans-serif;color:#f5e7ce;background:#172127;--paper:#f5e7ce;--muted:#b5c5c6;--line:#3a5058;--accent:#f1bb80}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 42% 0%,#2a4149,#172127 74%)}
+main{max-width:1200px;margin:auto;padding:clamp(20px,4vw,49px) clamp(14px,4.2vw,52px)}
+header,.job-header{display:flex;justify-content:space-between;align-items:baseline;gap:7px 14px;flex-wrap:wrap}
+h1{font:400 clamp(44px,7vw,84px)/.96 Georgia,serif;letter-spacing:-.064em;margin:0}
+h2{font:400 27px/1 Georgia,serif;margin:0}a{color:var(--accent);text-underline-offset:3px}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.summary{display:flex;flex-wrap:wrap;gap:8px 21px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:10px 0;margin-top:15px;color:var(--muted)}
+.summary b{color:var(--paper);font-weight:600}
+#jobs{display:grid;gap:12px;margin-top:15px}
+article{padding:13px;background:#203139;border:1px solid var(--line)}
+.sheet{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,143px),1fr));gap:8px;margin-top:13px}
+figure{margin:0;padding:6px;background:#192831;border:1px solid var(--line);min-width:0}
+figure img{display:block;width:100%;aspect-ratio:1;object-fit:contain;image-rendering:pixelated;background:#16242c}
+figcaption{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 8px;margin:6px 0 0;font-size:12px;color:var(--muted)}
+.baked{color:#f1bb80}.cached{color:#8ad6bb}
+details{margin-top:11px;border-top:1px solid var(--line);padding-top:7px;font-size:13px}
+summary{cursor:pointer;color:var(--accent)}ul{padding-left:20px;margin-bottom:0}
+</style>
+<script defer src="data.js"></script>
+</head>
+<body><main>
+<header><h1 id="title"></h1><a href="report.json" download>Batch report</a></header>
+<div class="summary" id="summary"></div>
+<section id="jobs" aria-label="Batch jobs"></section>
+<template id="job"><article>
+  <div class="job-header"><h2></h2><a class="review">Open bake review</a></div>
+  <div class="sheet"></div><details open><summary>Output aliases</summary><ul></ul></details>
+</article></template>
+<script>
+window.addEventListener('DOMContentLoaded',()=>{
+  const get=id=>document.getElementById(id), node=(tag,value)=>{const el=document.createElement(tag);if(value!==undefined)el.textContent=value;return el;};
+  const {totals,limits}=batch;
+  get('title').textContent=batch.label;
+  const stats=[[totals.baked,' baked'],[totals.cached,' reused'],[limits.peakWorkers+' / '+limits.workers,' workers'],
+    [limits.peakReservedMiB+' / '+limits.memoryMb+' MiB',' reserved']];
+  for(const [value,label] of stats) {
+    const line=node('span');line.append(node('b',value),label);get('summary').append(line);
+  }
+  for(const job of batch.jobs) {
+    const panel=get('job').content.firstElementChild.cloneNode(true), sheet=panel.querySelector('.sheet'), exports=panel.querySelector('ul');
+    panel.querySelector('h2').textContent=job.label;
+    panel.querySelector('.review').href=job.review;
+    for(const unit of job.units)for(const target of unit.targets)for(const tile of target.tiles) {
+      const card=node('figure'), footer=node('figcaption');
+      if(tile.preview) {const image=node('img');image.src=tile.preview;image.alt=target.id+' tile '+tile.label;card.append(image);}
+      const state=node('span',unit.status==='cached'?'Reused':'Baked');state.className=unit.status;
+      footer.append(node('span',target.id+' · '+tile.label),state);
+      card.append(footer);sheet.append(card);
+    }
+    for(const alias of job.aliases)for(const tile of alias.tiles) {
+      const item=node('li'), link=node('a',tile.file.split('/').at(-1));
+      link.href=tile.file;link.download='';
+      item.append(link);exports.append(item);
+    }
+    panel.querySelector('details').hidden=!job.aliases.length;
+    get('jobs').append(panel);
+  }
+});
+</script>
+</main></body></html>

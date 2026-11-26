@@ -144,19 +144,19 @@
       sd: (x, y, z) => distance(root, x, y, z, Infinity) };
   }
 
-  function stampedSweep(brush, guide, step, blendRadius, pressureResponse, looseness, orient, band) {
+  function stampedSweep(brush, guide, step, blendRadius, pressureResponse, looseness, { orient, band, loosenessAt }) {
     const api = P.paintLooseness, opacity = hasOpacity(pressureResponse);
     let rows, cost, spacing;
     if (brush?.kind === 'mark-profile') {
       const plan = P.markProfiles.prepareBrush(brush);
-      rows = P.markProfiles.place(plan, guide, maxPoses, looseness);
+      rows = P.markProfiles.place(plan, guide, maxPoses, looseness, loosenessAt);
       cost = Math.max(...plan.profiles.map(profile => profile.cost));
       spacing = step ?? Math.max(.0001, Math.min(.06, ...plan.profiles.map(profile => profile.spacing / 2)));
     } else {
       const brushForm = brushSource(brush);
       spacing = step ?? Math.max(.0001, Math.min(.06, brushForm.feature / 2));
       cost = brushForm.cost;
-      rows = [api.dabs(guide, spacing, looseness, maxPoses).map(row => ({ ...row, ...brushForm }))];
+      rows = [api.dabs(guide, spacing, looseness, maxPoses, loosenessAt).map(row => ({ ...row, ...brushForm }))];
     }
     const families = rows.map((dabs, family) => dabs.flatMap(dab => {
       const { pose, source: { bounds, sd, opacityAt }, size } = api.vary(looseness, dab, family, dab);
@@ -210,7 +210,7 @@
     };
   }
 
-  function prepare({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse, looseness }, { orient, band } = {}) {
+  function prepare({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse, looseness }, settings = {}) {
     if (!Array.isArray(poses) || poses.length < 1 || poses.length > 1024 ||
         !finite(blendRadius) || blendRadius < 0 ||
         (step !== undefined && (!positive(step) || step > 1)))
@@ -221,8 +221,8 @@
         pressureResponse.opacity !== undefined && !range(pressureResponse.opacity, 1)))
       throw new TypeError('Pressure response needs [at zero, at one] ranges for width (0–4) or opacity (0–1)');
     const input = Array.from(poses, poseSource), guide = path === 'ruled' ? ruled(input) : input;
-    if (brush?.kind === 'mark-profile' || looseness !== undefined || orient || band)
-      return stampedSweep(brush, guide, step, blendRadius, pressureResponse, P.paintLooseness.prepare(looseness), orient, band);
+    if (brush?.kind === 'mark-profile' || looseness !== undefined || settings.orient || settings.band)
+      return stampedSweep(brush, guide, step, blendRadius, pressureResponse, P.paintLooseness.prepare(looseness), settings);
     const source = brushSource(brush);
     const authored = pressureResponse === undefined ? guide : guide.map(pose => ({
       ...pose, pressure: responseAt(pressureResponse.width ?? [1, 1], pose.pressure)

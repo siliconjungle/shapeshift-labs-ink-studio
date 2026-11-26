@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Breakwater Signal · Ink Studio</title>
+<style>
+:root{color-scheme:dark;font:15px/1.45 system-ui,sans-serif;color:#f4e7d1;background:#17262b;--line:#40545b;--text:#bdd0cd;--accent:#f2c18a}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at 40% 0%,#314a51,#17262b 68%)}
+main{max-width:1190px;margin:auto;padding:clamp(20px,4vw,48px) clamp(14px,4vw,48px)}
+header{display:flex;justify-content:space-between;align-items:end;flex-wrap:wrap;gap:10px 16px;border-bottom:1px solid var(--line);padding-bottom:18px}
+h1{font:400 clamp(48px,7.4vw,86px)/.95 Georgia,serif;letter-spacing:-.064em;margin:0}
+p{color:var(--text);margin:8px 0 0}
+a{color:var(--accent);text-underline-offset:3px}
+.controls,.summary{display:flex;flex-wrap:wrap;align-items:center;gap:5px 13px;margin:14px 0;color:var(--text)}
+select{background:#253b43;border:1px solid var(--line);color:#f4e7d1;border-radius:3px;padding:4px 8px;font:inherit}
+a:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.summary b{color:#f4e7d1}
+.tile-sheet{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+article{border:1px solid var(--line);background:#1b2d34;padding:9px;min-width:0}
+img{width:100%;display:block;aspect-ratio:1;image-rendering:pixelated;background:#182a32}
+.tile-name{display:flex;justify-content:space-between;gap:4px;flex-wrap:wrap;margin:7px 0}
+.baked{color:#f2c18a}.cached{color:#97d8c6}
+footer{font:12px/1.45 ui-monospace,monospace;overflow-wrap:anywhere;color:var(--text)}
+aside{border-top:1px solid var(--line);margin-top:15px;padding-top:9px;color:var(--text);font-size:13px}
+@media(max-width:760px){.tile-sheet{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<script defer src="data.js"></script>
+</head>
+<body><main>
+<header><div><h1>Breakwater Signal</h1><p>One tile edit in a parallel material bake</p></div><a id="review">Open batch report</a></header>
+<div class="controls"><label>Run <select id="run">
+<option value="cold">Initial bake</option><option value="warm">Unchanged rerun</option><option value="incremental" selected>Edited tile 1002</option>
+</select></label><div id="summary" class="summary"></div></div>
+<section class="tile-sheet" id="tiles" aria-label="Baked and reused tiles"></section>
+<aside id="note"></aside>
+<template id="tile"><article><img><div class="tile-name"><span></span><strong></strong></div><footer><a download></a></footer></article></template>
+<script>
+window.addEventListener('DOMContentLoaded',()=>{
+  const get=id=>document.getElementById(id), chooser=get('run'), holder=get('tiles');
+  function render() {
+    const view=demo[chooser.value], {totals,limits,base}=view;
+    get('review').href=base+'index.html';
+    get('summary').textContent=totals.baked+' baked · '+totals.cached+' reused · peak '+limits.peakWorkers+
+      ' of '+limits.workers+' workers · '+limits.peakReservedMiB+' / '+limits.memoryMb+' MiB reserved';
+    holder.replaceChildren();
+    for(const job of view.jobs)for(const unit of job.units)for(const target of unit.targets)for(const tile of target.tiles) {
+      const card=get('tile').content.firstElementChild.cloneNode(true), image=card.querySelector('img'), link=card.querySelector('a');
+      image.src=base+tile.preview;
+      image.alt=job.label+' tile '+tile.label;
+      card.querySelector('.tile-name span').textContent=(job.id==='hardware'?'Fittings ':'Tile ')+tile.label;
+      const status=card.querySelector('strong');
+      status.textContent=unit.status==='cached'?'Reused':'Baked';status.className=unit.status;
+      const output=job.aliases.flatMap(row=>row.tiles).find(row=>row.tileLabel===tile.label);
+      link.href=base+output.file;
+      link.textContent=output.file.split('/').at(-1);
+      holder.append(card);
+    }
+    get('note').textContent={
+      cold:'Four work units are queued. The memory budget admits two workers at once.',
+      warm:'All four work units are restored from cache. No bake worker starts.',
+      incremental:'The east glaze changed. Only tile 1002 runs again. The other three outputs are reused.'
+    }[chooser.value];
+  }
+  chooser.addEventListener('change',render);
+  render();
+});
+</script>
+</main></body></html>

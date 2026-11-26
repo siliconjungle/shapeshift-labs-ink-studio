@@ -9,6 +9,8 @@ preview commands.
 Use [headless channel routing](channel-routing.md) to compare these
 controls with WAV and simulation samples on one clock.
 
+Use [animation erasers](channel-erasers.md#animation-controls) to lower a layer's influence on selected controls over an editable time window.
+
 ```sh
 ink-studio character-motion catalog rig.json motion.json
 ink-studio character-motion sample rig.json motion.json signal --at 0.82 --out pose.json --require-solved

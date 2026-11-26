@@ -1434,7 +1434,7 @@ const CMD = {
         '  sculpt-guide inspect <scene.json>   report generated copies and placements',
         '  painting-3d plan <scene.json> <placement.json>   validate attachment slots and mark contacts',
         '  painting-3d apply <scene.json> <placement.json> --out scene.json   retain a 3D painting',
-        '  painting-3d update <scene.json> <edit.json> --out scene.json   edit marks, profiles, order or placement',
+        '  painting-3d update <scene.json> <edit.json> --out scene.json   edit marks, profiles, erasers, order or placement',
         '  painting-3d inspect <scene.json>   report marks and resolved attachments',
         '  painting-3d extract <scene.json> --id painting --out painting.json   export a reusable painting',
         '  sculpt-spray plan <scene.json> <brush.json>   capture receivers for a volumetric paint brush',
@@ -1517,6 +1517,7 @@ const CMD = {
         '  mesh-topology transform <mesh-or-scene.json> <random-receipt.json> --replay [--object id] [--out file] [--report file]   replay recorded positions on the source revision',
         '  mesh-topology health <mesh-or-scene.json> [settings.json] [--object id] [--out report.json]   locate local topology and geometry problems',
         '  mesh-topology overlaps <mesh-or-scene.json> [settings.json] [--object id] [--part id] [--out report.json | --selection-out faces.json]   review same-facing coincident polygons',
+        '  mesh-topology array-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   duplicate a linked prefab on a retained XYZ array',
         '  mesh-topology replace-prefab <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   replace selected visual prefab placements and review carried anchors and overrides',
         '  mesh-topology variant-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   fork a linked prefab or detach one instance into editable members',
         '  mesh-topology edit-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json [--library-out library.json]]   review a visual prefab source edit across its instances',
@@ -1561,6 +1562,7 @@ const CMD = {
         '  scene-resource inspect|validate <scene> [--python path --blender path]',
         '  scene-resource convert <scene> --out <file> [--materialx look.mtlx --python path --blender path]',
         '  bake-job inspect|run|serve|preset <job.json> [--out directory --preset preset.json --port 0]',
+        '  bake-job batch <batch.json> --out directory   bake and cache a budgeted tiled batch',
         '    --manifest <revision.json>   attach an Ink asset revision to tagged glTF data',
         '  hybrid-ownership inspect <scene.json> [--out file.json]   list authored channels and derived outputs',
         '  hybrid-ownership route <scene.json> <object> <part> <channel>   resolve the authored edit destination',
@@ -1752,7 +1754,7 @@ const CMD = {
         '  character-rig preview <rig.json> <binding.json> <pose.json> [--view view.json] --out directory   render and capture a bound pose',
         '  character-motion catalog <rig.json> <motion.json> [--out index.json]   list clips, controls and resolved contact windows',
         '  character-motion sample <rig.json> <motion.json> <clip> [--at seconds --out pose.json --free --require-solved]   mix clips and solve contacts',
-        '  character-motion edit <rig.json> <motion.json> <edits.json> --out motion.json   edit curve keys or key saved rig controls',
+        '  character-motion edit <rig.json> <motion.json> <edits.json> --out motion.json   edit keys, saved rig controls or layer erasers',
         '  character-motion retarget <rig.json> <motion.json> <clip> <target-rig.json> <plan.json> --out motion.json [--report report.json --require-solved]   bake editable controls with transferred contacts',
         '  skinned-crowd bake <plan.json> --out take.json [--require-contacts]   bake skinned agents, tissue, terrain contact and ragdoll poses',
         '  skinned-crowd sample <plan.json> <take.json> [--frame N --out frame.json]   export the visible posed surfaces and diagnostics',
@@ -3010,11 +3012,11 @@ const CMD = {
   },
   async 'bake-job'() {
     const [action,input]=pos, {out,preset,port}=opt;
-    if(pos.length!==2||!['inspect','run','serve','preset'].includes(action)||
+    if(pos.length!==2||!['inspect','run','serve','preset','batch'].includes(action)||
        (action==='inspect'?out!==undefined:typeof out!=='string')||
-       port!==undefined&&action!=='serve'||
+       port!==undefined&&action!=='serve'||preset!==undefined&&action==='batch'||
        Object.entries(opt).some(([key,value])=>!['out','preset','port'].includes(key)||typeof value!=='string'||!value.trim()))
-      die('Use bake-job inspect|run|serve|preset <job.json> [--out directory --preset preset.json --port 0]');
+      die('Use bake-job inspect|run|serve|preset <job.json> or bake-job batch <batch.json> --out directory');
     const api=require('./bake-jobs.js'), controller=new AbortController(), options={presetFile:preset,signal:controller.signal};
     const stop=()=>controller.abort(new Error('Bake cancelled'));
     process.on('SIGINT',stop);process.on('SIGTERM',stop);
@@ -3032,7 +3034,8 @@ const CMD = {
         await session.close();
         return;
       } else {
-        result=await api.runBakeJob(input,{...options,directory:out,onProgress:row=>console.error(JSON.stringify(row))});
+        const run=action==='batch'?require('./bake-batch.js').runBakeBatch:api.runBakeJob;
+        result=await run(input,{...options,directory:out,onProgress:row=>console.error(JSON.stringify(row))});
         if(result.status==='cancelled')process.exitCode=2;
       }
       console.log(JSON.stringify(result,null,2));

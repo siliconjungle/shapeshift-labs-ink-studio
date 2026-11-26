@@ -59,6 +59,8 @@ Marks use native [sweep brushes and pressure poses](sculpt-sweeps.md). They rend
 
 [Finish paint](paint-finish.md) layers tint, hue, roughness, coating, and emission over the receiver material. Emissive marks can also opt into nearby light spill.
 
+[Channel erasers](channel-erasers.md#surface-channels) locally reduce a mark's pigment, finish, or style with a feathered path and adjustable strength.
+
 ## Dabs, pressure, and ruled strokes
 
 Use one pose for a precise dab or multiple poses for a stroke. Both use the same brush, quaternion orientation, pressure, and edit operations. Set `path: "ruled"` to lay the recorded poses along a straight line between the first and last points. Ink distributes the poses along the line by their original spacing along the stroke. A surface-bound mark rules the guide before projecting it onto the receiver.

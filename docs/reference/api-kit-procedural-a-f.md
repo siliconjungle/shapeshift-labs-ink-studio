@@ -319,6 +319,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.chainJoins` | namespace |  |  |
 | `KIT.procedural.chainJoins.plan` | function | `(first, second, { tolerance = .3, firstEnd, secondEnd } = {})` | [source](../../src/kit/pa7-chain-joins.js) |
 
+## KIT.procedural.channelEraser
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.channelEraser` | namespace |  |  |
+| `KIT.procedural.channelEraser.revise` | function | `(source, id, patch)` | [source](../../src/kit/p26h-channel-eraser.js) |
+| `KIT.procedural.channelEraser.surface` | function | `(raw)` | [source](../../src/kit/p26h-channel-eraser.js) |
+| `KIT.procedural.channelEraser.temporal` | function | `(raw, span, controls, makeTrack)` | [source](../../src/kit/p26h-channel-eraser.js) |
+
 ## KIT.procedural.chunks
 
 | Member | Kind | Signature or value | Guides and source |

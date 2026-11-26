@@ -318,7 +318,7 @@ function main(request,base) {
   }
   if(plan.sources.size||plan.skewMaps.size||plan.targets.some(row=>row.projection))
     report.projectionCatalog=library.describe();
-  refreshGraph(report,plan.refresh,out,K);
+  if(!request.settings.deferRefresh)refreshGraph(report,plan.refresh,out,K);
   for(const [file,sha256] of inputs) {
     if(fingerprint(file)!==sha256)throw new Error('Bake input changed while the job ran');
     report.inputs.push({file:path.relative(path.dirname(plan.location),file),sha256});
@@ -337,3 +337,5 @@ if(require.main===module) {
     process.exitCode=1;
   }
 }
+
+module.exports={refreshGraph};
