@@ -1162,6 +1162,8 @@ Build [WebGPU texture and geometry graphs](docs/webgpu-graphs.md) with reusable 
 
 [Gaussian glTF import](docs/gaussian-gltf.md) loads native triangles and ratified Gaussian ellipse primitives from one asset, using shared node transforms on the CPU and in WebGL.
 
+[Gaussian training](docs/gaussian-training.md) fits a cloud from registered masked images or native synthetic captures, then exports a Gaussian PLY and reports accuracy at held-out cameras.
+
 ```sh
 npx ink-studio render scan.spz --raw --out preview.png
 ```
