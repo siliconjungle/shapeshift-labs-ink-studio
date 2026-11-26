@@ -63,13 +63,20 @@ const FlowMap = (() => {
       return [data[i], data[i + 1]];
     }
 
-    function sample(u, v, out = [0, 0]) {
+    const repeat = (n, size) => ((n % size) + size) % size;
+    function sample(u, v, out = [0, 0], wrap) {
+      const wrapU = wrap?.[0], wrapV = wrap?.[1];
+      if (wrapU) u = u0 + repeat(u - u0, u1 - u0);
+      if (wrapV) v = v0 + repeat(v - v0, v1 - v0);
       if (!inside(u, v)) return null;
-      const x = clamp((u - u0) / du - .5, 0, width - 1);
-      const y = clamp((v - v0) / dv - .5, 0, height - 1);
+      const gx = (u - u0) / du - .5, gy = (v - v0) / dv - .5;
+      const x = wrapU ? gx : clamp(gx, 0, width - 1);
+      const y = wrapV ? gy : clamp(gy, 0, height - 1);
       const a = Math.floor(x), b = Math.floor(y), fx = x - a, fy = y - b;
-      const c = Math.min(a + 1, width - 1), d = Math.min(b + 1, height - 1);
-      const i = index(a, b), j = index(c, b), k = index(a, d), l = index(c, d);
+      const c = wrapU ? repeat(a + 1, width) : Math.min(a + 1, width - 1);
+      const d = wrapV ? repeat(b + 1, height) : Math.min(b + 1, height - 1);
+      const ax = wrapU ? repeat(a, width) : a, by = wrapV ? repeat(b, height) : b;
+      const i = index(ax, by), j = index(c, by), k = index(ax, d), l = index(c, d);
       for (let n = 0; n < 2; n++)
         out[n] = mix(mix(data[i+n], data[j+n], fx), mix(data[k+n], data[l+n], fx), fy);
       return out;
