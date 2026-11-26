@@ -445,10 +445,15 @@
         inv = spec.map.inv;
         lip = spec.map.lip || 1.5;
       } else throw new Error('warp: twist, bend, taper, stretch or map');
-      // where the warped solid ends up: carry the corners of a box round the original through the map
+      // Prefer a proven displacement bound when the map supplies one.
       const lo = [1e9, 1e9, 1e9],
         hi = [-1e9, -1e9, -1e9];
-      for (let k = 0; k < 27; k++) {
+      const padding = spec.map?.pad;
+      if (padding) for (let axis = 0; axis < 3; axis++) {
+        lo[axis] = p0.bc[axis] - p0.br - padding[axis];
+        hi[axis] = p0.bc[axis] + p0.br + padding[axis];
+      }
+      else for (let k = 0; k < 27; k++) {
         const q = fwd([
           p0.bc[0] + ((k % 3) - 1) * p0.br,
           p0.bc[1] + ((Math.floor(k / 3) % 3) - 1) * p0.br,
@@ -463,6 +468,7 @@
         p = {
           bc,
           br: p0.br > 1e8 ? 1e9 : Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) / 2,
+          ...(padding && { sourceLocal: point => p0.sourceLocal(inv(point)) }),
           sd: (x, y, z) => {
             const q = inv([x, y, z]);
             return S.psd(p0, q[0], q[1], q[2]) / lip;
@@ -483,7 +489,7 @@
       const mat = o.mat?.surfaceState ? o.mat : S.mapSurfaceState(
         o.mat && p0.mat.surfaceState ? { ...o.mat, surfaceState: p0.mat.surfaceState } : o.mat || p0.mat,
         inv, (normal, rest) => V.norm(K.M.app(K.M.tr(K.deform.jac(fwd, rest)), normal), normal));
-      const styled = spec.stretch && mat.rf ? { ...mat, rf: (x, y, z) => mat.rf(...inv([x, y, z])) } : mat;
+      const styled = (spec.stretch || padding) && mat.rf ? { ...mat, rf: (x, y, z) => mat.rf(...inv([x, y, z])) } : mat;
       return S.add(p, styled, Object.assign({ reach: spec.stretch ? Math.max(.06, p0.reach * sampleScale) : .06 }, o));
     };
     const gradOf = (p0, x, y, z) => {

@@ -239,8 +239,10 @@
     topologyMeshes: 'obj',
     prefabArrays: 'obj',
     sceneLayers: 'obj',
+    customProperties: 1,
     guidedOperations: 'list',
     paintings3d: 'list',
+    paintingWaves: 'list',
     constructionPlane: 'obj',
     tilesets: 'obj',
     tilesetSources: 'obj',
@@ -475,15 +477,25 @@
       error.problems = [{ level: 'error', path: 'guidedOperations', problem: error.message, hint: '' }];
       throw error;
     }
+    let waves;
     try {
-      return K.authoring.paintings3d.expand(spec, time);
+      waves = K.procedural.paintWave.scene(spec, time);
+    } catch (error) {
+      error.problems = [{ level: 'error', path: 'paintingWaves', problem: error.message, hint: '' }];
+      throw error;
+    }
+    try {
+      return { ...K.authoring.paintings3d.expand(spec, time, waves.paints), waves };
     } catch (error) {
       error.problems = [{ level: 'error', path: 'paintings3d', problem: error.message, hint: '' }];
       throw error;
     }
   }
   function resolveParameters(source, env) {
-    let { spec: expanded, meshPlacements, instances } = K.authoring.scenePrefabs.expand(source, env);
+    let { spec: expanded, meshPlacements, instances, properties } = K.authoring.scenePrefabs.expand(source, env);
+    const customProperties = Object.keys(properties.definitions).length ?
+      K.procedural.data.freeze({project:{...properties.values},
+        instances:Object.fromEntries([...instances].map(([id,row])=>[id,{...row.propertyValues}]))}) : undefined;
     let hidden;
     try {
       hidden = K.authoring.sceneLayers.visibility(source,instances);
@@ -502,7 +514,7 @@
       }
     }
     if (expanded?.parameterBindings === undefined)
-      return { ...expandAuthoredGeometry(expanded, env?.parameterInputs?.time), dataInputs, meshPlacements, hidden };
+      return { ...expandAuthoredGeometry(expanded, env?.parameterInputs?.time), dataInputs, meshPlacements, hidden, customProperties };
     try {
       const { parameterBindings, timeline, dataInputs: authoredData, ...base } = expanded;
       const program = K.parameters.prepare(parameterBindings);
@@ -511,7 +523,7 @@
       const inputs = { ...env?.parameterInputs, ...(dataInputs && { dataInputs }) };
       const { document, values } = program.apply(base, inputs);
       const spec = timeline === undefined ? document : { ...document, timeline };
-      return { ...expandAuthoredGeometry(spec, inputs.time), program, values, inputs, dataInputs, meshPlacements, hidden };
+      return { ...expandAuthoredGeometry(spec, inputs.time), program, values, inputs, dataInputs, meshPlacements, hidden, customProperties };
     } catch (error) {
       error.problems ??= [{ level: 'error', path: 'parameterBindings', problem: error.message, hint: '' }];
       throw error;
@@ -1790,7 +1802,7 @@
       e.problems = problems;
       throw e;
     }
-    const review = env.assemblyReview, { dataInputs, anchors, layers, looseness, boils, reports } = resolved;
+    const review = env.assemblyReview, { dataInputs, anchors, layers, looseness, boils, reports, waves, customProperties } = resolved;
     const hidden = modelOptions?.[brushField] ? undefined : resolved.hidden;
     const visibleEffect = (_,index) => !hidden?.effects.has(index);
     let { spec } = resolved;
@@ -1891,6 +1903,7 @@
         marksSystem = K.dataMarks.bind(world, marks, dataMarks, { first, query: marksQuery });
       }
       world.spec = source;
+      if (customProperties) world.customProperties = customProperties;
       bindSceneMeshes(world);
       bindBreakables(world);
       bindDecals(world);
@@ -2055,7 +2068,7 @@
             const caps = [style?.silhouetteAllowance, relief?.silhouetteAllowance].filter(n => n !== undefined);
             const allowance = finish || relief && !volume ? 0 : caps.length ? Math.min(...caps) : undefined;
             const pigmentOnly = allowance === 0 && !volume;
-            let warp = (comb || grid || relief || finish) && carrier.markWarp, chart;
+            let warp = (comb || grid || relief || finish || waves.geometry.get(anchor.host.id)?.plan.amplitude) && carrier.markWarp, chart;
             if (grid?.settings.kind === 'uv') {
               chart = warp?.base.markCharts?.(grid.settings.chart);
               if (!chart) {
@@ -2078,7 +2091,7 @@
               pigmentOnly || relief ? { ...anchor.snap, offset: 0 } : anchor.snap, restDistance);
             s = { ...s, poses, path: 'free' };
             paintContacts.set(s.id, contacts.length);
-            if (comb || gridDab || relief || finish) {
+            if (comb || gridDab || relief || finish || warp) {
               const report = (comb || gridDab) && modelOptions?.[brushField] === 'paintings' && {
                 space: 'receiver-rest', warped: !!warp, samples: 0, frames: [], ...(gridDab && { gridResults: {} })
               };
@@ -2137,7 +2150,8 @@
         return p;
       },
       makeSolid = (s, held, style, guard, orient) => {
-        const modifiers = activeModifiers(s);
+        const modifiers = activeModifiers(s), wave = waves.geometry.get(s.id);
+        const sway = wave?.plan.amplitude ? wave.map : undefined;
         const request = modelOptions?.[brushField];
         const audit = typeof request === 'object' ? request : null;
         const trace = s.id !== undefined && audit?.solid === s.id ? audit : null;
@@ -2171,7 +2185,7 @@
         const m = s.bodySurface ? WSurface().bindCaptured(baseMaterial, WSurface().captured(s.bodySurface, s), B.P, locate) :
           locate ? charts.bind(baseMaterial, locate, B.P) : baseMaterial;
         const sub = q => make(q, true), k = s.kind;
-        const baseOptions = modifiers.length || trace ? { ...o, hold: true } : o;
+        const baseOptions = modifiers.length || trace || sway ? { ...o, hold: true } : o;
         if (s.mat !== undefined && (k === 'join' || unaryKinds.includes(k))) baseOptions.mat = m;
         let p, recipeSockets;
         if (k === 'ground') p = S.ground(m, Object.assign({ rad: s.rad || 8 }, s.stretch ? { zs: s.stretch } : {}, baseOptions));
@@ -2357,11 +2371,12 @@
             p.reach += reach;
             if (trace) trace.stages.set(modifier.id, { before, after: { ...p }, tool, operand, ...(snapped && { snapped }) });
           }
-          p = S.add(p, p.mat, { ...o, res, bump: undefined, reach: p.reach });
+          if (!sway) p = S.add(p, p.mat, { ...o, res, bump: undefined, reach: p.reach });
         }
         if (locate && p) p.markCharts = locate.chart;
         if ((paint || spray) && p?.mat)
           p.mat = { ...p.mat, ...(paint && { sdfPaint: paint }), ...(spray && { sdfSpray: spray }) };
+        if (sway) p = S.warp(p, { map: sway }, { ...o, bump: undefined, reach: p.reach });
         if (p?.sd && carrierIds.has(s.id)) carriers.set(s.id, { ...p });
         if (trace) {
           trace.output = { ...p };
@@ -2480,7 +2495,8 @@
       return { meshes, joints, animations };
     }
     const moving = spec.solids.filter(s => s.part), authoredBounds = new Map();
-    const staticBake = cache && !anchors.size && !looseness.size && !boils.size && !moving.length && !effects.length && !spec.tap && !marks &&
+    const staticBake = cache && !anchors.size && !looseness.size && !boils.size && !waves.geometry.size &&
+      !moving.length && !effects.length && !spec.tap && !marks &&
       !presentation.breakables && !S.keepRenderSdf && !st0.finish.paint && !globalThis.INK_DECAL_NEXT &&
       !globalThis.INK_RETAIN_RENDER_SDF && !globalThis.INK_RETAIN_REFERENCE_SDF && !globalThis.INK_RAMPS;
     const bakeKey = staticBake ? cacheAPI.sceneKey(spec, st0,
@@ -2567,6 +2583,7 @@
         baked || {},
         { made, spec: source, paletteRoles: st0.roles, ...(dynamics && { parameters: dynamics.api }),
           ...(dataInputs && { dataInputs }),
+          ...(customProperties && {customProperties}),
           ...((review?.studio === true || st0.disableSun) ? { surfaceLight: st0.sun } :
             spec.light?.surfaceDirection !== undefined && { surfaceLight: spec.light.surfaceDirection }) }
       )
@@ -2577,6 +2594,8 @@
       key: animatedBoils.map(row => row.drawing).join('/'),
       at: time => animatedBoils.map(({ plan }) => K.procedural.paintBoil.state(plan, time).drawing).join('/')
     };
+    if (waves.reports.length) W.paintWaveReport = waves.reports;
+    if (waves.animated) W.paintWave = env.parameterInputs?.time ?? 0;
     if (env.resolveSpriteAtlas && Array.isArray(W.spriteAtlases))
       W.spriteAtlases = W.spriteAtlases.map(placement => typeof placement?.atlas === 'string' ?
         K.sprite.placeAtlas({ ...placement, atlas: env.resolveSpriteAtlas(placement.atlas) }) : placement);

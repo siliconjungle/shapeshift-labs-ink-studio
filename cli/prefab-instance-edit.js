@@ -8,6 +8,7 @@ const read = file => JSON.parse(fs.readFileSync(file,'utf8'));
 const name = value => typeof value === 'string' && value.trim();
 
 const commands = {
+  'custom-properties': ['planCustomProperties','previewCustomProperties','editCustomProperties'],
   'scene-layer': ['planSceneLayers','previewSceneLayers','editSceneLayers'],
   'mirror-prefab': ['planPrefabMirror','previewPrefabMirror','applyPrefabMirror'],
   'reparent-prefab': ['planPrefabReparent','previewPrefabReparent','reparentPrefab'],
@@ -25,9 +26,10 @@ function command(action,file,input,rest,opt,kit,openEditor) {
       out && !/\.json$/i.test(out) || view && !preview)
     throw new TypeError('Use mesh-topology '+action+' <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]');
   const source = path.resolve(file), output = out && path.resolve(out), editor = openEditor(source);
-  const library = editor.snapshot().prefabLibrary;
+  const {prefabLibrary:library,customProperties} = editor.snapshot();
   const inputs = [source,path.resolve(input),view && path.resolve(view),selection && path.resolve(selection),
-    library && path.resolve(path.dirname(source),library)].filter(Boolean);
+    library && path.resolve(path.dirname(source),library),
+    typeof customProperties==='string' && path.resolve(path.dirname(source),customProperties)].filter(Boolean);
   const outputs = [output,...(preview ? images.map(file => path.resolve(preview,file)) : [])].filter(Boolean);
   if (new Set(outputs).size !== outputs.length || outputs.some(file => inputs.includes(file)) ||
       output && path.dirname(output) !== path.dirname(source))

@@ -242,6 +242,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   painting-cels export <scene.json> <clip.json> --out directory [--view view.json]   render held exposures and animated PNG
   painting-flow sample <scene.json> <plan.json> [--at seconds] --out scene.json   advect retained marks through a painted field
   painting-flow bake <scene.json> <plan.json> [--from seconds --fps 12 --frames 24 --playback once] --out clip.json   bake editable flow poses into cels
+  painting-wave apply <scene.json> <plan.json> --out scene.json   retain a painted sway on marks or geometry
+  painting-wave inspect <scene.json> [--at seconds]   inspect sampled direction, stiffness, phase and offset
+  painting-wave sample <scene.json> --at seconds --out scene.json   hold the selected wave pose
   paint-survival review <scene.json> <plan.json> --out directory   compare painted fallbacks across native grids and angles
   paint-survival apply <scene.json> <plan.json> <review.json> --case angle/resolution --out scene.json   accept one reviewed paint variant
   sculpt-spray plan <scene.json> <brush.json>   capture receivers for a volumetric paint brush
@@ -325,6 +328,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology transform <mesh-or-scene.json> <random-receipt.json> --replay [--object id] [--out file] [--report file]   replay recorded positions on the source revision
   mesh-topology health <mesh-or-scene.json> [settings.json] [--object id] [--out report.json]   locate local topology and geometry problems
   mesh-topology overlaps <mesh-or-scene.json> [settings.json] [--object id] [--part id] [--out report.json | --selection-out faces.json]   review same-facing coincident polygons
+  mesh-topology custom-properties <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   inspect and edit typed project, prefab and instance properties
   mesh-topology scene-layer <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   organize placed prefabs, inspect bounds, and set layer origins
   mesh-topology mirror-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   link or commit a mirrored visual prefab placement
   mesh-topology reparent-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   change a visual prefab parent and hold world placement

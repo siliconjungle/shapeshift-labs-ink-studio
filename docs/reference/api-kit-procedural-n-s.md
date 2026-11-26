@@ -226,6 +226,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.paintRelief.gradient` | function | `(relief, form, space, accepts, remaining)` | [source](../../src/kit/p26g-paint-relief.js) |
 | `KIT.procedural.paintRelief.prepare` | function | `(raw)` | [source](../../src/kit/p26g-paint-relief.js) |
 
+## KIT.procedural.paintWave
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.paintWave` | namespace |  |  |
+| `KIT.procedural.paintWave.format` | value | `string = "ink-studio/painting-wave"` |  |
+| `KIT.procedural.paintWave.prepare` | function | `(raw)` | [source](../../src/kit/p26k-paint-wave.js) |
+| `KIT.procedural.paintWave.scene` | function | `(source,time)` | [source](../../src/kit/p26k-paint-wave.js) |
+| `KIT.procedural.paintWave.stroke` | function | `(shape, frame, {plan,map})` | [source](../../src/kit/p26k-paint-wave.js) |
+
 ## KIT.procedural.panelFrames
 
 | Member | Kind | Signature or value | Guides and source |
