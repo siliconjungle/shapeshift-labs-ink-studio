@@ -177,8 +177,9 @@
   }));
   modifierKinds.fold.may = { ...modifierKinds.fold.may, axis: ['x', 'y', 'z'] };
   modifierKinds.warp.may = { ...modifierKinds.warp.may, taper: 'vec2' };
-  modifierKinds.join = { need: { how: 'join', shape: 'solid' }, may: { ...DIO.kinds.join.may, snap: 'obj' } };
-  modifierKinds.mask = { need: { mode: ['keep', 'cut'], shape: 'solid' }, may: { cutSurface: 'obj', snap: 'obj' } };
+  modifierKinds.join = { need: { how: 'join', shape: 'solid' }, may: { ...DIO.kinds.join.may, snap: 'obj', snapGroup: 'str', preserveRamps: 'bool' } };
+  modifierKinds.mask = { need: { mode: ['keep', 'cut'], shape: 'solid' }, may: { cutSurface: 'obj', snap: 'obj', snapGroup: 'str' } };
+  modifierKinds['clip-plane'] = { need: { at: 'vec3', normal: 'vec3' } };
   modifierKinds['grid-brush'] = { need: { mode: ['add', 'cut', 'carve', 'through-cut', 'raise', 'fill', 'smooth', 'grab', 'flatten', 'scrape', 'crease', 'pinch'], brush: 1 } };
   const builtKinds = ['pillar', 'arch', 'stairs', 'fence', 'pipe'];
   const activeModifiers = solid => (solid.modifiers ?? []).filter(modifier => modifier.enabled !== false);
@@ -233,6 +234,7 @@
     assetPacks: 'list',
     assetParts: 'obj',
     topologyMeshes: 'obj',
+    guidedOperations: 'list',
     constructionPlane: 'obj',
     tilesets: 'obj',
     tilesetSources: 'obj',
@@ -291,8 +293,8 @@
     const frame = graph.transform(raw), inverse = graph.inverse(frame);
     const scale = transforms.distanceScale({ R: frame.matrix });
     const boundScale = 1 / transforms.distanceScale({ R: inverse.matrix });
-    if (!(M.det(frame.matrix) > 0) || scale < 1e-4 || boundScale > 1024)
-      throw new RangeError('A sculpt affine needs a positive orientation and usable distance and sampling scales');
+    if (scale < 1e-4 || boundScale > 1024)
+      throw new RangeError('A sculpt affine needs usable distance and sampling scales');
     const pull = M.tr(frame.matrix), push = M.tr(inverse.matrix);
     return { affine: true, scale, boundScale, point: value => graph.point(frame, value),
       inverse: value => graph.point(inverse, value), direction: value => M.app(frame.matrix, value),
@@ -450,6 +452,14 @@
     return K.authoring.looks.material(surface, settings.lookAsset, catalog);
   }
   const parameterRoots = ['solids', 'roles', 'palette', 'motion', 'light', 'effects', 'finish', 'tap'];
+  function expandGuidedOperations(spec) {
+    try {
+      return K.authoring.sculptGuides.expand(spec).scene;
+    } catch (error) {
+      error.problems = [{ level: 'error', path: 'guidedOperations', problem: error.message, hint: '' }];
+      throw error;
+    }
+  }
   function resolveParameters(source, env) {
     let { spec: expanded, meshPlacements } = K.authoring.scenePrefabs.expand(source, env);
     if (expanded?.dataMarks !== undefined && expanded.solids === undefined) expanded = { ...expanded, solids: [] };
@@ -462,7 +472,7 @@
         throw error;
       }
     }
-    if (expanded?.parameterBindings === undefined) return { spec: expanded, dataInputs, meshPlacements };
+    if (expanded?.parameterBindings === undefined) return { spec: expandGuidedOperations(expanded), dataInputs, meshPlacements };
     try {
       const { parameterBindings, timeline, dataInputs: authoredData, ...base } = expanded;
       const program = K.parameters.prepare(parameterBindings);
@@ -471,9 +481,9 @@
       const inputs = { ...env?.parameterInputs, ...(dataInputs && { dataInputs }) };
       const { document, values } = program.apply(base, inputs);
       const spec = timeline === undefined ? document : { ...document, timeline };
-      return { spec, program, values, inputs, dataInputs, meshPlacements };
+      return { spec: expandGuidedOperations(spec), program, values, inputs, dataInputs, meshPlacements };
     } catch (error) {
-      error.problems = [{ level: 'error', path: 'parameterBindings', problem: error.message, hint: '' }];
+      error.problems ??= [{ level: 'error', path: 'parameterBindings', problem: error.message, hint: '' }];
       throw error;
     }
   }
@@ -1189,6 +1199,10 @@
           keys(modifier.cutSurface, at + '.cutSurface', { material: 1 });
           matOk(modifier.cutSurface.material, at + '.cutSurface.material');
         }
+        if (modifier.snapGroup !== undefined && (!modifier.snap || !TargetSelectors.name(modifier.snapGroup)))
+          bad(at + '.snapGroup', 'a named snap group needs snap settings');
+        if (kind === 'clip-plane' && isVec(modifier.normal, 3) && V.len(modifier.normal) < 1e-8)
+          bad(at + '.normal', 'a clip plane needs a nonzero normal');
         if (kind === 'grid-brush') {
           try {
             K.procedural.gridSculptBrush.check(modifier.brush,modifier.mode);
@@ -2003,7 +2017,12 @@
         if (locate && s.mat === undefined && (k === 'join' || unaryKinds.includes(k))) p.mat = charts.bind(p.mat, locate, B.P);
         if (modifiers.length) {
           const res = p.res;
+          let snapGroup, snapCarrier;
           for (const modifier of modifiers) {
+            if (modifier.snapGroup === undefined || modifier.snapGroup !== snapGroup) {
+              snapGroup = modifier.snapGroup;
+              snapCarrier = p;
+            }
             const options = { hold: true };
             const before = trace && { ...p };
             let reach = p.reach, tool, operand, snapped;
@@ -2028,7 +2047,7 @@
             } else if (modifier.kind === 'join' || modifier.kind === 'mask') {
               let shape = modifier.shape;
               if (modifier.snap !== undefined) {
-                const carrier = p;
+                const carrier = snapCarrier;
                 try {
                   snapped = K.procedural.sweepSnap.resolve(shape, modifier.snap, (...point) => S.psd(carrier, ...point));
                 } catch (error) {
@@ -2041,7 +2060,8 @@
               reach = Math.max(reach, operand.reach);
               if (modifier.kind === 'join') {
                 const exact = ['union', 'cut', 'common'].includes(modifier.how);
-                p = S.join(modifier.how, p, operand, { ...options, r: modifier.size ?? (exact ? 0 : undefined), n: modifier.steps });
+                p = S.join(modifier.how, p, operand, { ...options, r: modifier.size ?? (exact ? 0 : undefined),
+                  n: modifier.steps, preserveRamps: modifier.preserveRamps });
               } else {
                 const keep = modifier.mode === 'keep', source = p;
                 p = S.join(keep ? 'common' : 'cut', source, operand, {
@@ -2058,6 +2078,13 @@
                   } } };
                 }
               }
+            } else if (modifier.kind === 'clip-plane') {
+              if (p.br >= 1e8) throw new RangeError('A guide clip needs a bounded operand');
+              const n = V.norm(modifier.normal), radius = V.dist(p.bc, modifier.at) + p.br + res * 2;
+              const axis = V.perp(n), upright = V.cross(n, axis);
+              const keep = S.box(V.mad(modifier.at, n, radius), [radius, radius, radius], p.mat,
+                { ...options, ax: [axis, upright, n] });
+              p = S.join('common', p, keep, { ...options, r: 0, mat: p.mat, mask: true });
             } else p = deform(p, modifier, options);
             p.reach += reach;
             if (trace) trace.stages.set(modifier.id, { before, after: { ...p }, tool, operand, ...(snapped && { snapped }) });
