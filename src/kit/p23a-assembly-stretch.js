@@ -277,6 +277,7 @@
       });
       return { solid: id, mode: options.mode ?? 'stretch', pivot: { before: pivot, after: mapPoint(id, pivot) },
         sockets, paint: { strokes: (solid.sdfPaint?.strokes ?? []).map(row => row.id),
+          ...(solid.sdfSpray && { sprays: solid.sdfSpray.map(row => row.id) }),
           charts: Object.keys(solid.surfaceState?.charts ?? {}) } };
     });
     return { patch: { solids: geometry, ...(Object.keys(joints.changes).length && { parts: { ...parts, ...joints.changes } }),

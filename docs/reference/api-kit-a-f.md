@@ -879,6 +879,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.sculptSnap.plan` | function | `(scene, input, env)` | [source](../../src/kit/p23a-sculpt-snap.js) |
 | `KIT.authoring.sculptSplit` | namespace |  |  |
 | `KIT.authoring.sculptSplit.plan` | function | `(scene, input, env)` | [source](../../src/kit/p23a-sculpt-split.js) |
+| `KIT.authoring.sculptSpray` | namespace |  |  |
+| `KIT.authoring.sculptSpray.inspect` | function | `(scene)` | [source](../../src/kit/p26c-sdf-volume-spray.js) |
+| `KIT.authoring.sculptSpray.plan` | function | `(scene, input, env)` | [source](../../src/kit/p26c-sdf-volume-spray.js) |
 | `KIT.authoring.sculptStamps` | namespace |  |  |
 | `KIT.authoring.sculptStamps.format` | value | `string = "ink-studio/sculpt-stamp"` |  |
 | `KIT.authoring.sculptStamps.place` | function | `(scene, stamp, placement)` | [source](../../src/kit/p23a-sculpt-stamps.js) |
@@ -1712,6 +1715,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.diorama.scene` | function | `(spec, env)` | [guide](../../README.md#scenes-as-json), [guide](../../README.md#editable-3d-drawing), [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.sceneLook` | function | `(spec)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.sceneMaterials` | function | `(spec)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
+| `KIT.diorama.sculptFieldReceivers` | function | `(spec, env)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.sculptRestTrace` | function | `(spec, solid, env, { measureBounds = false } = {})` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidFrames` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
 | `KIT.diorama.solidFrames.authored` | function | `(raw, fallback)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |

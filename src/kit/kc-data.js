@@ -110,6 +110,7 @@
     surfaceId: 'str',
     surfaceState: 1,
     sdfPaint: 1,
+    sdfSpray: 1,
     sdfProtection: 1,
     sockets: 'obj',
     prefabs: 'list',
@@ -1270,6 +1271,13 @@
           K.procedural.sdfMaterialPaint.prepare(s.sdfPaint,st.roles);
         } catch (error) { bad(path + '.sdfPaint',error.message); }
       }
+      if (s.sdfSpray !== undefined) {
+        try {
+          if (!s.id || inner || s.kind === 'ground' || s.ghost || s.carve || s.hold)
+            throw new TypeError('Volume spray needs a named, finite exterior solid');
+          K.procedural.sdfVolumeSpray.prepare(s.sdfSpray);
+        } catch (error) { bad(path + '.sdfSpray', error.message); }
+      }
       if (s.sdfProtection !== undefined) {
         try {
           if (!s.id || inner || s.kind==='ground' || s.ghost || s.carve || s.hold)
@@ -1659,7 +1667,7 @@
 
   function cleanCutMaterial(material) {
     const cap = { ...material };
-    for (const key of ['rf', 'surfaceState', 'sdfPaint', 'sdfNewSurface', 'cutSurface', 'materialAt']) delete cap[key];
+    for (const key of ['rf', 'surfaceState', 'sdfPaint', 'sdfSpray', 'sdfNewSurface', 'cutSurface', 'materialAt']) delete cap[key];
     return cap;
   }
 
@@ -1671,6 +1679,7 @@
 
   const brushField = Symbol('brush field');
   DIO.brushField = (spec, env) => DIO.build(spec, env, { [brushField]: true });
+  DIO.sculptFieldReceivers = (spec, env) => DIO.build(spec, env, { [brushField]: 'receivers' });
   DIO.sculptRestTrace = (spec, solid, env, { measureBounds = false } = {}) => {
     const trace = { solid, measureBounds, stages: new Map(), ...(measureBounds && { bumpPhases: new WeakMap() }) };
     DIO.build(spec, env, { [brushField]: trace });
@@ -1810,7 +1819,7 @@
       }
     const brushed = spec.solids.filter(s=>s.id && activeModifiers(s).some(modifier=>modifier.kind==='grid-brush'));
     const brushedParts = new Set(brushed.filter(s=>s.part).map(s=>s.id));
-    const painted = spec.solids.filter(s=>s.sdfPaint);
+    const painted = spec.solids.filter(s => s.sdfPaint || s.sdfSpray);
     const retainedParts = new Set([...brushedParts,...painted.filter(s=>s.part).map(s=>s.id)]);
     const authoredAssist = st0.finish.look?.sdfAssist;
     if (brushed.length && authoredAssist===undefined) {
@@ -1926,7 +1935,8 @@
       },
       makeSolid = (s, held) => {
         const modifiers = activeModifiers(s);
-        const audit = modelOptions?.[brushField];
+        const request = modelOptions?.[brushField];
+        const audit = typeof request === 'object' ? request : null;
         const trace = s.id !== undefined && audit?.solid === s.id ? audit : null;
         const o = { res: s.res, objectId: s.part ?? s.id };
         if (s.id || s.part || s.surfaceId || s.tags?.length || s.prefabs?.length) o.target = {
@@ -1952,6 +1962,7 @@
         const charts = K.procedural.surfaceState;
         const locate = s.surfaceState && charts.projection(s.surfaceState);
         const paint = s.sdfPaint && K.procedural.sdfMaterialPaint.prepare(s.sdfPaint,st0.roles,B.P);
+        const spray = s.sdfSpray && K.procedural.sdfVolumeSpray.prepare(s.sdfSpray);
         const m = locate ? charts.bind(matOf(s.mat), locate, B.P) : matOf(s.mat);
         const sub = q => make(q, true), k = s.kind;
         const baseOptions = modifiers.length || trace ? { ...o, hold: true } : o;
@@ -1995,7 +2006,8 @@
         } else if (k === 'join') p = S.join(s.how, sub(s.a), sub(s.b), Object.assign({ r: s.size, n: s.steps }, baseOptions));
         else if (unaryKinds.includes(k)) p = deform(sub(s.of), s, baseOptions);
         else if (builtKinds.includes(k)) {
-          const surface = paint && !modifiers.length ? {...m,sdfPaint:paint} : m;
+          const surface = !modifiers.length && (paint || spray) ?
+            { ...m, ...(paint && { sdfPaint: paint }), ...(spray && { sdfSpray: spray }) } : m;
           const mats = { stone:surface,post:surface,rail:surface,metal:surface },
             oo = Object.assign({}, s, { mats, tag: s.part, res: s.res, objectId: baseOptions.objectId, target: baseOptions.target });
           const buildRecipe = () =>
@@ -2091,7 +2103,8 @@
           }
           p = S.add(p, p.mat, { ...o, res, bump: undefined, reach: p.reach });
         }
-        if (paint && p?.mat) p.mat = { ...p.mat,sdfPaint:paint };
+        if ((paint || spray) && p?.mat)
+          p.mat = { ...p.mat, ...(paint && { sdfPaint: paint }), ...(spray && { sdfSpray: spray }) };
         if (trace) {
           trace.output = { ...p };
           trace.sockets = s.sockets ?? recipeSockets ?? {};
@@ -2100,11 +2113,12 @@
           trace.materialAt = (point, normal) => {
             const { mat } = trace.output;
             const { materialId, generatedSurface } = S.materialAt(mat, point, normal);
-            if (mat.cutSurface?.locate(point, normal)) return { role: materialId, paintIds: [] };
+            const paintIds = [];
+            spray?.locate(point, normal, id => paintIds.push(id));
+            if (mat.cutSurface?.locate(point, normal)) return { role: materialId, paintIds };
             const pickedRamp = mat.rf?.(...point);
             const rampRole = pickedRamp && Object.keys(st0.roles).find(key => st0.roles[key] === pickedRamp);
             const chart = mat.surfaceState?.locate(point, normal)?.chart;
-            const paintIds = [];
             paint?.locate(point, normal, 0, id => paintIds.push(id));
             return { role: materialId === mat.materialId ? rampRole ?? materialId : materialId,
               chart, generatedSurface, paintIds };
@@ -2114,7 +2128,10 @@
       };
     if (modelOptions?.[brushField]) {
       for (const solid of spec.solids) make(solid);
-      if (modelOptions[brushField] === true) S.ready();
+      const request = modelOptions[brushField];
+      if (request === true || request === 'receivers') S.ready();
+      if (request === 'receivers') return { field: S, frames: new Map(spec.solids.filter(s => s.id)
+        .map(s => [s.id, DIO.solidFrames.rest(s)])) };
       return S;
     }
     if (modelOptions) {
