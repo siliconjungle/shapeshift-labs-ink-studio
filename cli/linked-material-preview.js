@@ -5,6 +5,7 @@ const PNG = require('./png.js');
 const assets = require('./asset-files.js');
 const usages = require('./material-output-usages.js');
 const geometry = require('./material-preview-geometry.js');
+const { mapSamples, screenSamples, displaySamples } = require('./material-preview-aov.js');
 const render = require('./render.js').render;
 
 const format = 'ink-studio/linked-material-preview';
@@ -32,15 +33,23 @@ function address(value) {
 }
 
 function settings(source, baseDir) {
-  if (!fields(source, ['format', 'version', 'label', 'targets', 'slots', 'view']) || source.format !== format ||
+  if (!fields(source, ['format', 'version', 'label', 'targets', 'slots', 'view', 'variants']) || source.format !== format ||
       source.version !== 1 || !text(source.label, 140) ||
       !Array.isArray(source.targets) || !integer(source.targets.length, 1, 10) ||
       !record(source.slots) || !integer(Object.keys(source.slots).length, 1, 64))
     throw new TypeError('Expected a version 1 linked material preview plan with targets and slot bindings');
+  const variants = source.variants ?? [];
+  if (!Array.isArray(variants) || variants.length > 3 || !Array.from(variants).every(row =>
+      fields(row,['id','label','inputs','time','seed']) && id(row.id) && text(row.label) &&
+      (row.inputs === undefined || record(row.inputs)) && (row.time === undefined || Number.isFinite(row.time)) &&
+      (row.seed === undefined || Number.isSafeInteger(row.seed))))
+    throw new TypeError('Preview variants need an ID, label and optional inputs, time or seed');
+  if (new Set(['current',...variants.map(row=>row.id.toLowerCase())]).size !== variants.length+1)
+    throw new RangeError('Duplicate material preview variant ID');
   const view = source.view ?? {};
   const { width = 360, height = 280, steps = 12, textureSize = 256 } = view;
   if (!fields(view, ['width', 'height', 'steps', 'textureSize']) || !integer(width, 64, 640) || !integer(height, 64, 640) ||
-      !integer(steps, 1, 32) || !integer(textureSize, 16, 512) || width * height * steps * source.targets.length > 14e6)
+      !integer(steps, 1, 32) || !integer(textureSize, 16, 512) || width * height * steps * source.targets.length * (variants.length + 1) > 14e6)
     throw new RangeError('Preview dimensions, orbit steps or total render budget are out of range');
   const targets = Array.from(source.targets, target => {
     if (!fields(target, ['id', 'kind', 'label', 'file', 'slot', 'uvSet', 'uvGrid']) || !id(target.id) ||
@@ -73,7 +82,7 @@ function settings(source, baseDir) {
       throw new TypeError('Preview maps need names and graph output or output-usage references');
     slots.set(slot, { ...binding, tileList });
   }
-  return { label: source.label, targets, slots, view: { width, height, steps, textureSize } };
+  return { label: source.label, targets, slots, variants, view: { width, height, steps, textureSize } };
 }
 
 const sampleMaximum = image => ({ unorm8: 255, unorm16: 65535 })[image.descriptor.precision] ?? 1;
@@ -116,9 +125,9 @@ function texture(P, channels, id, limit) {
   return row;
 }
 
-async function loadMaps(project, config, run, P) {
+async function loadMaps(project, config, run, P, files, budget) {
   const table = new Map();
-  let budget = 0, requests = 0;
+  let requests = 0;
   for (const [slot, binding] of config.slots) for (const uv of binding.tileList) {
     if (++requests > 96) throw new RangeError('Linked preview has more than 96 tile bindings');
     const watches = binding.output ? { material: { output: binding.output } } : binding.maps;
@@ -134,32 +143,28 @@ async function loadMaps(project, config, run, P) {
       if (!P.graphImages.valid(image) || (!name.startsWith('custom.') && !P.materialChannels.validMap(name, image)))
         throw new TypeError('Preview channel ' + name + ' on ' + slot + ' needs a typed map with a matching intent');
       const { width, height } = image.raster;
-      budget += width * height;
-      if (budget > 12e6) throw new RangeError('Material maps exceed the 12-million-texel preview budget');
+      budget.texels += width * height;
+      if (budget.texels > 12e6) throw new RangeError('Material maps exceed the 12-million-texel preview budget');
       const { bytes, ...details } = usages.preview(P, image, evaluated.report.previews[name]?.outputUsage ?? {});
       const imageFile = 'images/' + createHash('sha256').update(bytes).digest('hex') + '.png';
-      return { name, width, height, ...details, image: imageFile, bytes };
+      files.set(imageFile,bytes);
+      return { name, width, height, ...details, image: imageFile, ...mapSamples(image,files), display:displaySamples(bytes,files) };
     });
     table.set(slot + '\0' + geometry.tileKey(uv), { channels, maps });
   }
   return table;
 }
 
-function capture(frame, regionById) {
-  const { w, h, rgb, passes } = frame;
-  const pixels = new Uint8Array(w * h * 4), hits = new Uint8Array(w * h * 6);
-  const tallies = new Array(regionById.size).fill(0);
-  for (let p = 0; p < w * h; p++) {
-    const id = passes.materials[passes.materialId[p]];
-    const region = regionById.get(id);
-    if (region === undefined || !passes.surfaceUVValid[p] || !Number.isFinite(passes.depth[p])) continue;
-    pixels.set([...rgb.subarray(p * 3, p * 3 + 3), 255], p * 4);
-    tallies[region]++;
-    const u = Math.round(clamp(passes.surfaceUV[p * 2]) * 65535);
-    const v = Math.round(clamp(passes.surfaceUV[p * 2 + 1]) * 65535);
-    hits.set([region + 1, u >> 8, u & 255, v >> 8, v & 255, 0], p * 6);
-  }
-  return { image: PNG.encode(w, h, pixels, 4), hit: PNG.encode(w * 2, h, hits), tallies };
+function capture(frame, regions, files) {
+  const { w, h, rgb } = frame;
+  const pixels = new Uint8Array(w*h*4), hits = new Uint8Array(w*h*6);
+  const native = screenSamples(frame,regions,files,(p,region,u,v)=>{
+    pixels.set(rgb.subarray(p*3,p*3+3),p*4);
+    pixels[p*4+3]=255;
+    const a=Math.round(clamp(u)*65535), b=Math.round(clamp(v)*65535);
+    hits.set([region+1,a>>8,a&255,b>>8,b&255,0],p*6);
+  });
+  return { ...native, image:PNG.encode(w,h,pixels,4), hit:PNG.encode(w*2,h,hits) };
 }
 
 async function createLinkedMaterialPreview(project, source, { toolkit = require('../index.js').load(),
@@ -168,41 +173,47 @@ async function createLinkedMaterialPreview(project, source, { toolkit = require(
   const carriers = config.targets.map(target => ({ target, ...geometry.split(geometry.load(target, toolkit, onFile), K) }));
   const names = new Set(carriers.flatMap(row => row.regions.map(region => region.slot)));
   for (const slot of config.slots.keys()) if (!names.has(slot)) throw new RangeError('No preview carrier has material slot ' + slot);
-  const inputs = await loadMaps(project, config, run, K.procedural);
-  for (const value of inputs.values()) for (const { image, bytes } of value.maps) files.set(image, bytes);
-  const { width, height, steps, textureSize } = config.view;
-  const targets = carriers.map(({ target, geometry, regions }) => {
-    const byId = new Map(), maxTile = Math.min(textureSize, Math.floor(Math.sqrt(2 ** 20 / regions.length)));
-    const materials = regions.map(region => {
-      const id = 'preview-region-' + region.index, entry = inputs.get(region.slot + '\0' + region.uv.join(','));
-      byId.set(id, region.index);
-      region.maps = entry?.maps.map(({ bytes, ...map }) => map) ?? [];
-      if (!entry) return { id, color: 0x5b6769 };
-      return texture(K.procedural, entry.channels, id, maxTile);
+  const { width, height, steps, textureSize } = config.view, budget = { texels:0 };
+  const variants = [];
+  for (const { id, label, inputs, ...options } of [{ id:'current',label:'Current' },...config.variants]) {
+    const evaluation = { ...run, ...options, ...(inputs && { inputs:{ ...run.inputs,...inputs } }) };
+    const maps = await loadMaps(project,config,evaluation,K.procedural,files,budget);
+    const targets = carriers.map(({ target, geometry, regions }) => {
+      const byId = new Map(), maxTile = Math.min(textureSize, Math.floor(Math.sqrt(2 ** 20 / regions.length)));
+      const bound = [];
+      const materials = regions.map(region => {
+        const id = 'preview-region-' + region.index, entry = maps.get(region.slot + '\0' + region.uv.join(','));
+        byId.set(id, region.index);
+        bound.push({ ...region, maps:entry?.maps ?? [] });
+        if (!entry) return { id, color: 0x5b6769 };
+        return texture(K.procedural, entry.channels, id, maxTile);
+      });
+      const mesh = K.sceneMeshes.create({ id: target.id, ...geometry, materials });
+      const world = makeBuilder(57, [0x14252a]).finish({ meshes: [mesh], dither: 0, radius: 5 });
+      const bounds = K.procedural.spatial.boxOf(Array.from({ length: geometry.positions.length / 3 },
+        (_, i) => geometry.positions.slice(i * 3, i * 3 + 3)));
+      const fit = Math.hypot(...K.V.sub(bounds.max, bounds.min)) * .5;
+      const distance = Math.max(2.2, fit * 2.24) * Math.max(1, height / width);
+      const views = [];
+      for (let i = 0; i < steps; i++) {
+        const yaw = (target.kind === 'plane' ? .12 : -.53) + i * (Math.PI * 2 / steps);
+        const pitch = target.kind === 'plane' ? .13 : .30;
+        const frame = render(world, { w: width, h: height, px: 1, raw: true, edges: false, target: [0, 0, 0],
+          dist: distance, yaw, pitch, ortho: true, passes: ['depth', 'materialId', 'surfaceUV', 'surfaceCoverage'],
+          renderGrid: false, cameraGuides: false, shutter: false });
+        const drawn = capture(frame, byId, files);
+        const image = (id==='current'?'views/':'views/variants/'+id+'/') + target.id + '-' + i + '.png';
+        files.set(image, drawn.image);
+        views.push({ image, pick: 'data:image/png;base64,' + drawn.hit.toString('base64'), pixels:drawn.tallies, screen:drawn.screen, depthRange:drawn.depthRange });
+      }
+      if (id==='current' && !views.some(view => view.pixels.some(Boolean))) throw new RangeError('Preview carrier produced no pickable surface: ' + target.id);
+      const preferred = [...config.slots.keys()].map(slot => bound.find(row => row.slot === slot && row.maps.length)).find(Boolean);
+      return { id: target.id, label: target.label, kind: target.kind, initialRegion: preferred?.index ?? 0, regions:bound, views };
     });
-    const mesh = K.sceneMeshes.create({ id: target.id, ...geometry, materials });
-    const world = makeBuilder(57, [0x14252a]).finish({ meshes: [mesh], dither: 0, radius: 5 });
-    const bounds = K.procedural.spatial.boxOf(Array.from({ length: geometry.positions.length / 3 },
-      (_, i) => geometry.positions.slice(i * 3, i * 3 + 3)));
-    const fit = Math.hypot(...K.V.sub(bounds.max, bounds.min)) * .5;
-    const distance = Math.max(2.2, fit * 2.24) * Math.max(1, height / width);
-    const views = [];
-    for (let i = 0; i < steps; i++) {
-      const yaw = (target.kind === 'plane' ? .12 : -.53) + i * (Math.PI * 2 / steps);
-      const pitch = target.kind === 'plane' ? .13 : .30;
-      const frame = render(world, { w: width, h: height, px: 1, raw: true, edges: false, target: [0, 0, 0],
-        dist: distance, yaw, pitch, ortho: true, passes: ['depth', 'materialId', 'surfaceUV'],
-        renderGrid: false, cameraGuides: false, shutter: false });
-      const drawn = capture(frame, byId);
-      const image = 'views/' + target.id + '-' + i + '.png';
-      files.set(image, drawn.image);
-      views.push({ image, pick: 'data:image/png;base64,' + drawn.hit.toString('base64'), pixels: drawn.tallies });
-    }
-    if (!views.some(view => view.pixels.some(Boolean))) throw new RangeError('Preview carrier produced no pickable surface: ' + target.id);
-    const preferred = [...config.slots.keys()].map(slot => regions.find(row => row.slot === slot && row.maps.length)).find(Boolean);
-    return { id: target.id, label: target.label, kind: target.kind, initialRegion: preferred?.index ?? 0, regions, views };
-  });
-  return { data: { format, version: 1, label: config.label, width, height, targets }, files };
+    variants.push({id,label,targets});
+  }
+  const [{targets},...alternates]=variants;
+  return { data: { format,version:1,label:config.label,width,height,targets,...(alternates.length&&{variants:alternates}) }, files };
 }
 
 async function writeLinkedMaterialPreview(project, planFile, { directory, toolkit, run, sources = [] } = {}) {
@@ -215,10 +226,11 @@ async function writeLinkedMaterialPreview(project, planFile, { directory, toolki
   const { data, files } = result;
   for (const [filename, extension] of [['index.html', '.html'], ['live.js', '.browser.js']])
     files.set(filename, fs.readFileSync(path.join(__dirname, 'linked-material-preview' + extension)));
+  files.set('aov.js',fs.readFileSync(path.join(__dirname,'../src/material-preview-aov.js')));
+  const summarize = targets=>targets.map(target=>({ ...target,views:target.views.map(({ pick,...view })=>view) }));
+  const report = { ...data, targets:summarize(data.targets),
+    ...(data.variants && { variants:data.variants.map(variant=>({ ...variant,targets:summarize(variant.targets) })) }) };
   files.set('data.js', 'const linkedMaterial = ' + JSON.stringify(data) + ';\n');
-  const report = { ...data, targets: data.targets.map(target => ({
-    ...target, views: target.views.map(({ pick, ...view }) => view)
-  })) };
   files.set('preview.json', JSON.stringify(report, null, 2) + '\n');
   if ([...files.keys()].some(file => touched.has(path.join(destination, file))))
     throw new RangeError('Choose an output directory that keeps the preview separate from its source files');
