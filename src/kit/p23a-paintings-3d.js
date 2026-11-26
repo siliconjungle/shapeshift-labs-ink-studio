@@ -5,7 +5,7 @@
   const record = value => K.world.data.record(value);
   const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
   const name = value => K.world.data.id(value) && /^[a-zA-Z0-9_-]{1,40}$/.test(value);
-  const editable = ['brush', 'poses', 'step', 'blendRadius', 'mat', 'res', 'transform', 'attachment', 'enabled'];
+  const editable = ['brush', 'poses', 'step', 'blendRadius', 'path', 'pressureResponse', 'mat', 'res', 'transform', 'attachment', 'enabled'];
 
   function expand(source) {
     const anchors = new Map(), layers = new Set(), reports = [];
@@ -78,7 +78,8 @@
         }
         report.marks.push({ id: key, order, enabled, attachment: attachment.kind, ...(attachment.slot && { slot: attachment.slot }),
           ...(target && { target }), ...(part && { part }), ...(enabled && { solid, transform: restAffine }),
-          brush: stroke.brush.kind, material: stroke.mat, poses: stroke.poses.length });
+          brush: stroke.brush.kind, material: stroke.mat, poses: stroke.poses.length,
+          ...(stroke.path !== undefined && { path: stroke.path }), ...(stroke.pressureResponse && { pressureResponse: stroke.pressureResponse }) });
       }
       for (const slot of Object.keys(bindings)) if (!slots.has(slot))
         throw new RangeError(id + ' has no attachment slot ' + slot);

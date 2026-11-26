@@ -25,7 +25,7 @@ const SculptSampling = (() => {
   }
 
   function surface(material) {
-    return (material.a === undefined || material.a >= 1) && !material.glass && !material.optical && !material.surface?.opacity &&
+    return !material.opacityAt && (material.a === undefined || material.a >= 1) && !material.glass && !material.optical && !material.surface?.opacity &&
       !material.em && !material.fur && !material.leaf && !material.blade && !material.fiber &&
       (!material.top || surface(material.top));
   }

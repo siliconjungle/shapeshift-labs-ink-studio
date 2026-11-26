@@ -80,7 +80,7 @@ test('CLI carves, attaches, inspects and revises a saved sweep with atomic valid
   assert(sample(saved) > 0);
   assert(sample(get('revised.json')) < 0);
 
-  put('invalid.json', { id: 'channel', poses: [{ point: [0, 0, 0] }] });
+  put('invalid.json', { id: 'channel', poses: [] });
   assert.throws(() => edit('update', 'cut.json', 'invalid.json', 'broken.json', '--target', 'plate'));
   assert(!fs.existsSync(filename('broken.json')));
 
