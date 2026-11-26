@@ -7,20 +7,27 @@ const PartMotion = require('./part-motion.js');
 const minimumCoverage = 1e-6;
 
 function create(world,w,h,request) {
-  const { object,part,objects,isolated = false,captureDepth = false } = request;
-  if (Object.keys(request).some(key=>!['object','part','objects','isolated','captureDepth'].includes(key)) ||
+  const { object,part,objects,isolated = false,captureDepth = false,review } = request;
+  const reviewScope = review !== undefined;
+  if (Object.keys(request).some(key=>!['object','part','objects','isolated','captureDepth','review'].includes(key)) ||
+      reviewScope && (object !== undefined || part !== undefined || objects !== undefined || isolated ||
+        typeof review?.matches !== 'function' || review.allow !== undefined && typeof review.allow !== 'function') ||
       objects !== undefined && (!Array.isArray(objects) || object !== undefined || part !== undefined ||
         !Array.from(objects).every(Targets.name)) ||
       typeof isolated !== 'boolean' || typeof captureDepth !== 'boolean') throw new TypeError('Invalid pixel selection capture');
-  const target = objects === undefined && Targets.prepare({object,...(part !== undefined && {part})});
+  const target = !reviewScope && objects === undefined && Targets.prepare({object,...(part !== undefined && {part})});
   const group = objects !== undefined && new Set(objects);
-  const matches = subject => group ? group.has(subject.object) || group.has(subject.entity) : !!Targets.objectScope(target,subject);
+  const matches = reviewScope ? review.matches : subject => group ?
+    group.has(subject.object) || group.has(subject.entity) : !!Targets.objectScope(target,subject);
   const { row } = Targets.index(world);
   const parts = part !== undefined ? PartMotion.catalog(world) : null;
   const rows = Uint8Array.from({length:world.count},(_,i)=>{
     const label = row(i), namedPart = parts?.parts[parts.rows[i]];
     return Number(matches(namedPart && !label.part ? { ...label,part:namedPart.part } : label));
   });
+  const allow = reviewScope ? review.allow : isolated ? matches : undefined;
+  const allowed = allow && allow !== matches ? Uint8Array.from({length:world.count},(_,i)=>Number(allow(row(i)))) : rows;
+  const filter = allow && { matches: allow, row: i => !!allowed[i] };
   const coverage = new Float32Array(w*h);
   const depth = captureDepth ? new Float32Array(w*h).fill(Infinity) : null;
   const topDown = values=>{
@@ -34,7 +41,7 @@ function create(world,w,h,request) {
       { object:hit.objectId,part:hit.partId };
     return matches(label) || (!label.object && !label.entity && !!rows[i]);
   }
-  return { isolated,row:i=>!!rows[i],matches,
+  return { isolated, filter, review: reviewScope, row:i=>!!rows[i],matches,
     fragment(p,i,hit,alpha,writesDepth = false,z = Infinity) {
       // Depth-writing cores own the pixel. Soft edges still admit contributed coverage.
       const through = writesDepth && alpha > cutoff ? 0 : 1-alpha;
@@ -46,7 +53,7 @@ function create(world,w,h,request) {
       }
     },
     finish() {
-      return { w,h,scene:world.id ?? world.spec?.id,...(group ? {objects:[...group]} : {object,...(part !== undefined && {part})}),isolated,
+      return { w,h,scene:world.id ?? world.spec?.id,...(reviewScope ? {} : group ? {objects:[...group]} : {object,...(part !== undefined && {part})}),isolated,
         coverage:topDown(coverage),...(depth && { depth:topDown(depth) }) };
     }
   };

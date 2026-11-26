@@ -899,7 +899,7 @@ function renderFrame(world, o, preparedPalettes) {
   const surfaceReset=o.resetRenderHistory||o.resetSurfaceMotion;
   if (partView&&!captureSurfaceMotion&&surfaceReset) o.surfaceMotionHistory?.clear();
   const pixelSelection = o.pixelSelection && !o.reflectionPlane && !probeView ? PixelSelectionScope.create(world,W,H,o.pixelSelection) : null;
-  const isolate = pixelSelection?.isolated ? pixelSelection : null;
+  const isolate = pixelSelection?.filter;
   const captureSourceSurface = passSelection.has('sourceSurface') && !o.reflectionPlane && !probeView;
   const captureTexturedSurface=!!pixelSelection||captureSourceSurface||Boolean(deepPlan)||captureSurfaceMotion||temporal||filterSettings?.varied||['objectId','materialId','objectPosition','surfaceUV','surfaceUVValid',
     'surfaceKind','partId'].some(channel=>passSelection.has(channel));
@@ -1244,7 +1244,7 @@ function renderFrame(world, o, preparedPalettes) {
     captureRestNormal:passSelection.has('sourceRestNormal'),trackSdf:trackFields && ((field,point)=>trackFields.set(JSON.stringify(field),point)),
     visible:geometryMask ? (row,x,y)=>spriteLOD.geometry(geometryMask.codes[row],x,y) : undefined}) : null;
   for (const sample of sdf?.samples ?? []) surfaceFragments.push(sample);
-  const emitterHits = !isolate && areaLights.length && AreaRaster.rasterize(areaLights, { w:W, h:H, rayAt, near, capture:!!(reflectionPlane || probeView), clip:geometryClip });
+  const emitterHits = (!isolate || pixelSelection?.review && o.reviewEmitters !== false) && areaLights.length && AreaRaster.rasterize(areaLights, { w:W, h:H, rayAt, near, capture:!!(reflectionPlane || probeView), clip:geometryClip });
   if (emitterHits) for (const hit of emitterHits) if (hit) surfaceFragments.push(hit);
   const surfaceDepth=surfaceFragments.length?new Float32Array(W*H).fill(Infinity):null;
   for (const sample of surfaceFragments) if (selectiveEnabled ? sample.alpha >= 1 && !sample.effect : !deep || sample.alpha >= 1)

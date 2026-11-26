@@ -169,6 +169,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.recordModelingRepair` | function | `(...args)` | [source](../../index.js) |
 | `node.reframeRaster` | function | `(image, delivery, time)` | [guide](../subject-reframe.md), [source](../../cli/subject-reframe.js) |
 | `node.render` | function | `(world, o, preparedPalettes)` | [guide](../aerial-perspective.md), [guide](../art-passes.md#part-motion-and-previous-depth), [guide](../art-passes.md#deep-compositing), [guide](../art-passes.md#shared-opaque-surfaces), [guide](../brick-meshes.md#choose-direct-tracing-for-a-close-up), [source](../../cli/render.js) |
+| `node.renderAssemblyReview` | function | `(editor, preset, view = {})` | [guide](../assembly-review.md), [source](../../cli/assembly-review.js) |
 | `node.renderAudiovisualTake` | function | `(settings,{kit=require('../index.js').load(),graph,world,simulation,checkpoint,audio,signals}={})` | [guide](../audiovisual-takes.md#library), [source](../../cli/audiovisual-take.js) |
 | `node.renderBoundaryShot` | function | `({width:w,height:h,count,settings,draw,output,progress})` | [source](../../cli/pixel-boundary-shot.js) |
 | `node.renderGraphScene` | function | `(source, { camera, lights, channels = defaults, options = {}, renderGraphInputs, renderGraphCapture, take, time = take?.start ?? 0, kit, node } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../cli/graph-render.js) |

@@ -687,6 +687,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring` | namespace |  |  |
 | `KIT.authoring.appearanceTransfer` | namespace |  |  |
 | `KIT.authoring.appearanceTransfer.create` | function | `({describe,compatible=(sample,target)=>sample.family===target.family,validate} = {})` | [guide](../procedural.md#optional-retained-authoring), [source](../../src/kit/p84-appearance-transfer.js) |
+| `KIT.authoring.assemblyReview` | namespace |  |  |
+| `KIT.authoring.assemblyReview.anonymousTags` | function | `(source)` | [source](../../src/kit/p23a-assembly-review.js) |
+| `KIT.authoring.assemblyReview.check` | function | `(before, after, input, env, nextEnv = env)` | [source](../../src/kit/p23a-assembly-review.js) |
+| `KIT.authoring.assemblyReview.format` | value | `string = "ink-studio/assembly-review"` |  |
+| `KIT.authoring.assemblyReview.plan` | function | `(source, input, env)` | [source](../../src/kit/p23a-assembly-review.js) |
+| `KIT.authoring.assemblyReview.prepare` | function | `(input)` | [source](../../src/kit/p23a-assembly-review.js) |
 | `KIT.authoring.assemblyStretch` | namespace |  |  |
 | `KIT.authoring.assemblyStretch.plan` | function | `(scene, input, env)` | [source](../../src/kit/p23a-assembly-stretch.js) |
 | `KIT.authoring.assetMeshes` | namespace |  |  |
@@ -828,7 +834,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.meshTopologyScene.diff` | function | `(before, after)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.evaluator` | function | `(rows, placements)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.mount` | function | `(world, prepared)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
-| `KIT.authoring.meshTopologyScene.prepare` | function | `(rows, tilesets = A.tilesets.prepare(), placements)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
+| `KIT.authoring.meshTopologyScene.prepare` | function | `(rows, tilesets = A.tilesets.prepare(), placements, reviewMaterial)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.revise` | function | `(row, patch, { projection, flatten=[], atlasForFlatten, ...transitionOptions } = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.transferAttachments` | function | `(row, patch, settings, projection)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.uvAtlases` | function | `(scene,row,selector,{tileGrid=false} = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
@@ -853,7 +859,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.projectBundles.version` | value | `number = 1` |  |
 | `KIT.authoring.projectDerived` | function | `(source, jobs)` | [source](../../src/kit/p23-authoring-document.js) |
 | `KIT.authoring.sceneEditor` | namespace |  |  |
-| `KIT.authoring.sceneEditor.create` | function | `(source, { env, historyLimit } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `KIT.authoring.sceneEditor.create` | function | `(source, { env, historyLimit, review: initialReview } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `KIT.authoring.sceneEditor.transactionDocument` | function | `(editor)` | [source](../../src/kit/p23-scene-editor.js) |
 | `KIT.authoring.sceneEditor.validateSnapshot` | function | `(editor,snapshot)` | [source](../../src/kit/p23-scene-editor.js) |
 | `KIT.authoring.sceneInstances` | namespace |  |  |
@@ -1525,6 +1531,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.diorama` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.assemblyLighting` | function | `(spec)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.brushField` | function | `(spec, env)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.build` | function | `(source, env, modelOptions)` | [guide](../../README.md#scenes-as-json), [guide](../asset-interchange.md#replace-one-part-in-a-scene), [guide](../destruction.md#breakable-groups-from-authored-parts), [guide](../parameter-bindings.md#dioramas), [guide](../scene-editor.md), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.check` | function | `(source, env)` | [guide](../../README.md#scenes-as-json), [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |

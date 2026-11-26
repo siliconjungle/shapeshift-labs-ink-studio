@@ -383,6 +383,7 @@ module.exports = {
     return require('./src/palette-extract.js').extract(require('./cli/png.js').paletteSource(file), options);
   },
   writeRasterAsset: require('./cli/raster-asset.js').writeRasterAsset,
+  renderAssemblyReview: require('./cli/assembly-review.js').renderAssemblyReview,
   createSceneEditor(source, options) {
     return module.exports.load().KIT.authoring.sceneEditor.create(source, options);
   },
