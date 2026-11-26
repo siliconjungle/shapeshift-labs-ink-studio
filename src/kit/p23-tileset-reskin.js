@@ -212,17 +212,57 @@
     return {mapped,basis:useUV ? 'authored-uv' : 'surface-projection'};
   }
 
+  function preserveAssignment(face, triangles, original, originalImage, destination, clamp, conflicts) {
+    const {id} = face;
+    if (!originalImage || face.corners.some(corner=>!original.get(corner.id))) {
+      conflicts.push({reason:originalImage ? 'missing-source-uv' : 'missing-source-atlas',face:id,material:face.material});
+      return;
+    }
+    const mapped = new Map(), texels = new Map();
+    const spans = destination.map(n=>n-1);
+    for (const {id:corner} of face.corners) {
+      const before = MaterialUV.texel(original.get(corner),...originalImage.size);
+      const after = before.map((n,i)=>Math.max(0,Math.min(n,spans[i])));
+      const clampedAxes = ['u','v'].filter((axis,i)=>Math.abs(before[i]-after[i])>1e-9);
+      texels.set(corner,{before,after,clampedAxes});
+      mapped.set(corner,after.map((n,i)=>n/Math.max(1,spans[i])));
+      if (clampedAxes.length && !clamp) conflicts.push({reason:'texel-outside-tileset',face:id,corner,
+        texel:before,clampedTexel:after,axes:clampedAxes});
+    }
+    for (const triangle of triangles) {
+      const values = triangle.corners.map(id=>texels.get(id));
+      if (!values.some(row=>row.clampedAxes.length)) continue;
+      const before = MeshUV.area2(...values.map(row=>row.before)), after = MeshUV.area2(...values.map(row=>row.after));
+      if (Math.abs(before)<=1e-12) continue;
+      const reason = Math.abs(after)<=1e-12 ? 'clamp-collapsed-uv' : before*after<0 ? 'clamp-flipped-uv' : undefined;
+      if (reason) conflicts.push({reason,face:id,corners:triangle.corners});
+    }
+    return {mapped,basis:'source-texels',texels};
+  }
+
+  function preservedSource(asset, atlas, texels, prior, slots, beforeImage) {
+    const data = prior?.data;
+    const matches = beforeImage.tileset && data?.selection?.tileset===beforeImage.tileset &&
+      beforeImage.size.every((n,i)=>n===data.atlasSize?.[i]);
+    const hint = matches ? {...prior,data:{...data,atlasSize:[asset.width,asset.height],
+      selection:{...data.selection,tileset:atlas}}} : undefined;
+    const recovered = A.tilesetEyedrop.recover(asset,atlas,texels,hint,slots);
+    return A.tilesetFaces.cropSource(asset,recovered.selection,undefined,recovered.paint).source;
+  }
+
   function planAssignment(scene, request) {
-    const {object,part,mode='tile',mapping='group',ids,selection,tile,tileset,cell,revision} = request ?? {};
+    const {object,part,mode='tile',mapping='group',ids,selection,tile,tileset,cell,revision,clamp} = request ?? {};
+    const preserve = mapping==='preserve-texels';
     if (!request || Object.getPrototypeOf(request)!==Object.prototype ||
-        Object.keys(request).some(key=>!['object','part','mode','mapping','ids','selection','tile','tileset','cell','revision'].includes(key)) ||
+        Object.keys(request).some(key=>!['object','part','mode','mapping','ids','selection','tile','tileset','cell','revision','clamp'].includes(key)) ||
         !name(object) || part!==undefined && !name(part) || !['tile','sheet'].includes(mode) ||
-        !['group','per-face'].includes(mapping) || (ids===undefined)===(selection===undefined) ||
+        !['group','per-face','preserve-texels'].includes(mapping) || preserve && mode!=='sheet' ||
+        clamp!==undefined && (!preserve || typeof clamp!=='boolean') || (ids===undefined)===(selection===undefined) ||
         ids!==undefined && !Array.isArray(ids) || selection!==undefined && (!selection || Object.getPrototypeOf(selection)!==Object.prototype) ||
         (mode==='tile' ? !tile || tileset!==undefined : !name(tileset) || tile!==undefined || cell!==undefined) ||
         cell!==undefined && (!cell || Object.getPrototypeOf(cell)!==Object.prototype ||
           Object.keys(cell).length!==2 || ![cell.column,cell.row].every(Number.isSafeInteger)))
-      throw new TypeError('Assign selected faces to a saved tile pick or a registered sheet');
+      throw new TypeError('Assign selected faces to a saved tile or sheet, with clamping available for preserve-texels sheet mapping');
     const rows = scene.topologyMeshes ?? {}, old = Object.hasOwn(rows,object) && rows[object];
     if (!old || part!==undefined && old.part!==part) throw new RangeError('No editable topology for scene object '+object);
     const doc = topology.create(old.document), beforeRevision = topology.revision(doc);
@@ -249,13 +289,15 @@
     const targetBounds = meshUVRegions.bounds(pigmentUV), spans = destination.map(n=>n-1);
     const constantAxis = targetBounds[0]===targetBounds[2] || targetBounds[1]===targetBounds[3];
     for (const group of groups) {
-      const fit = fitAssignment(group,positions,original,pigmentUV);
-      if (!fit) {
+      const fitted = !preserve && fitAssignment(group,positions,original,pigmentUV);
+      if (!preserve && !fitted) {
         conflicts.push({reason:'degenerate-assignment-bounds',faces:group.map(row=>row.face.id)});
         continue;
       }
       for (const {face,triangles} of group) {
-        const {id,material} = face, bake = activeBakes.get(material);
+        const {id,material} = face, bake = activeBakes.get(material), beforeImage = oldAtlases?.(material);
+        const fit = preserve ? preserveAssignment(face,triangles,original,beforeImage,destination,clamp,conflicts) : fitted;
+        if (!fit) continue;
         if (!materials.has(material)) {
           const base = definitions.get(material) ?? {id:material};
           const next = materialFor({...old,materials:[...(old.materials ?? []),...added]},base,atlas,Boolean(bake));
@@ -267,33 +309,37 @@
           const before = original.get(corner.id) ?? null, proposed = fit.mapped.get(corner.id);
           const after = before && uvMatch(before,proposed) ? before : proposed;
           fit.mapped.set(corner.id,after);
-          return {id:corner.id,before,after};
+          return {id:corner.id,before,after,...(preserve && {texels:fit.texels.get(corner.id)})};
         });
         const proposed = corners=>corners.map(id=>fit.mapped.get(id));
-        for (const [i,corner] of face.corners.entries()) if (MaterialUV.pinned(corner,uvSet) && !uvMatch(paint[i].before,paint[i].after))
+        for (const [i,corner] of face.corners.entries()) if (MaterialUV.pinned(corner,uvSet) && paint[i].before!==paint[i].after)
           conflicts.push({reason:'pinned-uv',face:id,corner:corner.id});
-        if (!constantAxis && triangles.some(row=>Math.abs(MeshUV.area2(...proposed(row.corners)))<=1e-12))
+        if (!preserve && !constantAxis && triangles.some(row=>Math.abs(MeshUV.area2(...proposed(row.corners)))<=1e-12))
           conflicts.push({reason:'degenerate-assignment-uv',face:id,basis:fit.basis});
         footprints.push(triangles.map(row=>proposed(row.corners).map(uv=>MaterialUV.texel(uv,...destination))));
         const prior = A.tilesetEyedrop.sourceBinding(old,id), slots = A.tilesetFaces.sourceCorners(prior,face.corners.length);
         const texels = paint.map(row=>MaterialUV.texel(row.after,...destination));
-        const inferred = slots && A.tilesetEyedrop.orientationOf(texels,undefined,slots).paint;
-        const bindingSource = {...source};
-        if (inferred) bindingSource.paint = inferred;
-        else delete bindingSource.paint;
+        const bindingSource = preserve ? preservedSource(asset,atlas,texels,prior,slots,beforeImage) : {...source};
+        if (!preserve) {
+          const inferred = slots && A.tilesetEyedrop.orientationOf(texels,undefined,slots).paint;
+          if (inferred) bindingSource.paint = inferred;
+          else delete bindingSource.paint;
+        }
         if (slots?.length===3) bindingSource.uvCorners = slots;
         bindings.set(id,{prior,source:bindingSource});
-        const beforeImage = oldAtlases?.(material);
         faces.push({face:id,basis:fit.basis,corners:paint,
           before:{material,tileset:beforeImage?.tileset ?? null,atlasSize:beforeImage?.size ?? null,
+            ...(preserve && {texelBounds:meshUVRegions.bounds(paint.map(row=>row.texels.before))}),
             metrics:beforeImage && triangles.every(row=>row.uv.every(Boolean)) ?
               meshUVRegions.stats(triangles,beforeImage.size.map(n=>n-1)) : null},
           after:{material:definition.id,tileset:atlas,bounds:meshUVRegions.bounds(texels),
+            ...(preserve && {atlasSize:destination,source:bindingSource,
+              clampedCorners:paint.filter(row=>row.texels.clampedAxes.length).map(row=>row.id)}),
             metrics:meshUVRegions.stats(triangles,spans,row=>proposed(row.corners))}});
-        if (definition.id!==material || paint.some(({before,after})=>!before || !uvMatch(before,after))) replacements.push({
+        if (definition.id!==material || paint.some(({before,after})=>before!==after)) replacements.push({
           ...face,material:definition.id,corners:face.corners.map((corner,i)=>{
             const {before,after} = paint[i];
-            return before && uvMatch(before,after) ? corner : uvSet ?
+            return before===after ? corner : uvSet ?
               {...corner,attributes:{...corner.attributes,[MaterialUV.key(uvSet)]:after}} : {...corner,uv:after};
           })
         });
@@ -303,7 +349,7 @@
     faces.forEach((row,i)=>{ row.after.coverage = perFace[i]; });
     const report = {format:'ink-studio/tileset-uv-assignment',version:1,object,...(old.part && {part:old.part}),
       id:atlas,mode,mapping,uvSet,beforeRevision,target:{...source,uvBounds:targetBounds},ids:[...chosen],
-      faces,coverage,conflicts,canCommit:!conflicts.length};
+      ...(preserve && {clamp:clamp ?? false}),faces,coverage,conflicts,canCommit:!conflicts.length};
     if (conflicts.length) return {report:freeze(report)};
     const row = replacements.length ? A.meshTopologyScene.revise(old,{faces:replacements}).row : {...old};
     row.bindings = rebindSources(row,bindings);

@@ -113,7 +113,7 @@ function atlas(layout, material, selection, settings, kit, paint) {
   const start = size.map(n => Math.floor((h - n) / 2));
   const at = uv => uv.map((n, axis) => start[axis] + .5 + n * (size[axis] - 1));
   const corners = new Map(layout.corners.map(row => [row.id, row]));
-  const faces = new Set(layout.faces.filter(row => row.material === material).map(row => row.id));
+  const faces = new Set(settings.texelAssignment ? [] : layout.faces.filter(row => row.material === material).map(row => row.id));
   const selected = new Set(selection?.faces), selectedEdges = new Set(selection?.domain === 'edges' ? selection.edges : []);
   const selectedSides = sideSelection(selection);
   const cuts = new Set(selection?.unwrap?.cuts), packing = selection?.packing;
@@ -145,9 +145,19 @@ function atlas(layout, material, selection, settings, kit, paint) {
   }
   for (const highlight of highlights) draw.push(highlight);
   for (const cut of cutLines) draw.push(cut);
-  for (const guide of selection?.snapGuides ?? []) if (guide.material===material) {
+  for (const guide of selection?.snapGuides ?? []) if (!settings.texelAssignment && guide.material===material) {
     const points = guide.points.map(at);
     draw.push(points.length>1 ? line(points,ink.snap,2) : rect(center(points[0],4),ink.snap));
+  }
+  if (settings.texelAssignment) {
+    const {faces, target:{uvBounds:[l,t,r,b]}} = settings.texelAssignment;
+    draw.push(line([[l,t],[r,t],[r,b],[l,b],[l,t]].map(at),ink.snap,2));
+    for (const {corners} of faces) {
+      const points = corners.map(row=>at(row.after));
+      draw.push({type:'polygon',points,fill:'#75e2c84d'},line([...points,points[0]],ink.selected,2));
+      for (const [i,row] of corners.entries()) if (row.texels.clampedAxes.length)
+        draw.push(rect(center(points[i],2),ink.seam));
+    }
   }
   if (packing?.material === material) {
     const outline = ([l,t,r,b], color) => line([[l,t],[r,t],[r,b],[l,b],[l,t]]
@@ -260,7 +270,7 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
   const captures = [nativeBefore, nativeAfter], views = [];
   const {orientation,scaling,normalization,flatten,unwrap,packing} = selected ?? {};
   const basis = scaling ?? orientation;
-  const assignment = selected?.assignment;
+  const assignment = selected?.assignment, destination = selected?.destinationAtlas;
   const materialAfter = captures[0]===captures[1] ? material :
     assignment?.faces.find(row=>row.before.material===material)?.after.material ?? material;
   const useAtlasPaint = basis || unwrap || packing || selected?.projection || selected?.cornerScope || selected?.snapGuides || settings.pivot || layouts.some(layout=>layout.pivot);
@@ -282,13 +292,19 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     crossHighlight = { sheets, faces: selected.faces.map(id => ({ id, material: byId.get(id).material, visiblePixels: visible.get(id) })) };
   } else for (const [i, layout] of layouts.entries()) {
     const slot = i ? materialAfter : material;
-    const paint = useAtlasPaint ? atlasPaint(captures[i].mesh,slot,layout,kit) : undefined;
-    views.push(atlas(layout, slot, selected, packing ? {...settings,packStage:i} : settings, kit, paint),
+    const showDestination = i===1 && destination;
+    const paint = showDestination || (useAtlasPaint ? atlasPaint(captures[i].mesh,slot,layout,kit) : undefined);
+    const atlasSettings = showDestination ? {...settings,texelAssignment:assignment} :
+      packing ? {...settings,packStage:i} : settings;
+    views.push(atlas(layout, slot, selected, atlasSettings, kit, paint),
       model(layout, captures[i], selected, kit));
   }
   const gap = 6, { w, h } = settings, width = h + w + 3 * gap, height = h * 2 + 64;
   const layers = [], draw = [text('Atlas', [h / 2 + gap, 13]), text('Native model', [h + 2 * gap + w / 2, 13])];
-  const rowNames = packing && before===after ? ['Current','Planned layout'] : before===after ? ['Selection','Selection'] : ['Before','After'];
+  const rowNames = destination && !assignment.canCommit ? ['Before','Proposed atlas'] :
+    packing && before===after ? ['Current','Planned layout'] : before===after ? ['Selection','Selection'] : ['Before','After'];
+  if (destination && !assignment.canCommit)
+    draw.push(text('Current model',[h + 2 * gap + w / 2,h + 41],'#9fb9c3',8));
   for (const [i, image] of views.entries()) {
     const x = i % 2 ? h + 2 * gap : gap, y = 33 + Math.floor(i / 2) * (h + 15);
     layers.push({ source: image, rect: [x, y, image.w, image.h] });
@@ -302,10 +318,15 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     selected?.snapGuides && 'Snap target';
   draw.push(text(snapGuide || 'Cut seam', [width * .18, height - 8], snapGuide ? ink.snap : ink.seam, 8));
   if (assignment) {
-    const stretch = assignment.faces.reduce((max,row)=>Math.max(max,row.after.metrics.maxStretch ?? 0),0);
     const {covered,texels,complete} = assignment.coverage;
-    draw.push(text((complete ? 'Coverage ' : 'Partial ')+covered+'/'+texels,[width*.49,height-8],ink.selected,8),
-      text(stretch ? 'Peak stretch '+stretch.toFixed(2)+'x' : 'No 2D stretch measure',[width*.80,height-8],ink.pin,8));
+    draw.push(text((complete ? 'Coverage ' : 'Partial ')+covered+'/'+texels,[width*.49,height-8],ink.selected,8));
+    if (destination) {
+      const count = assignment.faces.reduce((sum,row)=>sum+row.after.clampedCorners.length,0);
+      draw.push(text(count ? count+' clamped corners' : 'Texel scale held',[width*.80,height-8],count ? ink.seam : ink.held,8));
+    } else {
+      const stretch = assignment.faces.reduce((max,row)=>Math.max(max,row.after.metrics.maxStretch ?? 0),0);
+      draw.push(text(stretch ? 'Peak stretch '+stretch.toFixed(2)+'x' : 'No 2D stretch measure',[width*.80,height-8],ink.pin,8));
+    }
   } else if (packing) {
     draw.push(text('Held chart',[width*.49,height-8],ink.held,8),
       text(packing.unpacked.length ? 'Unpacked chart' : 'Packed chart',[width*.80,height-8],
@@ -322,6 +343,8 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
   };
   return { material, grid: [w, h], files: [...imageNames, ...crossHighlight?.sheets.slice(1).map(row => row.file) ?? []],
     ...(assignment && {materialAfter}),
+    ...(destination && {destinationTileset:assignment.id,destinationSize:[destination.w,destination.h],
+      nativeAfter:assignment.canCommit ? 'reassigned' : 'current'}),
     ...(scope && {cornerScope:scope}), ...(orientation && {orientation}), ...(scaling && {scaling}),
     ...(normalization && {normalization}),
     ...(flatten && {flatten}),
@@ -340,6 +363,11 @@ function assignmentReview(editor,revised,report,input,kit,directory,inputs) {
   const outline = [[l,t],[r,t],[r,b],[l,b],[l,t]];
   const assignment = {...picked,assignment:report,
     snapGuides:[...new Set(report.faces.map(row=>row.after.material))].map(material=>({material,points:outline}))};
+  if (report.mapping==='preserve-texels') {
+    const {tilesets,tilesetDefaults} = editor.snapshot();
+    const image = kit.KIT.authoring.tilesets.prepare(tilesets,tilesetDefaults).resolve({tileset:report.id});
+    assignment.destinationAtlas = {w:image.width,h:image.height,rgba:image.pixels};
+  }
   const old = capture(before,settings,kit,editor,object);
   const next = revised===editor ? old : capture(after,settings,kit,revised,object);
   return review(before,after,old,next,assignment,settings,kit,paths,settings.readability);
