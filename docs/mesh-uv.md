@@ -3053,3 +3053,64 @@ atlas swap or quad split carries the crop binding with the wrap settings.
 
 Run `node examples/tileset-pick/tileset-face-wrap-demo.cjs wrap-review`
 to compare all three modes on a wall with separately modeled end caps.
+
+## Review mixed coverage through a camera move
+
+`tileset coverage-review` renders opaque, cutout, and blended material
+together on the native art grid. Name editable mesh materials by object
+and material ID. Include a face ID to scope two faces that share a
+material. Use `decal:<id>` for a retained decal on its receiving object.
+
+```json
+{
+  "w": 176,
+  "h": 108,
+  "views": [
+    { "id": "left", "camera": { "yaw": -0.35 } },
+    { "id": "center" },
+    { "id": "right", "camera": { "yaw": 0.35 } }
+  ],
+  "targets": [
+    { "id": "room", "object": "wall", "material": "tileset/brick", "mode": "opaque" },
+    { "id": "screen", "object": "window", "material": "tileset/grille", "mode": "mask" },
+    { "id": "glass", "object": "window", "material": "tileset/glass", "mode": "blend" }
+  ],
+  "pairs": [
+    { "id": "openings", "front": "screen", "back": "room" },
+    { "id": "transmission", "front": "glass", "back": "room" }
+  ],
+  "checks": [
+    { "pair": "openings", "metric": "openPixels", "min": 8 },
+    { "pair": "transmission", "metric": "transmittedPixels", "min": 12 },
+    { "pair": "transmission", "metric": "reversedPixels", "max": 0 }
+  ]
+}
+```
+
+```sh
+ink-studio tileset coverage-review coverage.json --scene window.json --out coverage-review
+```
+
+Each view can set time `t`, camera angles in radians and other lens
+overrides, `cameraShot`, or `zoom`. Each target gets three grayscale
+mattes. **Footprint** shows the projected geometry. **Sampled** shows
+its alpha through the authored sampler and cutoff. **Visible** shows
+its remaining contribution after layers composite in depth order.
+`coverage.png` colors the visible contributions by alpha mode next
+to the same view's picture. These are headless camera measurements
+taken before post-processing and optical transport.
+
+The report includes sampled, clear, fractional, hidden, attenuated,
+and visible pixel counts and the visible pixel change from the
+preceding sample. For a front/back pair, it reports overlap, openings
+showing the back layer, partially transmitted pixels, blocked pixels,
+reversed compositing order where both layers contribute, and nearly
+coplanar samples. A check applies to every view unless it names one
+with `view`. The CLI writes the report and images even when it exits
+with a failed check. `spillPixels` counts visible pixels outside the
+projected footprint. `overpaintPixels` counts visible alpha above the
+target's sampled alpha.
+
+Run `node examples/tileset-pick/tileset-coverage-review-demo.cjs window-review`
+for a camera sweep across a grille, a blue window, and a translucent
+painted overlay in front of a repeated brick wall.

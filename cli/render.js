@@ -1238,16 +1238,23 @@ function renderFrame(world, o, preparedPalettes) {
   }
   const trackMeshes = isolate && o.trackPixelSources ? new Map() : null;
   const trackFields = trackMeshes && new Map();
-  const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { V, W, H, focal, ortho, near,simulationLayers,
-      pbr,paintIndex:fragmentTrace?.pixel,captureMeshTint,
-      far:camera.clipFar, clip: geometryClip,multiprojection:localProjection,
+  const materialReview=boundaryView && o.materialCoverageReview;
+  const surfaceOptions={V,W,H,focal,ortho,near,far:camera.clipFar,simulationLayers,
+    clip:geometryClip,multiprojection:localProjection,
+    paletteSampling:o.paletteSampling,semanticMipmaps:o.semanticMipmaps,artScale:o.artGridScale||1,
+    allow:isolate?.matches,meshMask:geometryMask?.meshCodes,spriteLOD,
+    omit:useSdf && sdfBrickFrames.length ? (object,material,point)=>sdfBrickObjects.has(object) && sdfSettings.allows({object,entity:object,material},point) : undefined};
+  if (materialReview) {
+    materialReview.begin(W,H,(targetOnly,footprint)=>SurfaceRaster.rasterize(surfaceLayers,
+      {...surfaceOptions,reviewTarget:materialReview.target,targetOnly,footprint,surfaceNormals:false}));
+  }
+  const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { ...surfaceOptions,
+      pbr,paintIndex:fragmentTrace?.pixel,captureMeshTint,reviewTarget:materialReview?.target,
       captureRestNormal:passSelection.has('sourceRestNormal'),trackMesh:trackMeshes && ((source,triangle,project)=>trackMeshes.set(PixelSourceTracking.meshKey(source,triangle),project)),
-      paletteSampling: o.paletteSampling, semanticMipmaps:o.semanticMipmaps, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1,
-      capture:captureTexturedSurface, sourceBinding:captureSourceSurface, allow:isolate?.matches, motion:!!temporal||captureSurfaceMotion, meshMask:geometryMask?.meshCodes, spriteLOD,
-      captureFogOwners,
+      surfaceNormals:o.surfaceNormals,capture:captureTexturedSurface,sourceBinding:captureSourceSurface,
+      motion:!!temporal||captureSurfaceMotion,captureFogOwners,
       lightingTargets:artLighting || o.bounceProbes!==false &&
-        (o.bounceProbes===true?world.bounceProbes:o.bounceProbes??world.bounceProbes)?.geometry,
-      omit:useSdf && sdfBrickFrames.length ? (object,material,point)=>sdfBrickObjects.has(object) && sdfSettings.allows({object,entity:object,material},point) : undefined });
+        (o.bounceProbes===true?world.bounceProbes:o.bounceProbes??world.bounceProbes)?.geometry });
   const localProjectionHits=surfaceFragments.some(sample=>sample.localProjection) && new Uint8Array(W*H);
   if (localProjectionHits) for (const sample of surfaceFragments) if (sample.localProjection) localProjectionHits[sample.p]=1;
   const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip,
@@ -2055,6 +2062,7 @@ function renderFrame(world, o, preparedPalettes) {
       if (fallingCoverage) fallingCoverage[p] = (kind === 2 || kind === 15 ? a : 0)+fallingCoverage[p]*(1-a);
     }
     const p3 = p * 3, ia = 1 - a;
+    if (materialReview) materialReview.fragment(p,a,sprite?.coverageTarget);
     if (strandTrace) strandTrace.fragment(p, a, opticalDepth, strandHit);
     if (fragmentTrace?.pixel === p) fragmentTrace.add(i,opticalDepth,a,sprite,glass,sectionEdge);
     splatReview?.fragment(p,i,opticalDepth,a,sprite);
@@ -3586,6 +3594,7 @@ function renderFrame(world, o, preparedPalettes) {
           deep.reflect(q, rayMedia?.reflected(), 1);
         }
         mattes?.fragment(q,sprOwner[q],undefined,1,rayMedia?.visibility() ?? 1,rayMedia?.matte());
+        if (materialReview) materialReview.fragment(q,1);
         if (paintStage) paintStage[q]=paintColor(baseReference(sprOwner[q]));
         if (q === paletteTrace?.bottom) paletteTrace.fragment = [];
         if (counters) counters.fragments++;
