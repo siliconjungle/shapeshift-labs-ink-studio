@@ -510,6 +510,29 @@
       else document.transact('Edit prefab instance ' + id, write);
     }
 
+    function stagePrefabStamp(request) {
+      const before = snapshot(), {instances,report} = A.prefabStamp.plan(before,request,buildEnv);
+      if (!instances) return {report};
+      const candidate = {...before,instances:{...before.instances,...instances}};
+      const problems = DIO.check(candidate,buildEnv).filter(row => row.level === 'error');
+      return problems.length ? {report:freeze({...report,canCommit:false,problems})} : {before,candidate,instances,report};
+    }
+
+    function planPrefabStamp(request) {
+      return stagePrefabStamp(request).report;
+    }
+
+    function stampPrefab(request) {
+      const {before,candidate,instances,report} = stagePrefabStamp(request);
+      if (!instances) throw Object.assign(new RangeError('Prefab stamping needs review'),{report});
+      requireReviewEdit(before,candidate);
+      const write = () => {
+        document.setEnvironment({instances});
+        return report;
+      };
+      return document.pending() ? write() : document.transact('Stamp prefab '+report.prefab,write);
+    }
+
     function stageTilesetPrefab(request) {
       const before = snapshot(), {patch,report} = A.tilesetPrefab.plan(before,request,buildEnv);
       if (!patch) return {report};
@@ -1584,7 +1607,7 @@
       planPainting3d, applyPainting3d, inspectPaintings3d,
       extractPainting3d: id => A.paintings3d.extract(snapshot(), id),
       placeSculptStamp, planSculptSplit, splitSculpt, planAssemblyStretch, stretchAssembly,
-      setPrefabInstance, planTilesetPrefab, promoteTilesetPrefab,
+      setPrefabInstance, planPrefabStamp, stampPrefab, planTilesetPrefab, promoteTilesetPrefab,
       planPrefabIsolation, previewPrefabIsolation, editIsolatedPrefab,
       planPrefabRefresh, refreshPrefabs,
       registerTileset,
