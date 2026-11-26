@@ -250,7 +250,7 @@ function finalize(task,native,ownership) {
     current=reduce(current,Math.max(1,Math.floor(current.width/2)),Math.max(1,Math.floor(current.height/2)),semantic);
   }
   const [base,...mips]=levels, texels=debug.footprint.reduce((n,v)=>n+Number(v>0),0);
-  return {...native,...base,validity:base.validity,mips,debug,
+  return {...native,...base,preview:base.preview,validity:base.validity,mips,debug,
     output:{...output,encoding:format==='png'?'png'+base.bitDepth:format,bitDepth:base.bitDepth,
       ...(semantic.normal&&{domain:float?'signed-unit':'unit'}),
       ...(semantic.color&&{colorSpace:float?'srgb-linear':'srgb'}),

@@ -208,7 +208,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.roomImpulseCapture.mixSettings` | function | `(options={})` | [guide](../room-impulse-capture.md), [source](../../src/room-impulse-capture.js) |
 | `node.roomImpulseCapture.split` | function | `(response,edit)` | [guide](../room-impulse-capture.md), [source](../../src/room-impulse-capture.js) |
 | `node.roomImpulseCapture.sweep` | function | `(options={})` | [guide](../room-impulse-capture.md), [source](../../src/room-impulse-capture.js) |
-| `node.runBakeJob` | function | `(file,{directory,signal=new AbortController().signal,onProgress,...settings}={})` | [guide](../bake-jobs.md), [source](../../cli/bake-jobs.js) |
+| `node.runBakeJob` | function | `(file,{directory,signal=new AbortController().signal,onProgress,heapMb,...settings}={})` | [guide](../bake-jobs.md), [source](../../cli/bake-jobs.js) |
 | `node.runDeepShot` | function | `(file, { out, operators } = {})` | [guide](../deep-shot.md#register-a-node-effect), [guide](../deep-shot.md), [source](../../cli/deep-shot.js) |
 | `node.runReferenceExperiments` | function | `({ kit = module.exports.load(), ...options } = {})` | [guide](../reference-experiments.md), [source](../../index.js) |
 | `node.sampleReframe` | function | `(delivery, time)` | [guide](../subject-reframe.md), [source](../../cli/subject-reframe.js) |

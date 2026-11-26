@@ -13,7 +13,7 @@ const revisionPattern=/^bake-[A-Za-z0-9]{6}$/;
 const worker=path.join(__dirname,'bake-job-worker.js');
 const json=f=>JSON.parse(fs.readFileSync(f,'utf8'));
 const lease=(dir,prefix)=>fs.mkdtempSync(path.join(dir,prefix));
-const launchSettings=()=>Process.budget({taskMs:300000,heapMb:768,outputBytes:196*1024*1024});
+const launchSettings=(heapMb=768)=>Process.budget({taskMs:300000,heapMb,outputBytes:196*1024*1024});
 
 function reviewData(data,directory) {
   Assets.write(path.join(directory,'index.html'),fs.readFileSync(path.join(__dirname,'bake-job.html')));
@@ -21,12 +21,12 @@ function reviewData(data,directory) {
   Assets.write(path.join(directory,'data.js'),'const bakeJob = '+JSON.stringify(data).replaceAll('<','\\u003c')+';\n');
 }
 
-async function start(file,settings,stage,mode,signal,progress,artifacts=stage) {
+async function start(file,settings,stage,mode,signal,progress,artifacts=stage,heapMb) {
   const request=path.join(stage,'request.json');
   Assets.json(request,{file:path.resolve(file),settings,mode});
   let buffer='', last='';
   const child=await Process.launch(worker,'work',[request,stage],{
-    cwd:process.cwd(),env:process.env,artifacts,signal,limits:launchSettings(),
+    cwd:process.cwd(),env:process.env,artifacts,signal,limits:launchSettings(heapMb),
     onOutput(chunk) {
       buffer+=chunk.toString('utf8');
       let at;
@@ -67,7 +67,7 @@ function latestBakeJob(directory) {
   return { ...latest,report };
 }
 
-async function runBakeJob(file,{directory,signal=new AbortController().signal,onProgress,...settings}={}) {
+async function runBakeJob(file,{directory,signal=new AbortController().signal,onProgress,heapMb,...settings}={}) {
   if(typeof directory!=='string'||!directory.trim())throw new TypeError('Bake job needs an output directory');
   const root=path.resolve(directory), revisions=path.join(root,'revisions'), marker=path.join(root,'latest.json');
   if(path.resolve(file)===marker)throw new RangeError('Bake output would overwrite its plan');
@@ -80,7 +80,7 @@ async function runBakeJob(file,{directory,signal=new AbortController().signal,on
     const revision='bake-'+path.basename(stage).slice(-6), destination=path.join(revisions,revision), work=path.join(stage,'.work');
     fs.mkdirSync(work);
     try {
-      await start(file,settings,work,'run',signal,onProgress,stage);
+      await start(file,settings,work,'run',signal,onProgress,stage,heapMb);
     } catch(error) {
       if(!signal.aborted)throw error;
       return {status:'cancelled',latest:latestBakeJob(root)?.revision??null};
@@ -107,4 +107,4 @@ async function runBakeJob(file,{directory,signal=new AbortController().signal,on
     release();
   }
 }
-module.exports={saveBakePreset,inspectBakeJob,runBakeJob,latestBakeJob,revisionPattern};
+module.exports={saveBakePreset,inspectBakeJob,runBakeJob,latestBakeJob,revisionPattern,reviewData};

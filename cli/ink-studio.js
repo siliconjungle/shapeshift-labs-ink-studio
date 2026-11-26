@@ -1560,6 +1560,7 @@ const CMD = {
         '  scene-resource inspect|validate <scene> [--python path --blender path]',
         '  scene-resource convert <scene> --out <file> [--materialx look.mtlx --python path --blender path]',
         '  bake-job inspect|run|serve|preset <job.json> [--out directory --preset preset.json --port 0]',
+        '  bake-job batch <batch.json> --out directory   bake and cache a budgeted tiled batch',
         '    --manifest <revision.json>   attach an Ink asset revision to tagged glTF data',
         '  hybrid-ownership inspect <scene.json> [--out file.json]   list authored channels and derived outputs',
         '  hybrid-ownership route <scene.json> <object> <part> <channel>   resolve the authored edit destination',
@@ -3009,11 +3010,11 @@ const CMD = {
   },
   async 'bake-job'() {
     const [action,input]=pos, {out,preset,port}=opt;
-    if(pos.length!==2||!['inspect','run','serve','preset'].includes(action)||
+    if(pos.length!==2||!['inspect','run','serve','preset','batch'].includes(action)||
        (action==='inspect'?out!==undefined:typeof out!=='string')||
-       port!==undefined&&action!=='serve'||
+       port!==undefined&&action!=='serve'||preset!==undefined&&action==='batch'||
        Object.entries(opt).some(([key,value])=>!['out','preset','port'].includes(key)||typeof value!=='string'||!value.trim()))
-      die('Use bake-job inspect|run|serve|preset <job.json> [--out directory --preset preset.json --port 0]');
+      die('Use bake-job inspect|run|serve|preset <job.json> or bake-job batch <batch.json> --out directory');
     const api=require('./bake-jobs.js'), controller=new AbortController(), options={presetFile:preset,signal:controller.signal};
     const stop=()=>controller.abort(new Error('Bake cancelled'));
     process.on('SIGINT',stop);process.on('SIGTERM',stop);
@@ -3031,7 +3032,8 @@ const CMD = {
         await session.close();
         return;
       } else {
-        result=await api.runBakeJob(input,{...options,directory:out,onProgress:row=>console.error(JSON.stringify(row))});
+        const run=action==='batch'?require('./bake-batch.js').runBakeBatch:api.runBakeJob;
+        result=await run(input,{...options,directory:out,onProgress:row=>console.error(JSON.stringify(row))});
         if(result.status==='cancelled')process.exitCode=2;
       }
       console.log(JSON.stringify(result,null,2));
