@@ -49,15 +49,17 @@ const BitmapResources = (() => {
     return source;
   }
   function interpretation(settings = {}) {
-    if (!fields(settings, ['intent', 'colorSpace', 'channel', 'units', 'alpha', 'sampling', 'tiling', 'normalSpace', 'normalOrientation', 'heightRange', 'layout']))
+    if (!fields(settings, ['intent', 'colorSpace', 'channel', 'units', 'alpha', 'sampling', 'tiling', 'normalSpace', 'normalOrientation', 'heightRange', 'valueRange', 'layout']))
       throw new TypeError('Invalid bitmap interpretation settings');
-    const { intent = 'color', colorSpace, channel, units, alpha, sampling, tiling, normalSpace, normalOrientation, heightRange, layout } = settings;
+    const { intent = 'color', colorSpace, channel, units, alpha, sampling, tiling, normalSpace, normalOrientation, heightRange, valueRange, layout } = settings;
+    const range=heightRange??valueRange;
     if (!['color', 'data', 'mask', 'height', 'normal'].includes(intent) ||
         layout!==undefined&&(intent!=='data'||layout!=='xyz'||channel!==undefined) ||
         normalSpace !== undefined && (intent !== 'normal' || !['tangent','world'].includes(normalSpace)) ||
         normalOrientation !== undefined && (intent !== 'normal' || normalSpace==='world' || !['opengl','directx'].includes(normalOrientation)) ||
-        heightRange !== undefined && (intent!=='height'||!Array.isArray(heightRange)||heightRange.length!==2||
-          !Array.from(heightRange).every(n=>Number.isFinite(n)&&Number.isFinite(Math.fround(n)))||heightRange[1]<=heightRange[0]) ||
+        heightRange !== undefined&&intent!=='height'||valueRange!==undefined&&(intent!=='data'||layout!==undefined)||
+        (heightRange!==undefined||valueRange!==undefined)&&(!Array.isArray(range)||range.length!==2||
+          !Array.from(range).every(n=>Number.isFinite(n)&&Number.isFinite(Math.fround(n)))||range[1]<=range[0]) ||
         intent === 'normal' && (channel !== undefined || units !== undefined && units !== 'unitless') ||
         (intent === 'color' ? colorSpace !== undefined && !spaces.includes(colorSpace) || channel !== undefined ||
           alpha !== undefined && !['straight', 'premultiplied'].includes(alpha) :
@@ -179,7 +181,7 @@ const BitmapResources = (() => {
       ...(normal && { normalSpace,...(normalSpace==='tangent'&&{normalOrientation:settings.normalOrientation??'opengl'}) }),
       alpha: color ? alpha : 'none', sampling, tiling: { u: tiling.u ?? 'clamp', v: tiling.v ?? 'clamp' },
       units: units ?? (intent === 'height' ? 'shape-units' : 'unitless'),
-      precision: intent === 'height'||vector ? 'float32' : native
+      precision: intent === 'height'||vector||settings.valueRange!==undefined ? 'float32' : native
     } };
   }
 
@@ -203,10 +205,10 @@ const BitmapResources = (() => {
         const lane = stride >= 3 || channels === 1 && stride === 2 && raw.alpha === 'none' && c === 1 ? c : 0;
         return src[p * stride + lane];
       }
-      const ratio = targetMax / sourceMax, range=settings?.heightRange;
-      const decodeHeight=n=>{
+      const ratio = targetMax / sourceMax, range=settings?.heightRange??settings?.valueRange;
+      const decodeRange=n=>{
         const unit=n/sourceMax;
-        if(unit<0||unit>1)throw new RangeError('Encoded bitmap height range needs samples in [0, 1]');
+        if(unit<0||unit>1)throw new RangeError('Encoded bitmap scalar range needs samples in [0, 1]');
         return range[0]+unit*(range[1]-range[0]);
       };
       function decodeVector(n) {
@@ -215,7 +217,7 @@ const BitmapResources = (() => {
         return n;
       }
       for (let p = 0; p < count; p++) {
-        if (channels === 1) data[p] = range?decodeHeight(read(p,lane)):read(p, lane) * ratio;
+        if (channels === 1) data[p] = range?decodeRange(read(p,lane)):read(p, lane) * ratio;
         else if(settings?.layout==='xyz')for(let c=0;c<3;c++)data[p*3+c]=decodeVector(read(p,c));
         else for (let c = 0; c < channels; c++) data[p * channels + c] = read(p, c) * ratio;
       }

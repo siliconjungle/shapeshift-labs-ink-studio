@@ -44,6 +44,7 @@ All checked-in guides, indexed by title and section headings.
 - [Warp and repitch a recording](../audio-warp.md)
 - [Drive picture from an audiovisual take](../audiovisual-takes.md)
 - [Authored contacts and prop handoffs](../authored-contacts.md)
+- [Curvature bakes](../bake-curvature.md)
 - [Bake jobs and presets](../bake-jobs.md)
 - [Normal and height bakes](../bake-normal-height.md)
 - [Ambient occlusion, bent normals and direction bakes](../bake-occlusion.md)

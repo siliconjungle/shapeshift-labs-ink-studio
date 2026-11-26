@@ -85,3 +85,7 @@ See [occlusion bakes](bake-occlusion.md) for ambient, contact and directional AO
 ## Measure thickness
 
 See [thickness bakes](bake-thickness.md) for search range, inward ray directions, strict shell and part checks, float and 16-bit outputs, and paired validity.
+
+## Bake convex and concave curvature
+
+See [curvature bakes](bake-curvature.md) for mesh and normal-input curvature, edge policies, scale, normalized maps, and signed float output. Use the cavity map independently for short-range occlusion.

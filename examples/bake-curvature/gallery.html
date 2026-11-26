@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aster Relief · Ink Studio</title>
+<style>
+:root{color-scheme:dark;font:15px/1.5 system-ui,sans-serif;background:#102023;color:#f6e2c7;--rule:#436065;--muted:#b0c5c3;--gold:#f3bd80;--cyan:#9ee1dd}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at 45% 0%,#22383b 0%,#102023 70%)}
+main{width:min(100%,1160px);margin:auto;padding:clamp(22px,4vw,52px) clamp(15px,4vw,56px)}
+header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:12px;border-bottom:1px solid var(--rule);padding-bottom:19px}
+h1{font:400 clamp(50px,7vw,90px)/.95 Georgia,serif;letter-spacing:-.062em;margin:0}
+p{color:var(--muted);margin:8px 0 0}
+a{color:var(--gold);text-underline-offset:3px}
+.controls{display:flex;gap:5px 17px;flex-wrap:wrap;font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px;margin-top:17px}
+article{min-width:0;padding:13px;border:1px solid var(--rule);background:#142629}
+label{color:var(--muted);display:grid;gap:4px;font-size:12px}
+select{color:#f6e2c7;background:#203638;border:1px solid var(--rule);border-radius:3px;padding:8px;margin:0;min-width:0;font:15px system-ui}
+:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+figure{position:relative;margin:12px 0;isolation:isolate}
+img{display:block;width:100%;aspect-ratio:1;image-rendering:pixelated;background:#172b30}
+.pin{position:absolute;top:84.5%;left:84.5%;translate:-50% -50%;width:13px;height:13px;border:1px solid #fff8dc;border-radius:50%;box-shadow:0 0 0 1px #18272b}
+footer{display:flex;justify-content:space-between;align-items:baseline;gap:5px 12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+aside{border-top:1px solid var(--rule);margin-top:20px;padding-top:12px;color:var(--muted);display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 20px}
+aside strong{color:#f6e2c7;font-weight:550}
+.key{display:flex;align-items:center;gap:7px;font-size:12px}
+.ramp{height:8px;width:82px;display:inline-block;background:linear-gradient(90deg,#52d3d8,#162b30,#f9b75f)}
+@media(max-width:650px){.grid{grid-template-columns:1fr}}
+</style>
+<script defer src="data.js"></script>
+</head>
+<body><main>
+<header>
+  <div><h1>Aster Relief</h1><p>Surface curvature and local occlusion baked from an observatory plate</p></div>
+  <nav class="controls" aria-label="Bake reviews"><a id="mesh-review">Mesh bake review</a><a id="normal-review">Normal bake review</a></nav>
+</header>
+<div id="comparisons" class="grid"></div>
+<aside>
+  <div id="reading"></div>
+  <div class="key">Concave <span class="ramp" aria-hidden="true"></span> Convex</div>
+</aside>
+<template id="panel">
+  <article>
+    <label>View<select></select></label>
+    <figure><img><span class="pin" aria-hidden="true"></span></figure>
+    <footer><span></span><a download>Download baked map</a></footer>
+  </article>
+</template>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+  const get = id => document.getElementById(id);
+  const modes = {
+    'mesh-curvature': 'Signed curvature · mesh',
+    'normal-curvature': 'Signed curvature · normal input',
+    cavity: 'Cavity · local occlusion',
+    'mesh-curvature-convex': 'Convex curvature · mesh',
+    'mesh-curvature-concave': 'Concave curvature · mesh',
+    'normal-curvature-convex': 'Convex curvature · normal input',
+    'normal-curvature-concave': 'Concave curvature · normal input'
+  };
+  get('mesh-review').href = demo.reviews.mesh;
+  get('normal-review').href = demo.reviews.normal;
+  const reading = get('reading');
+  reading.append('Marked flat point', document.createElement('br'));
+  const value = document.createElement('strong');
+  value.textContent = demo.sample.curvature + ' curvature · ' + (demo.sample.cavity * 100).toFixed(0) + '% cavity response';
+  reading.append(value);
+  const description = {
+    'mesh-curvature': 'Ridges and recesses in the triangulated relief',
+    'normal-curvature': 'Etched marks from a tangent normal map',
+    cavity: 'Nearby blockers and recesses'
+  };
+  for (const [i, initial] of ['mesh-curvature', 'cavity'].entries()) {
+    const panel = get('panel').content.firstElementChild.cloneNode(true);
+    const select = panel.querySelector('select'), image = panel.querySelector('img');
+    const pin = panel.querySelector('.pin'), link = panel.querySelector('a'), note = panel.querySelector('footer span');
+    select.setAttribute('aria-label', i === 0 ? 'Left view' : 'Right view');
+    select.replaceChildren(...Object.entries(modes).map(([id, name]) => new Option(name, id)));
+    select.value = initial;
+    function render() {
+      const key = select.value, row = demo.images[key];
+      image.src = row.image;
+      image.alt = modes[key];
+      pin.hidden = key !== 'mesh-curvature' && key !== 'cavity';
+      link.href = row.file;
+      note.textContent = description[key] ?? '16-bit magnitude · inverse mesh units';
+    }
+    select.addEventListener('change', render);
+    get('comparisons').append(panel);
+    render();
+  }
+});
+</script>
+</main></body>
+</html>
