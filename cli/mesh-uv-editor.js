@@ -131,7 +131,10 @@ function atlas(layout, material, selection, settings, kit, paint) {
   }
   const marks = cornerMarkers(corners.values(),selection,corner=>faces.has(corner.face) ? at(corner.uv) : undefined);
   const pivot = settings.pivot ?? layout.pivot;
-  if (pivot) {
+  const pivots = selection?.orientation ? selection.orientation.pivots
+    .filter(row=>row.face===undefined ? selection.orientation.faces.some(id=>faces.has(id)) : faces.has(row.face))
+    .map(row=>row.uv) : pivot ? [pivot] : [];
+  for (const pivot of pivots) {
     const [x,y] = at(pivot).map(Math.round), r = 6;
     marks.push(line([[x-r,y],[x+r,y]],ink.pivot),line([[x,y-r],[x,y+r]],ink.pivot));
   }
@@ -212,7 +215,8 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     layouts[0].faces[0]?.material;
   if (!layouts[0].faces.some(row => row.material === material)) throw new RangeError('Choose an authored UV material');
   const captures = [nativeBefore, nativeAfter], views = [];
-  const useAtlasPaint = selected?.cornerScope || selected?.snapGuides || settings.pivot || layouts.some(layout=>layout.pivot);
+  const orientation = selected?.orientation;
+  const useAtlasPaint = orientation || selected?.cornerScope || selected?.snapGuides || settings.pivot || layouts.some(layout=>layout.pivot);
   let crossHighlight;
   if (selectionOutput) {
     const layout = layouts[0], byId = new Map(layout.faces.map(row => [row.id, row]));
@@ -242,12 +246,13 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     if (i % 2 === 0) draw.push(text(rowNames[Math.floor(i / 2)], [x + h / 2, y - 7], '#9fb9c3', 8));
   }
   const scope = selected?.cornerScope;
-  const [pivotBefore,pivotAfter] = layouts.map(layout=>settings.pivot ?? layout.pivot ?? null);
+  const [pivotBefore,pivotAfter] = layouts.map(layout=>orientation ? null : settings.pivot ?? layout.pivot ?? null);
+  const hasPivot = orientation || pivotBefore || pivotAfter;
   draw.push(text(selected?.snapGuides ? 'Snap target' : 'Cut seam', [width * .18, height - 8],
     selected?.snapGuides ? ink.snap : ink.seam, 8),
     text(scope ? 'Held overlap' : 'Pinned corner', [width * .49, height - 8], scope ? ink.held : ink.pin, 8),
-    text(scope ? 'Move scope' : pivotBefore || pivotAfter ? 'UV pivot' : 'Linked selection', [width * .80, height - 8],
-      !scope && (pivotBefore || pivotAfter) ? ink.pivot : ink.selected, 8));
+    text(scope ? 'Move scope' : hasPivot ? 'UV pivot' : 'Linked selection', [width * .80, height - 8],
+      !scope && hasPivot ? ink.pivot : ink.selected, 8));
   views.push(composite(width, height, layers, draw, kit));
   for (const [i, image] of views.entries()) files.write(paths[i], PNG.encode(image.w, image.h, image.rgb));
   const evidence = readability && {
@@ -256,7 +261,7 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     after: UV.readability(nativeAfter.mesh, nativeAfter.frame, readability)
   };
   return { material, grid: [w, h], files: [...imageNames, ...crossHighlight?.sheets.slice(1).map(row => row.file) ?? []],
-    ...(scope && {cornerScope:scope}),
+    ...(scope && {cornerScope:scope}), ...(orientation && {orientation}),
     ...((pivotBefore || pivotAfter) && {pivot:{before:pivotBefore,after:pivotAfter}}),
     ...(crossHighlight && { crossHighlight }), ...(evidence && { readability: evidence }) };
 }
@@ -264,19 +269,22 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
 function editSelection(UV,document,plan,selectionFile) {
   const uvSet = plan.report.uvSet ?? 0;
   const guides = plan.report.operations.flatMap(row=>row.op==='snap' ? row.evidence.guides : []);
-  const snap = guides.length ? {snapGuides:guides} : {};
+  const oriented = plan.report.operations.findLast(row=>row.op==='orient')?.evidence;
+  const inspection = {...(guides.length && {snapGuides:guides}),
+    ...(oriented && {orientation:{mode:oriented.mode,faces:oriented.faces,pivotSource:oriented.pivotSource,pivots:oriented.pivots}})};
   if (selectionFile) {
     const saved = read(selectionFile);
-    return {...UV.select(document,{domain:saved.domain,from:saved,uvSet}),...snap};
+    return {...UV.select(document,{domain:saved.domain,from:saved,uvSet}),...inspection};
   }
   const scopes = plan.report.operations.filter(row=>row.evidence?.scope!==undefined && row.evidence.moving).map(row=>row.evidence);
   if (scopes.length) {
     const moving = new Set(scopes.flatMap(row=>row.moving.map(corner=>corner.id)));
     const held = [...new Set(scopes.flatMap(row=>row.held.map(corner=>corner.id)))].filter(id=>!moving.has(id)).sort();
     const selected = UV.select(document,{domain:'corners',uvSet,ids:[...moving]});
-    return {...selected,...snap,heldCorners:held,cornerScope:{modes:scopes.map(row=>row.scope),moving:selected.ids,held}};
+    return {...selected,...inspection,heldCorners:held,cornerScope:{modes:scopes.map(row=>row.scope),moving:selected.ids,held}};
   }
-  return UV.select(document,{domain:'faces',uvSet,ids:[...new Set(plan.report.corners.map(row=>row.face))]});
+  const ids = [...new Set([...plan.report.corners.map(row=>row.face),...oriented?.faces ?? []])];
+  return {...UV.select(document,{domain:'faces',uvSet,ids}),...inspection};
 }
 
 function command([action, file, input, ...rest], opt, kit, openEditor) {
