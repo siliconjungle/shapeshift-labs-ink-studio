@@ -1500,6 +1500,15 @@ uses the trim material and gives each sidewall a full rectangle in
 layouts 0 and 1. The cap retains its original material and paint UVs
 unless the interior rules override them.
 
+For extrusion, `rim.uv: "extend"` continues the cap's UVs across each
+shared edge. The wall starts from matching corner UVs and uses the
+adjacent cap triangle's UV gradient. A right-angle fold still advances
+through the texture at the authored texel density. Keep the cap's
+material and UVs when using this mode. The planner blocks UVs that run
+outside the texture and reports the proposed coordinates, edge and
+layout. Use `rim.uv: "brush"` to stamp a separate tileset crop on each
+new wall. See [Choose a sidewall brush](#choose-a-sidewall-brush).
+
 The extrusion receipt lists each source and result vertex, its
 direction, displacement, and the corner normals contributing in vertex
 mode. Sweep checks include stationary points and edges crossed by
@@ -1641,10 +1650,57 @@ rules apply to the base UVs and any bound layouts. Use `uvSets` to
 choose which alternate layouts receive the mapping. New vertices
 inherit the base weights.
 
+`"uv": "extend"` starts from the unchanged source edge's UVs and
+continues the incident face's mapping onto the new strip. It inherits
+the incident material. `"uv": "brush"` stamps an independent crop on
+each new quad.
+
 ```sh
 ink-studio mesh-topology edge-edit panel.json trim.json --object panel
 ink-studio mesh-topology edge-edit panel.json trim.json --object panel --out grown.json --report trim-receipt.json
 node examples/tileset-pick/extrude-open-edge-demo.cjs extrude-edge-review
+```
+
+### Choose a sidewall brush
+
+Use this mapping in `rim` for a face-region extrusion, or put the same
+fields in an `extrude-edge` operation. Provide the saved selection from
+`ink-studio tileset pick` for an atlas registered in the scene.
+
+```json
+{
+  "uv": "brush",
+  "material": "tunnel-masonry",
+  "brush": {
+    "selection": {
+      "format": "ink-studio/tileset-selection",
+      "version": 1,
+      "tileset": "stone",
+      "x": 0, "y": 0, "width": 24, "height": 16
+    }
+  }
+}
+```
+
+The brush can include `paint` with a quarter-turn or reflection and
+`uvInset` with texel distances per edge. Its crop goes in the pigment
+layout and other included layouts receive a per-face rectangle. Ink
+uses `tileset/<id>` as the material ID when omitted. It reuses a
+compatible slot or creates one for the new faces. A slot assigned to
+another source or a material bake blocks the edit.
+
+Both new modes include the pigment layout. Use `uvSets` to choose
+additional alternate layouts. Layout 0 is always included.
+
+The preview's `sidewallUVs` (under `detail` for edge edits) lists the
+source face, edge and UVs per generated face and layout. Brush edits
+also report the crop and whether a material will be created. The
+geometry, material and eyedroppable crop bindings commit and undo
+together in the scene. Standalone mesh requests support `"extend"`
+directly. The brush mode resolves its atlas in the retained scene.
+
+```sh
+node examples/tileset-pick/extrusion-uv-demo.cjs extrusion-uv-review
 ```
 
 ### Split a tile at a picked position

@@ -251,7 +251,7 @@
     });
   }
 
-  function transition(row, before, document, correspondence, {paintReview,sourceSplit} = {}) {
+  function transition(row, before, document, correspondence, {paintReview,sourceSplit,addBindings} = {}) {
     const updated = { ...row, document };
     if (row.bindings) {
       const remapped = remapBindings(row.bindings,correspondence);
@@ -275,6 +275,7 @@
         paintReview.has(binding.id) && !binding.review ? {...binding,
           review:{reason:'merged-tile-paint-changed',candidates:[binding.element]}} : binding);
     }
+    if (addBindings?.length) updated.bindings = [...(updated.bindings ?? []),...addBindings];
     if (row.bakes) {
       const dirty = new Map(), oldSet=MaterialUV.resolve(before.uvBindings,'pigment'),
         newSet=MaterialUV.resolve(document.uvBindings,'pigment');
@@ -294,10 +295,10 @@
     return { row: updated, correspondence, ...diff(row, updated) };
   }
 
-  function revise(row, patch, { projection, paintReview, sourceSplit } = {}) {
+  function revise(row, patch, { projection, ...transitionOptions } = {}) {
     const before = topology.create(row.document);
     const { document, correspondence } = topology.editWithCorrespondence(before, patch, { projection });
-    return transition(row, before, document, correspondence, {paintReview,sourceSplit});
+    return transition(row, before, document, correspondence, transitionOptions);
   }
 
   function applyModifiers(row, plan) {

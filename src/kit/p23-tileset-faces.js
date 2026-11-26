@@ -194,6 +194,61 @@
     return {collection,entry,seed,...(key === undefined ? {step,sequenceIndex} : {key})};
   }
 
+  function paintSource(asset,crop,selection,requestedPaint,uvInset) {
+    const choice = selection.collectionChoice === undefined ? undefined : readCollectionChoice(selection.collectionChoice);
+    if (choice && (selection.paint === undefined || requestedPaint !== undefined))
+      throw new TypeError('Use the recorded paint orientation with a seeded collection pick');
+    const rawPaint = requestedPaint === undefined ? selection.paint : requestedPaint;
+    const paint = rawPaint === undefined ? undefined : TilesetSelection.paintOrientation(rawPaint);
+    const texelBounds = uvInset === undefined ? undefined : TilesetSelection.uvMapping(asset,crop,uvInset).texelBounds;
+    const result = cropSource(asset,crop,texelBounds,paint);
+    if (choice) result.source.collectionChoice = choice;
+    return result;
+  }
+
+  function materialConflicts(existing,doc,slot,material,tileset,materialDefinition) {
+    const conflicts = [];
+    if (slot ? slot.texture?.tileset !== tileset : doc?.faces.some(row=>row.material === material))
+      conflicts.push({reason:'material-in-use',material});
+    if (slot && materialDefinition && !sameMaterial(slot,materialDefinition))
+      conflicts.push({reason:'different-material-definition',material});
+    if (existing?.bakes?.some(row=>row.material === material))
+      conflicts.push({reason:'material-has-bake',material});
+    return conflicts;
+  }
+
+  function extrusionBrush(scene,row,brush,requestedMaterial) {
+    const selection = brush?.selection;
+    if (!brush || Object.getPrototypeOf(brush) !== Object.prototype ||
+        Object.keys(brush).some(key=>!['selection','paint','uvInset'].includes(key)) ||
+        selection?.format !== 'ink-studio/tileset-selection' || selection.version !== 1 ||
+        requestedMaterial !== undefined && !name(requestedMaterial))
+      throw new TypeError('Sidewall brush needs a version 1 exact tileset selection and optional paint orientation and UV inset');
+    const asset = A.tilesets.prepare(scene.tilesets,scene.tilesetDefaults).source(selection.tileset);
+    const crop = TilesetSelection.pick(selection.tileset,asset,selection);
+    const material = requestedMaterial ?? 'tileset/'+crop.tileset;
+    const slot = row.materials?.find(item=>item.id === material);
+    return {...paintSource(asset,crop,selection,brush.paint,brush.uvInset),material,slot,
+      issues:materialConflicts(row,row.document,slot,material,crop.tileset)
+        .map(conflict=>({kind:'extrusion-brush-material-conflict',...conflict,tileset:crop.tileset}))};
+  }
+
+  function extrusionUpdates(row,sidewallUVs) {
+    if (sidewallUVs?.mode !== 'brush' || !sidewallUVs.faces.length) return {};
+    const {source,material,faces,createsMaterial} = sidewallUVs;
+    const used = new Set(row.bindings?.map(binding=>binding.id));
+    const addBindings = faces.map(({face})=>{
+      const base = 'tileset/'+face;
+      let id = base;
+      for (let n=2;used.has(id);n++) id = base+'/'+n;
+      used.add(id);
+      return {id,domain:'faces',element:face,data:source};
+    });
+    const materials = createsMaterial ?
+      [...(row.materials ?? []),{id:material,texture:{tileset:source.selection.tileset}}] : undefined;
+    return {addBindings,materials};
+  }
+
   function prepare(scene, request, {projectTexelsPerUnit} = {}, cellSize) {
     const {object,part,face,selection,origin,right,up,planeAt,snapGrid=false,
       texelsPerUnit,brushScale=1,material:requestedMaterial,paint:requestedPaint,uvInset,worldSize,materialDefinition} = request ?? {};
@@ -218,14 +273,7 @@
       throw new TypeError('Grid snapping needs a construction plane placement');
     const plane = A.constructionPlane;
     const frame = planeAt === undefined ? plane.resolve({origin,right,up}) : plane.forScene(scene);
-    const choice = selection.collectionChoice === undefined ? undefined : readCollectionChoice(selection.collectionChoice);
-    if (choice && (selection.paint === undefined || requestedPaint !== undefined))
-      throw new TypeError('Use the recorded paint orientation with a seeded collection pick');
-    const rawPaint = requestedPaint === undefined ? selection.paint : requestedPaint;
-    const paint = rawPaint === undefined ? undefined : TilesetSelection.paintOrientation(rawPaint);
-    const texelBounds = uvInset === undefined ? undefined : TilesetSelection.uvMapping(asset,crop,uvInset).texelBounds;
-    const {source,pigmentUV} = cropSource(asset,crop,texelBounds,paint);
-    if (choice) source.collectionChoice = choice;
+    const {source,pigmentUV} = paintSource(asset,crop,selection,requestedPaint,uvInset);
     const material = requestedMaterial ?? 'tileset/'+crop.tileset;
     if (materialDefinition !== undefined && (!materialDefinition || Object.getPrototypeOf(materialDefinition) !== Object.prototype ||
         materialDefinition.id !== material || materialDefinition.texture?.tileset !== crop.tileset))
@@ -238,12 +286,7 @@
     const conflicts = [];
     if (existing && part !== undefined && part !== existing.part) conflicts.push({reason:'different-mesh-part'});
     const slot = existing?.materials?.find(row=>row.id === material);
-    if (slot ? slot.texture?.tileset !== crop.tileset : doc?.faces.some(row=>row.material === material))
-      conflicts.push({reason:'material-in-use',material});
-    if (slot && materialDefinition && !sameMaterial(slot,materialDefinition))
-      conflicts.push({reason:'different-material-definition',material});
-    if (existing?.bakes?.some(row=>row.material === material))
-      conflicts.push({reason:'material-has-bake',material});
+    conflicts.push(...materialConflicts(existing,doc,slot,material,crop.tileset,materialDefinition));
     return {object,part:existing?.part ?? part,existing,doc,frame,snapGrid,source,material,slot,density,brushScale,size,materialDefinition,
       uvSet,activeSets,unitUV,pigmentUV,conflicts,faceIds:new Set(doc?.faces.map(row=>row.id)),
       bindingIds:new Set(existing?.bindings?.map(row=>row.id)),vertexIds:new Set(doc?.vertices.map(row=>row.id)),
@@ -322,5 +365,5 @@
   }
 
   A.tilesetFaces = Object.freeze({plan,prepare,stamp,polygonStamp,append,cornersFor,cropSource,sourceBindings,sourceCorners,
-    splitSources,joinSources,previewMerges,isSourceBinding,sameMaterial});
+    splitSources,joinSources,previewMerges,isSourceBinding,sameMaterial,extrusionBrush,extrusionUpdates});
 })(KIT);
