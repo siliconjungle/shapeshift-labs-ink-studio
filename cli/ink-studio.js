@@ -1525,6 +1525,8 @@ const CMD = {
         '  mesh-topology transfer-attachments <before.json> <replacement.json> <map.json> [--attachments file] [--settings file] [--view file] [--preview dir] [--out bundle.json] [--report file]   transfer skin weights and attachment frames with rest and pose checks',
         '  mesh-topology transfer-materials <before.json> <replacement.json> <map.json> [--materials file] [--settings file] [--out mesh.json] [--out-materials file] [--report file] [--partial on]   transfer registered paint and corner data',
         '  mesh-uv inspect|simplify <mesh> [--uv-set n | --channel id] --out <directory|mesh.json>   inspect UV maps or reduce with seam locks',
+        '  mesh-uv prepare <mesh-or-scene.json> <request.json> [--object id] [--out file] [--layout-out file] [--report file]   propose seams, repair charts and pack native UV tiles',
+        '  mesh-uv validate-batch <batch.json> [--out file]   validate texel density, distortion and overlap across assets',
         '  mesh-uv import <mesh> --out topology.json [--id id] [--uv-set n] [--join-coincident on|off]   retain triangle corner UVs for editing',
         '  mesh-uv layout <mesh-or-scene.json> [--object id] [--uv-set n | --channel id] [--atlas width,height] [--out file]   inspect normalized UVs and source texels on faces and seam sides',
         '  mesh-uv guide <mesh-or-scene.json> <request.json> [--object id] [--uv-set n | --channel id] --out directory   draw chart and face outlines, solid fills, and checker fills into an editable pixel document and PNG',
@@ -4535,6 +4537,8 @@ const CMD = {
     });
   },
   'mesh-uv'() {
+    if (['prepare', 'validate-batch'].includes(pos[0]))
+      return require('./mesh-uv-prepare.js')(pos, opt, lib(), openUVEditor);
     if (['layout', 'guide', 'select', 'edit'].includes(pos[0]))
       return require('./mesh-uv-editor.js').command(pos, opt, lib(), openUVEditor, {projectTexelsPerUnit:cfg.texelsPerUnit});
     require('./mesh-uv.js').command(pos,opt,{num,list});
