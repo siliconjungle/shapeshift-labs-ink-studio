@@ -99,7 +99,11 @@
           o.mat ||
           (kind.startsWith('cut') || kind === 'engrave' || kind === 'groove'
             ? Object.assign({}, ma, o.inner ? { rf: (x, y, z) => (fb(x, y, z) < 0.06 ? o.inner : null) } : {})
-            : Object.assign({}, ma, { rf: (x, y, z) => (fb(x, y, z) < fa(x, y, z) ? mb.r : null) }));
+            : Object.assign({}, ma, { rf: (x, y, z, attrs) => {
+                if (fb(x, y, z) < fa(x, y, z))
+                  return (o.preserveRamps && mb.rf?.(x, y, z, attrs)) || mb.r;
+                return o.preserveRamps ? ma.rf?.(x, y, z, attrs) || ma.r : null;
+              } }));
       const chart = A.concat(Bl).find(solid => solid.mat.surfaceState)?.mat.surfaceState;
       let mat = base;
       if (!o.mat?.surfaceState && chart) {

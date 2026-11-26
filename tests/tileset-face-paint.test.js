@@ -399,3 +399,84 @@ test('leave the atlas and local binding intact if a checker exceeds the indexed 
   assert.equal(report.conflicts[0].code,'indexed-palette-full');
   assert.deepEqual(editor.snapshot(),scene);
 });
+
+test('spray replays its seed and clips the same atlas pattern to the active selection',()=>{
+  const scene = fixture(), {rgba,...hit} = stroke, editor = ink.createSceneEditor(scene);
+  const op = {...hit,tool:'spray',color:'#f1ab65',spray:{seed:30419,radius:6,density:.9}};
+  const selection = {type:'rectangle',rect:[6,4,8,6]};
+  const clipped = {...op,selection}, run = options=>ink.paintTilesetFace(editor,clipped,options);
+  const first = run(), again = run();
+  assert(first.report.canCommit,JSON.stringify(first.report.conflicts));
+  assert.equal(first.report.stroke.selectedTexels,48);
+  assert.equal(first.report.stroke.spray.seed,30419);
+  assert(first.report.changedTexels>0 && first.report.changedTexels<48);
+  assert.deepEqual(again.report,first.report);
+  assert.deepEqual(again.images.texels.rgb,first.images.texels.rgb);
+  const other = {...clipped,spray:{...op.spray,seed:30420}};
+  assert.notDeepEqual(ink.paintTilesetFace(editor,other).images.texels.rgb,first.images.texels.rgb);
+  assert.equal(ink.paintTilesetFace(editor,other,{apply:true,expect:first.report.previewRevision}).report.conflicts[0].code,'stale-preview');
+  assert.deepEqual(editor.snapshot(),scene);
+  assert.deepEqual(run({apply:true,expect:first.report.previewRevision}).report,first.report);
+
+  const full = ink.createSceneEditor(scene);
+  ink.paintTilesetFace(full,op,{apply:true});
+  const original = Buffer.from(scene.tilesets.enamel.data,'base64');
+  const wide = Buffer.from(full.snapshot().tilesets.enamel.data,'base64');
+  const narrow = Buffer.from(editor.snapshot().tilesets.enamel.data,'base64');
+  for (let y=0;y<height;y++) for (let x=0;x<width;x++) {
+    const offset = (y*width+x)*4, inside = x>=6 && x<14 && y>=4 && y<10;
+    assert.equal(narrow.readUInt32BE(offset),(inside ? wide : original).readUInt32BE(offset));
+  }
+  assert(editor.undo());
+  assert.deepEqual(editor.snapshot(),scene);
+});
+
+test('dither uses native atlas ranks and carries a seeded blue-noise pattern across a clipped selection',()=>{
+  const scene = fixture(true), editor = ink.createSceneEditor(scene), {rgba,...hit} = stroke;
+  const colors = [{slot:0},{color:'#ffc968',alpha:230}];
+  const bayer = {...hit,tool:'dither',dither:{colors,mix:.5,seed:0},
+    selection:{type:'subtract',base:{type:'rectangle',rect:[7,4,4,4]},with:{type:'pixels',pixels:[[8,5]]}}};
+  const {report} = ink.paintTilesetFace(editor,bayer,{apply:true});
+  assert(report.canCommit,JSON.stringify(report.conflicts));
+  assert.equal(report.stroke.selectedTexels,15);
+  const {bayerRank} = require('../src/pixel-look.js');
+  const bytes = Buffer.from(editor.snapshot().tilesets.enamel.data,'base64');
+  for (let y=0;y<height;y++) for (let x=0;x<width;x++) {
+    const inside = x>=7 && x<11 && y>=4 && y<8 && (x!==8 || y!==5);
+    assert.equal(bytes[y*width+x],Number(inside && bayerRank(x,y)<.5));
+  }
+  assert(editor.undo());
+  const blue = {...bayer,sharing:'make-local-variant',variant:'ink-blue-noise',
+    dither:{...bayer.dither,pattern:'blue-noise',seed:331},selection:{type:'rectangle',rect:[3,3,15,15]}};
+  const first = ink.paintTilesetFace(editor,blue);
+  assert(first.report.canCommit,JSON.stringify(first.report.conflicts));
+  assert.equal(first.report.stroke.dither.seed,331);
+  assert.deepEqual(ink.paintTilesetFace(editor,blue).images.texels.rgb,first.images.texels.rgb);
+  const changed = ink.paintTilesetFace(editor,{...blue,dither:{...blue.dither,seed:332}});
+  assert.notDeepEqual(changed.images.texels.rgb,first.images.texels.rgb);
+  const local = ink.paintTilesetFace(editor,blue,{apply:true,expect:first.report.previewRevision}).report;
+  assert.deepEqual(local.uses.map(row=>row.object),['east']);
+  assert.deepEqual(editor.snapshot().tilesets.enamel,scene.tilesets.enamel);
+  assert.equal(editor.snapshot().tilesets['ink-blue-noise'].alpha[1],230);
+});
+
+test('mirror a pencil dab through crop-local saved pixels without painting the excluded corner',t=>{
+  const scene = fixture(), dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-bound-mirror-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const file = name=>path.join(dir,name);
+  const write = (name,value)=>fs.writeFileSync(file(name),JSON.stringify(value));
+  const run = args=>JSON.parse(execFileSync(process.execPath,[cli,'tileset','paint','face','stroke.json','--scene','scene.json',...args],
+    {cwd:dir,encoding:'utf8'}));
+  write('scene.json',scene);
+  write('stroke.json',{...stroke,drawing:{mirrorX:10.5,mirrorY:7}});
+  write('selection.json',{grid:[6,5],origin:[8,5],pixels:[[1,1],[4,1],[1,3]]});
+  const review = run(['--selection','selection.json','--preview','review']);
+  assert(review.canCommit,JSON.stringify(review.conflicts));
+  assert.equal(review.stroke.candidateTexels,3);
+  assert.deepEqual(review.samples.map(row=>row.at),[[9,6],[12,6],[9,8]]);
+  assert.deepEqual(review.files,['before.png','after.png','diff.png','texels.png']);
+  write('receipt.json',review);
+  assert.equal(run(['--selection','selection.json','--expect','receipt.json','--out','painted.json']).changedTexels,3);
+  const painted = JSON.parse(fs.readFileSync(file('painted.json'))), bytes = Buffer.from(painted.tilesets.enamel.data,'base64');
+  assert.deepEqual([...bytes.subarray((8*width+12)*4,(8*width+13)*4)],[71,105,89,255]);
+});

@@ -228,6 +228,22 @@
       return report;
     }
 
+    function planSculptGuide(request, { update = false } = {}) {
+      const scene = snapshot(), guidedOperations = A.sculptGuides.revise(scene, request, update);
+      const next = { ...scene, guidedOperations };
+      DIO.brushField(next, buildEnv);
+      const report = A.sculptGuides.inspect(next, buildEnv).find(row => row.id === request.id);
+      return freeze({ guidedOperations, report });
+    }
+
+    function applySculptGuide(request, options) {
+      const { guidedOperations, report } = planSculptGuide(request, options);
+      const write = () => document.setEnvironment({ guidedOperations });
+      if (document.pending()) write();
+      else document.transact('Edit guided sculpt operation ' + request.id, write);
+      return report;
+    }
+
     const planSculptSnap = request => A.sculptSnap.plan(snapshot(), request, buildEnv).report;
     const inspectSculptSnap = (target, id) => A.sculptSnap.inspect(snapshot(), target, id, buildEnv);
     function applySculptSnap(request) {
@@ -1348,7 +1364,8 @@
       setModifiers,
       updateModifier,
       sculptContributions, inspectSculptContribution, editSculptContribution,
-      planSculptSnap, inspectSculptSnap, applySculptSnap,
+      planSculptSnap, inspectSculptSnap, applySculptSnap, planSculptGuide, applySculptGuide,
+      inspectSculptGuides: () => A.sculptGuides.inspect(snapshot(), buildEnv),
       placeSculptStamp, planSculptSplit, splitSculpt, planAssemblyStretch, stretchAssembly,
       setPrefabInstance,
       planPrefabIsolation, previewPrefabIsolation, editIsolatedPrefab,
