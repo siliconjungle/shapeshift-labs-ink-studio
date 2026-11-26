@@ -269,6 +269,59 @@ function checkResolveModes({ createRenderer, pixelShaderSources }) {
   }
 }
 
+function checkContourProjection({ createRenderer }) {
+  const width = 159, height = 93;
+  const canvas = new OffscreenCanvas(width, height);
+  const renderer = createRenderer(canvas, { toolkit: { KIT, PixelLook } });
+  const gl = canvas.getContext('webgl2');
+  const palette = [0x111927, 0x27739c, 0xf2bd41, 0xf8e0a0];
+  const builder = makeBuilder(7, palette);
+  builder.disc(-.9, 0, 0, [0, 0, 1], .65, .05, builder.P[1], 3);
+  builder.disc(0, 0, -.1, [0, 0, 1], .58, .05, builder.P[2], 3);
+  builder.disc(.9, .15, 0, [.2, 0, 1], .65, .05, builder.P[3], 3);
+  builder.disc(.2, -.43, .2, [0, 0, 1], .19, .05, builder.P[1], 3);
+  const world = builder.finish({ cam: { target: [0, 0, 0], dist: 5, yaw: .16, pitch: .13 }, radius: 5 });
+  // A twinkling splat snaps only on the native grid. A transparent slot is
+  // retained by the full-order control and omitted by the automatic sorter.
+  world.data.set([1, .3, 1.5], 11);
+  world.data[3 * 16 + 3] = 0;
+  const fullOrder = Int32Array.of(1, 0, 2, 3);
+  let projections = [], splatDraws = [];
+  const drawArrays = gl.drawArrays.bind(gl), drawInstances = gl.drawArraysInstanced.bind(gl);
+  gl.drawArrays = (mode, first, count) => {
+    if (mode === gl.POINTS) projections.push(count);
+    drawArrays(mode, first, count);
+  };
+  gl.drawArraysInstanced = (mode, first, count, instances) => {
+    if (mode === gl.TRIANGLE_STRIP && count === 4) splatDraws.push(instances);
+    drawInstances(mode, first, count, instances);
+  };
+  function draw(frame) {
+    projections = [];
+    splatDraws = [];
+    renderer.render(world, { width, height, clean: false, damp: false, dither: 0, colored: true, ...frame });
+    const pixels = new Uint8Array(width * height * 4);
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    const error = gl.getError();
+    if (error) throw Error('WebGL readback failed with error ' + error);
+    return { pixels, projections, splatDraws };
+  }
+  for (const frame of [{ time: .1 }, { time: 1.2, ortho: true }, { time: 2.4, yaw: -.23 }]) {
+    const control = draw({ ...frame, sharedContourProjection: false });
+    const shared = draw({ ...frame, sharedContourProjection: true });
+    if (String(control.splatDraws) !== '3,3' || String(shared.projections) !== '3' || String(shared.splatDraws) !== '3,3')
+      throw Error('Expected one projection and two raster passes, got ' + JSON.stringify([control.splatDraws, shared.projections, shared.splatDraws]));
+    if (!control.pixels.every((value, i) => value === shared.pixels[i])) throw Error('Shared contour pixels differ');
+  }
+  const auto = draw({ raw: true, sharedContourProjection: false, ortho: true, yaw: 0, pitch: 0 });
+  // Larger Z has greater view depth in the orthographic camera facing +Z.
+  const uncropped = draw({ raw: true, order: fullOrder, ortho: true, yaw: 0, pitch: 0 });
+  if (String(auto.splatDraws) !== '3' || String(uncropped.splatDraws) !== '4')
+    throw Error('Zero-opacity splat was not omitted from the automatic draw');
+  if (!auto.pixels.every((value, i) => value === uncropped.pixels[i])) throw Error('Removing zero-opacity splats changed the frame');
+  renderer.dispose();
+}
+
 function runChromeFixture(t, fixture) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'ink-webgl-tone-palette-'));
   t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
@@ -302,4 +355,7 @@ test('WebGL resolves tones and high palette entries across materials, lamps, gra
 });
 test('WebGL simple mode avoids the full resolve and auto mode loads it on demand', browser, t => {
   runChromeFixture(t, checkResolveModes);
+});
+test('WebGL Colored Contours shares projection and preserves the two-grid pixels', browser, t => {
+  runChromeFixture(t, checkContourProjection);
 });

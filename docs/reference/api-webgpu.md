@@ -9,7 +9,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `webgpu.createGaussianChunkStream` | function | `(renderer, toolkit, manifest, { url, fetch: fetchFile = globalThis.fetch, budgetBytes, maxSplats, layers, projectedError = {}, guardPixels = 12, startsPerFrame, concurrency } = {})` | [source](../../src/webgpu/gaussian-stream.mjs) |
-| `webgpu.createGaussianSplatRenderer` | function | `(device, { format = 'rgba8unorm' } = {})` | [source](../../src/webgpu/gaussian-renderer.mjs) |
+| `webgpu.createGaussianContourResolve` | function | `(device, { format = 'rgba8unorm' } = {})` | [source](../../src/webgpu/gaussian-contours.mjs) |
+| `webgpu.createGaussianSplatRenderer` | function | `(device, { format = 'rgba8unorm', pointAdapter, contours = pointAdapter?.contours ?? false } = {})` | [source](../../src/webgpu/gaussian-renderer.mjs) |
 | `webgpu.createWebGPUGraph` | function | `(device, definition)` | [source](../../src/webgpu/graph.mjs) |
 | `webgpu.createWebGPUPixelProcessor` | function | `(device, program)` | [guide](../pixel-processor.md), [source](../../src/webgpu/pixel-processor.mjs) |
 | `webgpu.decodeGaussianPly` | function | `(input, { maxPoints = pointLimit } = {})` | [source](../../src/gaussian-splats.mjs) |

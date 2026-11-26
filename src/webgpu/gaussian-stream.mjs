@@ -121,7 +121,8 @@ export function createGaussianChunkStream(renderer, toolkit, manifest, {
   }
 
   function render(target, { selected, ...frame } = {}) {
-    const { snapshot, camera } = captureStreamingCamera(cameraWorld, frame, target.width, target.height);
+    const viewTarget = frame.nativeColor ?? target;
+    const { snapshot, camera } = captureStreamingCamera(cameraWorld, frame, viewTarget.width, viewTarget.height);
     const scene = planner.advance({ place: 'cloud', camera, selected });
     const entries = scene.views[0].entries;
     const next = renderer.renderChunks(target, cameraWorld, entries.map(row => row.value),

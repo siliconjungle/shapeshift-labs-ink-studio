@@ -231,7 +231,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     let toneKey, tone, uploadedTone, sorted, instanceDraw, expandInstances, lastInstances;
 
     function orderFor(world, frame, camera, time, isNew, plan, width, height, scale,
-      tolerance, histories, source, rainClocks, rainWind, quality, spriteMask, curveRows) {
+      tolerance, histories, source, rainClocks, rainWind, quality, spriteMask, curveRows, rasterRows) {
       const far = spriteMask?.hasFar ? spriteMask : null;
       const keep = i => !curveRows?.[i] && (!quality || quality.keep[i]) && !spriteLOD?.hidden(far?.codes[i]);
       function submitted(indices, references) {
@@ -265,7 +265,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       if (canReuse && !isNew && (frame.changedRows?.length === 0 || plan && !world.count && !frame.changedRows) &&
           !frame.resetTransparency && !seeking && sorted?.tolerance === tolerance && sameValues(sorted.clock,clock) &&
           (!tolerance || sorted.histories === histories) &&
-          sorted.quality === quality && sorted.far === far &&
+          sorted.quality === quality && sorted.far === far && sorted.rasterRows === rasterRows &&
           (sorted.curveRows === curveRows || curveRows && sameValues(sorted.curveRows,curveRows)) &&
           sorted.revision === plan?.orderRevision && sameValues(sorted.viewport,viewport) &&
           sameValues(sorted.view, camera.view) && sameValues(sorted.moving, moving) && sameValues(sorted.back, back)) {
@@ -279,10 +279,11 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         data: source.data, layout: frame.instances, view: camera.view, time: sceneTime, tolerance, depthAt: i => depths[i],
         transparentAt: i => transparencyAPI.isTransparent(data, i, data[i * 16 + 3], opticalSplats?.[i * 12 + 3], backRows)
       }) : undefined;
-      const order = sort(world, camera.view, time, visible, plan?.rows, stabilize, rainClocks, rainWind, camera.ortho ? undefined : camera.eye);
+      const order = sort(world, camera.view, time, visible, plan?.rows, stabilize, rainClocks, rainWind,
+        camera.ortho ? undefined : camera.eye, rasterRows);
       pipeline.setOrder(submitted(order,!!plan), !!plan);
       sorted = canReuse ? { view: camera.view, moving: Int32Array.from(moving), back: Int32Array.from(back),
-        clock, tolerance, sceneTime, source, histories, revision:plan?.orderRevision, viewport, quality, far, curveRows } : null;
+        clock, tolerance, sceneTime, source, histories, revision:plan?.orderRevision, viewport, quality, far, curveRows, rasterRows } : null;
     }
 
     function prepareDetail(world, budget) {
@@ -712,6 +713,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         u_historyOwner:!!options.historyOwner,
         u_gaussianMaterialPass: !!options.u_gaussianMaterialPass, u_surfacePeel: false,
         u_gaussianNormalCutoff: options.u_gaussianNormalCutoff ?? 0,
+        u_contourStage: options.contourStage ?? 0,
         u_materialGridScale: options.u_materialGridScale ?? 1,
         u_facingGridScale: options.u_materialGridScale ?? 1,
         u_spriteLodGrid: options.spriteGrid ?? [1,1],
@@ -734,6 +736,13 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       if(options.u_idx===3){
         pipeline.drawSubset(options.indices);
         gl.disable(gl.DEPTH_TEST);
+      } else if (options.contourStage) {
+        if (options.contourStage === 2) {
+          shader.set({ u_contourStage: 1, u_snap: 1 });
+          pipeline.projectContours();
+          shader.set({ u_contourStage: 2, u_snap: options.u_snap });
+        }
+        pipeline.drawProjectedContours();
       } else pipeline.draw();
       if (meshDepth) textureUnit(meshDepthUnit,previousMeshBinding);
       gl.disable(gl.DEPTH_TEST);gl.depthMask(true);
@@ -1503,7 +1512,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       };
       const curvePlan = curveSettings && prepareFiniteCurves(toolkit.KIT,world,geometryData,camera,width,height,curveSettings);
       orderFor(world, frame, camera, time, isNew, plan, width, height, scale, tolerance, histories, source, rainClocks, rainWind,
-        selection, spriteMask, curvePlan?.rows);
+        selection, spriteMask, curvePlan?.rows, !plan && !engraved && !localOrder && geometryData === world.data ? geometryData : undefined);
       if (patterned) {
         const pixelRows=()=>{
           const source=diffuseRamps?.pixels ?? world.pix;
@@ -1598,6 +1607,9 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           layers: ordering?.layers ?? 0, passes: ordering ? (ordering.layers + Number(ordering.overflow)) * (colored ? 2 : 1) : 0 };
       }
       const shader = pipeline.programFor({
+        sharedContours: frame.sharedContourProjection === true && colored && !ordering && !hasFine && !waterScene &&
+          !env && !surfaces && !preview && !proxy && !depthProxy && !spriteRows?.length && !emitterFrame?.display &&
+          detailGeometry[1] <= detailGeometry[0],
         pbr: !!pbr,
         pbrSpecularSampling:pbr?.specularSampling, pbrBands:pbr?.hasBands,
         water: !!wet, airPockets: wet?.airPockets, layered: wet?.layered, atlas: wet?.atlas, portal: plane !== zero || !!cover,
@@ -1677,9 +1689,10 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         textureUnit(13,glassBoundary.textures[0]);
       }
       drawGeometry(shader, geometry, rw, rh, { u_idx: 0, u_snap: +(!raw && !colored), u_hard: 0,
+        contourStage: shader.sharedContours && 2,
         u_materialGridScale: samples, background, tangent, proxy, lookGrid:coverage&&[width,height],layeredGlass,surfaces,scaleSurfaces,spriteRows,spriteGrid:[width/rw,height/rh],surfaceFrame }, water, wet, env);
       if (colored)
-        drawGeometry(shader, contours, width, height, { u_idx: 0, u_snap: 1, u_hard: 0, background, tangent,proxy,surfaces,scaleSurfaces,spriteRows,surfaceFrame }, water, wet, env);
+        drawGeometry(shader, contours, width, height, { u_idx: 0, u_snap: 1, u_hard: 0, contourStage: shader.sharedContours && 3, background, tangent,proxy,surfaces,scaleSurfaces,spriteRows,surfaceFrame }, water, wet, env);
       if (ordering) {
         function sortedGeometry(center, index, snap, scale) {
           const rect = surfaceOrderRegion(ordering.region, center.width, center.height);

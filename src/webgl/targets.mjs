@@ -79,20 +79,25 @@ export function createTargets(gl, resources) {
         dirtyRows = undefined;
       }
       const full = Math.floor(count / stride);
+      let uploadTail = dirtyRows === undefined && full < next;
       if (dirtyRows !== undefined) {
-        for (const row of dirtyRows) {
-          const start = row * stride;
-          if (row < full) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, row, width, 1, gl.RGBA, gl.FLOAT, values, start);
-          else {
-            tail.fill(0);
-            tail.set(values.subarray(start, count));
-            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, row, width, 1, gl.RGBA, gl.FLOAT, tail);
+        const ordered = dirtyRows.length > 1 ? [...dirtyRows].sort((a, b) => a - b) : dirtyRows;
+        for (let i = 0; i < ordered.length;) {
+          const first = ordered[i++];
+          if (first >= full) {
+            uploadTail = first === full && full < next;
+            break;
           }
+          let end = first + 1;
+          while (i < ordered.length && ordered[i] <= end && ordered[i] < full) {
+            end = ordered[i++] + 1;
+          }
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, first, width, end - first, gl.RGBA, gl.FLOAT, values, first * stride);
         }
-        return;
+      } else if (full) {
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, full, gl.RGBA, gl.FLOAT, values);
       }
-      if (full) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, full, gl.RGBA, gl.FLOAT, values);
-      if (full < next) {
+      if (uploadTail) {
         tail.fill(0);
         tail.set(values.subarray(full * stride, count));
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, full, width, 1, gl.RGBA, gl.FLOAT, tail);

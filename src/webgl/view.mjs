@@ -93,7 +93,7 @@ function depthBounds(row, view) {
 export function createDepthSorter() {
   const counts = new Uint32Array(65536);
   let depth, keys, order;
-  return function sort(world, view, time, instances, placements, stabilize, rainClocks = [time,time], rainWind = [0,0], eye) {
+  return function sort(world, view, time, instances, placements, stabilize, rainClocks = [time,time], rainWind = [0,0], eye, rasterRows) {
     const { count, data } = world;
     const stride = instances ? 2 : 1;
     const total = count + (instances?.reduce((sum,row) => sum + row.asset.count, 0) ?? 0);
@@ -177,7 +177,12 @@ export function createDepthSorter() {
     }
     const scale = 65535 / (max - min || 1);
     counts.fill(0);
-    for (let i = 0; i < total; i++) counts[keys[i] = (depth[i] - min) * scale | 0]++;
+    // Keep even hidden rows in the depth range so that the quantized tie order
+    // of visible rows matches the draw that discards those rows in the shader.
+    for (let i = 0; i < total; i++) {
+      if (rasterRows && rasterRows[i * 16 + 3] <= 0) continue;
+      counts[keys[i] = (depth[i] - min) * scale | 0]++;
+    }
     let next = 0;
     for (let bucket = 0; bucket < counts.length; bucket++) {
       const size = counts[bucket];
@@ -185,7 +190,10 @@ export function createDepthSorter() {
       next += size;
     }
     if (!instances) {
-      for (let i = 0; i < count; i++) order[counts[keys[i]]++] = i;
+      for (let i = 0; i < count; i++) {
+        if (rasterRows && rasterRows[i * 16 + 3] <= 0) continue;
+        order[counts[keys[i]]++] = i;
+      }
     } else {
       for (let i = 0; i < count; i++) {
         const j = counts[keys[i]]++ * 2;
@@ -200,6 +208,6 @@ export function createDepthSorter() {
         }
       }
     }
-    return order.length === total * stride ? order : order.subarray(0,total * stride);
+    return order.length === next * stride ? order : order.subarray(0,next * stride);
   };
 }

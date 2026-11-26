@@ -73,6 +73,7 @@ sorting or `specialize: false` in auto mode to compare the full resolve.
 | `renderGraphInputs` | Bind named procedural rasters to render graph image and mask slots. See [raster bindings](render-graph.md#connect-procedural-rasters). |
 | `composite` | Choose independent resolutions for the world and ordered screen layers. See [mixed-resolution compositing](mixed-resolution.md). |
 | `colored` | Use higher-resolution contours over native-size interiors. On by default for scenes without per-pixel materials. |
+| `sharedContourProjection` | Use one projection for both Colored Contours grids when the frame uses the basic splat shader. The renderer uses separate projections for scenes with features such as fine textures, mesh surfaces, or depth proxies. |
 | `outline`, `dither`, `tone` | Control outline and palette treatment. Use `tone: false` to disable an authored tone. |
 | `paletteRemap` | Override a world's [palette remap](pixel-look.md#palette-remaps), or pass `false` to disable it. |
 | `colorCurves` | Override a world's [scene color curves](pixel-look.md#color-ramps-and-channel-curves), or pass `false` to disable them. |

@@ -17,8 +17,8 @@ test('WebGPU keeps a multi-tile Gaussian order deterministic after offscreen cul
   const url = pathToFileURL(filename).href;
   const moduleURL = pathToFileURL(path.resolve(__dirname, '../webgpu.mjs')).href;
   fs.writeFileSync(filename, `<!doctype html><script type="module">
-  import { createGaussianSplatRenderer, decodeGaussianPly, gaussianSplatWorld } from ${JSON.stringify(moduleURL)};
-  window.run = (${fixture.toString()})({ createGaussianSplatRenderer, decodeGaussianPly, gaussianSplatWorld });
+  import { createGaussianSplatRenderer, createGaussianContourResolve, decodeGaussianPly, gaussianSplatWorld } from ${JSON.stringify(moduleURL)};
+  window.run = (${fixture.toString()})({ createGaussianSplatRenderer, createGaussianContourResolve, decodeGaussianPly, gaussianSplatWorld });
   </script>`);
   const chrome = spawn(process.env.INK_TEST_WEBGPU, ['--headless', '--no-first-run', '--disable-background-networking',
     '--allow-file-access-from-files', '--enable-unsafe-webgpu', '--remote-debugging-port=0',
@@ -55,7 +55,8 @@ test('WebGPU keeps a multi-tile Gaussian order deterministic after offscreen cul
   const response = JSON.parse(event.data);
   assert.equal(response.error, undefined, JSON.stringify(response.error));
   assert.equal(response.result.exceptionDetails, undefined, JSON.stringify(response.result.exceptionDetails));
-  const { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, local, trimmed, resident, validation } = response.result.result.value;
+  const { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, local, trimmed, resident,
+    contours, validation } = response.result.result.value;
   assert.equal(validation, null);
   assert.equal(first.profile.visible, 692);
   assert.equal(first.profile.sortCapacity, 1024);
@@ -103,9 +104,22 @@ test('WebGPU keeps a multi-tile Gaussian order deterministic after offscreen cul
   for (const sample of [trimmed.hole, trimmed.selectiveHole]) assert.deepEqual(sample.pixel, [10,20,30,255]);
   for (const sample of [trimmed.paint, trimmed.selectivePaint])
     assert(sample.pixel[1] > 205 && sample.pixel[0] < 60, String(sample.pixel));
+  assert.equal(contours.report.visible, 1);
+  assert.equal(contours.report.cameraUpload.bytes, 112);
+  if (contours.report.gpuMs) {
+    assert(contours.report.gpuMs.highRaster >= 0);
+    assert(contours.report.gpuMs.nativeRaster >= 0);
+  }
+  assert(contours.high[1] > 230 && contours.high[0] < 16, String(contours.high));
+  assert.deepEqual(contours.native, [0, 255, 0, 255]);
+  for (const depth of [contours.highDepth, contours.nativeDepth])
+    assert(depth[0] > 20 && depth[0] < 235, String(depth));
+  assert(contours.singleGrid[0] > 230 && contours.singleGrid[1] < 16, String(contours.singleGrid));
+  assert.deepEqual(contours.resolved, [32, 64, 255, 255]);
+  assert(contours.rejectsMismatchedTargets);
 });
 
-async function fixture({ createGaussianSplatRenderer, decodeGaussianPly, gaussianSplatWorld }) {
+async function fixture({ createGaussianSplatRenderer, createGaussianContourResolve, decodeGaussianPly, gaussianSplatWorld }) {
   const adapter = await navigator.gpu.requestAdapter();
   const requiredFeatures = adapter.features.has('timestamp-query') ? ['timestamp-query'] : [];
   const device = await adapter.requestDevice({ requiredFeatures });
@@ -219,9 +233,61 @@ async function fixture({ createGaussianSplatRenderer, decodeGaussianPly, gaussia
   };
   painted.dispose();
   atlas.dispose();
+  const pigmentTexture = device.createTexture({ size: [1, 1], format: 'rgba8unorm',
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+  const setPigmentTexture = green => device.queue.writeTexture({ texture: pigmentTexture },
+    Uint8Array.of(0, green, 0, 255), {}, [1, 1]);
+  setPigmentTexture(255);
+  const pointAdapter = {
+    bytes: 16,
+    textureViews: [pigmentTexture.createView()],
+    uniforms: ({ pigment }) => Float32Array.of(pigment, 0, 0, 0),
+    shader: `
+@group(0) @binding(5) var<uniform> pigment: vec4f;
+@group(0) @binding(6) var pigmentTexture: texture_2d<f32>;
+fn adaptPoint(point: Point, order: u32) -> Point {
+  var result = point;
+  result.covariance0.w = select(point.covariance0.w, pigment.x, textureLoad(pigmentTexture,vec2i(0),0).g > .5);
+  return result;
+}`
+  };
+  const dual = await createGaussianSplatRenderer(device, { contours: true, pointAdapter });
+  const texture = (width, height) => device.createTexture({ size: [width, height], format: dual.format,
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC | GPUTextureUsage.TEXTURE_BINDING });
+  const [high, highDepth, native, nativeDepth] = [texture(128, 96), texture(128, 96), texture(64, 48), texture(64, 48)];
+  const dualChunk = dual.uploadChunk(Float32Array.of(0,0,0,1,.25,0,0,255,.25,0,.25,0,0,0,0,0));
+  const dualFrame = { profile: true, target: cameraTarget, dist: 4, ortho: true, background: [10, 20, 30], pigment: 65280,
+    depth: highDepth, nativeColor: native, nativeDepth };
+  const report = await dual.renderChunks(high, dense, [dualChunk], dualFrame);
+  async function centerPixel(texture) {
+    const encoder = device.createCommandEncoder();
+    encoder.copyTextureToBuffer({ texture, origin: [texture.width / 2, texture.height / 2] }, { buffer: readback }, [1, 1]);
+    device.queue.submit([encoder.finish()]);
+    await readback.mapAsync(GPUMapMode.READ);
+    const pixel = Array.from(new Uint8Array(readback.getMappedRange(), 0, 4));
+    readback.unmap();
+    return pixel;
+  }
+  const contours = { report, high: await centerPixel(high), native: await centerPixel(native),
+    highDepth: await centerPixel(highDepth), nativeDepth: await centerPixel(nativeDepth) };
+  const resolve = await createGaussianContourResolve(device);
+  const resolved = texture(64, 48);
+  resolve.resolve(resolved, { high, depth: highDepth, native, nativeDepth }, {
+    colors: [0x0a141e, 0x00ff00], grade: [10 / 255, 20 / 255, 30 / 255, 32 / 255, 64 / 255, 1], dither: 0
+  });
+  contours.resolved = await centerPixel(resolved);
+  resolve.dispose();
+  try { dual.renderChunks(high, dense, [dualChunk], { ...dualFrame, nativeDepth: highDepth }); }
+  catch (error) { contours.rejectsMismatchedTargets = error instanceof TypeError; }
+  setPigmentTexture(0);
+  await dual.renderChunks(high, dense, [dualChunk], { target: cameraTarget, dist: 4, ortho: true, pigment: 65280 });
+  contours.singleGrid = await centerPixel(high);
+  dual.dispose();
+  for (const target of [high, highDepth, native, nativeDepth, resolved, pigmentTexture]) target.destroy();
   const error = await device.popErrorScope();
   renderer.dispose();
   readback.destroy();
   image.destroy();
-  return { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, local, trimmed, resident, validation: error ? error.message : null };
+  return { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, local, trimmed, resident,
+    contours, validation: error ? error.message : null };
 }
