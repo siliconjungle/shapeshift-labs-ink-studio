@@ -202,6 +202,7 @@ All checked-in guides, indexed by title and section headings.
 - [Live sun lighting](../live-sun.md)
 - [Cycle detection and loop authoring](../loop-authoring.md)
 - [Lumped effort/flow networks](../lumped-networks.md)
+- [Paint with custom mark profiles](../mark-profiles.md)
 - [Measure physical properties of assemblies](../mass-properties.md)
 - [Match-cut finder](../match-cut.md)
 - [Advanced typed texture filters](../material-advanced-texture-filters.md)
