@@ -812,6 +812,11 @@ const notes = {
   'vector.path': ['Returns one sampled contour and all sampled contours separately. Sampling is independent of the retained SVG path data.'],
   'vector.fillMask': ['Bake one selected shape using its inherited winding rule and the chosen viewport.',
     'The mask describes geometric fill coverage. Use SVG export for stroke, gradient and clip styling.'],
+  'material.smartMask': [
+    'Choose edgeWear, dirt, dust, rust, leaks, slope, waterline or exposure.',
+    'Supply aligned typed bake images and a coverage map. Inspect the evidence, generated mask, corrected mask and recipe report.',
+    'Paint additions and protection separately. Leaks route downhill by baked position inside the supplied UV tile.'
+  ],
   'material.layer': ['Match UV sets and use typed images for blended maps. Existing maps keep their grids and encodings.',
     'A single transform places the layer. Tangent normals and UV flow vectors follow it.',
     'Height dominance compares equal-unit relief and gates every active map. Use material.replace to edit individual maps before layering.'],

@@ -197,3 +197,30 @@ Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy
 
 Get the runnable example with `ink-studio graph describe material.replace --example > example.json`.
 Run it with `ink-studio graph run example.json`.
+
+### material.smartMask
+
+Generate and inspect a wear or environment mask from aligned geometry bakes and authored corrections.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `recipe` | `string` | Required |  |
+| Input | `bakes` | `record` | Required | Named typed bakes for one UV grid. · {"layout":"Plain named object"} |
+| Input | `options` | `record` | `{}` | {"layout":"Plain named object"} |
+| Input | `add` | `any` | `null` | Optional aligned unitless grayscale correction image. |
+| Input | `remove` | `any` | `null` | Optional aligned unitless grayscale correction image. |
+| Output | `value` | `grayImage` | — | {"layout":"Typed unitless single-channel data or mask"} |
+| Output | `raw` | `grayImage` | — | {"layout":"Typed unitless single-channel data or mask"} |
+| Output | `evidence` | `grayImage` | — | {"layout":"Typed unitless single-channel data or mask"} |
+| Output | `report` | `record` | — | {"layout":"Plain named object"} |
+
+- Choose edgeWear, dirt, dust, rust, leaks, slope, waterline or exposure.
+- Supply aligned typed bake images and a coverage map. Inspect the evidence, generated mask, corrected mask and recipe report.
+- Paint additions and protection separately. Leaks route downhill by baked position inside the supplied UV tile.
+
+Guides: [guide](../smart-material-masks.md)
+
+Get the runnable example with `ink-studio graph describe material.smartMask --example > example.json`.
+Run it with `ink-studio graph run example.json`.
