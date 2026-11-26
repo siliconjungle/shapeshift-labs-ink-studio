@@ -42,6 +42,8 @@ figcaption input{flex:1;min-width:0;accent-color:var(--gold)}
   <label>Right image<select id="right"></select></label>
   <button id="swap" type="button">Swap</button>
   <a href="raw.exr" download>Linear OpenEXR</a>
+  <a id="working-color" href="working.exr" download hidden>Working-space EXR</a>
+  <a id="display-color" href="display.png" download hidden>Managed display PNG</a>
 </div>
 <figure id="compare">
   <div class="canvas">
@@ -57,6 +59,10 @@ const report=/*PHYSICAL_REFERENCE*/;
 const element=id=>document.getElementById(id);
 element('title').textContent=report.label;
 document.title=report.label+' · Ink Studio';
+if(report.colorManagement) {
+  element('working-color').hidden=false;
+  element('display-color').hidden=false;
+}
 const {width,height,denoise,bounces}=report.settings;
 element('compare').style.setProperty('--ratio',width/height);
 const options=new Map([

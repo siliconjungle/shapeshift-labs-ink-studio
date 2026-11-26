@@ -19,7 +19,7 @@ const argv = process.argv.slice(2),
   cmd = argv[0] || 'help',
   pos = [],
   opt = {};
-const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' || cmd === 'effect-recipe' || cmd === 'physical-reference' ? ['json'] :
+const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' || cmd === 'effect-recipe' || cmd === 'physical-reference' || cmd === 'color-management' ? ['json'] :
   cmd === 'tasks' ? ['resume', 'progress', 'wait'] :
   cmd === 'modeling-benchmark' ? ['repairs-complete'] : cmd === 'mesh-topology' ? ['from-camera', 'detach-edge', 'coincident', 'replay'] : cmd === 'tileset' ? ['brush', 'clear', 'accept-external', 'snap-grid', 'paint-flip-x', 'paint-flip-y', 'brush-size'] : [];
 for (let i = 1; i < argv.length; i++) {
@@ -1441,6 +1441,7 @@ const CMD = {
         '  render or clip --multiprojection plan.json   use local projection for named mesh surfaces',
         '  path-ink <scene> --plan look.json --out frame.png [--t 0 | --from 0 --to 2 --fps 12]',
         '  sdf-reference <scene> --out directory [--t 0,1.2 --w 192 --h 120 --samples 32 --bounces 3]',
+        '  color-management <plan.json> --out directory [--json]',
         '  physical-reference <plan.json> --out directory [--quality studio --samples 32 --bounces 4 --batch 16 --denoise gentle --resume accumulation.bin]',
         '  hybrid-cage <scene.js> --plan file.json [--out directory --w pixels --h pixels --raw]   preview a shared mesh, strand, and splat deformation',
         '  sculpt-detail <scene> --plan file.json [--out directory --object id --t 1.2]   review and reproject sculpt relief',
@@ -2765,6 +2766,12 @@ const CMD = {
     require('./asset-files.js').json(reportFile,{format:'ink-studio/path-ink',version:1,settings,
       ...(sequence && {fps}),frames:report});
     console.log('Wrote',n,'path ink frame(s) to',file);
+  },
+  'color-management'() {
+    if (pos.length!==1 || typeof opt.out!=='string' || Object.keys(opt).some(key=>!['out','json'].includes(key)))
+      die('Use color-management <plan.json> --out directory [--json]');
+    const result=require('./color-management-review.js').writeColorReview(pos[0],{directory:outputFile('color-management'),toolkit:lib()});
+    console.log(opt.json?JSON.stringify(result,null,2):'Wrote '+result.views.length+' managed views to '+result.file);
   },
   async 'physical-reference'() {
     const flags={w:'width',h:'height',samples:'samples',bounces:'bounces',batch:'batch',seed:'seed',exposure:'exposure'};

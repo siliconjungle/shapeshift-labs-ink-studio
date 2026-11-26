@@ -35,11 +35,17 @@ function decode(bytes, encoding, row, layoutOnly) {
       ...(row.rowOrder&&{rowOrder:row.rowOrder})});
   const precision = encoding === 'exr' || texture.bitDepth === 32 ? 'float32' :
     texture.bitDepth === 16 ? 'unorm16' : 'unorm8';
-  return { ...texture,precision };
+  return { ...texture,precision,encoding };
 }
 
-function load(definition, { baseDir = process.cwd(), declare, onFile = () => {} } = {}) {
+function load(definition, { baseDir = process.cwd(), declare, colorManagement, onFile = () => {} } = {}) {
   const { rows } = Bitmap.layout(definition);
+  const interpretation=Bitmap.interpretation(definition.interpretation);
+  const managed=(interpretation.intent??'color')==='color' ? colorManagement : null;
+  if (interpretation.ocio && !managed) throw new TypeError('Bitmap OCIO interpretation requires project colorManagement');
+  const sourceReports=new Map();
+  const baked=managed ? {...definition,interpretation:{...interpretation,colorSpace:'srgb-linear',alpha:'straight'}} : definition;
+  if (managed) delete baked.interpretation.ocio;
   const encoded = new Map(), preview = new Map();
   let fileBytes = 0, decodedBytes = 0;
   for (const row of rows) {
@@ -50,12 +56,17 @@ function load(definition, { baseDir = process.cwd(), declare, onFile = () => {} 
       if (bytes.length > Bitmap.maxFileBytes || (fileBytes += bytes.length) > Bitmap.maxResourceBytes)
         throw new RangeError('Bitmap resource exceeds its file byte budget');
       const header = decode(bytes,codec,row,true);
+      if (managed) sourceReports.set(row.key,managed.sourceDescription(header,interpretation));
+      else if ((interpretation.intent??'color')==='color'&&interpretation.colorSpace===undefined&&
+          [16,18].includes(header.profile?.cicp?.transfer))
+        throw new TypeError('HDR RGB requires a managed color interpretation');
       const rawBytes = header.width * header.height * header.channels *
         (header.precision === 'float32' ? 4 : header.precision === 'unorm16' ? 2 : 1);
       if ((decodedBytes += rawBytes) > Bitmap.maxResourceBytes)
         throw new RangeError('Bitmap resource exceeds its raw sample budget');
       encoded.set(row.key, { row, bytes, codec, sha256: hash(bytes) });
-      preview.set(row.key, header);
+      preview.set(row.key, managed?{...header,precision:'float32',colorSpace:'srgb-linear',
+        alpha:header.alpha==='none'?'none':'straight'}:header);
     } catch (error) {
       throw new Error('Bitmap member ' + row.key + ': ' + error.message, { cause: error });
     }
@@ -63,22 +74,32 @@ function load(definition, { baseDir = process.cwd(), declare, onFile = () => {} 
   }
 
   // Check the budget and collection contract before inflating any members.
-  let result = Bitmap.compile(definition, preview);
+  let result = Bitmap.compile(baked, preview);
   if (declare) {
     const decoded = new Map();
     for (const [key, { row, bytes, codec }] of encoded) {
       try {
         const raw = decode(bytes,codec,row,false);
-        decoded.set(key, raw);
+        if (managed) {
+          const converted=managed.importColor(raw,interpretation);
+          decoded.set(key,converted.raw);
+          sourceReports.set(key,converted.report);
+        } else decoded.set(key,raw);
       } catch (error) {
         throw new Error('Bitmap member ' + key + ': ' + error.message, { cause: error });
       }
     }
-    result = Bitmap.compile(definition, decoded, declare);
+    result = Bitmap.compile(baked, decoded, declare);
   }
   const members = result.info.members.map(member => encoded.has(member.key) ?
-    { ...member, sha256: encoded.get(member.key).sha256 } : member);
-  return { select: result.select, info: { ...result.info, members },
+    { ...member, sha256: encoded.get(member.key).sha256,
+      ...(sourceReports.has(member.key)&&{color:sourceReports.get(member.key)}) } : member);
+  const select=managed?request=>{
+    const sampled=result.select(request);
+    const color=sourceReports.get(sampled.info.resolved);
+    return color?{...sampled,info:{...sampled.info,color}}:sampled;
+  }:result.select;
+  return { select, info: { ...result.info, members },
     sha256: hash(JSON.stringify(members.map(({ key, sha256 }) => [key, sha256 ?? null]))) };
 }
 

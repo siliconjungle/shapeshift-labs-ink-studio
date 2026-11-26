@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Enamel · Bitmap interpretation</title>
+<style>
+:root{font:16px/1.5 system-ui;color:#f2e7d2;background:#141b21}
+body{margin:48px auto;padding:0 20px;max-width:960px}
+h1{font:normal clamp(41px,8vw,70px)/1 Georgia,serif;margin:10px 0 20px}
+p{color:#bdcbd0}
+figure{margin:0;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+img{width:100%;display:block;image-rendering:pixelated}
+figcaption{margin-top:8px}
+a{color:#edbd88}
+nav{display:flex;gap:16px;flex-wrap:wrap}
+@media(max-width:570px){figure{grid-template-columns:1fr}}
+</style>
+<h1>Tagged enamel</h1>
+<p>Both samples use the same 16-bit PNG and the same OCIO view. The resource interpretation changes the color entering the working space.</p>
+<figure>
+  <div><img src="icc-proof.png" alt="Embedded ICC proof on four enamel swatches"><figcaption>Embedded P3 primaries and gamma 2.2 ICC</figcaption></div>
+  <div><img src="assigned-proof.png" alt="Explicitly assigned sRGB proof on the same swatches"><figcaption>Explicit sRGB source assignment</figcaption></div>
+</figure>
+<nav><a href="index.html">After the tide</a><a href="enamel.material.json">Editable Ink graph</a><a href="enamel-report.json">Color receipt</a></nav>
+</html>

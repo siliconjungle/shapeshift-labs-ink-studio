@@ -3,6 +3,7 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { isDeepStrictEqual } = require('node:util');
 const PNG = require('./png.js');
+const ColorManagement = require('./color-management.js');
 const Bitmap = require('../src/bitmap-resources.js');
 const bitmapFiles = require('./bitmap-resources.js');
 const vectorFiles = require('./vector-resources.js');
@@ -199,7 +200,7 @@ function prepareAssertions(rows, plan) {
   });
 }
 
-function nativeOperations(kit, assets) {
+function nativeOperations(kit, assets, colorManagement) {
   const binary = (fn, type='number') => ({inputs:{a:'number',b:'number'},outputs:{value:type},run(args){return {value:fn(args)};}});
   function asset(type, accepts) {
     return {inputs:{name:'string'},outputs:{value:type},asset:'name',workerLocal:true,run({name}){
@@ -215,6 +216,7 @@ function nativeOperations(kit, assets) {
   }
   const bitmapOp = Bitmap.operation(bitmap, bitmap);
   return {
+    'color.paletteInput': ColorManagement.paletteOperation(colorManagement,kit.KIT.procedural),
     bitmapAsset: {
       ...bitmapOp,
       specialize(spec) {
@@ -250,8 +252,8 @@ function nativeOperations(kit, assets) {
   };
 }
 
-function operationRegistry(kit, operations = {}, assets = new Map()) {
-  const stock = nativeOperations(kit, assets);
+function operationRegistry(kit, operations = {}, assets = new Map(), colorManagement) {
+  const stock = nativeOperations(kit, assets, colorManagement);
   const extensions = {...kit.KIT.world?.kernels?.graphOperations(),...Object.fromEntries(named(operations, 'host operations'))};
   return { stock, extensions, overrides: { ...stock, ...extensions }, toolkit: kit.KIT.procedural.graph.operations };
 }
@@ -328,8 +330,8 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const project=data.freeze(data.clone(source));
   materialMetadata=materialMetadata && data.freeze(structuredClone(materialMetadata));
   const {format:kind,version:revision,groups:definitions={},assets:assetDefinitions={},assetRegistry,exports:exportsSpec={},
-    assertions:assertionSpecs=[],time=0,seed:authoredSeed,base:baseSpec,inheritance,primaryInput,outputUsages,...root}=fields(project,
-    ['format','version','inputs','nodes','outputs','result','groups','assets','assetRegistry','exports','assertions','time','seed','base','inheritance','primaryInput','outputUsages'],'graph project');
+    assertions:assertionSpecs=[],time=0,seed:authoredSeed,base:baseSpec,inheritance,primaryInput,outputUsages,colorManagement:colorSpec,...root}=fields(project,
+    ['format','version','inputs','nodes','outputs','result','groups','assets','assetRegistry','exports','assertions','time','seed','base','inheritance','primaryInput','outputUsages','colorManagement'],'graph project');
   if (kind!==format || revision!==version) throw new TypeError('Expected ink-studio/graph-project version 1');
   const base=baseSpec===undefined ? undefined : data.freeze(Base.resolve(baseSpec,{seed:authoredSeed}));
   const seed=base?.seed ?? (authoredSeed===undefined ? 0 : authoredSeed);
@@ -351,6 +353,8 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       throw new TypeError('Material primaryInput must name a declared typed image input');
   }
   const paths=new Set(sourceFile ? [path.resolve(sourceFile)] : []);
+  const colorManagement=colorSpec===undefined?undefined:ColorManagement.configure(colorSpec,{baseDir,onFile:file=>paths.add(file)});
+  const colorReport=colorManagement?.description;
   const api=kit.KIT.authoring.assetReferences;
   const resolveAsset=Assets.scope(api,path.join(baseDir,'graph.json'),assetRegistry,{onFile:file=>paths.add(file)});
   const groupTree=loadGraphGroups(definitions,baseDir,{onFile:file=>paths.add(file),inspectors:groupInspectors});
@@ -366,7 +370,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     }
     if (definition?.format === Bitmap.format) {
       const { info, select, sha256 } = bitmapFiles.load(definition, {
-        baseDir, declare: planAssets ? undefined : procedural.graphImages.declare, onFile: file => paths.add(file)
+        baseDir, colorManagement, declare: planAssets ? undefined : procedural.graphImages.declare, onFile: file => paths.add(file)
       });
       const interpretation = { intent: 'color', ...definition.interpretation };
       return [name, { format: Bitmap.format, type: 'typedImage', info, sha256, value: { info, select, interpretation } }];
@@ -419,7 +423,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     }
     return [name,{format,file,sha256:sha256(bytes),value,...(modelHash && {modelHash}),...(kind && {type:kind}),...(codec && {codec})}];
   }));
-  const {stock,extensions,overrides:ops}=operationRegistry(kit,operations,assets);
+  const {stock,extensions,overrides:ops}=operationRegistry(kit,operations,assets,colorManagement);
   const scopes=new Map(), preparedGroups=new Map(), visiting=new Set();
   function operationsIn(scope) {
     if (!scopes.has(scope)) scopes.set(scope,Object.create(null));
@@ -510,7 +514,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     { reference:group.reference, sha256:group.document.sha256 }]));
   const projectHash=sha256(jsonBytes({project,
     groups:Object.fromEntries([...groupSpecs].map(([group,body])=>[group.alias,body])),assets:assetInfo,
-    ...(versionedGroups.length && {groupFiles}),...(Object.keys(context).length && {baseContext:context})}));
+    ...(versionedGroups.length && {groupFiles}),...(Object.keys(context).length && {baseContext:context}),...(colorReport&&{colorManagement:colorReport})}));
   const header={format:reportFormat,version,projectHash};
 
   function clock(t,s) {
@@ -519,7 +523,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   }
   clock(time,seed);
   const projectPlan={...header,kind:'plan',...rootPlan,time,seed,...(base && {base, ...Base.measure(base)}),
-    assets:assetInfo,exports,assertions:assertionSpecs,...(outputUsages!==undefined && {outputUsages:maps}),
+    assets:assetInfo,...(colorReport&&{colorManagement:colorReport}),exports,assertions:assertionSpecs,...(outputUsages!==undefined && {outputUsages:maps}),
     groups:Object.fromEntries([...preparedGroups].map(([name,{plan}])=>[name,plan])),
     groupDependencies:dependencyRows,hostOperations:Object.keys(extensions).sort()};
 

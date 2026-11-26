@@ -54,7 +54,7 @@ function profileMode(bytes, channels) {
   return bytes;
 }
 function profile(value = {}) {
-  if (!fields(value, ['icc', 'name', 'chromaticities', 'gamma', 'srgb']))
+  if (!fields(value, ['icc', 'name', 'chromaticities', 'gamma', 'srgb', 'cicp', 'mastering', 'lightLevels', 'whiteLuminance', 'ocioColorSpace']))
     throw new TypeError('Expected a texture color profile record');
   const { icc: base64, name, chromaticities, gamma, srgb } = value;
   if (name !== undefined && (typeof name !== 'string' || !/^[\x20-\x7e\xa1-\xff]{1,79}$/.test(name) ||
@@ -66,6 +66,24 @@ function profile(value = {}) {
   if (gamma !== undefined && (!Number.isFinite(gamma) || gamma < .00001 || gamma > 100) ||
       srgb !== undefined && (!uint(srgb, 0, 3) || base64 !== undefined))
     throw new RangeError('Invalid gamma or sRGB rendering intent');
+  const {cicp,mastering,lightLevels,whiteLuminance,ocioColorSpace}=value;
+  const light = n => Number.isFinite(n) && n>=0 && n<=0xffffffff/10000;
+  if (whiteLuminance!==undefined && (!Number.isFinite(whiteLuminance)||whiteLuminance<=0||
+      !Number.isFinite(Math.fround(whiteLuminance))||Math.fround(whiteLuminance)===0) ||
+      ocioColorSpace!==undefined && (typeof ocioColorSpace!=='string'||!ocioColorSpace.trim()||ocioColorSpace.length>256||
+        /[\x00-\x1f]/.test(ocioColorSpace)))
+    throw new TypeError('Invalid scene-linear luminance or OCIO color space tag');
+  if (cicp!==undefined && (!fields(cicp,['primaries','transfer','matrix','fullRange']) ||
+      !uint(cicp.primaries,0,255)||!uint(cicp.transfer,0,255)||cicp.matrix!==0||typeof cicp.fullRange!=='boolean'))
+    throw new TypeError('PNG cICP needs primaries, transfer, identity RGB matrix, and range');
+  if (mastering!==undefined && (!cicp||!fields(mastering,['chromaticities','maxNits','minNits'])||
+      !Array.isArray(mastering.chromaticities)||mastering.chromaticities.length!==8||
+      !Array.from(mastering.chromaticities).every(n=>Number.isFinite(n)&&n>=0&&n<=1)||
+      !light(mastering.maxNits)||!light(mastering.minNits)||mastering.maxNits<=mastering.minNits))
+    throw new TypeError('PNG mastering metadata needs cICP, eight normalized chromaticities and ordered luminance limits');
+  if (lightLevels!==undefined && (!fields(lightLevels,['maxCLL','maxFALL'])||!light(lightLevels.maxCLL)||
+      !light(lightLevels.maxFALL)||lightLevels.maxCLL!==0&&lightLevels.maxFALL>lightLevels.maxCLL))
+    throw new TypeError('PNG light-level metadata needs valid MaxCLL and MaxFALL values');
   let bytes;
   if (base64 !== undefined) {
     if (typeof base64 !== 'string' || base64.length > 4 * Math.ceil(maxProfile / 3))

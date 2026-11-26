@@ -12,14 +12,15 @@ function metadata(file, allowAnimation) {
   if (bytes.length < 45 || !bytes.subarray(0, 8).equals(signature)) throw new TypeError('Not a PNG file');
   let at = 8, seenData = false, dataEnded = false, ended = false;
   const tags = new Map();
-  const unique = new Set(['IHDR', 'PLTE', 'tRNS', 'iCCP', 'sRGB', 'cHRM', 'gAMA', 'IEND']);
+  const unique = new Set(['IHDR', 'PLTE', 'tRNS', 'iCCP', 'sRGB', 'cHRM', 'gAMA', 'cICP', 'mDCV', 'cLLI', 'IEND']);
   while (at < bytes.length) {
     const prefix = C.slice(bytes, at, 8), size = prefix.readUInt32BE(0), key = prefix.toString('ascii', 4);
     const data = C.slice(bytes, at + 8, size), checksum = C.slice(bytes, at + size + 8, 4).readUInt32BE();
     if (!/^[A-Za-z]{4}$/.test(key) || Bytes.crc32(bytes.subarray(at + 4, at + size + 8)) !== checksum)
       throw new RangeError('Invalid PNG chunk checksum or name for ' + key);
-    if ((at === 8) !== (key === 'IHDR') || unique.has(key) && tags.has(key) ||
-        (key === 'IDAT' && dataEnded) || (seenData && ['PLTE','tRNS','iCCP','sRGB','cHRM','gAMA'].includes(key)))
+    if (tags.has('PLTE') && ['cICP','mDCV','cLLI'].includes(key) ||
+        (at === 8) !== (key === 'IHDR') || unique.has(key) && tags.has(key) ||
+        (key === 'IDAT' && dataEnded) || (seenData && ['PLTE','tRNS','iCCP','sRGB','cHRM','gAMA','cICP','mDCV','cLLI'].includes(key)))
       throw new TypeError('Invalid PNG chunk order');
     if (!allowAnimation && ['acTL','fcTL','fdAT'].includes(key)) throw new TypeError('Use a bitmap sequence for animated texture frames');
     if (key[0] === key[0].toUpperCase() && !['IHDR','PLTE','IDAT','IEND'].includes(key))
@@ -64,6 +65,20 @@ function metadata(file, allowAnimation) {
     profile.name = iccp.toString('latin1', 0, end);
     profile.icc = C.icc(inflateSync(iccp.subarray(end+2), { maxOutputLength: C.maxProfile })).toString('base64');
   }
+  const cicp=tags.get('cICP'), mastering=tags.get('mDCV'), levels=tags.get('cLLI');
+  if (cicp) {
+    if(cicp.length!==4||cicp[3]>1) throw new TypeError('Invalid PNG cICP chunk');
+    profile.cicp={primaries:cicp[0],transfer:cicp[1],matrix:cicp[2],fullRange:Boolean(cicp[3])};
+  }
+  if (mastering) {
+    if(mastering.length!==24) throw new TypeError('Invalid PNG mDCV chunk');
+    profile.mastering={chromaticities:Array.from({length:8},(_,i)=>mastering.readUInt16BE(i*2)/50000),
+      maxNits:mastering.readUInt32BE(16)/10000,minNits:mastering.readUInt32BE(20)/10000};
+  }
+  if (levels) {
+    if(levels.length!==8) throw new TypeError('Invalid PNG cLLI chunk');
+    profile.lightLevels={maxCLL:levels.readUInt32BE(0)/10000,maxFALL:levels.readUInt32BE(4)/10000};
+  }
   C.profileMode(C.profile(profile).bytes,channels);
   const wide = profile.chromaticities?.every((n,i)=>Math.abs(n-C.p3[i])<1e-5);
   return { bytes, width, height, channels, bitDepth, profile, alpha: C.alphaMode(channels),
@@ -89,7 +104,9 @@ function write(image, value) {
   if (depth === 32) throw new TypeError('PNG texture needs integer samples');
   C.alphaMode(channels, image.alpha);
   if (image.alpha === 'premultiplied') throw new TypeError('PNG texture needs straight alpha');
-  const { bytes:icc, name, srgb, chromaticities, gamma } = C.profile(value);
+  const { bytes:icc, name, srgb, chromaticities, gamma, cicp, mastering, lightLevels, whiteLuminance, ocioColorSpace } = C.profile(value);
+  if (whiteLuminance!==undefined||ocioColorSpace!==undefined)
+    throw new TypeError('Scene-linear luminance and named working spaces use OpenEXR metadata');
   C.profileMode(icc,channels);
   if (chromaticities?.some(n=>n<0||n>1)) throw new RangeError('PNG chromaticities need normalized coordinates');
   const header = Buffer.alloc(13), color = {1:0,2:4,3:2,4:6}[channels], bps = depth/8;
@@ -109,6 +126,20 @@ function write(image, value) {
     const value = Buffer.alloc(32);
     [6,7,0,1,2,3,4,5].forEach((i,n)=>value.writeUInt32BE(Math.round(chromaticities[i]*100000),4*n));
     tags.push(chunk('cHRM',value));
+  }
+  if (cicp) tags.push(chunk('cICP',Buffer.from([cicp.primaries,cicp.transfer,cicp.matrix,Number(cicp.fullRange)])));
+  if (mastering) {
+    const bytes=Buffer.alloc(24);
+    mastering.chromaticities.forEach((v,i)=>bytes.writeUInt16BE(Math.round(v*50000),2*i));
+    bytes.writeUInt32BE(Math.round(mastering.maxNits*10000),16);
+    bytes.writeUInt32BE(Math.round(mastering.minNits*10000),20);
+    tags.push(chunk('mDCV',bytes));
+  }
+  if (lightLevels) {
+    const bytes=Buffer.alloc(8);
+    bytes.writeUInt32BE(Math.round(lightLevels.maxCLL*10000),0);
+    bytes.writeUInt32BE(Math.round(lightLevels.maxFALL*10000),4);
+    tags.push(chunk('cLLI',bytes));
   }
   const raw = depth === 16 ? Buffer.alloc(data.length * 2) : data;
   if (depth === 16) for (let i=0; i<data.length; i++) raw.writeUInt16BE(data[i],2*i);
