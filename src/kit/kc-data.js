@@ -321,6 +321,45 @@
     return locate;
   };
   DIO.solidTransform = solidTransform;
+
+  const solidAxes = [[0, 1, 0], [1, 0, 0], [0, 0, 1]];
+  function affineFrame(basis, scale, offset) {
+    const { M, V } = K;
+    const direction = value => M.app(basis, value);
+    return { scale, basis, direction, point: value => V.mad(offset, direction(value), scale),
+      mesh: { matrix: basis.map(value => value * scale), position: offset } };
+  }
+
+  function authoredFrame(raw, fallback) {
+    const { M, V } = K;
+    const { translation, rotation, scale, pivot = fallback ?? [0, 0, 0] } = solidTransform(raw === undefined ? {} : raw);
+    const basis = rotation.reduce((out, angle, i) => M.mul(out, M.rot(solidAxes[i], angle)), M.id());
+    const offset = V.sub(V.add(pivot, translation), V.mul(M.app(basis, pivot), scale));
+    return affineFrame(basis, scale, offset);
+  }
+
+  function inverseFrame(frame) {
+    const { M, V } = K;
+    const basis = M.tr(frame.basis), scale = 1 / frame.scale;
+    return affineFrame(basis, scale, V.mul(M.app(basis, frame.mesh.position), -scale));
+  }
+
+  function composeFrames(outer, inner) {
+    return affineFrame(K.M.mul(outer.basis, inner.basis), outer.scale * inner.scale,
+      outer.point(inner.mesh.position));
+  }
+
+  function frameTransform({ basis, scale, mesh }) {
+    const level = Math.hypot(basis[2], basis[8]);
+    const pitch = Math.atan2(-basis[5], level);
+    const yaw = level > 1e-8 ? Math.atan2(basis[2], basis[8]) : Math.atan2(-basis[6], basis[0]);
+    const roll = level > 1e-8 ? Math.atan2(basis[3], basis[4]) : 0;
+    const jsonVector = vector => vector.map(value => value === 0 ? 0 : value);
+    return { translation: jsonVector(mesh.position), rotation: jsonVector([yaw, pitch, roll]), scale, pivot: [0, 0, 0] };
+  }
+
+  DIO.solidFrames = Object.freeze({ authored: authoredFrame, inverse: inverseFrame,
+    compose: composeFrames, transform: frameTransform });
   const lev = (a, b) => {
     const d = [];
     for (let i = 0; i <= a.length; i++) {

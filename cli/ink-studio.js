@@ -1386,6 +1386,7 @@ const CMD = {
         '  sdf-reference <scene> --out directory [--t 0,1.2 --w 192 --h 120 --samples 32 --bounces 3]',
         '  hybrid-cage <scene.js> --plan file.json [--out directory --w pixels --h pixels --raw]   preview a shared mesh, strand, and splat deformation',
         '  sculpt-detail <scene> --plan file.json [--out directory --object id --t 1.2]   review and reproject sculpt relief',
+        '  sculpt-stamp place <scene.json> <stamp.json> <placement.json> --out scene.json   add and carve one compound stamp',
         '  sculpt-sweep add <scene.json> <sweep.json> [--target solid] --out scene.json   add a retained shaped sweep',
         '  sculpt-sweep cut <scene.json> <sweep.json> --target solid --out scene.json   carve a retained sweep into a solid',
         '  sculpt-sweep update <scene.json> <edit.json> [--target solid] --out scene.json   revise a saved sweep',
@@ -2602,6 +2603,10 @@ const CMD = {
     pose(world,time);
     const report=require('./sculpt-detail.js').run(world,plan,directory,{kit:lib(),time,objectId:opt.object,inputs:[pos[0],file]});
     console.log(report.object,'·',report.counts.applied,'eligible chart samples ·',report.changedSamples,'updated lattice samples. Wrote',directory);
+  },
+  'sculpt-stamp'() {
+    return require('./sculpt-stamp.js')(pos, opt, lib().KIT.authoring.sculptStamps,
+      (file, source) => dataScene(file, source, { refreshTilesets: false }));
   },
   'sculpt-sweep'() {
     return require('./sculpt-sweep.js')(pos, opt, lib(), file => {
