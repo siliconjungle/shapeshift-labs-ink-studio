@@ -50,6 +50,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.packing` | namespace |  |  |
 | `KIT.procedural.packing.apollonian` | function | `({ depth = 7, center = [0, 0], radius = 1, rotation = 0, seeds = regular(), minRadius = .001, maxCircles = 6000 } = {})` | [guide](../hyperbolic-mosaics.md), [guide](../hyperbolic-mosaics.md#apollonian-packing), [source](../../src/kit/p42-apollonian-packing.js) |
 
+## KIT.procedural.paintLooseness
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.paintLooseness` | namespace |  |  |
+| `KIT.procedural.paintLooseness.dabs` | function | `(guide, interval, settings, limit = 4096)` | [source](../../src/kit/p26d-paint-looseness.js) |
+| `KIT.procedural.paintLooseness.prepare` | function | `(raw)` | [source](../../src/kit/p26d-paint-looseness.js) |
+| `KIT.procedural.paintLooseness.vary` | function | `(settings, row, family, source)` | [source](../../src/kit/p26d-paint-looseness.js) |
+
 ## KIT.procedural.panelFrames
 
 | Member | Kind | Signature or value | Guides and source |
@@ -1980,7 +1989,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.shapeSweeps` | namespace |  |  |
-| `KIT.procedural.shapeSweeps.prepare` | function | `({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse })` | [guide](../sculpt-sweeps.md), [source](../../src/kit/p26a-shape-sweeps.js) |
+| `KIT.procedural.shapeSweeps.prepare` | function | `({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse, looseness })` | [guide](../sculpt-sweeps.md), [source](../../src/kit/p26a-shape-sweeps.js) |
 
 ## KIT.procedural.signalRecovery
 
