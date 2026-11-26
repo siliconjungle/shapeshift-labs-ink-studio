@@ -47,7 +47,7 @@
     }
   }
 
-  function expand(source, time = 0) {
+  function expand(source, time = 0, waveMarks) {
     const anchors = new Map(), layers = new Set(), looseness = new Map(), boils = new Map(), reports = [];
     if (source?.paintings3d === undefined) return { spec: source, anchors, layers, looseness, boils, reports };
     const { paintings3d, ...scene } = source;
@@ -104,7 +104,8 @@
         if (stroke.mat === undefined && authoredFinish === undefined) throw new TypeError(id + ' mark ' + key + ' needs a material');
         ids.add(key);
         const solid = 'paint.' + id + '.' + key;
-        const guideFrame = graph.compose(frame, graph.transform(transform));
+        const markFrame = graph.transform(transform), guideFrame = graph.compose(frame, markFrame);
+        const wave = waveMarks?.get(solid);
         let restAffine = guideFrame, part, target;
         if (!fields(attachment, ['kind', 'slot', 'snap']) || !['free', 'surface', 'part'].includes(attachment.kind) ||
             (attachment.kind === 'free' ? attachment.slot !== undefined : !name(attachment.slot)) ||
@@ -129,6 +130,11 @@
           if (grid && (attachment.kind !== 'surface' || grid.settings.kind !== 'direction' && attachment.snap.mode !== 'surface'))
             throw new TypeError('A mark grid needs a surface attachment and positional grids need surface snap mode');
           style = K.procedural.paintLooseness.prepare(authoredStyle);
+          if (wave?.target.mode === 'pigment' && (attachment.kind !== 'surface' || attachment.snap.mode !== 'surface' ||
+              relief?.mode === 'volume' || !relief && !finish && style?.silhouetteAllowance !== 0))
+            throw new TypeError('Pigment waves need a flat, shading-relief or finish surface stroke');
+          if (wave?.target.mode === 'raised' && !(relief?.mode === 'volume' && relief.height > 0))
+            throw new TypeError('Raised waves need positive volume relief');
           if (authoredErasers?.some(row => row.channels.includes('paint')) &&
               (finish || relief?.mode === 'volume' || !relief && style?.silhouetteAllowance !== 0))
             throw new TypeError('Paint erasers need a flat pigment or shading-relief stroke');
@@ -140,6 +146,7 @@
           if (relief?.mode === 'volume' && relief.height > 0 && style?.silhouetteAllowance === 0)
             throw new RangeError('Raised volume needs positive silhouette clearance. Use shading relief for a zero silhouette allowance');
           shape = { kind: 'sweep', id: solid, ...stroke, brush: resolveBrush(stroke.brush, profiles) };
+          if (wave) shape = K.procedural.paintWave.stroke(shape, markFrame, wave);
           K.procedural.shapeSweeps.prepare({ ...shape, looseness: authoredStyle });
           if (attachment.kind === 'surface') K.procedural.sweepSnap.check(attachment.snap, shape);
         } catch (error) {
@@ -193,6 +200,7 @@
           ...(relief && { relief }),
           ...(finish && { finish: authoredFinish }),
           ...(boil && { boil: authoredBoil, ...(drawing !== undefined && { drawing }) }),
+          ...(wave && { wave: wave.id }),
           ...(authoredErasers !== undefined && { erasers: authoredErasers }),
           ...(stroke.step !== undefined && { step: stroke.step }), ...(stroke.blendRadius !== undefined && { blendRadius: stroke.blendRadius }),
           ...(stroke.path !== undefined && { path: stroke.path }), ...(stroke.pressureResponse && { pressureResponse: stroke.pressureResponse }) });
