@@ -1,5 +1,6 @@
 'use strict';
 
+const neighborhood = require('./splat-neighborhood.js');
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const sub = (a, b) => a.map((n, k) => n - b[k]);
 const clamp = (n, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, n));
@@ -8,40 +9,6 @@ const normalize = a => {
   return len > 1e-12 ? a.map(n => n / len) : [0, 0, 0];
 };
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-
-function neighborhood(points) {
-  function partition(rows, depth) {
-    if (!rows.length) return null;
-    const axis = depth % 3;
-    rows.sort((a, b) => points[a][axis] - points[b][axis] || a - b);
-    const middle = rows.length >> 1;
-    return { id: rows[middle], axis,
-      left: partition(rows.slice(0, middle), depth + 1), right: partition(rows.slice(middle + 1), depth + 1) };
-  }
-  const tree = partition(Array.from(points.keys()), 0);
-  return (row, limit) => {
-    const at = points[row], nearest = [], maxVisits = 768;
-    let visits = 0;
-    function search(node) {
-      if (!node || visits >= maxVisits) return;
-      visits++;
-      const p = points[node.id], delta = at[node.axis] - p[node.axis];
-      const first = delta < 0 ? node.left : node.right, second = delta < 0 ? node.right : node.left;
-      search(first);
-      if (node.id !== row) {
-        const distance = (p[0] - at[0]) ** 2 + (p[1] - at[1]) ** 2 + (p[2] - at[2]) ** 2;
-        if (distance > 0 && (nearest.length < limit || distance < nearest.at(-1).distance)) {
-          const i = nearest.findIndex(hit => hit.distance > distance || (hit.distance === distance && hit.row > node.id));
-          nearest.splice(i < 0 ? nearest.length : i, 0, { row: node.id, distance });
-          if (nearest.length > limit) nearest.pop();
-        }
-      }
-      if (nearest.length < limit || delta ** 2 <= nearest.at(-1).distance) search(second);
-    }
-    search(tree);
-    return { nearest, limited: visits === maxVisits };
-  };
-}
 
 function plane(points, at, nearest) {
   if (nearest.length < 4) return { direction: [0, 0, 0], support: 0 };
@@ -86,7 +53,7 @@ function estimate(world, { neighbors, normalToward }) {
   const find = neighborhood(points), axes = world.gaussianHarmonics.normals;
   return points.map((at, row) => {
     const axis = Array.from(axes.subarray(row * 3, row * 3 + 3)), strength = clamp(Math.hypot(...axis) / 127);
-    const { nearest, limited } = find(row, neighbors);
+    const { nearest, limited } = find(at, neighbors, { exclude: row, coincident: false });
     const local = plane(points, at, nearest);
     const authored = normalize(axis), reference = normalToward ?? normalize(at);
     const alignment = Math.abs(dot(authored, local.direction));

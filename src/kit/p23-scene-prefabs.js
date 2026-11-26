@@ -25,6 +25,7 @@
   function tilesetRequirements(definition, meshes) {
     const sheets = new Set(definition.usesTilesets ?? []);
     for (const row of Object.values(meshes ?? {})) {
+      if (row.directionalUV) sheets.add(row.directionalUV.tileset);
       for (const material of row.materials ?? []) if (material.texture?.tileset) sheets.add(material.texture.tileset);
       for (const binding of row.bindings ?? []) {
         const sheet = binding.data?.selection?.tileset;

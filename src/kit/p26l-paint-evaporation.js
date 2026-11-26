@@ -110,7 +110,7 @@
   }
 
   function reserve(B,layers) {
-    return layers.map(({plan,particles})=>{
+    return layers.map(({plan,particles,start=0,weight,time})=>{
       const identity=i=>'paint-particles/'+plan.id+'/'+i;
       const pool=K.pool(B,particles.length,i=>({em:particles[i].glow,splatId:identity(i)}));
       const rows=particles.map((row,i)=>{
@@ -125,25 +125,25 @@
           target:{entity:row.source,surface:plan.id,castsShadow:false}});
         if (row.emission.some(Boolean))
           B.describePaintFinish?.(slot,slot+1,[8,1,1,1,0,0,0,0,0,0,...row.emission]);
-        return {slot,point,velocity,size,rgb,birth:row.birth};
+        return {slot,point,velocity,size,rgb,origin:row.point,birth:row.birth+start};
       });
-      return {pool,plan,rows};
+      return {pool,plan,rows,weight,time};
     });
   }
 
   function bind(stage,layers) {
     const update=(_dt,t)=>{
       const time=t+(stage.t0??0);
-      for (const {pool,plan,rows} of layers) {
+      for (const {pool,plan,rows,weight,time:pinned} of layers) {
         for (const row of rows) {
-          const age=time-row.birth;
-          if (age<0 || age>=plan.life) {
+          const at=pinned??time, age=at-row.birth, gain=weight?.(at,row.origin)??1;
+          if (age<0 || age>=plan.life || !gain) {
             pool.hide(stage,row.slot);
             continue;
           }
           const u=age/plan.life, alpha=plan.fade?Math.min(1,(1-u)/plan.fade):1;
           const point=V.mad(row.point,row.velocity,age);
-          pool.put(stage,row.slot,...point,row.size,row.rgb,3*alpha);
+          pool.put(stage,row.slot,...point,row.size,row.rgb,3*alpha*gain);
         }
       }
     };

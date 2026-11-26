@@ -3,6 +3,7 @@ const RowAssets = require('./render-row-assets.js');
 const RowAttributes = require('./splat-row-attributes.js');
 const Topology = require('./splat-topology.js');
 const Groups = require('./splat-group-deformations.js');
+const ScanRotation = require('./splat-scan-rotation.js');
 const Curve = require('../src/curve-splat.js');
 const Optical = require('../src/optical-materials.js');
 const Provenance = require('../src/splat-provenance.js');
@@ -71,6 +72,18 @@ function fittedFootprints(count,authored,replacements) {
 const topologyEditable = (world,i) => paintable(world,i) && RowAttributes.transformable(world,i);
 const sourceWorld = (world,fit) => fit?.topology?.world ?? world[sourceTopology]?.world ?? baseWorld(world);
 
+function sourceSignature(world) {
+  const hash=createHash('sha256').update(RowAssets.signature(world));
+  const scan=world.gaussianHarmonics, meta=world.renderMetadata;
+  hash.update(JSON.stringify([world.splatIds,meta?.objects,meta?.materials,meta?.targets,scan?.degree,scan?.up]));
+  for (const column of [meta?.objectIds,meta?.materialIds,meta?.targetIds,meta?.normals,scan?.dc,scan?.sh,
+    scan?.normals,scan?.linear,scan?.available]) {
+    hash.update(column ? 'column:'+column.byteLength+':' : 'missing:');
+    if (column) hash.update(Buffer.from(column.buffer,column.byteOffset,column.byteLength));
+  }
+  return hash.digest('hex');
+}
+
 function prepare(world, asset) {
   const base = world = baseWorld(world);
   if (asset===undefined || asset===false) return null;
@@ -81,6 +94,8 @@ function prepare(world, asset) {
   let cache = compiled.get(asset);
   if (!cache) compiled.set(asset,cache = new WeakMap());
   if (cache.has(world)) return cache.get(world);
+  if (stable && asset.sourceSignature!==undefined && asset.sourceSignature!==sourceSignature(world))
+    throw new RangeError('Splat attribute plan does not match the source cloud');
   const target = stable ? Targets.prepare(asset.target) : undefined;
   if (stable && (!Targets.name(target.object) || Object.keys(target).some(key => !['object','part'].includes(key))))
     throw new TypeError('Stable splat fit needs an object ID and optional part ID');
@@ -253,6 +268,16 @@ function prepare(world, asset) {
       for (const row of scales.groups.affected.keys()) editedRows[row]=scales.attributeRows[row]=1;
     }
   }
+  if (scales.rowAttributes) scales.rowTransforms=RowAttributes.transforms(scales.rowAttributes);
+  if (world.gaussianHarmonics && (scales.rowTransforms || scales.groups?.affected.size)) {
+    const {M}=require('../index.js').load().KIT;
+    const rotations=new Map([...(scales.rowTransforms ?? [])].filter(([,change])=>change.matrix));
+    const first=ScanRotation.transport(world,rotations,M);
+    const last=scales.groups && ScanRotation.transport(first.harmonics ? {...world,gaussianHarmonics:first.harmonics} : world,
+      scales.groups.affected,M);
+    scales.harmonics=last?.harmonics ?? first.harmonics;
+    if (scales.groups) scales.groups.directionalRows=last.directionalRows ?? 0;
+  }
   if (editedRows.some(Boolean)) {
     scales.editedRows=editedRows;
     scales.revision=createHash('sha256').update(JSON.stringify(asset)).digest('hex');
@@ -358,13 +383,13 @@ function renderWorld(world,fit,{footprints=true,applyAttributes=true} = {}) {
   if (fit.rowAttributes) {
     const attributesSource={...sourceWorld(world,fit),...(surfaceData&&{surfaceData}),
       ...(hasFootprints&&{splatFootprints:fit.footprints})};
-    result=RowAttributes.apply(rendered,attributesSource,fit.rowAttributes);
+    result=RowAttributes.transport(rendered,attributesSource,fit.rowTransforms);
   }
   if (fit.groups?.affected.size) {
     result=RowAttributes.transport(result,result,fit.groups.affected);
-    if (fit.groups.harmonics) result.gaussianHarmonics=fit.groups.harmonics;
     result[carriedGroups]={fit,footprints,input:world};
   }
+  if (fit.harmonics) result.gaussianHarmonics=fit.harmonics;
   return result;
 }
 
@@ -459,4 +484,4 @@ function lifecycle(world,row) {
 
 const editedAttributes = (world,row) => world[rowAttributes]?.get(row);
 const deformationAt = (world,row) => world[groupTransforms]?.get(row);
-module.exports={format,prepare,bake,planSplatGroups,editedSubjects,sourceRevision,topologyEditable,sourceWorld,lifecycle,editedAttributes,deformationAt,footprintAt,footprintFor,editedFootprint,eligible,paintable,sceneId,rgb24,unit,pigmentAt,validEmission,roughnessAt,materialProfiles,renderWorld,baseWorld};
+module.exports={format,sourceSignature,prepare,bake,planSplatGroups,editedSubjects,sourceRevision,topologyEditable,sourceWorld,lifecycle,editedAttributes,deformationAt,footprintAt,footprintFor,editedFootprint,eligible,paintable,sceneId,rgb24,unit,pigmentAt,validEmission,roughnessAt,materialProfiles,renderWorld,baseWorld};

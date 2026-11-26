@@ -98,13 +98,12 @@ function transport(world, source, edits) {
       layout.styles,Uint16Array.from({length:world.count},(_,i)=>layout.indices[i]??0),frames)}) };
 }
 
-function apply(world,source,edits) {
+function transforms(edits) {
   const { Q }=kit();
-  const transforms = Array.from(edits, ([row,{opacity,position,scale,orientation}]) => [
+  return new Map(Array.from(edits, ([row,{opacity,position,scale,orientation}]) => [
     row,{opacity,position,matrix:scale || orientation ?
       Q.toMatrix(orientation??identity).map((v,j)=>v*(scale??unitScale)[j%3]) : undefined}
-  ]);
-  return transport(world,source,transforms);
+  ]));
 }
 
-module.exports={keys,prepare,valuesAt,transformable,same,apply,transport};
+module.exports={keys,prepare,valuesAt,transformable,same,transforms,transport};
