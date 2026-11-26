@@ -70,7 +70,7 @@ const prefabSourceRebase = (function (K) {
     return {before,after,evidence};
   }
 
-  function instance(id, entry, from, to) {
+  function instance(id, entry, from, to, {meshMerge=mergeMesh} = {}) {
     const {equal} = K.world.data, T = K.meshTopology;
     const pathEdits = paths(tableView(from),tableView(to),entry.overrides ?? []);
     const report = {instance:id,overrides:pathEdits.evidence,meshOverrides:[],members:[],conflicts:[]};
@@ -91,7 +91,7 @@ const prefabSourceRebase = (function (K) {
       }
       const old = before.topologyMeshes[member];
       const touched = !equal(old,base);
-      const result = touched ? mergeMesh(old,base,override.mesh) : {mesh:override.mesh,conflicts:[],merged:[]};
+      const result = touched ? meshMerge(old,base,override.mesh) : {mesh:override.mesh,conflicts:[],merged:[]};
       next[member] = {revision:to.revision,base:T.revision(base.document),mesh:result.mesh};
       const {conflicts,merged} = result;
       report.meshOverrides.push({member,status:conflicts.length ? 'conflict' : touched ? 'rebased' : 'preserved',merged,conflicts});
@@ -119,5 +119,5 @@ const prefabSourceRebase = (function (K) {
     }
   }
 
-  return Object.freeze({tables,instance});
+  return Object.freeze({tables,instance,mergeMesh});
 })(KIT);
