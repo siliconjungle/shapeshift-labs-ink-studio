@@ -19,7 +19,7 @@ const PixelPalette = (() => {
         !Array.from(source.swatches).every(row=>fields(row,['id','color','label','locked']) && id(row.id) &&
           rgb(row.color) && (row.label === undefined || label(row.label)) &&
           (row.locked === undefined || typeof row.locked === 'boolean')))
-      throw new TypeError('A pixel palette needs 1–255 ordered RGB swatches with IDs, optional names and locks');
+      throw new TypeError('A pixel palette needs 1–'+max+' ordered RGB swatches with IDs, optional names and locks');
     const ids = new Set(source.swatches.map(row=>row.id));
     if (ids.size !== source.swatches.length) throw new RangeError('Pixel swatch IDs must be unique');
     const ramps = source.ramps === undefined ? [] : source.ramps;
@@ -70,8 +70,8 @@ const PixelPalette = (() => {
     }));
   }
 
-  function edit(source,operation) {
-    const { swatches,ramps = [] } = validate(source);
+  function edit(source,operation,options) {
+    const { swatches,ramps = [] } = validate(source,options);
     const entries = new Map(swatches.map(row=>[row.id,row])), namedRamps = new Map(ramps.map(row=>[row.id,row]));
     let replacements, removed = [];
     if (fields(operation,['type','swatch']) && operation.type === 'swatch') {
@@ -97,9 +97,9 @@ const PixelPalette = (() => {
       if (!Array.isArray(order) || order.length !== entries.size || new Set(order).size !== entries.size ||
           !Array.from(order).every(key=>entries.has(key)))
         throw new RangeError('Palette reorder needs every swatch ID exactly once');
-      return { palette:asset(order.map(key=>entries.get(key)),ramps),removed };
+      return { palette:asset(order.map(key=>entries.get(key)),ramps,options),removed };
     } else if (fields(operation,['type','palette']) && operation.type === 'import') {
-      const incoming = validate(operation.palette);
+      const incoming = validate(operation.palette,options);
       for (const row of incoming.swatches) {
         const before = entries.get(row.id);
         if (before && before.color.toLowerCase() !== row.color.toLowerCase()) {
@@ -151,10 +151,9 @@ const PixelPalette = (() => {
     } else {
       throw new TypeError('Choose a palette swatch, ramp, reorder, import, or remap operation');
     }
-    return { palette:asset([...entries.values()],[...namedRamps.values()]),replacements,removed };
+    return { palette:asset([...entries.values()],[...namedRamps.values()],options),replacements,removed };
   }
 
   return Object.freeze({ asset, validate, fromStamp, stampMetadata, fromExtraction, edit });
 })();
-if (typeof module !== 'undefined') module.exports = PixelPalette;
-else globalThis[Symbol.for('ink-studio.pixel-palette')] = PixelPalette;
+if (typeof module !== 'undefined') module.exports = PixelPalette; else globalThis[Symbol.for('ink-studio.pixel-palette')] = PixelPalette;

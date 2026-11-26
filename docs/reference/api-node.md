@@ -67,6 +67,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.editMaterialPresets` | function | `(source, request, { kit = require('../index.js').load() } = {})` | [guide](../editable-material-graph.md#save-and-apply-material-presets), [source](../../cli/material-presets.js) |
 | `node.editMaterialSubgraph` | function | `(source, edit, options = {})` | [guide](../editable-material-graph.md#publish-and-edit-reusable-subgraphs), [source](../../cli/material-subgraphs.js) |
 | `node.editMaterialVector` | function | `(source, request, { baseDir = process.cwd() } = {})` | [source](../../cli/material-vectors.js) |
+| `node.editTilesetPalette` | function | `(editor, id, operation, options)` | [guide](../mesh-uv.md#reuse-a-named-tileset-palette), [source](../../index.js) |
 | `node.encodeDeepEXR` | function | `(frame, options)` | [guide](../deep-openexr.md#node-api), [guide](../deep-openexr.md), [source](../../cli/deep-openexr.js) |
 | `node.encodeSceneryPack` | function | `(id, meshes)` | [source](../../cli/scenery-delivery.js) |
 | `node.encodeTexture` | function | `(image, options)` | [source](../../index.js) |
@@ -98,6 +99,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.inspectPalettePixel` | function | `(world, { at, ...view } = {})` | [guide](../palette-recipes.md#inspect-the-palette-at-a-pixel), [source](../../cli/palette-pixel.js) |
 | `node.inspectPxc` | function | `(source, { image = false, tolerateArt = false } = {})` | [source](../../cli/pxc.js) |
 | `node.inspectTilesetCollection` | function | `(scene, collection)` | [source](../../index.js) |
+| `node.inspectTilesetPalette` | function | `(editor, id)` | [guide](../mesh-uv.md#reuse-a-named-tileset-palette), [source](../../index.js) |
 | `node.instantiateStoryTemplate` | function | `(template, instance)` | [source](../../index.js) |
 | `node.lint` | function | `(files)` | [source](../../scripts/lint.js) |
 | `node.lint.CODEY` | value | `array` |  |

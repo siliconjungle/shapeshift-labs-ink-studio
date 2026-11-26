@@ -5,8 +5,27 @@
   const imageShape = asset=>[asset.width,asset.height,asset.encoding,asset.palette,asset.alpha];
   const sameImage = (a,b)=>JSON.stringify(imageShape(a)) === JSON.stringify(imageShape(b)) &&
     (a.data === b.data || atob(a.data) === atob(b.data));
+  const sameMetadata = (a,b)=>JSON.stringify(a.paletteMetadata) === JSON.stringify(b.paletteMetadata);
+  function readTexels(asset) {
+    const {palette,encoding,alpha} = asset, data = atob(asset.data);
+    if (encoding === 'rgba8') return p=>{
+      const at = p*4;
+      return data.charCodeAt(at)*0x1000000+data.charCodeAt(at+1)*0x10000+data.charCodeAt(at+2)*256+data.charCodeAt(at+3);
+    };
+    const values = palette.map((color,slot)=>color*256+(alpha?.[slot] ?? 255));
+    return p=>values[data.charCodeAt(p)];
+  }
+
+  function sameTexels(before,after) {
+    if (before.width!==after.width || before.height!==after.height) return false;
+    if (sameImage(before,after)) return true;
+    const a = readTexels(before), b = readTexels(after);
+    for (let i=0;i<before.width*before.height;i++) if (a(i)!==b(i)) return false;
+    return true;
+  }
+
   const descriptor = (id,asset,tileSize)=>({id,width:asset.width,height:asset.height,encoding:asset.encoding,
-    tileSize,revision:hash(JSON.stringify([...imageShape(asset),asset.data,tileSize])).toString(16).padStart(8,'0')});
+    tileSize,revision:hash(JSON.stringify([...imageShape(asset),asset.data,tileSize,...(asset.paletteMetadata ? [asset.paletteMetadata] : [])])).toString(16).padStart(8,'0')});
 
   function clipDefinitions(timeline) {
     if (!timeline) return [];
@@ -91,7 +110,7 @@
     });
     if (width>A.tilesets.maxEdge || height>A.tilesets.maxEdge) return {width,height,placements};
     const first = tilesets.source(ids[0]);
-    const signature = asset=>JSON.stringify([asset.palette,asset.alpha]);
+    const signature = asset=>JSON.stringify([asset.palette,asset.alpha,asset.paletteMetadata]);
     const indexed = placements.every(row=>{
       const asset = tilesets.source(row.id);
       return asset.encoding === 'indexed8' && signature(asset) === signature(first) &&
@@ -109,7 +128,7 @@
       }
     }
     const asset = {version:1,width,height,encoding:indexed ? 'indexed8' : 'rgba8',data:A.tilesets.encodeRaster(pixels),
-      tileSize:{width,height},...(indexed && {palette:first.palette,...(first.alpha !== undefined && {alpha:first.alpha})})};
+      tileSize:{width,height},...(indexed && {palette:first.palette,...(first.alpha !== undefined && {alpha:first.alpha}),...(first.paletteMetadata && {paletteMetadata:first.paletteMetadata})})};
     return {asset,width,height,placements};
   }
 
@@ -167,13 +186,13 @@
     return {patch:Object.keys(meshes).length ? {topologyMeshes:{...scene.topologyMeshes,...meshes}} : {},invalidatedBakes};
   }
 
-  const schemas = {clone:['id','newId'],replace:['id','asset'],combine:['ids','newId','axis'],
+  const schemas = {clone:['id','newId'],replace:['id','asset'],palette:['id','asset'],combine:['ids','newId','axis'],
     deduplicate:['id','keepId'],remove:['id']};
 
   function plan(scene, request, external) {
     if (!request || Object.getPrototypeOf(request) !== Object.prototype ||
         !Object.hasOwn(schemas,request.type) || Object.keys(request).some(key=>key !== 'type' && !schemas[request.type].includes(key)))
-      throw new TypeError('Choose a tileset clone, replace, combine, deduplicate or remove request');
+      throw new TypeError('Choose a tileset clone, replace, palette, combine, deduplicate or remove request');
     const {type,id,newId,keepId,axis='x'} = request;
     const ids = type === 'combine' ? request.ids : type === 'deduplicate' ? [id,keepId] : [id];
     const output = {...scene.tilesets}, API = A.tilesets;
@@ -194,16 +213,23 @@
         const {asset,width,height,placements} = combine(ids,tilesets,axis);
         if (asset) output[newId] = asset;
         else blockers.push({reason:'combined-atlas-too-large',id:newId,width,height,limit:API.maxEdge});
-        detail = {axis,placements};
+        const omittedPalettes = asset?.encoding === 'rgba8' ? ids.filter(key=>tilesets.source(key).paletteMetadata) : [];
+        detail = {axis,placements,...(omittedPalettes.length && {omittedPalettes})};
       }
-    } else if (type === 'replace') {
-      const asset = request.asset;
+    } else if (type === 'replace' || type === 'palette') {
+      const asset = request.asset, before = sources[0];
       const {tileSize,...image} = API.prepare({replacement:asset}).source('replacement');
-      const revised = {...image,...(sources[0].tileSize && {tileSize:sources[0].tileSize})};
+      const keepNames = type === 'replace' && !image.paletteMetadata && before.paletteMetadata &&
+        JSON.stringify(before.palette) === JSON.stringify(image.palette);
+      const revised = {...image,...(keepNames && {paletteMetadata:before.paletteMetadata}),
+        ...(before.tileSize && {tileSize:before.tileSize})};
       const grid = tilesets.grid(id).tileSize;
       if (grid && !TilesetSelection.gridFits(revised,grid)) blockers.push({reason:'grid-does-not-fit',id,tileSize:grid});
       output[id] = revised;
-      if (!sameImage(sources[0],revised)) {
+      if (type === 'palette') {
+        if (revised.encoding !== 'indexed8' || !sameTexels(before,revised))
+          blockers.push({reason:'palette-changes-texels',id});
+      } else if (!sameImage(before,revised)) {
         const {patch,invalidatedBakes} = invalidateBakes(scene,id);
         extra = patch;
         detail = {invalidatedBakes};
@@ -214,7 +240,7 @@
         if (materials.length || prefabs.length) blockers.push({reason:'tileset-in-use',id});
       } else {
         const [from,to] = sources, sameGrid = JSON.stringify(tilesets.grid(id).tileSize) === JSON.stringify(tilesets.grid(keepId).tileSize);
-        if (!sameGrid || !sameImage(from,to))
+        if (!sameGrid || !sameImage(from,to) || !sameMetadata(from,to))
           blockers.push({reason:'different-tilesets',id,keepId});
         if (links[id] && JSON.stringify(links[id]) !== JSON.stringify(links[keepId]))
           blockers.push({reason:'different-source-links',id,keepId});

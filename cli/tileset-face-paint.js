@@ -119,12 +119,12 @@ function alphaPreview(asset, next, rect) {
     images:{'coverage-before':{w,h,rgb:oldImage},'coverage-after':{w,h,rgb:newImage}}};
 }
 
-function planChange(editor, source, asset, {rect,pixels,changedMask}, variant) {
+function planChange(editor, source, asset, {rect,pixels,changedMask}, variant, tilesets) {
   if (variant===undefined) {
-    const planned = planPixels(editor,source.tileset,asset,rect,pixels,changedMask);
+    const planned = planPixels(editor,source.tileset,asset,rect,pixels,changedMask,tilesets);
     return {...planned,...(planned.edit?.canCommit && {commit:target=>target.editTilesetRevision(planned.request)})};
   }
-  const painted = paintPixels(asset,rect,pixels,changedMask);
+  const painted = paintPixels(asset,rect,pixels,changedMask,tilesets);
   if (!painted) return {};
   const request = {object:source.object,face:source.face,source:source.tileset,tileset:variant,asset:painted.asset};
   const edit = editor.planTilesetFaceVariant(request);
@@ -184,7 +184,7 @@ function paint(editor, request, {apply=false,expect} = {}, kit = require('..').l
   const write = area ? null : Tools.pencilOrEraser(asset,source.at,op);
   if (!area && !write) return blocked('palette-slot-unavailable',{source,slot:op.slot});
   const region = area ?? {rect:[...source.at,1,1],pixels:[write.pixel]};
-  const planned = planChange(editor,source,asset,region,variant);
+  const planned = planChange(editor,source,asset,region,variant,K.authoring.tilesets);
   if (!planned.detail) return blocked('indexed-palette-full',{source});
   const evidence = tool==='transform' ? 'transform' : op.fill ? 'fill' : 'stroke';
   const detail = {...head,source,...(area ? {[evidence]:area.report} : {rgba:write.rgba}),
