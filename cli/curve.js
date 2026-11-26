@@ -26,6 +26,10 @@ function topology([action,source,request,...extra], opt, api) {
 
 module.exports = function curveCLI(pos, opt, kit) {
   const C=kit.KIT.curve;
+  if (pos[0] === 'bend') {
+    if (!C.bend) throw new Error('This toolkit has no retained spline bend support');
+    return require('./geometry-authoring.js').bend(pos.slice(1), opt, C.bend);
+  }
   if (pos[0]==='topology') {
     if (!C.retained) throw new Error('This toolkit has no retained spline support');
     return topology(pos.slice(1),opt,C.retained);
