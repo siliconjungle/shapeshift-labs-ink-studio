@@ -52,3 +52,5 @@ node examples/material-channel-paint/demo.cjs
 ```
 
 Open the printed HTML path. Paint glaze, relief, phosphor, roughness, or flow on the enamel plate. Choose UV, world, rest, or texel coordinates, compare before and after, and download the material to replay the session with its source bitmaps. The graph derives the preview normal map from painted height. The lit panel is a texture-space preview with an adjustable light angle.
+
+For paint bound to scene geometry, [review the same paint at multiple camera ranges](pixel-art-authoring.md#compare-paint-and-finish-across-camera-ranges) with a shared world-space key and separate pigment, relief, roughness, and highlight views.
