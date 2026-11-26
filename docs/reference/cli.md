@@ -670,6 +670,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   graph impact <group.json> [--root folder] [--json]   find consumers of a shared group
   graph snapshot <project.json> [--inputs values.json] [--seed N] [--at T]   capture graph bindings and asset hashes
   graph diff <before.json> <after.json> [--json]   explain node, port and named output changes
+  graph lighting-room <project.json> <plan.json> --out directory   review a material under HDRI and reusable camera rigs
   graph displacement-preview <project.json> <plan.json> --out directory   compare flat, parallax and tessellated graph height
   graph material-preview <project.json> <plan.json> --out directory   link a native material carrier to its UV maps
   graph inspect <project.json> [--output NAME | --node PATH --port NAME | --map ID [--component r|g|b|a]] [--out directory]
@@ -830,6 +831,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio graph import-pxc` · `--out`, `--adapters`, `--using`, `--translate`, `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio graph inspect` · `--inputs`, `--at`, `--seed`, `--out`, `--output`, `--node`, `--port`, `--map`, `--component`, `--json`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph inspect-pxc` · `--out`, `--json` · [source](../../cli/graph-cli.js)
+- `ink-studio graph lighting-room` · `--inputs`, `--at`, `--seed`, `--out`, `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph material` · `--id`, `--out`, `--base`, `--output-usages`, `--metadata` · [source](../../cli/graph-cli.js)
 - `ink-studio graph material-bitmap` · `--out` · [source](../../cli/graph-cli.js)
 - `ink-studio graph material-font` · `--out` · [source](../../cli/graph-cli.js)
