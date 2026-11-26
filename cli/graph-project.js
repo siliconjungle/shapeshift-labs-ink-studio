@@ -317,7 +317,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   if (primaryInput!==undefined) {
     const socket=id(primaryInput) && Object.hasOwn(spec.inputs,primaryInput) ? spec.inputs[primaryInput] : undefined;
     const type=typeof socket==='string' ? socket : socket?.type;
-    if (!['typedImage','colorImage','heightImage'].includes(type))
+    if (!['typedImage','colorImage','grayImage','heightImage'].includes(type))
       throw new TypeError('Material primaryInput must name a declared typed image input');
   }
   const paths=new Set(sourceFile ? [path.resolve(sourceFile)] : []);
@@ -426,11 +426,11 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     if (!id(output) || !Object.hasOwn(rootPlan.outputs,output) || !['png','json','atlas','wav','codec','material-image'].includes(format))
       throw new TypeError('Graph export '+name+' needs a known output and png, json, atlas, wav, codec or material-image format');
     const port=rootPlan.outputs[output].type, compatible=kit.KIT.procedural.graphTypes.compatible;
-    if (format==='material-image' && (!base || !['typedImage','colorImage','heightImage'].includes(port)))
+    if (format==='material-image' && (!base || !['typedImage','colorImage','grayImage','heightImage'].includes(port)))
       throw new TypeError('Material image export '+name+' needs shared base settings and a typed image output');
     if ((format==='png' || format==='codec' && type==='raster') && port==='linearRaster')
       throw new TypeError('Graph image export '+name+' needs display RGB. Use color.rasterToDisplay first.');
-    if ((format==='png' || format==='codec' && type==='raster') && ['typedImage','colorImage','heightImage','normalImage'].includes(port))
+    if ((format==='png' || format==='codec' && type==='raster') && ['typedImage','colorImage','grayImage','heightImage','normalImage'].includes(port))
       throw new TypeError('Graph image export '+name+' needs a display raster. Use image.toDisplay for color or export the typed image as JSON.');
     if (format==='png' && !compatible(port,'raster')) throw new TypeError('Graph PNG export '+name+' needs an image output');
     if (format==='atlas' && !compatible(port,'atlas')) throw new TypeError('Graph atlas export '+name+' needs an atlas output');

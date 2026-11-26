@@ -32,8 +32,8 @@
     if (declared && (!fn.validType(stored.result) || !record(stored.outputs) ||
         Object.keys(stored.outputs).length !== 1 || !Object.hasOwn(stored.outputs, 'result')))
       throw new TypeError('Function graph needs one output named result and a declared value type');
-    if (declared && Object.values(specInputs).some(socket => !fn.validType(socket.type)))
-      throw new TypeError('Function graph inputs must use declared value types');
+    if (declared && Object.values(specInputs).some(socket => !fn.validInputType(socket.type)))
+      throw new TypeError('Function graph inputs must use declared value types or typed textures');
     const linkTypes = declared ? fn.compatible : compatible;
     if (!record(stored.nodes) || !record(stored.outputs) || Object.keys(stored.nodes).length > 2000)
       throw new RangeError('A graph needs named nodes and outputs within its node budget');
@@ -148,11 +148,15 @@
       return pending.get(link.id).outputs[link.port];
     };
 
-    function parameters(input = {}) {
+    function accepts(type,value,valid,textureCache) {
+      return textureCache && fn.textureType(type) ? P.graphImages.textureSampling.valid(type,value,textureCache()) : valid(value);
+    }
+
+    function parameters(input = {}, textureCache) {
       if (!record(input)) throw new TypeError('Graph inputs must be named values');
       return Object.fromEntries(Object.entries(specInputs).map(([name, socket]) => {
         const value = Object.hasOwn(input, name) ? input[name] : socket.default;
-        if (!validator(socket.type)(value))
+        if (!accepts(socket.type,value,validator(socket.type),textureCache))
           throw new TypeError('Wrong input value for graph socket ' + name + ': expected ' + description(socket.type));
         return [name, value];
       }));
@@ -185,20 +189,22 @@
       return schedule;
     }
 
-    function begin(input, { take, sequence, time = take?.start ?? 0, seed = 0, workers, modeling = false }) {
+    function begin(input, { take, sequence, time = take?.start ?? 0, seed = 0, workers, modeling = false, textureCache: inheritedTextureCache }) {
       if (take !== undefined) {
         P.takeTime.requireFrame(take);
         if (time !== take.start) throw new RangeError('Graph seconds must match the take frame start');
       }
       if (planOnly) throw new Error('A graph plan cannot be evaluated');
       if (!Number.isFinite(time) || !Number.isSafeInteger(seed)) throw new TypeError('Invalid graph run options');
-      const values = parameters(input);
+      let textures;
+      const textureCache = inheritedTextureCache ?? (()=>textures ??= P.graphImages.textureSampling.createCache());
+      const values = parameters(input,declared ? textureCache : undefined);
       const pending = new Map();
       function prepare(name) {
         const config = configs.get(name), { bindings, clock } = config;
         const entries = bindings.map(([key, socket, link, valid]) => {
           const value = resolve(link, values, time, pending);
-          if (!valid(value))
+          if (!accepts(socket.type,value,valid,declared ? textureCache : undefined))
             throw new TypeError('Wrong linked value for graph socket ' + name + '.' + key + ': expected ' + description(socket.type));
           return [key, value];
         });
@@ -217,6 +223,7 @@
             if (work.length<256) work.push(P.modelingDiagnostics.receipt(receipt));
             else evidence.workOmitted=(evidence.workOmitted??0)+1;
           }, recordModeling(value) { evidence.modeling=value; }}) };
+        if (context) Object.defineProperty(context,'textureCache',{value:textureCache});
         return { config, inputs: reused ? undefined : Object.fromEntries(entries), context, comparable, reused, previous, work,evidence };
       }
       function invoke(row, asynchronous = false) {
@@ -249,6 +256,7 @@
           throw new TypeError('Wrong value for function result: expected ' + description(stored.result));
         const snapshot = new Map(pending);
         for (const [name, item] of snapshot) marks.set(name, item);
+        textures = undefined; // Inspectable frames retain values, while working mip levels are scoped to evaluation.
         return { outputs, status, preview(node, port = 'value') {
           const [name, ...nested] = node.split('/');
           const result = snapshot.get(name);
@@ -369,7 +377,7 @@
       const graph = create(spec, { operations, groups });
       let latest;
       const run = (inputs, context, workers) => {
-        latest = graph.evaluate(inputs, workers ? { ...context, workers } : context);
+        latest = graph.evaluate(inputs, workers ? { ...context, textureCache:context.textureCache, workers } : context);
         return latest.outputs;
       };
       run.async = async (inputs, context) => {

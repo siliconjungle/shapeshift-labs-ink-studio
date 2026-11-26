@@ -160,6 +160,7 @@
     scalarRaster,
     typedImage: value => K.procedural.graphImages.valid(value),
     colorImage: value => K.procedural.graphImages.valid(value, 'color'),
+    grayImage: value => K.procedural.graphImages.validGray(value),
     heightImage: value => K.procedural.graphImages.valid(value, 'height'),
     normalImage: value => K.procedural.graphImages.valid(value, 'normal'),
     regionField: value => K.procedural.graphImages.regions.valid(value),
@@ -213,6 +214,7 @@
     scalarRaster: ['uncolored single-channel raster'],
     typedImage: ['typed image with a sample contract'],
     colorImage: ['typed color image'],
+    grayImage: ['typed unitless grayscale or mask image'],
     heightImage: ['typed height image'],
     normalImage: ['typed normal image'],
     regionField: ['versioned flood region field'],
@@ -262,8 +264,8 @@
     if (from === to || from === 'any' || to === 'any') return true;
     if (from === 'integer') return ['number','pixelCount','frames','unitScalar'].includes(to);
     if (to === 'integer') return ['pixelCount','frames'].includes(from);
-    if (to === 'typedImage' && ['colorImage', 'heightImage', 'normalImage'].includes(from)) return true;
-    if (from === 'typedImage' && ['normalImage', 'heightImage'].includes(to)) return true;
+    if (to === 'typedImage' && ['colorImage', 'grayImage', 'heightImage', 'normalImage'].includes(from)) return true;
+    if (from === 'typedImage' && ['normalImage', 'heightImage', 'grayImage'].includes(to)) return true;
     if (to === 'reliefHeight') return ['heightImage', 'typedImage', 'scalarRaster', 'raster'].includes(from);
     if (from === 'raster' && to === 'scalarRaster' || from === 'scalarRaster' && to === 'raster') return true;
     const source = Object.hasOwn(semantics, from) ? semantics[from] : null;

@@ -1,5 +1,5 @@
 /* Resample a typed image in one pass, retaining its encoding and material contract. */
-const TypedImageSpatial = ({ requireImage, descriptor, wrap, storage, pack, integerMax, convertColor, dimensions, fields }) => {
+const TypedImageSpatial = ({ requireImage, validImage, grayDescriptor, descriptor, wrap, storage, pack, integerMax, alphaAt, convertColor, dimensions, fields }) => {
   const maxBytes = 192 * 1024 * 1024;
   const edges = ['clamp', 'wrap', 'mirror', 'transparent'];
   const finite = Number.isFinite;
@@ -68,6 +68,22 @@ const TypedImageSpatial = ({ requireImage, descriptor, wrap, storage, pack, inte
     } };
   }
 
+  const maxMip = grid => Math.floor(Math.log2(Math.max(grid.width, grid.height)));
+  const mipExtent = (grid, index) => ({width:Math.max(1,grid.width >> index),height:Math.max(1,grid.height >> index)});
+  const mipBytes = ({width,height},channels) => width * height * channels * Float64Array.BYTES_PER_ELEMENT;
+
+  function mipChain(origin, channels, reserve) {
+    const levels = [origin];
+    return index => {
+      while (levels.length <= index) {
+        const extent = mipExtent(origin,levels.length);
+        reserve?.(mipBytes(extent,channels));
+        levels.push(boxLevel(levels.at(-1),extent.width,extent.height,channels));
+      }
+      return levels[index];
+    };
+  }
+
   function sampler({ width, height, accumulate }, channels, filter, ax, ay) {
     function tap(x, y, weight, out) {
       if (!(weight > 0)) return;
@@ -91,6 +107,82 @@ const TypedImageSpatial = ({ requireImage, descriptor, wrap, storage, pack, inte
     if (!edges.includes(u) || !edges.includes(v)) throw new RangeError('Unknown image border policy');
     return { u, v };
   }
+
+  const createCache = () => ({ entries:new WeakMap(), bytes:0 });
+  function entry(source, cache) {
+    if (!source || typeof source !== 'object') return null;
+    if (cache.entries.has(source)) return cache.entries.get(source);
+    const spec = source.descriptor;
+    const type = spec?.intent === 'color' ? 'colorImage' : grayDescriptor(spec) ? 'grayImage' : null;
+    const value = type && validImage(source) ? { type } : null;
+    cache.entries.set(source,value);
+    return value;
+  }
+
+  function readersFor(source, type, cache) {
+    const { raster:{width,height,data,channels:stride},descriptor:spec } = source;
+    const color = type === 'colorImage', channels = color ? 4 : 1;
+    const divisor = integerMax(spec.precision) || 1;
+    const rgb = [0,0,0], readColor = color && convertColor(spec,'srgb-linear');
+    const accumulate = color ? (i,out,weight) => {
+      const at = i / channels * stride;
+      if (!alphaAt(data,at,spec)) return;
+      const weightedAlpha = readColor(data,at,rgb) * weight;
+      for (let c = 0; c < 3; c++) out[c] += weightedAlpha * rgb[c];
+      out[3] += weightedAlpha;
+    } : (i,out,weight)=>{ out[0] += (data[i] / divisor) * weight; };
+    const level = mipChain({width,height,accumulate},channels,bytes=>{
+      if (cache.bytes + bytes > maxBytes) throw new RangeError('Function texture mips exceed the working memory budget');
+      cache.bytes += bytes;
+    });
+    const readers = new Map();
+    return (index,filter,u,v)=>{
+      const key = index+'/'+filter+'/'+u+'/'+v;
+      if (!readers.has(key))
+        readers.set(key,sampler(level(index),channels,filter,TextureAddress.axis(u),TextureAddress.axis(v)));
+      return readers.get(key);
+    };
+  }
+
+  // Bring large UVs back into a range where a texel-scaled coordinate remains meaningful.
+  function boundedCoordinate(n, mode) {
+    if (mode === 'wrap') return Math.abs(n) <= 2 ? n : n % 1;
+    if (mode === 'mirror') return Math.abs(n) <= 2 ? n : n % 2;
+    if (mode === 'clamp') return unit(n);
+    return Math.max(-1,Math.min(2,n));
+  }
+
+  function samplePoint(source, type, uv, options = {}, cache = createCache()) {
+    const texture = entry(source,cache);
+    if (texture?.type !== type) throw new TypeError('Expected a typed '+(type === 'colorImage' ? 'color' : 'grayscale')+' texture');
+    if (!Array.isArray(uv) || uv.length !== 2 || !finite(uv[0]) || !finite(uv[1]))
+      throw new TypeError('Function texture sampling needs two finite UV coordinates');
+    if (!fields(options,['filter','wrapU','wrapV','mip','mipFilter']))
+      throw new TypeError('Unknown function texture sampling option');
+    const spec = source.descriptor;
+    const { filter:requestedFilter='image',wrapU='image',wrapV='image',mip=0,mipFilter='linear' } = options;
+    const filter = requestedFilter === 'image' ? spec.sampling : requestedFilter;
+    if (!['nearest','linear'].includes(filter) || !finite(mip) || mip < 0 || !['nearest','linear'].includes(mipFilter))
+      throw new RangeError('Invalid function texture filter or mip choice');
+    const {u,v} = borders({u:wrapU === 'image' ? undefined : wrapU,v:wrapV === 'image' ? undefined : wrapV},spec.tiling);
+    const lod = Math.min(mip,maxMip(source.raster));
+    const base = mipFilter === 'nearest' ? Math.round(lod) : Math.floor(lod), mix = mipFilter === 'nearest' ? 0 : lod-base;
+    const s = boundedCoordinate(uv[0],u), t = boundedCoordinate(uv[1],v);
+    const color = type === 'colorImage', sum = new Float64Array(color ? 4 : 1);
+    texture.readers ??= readersFor(source,type,cache);
+    texture.readers(base,filter,u,v)(s,t,1-mix,sum);
+    if (mix) texture.readers(base+1,filter,u,v)(s,t,mix,sum);
+    if (!color) return spec.domain === 'unit' ? unit(sum[0]) : sum[0];
+    const alpha = sum[3];
+    return alpha ? [sum[0]/alpha,sum[1]/alpha,sum[2]/alpha,unit(alpha)] : [0,0,0,0];
+  }
+
+  const textureSampling = Object.freeze({
+    createCache,
+    valid:(type,source,cache)=>entry(source,cache)?.type === type,
+    sampleColor:(source,uv,options,cache)=>samplePoint(source,'colorImage',uv,options,cache),
+    sampleGray:(source,uv,options,cache)=>samplePoint(source,'grayImage',uv,options,cache)
+  });
 
   function footprint(map, source, target, unwrapU) {
     const before = new Float64Array(2), after = new Float64Array(2);
@@ -137,15 +229,10 @@ const TypedImageSpatial = ({ requireImage, descriptor, wrap, storage, pack, inte
     if (!['nearest', 'linear'].includes(filter) || !auto && mip !== 'none' && !fixed ||
         !finite(mipBias) || Math.abs(mipBias) > 16 || !auto && mipBias !== 0)
       throw new RangeError('Invalid image filter or mip policy');
-    const maxLevel = Math.floor(Math.log2(Math.max(grid.width, grid.height)));
+    const maxLevel = maxMip(grid);
     const requested = auto ? maxLevel : Math.min(maxLevel, fixed ? mip : 0);
-    const extents = [{ width: grid.width, height: grid.height }];
     let bytes = width * height * channels * storage[spec.precision].BYTES_PER_ELEMENT;
-    for (let i = 1; i <= Math.ceil(requested); i++) {
-      const w = Math.max(1, grid.width >> i), h = Math.max(1, grid.height >> i);
-      extents.push({ width: w, height: h });
-      bytes += w * h * channels * Float64Array.BYTES_PER_ELEMENT;
-    }
+    for (let i = 1; i <= Math.ceil(requested); i++) bytes += mipBytes(mipExtent(grid,i),channels);
     if (bytes > maxBytes) throw new RangeError('Image transform exceeds its working memory budget');
     const geometry = crop || prepare(grid, options, { width, height });
     const { maps = [geometry.map], angularU = false, combine = 'average' } = geometry;
@@ -153,14 +240,10 @@ const TypedImageSpatial = ({ requireImage, descriptor, wrap, storage, pack, inte
     const ax = TextureAddress.axis(u), ay = TextureAddress.axis(v);
     const lodAt = auto && maxLevel ? maps.map(map => footprint(map, grid, { width, height }, angularU)) : null;
     const { read, write } = workingSamples(spec, original, channels);
-    const levels = [{ ...extents[0], accumulate: read }];
+    const level = mipChain({width:grid.width,height:grid.height,accumulate:read},channels);
     const readers = [];
     function sampleLevel(index, uv, gain, out) {
-      while (levels.length <= index) {
-        const extent = extents[levels.length];
-        levels.push(boxLevel(levels.at(-1), extent.width, extent.height, channels));
-      }
-      readers[index] ??= sampler(levels[index], channels, filter, ax, ay);
+      readers[index] ??= sampler(level(index), channels, filter, ax, ay);
       readers[index](uv[0], uv[1], gain, out);
     }
 
@@ -210,5 +293,5 @@ const TypedImageSpatial = ({ requireImage, descriptor, wrap, storage, pack, inte
   const spatial = Object.freeze(Object.fromEntries(Object.entries(optionsFor).map(([name, keys]) => [name, (source, options = {}) =>
     resample(source, options, name, keys, TypedImageSpatialGeometry[name],
       name === 'crop' ? TypedImageSpatialGeometry.crop : undefined)])));
-  return { spatial, resample, sampler, borders, workingSamples };
+  return { spatial, resample, sampler, borders, workingSamples, textureSampling };
 };

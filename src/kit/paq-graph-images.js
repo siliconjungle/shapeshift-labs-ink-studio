@@ -110,6 +110,9 @@
     catch { return false; }
   }
 
+  const grayDescriptor = spec => ['data','mask'].includes(spec?.intent) && spec.layout === 'r' && spec.units === 'unitless';
+  const validGray = source => grayDescriptor(source?.descriptor) && valid(source);
+
   function declare(source, settings) {
     if (!raster(source) || !dimensions(source) || !validPivot(source.pivot))
       throw new TypeError('Graph image needs a bounded source raster and a valid pivot');
@@ -608,8 +611,8 @@
   const morphology = TypedImageMorphology({
     requireImage, descriptor, wrap, storage, integerMax, measure, fields, geometry: P.geometry
   });
-  const { spatial, resample, sampler: spatialSampler, borders, workingSamples } = TypedImageSpatial({
-    requireImage, descriptor, wrap, storage, pack, integerMax, convertColor, dimensions, fields
+  const { spatial, resample, sampler: spatialSampler, borders, workingSamples, textureSampling } = TypedImageSpatial({
+    requireImage, validImage:valid, grayDescriptor, descriptor, wrap, storage, pack, integerMax, alphaAt, convertColor, dimensions, fields
   });
   const warps = TypedImageDisplacement({
     requireImage, descriptor, wrap, integerMax, filters, resample, sampler: spatialSampler, borders
@@ -1072,5 +1075,5 @@
       run({ source }) { return { value: inspect(source) }; }
     }
   });
-  P.graphImages = Object.freeze({ format, version, valid, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, regions, advancedHeight, advancedTexture, shape:bakeShape, tileGenerator:tileGenerator.generate, tileSampler:tileSampler.sample, shapeSplatter, scatterMappers, noise:makeNoise, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
+  P.graphImages = Object.freeze({ format, version, valid, validGray, textureSampling, declare, uniform, convert, split: splitChannels, shuffle: shuffleChannels, pack: packChannels, channelMath, blend: blendImage, corrections, transfers, filters, morphology, spatial, warps, normals, regions, advancedHeight, advancedTexture, shape:bakeShape, tileGenerator:tileGenerator.generate, tileSampler:tileSampler.sample, shapeSplatter, scatterMappers, noise:makeNoise, toHeight, resize, toDisplay, displaySamples, toRaster, inspect, operations });
 })(KIT.procedural);

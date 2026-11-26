@@ -8,7 +8,7 @@ const record = value => value && [Object.prototype, null].includes(Object.getPro
 const id = value => typeof value === 'string' && /^[a-z][\w.-]{0,99}$/i.test(value) &&
   !['__proto__', 'constructor', 'prototype'].includes(value);
 const usages = new Set(['baseColor', 'normal', 'height', 'roughness', 'metalness', 'ao', 'emission', 'opacity', 'packed']);
-const typed = new Set(['typedImage', 'colorImage', 'heightImage', 'normalImage']);
+const typed = new Set(['typedImage', 'colorImage', 'grayImage', 'heightImage', 'normalImage']);
 const components = ['r', 'g', 'b', 'a'];
 const maximum = { unorm8: 255, unorm16: 65535 };
 const unit = value => Number.isFinite(value) && value >= 0 && value <= 1;
