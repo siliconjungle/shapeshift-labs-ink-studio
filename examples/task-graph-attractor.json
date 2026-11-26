@@ -1,0 +1,27 @@
+{
+  "format": "ink-studio/task-graph",
+  "version": 1,
+  "tasks": {
+    "explore": {
+      "command": "sweep",
+      "inputs": { "scene": "visual-sweep-attractor.js", "plan": "visual-sweep-attractor.plan.json" },
+      "outputs": { "review": "review" },
+      "args": [{ "input": "scene" }, { "input": "plan" }, "--out", { "output": "review" }]
+    },
+    "choose": {
+      "command": "sweep",
+      "inputs": { "review": { "task": "explore", "artifact": "review" } },
+      "outputs": { "pin": "selected.json" },
+      "args": ["pin", { "input": "review" }, "5", "--out", { "output": "pin" }]
+    },
+    "reproduce": {
+      "command": "sweep",
+      "inputs": {
+        "pin": { "task": "choose", "artifact": "pin" },
+        "source": "visual-sweep-attractor.js"
+      },
+      "outputs": { "review": "replay" },
+      "args": ["replay", { "input": "pin" }, "--out", { "output": "review" }]
+    }
+  }
+}
