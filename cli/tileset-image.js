@@ -389,6 +389,16 @@ function reskinCommand(args, options, openEditor) {
   return publishFaceEdit(openEditor(input),request,undefined,output,'planTilesetReskin','applyTilesetReskin');
 }
 
+function guttersCommand([file,...rest], options, openEditor) {
+  const {scene,out} = options;
+  if (rest.length || !file || !scene ||
+      Object.entries(options).some(([key,value])=>!['scene','out'].includes(key) || typeof value!=='string' || !value.trim()))
+    throw new TypeError('Use tileset gutters <request.json> --scene <scene.json> [--out <new-scene.json>]');
+  const input = path.resolve(scene), output = out && sceneOutput(input,out,file);
+  const request = JSON.parse(fs.readFileSync(path.resolve(file),'utf8'));
+  return publishFaceEdit(openEditor(input),request,undefined,output,'planTilesetGutters','editTilesetGutters');
+}
+
 function assignCommand([file,...rest], options, toolkit, openEditor) {
   const {scene,out,preview,view} = options;
   if (rest.length || !file || !scene || view && !preview ||
@@ -484,6 +494,8 @@ function command([action, ...args], options, toolkit, projectTexelsPerUnit, open
   if (action === 'select') return require('./tileset-component-selection.js').command(args,options,openEditor);
   if (action === 'select-atlas') return require('./tileset-component-selection.js').atlasCommand(args,options,openEditor);
   if (action === 'reskin') return reskinCommand(args,options,openEditor);
+  if (action === 'gutters') return guttersCommand(args,options,openEditor);
+  if (action === 'bleed-review') return require('./tileset-bleed-review.js').command(args,options,toolkit,openEditor);
   if (action === 'assign') return assignCommand(args,options,toolkit,openEditor);
   if (action === 'eyedrop') return eyedropCommand(args,options,openEditor);
   if (Object.hasOwn(faceEdits,action)) return faceEditCommand(action,args,options,projectTexelsPerUnit,openEditor);
