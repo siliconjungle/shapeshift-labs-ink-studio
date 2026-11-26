@@ -21,7 +21,7 @@ The version 1 value serializes as `{ format: "ink-studio/material-channels", ver
 
 In code the corresponding Toolkit functions are `KIT.procedural.materialChannels.pack`, `KIT.procedural.materialChannels.channel`, and `KIT.procedural.materialChannels.replace`.
 
-Use [material-channel painting](material-channel-paint.md) to apply an editable layer session directly to a packet.
+Use [material-channel painting](material-channel-paint.md) to apply an editable layer session directly to a packet. [Measured material recovery](measured-materials.md) can produce a packet from registered surface captures.
 
 ## Northstar seal demo
 

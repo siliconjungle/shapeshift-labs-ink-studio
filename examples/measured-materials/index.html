@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tideglass · Ink Studio</title>
+<style>
+:root{--paper:#f1ebdc;--ink:#253334;--muted:#526563;--edge:#bbb8a9;--teal:#184c49;--night:#142627;--gold:#ecc598;--hot:#c95267;--mint:#6ac5af}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+main{max-width:1434px;margin:auto;padding:36px 42px 28px}
+.kicker,.label,.mono,button,select{font:600 11px/1.25 ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase}
+.kicker{letter-spacing:.17em;color:var(--teal)}
+header{display:flex;justify-content:space-between;align-items:end;gap:24px;border-bottom:1px solid var(--edge);padding-bottom:24px;margin-bottom:20px}
+h1{font:normal clamp(62px,9vw,130px)/.84 Georgia,serif;letter-spacing:-.077em;margin:10px 0 0}
+h2{font:normal 31px/1.13 Georgia,serif;letter-spacing:-.022em;margin:0}
+p{margin:0;color:var(--muted)}
+.actions{display:flex;gap:9px;flex-wrap:wrap}
+.actions a{color:var(--teal);border:1px solid var(--edge);text-decoration:none;padding:10px 13px;border-radius:3px}
+.actions a:hover{background:var(--teal);border-color:var(--teal);color:var(--paper)}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.06fr);gap:16px;align-items:start}
+article{border:1px solid var(--edge);min-width:0;border-radius:4px;overflow:hidden}
+.top{padding:17px 19px;display:flex;gap:9px;justify-content:space-between;align-items:center;min-height:72px}
+select{border:1px solid var(--edge);border-radius:3px;background:var(--paper);color:var(--teal);padding:10px;max-width:52%;white-space:nowrap}
+figure{margin:0}
+.stage{height:365px;display:grid;place-items:center;overflow:hidden;background:radial-gradient(ellipse at 45% 42%,#3f5c59,#263f40 64%,#233536);border-block:1px solid var(--edge)}
+.stage img{width:min(94%,430px);height:auto;max-height:96%;object-fit:contain;filter:drop-shadow(3px 8px 6px #101f1ea6);image-rendering:pixelated}
+.render{background:var(--night);color:var(--paper);border-color:#405753}
+.render .top{border-color:#405753}
+.render .stage{background:radial-gradient(ellipse at 50% 44%,#334b47,#152526 73%);border-color:#405753}
+.render img{width:min(100%,610px)}
+.caption{padding:15px 19px 18px;min-height:83px;display:flex;flex-direction:column;gap:6px}
+.label{color:var(--teal)}
+.render .label{color:var(--gold)}
+.render p{color:#c0cebf}
+.sliderbox{display:flex;gap:13px;align-items:center}
+output{color:var(--gold);white-space:nowrap;width:5ch;text-align:right}
+input[type=range]{accent-color:var(--gold);width:100%}
+.legend{display:flex;gap:15px;flex-wrap:wrap;color:var(--muted);font-size:12px}
+.legend:not([hidden]) span::before{content:"";width:8px;height:8px;margin-right:6px;display:inline-block;background:var(--hot)}
+.legend:not([hidden]) span+span::before{background:var(--mint)}
+[hidden]{display:none!important}
+.metrics{margin-top:16px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-block:1px solid var(--edge)}
+.metric{padding:14px 16px;border-right:1px solid var(--edge)}
+.metric:last-child{border-right:0}
+.reading{display:block;color:var(--teal);font:normal 29px/1.1 Georgia,serif;margin:5px 0 0}
+footer{margin-top:12px;color:var(--muted);font-size:13px}
+footer a{color:var(--teal)}
+a:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--mint);outline-offset:3px}
+@media(max-width:900px){main{padding:26px 20px}.stage{height:300px}.top{align-items:start;flex-direction:column}.top select{max-width:100%;width:100%}}
+@media(max-width:680px){header{align-items:start;flex-direction:column}.grid{grid-template-columns:1fr}.top{align-items:center;flex-direction:row}.top select{max-width:54%}.metrics{grid-template-columns:1fr}.metric{border-right:0;border-bottom:1px solid var(--edge)}.metric:last-child{border-bottom:0}.stage{height:270px}}
+</style>
+<script defer src="data.js"></script>
+<script defer src="live.js"></script>
+</head>
+<body>
+<main>
+  <header>
+    <div><div class="kicker">Ink Studio · Measured materials</div><h1>Tideglass</h1></div>
+    <div class="actions"><a class="mono" href="tideglass.material.json" download>Editable graph ↓</a>
+      <a class="mono" href="artifacts/tideglass.exr" download>EXR maps ↓</a>
+      <a class="mono" href="artifacts/tideglass.glb" download>Relit GLB ↓</a></div>
+  </header>
+  <div class="grid">
+    <article>
+      <div class="top"><h2>Capture and recovery</h2>
+        <select id="map" aria-label="Capture or recovered map">
+          <option value="front">Front capture</option>
+          <option value="port">Port capture</option>
+          <option value="starboard">Starboard capture</option>
+          <option value="pigment" selected>Recovered pigment</option>
+          <option value="height">Signed relief</option>
+          <option value="normals">Tangent normals</option>
+          <option value="relief-confidence">Relief confidence</option>
+          <option value="pigment-confidence">Pigment confidence</option>
+        </select>
+      </div>
+      <figure><div class="stage"><img id="map-preview" alt=""></div>
+        <figcaption class="caption"><div id="map-label" class="label"></div>
+          <p id="caption" aria-live="polite"></p><div id="legend" class="legend" hidden><span>Low confidence</span><span>High confidence</span></div>
+        </figcaption>
+      </figure>
+    </article>
+    <article class="render">
+      <div class="top"><h2>Relight the ceramic</h2><div class="label">Ink scan mesh</div></div>
+      <figure><div class="stage"><img id="render-preview" alt="Recovered ceramic relief under a movable light"></div>
+        <figcaption class="caption">
+          <label class="label" for="light">Light azimuth</label>
+          <div class="sliderbox"><input id="light" type="range" min="0" max="8" value="4" step="1"><output id="angle" for="light"></output></div>
+        </figcaption>
+      </figure>
+    </article>
+  </div>
+  <div class="metrics">
+    <div class="metric"><span class="label">Pigment error · linear RGB</span><strong class="reading" id="error"></strong></div>
+    <div class="metric"><span class="label">Relief disagreements</span><strong class="reading" id="disagreements"></strong></div>
+    <div class="metric"><span class="label">Relief probe · confidence</span><strong class="reading" id="probe"></strong></div>
+  </div>
+  <footer>Three simulated scans of a ceramic swatch with known pigment and relief. <a href="verification.json">Measurement report</a></footer>
+</main>
+</body>
+</html>

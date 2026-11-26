@@ -225,6 +225,7 @@ All checked-in guides, indexed by title and section headings.
 - [Map-driven Tile Sampler](../material-tile-sampler.md)
 - [Surface materialisation](../materialisation.md)
 - [Procedural math fields](../math-fields.md)
+- [Measured materials from planar captures](../measured-materials.md)
 - [Editable mesh topology](../mesh-topology.md)
 - [UV inspection and editing](../mesh-uv.md)
 - [Mixed-resolution compositing](../mixed-resolution.md)

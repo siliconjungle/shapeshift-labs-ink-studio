@@ -104,6 +104,8 @@ module.exports = {
   readGaussianSplat: require('./cli/gaussian-splats.js').readGaussianSplat,
   scanToMesh: require('./cli/scan-mesh.js').scanToMesh,
   scanFusion: require('./cli/scan-fusion.js').scanFusion,
+  importAxF: require('./cli/axf-material-adapter.js').importAxF,
+  exportAxF: require('./cli/axf-material-adapter.js').exportAxF,
   bakeSplatFit: require('./cli/splat-fit-asset.js').bake,
   planSplatGroups: require('./cli/splat-fit-asset.js').planSplatGroups,
   planSplatRedistribution: require('./cli/splat-redistribution.js').planSplatRedistribution,
