@@ -148,7 +148,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.readGraphProject` | function | `(file, options={})` | [guide](../editable-material-graph.md#open-edit-and-save), [guide](../graph-clips.md#node-api), [guide](../headless-authoring.md#persistent-sessions), [guide](../material-base-settings.md#inherit-individual-settings), [source](../../cli/graph-project.js) |
 | `node.readHorizonBands` | function | `(file, dependency)` | [guide](../layered-horizon.md), [source](../../cli/horizon-bands.js) |
 | `node.readMaterialGraph` | function | `(file, options)` | [guide](../editable-material-graph.md#open-edit-and-save), [source](../../cli/material-graph.js) |
-| `node.readMesh` | function | `(file, { attributes = false, uvSet = 0, allUVSets = false } = {})` | [guide](../../README.md#importing-meshes), [source](../../index.js) |
+| `node.readMesh` | function | `(file, { attributes = false, uvSet = 0, allUVSets = false, onFile, strictTextures = false } = {})` | [guide](../../README.md#importing-meshes), [source](../../index.js) |
 | `node.readProjectBundle` | function | `(file)` | [source](../../cli/project-bundle.js) |
 | `node.readRasterAsset` | function | `(file)` | [guide](../headless-authoring.md#materials-artwork-and-animation-signals), [source](../../index.js) |
 | `node.readReferencePalette` | function | `(file, options)` | [guide](../palette-recipes.md#extract-a-reference-palette), [source](../../index.js) |

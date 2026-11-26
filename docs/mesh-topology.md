@@ -1872,6 +1872,82 @@ X and Y cuts and uses the basis to order the resulting grid.
 node examples/tileset-pick/subdivision-orientation-demo.cjs subdivision-orientation-review
 ```
 
+## Repair and remesh imported triangles
+
+`remesh-import` accepts OBJ, glTF, GLB, indexed JSON, and retained
+mesh topology JSON. Indexed JSON uses `id`, `positions`, `indices`, and
+optional `materials`, `faceMaterials`, `cornerUVs`, `cornerNormals`,
+`vertexColors`, `skin`, and `weights`.
+
+```sh
+ink-studio mesh-topology remesh-import twinfin.glb settings.json --out workpiece
+```
+
+The import repair welds exact duplicate positions with identical
+weights, drops invalid and collapsed triangles, removes duplicates
+with matching corner data, and reconciles winding in connected
+components. It records the source IDs of each change. Non-manifold
+edges, coincident triangles with conflicting data, protected elements
+that would disappear, and unresolved intersection checks block
+publication and retain a report. Set `"quads": false` for cleanup only.
+
+Compatible triangle pairs become editable quads with the source
+diagonal stored for triangulation. Material boundaries, sharp
+edges, UV seams, corner channels, and the feature angle constrain
+pairing. Protected vertices, edge endpoints, and faces can use
+zero-based imported IDs or retained IDs. Symmetry pairs decisions
+across an XYZ plane and records unmatched vertices and candidates.
+The operation keeps source positions and can leave triangles wherever
+the protection or shape checks prevent joining.
+
+```json
+{
+  "symmetry": {"axis":"x","plane":0,"tolerance":0.000001},
+  "featureAngle": 25,
+  "protected": {"vertices":[2],"edges":[[3,10]],"faces":[0]}
+}
+```
+
+The output directory contains `repaired.json`, `mesh.json`,
+`correspondence.json`, `materials.json`, and `report.json`.
+Imported PNG pigment keeps its indexed slots and coverage. UVs
+must be normalized and pigment texture transforms must be baked.
+Named material overrides can supply protected masks. The transfer
+report identifies the source faces and corner matches. A glTF rig
+uses one named joint roster with up to four influences per vertex.
+Exact welds retain the authored weights on the surviving vertex.
+
+To move sockets, curve roots, or splat attachments, supply `transfer`
+settings with a manifest pinned to `repaired.json`. For skinned
+meshes include the named pose matrices to verify, as in
+[attachment transfer](#transfer-skin-weights-and-attachments-after-editing).
+The accepted run writes `attachments.json` and reports per-element
+rest and pose errors.
+
+### Query a quad limit surface
+
+```sh
+ink-studio mesh-topology limit-surface workpiece/mesh.json samples.json --out limit.json
+```
+
+Use `"samples": [{"face":"f/10","uv":[0.4,0.6]}]` with an existing
+quad. The coordinates follow its corner order from `[0,0]` through
+`[1,0]`, `[1,1]`, and `[0,1]`. Regular smooth patches use analytic
+bicubic evaluation. At boundaries, creases, and extraordinary
+vertices, refinement looks for a regular patch or reports a limit
+estimate. Set `levels` up to three, `positionTolerance` in world
+units, and `normalTolerance` in degrees. The report includes positions,
+normals, the method, and convergence between successive estimates.
+Exit status 2 indicates samples that missed the requested tolerance.
+
+Run the [Twinfin demo](../examples/imported-mesh-retopology.cjs)
+to import a painted skinned mesh, repair bad triangles and winding,
+retopologize both sides, and verify a socket in a flex pose.
+
+```sh
+node examples/imported-mesh-retopology.cjs twinfin-review
+```
+
 ## Draw surface-snapped retopology patches
 
 Use `KIT.meshTopology.planRetopology(document, request)` to propose an

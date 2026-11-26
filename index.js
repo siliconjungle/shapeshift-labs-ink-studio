@@ -117,7 +117,7 @@ module.exports = {
   async gaussianSplatWorld(cloud, options) {
     return (await import('./src/gaussian-splats.mjs')).gaussianSplatWorld(cloud, options);
   },
-  readMesh(file, { attributes = false, uvSet = 0, allUVSets = false } = {}) {
+  readMesh(file, { attributes = false, uvSet = 0, allUVSets = false, onFile, strictTextures = false } = {}) {
     const K = module.exports.load().KIT,
       ext = path.extname(file).toLowerCase(),
       dir = path.dirname(file);
@@ -126,18 +126,29 @@ module.exports = {
         m = /^mtllib\s+(.+)$/m.exec(text),
         mf = m && path.join(dir, m[1].trim());
       const mtl = mf && fs.existsSync(mf) ? fs.readFileSync(mf, 'utf8') : null;
+      if (strictTextures && mf && mtl === null) throw new Error('Missing imported mesh material library');
+      if (mtl !== null) onFile?.(mf);
       const mesh = K.mesh.obj(text, mtl, { attributes });
-      if (attributes && mtl && mesh.uvs) {
+      if (attributes && mtl && (mesh.uvs || strictTextures)) {
         let name;
         const textures = new Map();
         for (const raw of mtl.split('\n')) {
           const entry = /^(newmtl|map_Kd)\s+(.+)$/.exec(raw.trim());
           if (!entry) continue;
           if (entry[1] === 'newmtl') name = entry[2];
-          else if (name && !entry[2].startsWith('-')) {
+          else if (name) {
+            if (entry[2].startsWith('-')) {
+              if (strictTextures && mesh.mats.some(row => row.name === name))
+                throw new RangeError('Bake the imported pigment UV transform before retopology');
+              continue;
+            }
             const image = path.resolve(path.dirname(mf), entry[2].replace(/^["']|["']$/g, ''));
             const mimeType = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' }[path.extname(image).toLowerCase()];
-            if (mimeType && fs.existsSync(image)) textures.set(name, { bytes: fs.readFileSync(image), mimeType });
+            if (mimeType && fs.existsSync(image)) {
+              onFile?.(image);
+              textures.set(name, { bytes: fs.readFileSync(image), mimeType });
+            } else if (strictTextures && mesh.mats.some(row => row.name === name))
+              throw new RangeError('Missing or unsupported imported pigment image');
           }
         }
         mesh.mats = mesh.mats.map(m => ({ ...m, texture: textures.get(m.name) }));

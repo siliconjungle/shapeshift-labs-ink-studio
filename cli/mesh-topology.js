@@ -237,6 +237,8 @@ function maintenance(action, file, input, rest, opt, meshTopology, openEditor) {
 function command([action, file, input, ...rest], opt, toolkit, { build, openEditor, projectTexelsPerUnit } = {}) {
   const { KIT: { meshTopology } } = toolkit;
   if (opt.replay !== undefined && action !== 'transform') throw new TypeError('Use --replay with mesh-topology transform');
+  if (action === 'remesh-import' || action === 'limit-surface')
+    return require('./mesh-import-retopology.js').command(action, file, input, rest, opt, toolkit);
   if (action === 'transfer-attachments')
     return require('./mesh-attachment-transfer.js').command([file,input,...rest],opt,toolkit);
   if (action === 'transfer-materials')
