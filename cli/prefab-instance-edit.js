@@ -8,6 +8,7 @@ const read = file => JSON.parse(fs.readFileSync(file,'utf8'));
 const name = value => typeof value === 'string' && value.trim();
 
 const commands = {
+  'array-prefab': ['planPrefabArray','previewPrefabArray','applyPrefabArray'],
   'variant-prefab': ['planPrefabVariant','previewPrefabVariant','applyPrefabVariant'],
   'replace-prefab': ['planPrefabReplacement','previewPrefabReplacement','replacePrefabs']
 };
@@ -39,8 +40,9 @@ function command(action,file,input,rest,opt,kit,openEditor) {
   const evidence = result && capture(result,settings,path.resolve(preview),kit);
   if (output && report.canCommit) {
     editor[apply](request);
-    const scene = replace ? editor.snapshot() : structuredClone(editor.snapshot());
-    if (!replace) {
+    const variant = action === 'variant-prefab';
+    const scene = variant ? structuredClone(editor.snapshot()) : editor.snapshot();
+    if (variant) {
       const solids = report.mode === 'fork' ? Object.values(scene.prefabs[report.variant].solids) :
         scene.solids.filter(solid => report.solids.includes(solid.id));
       relativeSolidAssets(solids,path.dirname(output),kit);

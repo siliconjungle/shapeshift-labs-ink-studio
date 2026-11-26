@@ -196,9 +196,28 @@
     });
   }
 
+  function indexedTargets(scene,before,after,mapMember = (instance,table,name) => name) {
+    if (scene.parameterBindings === undefined) return [];
+    const indexed = ['solids','motion','effects'], conflicts = [];
+    const order = (links,table,remap) => [
+      ...(scene[table] ?? []).map((_,index) => [null,index]),
+      ...[...links].flatMap(([instance,link]) => Object.keys(link.resolved[table]).map(name =>
+        [instance,remap ? mapMember(instance,table,name) : name]))
+    ];
+    const candidates = K.parameters.prepare(scene.parameterBindings).targets.filter(({path:[table,index]}) =>
+      indexed.includes(table) && /^(0|[1-9][0-9]*)$/.test(index));
+    for (const table of new Set(candidates.map(({path}) => path[0]))) {
+      const left = order(before.instances,table,true), right = order(after.instances,table,false);
+      for (const {path} of candidates.filter(({path}) => path[0] === table))
+        if (!K.world.data.equal(left[path[1]],right[path[1]]))
+          conflicts.push({reason:'indexed-parameter-target-moved',path:[...path]});
+    }
+    return conflicts;
+  }
+
   function origin(transform) {
     return authored(transform).point([0, 0, 0]);
   }
 
-  A.scenePrefabs = Object.freeze({ expand, review, origin, checkProvenance, tilesetRequirements });
+  A.scenePrefabs = Object.freeze({ expand, review, origin, checkProvenance, tilesetRequirements, indexedTargets });
 })(KIT);

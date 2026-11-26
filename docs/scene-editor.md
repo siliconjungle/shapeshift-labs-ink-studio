@@ -511,6 +511,54 @@ In the SDK, use `planPrefabReplacement`, `previewPrefabReplacement`, or
 `node examples/tileset-pick/prefab-replacement-demo.cjs replace-demo`
 to replace two bays and inspect the carried sign, mark, and material.
 
+### Duplicate a prefab instance in three axes
+
+`mesh-topology array-prefab` duplicates a placed instance using independent
+XYZ counts and signed spacing in scene units. The counts include the
+source at `[0,0,0]`. The other cells receive stable instance IDs such as
+`rack.1.0.1`, so resizing on any axis keeps the same name for a surviving
+coordinate. Each copy starts with the source prefab link, authored
+rotation, scale, pivot, and local overrides.
+
+```json
+{
+  "id": "rack",
+  "instance": "west",
+  "count": [2, 2, 2],
+  "spacing": [1.75, 1.25, 2.5],
+  "space": "world"
+}
+```
+
+```sh
+ink-studio mesh-topology array-prefab station.json array.json --preview review --view view.json
+ink-studio mesh-topology array-prefab station.json array.json --out arrayed.json
+```
+
+Use `space: "local"` for the source's rotated axes or `space: "plane"`
+for its working plane's right, up, and normal axes. The source remains
+the origin of the array. Spacing is independent of the source scale and
+the construction grid interval.
+
+Reuse the array `id` with updated `count`, `spacing`, or `space` to
+resize it. Omitted settings come from the saved array. A surviving
+copy keeps its prefab link, local overrides, rotation, scale, pivot, and
+manual translation offset relative to the grid. Added cells take their
+settings from the current source. A deleted or detached cell is listed
+as missing while its coordinate is within the array.
+
+The receipt lists added, moved, retained, missing, and retired copies.
+Colliding instance IDs, retired cells used by another array, or changed
+indexed parameter targets block the edit. Normal scene validation checks
+named references such as decals on retired copies. One undo restores
+the array and its placements.
+
+In the SDK, use `planPrefabArray`, `previewPrefabArray`, and
+`applyPrefabArray`. Run
+`node examples/tileset-pick/prefab-instance-array-demo.cjs array-demo`
+to duplicate a bay in three axes, edit an individual copy, and resize
+the array with that edit intact.
+
 ## Breakable groups
 
 Use `editor.suggestBreakable({ at, radius, voxel })` to query a nearby
