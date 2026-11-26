@@ -17,7 +17,7 @@ fs.mkdirSync(directory,{recursive:true});
 json('station.json',scene);
 json('library.json',library);
 
-const target = {at:[130,49],object:'east.panel',face:'sign',view,tool:'fill'};
+const target = {at:[125,48],object:'east.panel',face:'sign',view,tool:'fill'};
 const amber = {color:'#f2bd7c'}, coral = {color:'#ef785f'};
 const cli = path.resolve(__dirname,'../../cli/ink-studio.js'), commands = [];
 function run(args, receipt) {
