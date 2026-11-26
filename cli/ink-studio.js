@@ -2057,6 +2057,8 @@ const CMD = {
         '  take approve-video <plan.json> --out directory   check decoded video for palette, accent and flicker damage',
         '  take review-flashes <plan.json> --out directory   trace composited and decoded flashes and verify a reduced-flicker preview',
         '  take check-sync <recipe.json> [--out report.json] [--fail-on-flags]   compare visible contact and rendered attack',
+        '  scene-record capture <scene.json> <plan.json> [--input changes.ndjson] --out take.json   capture timed scene manipulation',
+        '  scene-record apply <scene.json> <take.json> --out scene.json   overdub a take or punch selected timeline channels',
         '  timeline <scene> [--at seconds] [--from seconds --to seconds] [--out report.json]  sample tracks and export cues',
         '  authored-contacts <id> [--at seconds] [--out report.json]  inspect contact ranges and socket transfer timing',
         '  motion-fx <id> [--at seconds] [--out report.json]  inspect keyed FX layers and sampled effect output',
@@ -3956,6 +3958,10 @@ const CMD = {
   },
   take() {
     return require('./take.js').command(pos,opt,{kit:lib(),operations:cfg.graphOperations,adapters:cfg.graphAdapters});
+  },
+  'scene-record'() {
+    return require('./scene-record.js')(pos,opt,
+      (file,source)=>dataScene(file,source,{refreshTilesets:false}));
   },
   timeline() {
     return worldCLI().inspectTimeline(pos[0]);
@@ -5905,6 +5911,7 @@ async function run() {
     });
   }
   const sceneFiles = captureScenes.length ? captureScenes : cmd === 'snap' ? pos : cmd === 'pixel-art' ? pixelInputs :
+    cmd === 'scene-record' ? pos.slice(1, 2) :
     cmd === 'cable-route' && pos[0] === 'review' ? pos.slice(1, 2) :
     cmd === 'mesh-uv' && ['layout', 'guide', 'select', 'edit'].includes(pos[0]) && typeof opt.object === 'string' ? pos.slice(1, 2) :
     cmd === 'mesh-topology' && pos[0] === 'tint-remap' ? pos.slice(1, 2) :
