@@ -374,8 +374,10 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
       }
     }
   }
-  return depthOnly ? depth : fragments.filter(Boolean).concat(blended.filter(sample=>
-    !fragments[sample.p] || sample.z<fragments[sample.p].z));
+  if (depthOnly) return depth;
+  const opaque=fragments.filter(Boolean);
+  return blended.length ? opaque.concat(blended.filter(sample=>
+    !fragments[sample.p] || sample.z<fragments[sample.p].z)) : opaque;
 }
 function labels(atlas,bricks=[]) {
   const objects=new Set(), materials=new Set(), parts=new Map();

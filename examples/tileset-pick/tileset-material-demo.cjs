@@ -67,7 +67,7 @@ function material(source,id,name,settings) {
   return scene;
 }
 function render(scene,target,options=[]) {
-  command(['render',scene,'--w','96','--h','64','--px1','--raw','--sun-direction','0.8,0.6,-0.25',
+  command(['render',scene,'--w','96','--h','64','--px','1','--raw','--sun-direction','0.8,0.6,-0.25',
     '--sun-ambient','0.2','--sun-intensity','0.8','--sun-shadows','off','--out',target+'.png',...options]);
 }
 const unlit={lighting:'unlit',sidedness:'double',minFilter:'nearest',magFilter:'nearest'};
@@ -89,13 +89,14 @@ write('README.md','# Shared tileset materials\n\nRun `sh COMMANDS.sh` with Ink S
   'The window panels use the same source pixels. The split comparisons show lighting, emissive gain,\n'+
   'alpha, sidedness and independent minification. The export is applied to a second sheet in reused.json.\n');
 
-const w=839,h=409, xs=[20,222,424,626], titles=['LIT / MASK','UNLIT / EMISSIVE','OPAQUE','ALPHA BLEND',
+const w=839,h=409, xs=[20,222,424,626], titles=['LIT / MASK','UNLIT + GAIN','OPAQUE','ALPHA BLEND',
   'BACK / CULLED','BACK / DOUBLE','MIN / NEAREST','MIN / LINEAR'];
 const sheet=draw(w,h,[rect(0,0,w,h,'#172833'),text('INK STUDIO / TILESET MATERIALS',20,15,2,'#9dc7b5'),
   text('One sheet, different surfaces',20,40,3),
   ...titles.map((title,i)=>text(title,xs[i%4],i<4?79:244,2))]);
 for (const [i,key] of ['lit-mask','unlit-mask','opaque','blend','back-culled','back-visible','min-nearest','min-linear'].entries()) {
   const result=PNG.raster(file(key+'.png'));
+  assert.deepEqual([result.w,result.h],[96,64]);
   for (let y=0;y<128;y++) for (let x=0;x<192;x++) {
     const at=4*(Math.floor(y/2)*result.w+Math.floor(x/2));
     sheet.data.set(result.data.subarray(at,at+4),4*((y+(i<4?101:266))*w+xs[i%4]+x));
