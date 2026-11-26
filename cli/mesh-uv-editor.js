@@ -220,7 +220,7 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     layouts[0].faces[0]?.material;
   if (!layouts[0].faces.some(row => row.material === material)) throw new RangeError('Choose an authored UV material');
   const captures = [nativeBefore, nativeAfter], views = [];
-  const {orientation,scaling,normalization} = selected ?? {};
+  const {orientation,scaling,normalization,flatten} = selected ?? {};
   const basis = scaling ?? orientation;
   const assignment = selected?.assignment;
   const materialAfter = captures[0]===captures[1] ? material :
@@ -259,7 +259,7 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
   const [pivotBefore,pivotAfter] = layouts.map(layout=>basis ? null : settings.pivot ?? layout.pivot ?? null);
   const hasPivot = basis || pivotBefore || pivotAfter;
   const snapGuide = scaling?.snapBounds ? 'Snapped bounds' : normalization ? 'UV reference' :
-    assignment ? 'Assigned region' : selected?.snapGuides && 'Snap target';
+    assignment ? 'Assigned region' : flatten ? 'Flattened bounds' : selected?.snapGuides && 'Snap target';
   draw.push(text(snapGuide || 'Cut seam', [width * .18, height - 8], snapGuide ? ink.snap : ink.seam, 8));
   if (assignment) {
     const stretch = assignment.faces.reduce((max,row)=>Math.max(max,row.after.metrics.maxStretch ?? 0),0);
@@ -280,6 +280,7 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     ...(assignment && {materialAfter}),
     ...(scope && {cornerScope:scope}), ...(orientation && {orientation}), ...(scaling && {scaling}),
     ...(normalization && {normalization}),
+    ...(flatten && {flatten}),
     ...((pivotBefore || pivotAfter) && {pivot:{before:pivotBefore,after:pivotAfter}}),
     ...(crossHighlight && { crossHighlight }), ...(evidence && { readability: evidence }) };
 }
@@ -302,11 +303,18 @@ function assignmentReview(editor,revised,report,input,kit,directory,inputs) {
 function editSelection(UV,document,plan,selectionFile) {
   const uvSet = plan.report.uvSet ?? 0;
   const normalized = plan.report.operations.findLast(row=>row.op==='normalize-orientation')?.evidence;
+  const flatten = plan.report.operations.findLast(row=>row.op==='flatten')?.evidence;
+  const footprints = flatten?.faces.flatMap(({material,atlas,texelBounds,metrics})=>{
+    if (!metrics) return [];
+    const [l,t,r,b] = texelBounds.map((n,i)=>n/(atlas[i%2]-1));
+    return [{material,points:[[l,t],[r,t],[r,b],[l,b],[l,t]]}];
+  }) ?? [];
   const guides = plan.report.operations.flatMap(row=>row.op==='snap' ? row.evidence.guides : [])
-    .concat(normalized?.reference.guides ?? []);
+    .concat(normalized?.reference.guides ?? [],footprints);
   const basis = plan.report.operations.findLast(row=>row.op==='orient' || row.op==='scale');
   const applied = basis?.evidence;
   const inspection = {...(guides.length && {snapGuides:guides}),
+    ...(flatten && {flatten}),
     ...(normalized && {normalization:{axis:normalized.axis,method:normalized.method,reference:normalized.reference,faces:normalized.faces}}),
     ...(applied && {[basis.op==='orient' ? 'orientation' : 'scaling']:{
       mode:applied.mode,faces:applied.faces,pivotSource:applied.pivotSource,pivots:applied.pivots,
@@ -323,11 +331,12 @@ function editSelection(UV,document,plan,selectionFile) {
     const selected = UV.select(document,{domain:'corners',uvSet,ids:[...moving]});
     return {...selected,...inspection,heldCorners:held,cornerScope:{modes:scopes.map(row=>row.scope),moving:selected.ids,held}};
   }
-  const ids = [...new Set([...plan.report.corners.map(row=>row.face),...applied?.faces ?? [],...normalized?.faces.map(row=>row.face) ?? []])];
+  const ids = [...new Set([...plan.report.corners.map(row=>row.face),...applied?.faces ?? [],
+    ...normalized?.faces.map(row=>row.face) ?? [],...flatten?.faces.map(row=>row.face) ?? []])];
   return {...UV.select(document,{domain:'faces',uvSet,ids}),...inspection};
 }
 
-function command([action, file, input, ...rest], opt, kit, openEditor) {
+function command([action, file, input, ...rest], opt, kit, openEditor, {projectTexelsPerUnit} = {}) {
   if (!file || rest.length || (action === 'layout' ? input !== undefined : !input) ||
       Object.entries(opt).some(([key, value]) => !options[action].includes(key) || !name(value)) ||
       opt.selection && !opt.preview)
@@ -384,7 +393,8 @@ function command([action, file, input, ...rest], opt, kit, openEditor) {
         files.publishJson(path.resolve(topologyOut), selection, 'A different topology selection already exists at ' + topologyOut);
       }
     } else {
-      const plan = editor ? editor.planMeshUV(object, request) : UV.plan(document, request);
+      const plan = editor ? editor.planMeshUV(object,request,{projectTexelsPerUnit}) :
+        UV.plan(document,request,{texelsPerUnit:projectTexelsPerUnit});
       result = { ...plan.report };
       if (preview) {
         const selected = editSelection(UV,document,plan,opt.selection);
@@ -400,7 +410,7 @@ function command([action, file, input, ...rest], opt, kit, openEditor) {
         result.preview = review(document, plan.document, old, next, selected, {...settings,pivot}, kit, paths,readability);
       }
       if (out && plan.report.canCommit) {
-        if (editor) result.transaction = editor.editMeshUV(object, request).topology;
+        if (editor) result.transaction = editor.editMeshUV(object,request,{projectTexelsPerUnit}).topology;
         value = editor ? editor.snapshot() : plan.document;
       }
     }

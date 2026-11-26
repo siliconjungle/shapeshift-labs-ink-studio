@@ -678,11 +678,23 @@
       return writeMeshTopology(object,patch,options);
     }
 
+    function flattenAtlasLookup(scene,row) {
+      const atlases = new Map();
+      return (channel,material)=>{
+        if (!atlases.has(channel)) atlases.set(channel,A.meshTopologyScene.uvAtlases(scene,{...row,bakes:[]},channel));
+        return atlases.get(channel)?.(material);
+      };
+    }
+
     function writeMeshTopology(object, patch, { part, projection, label, materials } = {}, {sidewallUVs,...transitionOptions} = {}) {
       const before = meshTopology(object, part);
       const {addBindings,materials:brushMaterials} = A.tilesetFaces.extrusionUpdates(before,sidewallUVs);
-      const { row, ...evidence } = A.meshTopologyScene.revise(before, patch, { projection, ...transitionOptions,addBindings });
       const definitions = brushMaterials ?? materials;
+      const atlasForFlatten = before.bindings?.some(meshUVFlatten.isBinding) &&
+        flattenAtlasLookup(snapshot(),definitions===undefined ? before : {...before,materials:definitions});
+      const { row, ...evidence } = A.meshTopologyScene.revise(before, patch, {
+        projection,...transitionOptions,addBindings,atlasForFlatten:atlasForFlatten || undefined
+      });
       function write() {
         const next = { topologyMeshes: { ...snapshot().topologyMeshes, [object]: definitions===undefined ? row : {...row,materials:definitions} } };
         validate({ ...snapshot(), ...next });
@@ -808,6 +820,10 @@
         sdf:id=>meshSnapField(scene,id)
       });
       if (!plan.document.faces.length) throw new RangeError('A scene transform must retain at least one polygon');
+      if (plan.report.canCommit!==false && row.bindings?.some(meshUVFlatten.isBinding)) {
+        const refit = meshUVFlatten.updateBindings(row,row.document,plan.document,[],flattenAtlasLookup(scene,row));
+        if (refit.evidence.length) return {...plan,document:refit.document,report:{...plan.report,uvRefits:refit.evidence}};
+      }
       return plan;
     }
 
@@ -1032,22 +1048,27 @@
       return K.meshTopology.uv.select(row.document,query,{atlasFor});
     }
 
-    function planMeshUV(object, request, { part } = {}) {
+    function planMeshUV(object, request, { part, projectTexelsPerUnit } = {}) {
       const row = meshTopology(object,part);
       const operations = Array.isArray(request?.operations) ? request.operations : [];
       const tileGrid = operations.some(op=>['nudge','snap'].includes(op?.op));
       const atlasFor = tileGrid || operations.some(op=>op && op.atlas===undefined &&
         (op.op==='orient' && op.space==='texel' || op.op==='scale' && op.snapBounds===true)) ?
         A.meshTopologyScene.uvAtlases(snapshot(),row,request.uvSet ?? 0,{tileGrid}) : undefined;
-      return K.meshTopology.uv.plan(row.document,request,{atlasFor});
+      const scene = operations.some(op=>op?.op==='flatten') ? snapshot() : undefined;
+      const flattenAtlasFor = scene && A.meshTopologyScene.uvAtlases(scene,{...row,bakes:[]},request.uvSet ?? 0);
+      return K.meshTopology.uv.plan(row.document,request,{atlasFor,flattenAtlasFor,retainFlatten:true,
+        texelsPerUnit:scene?.tilesetDefaults?.texelsPerUnit ?? projectTexelsPerUnit});
     }
 
     function editMeshUV(object, request, options) {
       const plan = planMeshUV(object, request, options);
       if (!plan.report.canCommit)
         throw Object.assign(new RangeError('UV edit failed its corner or seam constraints'), { report: plan.report });
-      return freeze({ uv: plan.report, ...(Object.keys(plan.patch).length && {
-        topology: editMeshTopology(object, plan.patch, { label: 'Edit UVs of ' + object, ...options })
+      const row = meshTopology(object,options?.part);
+      const flatten = plan.flatten?.some(update=>update.binding) || row.bindings?.some(meshUVFlatten.isBinding) ? plan.flatten : undefined;
+      return freeze({ uv: plan.report, ...((Object.keys(plan.patch).length || flatten?.length) && {
+        topology: writeMeshTopology(object, plan.patch, { label: 'Edit UVs of ' + object, ...options },{flatten})
       }) });
     }
 

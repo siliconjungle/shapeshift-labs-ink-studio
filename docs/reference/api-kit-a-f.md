@@ -827,7 +827,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.meshTopologyScene.evaluator` | function | `(rows, placements)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.mount` | function | `(world, prepared)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.prepare` | function | `(rows, tilesets = A.tilesets.prepare(), placements)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
-| `KIT.authoring.meshTopologyScene.revise` | function | `(row, patch, { projection, ...transitionOptions } = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
+| `KIT.authoring.meshTopologyScene.revise` | function | `(row, patch, { projection, flatten=[], atlasForFlatten, ...transitionOptions } = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.transferAttachments` | function | `(row, patch, settings, projection)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.uvAtlases` | function | `(scene,row,selector,{tileGrid=false} = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.physicalMaterials` | namespace |  |  |
