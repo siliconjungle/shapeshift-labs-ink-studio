@@ -2470,6 +2470,102 @@ node examples/geometry-attributes/demo.cjs inlay-review
 node cli/ink-studio.js graph run inlay-review/attributes.json --out inlay-review/replay
 ```
 
+## Rational surfaces, curve bends and attribute edits
+
+Run the [Windgate Sail example](../examples/advanced-geometry.cjs) for a
+weighted sail with an editable eyelet, a rigging line that follows a bend
+track, and named values on mesh corners and curve controls. It saves its
+input documents, sampled poses, edit receipts and a fixed-camera sheet.
+
+```sh
+node examples/advanced-geometry.cjs windgate-demo
+node cli/ink-studio.js surface inspect windgate-demo/sail.json
+node cli/ink-studio.js surface edit windgate-demo/sail.json windgate-demo/sail-edit.json \
+  --out windgate-demo/replay-sail.json --report windgate-demo/replay-sail-edit.json
+node cli/ink-studio.js surface sample windgate-demo/replay-sail.json windgate-demo/uv-pairs.json
+node cli/ink-studio.js surface mesh windgate-demo/replay-sail.json --resolution 26 \
+  --out windgate-demo/replay-mesh.json --report windgate-demo/replay-mesh-report.json
+node cli/ink-studio.js curve bend windgate-demo/rope.json windgate-demo/rope-bend.json --at 0.6 \
+  --out windgate-demo/replay-rope.json --report windgate-demo/replay-rope-report.json
+node cli/ink-studio.js attributes inspect windgate-demo/corners-authored.json windgate-demo/corners-selection.json
+```
+
+### Weighted patches and trims
+
+An `ink-studio/rational-surface` version 1 document contains an `id`,
+axes `u` and `v` with `degree` and `knots`, and a rectangular
+`controls` net. Rows follow V and columns follow U. Each control
+has a Cartesian XYZ `position` and an optional positive `weight` that
+defaults to 1. Each axis has 2 to 64 controls, a degree from 1 to 5, and
+`control count + degree + 1` knots clamped to [0, 1]. For two controls
+at degree 1, the knots are `[0, 0, 1, 1]`. Higher weights pull the
+surface toward their controls.
+
+Optional `trims` are closed rational curves in normalized UV. Each has
+an `id`, a `kind` of `outer` or `hole`, a degree, knots, and
+weighted 2D controls with coincident first and last positions. The
+unit square is the default outer boundary. Choose the trim
+`steps` per nonempty knot span to control the polygonal approximation
+used in membership queries and tessellation. Holes must sit strictly
+inside the outer loop and cannot touch, cross or nest. The native
+triangulator keeps trim segments as mesh edges.
+
+Sample queries accept a JSON array of UV pairs. Each result gives the
+surface point, analytic U and V derivatives, normal and trim
+membership. A singular point has a null normal. At an interior
+multiple knot, derivatives use the span on the increasing side. The
+mesh export includes indexed triangles, UVs and analytic vertex normals
+when all normals are defined. Mesh resolution sets the interior UV
+grid density. Trim steps control the sampled edge density separately.
+
+Use `surface edit` with an `operations` array and an optional source
+`revision` from `surface inspect`. Supported operations are
+`set-control` with zero-based `row` and `column` plus `position`
+or `weight`, `set-axis` with `direction` of `u` or `v`, `degree`
+and `knots`, `set-trim` with a complete `trim` to add or replace by
+ID, and `remove-trim` with an `id`. The SDK exposes the same
+operations through `KIT.procedural.rationalSurface`.
+
+### Bend retained curves
+
+An `ink-studio/curve-bend` version 1 document names a retained `spline`
+and defines its bend frame with `origin`, longitudinal `axis` and
+`toward` vectors. The signed `angle` in each key gives the turn in
+radians over the reference `length`. Keys have a time in seconds and an
+optional native `ease`. The command samples the keys at `--at`, returning
+a retained spline document that Ink's existing curve consumers accept.
+
+The bend maps controls along a circular arc and transforms their
+handles with the local derivative. It keeps the cubic spans and IDs,
+so existing attachments resolve at their original segment and
+parameter. Use shorter spans for a closer approximation on a tight
+bend. The receipt reports the posed length and where each attachment
+moved. Use `KIT.curve.bend.create(splines, bend).sample(time)` for
+repeated sampling of the same track.
+
+### Named attributes by domain
+
+`attributes init` creates an `ink-studio/geometry-attributes` asset
+from an indexed or retained mesh for `vertex`, `edge`, `face` and
+`corner`, and from a retained spline document for `curve` and
+`curve-control`. Any supported domain can also take a JSON array of
+element rows with explicit `id` and XYZ `point`, including `point`,
+`instance` and `splat`. The request names a `domain` and optionally
+declares `channels`. Channel data can come from buffers in the request
+or an `attributes` dictionary on each authored element row.
+
+`attributes inspect` reports numeric ranges, label counts and missing
+values. Pass a selection JSON object with `ids` or `channels` to
+inspect specific values. IDs retain their original string or numeric
+type. `attributes edit` accepts an optional `revision` and an
+`operations` array. Use `add-channel`, `rename-channel`,
+`remove-channel`, `set-interpolation`, `set` or `clear`. Row edits
+take a channel `name` and element `id`. A null label is an authored
+value. Use `clear` to make an entry missing. The edited asset preserves
+element IDs and stays compatible with Ink's attribute transfer tools.
+The SDK exposes these commands through
+`KIT.procedural.attributeAuthoring`.
+
 ## Materials, artwork and animation signals
 
 `graph.material({ height, wetness, ink, palette })` returns coordinated sample functions for height, normal, wetness, ink and palette roles. Connect individual outputs to masks, finishes or layered materials. `graph.tiles({ bounds, cell, mask, vector, scale, seed })` uses stable tile IDs and per-tile sampling to vary density, alignment and size.
