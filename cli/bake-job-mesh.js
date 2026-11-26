@@ -15,6 +15,7 @@ function load(filename,directory,onInput) {
 }
 function catalog(model) {
   return model.meshes.map((mesh,index)=>({index,name:mesh.name,
+    placements:model.nodes.filter(node=>node.mesh===index).map(({index,name})=>({index,name})),
     submeshes:mesh.parts.map((p,index)=>({index,slot:slot(model,p),triangles:p.indices.length/3,uvSets:Object.keys(p.uv).map(Number)}))}));
 }
 

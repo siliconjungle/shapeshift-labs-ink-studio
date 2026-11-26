@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Meridian Relay · Ink Studio</title>
+<style>
+:root{color-scheme:dark;font:15px/1.4 system-ui,sans-serif;color:#f4e8d4;background:#131c20;--line:#3b4e54;--accent:#efc58e;--muted:#b6c4c4}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at 49% 22%,#23343a 0%,#131c20 72%)}
+main{max-width:1180px;margin:auto;padding:clamp(20px,3.6vw,47px) clamp(14px,4vw,55px) 28px}
+header{display:flex;justify-content:space-between;align-items:end;flex-wrap:wrap;gap:12px;padding-bottom:18px;border-bottom:1px solid var(--line)}
+h1{font:400 clamp(50px,7vw,88px)/.94 Georgia,serif;letter-spacing:-.063em;margin:0}
+p{color:var(--muted);margin:7px 0 0}
+a{color:var(--accent);text-underline-offset:3px}
+header a{font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin-top:16px}
+article{min-width:0;padding:13px;border:1px solid var(--line);background:#18262a}
+label{display:grid;gap:4px;color:var(--muted);font-size:12px}
+select{background:#23353a;color:#f4e8d4;border:1px solid var(--line);padding:8px;font:15px system-ui;min-width:0;border-radius:3px}
+figure{position:relative;margin:12px 0;cursor:crosshair;background:radial-gradient(ellipse,#25363d 0%,#1a292e 58%,#111d22 100%);touch-action:manipulation}
+figure:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+img{display:block;width:100%;aspect-ratio:1;image-rendering:pixelated;user-select:none}
+.aim{position:absolute;left:var(--x);top:var(--y);translate:-50% -50%;width:15px;height:15px;border:1px solid #fff5db;border-radius:50%;box-shadow:0 0 0 1px #121d20;pointer-events:none}
+footer{display:flex;justify-content:space-between;align-items:baseline;gap:6px 12px;flex-wrap:wrap;font-size:13px}
+.value{font-variant-numeric:tabular-nums;color:#f4e8d4;overflow-wrap:anywhere}
+.meta{margin-top:14px;min-height:54px;border-top:1px solid var(--line);padding-top:10px;color:var(--muted);font-size:13px}
+#swatches{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:6px}
+#swatches span{display:flex;align-items:center;gap:4px}
+i{border:1px solid #fff5;width:10px;height:10px;display:inline-block;background:var(--swatch)}
+@media(max-width:650px){.grid{grid-template-columns:1fr}}
+</style>
+<script defer src="data.js"></script>
+</head>
+<body><main>
+<header><div><h1>Meridian Relay</h1><p>Compare the relay’s surface coordinates and categorical IDs.</p></div>
+<a id="review">Open bake review</a></header>
+<section class="grid" id="views" aria-label="Surface comparison"></section>
+<div class="meta"><div id="point"></div><div id="swatches"></div></div>
+<template id="panel"><article>
+  <label>View<select></select></label>
+  <figure tabindex="0" aria-label="Pick a texel. Use arrow keys to move the pick."><img draggable="false"><span class="aim" aria-hidden="true"></span></figure>
+  <footer><output class="value"></output><a download>Download</a></footer>
+</article></template>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+  const get = id => document.getElementById(id);
+  const { size, artifacts, review } = demo;
+  const modes = {
+    enamel:'Shaded relay', 'position-object':'Object position',
+    'position-world':'World position · station mount', 'bench-world':'World position · assembly bench',
+    'position-normalized':'Normalized position', 'vertex-id':'Vertex ID', 'material-id':'Material ID', 'part-id':'Part ID',
+    coverage:'Coverage'
+  };
+  const panels=[], samples=new Map();
+  let x=Math.floor(size*.63), y=Math.floor(size*.45);
+  const clip = n => Math.max(0,Math.min(size-1,n));
+  const number = n => Number(n.toFixed(4));
+  function update() {
+    get('point').textContent='Texel '+x+', '+y+' · Click either map or use the arrow keys';
+    const colors=new Map();
+    for(const {select,figure,value} of panels) {
+      figure.style.setProperty('--x',((x+.5)/size*100)+'%');
+      figure.style.setProperty('--y',((y+.5)/size*100)+'%');
+      const id=select.value, artifact=artifacts[id], {output,channels}=artifact;
+      if(!output) {
+        value.textContent=id==='enamel'?'Lit from the baked surface':'Coverage before edge padding';
+        continue;
+      }
+      if(!samples.has(id))samples.set(id,new DataView(Uint8Array.from(atob(artifact.samples),c=>c.charCodeAt(0)).buffer));
+      const texel=(y*size+x)*channels, data=samples.get(id);
+      if(output.kind==='position') {
+        const xyz=Array.from({length:3},(_,i)=>data.getFloat32((texel+i)*4,true));
+        value.textContent=xyz.map((n,i)=>'XYZ'[i]+' '+number(n)).join(' · ');
+      } else {
+        const code=data.getFloat32(texel*4,true), entry=output.palette.find(row=>row.id===code);
+        value.textContent=code?(entry?.label?entry.label+' · ':'')+'ID '+code:'Outside the surface';
+        if(output.distinct<=12) for(const row of output.palette)colors.set(id+'/'+row.id,row);
+      }
+    }
+    get('swatches').replaceChildren(...[...colors.values()].map(row=>{
+      const item=document.createElement('span'), chip=document.createElement('i');
+      chip.style.setProperty('--swatch',row.color);
+      item.append(chip,(row.label??'Vertex')+' · '+row.id);
+      return item;
+    }));
+  }
+  get('review').href=review.station;
+  for(const [i,initial] of ['enamel','material-id'].entries()) {
+    const article=get('panel').content.firstElementChild.cloneNode(true), select=article.querySelector('select');
+    const figure=article.querySelector('figure'), image=article.querySelector('img'), link=article.querySelector('a');
+    const value=article.querySelector('output');
+    select.setAttribute('aria-label',i===0?'Left view':'Right view');
+    select.replaceChildren(...Object.entries(modes).map(([id,label])=>new Option(label,id)));
+    select.value=initial;
+    function render() {
+      const id=select.value,row=artifacts[id];
+      image.src=row.preview;image.alt=modes[id];link.href=row.file;update();
+    }
+    figure.addEventListener('pointerdown',event=>{
+      const box=figure.getBoundingClientRect();
+      x=clip(Math.floor((event.clientX-box.left)/box.width*size));
+      y=clip(Math.floor((event.clientY-box.top)/box.height*size));
+      figure.focus();
+      update();
+    });
+    figure.addEventListener('keydown',event=>{
+      const delta={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]}[event.key];
+      if(!delta)return;
+      event.preventDefault();x=clip(x+delta[0]);y=clip(y+delta[1]);update();
+    });
+    select.addEventListener('change',render);
+    panels.push({select,figure,value});
+    get('views').append(article);
+    render();
+  }
+});
+</script>
+</main></body></html>
