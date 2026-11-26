@@ -374,6 +374,7 @@ All checked-in guides, indexed by title and section headings.
 - [Scene publishing](../scene-publishing.md)
 - [Unified scene timeline](../scene-timeline.md)
 - [Halftone and layered screen printing](../screen-print.md)
+- [Retained sculpt sweeps](../sculpt-sweeps.md)
 - [SDF-assisted rendering](../sdf-assist.md)
 - [Signed-distance function graphs](../sdf-functions.md)
 - [Offline path-traced SDF reference](../sdf-reference.md)

@@ -102,6 +102,10 @@ Use `planTilesetPrimitive(request)` and `applyTilesetPrimitive(request)`
 to stamp and revise painted primitives. The source retains dimensions
 and segment counts with its mesh. [Textured primitive workflow](mesh-uv.md#stamp-and-revise-textured-primitives)
 
+Use a [retained sculpt sweep](sculpt-sweeps.md) as a standalone solid or
+as a join modifier's shaped operand. It preserves the authored poses,
+pressure, and blend radius in the saved scene.
+
 ## Brushes and local rebuilds
 
 Use `paintShadowBand(stroke, { pbrMaterial })` to append a stroke to a [named PBR diffuse ramp](pbr-materials.md#paint-a-pbr-shadow-band).

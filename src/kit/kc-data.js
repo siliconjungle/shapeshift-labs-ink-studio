@@ -133,6 +133,7 @@
     box: { need: { at: 'vec3', half: 'vec3' }, may: { round: 'num' } },
     lathe: { need: { at: 'vec3', h: 'pos', r: 'num|vec2|profile' } },
     torus: { need: { at: 'vec3', R: 'pos', r: 'pos' } },
+    sweep: { need: { brush: 'obj', poses: 'list' }, may: { step: 'pos', blendRadius: 'num' } },
     tube: { need: { pts: 'pts', r: 'num|vec2' } },
     stroke: {
       need: { points: 'list' },
@@ -1152,6 +1153,12 @@
         );
       }
       fields(s, path, def, COMMON);
+      if (s.kind === 'sweep') {
+        try {
+          if (s.turn !== undefined) throw new TypeError('Use transform to rotate a complete sweep');
+          K.procedural.shapeSweeps.prepare(s);
+        } catch (error) { bad(path, error.message); }
+      }
       if (s.surfaceState !== undefined) {
         try { K.procedural.surfaceState.projection(s.surfaceState); }
         catch (error) { bad(path + '.surfaceState', error.message); }
@@ -1821,6 +1828,7 @@
         else if (k === 'lathe')
           p = S.lathe(s.at, s.h, Array.isArray(s.r) && Array.isArray(s.r[0]) ? t => K.kf(t, s.r.flat()) : s.r, m, baseOptions);
         else if (k === 'torus') p = S.torus(s.at, s.R, s.r, m, baseOptions);
+        else if (k === 'sweep') p = S.implicitForm(K.procedural.shapeSweeps.prepare(s), m, baseOptions);
         else if (k === 'tube')
           p = S.tube(s.pts, Array.isArray(s.r) ? s.r[0] : s.r, Array.isArray(s.r) ? s.r[1] : s.r, m, baseOptions);
         else if (K.drawing.kind(s)) p = K.drawing.solid(S, s, m, baseOptions);
