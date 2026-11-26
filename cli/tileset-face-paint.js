@@ -48,7 +48,8 @@ function usesOf(world, tileset, at, K, area) {
   const areaHit = area && Region.contact(area.rect,area.changedMask);
   for (const [object,row] of Object.entries(world.topologyMeshes ?? {})) {
     if (!row.tilesetMaterials) continue;
-    const layer = K.sceneMeshes.layer(row.mesh);
+    const layer = K.sceneMeshes.layer(row.mesh), wraps=layer.tileWraps;
+    let wrapIndex=0;
     for (const chart of layer.surfaceCharts) {
       const {first,end,materialId:material,partId:part,region} = chart;
       if (row.tilesetMaterials.get(material)!==tileset) continue;
@@ -59,12 +60,15 @@ function usesOf(world, tileset, at, K, area) {
         layer[Symbol.for('ink-studio.spriteSurface.uvSlip')]?.ranges.some(range=>range.first<end && range.end>first);
       for (let corner=first;corner<end;corner+=3) {
         const face = layer.featureFaces[corner/3], id = key(object,face), offset = corner*5;
-        if (result.get(id)?.sampling==='texel-footprint') continue;
-        const uv = areaHit ? null : [3,8,13].map(i=>[layer.vertices[offset+i],layer.vertices[offset+i+1]]);
-        const direct = areaHit ? areaHit(layer,corner,chart) :
-          hi.every((limit,axis)=>uv.some(point=>point[axis]<limit)) && touches(uv,origin,hi);
-        if (direct || filtered) result.set(id,{object,...(part!==undefined && {part}),face,material,
-          sampling:direct ? 'texel-footprint' : 'filter-or-uv-motion',visiblePixels:0,changedPixels:0});
+        if (['texel-footprint','wrapped-crop'].includes(result.get(id)?.sampling)) continue;
+        while(wraps?.[wrapIndex]?.end<=corner)wrapIndex++;
+        const wrap=wraps?.[wrapIndex]?.first<=corner ? wraps[wrapIndex].mapping : null;
+        const uv = areaHit || wrap ? null : [3,8,13].map(i=>[layer.vertices[offset+i],layer.vertices[offset+i+1]]);
+        const direct = areaHit ? areaHit(layer,corner,chart,wrap) :
+          wrap ? origin.every((value,k)=>value>=wrap.start[k] && value<wrap.start[k]+wrap.size[k]) :
+            hi.every((limit,axis)=>uv.some(point=>point[axis]<limit)) && touches(uv,origin,hi);
+        if (direct || filtered && !wrap) result.set(id,{object,...(part!==undefined && {part}),face,material,
+          sampling:wrap ? 'wrapped-crop' : direct ? 'texel-footprint' : 'filter-or-uv-motion',visiblePixels:0,changedPixels:0});
       }
     }
   }

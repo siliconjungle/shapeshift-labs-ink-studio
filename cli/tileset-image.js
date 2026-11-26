@@ -5,6 +5,7 @@ const path = require('node:path');
 const PNG = require('./png.js');
 const files = require('./asset-files.js');
 const Selection = require('../src/tileset-selection.js');
+const {canonicalDigest,isRevision} = require('./pixel-edit-revisions.js');
 
 function readTilesetImage(source, toolkit = require('..').load()) {
   const bytes = source instanceof Uint8Array ? source : fs.readFileSync(source);
@@ -489,11 +490,37 @@ function publishFaceEdit(editor, request, settings, output, plan, apply) {
   process.stdout.write(JSON.stringify(report,null,2)+'\n');
 }
 
+function wrapCommand([file,...rest], options, openEditor) {
+  const {scene,out,expect}=options;
+  if (rest.length || ![scene,file,...Object.values(options)].every(value=>typeof value==='string' && value.trim()) ||
+      Object.keys(options).some(key=>!['scene','out','expect'].includes(key)))
+    throw new TypeError('Use tileset wrap <request.json> --scene <scene.json> [--expect receipt.json] [--out <new-scene.json>]');
+  const read=filename=>JSON.parse(fs.readFileSync(filename,'utf8'));
+  const input=path.resolve(scene), output=out && sceneOutput(input,out,file);
+  if (output && expect && output===path.resolve(expect)) throw new RangeError('Write the scene separately from the receipt');
+  const editor=openEditor(input), request=read(file);
+  const plan=editor.planTilesetWrap(request);
+  const previewRevision=canonicalDigest([editor.snapshot(),editor.sourceDependencies?.(),request,plan]);
+  if (expect) {
+    const reviewed=read(expect);
+    if (reviewed?.format!==plan.format || reviewed.version!==1 || reviewed.canCommit!==true || !isRevision(reviewed.previewRevision))
+      throw new TypeError('Expected a successful tileset wrap preview receipt');
+    if (reviewed.previewRevision!==previewRevision) throw new RangeError('Tileset wrap preview is stale');
+  }
+  if (output && plan.canCommit) {
+    editor.applyTilesetWrap(request);
+    files.publishJson(output,editor.snapshot(),'A different scene already exists at '+output);
+  }
+  if (output && !plan.canCommit) process.exitCode=1;
+  process.stdout.write(JSON.stringify({...plan,previewRevision},null,2)+'\n');
+}
+
 function command([action, ...args], options, toolkit, projectTexelsPerUnit, openEditor) {
   if (action === 'collection') return require('./tileset-collection.js').command(args,options,toolkit);
   if (action === 'select') return require('./tileset-component-selection.js').command(args,options,openEditor);
   if (action === 'select-atlas') return require('./tileset-component-selection.js').atlasCommand(args,options,openEditor);
   if (action === 'reskin') return reskinCommand(args,options,openEditor);
+  if (action === 'wrap') return wrapCommand(args,options,openEditor);
   if (action === 'material') return require('./tileset-material.js').command(args,options,openEditor,sceneOutput);
   if (action === 'palette') return require('./tileset-palette.js').command(args,options,toolkit,openEditor,sceneOutput);
   if (action === 'paint') return require('./tileset-paint.js').command(args,options,toolkit,openEditor,sceneOutput);

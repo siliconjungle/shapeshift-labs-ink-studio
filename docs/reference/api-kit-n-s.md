@@ -1280,6 +1280,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.sceneMeshes` | namespace |  | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes) |
+| `KIT.sceneMeshes.bindTileWraps` | function | `(mesh, byFace)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.bounds` | function | `(mesh)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.channelUV` | function | `(mesh, triangle, weights, selector = 'pigment')` | [guide](../mesh-uv.md#bind-separate-material-layouts), [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.clipUV` | function | `(mesh, {min,max,material,clip:limit,uvSet='pigment'})` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
