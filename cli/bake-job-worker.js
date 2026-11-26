@@ -14,6 +14,7 @@ const Thickness=require('./thickness.js');
 const Curvature=require('./bake-job-curvature.js');
 const Attributes=require('./bake-job-attributes.js');
 const Transfer=require('./bake-job-transfer.js');
+const UVDebug=require('./bake-job-uv-debug.js');
 const Geometry=require('./geometry-masks.js');
 const UV=require('./material-preview-geometry.js');
 const bake=require('./glb-bake.js');
@@ -46,7 +47,7 @@ function interpretation(row) {
   if(row.output?.kind==='direction')return {intent:'data',layout:'xyz'};
   if(row.output?.kind==='curvature')return {intent:'data',units:row.output.units,
     ...(row.output.range&&{valueRange:row.output.range})};
-  if(['pigment','emission'].includes(row.map))return {intent:'color',colorSpace:'srgb'};
+  if(['pigment','emission',UVDebug.outline].includes(row.map))return {intent:'color',colorSpace:'srgb'};
   return {intent:'mask'};
 }
 
@@ -126,9 +127,10 @@ function steps(plan,model,library,K,onInput) {
   const receivers=hasOcclusion&&selections.map((row,i)=>hasOther&&!plan.targets[i].projection?
     Meshes.meshFor(model,plan.targets[i],K,images,{sceneSpace:true}):row);
   const diagnostics=plan.preset.maps.some(row=>row.enabled&&Projection.maps.includes(row.id));
+  const samplesMaterial=enabled.some(row=>!Occlusion.names.includes(row.id)&&!UVDebug.debugMap(row.id));
   const casts=selections.map((selection,i)=>{
     const {projection}=plan.targets[i];
-    if(hasOther&&(projection||diagnostics))return Projection.prepare(projection,selection,library,plan,K,images,onInput);
+    if(samplesMaterial&&(projection||diagnostics))return Projection.prepare(projection,selection,library,plan,K,images,onInput);
   });
   const totalTiles=selections.reduce((n,row)=>n+row.tiles.length,0), tasks=[];
   let pixels=0;
@@ -265,20 +267,42 @@ function main(request,base) {
     ...(plan.textureInputs.size&&{textureInputs:[...plan.textureInputs.keys()]})};
   emit({event:'planned',completed:0,total:pending.length});
   const render=renderTasks(pending,model,receivers,plan,record,K);
+  const uvDebug=UVDebug.create(pending,(file,bytes)=>{
+    Assets.write(directory(out,file),bytes);
+    return digest(bytes);
+  },K);
   for(const [i,task] of pending.entries()) {
     const {map,tile,selection,authored,settings}=task;
     const detail={map,target:authored.id,tile:tile.label,total:pending.length};
     emit({event:'map-started',...detail,completed:i});
-    const {bytes,preview,validity,...rest}=render(task);
-    const [u,v]=tile.tile, stem='maps/'+authored.id+'/'+u+'_'+v+'/'+map, relative=stem+'.'+Surface.ext(settings.encoding);
-    Assets.write(directory(out,relative),bytes);
-    const previewFile=preview&&stem+'.preview.png';
-    if(preview)Assets.write(directory(out,previewFile),preview);
-    const validityFile=validity&&stem+'.valid.png';
-    if(validity)Assets.write(directory(out,validityFile),validity);
+    const debug=uvDebug(task);
+    if(debug&&debug.index===undefined)debug.index=(report.uvDebug??=[]).push(debug.entry)-1;
+    let relative, sha256, rest, previewFile, validityFile, validitySha256;
+    if(UVDebug.debugMap(map)) {
+      const key=map==='coverage'?'coverage':'outline', {entry}=debug;
+      relative=entry.files[key];
+      sha256=debug.hashes[key];
+      rest={texels:entry.texels,coverage:entry.texels/settings.size**2};
+    } else {
+      const {bytes,preview,validity,...info}=render(task), [u,v]=tile.tile;
+      const stem='maps/'+authored.id+'/'+u+'_'+v+'/'+map;
+      relative=stem+'.'+Surface.ext(settings.encoding);
+      Assets.write(directory(out,relative),bytes);
+      sha256=digest(bytes);
+      rest=info;
+      if(preview) {
+        previewFile=stem+'.preview.png';
+        Assets.write(directory(out,previewFile),preview);
+      }
+      if(validity) {
+        validityFile=stem+'.valid.png';
+        Assets.write(directory(out,validityFile),validity);
+        validitySha256=digest(validity);
+      }
+    }
     report.maps.push({target:authored.id,mesh:selection.mesh,meshIndex:selection.index,uvSet:authored.uvSet,
-      tile:tile.tile,tileLabel:tile.label,map,settings,file:relative,sha256:digest(bytes),...(previewFile&&{previewFile}),
-      ...(validityFile&&{validityFile,validitySha256:digest(validity)}),...rest});
+      tile:tile.tile,tileLabel:tile.label,map,settings,file:relative,sha256,...(previewFile&&{previewFile}),
+      ...(validityFile&&{validityFile,validitySha256}),...(debug&&{uvDebug:debug.index}),...rest});
     emit({event:'map-finished',...detail,completed:i+1});
   }
   if(plan.sources.size||plan.skewMaps.size||plan.targets.some(row=>row.projection))

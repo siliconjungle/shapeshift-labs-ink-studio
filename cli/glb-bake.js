@@ -1,6 +1,6 @@
 // Rasterize source appearance into the finished atlas, with padding for texture filtering.
 const png = require('./png');
-const { area2 } = require('./glb-uv');
+const Grid = require('./uv-bake-grid.js');
 const { idOK } = require('./material-projection.js');
 const { names:geometryNames } = require('./geometry-masks.js');
 
@@ -95,8 +95,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
     const rebuildChart = rebuild?.has(chart), layoutRow = layoutRows.get(chart);
     const geometrySample = geometry?.calculate?.forFace(f,geometryLayers);
     const visibilitySample = visibility?.forFace(f);
-    const t = uvs[f].map(p => p.map(x => x * size)), [a, b, c] = t, det = area2(a, b, c);
-    if (Math.abs(det) < 1e-16) throw new Error('Cannot bake a degenerate UV triangle');
+    const grid = Grid.triangle(uvs[f],size), {points:[a,b,c],det} = grid;
     const [pa, pb, pc] = face.map(i => mesh.points[i]);
     const ab = V.sub(pb, pa), ac = V.sub(pc, pa);
     const front = (project || cage) && V.norm(V.cross(ab,ac));
@@ -104,22 +103,14 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
     const [na, nb, nc] = mesh.cornerNormals?.[f] || face.map(i => normals[i]), normAB = V.sub(nb, na), normAC = V.sub(nc, na);
     const tangent = V.mul(V.sub(V.mul(ab, c[1] - a[1]), V.mul(ac, b[1] - a[1])), 1 / det);
     const bitangent = V.mul(V.sub(V.mul(ac, b[0] - a[0]), V.mul(ab, c[0] - a[0])), 1 / det);
-    const x0 = Math.max(0, Math.floor(Math.min(a[0], b[0], c[0])));
-    const y0 = Math.max(0, Math.floor(Math.min(a[1], b[1], c[1])));
-    const x1 = Math.min(size, Math.ceil(Math.max(a[0], b[0], c[0])));
-    const y1 = Math.min(size, Math.ceil(Math.max(a[1], b[1], c[1])));
     const slot = mesh.faceMaterials?.[f] ?? 0, fallback = mats[slot];
-    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
-      const q = [x + 0.5, y + 0.5], u = area2(a, q, c) / det, v = area2(a, b, q) / det;
-      if (u < -1e-9 || v < -1e-9 || u + v > 1 + 1e-9) continue;
-      const i = x + y * size;
-      if (previous && !rebuildChart && (owners[i] !== chart+1 || !previous.footprint[i])) continue;
+    Grid.samples(grid,size,(i,u,v,interior,x,y)=>{
+      if (previous && !rebuildChart && (owners[i] !== chart+1 || !previous.footprint[i])) return;
       if (rebuildChart && owners[i] && owners[i] !== chart + 1)
         throw chartBake.conflict([{ code: 'retained-texel', chart, chartOwner: owners[i] - 1,
           pixel: [x, y], gutter: !footprint[i] }]);
-      const interior = Math.min(u, v, 1 - u - v) > 1e-7;
       if (covered[i] === 2 && interior) throw new Error('UV islands overlap in the texture bake');
-      if (covered[i]) continue;
+      if (covered[i]) return;
       covered[i] = interior ? 2 : 1;
       if (registered) {
         owners[i] = chart + 1;
@@ -208,7 +199,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
       emissiveUsed ||= emission.some(value => value > 0);
       surfaceUsed ||= roughness !== 0.8 || metallic !== 0;
       strength = Math.max(strength, ...emission);
-    }
+    });
   }
   palette?.finish();
   if (!used && !previous) throw new Error('Texture bake found no surface in the UV atlas');
@@ -222,10 +213,6 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
   }
   // Fixed charts expand inside their saved gutters. Revised charts may
   // claim only free texels next to their newly rasterized surface.
-  let front = [];
-  for (let i = 0; i < count; i++) if (covered[i] && (!previous || footprint[i] && dirty.has(owners[i]-1)) &&
-    ((i % size > 0 && !covered[i - 1]) || (i % size < size - 1 && !covered[i + 1]) ||
-    (i >= size && !covered[i - size]) || (i < count - size && !covered[i + size]))) front.push(i);
   const copy = (i, j, next) => {
     const owner = registered ? owners[i] : 0;
     if (rebuild?.has(owner - 1) && owners[j] && owners[j] !== owner) {
@@ -245,16 +232,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
     if(height)height[j]=height[i];
     if(alpha)alpha[j]=alpha[i];
   };
-  for (let step = 0; step < padding && front.length; step++) {
-    const next = [];
-    for (const i of front) {
-      if (i % size > 0) copy(i, i - 1, next);
-      if (i % size < size - 1) copy(i, i + 1, next);
-      if (i >= size) copy(i, i - size, next);
-      if (i < count - size) copy(i, i + size, next);
-    }
-    front = next;
-  }
+  Grid.gutters(covered,size,padding,i=>!previous||footprint[i]&&dirty.has(owners[i]-1),copy);
   const textures = Object.fromEntries(Object.entries(pixels).map(([key, data]) => [key, png.encode(size, size, data)]));
   const translucent = alpha && alpha.some((value,i)=>covered[i]&&value<255);
   if (alpha) {

@@ -9,10 +9,11 @@ const Thickness=require('./thickness.js');
 const Curvature=require('./bake-job-curvature.js');
 const Attributes=require('./bake-job-attributes.js');
 const Transfer=require('./bake-job-transfer.js');
+const UVDebug=require('./bake-job-uv-debug.js');
 
 const format='ink-studio/bake-job', presetFormat='ink-studio/bake-preset';
 const names=Object.freeze(['pigment','normal','world-normal','height','roughness','metalness','emission','opacity','coverage',...Geometry.names,
-  ...projectionMaps,...Occlusion.names,...Curvature.names,...Attributes.names,Transfer.name]);
+  ...projectionMaps,...Occlusion.names,...Curvature.names,...Attributes.names,Transfer.name,UVDebug.outline]);
 const geometryFields=['up','samples','cavityRadius','exposureDistance','thicknessScale','rayBias'];
 const mapGeometry={slope:['up'],cavity:['samples','cavityRadius','rayBias'],
   exposure:['samples','exposureDistance','rayBias'],thickness:['thicknessScale','rayBias'],'thickness-valid':['rayBias']};

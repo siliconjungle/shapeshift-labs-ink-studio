@@ -30,14 +30,27 @@ label{font-size:12px;color:var(--muted);display:grid;gap:3px}summary{cursor:poin
 .map-controls{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 p{margin:6px 0;color:var(--muted);font-size:12px}
 progress{width:100%;height:9px;accent-color:var(--gold)}
-.preview{display:grid;place-items:center;margin:11px 0;min-height:270px;height:min(49vw,429px);max-height:463px;border:1px solid var(--line);
-background-color:#242b38;background-image:conic-gradient(#2e3746 25%,transparent 0 50%,#2e3746 0 75%,transparent 0);background-size:24px 24px}
-.preview img{display:block;max-width:100%;max-height:100%;height:100%;width:auto;aspect-ratio:1;image-rendering:pixelated}
+.preview{--preview-edge:clamp(270px,49vw,429px);display:grid;place-items:center;margin:11px 0;height:var(--preview-edge);
+border:1px solid var(--line);background-color:#242b38;background-image:conic-gradient(#2e3746 25%,transparent 0 50%,#2e3746 0 75%,transparent 0);background-size:24px 24px}
+#map-frame{width:min(100%,var(--preview-edge));height:auto;aspect-ratio:1;position:relative;isolation:isolate}
+#map-frame img{position:absolute;inset:0;display:block;width:100%;height:100%;image-rendering:pixelated;pointer-events:none}
+#uv-ownership{opacity:.71}
+#uv-border{position:absolute;inset:1px;border:1px dashed #faca91;pointer-events:none;box-shadow:0 0 0 1px #17202d}
+#uv-border span{position:absolute;display:block;width:max-content;max-width:100%;padding:3px 5px;color:#fff0d1;background:#1a2433;
+font:11px ui-monospace,monospace}
+#uv-tile-name{top:2px;left:2px}#uv-tile-axes{bottom:2px;right:2px}
+#uv-controls{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:8px}
+#uv-controls label{display:inline-flex;align-items:center;gap:4px}
+#uv-tiles button[aria-pressed="true"]{border-color:var(--gold);color:var(--gold)}
+#uv-legend{margin:10px 0;color:var(--muted)}
+#uv-swatches{padding:0;margin:6px 0 0;list-style:none;display:grid;gap:4px;max-height:180px;overflow:auto}
+#uv-swatches li{display:flex;align-items:center;gap:8px;overflow-wrap:anywhere;font-size:12px}
+#uv-swatches li span:first-child{width:11px;height:11px;flex:none;border:1px solid #fff4;border-radius:2px}
 dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 9px;font-size:12px;margin:0;color:var(--muted)}dd{margin:0;color:var(--paper);overflow-wrap:anywhere}
 #refresh div{display:flex;gap:7px;flex-wrap:wrap;justify-content:space-between;border-top:1px solid var(--line);padding:5px 0;font-size:12px}
 #notice{white-space:pre-wrap;overflow-wrap:anywhere;color:#f5bca9;min-height:1.05em}
 [hidden]{display:none!important}
-@media(max-width:770px){.layout{grid-template-columns:1fr}.preview{height:290px}}
+@media(max-width:770px){.layout{grid-template-columns:1fr}.preview{--preview-edge:290px}}
 #id-legend{margin:10px 0;color:var(--muted)}
 #id-swatches{padding:0;margin:6px 0 0;list-style:none;display:grid;gap:4px;max-height:180px;overflow:auto}
 #id-swatches li{display:flex;align-items:center;gap:8px;overflow-wrap:anywhere;font-size:12px}
@@ -67,9 +80,26 @@ dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 9px;font
 </section>
 <section class="card">
 <h2>Baked map</h2><label>Map, target and tile<select id="result"></select></label>
-<div class="preview"><img id="image" alt="" hidden><p id="empty">Run a bake to preview its maps.</p></div><dl id="details"></dl>
+<div id="uv-tiles" class="toolbar" aria-label="Tiles for this map" hidden></div>
+<div id="uv-controls" aria-label="UV overlays" hidden>
+<label><input id="show-uv-outlines" type="checkbox"> Chart outlines</label>
+<label><input id="show-uv-ownership" type="checkbox"> Chart ownership</label>
+<label><input id="show-uv-bounds" type="checkbox" checked> Tile bounds</label>
+</div>
+<div class="preview">
+  <div id="map-frame" hidden><img id="image" alt="" hidden><img id="uv-ownership" alt="" hidden>
+  <img id="uv-outlines" alt="" hidden><div id="uv-border" hidden>
+  <span id="uv-tile-name"></span><span id="uv-tile-axes"></span></div></div>
+  <p id="empty">Run a bake to preview its maps.</p>
+</div><dl id="details"></dl>
+<details id="uv-legend" hidden><summary>Chart ownership</summary><ul id="uv-swatches"></ul></details>
 <details id="id-legend" hidden><summary>ID palette</summary><ul id="id-swatches"></ul></details>
 <div class="toolbar"><a id="download-map" download hidden>Download map</a><a id="download-validity" download hidden>Download paired validity</a></div>
+<div id="uv-downloads" class="toolbar" hidden>
+<a id="uv-outline-png" download>Outlines PNG</a><a id="uv-outline-svg" download>Outlines SVG</a>
+<a id="uv-coverage-png" download>Coverage PNG</a><a id="uv-coverage-svg" download>Coverage SVG</a>
+<a id="uv-ownership-png" download>Ownership PNG</a>
+</div>
 </section>
 <section class="card" id="refresh-wrap" hidden><h2>Refreshed resources</h2><div id="refresh"></div><a id="material" href="material.material.json" download>Material graph</a></section>
 </div>
