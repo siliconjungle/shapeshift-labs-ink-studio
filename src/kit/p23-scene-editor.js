@@ -570,6 +570,10 @@
       return stageTilesetFaceEdit(A.tilesetReskin.plan,request).report;
     }
 
+    function planTilesetAssignment(request) {
+      return stageTilesetFaceEdit(A.tilesetReskin.planAssignment,request).report;
+    }
+
     function planTilesetGrow(request, options) {
       return stageTilesetFaceEdit(A.tilesetGrow.plan,request,options).report;
     }
@@ -635,6 +639,10 @@
 
     function applyTilesetReskin(request) {
       return commitTilesetFaceEdit(A.tilesetReskin.plan,request,undefined,'reskin');
+    }
+
+    function applyTilesetAssignment(request) {
+      return commitTilesetFaceEdit(A.tilesetReskin.planAssignment,request,undefined,'assignment');
     }
 
     function growTilesetFace(request, options) {
@@ -1193,7 +1201,8 @@
       constructionPlane, setConstructionPlane, planConstructionOrigin, snapConstructionOrigin,
       planTilesetFace, placeTilesetFace, eyedropTilesetFace, planTilesetStroke, applyTilesetStroke,
       planTilesetRectangle, applyTilesetRectangle, planTilesetBrushRun, applyTilesetBrushRun,
-      planTilesetReskin, applyTilesetReskin, planTilesetGrow, growTilesetFace, planTilesetBlock, applyTilesetBlock,
+      planTilesetReskin, applyTilesetReskin, planTilesetAssignment, applyTilesetAssignment,
+      planTilesetGrow, growTilesetFace, planTilesetBlock, applyTilesetBlock,
       planTilesetPrimitive, applyTilesetPrimitive,
       planTilesetFaceFromVertices, createTilesetFaceFromVertices,
       selectTilesetComponents: (request, options) => A.tilesetComponentSelection.select(snapshot(),request,options),

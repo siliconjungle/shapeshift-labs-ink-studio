@@ -389,6 +389,25 @@ function reskinCommand(args, options, openEditor) {
   return publishFaceEdit(openEditor(input),request,undefined,output,'planTilesetReskin','applyTilesetReskin');
 }
 
+function assignCommand([file,...rest], options, toolkit, openEditor) {
+  const {scene,out,preview,view} = options;
+  if (rest.length || !file || !scene || view && !preview ||
+      Object.entries(options).some(([key,value])=>!['scene','out','preview','view'].includes(key) || typeof value!=='string' || !value.trim()))
+    throw new TypeError('Use tileset assign <request.json> --scene <scene.json> [--preview dir] [--view view.json] [--out <new-scene.json>]');
+  const source = path.resolve(scene), output = out && sceneOutput(source,out,file);
+  const read = filename=>JSON.parse(fs.readFileSync(path.resolve(filename),'utf8'));
+  if (output && view && output===path.resolve(view)) throw new RangeError('Write the scene separately from the preview settings');
+  const request = read(file), editor = openEditor(source);
+  const report = editor.planTilesetAssignment(request);
+  const revised = report.canCommit && (preview || output) ? editor.fork() : editor;
+  if (revised!==editor) revised.applyTilesetAssignment(request);
+  const review = preview && require('./mesh-uv-editor.js').assignmentReview(editor,revised,report,view ? read(view) : {},
+    toolkit,preview,[source,path.resolve(file),output,view && path.resolve(view)]);
+  if (output && report.canCommit) files.publishJson(output,revised.snapshot(),'A different scene already exists at '+output);
+  if (output && !report.canCommit) process.exitCode = 1;
+  process.stdout.write(JSON.stringify({...report,...(review && {preview:review})},null,2)+'\n');
+}
+
 const faceEdits = {
   stroke:['planTilesetStroke','applyTilesetStroke'],
   rectangle:['planTilesetRectangle','applyTilesetRectangle'],
@@ -465,6 +484,7 @@ function command([action, ...args], options, toolkit, projectTexelsPerUnit, open
   if (action === 'select') return require('./tileset-component-selection.js').command(args,options,openEditor);
   if (action === 'select-atlas') return require('./tileset-component-selection.js').atlasCommand(args,options,openEditor);
   if (action === 'reskin') return reskinCommand(args,options,openEditor);
+  if (action === 'assign') return assignCommand(args,options,toolkit,openEditor);
   if (action === 'eyedrop') return eyedropCommand(args,options,openEditor);
   if (Object.hasOwn(faceEdits,action)) return faceEditCommand(action,args,options,projectTexelsPerUnit,openEditor);
   if (action === 'stamp' || action === 'place' || action === 'grow') return stampCommand(action,args,options,toolkit,projectTexelsPerUnit,openEditor);

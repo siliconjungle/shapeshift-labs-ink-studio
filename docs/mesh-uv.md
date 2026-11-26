@@ -1725,6 +1725,53 @@ ink-studio mesh-uv edit boards.json normalize.json --object siding --out aligned
 node examples/tileset-pick/uv-normalization-demo.cjs uv-normalization-demo
 ```
 
+### Assign a selection to a tile or sheet
+
+Fit selected faces to a saved tile pick with `mode: "tile"`, or to
+the whole registered image with `mode: "sheet"` and its `tileset` ID.
+Use face `ids`, a saved face or island UV `selection`, or a saved
+topology face or tileset component selection.
+
+```json
+{
+  "object": "siding",
+  "ids": ["panel-1", "panel-2"],
+  "mode": "sheet",
+  "tileset": "enamel",
+  "mapping": "group"
+}
+```
+
+For a tile assignment, put the saved rectangle, brush, or eyedropped
+face under `tile`. A padded brush needs a `cell` with zero-based
+`column` and `row`. Ink uses the pick’s paint orientation and insets.
+Group mapping fits the shared UV bounds to the chosen region.
+Use `mapping: "per-face"` to fit the whole region on each face.
+When a group has unusable UVs, Ink projects its geometry into the
+first face’s plane before fitting. Use per-face mapping for separate
+planes.
+
+The report measures per-face stretch and density from the retained
+triangles in source texel units. Coverage counts distinct source
+texel centers in the proposed footprints, including polygon edges.
+It also counts texels shared by multiple faces and classifies source
+alpha as transparent, translucent, or opaque. Large assignments can
+return partial coverage with `complete: false`. This measures the
+source footprint before camera, lighting, or material alpha cutoff.
+
+Preview draws the assigned region in gold beside the native model.
+When the assignment changes sheets, the atlas preview follows the
+selected material to the new sheet. Commits update the pigment UVs,
+material assignments, and source bindings together. Unselected faces
+keep their existing material slots and active bakes. Pinned corners
+and incompatible material maps can block the commit.
+
+```sh
+ink-studio tileset assign assignment.json --scene siding.json --preview assignment-review
+ink-studio tileset assign assignment.json --scene siding.json --out assigned.json
+node examples/tileset-pick/uv-assignment-demo.cjs uv-assignment-demo
+```
+
 ## Bind separate material layouts
 
 A retained mesh part can use a different UV set for each material channel.

@@ -64,27 +64,28 @@
       sourceStatus:mapping.sourceStatus} : {};
   }
 
-  function rebind(row, face, prior, source) {
+  function rebindSources(row, updates) {
     const api = A.tilesetFaces;
-    const related = binding=>binding.element === face && api.isSourceBinding(binding);
     const all = row.bindings ?? [];
-    const unrelated = all.filter(binding=>!related(binding));
-    if (!source) return unrelated;
-    const used = new Set(unrelated.map(binding=>binding.id));
-    const base = prior?.id ?? 'tileset/'+face;
-    let id = base;
-    for (let n=2;used.has(id);n++) id = base+'/'+n;
-    const old = prior?.data;
-    const binding = {id,domain:'faces',element:face,data:{...source,...(old?.placement && {placement:old.placement})}};
-    let inserted = false;
+    const related = binding=>updates.has(binding.element) && api.isSourceBinding(binding);
+    const used = new Set(all.filter(binding=>!related(binding)).map(binding=>binding.id));
+    const reserved = new Set([...updates.values()].map(({prior})=>prior?.id)), replacements = new Map();
+    for (const [face,{prior,source}] of updates) if (source) {
+      const base = prior?.id ?? 'tileset/'+face;
+      let id = base;
+      for (let n=2;used.has(id) || reserved.has(id) && id!==prior?.id;n++) id = base+'/'+n;
+      used.add(id);
+      const placement = prior?.data.placement;
+      replacements.set(face,{id,domain:'faces',element:face,data:{...source,...(placement && {placement})}});
+    }
     const result = all.flatMap(entry=>{
       if (!related(entry)) return [entry];
-      if (inserted || prior && entry.id !== prior.id) return [];
-      inserted = true;
+      const {prior} = updates.get(entry.element), binding = replacements.get(entry.element);
+      if (!binding || prior && entry.id!==prior.id) return [];
+      replacements.delete(entry.element);
       return [binding];
     });
-    if (!inserted) result.push(binding);
-    return result;
+    return result.concat([...replacements.values()]);
   }
 
   function plan(scene, request) {
@@ -150,7 +151,7 @@
       corners[i].before === corners[i].after ? corner : uvSet ?
         {...corner,attributes:{...corner.attributes,[MaterialUV.key(uvSet)]:corners[i].after}} : {...corner,uv:corners[i].after})};
     const row = edited ? A.meshTopologyScene.revise(old,{faces:[polygon]}).row : {...old};
-    const bindings = rebind(row,face,prior,source);
+    const bindings = rebindSources(row,new Map([[face,{prior,source}]]));
     if (bindings.length || old.bindings) row.bindings = bindings;
     if (material.add) row.materials = [...(row.materials ?? []),material.definition];
     // When a face leaves a shared slot its old bake still describes every remaining user.
@@ -166,5 +167,156 @@
     return {row,report:freeze({...report,afterRevision,changes,...(material.add && {addedMaterial:material.definition})})};
   }
 
-  A.tilesetReskin = Object.freeze({plan});
+  function assignmentFaces(doc, {object,part,ids,selection}, uvSet) {
+    if (selection?.format==='ink-studio/tileset-component-selection') {
+      if (selection.version!==1 || selection.domain!=='tiles' || selection.object!==object || selection.part!==part)
+        throw new RangeError('Use a saved tile selection from this scene mesh');
+      selection = selection.selection;
+      if (!selection) throw new TypeError('A saved tile selection needs its topology selection');
+    }
+    const saved = selection?.format==='ink-studio/uv-selection';
+    if (saved && !['faces','islands'].includes(selection.domain))
+      throw new TypeError('Use a saved face or island UV selection for tileset assignment');
+    const chosen = saved ? topology.uv.select(doc,{domain:selection.domain,from:selection,uvSet}).faces :
+      topology.select(doc,selection===undefined ? {domain:'faces',ids} : {domain:'faces',from:selection},{object,part}).ids;
+    if (!chosen.length) throw new RangeError('Choose at least one face to assign');
+    return new Set(chosen);
+  }
+
+  function projectAssignment(group, positions) {
+    const {V} = K, [{face,triangles}] = group;
+    const [a,b] = face.corners.map(corner=>positions.get(corner.vertex));
+    const [p,q,r] = triangles[0].positions;
+    const horizontal = V.norm(V.sub(b,a)), normal = V.norm(V.cross(V.sub(q,p),V.sub(r,p)));
+    const down = V.cross(horizontal,normal), points = new Map();
+    for (const {face} of group) for (const corner of face.corners) {
+      const offset = V.sub(positions.get(corner.vertex),a);
+      points.set(corner.id,[V.dot(offset,horizontal),V.dot(offset,down)]);
+    }
+    return points;
+  }
+
+  function fitAssignment(group, positions, original, destination) {
+    const useUV = group.every(({triangles})=>triangles.every(({uv})=>uv.every(Boolean) && Math.abs(MeshUV.area2(...uv))>1e-12));
+    const points = useUV ? original : projectAssignment(group,positions);
+    const [l,t,r,b] = meshUVRegions.bounds(group.flatMap(({face})=>face.corners.map(corner=>points.get(corner.id))));
+    if (!(l<r && t<b)) return;
+    const [bottomLeft,,topRight,topLeft] = destination;
+    const mapped = new Map();
+    const lerp = (a,b,t)=>t===0 ? a : t===1 ? b : a+(b-a)*t;
+    for (const {face} of group) for (const {id} of face.corners) {
+      const [u,v] = points.get(id);
+      const s = (u-l)/(r-l), h = (v-t)/(b-t);
+      mapped.set(id,topLeft.map((start,i)=>topRight[i]!==start ? lerp(start,topRight[i],s) : lerp(start,bottomLeft[i],h)));
+    }
+    return {mapped,basis:useUV ? 'authored-uv' : 'surface-projection'};
+  }
+
+  function planAssignment(scene, request) {
+    const {object,part,mode='tile',mapping='group',ids,selection,tile,tileset,cell,revision} = request ?? {};
+    if (!request || Object.getPrototypeOf(request)!==Object.prototype ||
+        Object.keys(request).some(key=>!['object','part','mode','mapping','ids','selection','tile','tileset','cell','revision'].includes(key)) ||
+        !name(object) || part!==undefined && !name(part) || !['tile','sheet'].includes(mode) ||
+        !['group','per-face'].includes(mapping) || (ids===undefined)===(selection===undefined) ||
+        ids!==undefined && !Array.isArray(ids) || selection!==undefined && (!selection || Object.getPrototypeOf(selection)!==Object.prototype) ||
+        (mode==='tile' ? !tile || tileset!==undefined : !name(tileset) || tile!==undefined || cell!==undefined) ||
+        cell!==undefined && (!cell || Object.getPrototypeOf(cell)!==Object.prototype ||
+          Object.keys(cell).length!==2 || ![cell.column,cell.row].every(Number.isSafeInteger)))
+      throw new TypeError('Assign selected faces to a saved tile pick or a registered sheet');
+    const rows = scene.topologyMeshes ?? {}, old = Object.hasOwn(rows,object) && rows[object];
+    if (!old || part!==undefined && old.part!==part) throw new RangeError('No editable topology for scene object '+object);
+    const doc = topology.create(old.document), beforeRevision = topology.revision(doc);
+    if (revision!==undefined && revision!==beforeRevision) throw new RangeError('Tileset assignment was authored against a different topology revision');
+    const uvSet = MaterialUV.resolve(doc.uvBindings,'pigment');
+    const chosen = assignmentFaces(doc,{object,part:old.part,ids,selection},uvSet);
+    const atlases = A.tilesets.prepare(scene.tilesets,scene.tilesetDefaults);
+    const brush = mode==='tile' ? pick(atlases,{selection:tile,cell},'crop') : pick(atlases,{tileset},'tileset');
+    const {asset,atlas} = brush, crop = brush.selection ?? TilesetSelection.pick(atlas,asset,{x:0,y:0,width:asset.width,height:asset.height});
+    const {source,pigmentUV} = A.tilesetFaces.cropSource(asset,crop,brush.bounds,brush.paint);
+    const faceData = new Map(doc.faces.filter(face=>chosen.has(face.id)).map(face=>[face.id,{face,triangles:[]}]));
+    const positions = new Map(doc.vertices.map(({id,position})=>[id,position]));
+    const selectedCorners = new Map([...faceData.values()].flatMap(({face})=>face.corners.map(corner=>[corner.id,corner])));
+    const original = new Map([...selectedCorners].map(([id,corner])=>[id,MaterialUV.uv(corner,uvSet)]));
+    for (const {face,corners} of topology.triangulate(doc).triangleSources) if (faceData.has(face))
+      faceData.get(face).triangles.push({corners,positions:corners.map(id=>positions.get(selectedCorners.get(id).vertex)),
+        uv:corners.map(id=>original.get(id))});
+    const selected = [...faceData.values()], groups = mapping==='group' ? [selected] : selected.map(row=>[row]);
+    const definitions = new Map((old.materials ?? []).map(material=>[material.id,material]));
+    const activeBakes = new Map((old.bakes ?? []).filter(bake=>!bake.invalidated).map(bake=>[bake.material,bake]));
+    const unselectedSlots = new Set(doc.faces.filter(face=>!chosen.has(face.id)).map(face=>face.material));
+    const oldAtlases = A.meshTopologyScene.uvAtlases(scene,old,'pigment'), destination = [asset.width,asset.height];
+    const added = [], materials = new Map(), replacements = [], faces = [], conflicts = [], footprints = [], bindings = new Map();
+    const targetBounds = meshUVRegions.bounds(pigmentUV), spans = destination.map(n=>n-1);
+    const constantAxis = targetBounds[0]===targetBounds[2] || targetBounds[1]===targetBounds[3];
+    for (const group of groups) {
+      const fit = fitAssignment(group,positions,original,pigmentUV);
+      if (!fit) {
+        conflicts.push({reason:'degenerate-assignment-bounds',faces:group.map(row=>row.face.id)});
+        continue;
+      }
+      for (const {face,triangles} of group) {
+        const {id,material} = face, bake = activeBakes.get(material);
+        if (!materials.has(material)) {
+          const base = definitions.get(material) ?? {id:material};
+          const next = materialFor({...old,materials:[...(old.materials ?? []),...added]},base,atlas,Boolean(bake));
+          if (next.add) added.push(next.definition);
+          materials.set(material,next.definition);
+        }
+        const definition = materials.get(material);
+        const paint = face.corners.map(corner=>{
+          const before = original.get(corner.id) ?? null, proposed = fit.mapped.get(corner.id);
+          const after = before && uvMatch(before,proposed) ? before : proposed;
+          fit.mapped.set(corner.id,after);
+          return {id:corner.id,before,after};
+        });
+        const proposed = corners=>corners.map(id=>fit.mapped.get(id));
+        for (const [i,corner] of face.corners.entries()) if (MaterialUV.pinned(corner,uvSet) && !uvMatch(paint[i].before,paint[i].after))
+          conflicts.push({reason:'pinned-uv',face:id,corner:corner.id});
+        if (!constantAxis && triangles.some(row=>Math.abs(MeshUV.area2(...proposed(row.corners)))<=1e-12))
+          conflicts.push({reason:'degenerate-assignment-uv',face:id,basis:fit.basis});
+        footprints.push(triangles.map(row=>proposed(row.corners).map(uv=>MaterialUV.texel(uv,...destination))));
+        const prior = A.tilesetEyedrop.sourceBinding(old,id), slots = A.tilesetFaces.sourceCorners(prior,face.corners.length);
+        const texels = paint.map(row=>MaterialUV.texel(row.after,...destination));
+        const inferred = slots && A.tilesetEyedrop.orientationOf(texels,undefined,slots).paint;
+        const bindingSource = {...source};
+        if (inferred) bindingSource.paint = inferred;
+        else delete bindingSource.paint;
+        if (slots?.length===3) bindingSource.uvCorners = slots;
+        bindings.set(id,{prior,source:bindingSource});
+        const beforeImage = oldAtlases?.(material);
+        faces.push({face:id,basis:fit.basis,corners:paint,
+          before:{material,tileset:beforeImage?.tileset ?? null,atlasSize:beforeImage?.size ?? null,
+            metrics:beforeImage && triangles.every(row=>row.uv.every(Boolean)) ?
+              meshUVRegions.stats(triangles,beforeImage.size.map(n=>n-1)) : null},
+          after:{material:definition.id,tileset:atlas,bounds:meshUVRegions.bounds(texels),
+            metrics:meshUVRegions.stats(triangles,spans,row=>proposed(row.corners))}});
+        if (definition.id!==material || paint.some(({before,after})=>!before || !uvMatch(before,after))) replacements.push({
+          ...face,material:definition.id,corners:face.corners.map((corner,i)=>{
+            const {before,after} = paint[i];
+            return before && uvMatch(before,after) ? corner : uvSet ?
+              {...corner,attributes:{...corner.attributes,[MaterialUV.key(uvSet)]:after}} : {...corner,uv:after};
+          })
+        });
+      }
+    }
+    const {perFace,...coverage} = MeshUV.sampleCoverage(footprints,crop,atlases.resolve({tileset:atlas}));
+    faces.forEach((row,i)=>{ row.after.coverage = perFace[i]; });
+    const report = {format:'ink-studio/tileset-uv-assignment',version:1,object,...(old.part && {part:old.part}),
+      id:atlas,mode,mapping,uvSet,beforeRevision,target:{...source,uvBounds:targetBounds},ids:[...chosen],
+      faces,coverage,conflicts,canCommit:!conflicts.length};
+    if (conflicts.length) return {report:freeze(report)};
+    const row = replacements.length ? A.meshTopologyScene.revise(old,{faces:replacements}).row : {...old};
+    row.bindings = rebindSources(row,bindings);
+    if (added.length) row.materials = [...(row.materials ?? []),...added];
+    if (row.bakes) row.bakes = row.bakes.map(bake=>unselectedSlots.has(bake.material) ?
+      activeBakes.get(bake.material) ?? bake : bake);
+    const afterRevision = topology.revision(row.document);
+    if (!row.modifiers?.some(modifier=>modifier.enabled!==false)) {
+      if (row.attachments?.revision===beforeRevision) row.attachments = {...row.attachments,revision:afterRevision};
+      if (row.shapeKeys?.restRevision===beforeRevision) row.shapeKeys = {...row.shapeKeys,restRevision:afterRevision};
+    }
+    return {row,report:freeze({...report,afterRevision,addedMaterials:added,changes:A.meshTopologyScene.diff(old,row)})};
+  }
+
+  A.tilesetReskin = Object.freeze({plan,planAssignment});
 })(KIT);

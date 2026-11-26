@@ -929,6 +929,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetPrimitives.plan` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-primitives.js) |
 | `KIT.authoring.tilesetReskin` | namespace |  |  |
 | `KIT.authoring.tilesetReskin.plan` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-reskin.js) |
+| `KIT.authoring.tilesetReskin.planAssignment` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-reskin.js) |
 | `KIT.authoring.tilesetRevisions` | namespace |  |  |
 | `KIT.authoring.tilesetRevisions.dependencies` | function | `(scene, id, external)` | [source](../../src/kit/p23-tileset-revisions.js) |
 | `KIT.authoring.tilesetRevisions.plan` | function | `(scene, request, external)` | [source](../../src/kit/p23-tileset-revisions.js) |
