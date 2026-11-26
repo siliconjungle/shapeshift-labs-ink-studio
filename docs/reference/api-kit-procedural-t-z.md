@@ -35,6 +35,21 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.terraces.parameters` | function | `(raw = {})` | [source](../../src/kit/p12-terraced-carrier.js) |
 | `KIT.procedural.terraces.surface` | function | `(base, configuration)` | [source](../../src/kit/p12-terraced-carrier.js) |
 
+## KIT.procedural.terrainSet
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.terrainSet` | namespace |  | [guide](../terrain-sets.md#streaming-manifests) |
+| `KIT.procedural.terrainSet.bake` | function | `(source)` | [guide](../terrain-sets.md#streaming-manifests), [source](../../src/kit/pdb-terrain-set-bake.js) |
+| `KIT.procedural.terrainSet.create` | function | `(source)` | [guide](../terrain-sets.md#streaming-manifests), [source](../../src/kit/pda-terrain-set.js) |
+| `KIT.procedural.terrainSet.edit` | function | `(source, request)` | [guide](../terrain-sets.md#streaming-manifests), [source](../../src/kit/pda-terrain-set.js) |
+| `KIT.procedural.terrainSet.format` | value | `string = "ink-studio/terrain-set"` | [guide](../terrain-sets.md#streaming-manifests) |
+| `KIT.procedural.terrainSet.inspect` | function | `(source)` | [guide](../terrain-sets.md#streaming-manifests), [source](../../src/kit/pda-terrain-set.js) |
+| `KIT.procedural.terrainSet.lod` | function | `(instance, viewer)` | [guide](../terrain-sets.md#streaming-manifests), [source](../../src/kit/pdb-terrain-set-bake.js) |
+| `KIT.procedural.terrainSet.mesh` | function | `(tile)` | [guide](../terrain-sets.md#streaming-manifests), [source](../../src/kit/pdb-terrain-set-bake.js) |
+| `KIT.procedural.terrainSet.revision` | function | `(source)` | [guide](../terrain-sets.md#streaming-manifests), [source](../../src/kit/pda-terrain-set.js) |
+| `KIT.procedural.terrainSet.tileFormat` | value | `string = "ink-studio/terrain-tile"` | [guide](../terrain-sets.md#streaming-manifests) |
+
 ## KIT.procedural.tiles
 
 | Member | Kind | Signature or value | Guides and source |
