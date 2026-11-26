@@ -30,6 +30,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.makeBuilder().describeEngraving` | function | `(first,end,spec,frame)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
 | `toolkit.makeBuilder().describeFootprint` | function | `(first, end, definition, frame)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
 | `toolkit.makeBuilder().describeOptical` | function | `(first, end, profile)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
+| `toolkit.makeBuilder().describePaintFinish` | function | `(first, end, row, spills)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
 | `toolkit.makeBuilder().describePaintedShading` | function | `(first,end,normal,emission,controls)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
 | `toolkit.makeBuilder().describePixelStyle` | function | `(first, end, style, pair)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
 | `toolkit.makeBuilder().describePrecipitation` | function | `(first, end, profile = false, spatial = true)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |

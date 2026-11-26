@@ -45,6 +45,7 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow, cutout
   }));
   const projectors = spots.map(light => ({ ...light, tint:linear(light.rgb) }));
   const spillLights=spill.filter(light=>light.intensity>0);
+  const finishSpills = spillLights.filter(light => light.paintedFinish);
   const rig = ShotLighting.bind(shot, world, data, alpha, art);
   if (!active.length && !spillLights.length && !projectors.length && !rig) return null;
   const sources = active.some(light=>light.shadows) || spillLights.some(light=>light.shadows) || (!shadow && spots.some(light=>light.castsShadow))
@@ -53,18 +54,21 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow, cutout
     cutoutShadow?.(origin, direction, stop) || occludes(sources, origin, direction, stop) : null;
   const cache = [];
   const inkControls = world.renderMetadata?.inkControls;
+  function spillAt(lights, point, normal, row, bias, suppression) {
+    const emitted = [0,0,0], weight = 1 - (suppression ?? (Number.isInteger(row) ? inkControls?.[row*4+3] : undefined) ?? 0);
+    if (!lights.length || !weight) return emitted;
+    AreaLights.evaluate(lights, point, normal, emitted, {shadow:areaShadow,biasNormal:bias,
+      contribution:art?.spill && ((light,at)=>art.spill(light,row,at))});
+    return (art?.curves.emission?.(emitted) ?? emitted).map(n=>n*weight);
+  }
 
   function evaluate(point, normal, row, biasNormal, specular, spillSuppression) {
     const rgb=[0,0,0];
     const shadeNormal=art?.normal?.(row,normal) ?? normal, bias=biasNormal??normal;
     AreaLights.evaluate(active,point,shadeNormal,rgb,{shadow:areaShadow,biasNormal:bias,specular});
-    const spillWeight=1-(spillSuppression ?? (Number.isInteger(row) ? inkControls?.[row*4+3] : undefined) ?? 0);
-    if(spillLights.length&&spillWeight){
-      const emitted=[0,0,0];
-      AreaLights.evaluate(spillLights,point,shadeNormal,emitted,{shadow:areaShadow,biasNormal:bias,
-        contribution:art?.spill && ((light,at)=>art.spill(light,row,at))});
-      const graded=art?.curves.emission?.(emitted) ?? emitted;
-      for(let c=0;c<3;c++)rgb[c]+=graded[c]*spillWeight;
+    if (spillLights.length) {
+      const emitted=spillAt(spillLights,point,shadeNormal,row,bias,spillSuppression);
+      for(let c=0;c<3;c++)rgb[c]+=emitted[c];
     }
     for (const light of projectors) {
       const offset = light.at.map((value,k) => value-point[k]), distance = Math.hypot(...offset);
@@ -115,6 +119,10 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow, cutout
     return {irradiance:gain.map(n=>n-1),highlight};
   };
   shade.receives = row => active.length > 0 || spillLights.length > 0 || projectors.length > 0 || rig?.receives(row);
+  if (finishSpills.length) shade.finishSpill = (point, normal, color, row, suppression) => {
+    const added = spillAt(finishSpills, point, art?.normal?.(row,normal) ?? normal, row, normal, suppression);
+    return added.some(Boolean) ? ShotLighting.shade(color, added.map(n=>1+n)) : color;
+  };
   return shade;
 }
 

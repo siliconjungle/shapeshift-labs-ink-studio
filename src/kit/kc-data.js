@@ -1895,7 +1895,8 @@
     const { detailBudgets, shadowArt } = st0.finish.look ?? {};
     const B = (env.makeBuilder || makeBuilder)(seed, pal, detailBudgets === undefined && shadowArt === undefined ?
       undefined : { detailBudgets, shadowArt });
-    const keepLightCasters = ShotLighting.needsCasters(st0.finish.shotLighting) ||
+    const keepLightCasters = [...anchors.values()].some(anchor => anchor.finish?.spill?.shadows) ||
+      ShotLighting.needsCasters(st0.finish.shotLighting) ||
       AreaLights.prepare(st0.finish.areaLights).some(light => light.shadows && light.intensity) ||
       EmissiveFinishes.prepare(st0.finish.emissiveFinishes, pal).some(({spill}) => spill?.shadows && spill.intensity) ||
       st0.finish.volumeLighting?.spots?.some(light => light.surfaceIntensity && light.castsShadow !== false);
@@ -2008,12 +2009,12 @@
           try {
             const carrier = carriers.get(anchor.host.id) ?? makeSolid(anchor.host, true);
             const psd = S.psd, distance = (x, y, z) => psd(carrier, x, y, z);
-            const { direction: comb, grid, relief } = anchor;
+            const { direction: comb, grid, relief, finish } = anchor;
             const volume = relief?.mode === 'volume';
             const caps = [style?.silhouetteAllowance, relief?.silhouetteAllowance].filter(n => n !== undefined);
-            const allowance = relief && !volume ? 0 : caps.length ? Math.min(...caps) : undefined;
+            const allowance = finish || relief && !volume ? 0 : caps.length ? Math.min(...caps) : undefined;
             const pigmentOnly = allowance === 0 && !volume;
-            let warp = (comb || grid || relief) && carrier.markWarp, chart;
+            let warp = (comb || grid || relief || finish) && carrier.markWarp, chart;
             if (grid?.settings.kind === 'uv') {
               chart = warp?.base.markCharts?.(grid.settings.chart);
               if (!chart) {
@@ -2028,7 +2029,7 @@
               pigmentOnly || relief ? { ...anchor.snap, offset: 0 } : anchor.snap, restDistance);
             s = { ...s, poses, path: 'free' };
             paintContacts.set(s.id, contacts.length);
-            if (comb || gridDab || relief) {
+            if (comb || gridDab || relief || finish) {
               const report = (comb || gridDab) && modelOptions?.[brushField] === 'paintings' && {
                 space: 'receiver-rest', warped: !!warp, samples: 0, frames: [], ...(gridDab && { gridResults: {} })
               };
@@ -2060,7 +2061,7 @@
                   return V.dot(V.norm(M.app(M.tr(jac), n)), direction) >= facing;
                 };
               }
-              guard = { entity: anchor.host.id, pigmentOnly, accepts, relief,
+              guard = { entity: anchor.host.id, pigmentOnly, accepts, relief, finish,
                 ...(allowance !== undefined && (!volume || relief.height > 0) && {
                   signed: (x, y, z) => (distance(...frame.point([x, y, z])) - allowance) / frame.boundScale
                 }) };
@@ -2141,22 +2142,28 @@
           const paintOverlay = guard?.pigmentOnly || recess || !volume && (style || form.opacityAt) &&
             !held && !s.hold && !s.carve && !s.ghost && !s.group && !modifiers.length;
           const material = form.opacityAt ? { ...m, opacityAt: form.opacityAt } : m;
-          if (guard?.pigmentOnly && relief?.tint !== false) {
+          if (guard?.pigmentOnly) {
             const { inverse } = affineSolidSpace(s.restAffine);
-            const color = B.P[m.r[Math.floor(m.r.length / 2)]].map(n => n / 255);
-            S.addSurfacePigment(guard.entity, s.id, (point, normal, onHit) => {
+            const coverage = (point, normal) => {
               const local = inverse(point);
               if (local.some((n, i) => n < form.bounds.min[i] - 1e-6 || n > form.bounds.max[i] + 1e-6)) return;
               if (form.sd(...local) > 1e-6) return;
               if (guard.accepts && !guard.accepts(point, normal)) return;
-              const weight = form.opacityAt?.(...local) ?? 1;
-              if (!weight) return;
-              onHit(weight);
-              return rgb => {
-                const light = .35 + .85 * (.2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2]);
-                return color.map((value, i) => K.clamp(value * light * weight + rgb[i] * (1 - weight), 0, 1));
-              };
-            });
+              return form.opacityAt?.(...local) ?? 1;
+            };
+            if (guard.finish) S.addPaintFinish(guard.entity, s.id, guard.finish, coverage);
+            else if (relief?.tint !== false) {
+              const color = B.P[m.r[Math.floor(m.r.length / 2)]].map(n => n / 255);
+              S.addSurfacePigment(guard.entity, s.id, (point, normal, onHit) => {
+                const weight = coverage(point, normal);
+                if (!weight) return;
+                onHit(weight);
+                return rgb => {
+                  const light = .35 + .85 * (.2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2]);
+                  return color.map((value, i) => K.clamp(value * light * weight + rgb[i] * (1 - weight), 0, 1));
+                };
+              });
+            }
           }
           if (relief?.mode === 'shading') S.addSurfaceRelief(guard.entity,
             K.procedural.paintRelief.gradient(relief, form, affineSolidSpace(s.restAffine), guard.accepts));
