@@ -72,6 +72,7 @@ All checked-in guides, indexed by title and section headings.
 - [Place paint by cause](../caused-marks.md)
 - [Celestial tracks](../celestial-tracks.md)
 - [Cellular rules and lattices](../cellular-lattices.md)
+- [Headless character rigs](../character-rigs.md)
 - [Character surface contact](../character-surfaces.md)
 - [CLAP instruments and DAW handoff](../clap-instruments-and-handoff.md)
 - [Clip sequencing and retiming](../clip-sequence.md)
