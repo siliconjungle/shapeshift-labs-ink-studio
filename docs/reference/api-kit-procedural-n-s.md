@@ -2233,3 +2233,11 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.surfaceState.restSampler` | function | `(chart,definitions=materialChannels())` | [source](../../src/kit/pa9-surface-state.js) |
 | `KIT.procedural.surfaceState.valueOf` | function | `(schema,value,add=false)` | [source](../../src/kit/pa9-surface-state.js) |
 | `KIT.procedural.surfaceState.window` | function | `(box)` | [source](../../src/kit/pa9-surface-state.js) |
+
+## KIT.procedural.sweepSnap
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.sweepSnap` | namespace |  |  |
+| `KIT.procedural.sweepSnap.check` | function | `(raw, shape)` | [source](../../src/kit/p26b-sweep-snap.js) |
+| `KIT.procedural.sweepSnap.resolve` | function | `(shape, settings, distance)` | [source](../../src/kit/p26b-sweep-snap.js) |

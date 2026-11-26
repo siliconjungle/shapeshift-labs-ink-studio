@@ -184,6 +184,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   sculpt-split plan <scene.json> <split.json>   report a complementary sculpt split
   sculpt-split apply <scene.json> <split.json> --out scene.json   save separate sculpt pieces
   sculpt-stamp place <scene.json> <stamp.json> <placement.json> --out scene.json   add and carve one compound stamp
+  sculpt-snap plan <scene.json> <stroke.json>   preview a surface or root stroke snap
+  sculpt-snap apply <scene.json> <stroke.json> --out scene.json   write a retained snapped stroke
+  sculpt-snap inspect <scene.json> --target solid --id stroke   sample the live attachment
   sculpt-sweep add <scene.json> <sweep.json> [--target solid] --out scene.json   add a retained shaped sweep
   sculpt-sweep cut <scene.json> <sweep.json> --target solid --out scene.json   carve a retained sweep into a solid
   sculpt-sweep update <scene.json> <edit.json> [--target solid] --out scene.json   revise a saved sweep

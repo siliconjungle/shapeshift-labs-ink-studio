@@ -228,6 +228,14 @@
       return report;
     }
 
+    const planSculptSnap = request => A.sculptSnap.plan(snapshot(), request, buildEnv).report;
+    const inspectSculptSnap = (target, id) => A.sculptSnap.inspect(snapshot(), target, id, buildEnv);
+    function applySculptSnap(request) {
+      const { modifiers, report } = A.sculptSnap.plan(snapshot(), request, buildEnv);
+      setModifiers(modifiers, 'solid:' + request.target);
+      return report;
+    }
+
     function assemblyStretchProposal(request) {
       const scene = snapshot(), plan = A.assemblyStretch.plan(scene, request, buildEnv);
       const proposed = { ...scene, ...plan.patch };
@@ -1340,6 +1348,7 @@
       setModifiers,
       updateModifier,
       sculptContributions, inspectSculptContribution, editSculptContribution,
+      planSculptSnap, inspectSculptSnap, applySculptSnap,
       placeSculptStamp, planSculptSplit, splitSculpt, planAssemblyStretch, stretchAssembly,
       setPrefabInstance,
       planPrefabIsolation, previewPrefabIsolation, editIsolatedPrefab,

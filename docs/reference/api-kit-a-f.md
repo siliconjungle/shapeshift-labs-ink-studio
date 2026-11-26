@@ -870,6 +870,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.sculptContributions.inspect` | function | `(scene, solid, id, env)` | [source](../../src/kit/p23a-sculpt-contributions.js) |
 | `KIT.authoring.sculptContributions.list` | function | `(scene, id)` | [source](../../src/kit/p23a-sculpt-contributions.js) |
 | `KIT.authoring.sculptContributions.plan` | function | `(scene, input, env)` | [source](../../src/kit/p23a-sculpt-contributions.js) |
+| `KIT.authoring.sculptSnap` | namespace |  |  |
+| `KIT.authoring.sculptSnap.inspect` | function | `(scene, target, id, env)` | [source](../../src/kit/p23a-sculpt-snap.js) |
+| `KIT.authoring.sculptSnap.plan` | function | `(scene, input, env)` | [source](../../src/kit/p23a-sculpt-snap.js) |
 | `KIT.authoring.sculptSplit` | namespace |  |  |
 | `KIT.authoring.sculptSplit.plan` | function | `(scene, input, env)` | [source](../../src/kit/p23a-sculpt-split.js) |
 | `KIT.authoring.sculptStamps` | namespace |  |  |
