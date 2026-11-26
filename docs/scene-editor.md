@@ -37,6 +37,9 @@ For CLI diorama builds, add `--asset-cache DIR` to reuse candidate points, mesh 
 
 Transform edits replace individual fields in the solid's `transform`. The transform is applied after its authored geometry and `turn`. A nested operand is transformed before its enclosing operation. A rigged solid's transform edits its rest geometry. Rig joint positions remain controlled by the scene's part definitions.
 
+Use [assembly stretch](assembly-stretch.md) to pull a connected assembly
+between two picks, carry its attachments, and check joint limits.
+
 ## Non-destructive shape editing
 
 `updateShape(patch, keys)` edits the geometry fields of a solid or an operand in the tree. This includes primitive dimensions and the parameters and operands of existing boolean and procedural shapes.
