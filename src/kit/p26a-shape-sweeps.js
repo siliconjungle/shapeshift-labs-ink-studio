@@ -63,21 +63,28 @@
     return { point: point.slice(), rotation: Q.normalize(rotation), pressure };
   }
 
-  function transform(bounds, pose) {
+  function transform(bounds, pose, band) {
     const { point, pressure } = pose, rotation = Q.toMatrix(pose.rotation);
     const center = V.mul(V.lerp(bounds.min, bounds.max, .5), pressure);
     const half = V.mul(V.sub(bounds.max, bounds.min), pressure / 2);
+    const depth = band ? (band[1] - band[0]) / (bounds.max[2] - bounds.min[2]) : pressure;
+    const bias = band ? band[0] - bounds.min[2] * depth : 0;
+    if (band) {
+      center[2] = (band[0] + band[1]) / 2;
+      half[2] = (band[1] - band[0]) / 2;
+    }
     const world = V.add(point, M.app(rotation, center));
     const extent = [0, 3, 6].map(i =>
       Math.abs(rotation[i]) * half[0] + Math.abs(rotation[i + 1]) * half[1] + Math.abs(rotation[i + 2]) * half[2]);
     const inverse = M.tr(rotation);
     return {
       bounds: { min: V.sub(world, extent), max: V.add(world, extent) },
+      metric: pressure > 0 ? Math.min(pressure, depth) : 1,
       local: pressure > 0 ? (x, y, z, sd) => {
         const a = (x - point[0]) / pressure, b = (y - point[1]) / pressure, c = (z - point[2]) / pressure;
+        const z0 = inverse[6] * a + inverse[7] * b + inverse[8] * c;
         return sd(inverse[0] * a + inverse[1] * b + inverse[2] * c,
-          inverse[3] * a + inverse[4] * b + inverse[5] * c,
-          inverse[6] * a + inverse[7] * b + inverse[8] * c) * pressure;
+          inverse[3] * a + inverse[4] * b + inverse[5] * c, band ? (z0 * pressure - bias) / depth : z0);
       } : (x, y, z) => Math.hypot(x - point[0], y - point[1], z - point[2])
     };
   }
@@ -137,7 +144,7 @@
       sd: (x, y, z) => distance(root, x, y, z, Infinity) };
   }
 
-  function stampedSweep(brush, guide, step, blendRadius, pressureResponse, looseness, orient) {
+  function stampedSweep(brush, guide, step, blendRadius, pressureResponse, looseness, orient, band) {
     const api = P.paintLooseness, opacity = hasOpacity(pressureResponse);
     let rows, cost, spacing;
     if (brush?.kind === 'mark-profile') {
@@ -157,9 +164,9 @@
       if (scale <= 0) return [];
       const alpha = opacity ? responseAt(pressureResponse.opacity, pose.pressure) : 1;
       const aligned = orient ? orient(pose, dab.ordinal, family) : pose;
-      const width = scale * size, placed = transform(bounds, { ...aligned, pressure: width });
-      return [{ bounds: placed.bounds, sample: (x, y, z) => placed.local(x, y, z, sd),
-        ...(opacityAt || alpha < 1 ? { alphaAt: opacityAt ? (x, y, z) => alpha * placed.local(x, y, z, opacityAt) / width
+      const placed = transform(bounds, { ...aligned, pressure: scale * size }, band);
+      return [{ bounds: placed.bounds, sample: (x, y, z) => placed.local(x, y, z, sd) * placed.metric,
+        ...(opacityAt || alpha < 1 ? { alphaAt: opacityAt ? (x, y, z) => alpha * placed.local(x, y, z, opacityAt)
           : () => alpha } : {}) }];
     }));
     const stations = families.flat();
@@ -203,7 +210,7 @@
     };
   }
 
-  function prepare({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse, looseness }, { orient } = {}) {
+  function prepare({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse, looseness }, { orient, band } = {}) {
     if (!Array.isArray(poses) || poses.length < 1 || poses.length > 1024 ||
         !finite(blendRadius) || blendRadius < 0 ||
         (step !== undefined && (!positive(step) || step > 1)))
@@ -214,8 +221,8 @@
         pressureResponse.opacity !== undefined && !range(pressureResponse.opacity, 1)))
       throw new TypeError('Pressure response needs [at zero, at one] ranges for width (0–4) or opacity (0–1)');
     const input = Array.from(poses, poseSource), guide = path === 'ruled' ? ruled(input) : input;
-    if (brush?.kind === 'mark-profile' || looseness !== undefined || orient)
-      return stampedSweep(brush, guide, step, blendRadius, pressureResponse, P.paintLooseness.prepare(looseness), orient);
+    if (brush?.kind === 'mark-profile' || looseness !== undefined || orient || band)
+      return stampedSweep(brush, guide, step, blendRadius, pressureResponse, P.paintLooseness.prepare(looseness), orient, band);
     const source = brushSource(brush);
     const authored = pressureResponse === undefined ? guide : guide.map(pose => ({
       ...pose, pressure: responseAt(pressureResponse.width ?? [1, 1], pose.pressure)
@@ -241,8 +248,8 @@
       stations.push(b);
     }
     const rows = stations.map(pose => {
-      const { bounds, local } = transform(source.bounds, pose);
-      return { bounds, sample: (x, y, z) => local(x, y, z, source.sd) };
+      const { bounds, local, metric } = transform(source.bounds, pose);
+      return { bounds, sample: (x, y, z) => local(x, y, z, source.sd) * metric };
     });
     // Blend neighboring stations independently so overlap never compounds with step density.
     return { ...field(blendRows(rows, blendRadius)), cost: source.cost, sampleCount: stations.length, step: spacing, guide,

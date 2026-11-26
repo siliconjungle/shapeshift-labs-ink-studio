@@ -304,6 +304,7 @@ All checked-in guides, indexed by title and section headings.
 - [Program the pads](../pad-patterns.md)
 - [Paint looseness inside a protected edge](../paint-looseness.md)
 - [Paint mixing](../paint-mixing.md)
+- [Raise, flatten, or recess retained paint](../paint-relief.md)
 - [Shadows from painted cutouts](../painted-cutout-shadows.md)
 - [Retain and edit a 3D painting](../painting-3d.md)
 - [Palette recipes and color paths](../palette-recipes.md)

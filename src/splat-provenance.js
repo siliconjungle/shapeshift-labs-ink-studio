@@ -16,6 +16,7 @@ const SplatProvenance = (() => {
     const labels = [target.entity, target.surface, target.prefabs, target.tags, target.medium, target.mediumKind];
     if (target.mark !== undefined || target.markLayer !== undefined || target.part !== undefined) labels.push(target.mark, target.markLayer);
     if (target.part !== undefined) labels.push(target.part);
+    if (target.castsShadow !== undefined) labels.push(target.castsShadow);
     return JSON.stringify(labels);
   }
 
