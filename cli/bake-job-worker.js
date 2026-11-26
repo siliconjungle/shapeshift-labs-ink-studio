@@ -11,6 +11,7 @@ const Projection=require('./bake-job-projection.js');
 const Surface=require('./bake-job-surface.js');
 const Occlusion=require('./bake-job-occlusion.js');
 const Thickness=require('./thickness.js');
+const Curvature=require('./bake-job-curvature.js');
 const Geometry=require('./geometry-masks.js');
 const UV=require('./material-preview-geometry.js');
 const bake=require('./glb-bake.js');
@@ -35,6 +36,8 @@ function interpretation(row) {
   if(row.output?.kind==='thickness'&&row.output.encoding!=='png8')return {intent:'height',units:row.output.units,
     ...(row.output.range&&{heightRange:row.output.range})};
   if(row.output?.kind==='direction')return {intent:'data',layout:'xyz'};
+  if(row.output?.kind==='curvature')return {intent:'data',units:row.output.units,
+    ...(row.output.range&&{valueRange:row.output.range})};
   if(['pigment','emission'].includes(row.map))return {intent:'color',colorSpace:'srgb'};
   return {intent:'mask'};
 }
@@ -46,7 +49,8 @@ function sameInterpretation(prior,fresh) {
     (fresh.normalSpace==='world'||(prior.normalOrientation??'opengl')===fresh.normalOrientation);
   if(intent==='height')return (prior.units??'shape-units')===fresh.units&&
     JSON.stringify(prior.heightRange??null)===JSON.stringify(fresh.heightRange??null);
-  if(intent==='data')return prior.layout===fresh.layout&&(prior.units??'unitless')===(fresh.units??'unitless');
+  if(intent==='data')return prior.layout===fresh.layout&&(prior.units??'unitless')===(fresh.units??'unitless')&&
+    JSON.stringify(prior.valueRange??null)===JSON.stringify(fresh.valueRange??null);
   return intent!=='color'||!prior.colorSpace||prior.colorSpace===fresh.colorSpace;
 }
 
@@ -177,9 +181,10 @@ function renderOcclusion(tasks,scene,K) {
   };
 }
 
-function renderTasks(tasks,model,receivers,K) {
+function renderTasks(tasks,model,receivers,normalInputs,onInput,K) {
   const shared=new Map(), details=new Map(), heightTasks=new Map(), heightGroups=new Map();
   const occlusion=receivers&&renderOcclusion(tasks,Occlusion.scene(model,receivers,K),K);
+  const curvature=Curvature.render(tasks,normalInputs,onInput,K);
   const rasterKey=({authored,tile,settings})=>JSON.stringify([authored.id,tile.tile,settings.size,settings.padding]);
   for(const task of tasks) {
     const {map,settings,authored}=task, key=rasterKey(task);
@@ -209,6 +214,7 @@ function renderTasks(tasks,model,receivers,K) {
   return task=>{
     const {map,settings,authored}=task;
     if(settings.occlusion)return occlusion(task);
+    if(settings.curvature)return curvature(task);
     if(settings.geometry)return renderGeometry(task,K);
     if(map==='height') {
       if(!heightGroups.has(authored.id)) {
@@ -235,14 +241,14 @@ function main(request,base) {
   const library=Projection.sceneLibrary(plan,model,directory(base,'projection-textures'),record);
   if(request.mode==='inspect') {
     Assets.json(directory(base,'inspection.json'),{label:plan.label,preset:plan.preset,targets:plan.targets,
-      catalog:Meshes.catalog(model),refresh:plan.refresh?.bindings??[],projectionCatalog:library.describe()});
+      catalog:Meshes.catalog(model),refresh:plan.refresh?.bindings??[],projectionCatalog:library.describe(),normalInputs:[...plan.normalInputs.keys()]});
     return;
   }
   const out=path.dirname(base), {tasks:pending,receivers}=steps(plan,model,library,K,record);
   const report={format:'ink-studio/bake-job-report',version:1,label:plan.label,preset:plan.preset,targets:plan.targets,
-    catalog:Meshes.catalog(model),maps:[],inputs:[]};
+    catalog:Meshes.catalog(model),maps:[],inputs:[],...(plan.normalInputs.size&&{normalInputs:[...plan.normalInputs.keys()]})};
   emit({event:'planned',completed:0,total:pending.length});
-  const render=renderTasks(pending,model,receivers,K);
+  const render=renderTasks(pending,model,receivers,plan.normalInputs,record,K);
   for(const [i,task] of pending.entries()) {
     const {map,tile,selection,authored,settings}=task;
     const detail={map,target:authored.id,tile:tile.label,total:pending.length};

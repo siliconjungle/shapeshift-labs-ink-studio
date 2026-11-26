@@ -159,6 +159,6 @@ function meshFor(model,selection,K,images,{sceneSpace=false}={}) {
     return {tile,label:UV.tileLabel(tile),name:asset.name,mesh:{points,materials:[{}],paintedOpacity:true,
       sampleSurface:(p,n,f)=>metadata[source[f]].sample(p,n)},faces,uvs,normals,source};
   });
-  return {index,mesh:asset.name,asset,selected,...geometry,tiles};
+  return {index,mesh:asset.name,asset,selected,uvSet,...geometry,tiles};
 }
 module.exports={load,catalog,chooseMesh,sceneMesh,sceneTransform,surfaces,meshFor};
