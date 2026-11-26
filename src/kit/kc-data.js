@@ -434,6 +434,10 @@
     }
     return out;
   };
+  DIO.assemblyLighting = spec => {
+    const style = styleOf(spec);
+    return { ...style, finish: K.authoring.environments.apply(style.finish, spec.environmentPreset, lookCatalog(spec), style.palette) };
+  };
   DIO.sceneLook = spec => styleOf(spec)?.finish.look;
   DIO.sceneMaterials = spec => {
     const { palette, roles } = styleOf(spec);
@@ -557,7 +561,8 @@
     }
     if (spec.topologyMeshes !== undefined && (!hasTilesets || tilesets)) {
       try {
-        presentation.topologyMeshes = K.authoring.meshTopologyScene.prepare(spec.topologyMeshes, tilesets, meshPlacements);
+        presentation.topologyMeshes = K.authoring.meshTopologyScene.prepare(
+          spec.topologyMeshes, tilesets, meshPlacements, env?.assemblyReview?.meshMaterial);
         const names = new Set([...DIO.solids(spec).map(solid => solid?.id), ...Object.keys(spec.assetParts ?? {})]);
         for (const [object] of presentation.topologyMeshes) {
           if (names.has(object)) throw new RangeError('Editable mesh conflicts with scene object ' + object);
@@ -1713,12 +1718,18 @@
       e.problems = problems;
       throw e;
     }
-    const { spec, dataInputs } = resolved, { timeline, cameraRig, dataMarks, decals } = presentation, dynamics = boundRuntime(source, env, resolved);
-    const st0 = styleOf(spec), catalog = lookCatalog(spec),
+    const review = env.assemblyReview, { dataInputs } = resolved;
+    let { spec } = resolved;
+    const { timeline, cameraRig, dataMarks, decals } = presentation, dynamics = boundRuntime(source, env, resolved);
+    if (review) spec = review.scene(spec);
+    const authoredStyle = styleOf(spec), catalog = lookCatalog(spec);
+    authoredStyle.finish = K.authoring.environments.apply(authoredStyle.finish, spec.environmentPreset, catalog, authoredStyle.palette);
+    authoredStyle.finish.look = K.authoring.looks.scene(authoredStyle.finish.look, catalog);
+    const st0 = review ? review.lighting(authoredStyle) : authoredStyle,
       seed = spec.seed === undefined ? 1 : spec.seed,
       effects = spec.effects || [],
       motion = spec.motion || [],
-      lamps = effects.filter(e => e.do === 'lamp'),
+      lamps = effects.filter((e, i) => e.do === 'lamp' && (!review || review.lamp(i))),
       loose = effects.some(e => ['dust', 'embers', 'smoke', 'sparks', 'rain'].includes(e.do)) || !!spec.tap;
     function bindSceneMeshes(world) {
       if (spec.assetParts !== undefined) {
@@ -1737,9 +1748,10 @@
       }
     }
     function bindDecals(world, rig) {
-      if (!decals?.document.decals.length) return;
+      const document = review && decals ? review.decals(decals.document) : decals?.document;
+      if (!document?.decals.length) return;
       const receivers = new Map(), nodes = {}, parts = new Map();
-      for (const {anchor:{object,part}} of decals.document.decals) {
+      for (const {anchor:{object,part}} of document.decals) {
         const rigPart = decals.solids.get(object).part;
         let node;
         if (rig?.has(rigPart)) {
@@ -1754,7 +1766,7 @@
           representation:'splats', ...(node&&{node})});
       }
       const graph = parts.size ? K.sceneGraph.create({nodes}) : undefined;
-      K.surfaceDecals.bind(world, decals.document, {receivers:[...receivers.values()],graph});
+      K.surfaceDecals.bind(world, document, {receivers:[...receivers.values()],graph});
       if (graph) return () => {
         for (const [part, node] of parts) {
           const at = rig.names.indexOf(part) * 12;
@@ -1806,9 +1818,7 @@
       }
       return world;
     }
-    st0.finish = K.authoring.environments.apply(st0.finish,spec.environmentPreset,catalog,st0.palette);
-    st0.finish.look = K.authoring.looks.scene(st0.finish.look, catalog);
-    const cache = !env.makeBuilder && !env.makeSculpt && env.bakeCache, cacheAPI = K.authoring.bakeCache;
+    const cache = !review && !env.makeBuilder && !env.makeSculpt && env.bakeCache, cacheAPI = K.authoring.bakeCache;
     let pal = st0.palette;
     const meshLooks = new Map();
     const activeSolids = [...DIO.solids(spec, { activeOnly: true })];
@@ -1841,6 +1851,7 @@
       const measureBounds = modelOptions?.[brushField]?.measureBounds;
       S = K.sculpt((env.makeSculpt || makeSculpt)(B, measureBounds ? { measureBounds } : undefined));
       S.sun = B.norm(st0.sun);
+      if (st0.disableSun) S.sunK = 0;
       if (st0.finish.look?.pixel) S.pixel = true;
       S.keepPartRenderSdf = env.retainPartRenderSdf === true || retainedParts;
       S.keepRenderSdf = env.retainRenderSdf === true || env.retainPartRenderSdf === true || keepLightCasters || painted.length>0 || Boolean(st0.finish.look?.sdfAssist ||
@@ -2284,7 +2295,8 @@
         baked || {},
         { made, spec: source, paletteRoles: st0.roles, ...(dynamics && { parameters: dynamics.api }),
           ...(dataInputs && { dataInputs }),
-          ...(spec.light?.surfaceDirection !== undefined && { surfaceLight: spec.light.surfaceDirection }) }
+          ...((review?.studio === true || st0.disableSun) ? { surfaceLight: st0.sun } :
+            spec.light?.surfaceDirection !== undefined && { surfaceLight: spec.light.surfaceDirection }) }
       )
     );
     if (env.resolveSpriteAtlas && Array.isArray(W.spriteAtlases))

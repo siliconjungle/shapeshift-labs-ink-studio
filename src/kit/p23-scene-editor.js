@@ -99,22 +99,20 @@
     nodes.set(tree.key, tree);
 
     // A preview tag identifies anonymous geometry without replacing its render ownership.
-    const usedTags = new Set([...nodes.values()].flatMap(node => node.solid?.tags ?? []));
+    const tags = A.assemblyReview.anonymousTags(scene);
     const byTag = new Map(), preview = { ...scene, solids: solids.map((solid, i) => {
-      if (solid.id !== undefined) return solid;
-      let tag = '@editor/' + i;
-      while (usedTags.has(tag)) tag += '_';
-      usedTags.add(tag);
+      const tag = tags.get(i);
+      if (!tag) return solid;
       byTag.set(tag, indexedNodes[i].key);
       return { ...solid, tags: [...(solid.tags ?? []), tag] };
     }) };
     return { tree, nodes, byEntity, byTag, byStroke, preview: freeze(preview) };
   }
 
-  function create(source, { env, historyLimit } = {}) {
+  function create(source, { env, historyLimit, review: initialReview } = {}) {
     const input = typeof source === 'string' ? JSON.parse(source) : source;
     if (A.projectBundles && input?.format === A.projectBundles.format)
-      return A.projectBundles.open(input).editor({ env, historyLimit });
+      return A.projectBundles.open(input).editor({ env, historyLimit, review: initialReview });
     const baked = input?.data instanceof Float32Array;
     if (baked && !input.spec) throw new TypeError('This splat bake has no retained diorama source');
     const scene = clone(baked ? input.spec : input);
@@ -127,11 +125,28 @@
         throw error;
       }
     }
+    let reviewPreset;
+    function checkReview(before, after, definition = reviewPreset, bindings = buildEnv) {
+      return A.assemblyReview.check(before, after, definition, buildEnv, bindings);
+    }
+    function requireReviewEdit(before, after, bindings = buildEnv) {
+      if (!reviewPreset?.freeze.length) return;
+      const report = checkReview(before, after, reviewPreset, bindings);
+      if (!report.canEdit)
+        throw Object.assign(new RangeError('Frozen assembly items: ' + report.conflicts.map(row => row.key).join(', ')), { report });
+    }
+
     validate(scene);
+    if (initialReview != null) reviewPreset = A.assemblyReview.plan(scene, initialReview, buildEnv).report.preset;
     const document = A.document({ format: A.data.format, version: A.data.version, id: scene.id,
-      seed: 1, nextId: 1, entities: {}, styles: {}, environment: scene }, { historyLimit });
+      seed: 1, nextId: 1, entities: {}, styles: {}, environment: scene }, {
+      historyLimit, beforeTravel: (before, after) => requireReviewEdit(before.environment, after.environment)
+    });
     const snapshot = () => document.snapshot().environment;
-    document.beforeCommit(() => validate(snapshot()));
+    document.beforeCommit(() => {
+      validate(snapshot());
+      requireReviewEdit(document.transactionBase().environment, snapshot());
+    });
 
     let selection = freeze([]), indexScene, index, previewWorld, cachedPick;
     function current() {
@@ -380,6 +395,23 @@
       ...buildEnv, parameterInputs:inputs,retainRenderSdf,retainPartRenderSdf
     }), { spec:snapshot() });
 
+    function setAssemblyReview(definition) {
+      if (document.pending()) throw new RangeError('Finish the active edit before switching the assembly review');
+      const report = definition == null ? null : A.assemblyReview.plan(snapshot(), definition, buildEnv).report;
+      reviewPreset = report?.preset;
+      return report;
+    }
+
+    function buildAssemblyReview(definition = reviewPreset, { time } = {}) {
+      const source = snapshot(), review = A.assemblyReview.plan(source, definition, buildEnv);
+      const sampleTime = review.report.preset.time ?? time ?? 0;
+      if (!Number.isFinite(sampleTime) || sampleTime < 0 || sampleTime > 120)
+        throw new RangeError('Review time must be between 0 and 120 seconds');
+      const world = DIO.build(current().preview, { ...buildEnv, assemblyReview: review,
+        brushSession: A.brushRegions.create(), parameterInputs: { ...buildEnv.parameterInputs, time: sampleTime } });
+      return { world: Object.assign(world, { spec: source }), review, time: sampleTime };
+    }
+
     function preparePrefabRefresh(prefabs, assets) {
       const bindings = { ...buildEnv, assets, prefabs: freeze(clone(prefabs)) };
       const source = snapshot();
@@ -387,6 +419,7 @@
       try {
         instances = A.scenePrefabs.review(source, buildEnv.prefabs, bindings.prefabs);
         validate(source, bindings);
+        requireReviewEdit(source, source, bindings);
       } catch (failure) {
         error = failure;
       }
@@ -1324,7 +1357,7 @@
       }
     }
 
-    function pick(ray, { world, time, reconstruction, sampleWithdrawal } = {}) {
+    function pick(ray, { world, time, reconstruction, sampleWithdrawal, review: definition = reviewPreset, through = false } = {}) {
       const { byEntity, byTag, byStroke } = current();
       const rendered = world ?? (previewWorld ??= build());
       const at = time ?? rendered.lookSnapshot?.time ?? 0;
@@ -1335,7 +1368,10 @@
         const query = K.procedural.contributions.create(posed, { time: at, sampleWithdrawal });
         cachedPick = { time: at, reconstruction, sampleWithdrawal, query };
       }
-      const result = cachedPick.query.ray(ray);
+      const review = definition && A.assemblyReview.plan(snapshot(), definition, buildEnv);
+      const scope = through ? review?.reveal : review?.scoped && review.visible;
+      const accept = scope && (hit => scope(hit.target ?? {}) && (!ray.accept || ray.accept(hit)));
+      const result = cachedPick.query.ray(accept ? { ...ray, accept } : ray);
       if (world) cachedPick = undefined;
       for (const hit of [result.dominant, ...result.contributions]) {
         const target = hit?.target;
@@ -1350,7 +1386,11 @@
     const editor = Object.freeze({
       snapshot,
       serialize: (space = 2) => JSON.stringify(snapshot(), null, space),
-      fork: (source = snapshot()) => create(source,{ env:buildEnv, historyLimit:0 }),
+      fork: (source = snapshot()) => create(source,{ env:buildEnv, historyLimit:0, review: reviewPreset }),
+      setAssemblyReview,
+      inspectAssemblyReview: (definition = reviewPreset) => A.assemblyReview.plan(snapshot(), definition, buildEnv).report,
+      checkAssemblyReview: (candidate, definition = reviewPreset) => checkReview(snapshot(), candidate, definition),
+      buildAssemblyReview,
       sourceDependencies: () => A.bakeCache.signature([
         buildEnv.assets ?? {},buildEnv.prefabs ?? {},buildEnv.parameterInputs ?? {}
       ]),
