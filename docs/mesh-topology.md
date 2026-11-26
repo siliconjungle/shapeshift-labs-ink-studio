@@ -2031,6 +2031,9 @@ ink-studio mesh-topology shading revised.json --view view.json --preview rounded
 An edit request has an `id`, the current topology `revision`, and one or
 more of these fields.
 
+- `groups` assigns a smoothing group to faces. Each row has a `group`
+  name or nonnegative integer and either `faces` with stable face IDs or
+  a saved face `selection`. Set `group: null` to clear the assignment.
 - `edges` contains rows with an `id` and `smooth: true` or
   `smooth: false` for smooth or hard shading. Omit a field to leave it
   alone. Set it to `null` to clear the override.
@@ -2039,8 +2042,8 @@ more of these fields.
   `normal: null` to return the corner to generated shading.
 - `settings` sets the document-wide `smooth` default and
   `weighting`, which can be `uniform`, `area`, `angle` (default),
-  or `area-angle`. Without a smooth default or edge override,
-  the mesh keeps its flat rendering. Set `settings: null` to clear
+  or `area-angle`. Faces without groups use the mesh default and
+  edge overrides. Set `settings: null` to clear
   document-wide settings.
 
 A smooth fan averages the geometric normals of faces connected at a
@@ -2053,6 +2056,46 @@ The native preview writes `beauty.png`, `geometric.png`, and
 `shading.png` on the same 1× grid. In `comparison.png`, geometric normals
 appear on the left and shading normals on the right. Each normal image
 encodes XYZ as RGB.
+
+### Assign smoothing groups to tiles
+
+Give the tiles that should blend the same group. Use separate groups
+for a bevel strip or the other side of a fold. Two grouped faces blend
+across a consistently wound shared edge when their group IDs match.
+An explicit hard edge, full crease, or authored UV seam in any layout
+breaks the fan. Tiles with different atlas rectangles can still blend
+when the edge has no authored seam. Faces that meet only at a vertex
+keep separate fans.
+
+```json
+{
+  "id": "painted-housing",
+  "revision": "<mesh revision>",
+  "groups": [
+    { "group": "shell", "faces": ["shell/a", "shell/b", "shell/c"] },
+    { "group": "rim", "faces": ["rim/a", "rim/b"] }
+  ]
+}
+```
+
+The shading inspector lists group members and gives the rule that
+determines each edge's shading. To pick members for a subsequent edit,
+pass this query to `mesh-topology select`.
+
+```json
+{ "domain": "faces", "filter": { "smoothingGroups": ["shell"] } }
+```
+
+Use `null` in the filter to include unassigned faces. Subdividing a tile
+keeps the group on its child faces. New extrusion sidewalls can be
+assigned independently of their source cap. A safe tile merge reports a
+group boundary among the data it would discard.
+
+```sh
+ink-studio mesh-topology shading housing.json groups.json --object housing --out shaded.json --report receipt.json
+ink-studio mesh-topology shading shaded.json --object housing --view view.json --preview native-views
+node examples/tileset-pick/smoothing-groups-demo.cjs smoothing-groups-review
+```
 
 An edge's `crease` controls subdivision separately from `smooth`.
 Zero uses the standard smooth mask, one keeps a sharp ridge, and

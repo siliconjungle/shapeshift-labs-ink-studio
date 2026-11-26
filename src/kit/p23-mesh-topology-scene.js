@@ -204,7 +204,9 @@
       const retained=attributes && Object.fromEntries(Object.entries(attributes).filter(([key])=>!MaterialUV.isKey(key)));
       return {...geometry,uv:MaterialUV.uv(row,uvSet),...(retained && Object.keys(retained).length && {attributes:retained})};
     }
-    return kind === 'faces' ? { ...row, corners: row.corners.map(corner => geometricRecord(corner,'corners',uvSet)) } : row;
+    if (kind !== 'faces') return row;
+    const {smoothingGroup,...geometry} = row;
+    return {...geometry,corners:row.corners.map(corner=>geometricRecord(corner,'corners',uvSet))};
   }
 
   function bakeState(bake) {

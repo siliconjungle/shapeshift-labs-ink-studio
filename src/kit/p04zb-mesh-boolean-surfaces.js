@@ -162,7 +162,7 @@ const meshBooleanSurfaces = (function(K) {
           if (from && id!==from) cornerLinks.push({from,to:id});
           return {id,vertex:row.node.vertex.id,...cornerData(poly.meta,row.weights,poly.flipped,true)};
         });
-        faces.push({id,material,corners});
+        faces.push({id,material,corners,...(original.smoothingGroup !== undefined && {smoothingGroup:original.smoothingGroup})});
         owners.push({face:id,operand:side,sourceFace:original.id,material});
       }
     }
