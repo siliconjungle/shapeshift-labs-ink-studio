@@ -258,6 +258,8 @@ function command([action, file, input, ...rest], opt, toolkit, { build, openEdit
   if (action === 'move') return moveVertex(file,input,rest,opt,toolkit,openEditor);
   if (action === 'pivot') return pivot(file,input,rest,opt,meshTopology,openEditor);
   if (action === 'overlaps') return overlaps(file,input,rest,opt,meshTopology);
+  if (action === 'variant-prefab')
+    return require('./prefab-variant.js').command(file,input,rest,opt,toolkit,openEditor);
   if (action === 'edit-prefab')
     return require('./prefab-source-edit.js').command(file,input,rest,opt,toolkit,openEditor);
   if (action === 'isolate-prefab')
