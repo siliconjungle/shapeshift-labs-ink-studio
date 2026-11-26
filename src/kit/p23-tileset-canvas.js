@@ -12,12 +12,13 @@
     }
     const wasIndexed = asset.encoding === 'indexed8', padding = index.includes(-1);
     const palette = asset.palette?.slice(), alpha = asset.alpha?.slice() ?? [];
-    let transparent = alpha.indexOf(0);
+    let {paletteMetadata} = asset, transparent = alpha.indexOf(0);
     if (wasIndexed && padding && transparent === -1 && palette.length < 256) {
       transparent = palette.length;
       palette.push(0);
       while (alpha.length < transparent) alpha.push(255);
       alpha.push(0);
+      if (paletteMetadata) paletteMetadata = A.tilesets.appendSwatch(paletteMetadata);
     }
     const indexed = wasIndexed && (!padding || transparent >= 0);
     const bytes = atob(asset.data), pixels = new Uint8Array(index.length*(indexed ? 1 : 4));
@@ -39,7 +40,7 @@
       }
     }
     return {version:1,width,height,...grid,encoding:indexed ? 'indexed8' : 'rgba8',data:A.tilesets.encodeRaster(pixels),
-      ...(indexed && {palette,...((asset.alpha !== undefined || alpha.length) && {alpha})})};
+      ...(indexed && {palette,...((asset.alpha !== undefined || alpha.length) && {alpha}),...(paletteMetadata && {paletteMetadata})})};
   }
 
   function gridPlan(grid, map, operation) {
@@ -182,7 +183,8 @@
     const inherited = tilesets.grid().tileSize;
     const keepInherited = asset.tileSize === undefined && tileSize === undefined && JSON.stringify(grid.after) === JSON.stringify(inherited);
     const next = editRaster(asset,map,keepInherited ? null : grid.after);
-    return {asset:next,meshes,report:freeze({...report,encoding:{before:asset.encoding,after:next.encoding}})};
+    return {asset:next,meshes,report:freeze({...report,encoding:{before:asset.encoding,after:next.encoding},
+      ...(asset.paletteMetadata && !next.paletteMetadata && {omittedPalette:true})})};
   }
 
   A.tilesetCanvas = Object.freeze({plan});

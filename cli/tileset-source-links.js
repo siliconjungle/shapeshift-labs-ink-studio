@@ -7,7 +7,7 @@ const files = require('./asset-files.js');
 const {readTilesetImage} = require('./tileset-image.js');
 
 function revision(asset) {
-  const shape = [asset.width,asset.height,asset.encoding,asset.palette,asset.alpha];
+  const shape = [asset.width,asset.height,asset.encoding,asset.palette,asset.alpha,...(asset.paletteMetadata ? [asset.paletteMetadata] : [])];
   return createHash('sha256').update(JSON.stringify(shape)).update(Buffer.from(asset.data,'base64')).digest('hex');
 }
 

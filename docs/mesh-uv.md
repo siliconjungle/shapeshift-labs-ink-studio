@@ -1621,6 +1621,54 @@ ink-studio tileset paint face transform.json --scene station.json --expect revie
 Run `node examples/tileset-pick/bound-tile-transform-demo.cjs bound-tile-transform-demo`
 for a marquee move and a local resized and flipped copy.
 
+### Reuse a named tileset palette
+
+Inspect an atlas to see ordered swatch IDs, labels, locks, alpha, and
+texel counts. Inspect groups exact RGBA duplicates separately from
+same-RGB swatches with different alpha.
+
+~~~sh
+ink-studio tileset palette inspect --scene station.json --id enamel
+ink-studio tileset palette export --scene station.json --id enamel --out enamel.json
+ink-studio tileset palette import enamel.json --scene other.json --id signs > import-review.json
+ink-studio tileset palette import enamel.json --scene other.json --id signs --expect import-review.json --out named-signs.json
+~~~
+
+Use an Ink pixel palette JSON for stable IDs, labels, locks, and ramps.
+GIMP `.gpl` keeps swatch labels. JASC `.pal` and `.hex` carry ordered
+RGB colors. Exports report unsupported metadata, including alpha across
+these RGB formats. The tileset itself retains exact texel alpha.
+
+On the first import, names attach to matching RGB slots in sheet order,
+keeping distinct source slots and their alpha. Imported swatches appear
+in file order, followed by other source colors. Later imports merge by
+stable ID. A new color gets an unused opaque slot, and an existing ID
+with a different RGB value is a conflict. RGBA sheets can be indexed
+without color loss if the resulting palette fits 256 slots.
+
+Use `tileset palette edit` with an operation JSON and the same
+`--scene`, `--id`, `--expect`, and `--out` workflow.
+
+| Type | Fields |
+| --- | --- |
+| `reorder` | `order` lists every current swatch ID once. |
+| `consolidate` | `map` names each duplicate to remove and the ID to keep, such as `{"glaze-copy":"glaze"}`. |
+
+Both operations remap stored indices and preserve every rendered texel
+and valid bake. Consolidation requires identical RGB and alpha, updates
+ramp references, and respects locked swatches and ramp lengths. Receipts
+show the old and new slots so you can review the change before committing.
+
+Open indexed paint to use the retained names and ramps. A bound-face
+pencil or pattern can use a stable ID in `slot`, for example
+`{"tool":"pencil","slot":"glaze"}`. The eyedropper reports that ID
+alongside the numeric slot. A scene undo restores names, order, and
+indices together. In Node, use `ink.inspectTilesetPalette` and
+`ink.editTilesetPalette`.
+
+Run `node examples/tileset-pick/named-palette-demo.cjs named-palette-demo`
+for a reviewed consolidation and matched native renders.
+
 ### Inset brush UVs on each edge
 
 Use inward distances measured in source texels. The top, bottom, left, and

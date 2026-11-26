@@ -500,6 +500,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.world.entityLifecycle.create` | function | `({known=()=>true,authored=()=>empty,guard=()=>{}}={})` | [source](../../src/kit/pu86-entity-lifecycle.js) |
 | `KIT.world.entityLifecycle.projection` | value | `symbol` |  |
 
+## KIT.world.entityPromotion
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.world.entityPromotion` | namespace |  |  |
+| `KIT.world.entityPromotion.format` | value | `string = "ink-studio/entity-promotion"` |  |
+| `KIT.world.entityPromotion.inspect` | function | `(source, options)` | [source](../../src/kit/pu88-entity-promotion.js) |
+| `KIT.world.entityPromotion.plan` | function | `(source, input, { base, env, ...options } = {})` | [source](../../src/kit/pu88-entity-promotion.js) |
+
 ## KIT.world.eventVisualEffects
 
 | Member | Kind | Signature or value | Guides and source |

@@ -5,6 +5,7 @@ const files = require('./asset-files.js'), PNG = require('./png.js'), Pixels = r
 const Selection = require('../src/tileset-selection.js');
 const {runs} = require('../src/pixel-paint-tools.js');
 const {uniqueId} = require('../src/pixel-raster-colors.js');
+const Palette = require('../src/pixel-palette.js');
 const {digest,isRevision} = require('./pixel-edit-revisions.js');
 
 const format = 'ink-studio/tileset-paint-binding', frame = 'artwork';
@@ -36,7 +37,7 @@ function visitRect(asset, [x,y,width,height], emit) {
     emit(row*width+col,(y+row)*asset.width+x+col);
 }
 
-function paintDocument(asset, rect) {
+function paintDocument(asset, rect, tilesets, reserve) {
   const [,,width,height] = rect, data = Buffer.from(asset.data,'base64');
   if (width>512 || height>512)
     throw new RangeError('The pixel canvas accepts up to 512 pixels per side. Pick a crop of a larger sheet.');
@@ -50,10 +51,20 @@ function paintDocument(asset, rect) {
     slots[i] = data[at];
     alpha[i] = asset.alpha?.[data[at]] ?? 255;
   });
-  const used = [...new Set(slots)].sort((a,b)=>a-b), local = new Map(used.map((id,i)=>[id,i]));
-  if (used.length>255) throw new RangeError('A pixel canvas can edit up to 255 swatches. Pick a crop with fewer used slots.');
+  const used = new Set(slots), named = asset.paletteMetadata && tilesets.namedPalette(asset);
+  if (used.size>255) throw new RangeError('A pixel canvas can edit up to 255 swatches. Pick a crop with fewer used slots.');
+  const all = asset.palette.map((_,i)=>i);
+  if (named) {
+    const unused = all.filter(i=>!used.has(i)).slice(0,Math.max(0,255-used.size-reserve));
+    for (const i of unused) used.add(i);
+  }
+  const visible = all.filter(i=>used.has(i));
+  const local = new Map(visible.map((id,i)=>[id,i]));
+  const swatchIds = visible.map(i=>named?.swatches[i].id ?? 'slot-'+i), allowed = new Set(swatchIds);
+  const metadata = named ? Palette.stampMetadata({swatches:visible.map(i=>named.swatches[i]),
+    ramps:named.ramps.filter(row=>row.swatches.every(id=>allowed.has(id)))}) : {};
   return Pixels.documentFromRaster({width,height,slots:slots.map(id=>local.get(id)),alpha,
-    palette:used.map(id=>hex(asset.palette[id])),swatchIds:used.map(id=>'slot-'+id)});
+    palette:visible.map(i=>hex(asset.palette[i])),swatchIds,...metadata});
 }
 
 function swatch(document, id, color) {
@@ -118,7 +129,7 @@ function open(editor, request, kit = require('..').load()) {
     throw new TypeError('Open a registered tileset with an optional pick, grid, and UV overlay');
   const {tileset,selection,grid,uv} = request, board = source(editor,tileset,kit);
   const {x,y,width,height} = pick(tileset,board.asset,selection), rect = [x,y,width,height];
-  const document = paintDocument(board.asset,rect), overlays = {};
+  const document = paintDocument(board.asset,rect,kit.KIT.authoring.tilesets,Number(Boolean(grid))+Number(Boolean(uv))), overlays = {};
   if (grid) overlays.grid = gridLayer(document,rect,board.asset,board.grid);
   if (uv) overlays.uv = uvLayer(document,editor,tileset,board.asset,rect,uv,kit);
   const binding = {format,version:1,scene:board.scene,tileset,scope:selection===undefined ? 'sheet' : 'crop',
@@ -134,12 +145,14 @@ function pixelValues(stamp) {
     {value:colors[slot]*256+(stamp.alpha?.[i] ?? 255),slot:stamp.swatchIds[slot]});
 }
 
-function revisedAsset(asset, rect, pixels, changedMask) {
+function revisedAsset(asset, rect, pixels, changedMask, tilesets) {
   const data = Buffer.from(asset.data,'base64'), indexed = asset.encoding==='indexed8';
   const palette = asset.palette?.slice(), alpha = asset.alpha?.slice() ?? [], slots = new Map();
   const valueAt = slot=>palette[slot]*256+(alpha[slot] ?? 255);
-  let empty;
+  let empty, {paletteMetadata} = asset;
+  const ids = new Map();
   if (indexed) for (let slot=0;slot<palette.length;slot++) {
+    ids.set(paletteMetadata?.swatchIds[slot] ?? 'slot-'+slot,slot);
     const value = valueAt(slot);
     if (!slots.has(value)) slots.set(value,slot);
     if (value%256===0 && empty===undefined) empty = slot;
@@ -150,14 +163,13 @@ function revisedAsset(asset, rect, pixels, changedMask) {
   visitRect(asset,rect,(i,at)=>{
     const pixel = pixelAt(i);
     if (!pixel) return;
-    const {value,slot} = pixel;
+    const {value,slot,index} = pixel;
     let after = value;
     let before;
     if (indexed) {
       before = data[at];
       const prior = valueAt(before);
-      const explicit = /^slot-(\d+)$/.exec(slot ?? '');
-      const preferred = explicit && Number(explicit[1])<palette.length ? Number(explicit[1]) : undefined;
+      const preferred = index ?? ids.get(slot);
       if (slot===null && prior%256===0) return;
       if (preferred!==undefined && valueAt(preferred)===value) after = preferred;
       else if (prior===value) return;
@@ -167,6 +179,10 @@ function revisedAsset(asset, rect, pixels, changedMask) {
         if (palette.length===256) {paletteFull = true; return;}
         after = palette.length;
         palette.push(value>>>8);
+        if (paletteMetadata) {
+          paletteMetadata = tilesets.appendSwatch(paletteMetadata,slot ?? undefined);
+          ids.set(paletteMetadata.swatchIds[after],after);
+        }
         slots.set(value,after);
         const opacity = value%256;
         if (opacity!==255) {
@@ -187,7 +203,7 @@ function revisedAsset(asset, rect, pixels, changedMask) {
     if (samples.length<32) samples.push({at:[x+i%width,y+Math.floor(i/width)],before,after});
   });
   return {asset:changedTexels ? {...asset,data:data.toString('base64'),
-    ...(indexed && {palette,...(alpha.length && {alpha})})} : asset,changedTexels,samples,paletteFull};
+    ...(indexed && {palette,...(alpha.length && {alpha}),...(paletteMetadata && {paletteMetadata})})} : asset,changedTexels,samples,paletteFull};
 }
 
 function write(editor, binding, document, {apply=false} = {}, kit = require('..').load()) {
@@ -209,14 +225,14 @@ function write(editor, binding, document, {apply=false} = {}, kit = require('..'
   const loaded = Pixels.compile(document,binding.frame);
   for (const item of Object.values(overlays)) if (item.layer &&
     document.layers.some(row=>row.id===item.layer && row.kind!=='reference')) return blocked('overlay-is-paint');
-  const planned = planPixels(editor,tileset,board.asset,rect,pixelValues(Pixels.stamp(loaded)));
+  const planned = planPixels(editor,tileset,board.asset,rect,pixelValues(Pixels.stamp(loaded)),undefined,kit.KIT.authoring.tilesets);
   if (!planned.detail) return blocked('indexed-palette-full');
   if (apply && planned.edit?.canCommit) editor.editTilesetRevision(planned.request);
   return {...report,...planned.detail};
 }
 
-function paintPixels(before, rect, pixels, changedMask) {
-  const {asset,changedTexels,samples,paletteFull} = revisedAsset(before,rect,pixels,changedMask);
+function paintPixels(before, rect, pixels, changedMask, tilesets) {
+  const {asset,changedTexels,samples,paletteFull} = revisedAsset(before,rect,pixels,changedMask,tilesets);
   if (paletteFull) return;
   const detail = {encoding:asset.encoding,changedTexels,samples,
     sampleUnits:asset.encoding==='indexed8' ? 'palette-slot' : 'rgba32',
@@ -224,8 +240,8 @@ function paintPixels(before, rect, pixels, changedMask) {
   return {asset,detail};
 }
 
-function planPixels(editor, tileset, before, rect, pixels, changedMask) {
-  const painted = paintPixels(before,rect,pixels,changedMask);
+function planPixels(editor, tileset, before, rect, pixels, changedMask, tilesets) {
+  const painted = paintPixels(before,rect,pixels,changedMask,tilesets);
   if (!painted) return {};
   const {asset,detail} = painted;
   if (!detail.changedTexels) return {asset,detail:{...detail,canCommit:true,conflicts:[]}};

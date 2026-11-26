@@ -109,6 +109,7 @@
     label: 'str',
     surfaceId: 'str',
     surfaceState: 1,
+    bodySurface: 1,
     sdfPaint: 1,
     sdfSpray: 1,
     sdfProtection: 1,
@@ -135,6 +136,7 @@
     ball: { need: { at: 'vec3', r: 'num|vec3' } },
     rock: { need: { at: 'vec3', r: 'num|vec3' } },
     box: { need: { at: 'vec3', half: 'vec3' }, may: { round: 'num' } },
+    'body-shape': { need: { at: 'vec3', half: 'vec3' }, may: { collider: 'obj', bend: 'obj' } },
     lathe: { need: { at: 'vec3', h: 'pos', r: 'num|vec2|profile' } },
     torus: { need: { at: 'vec3', R: 'pos', r: 'pos' } },
     sweep: { need: { brush: 'obj', poses: 'list' }, may: { step: 'pos', blendRadius: 'num' } },
@@ -1265,6 +1267,29 @@
             isVec(row.p, 3) && (row.dir === undefined || isVec(row.dir, 3) && V.len(row.dir) > 1e-9));
         if (!valid) bad(path + '.sockets', 'solid sockets need stable names and rest points, with optional nonzero directions');
       }
+      if (s.kind === 'body-shape') {
+        try {
+          if (!isVec(s.half, 3) || s.half.some(n => n < 0) || Boolean(s.collider) === Boolean(s.bend) || s.turn)
+            throw new TypeError('Retain a collider or a bent box with finite half extents and a solid transform');
+          if (s.collider) {
+            const bounds = K.world.colliders.local(s.collider).half;
+            if (!K.world.data.equal(bounds, s.half))
+              throw new TypeError('Collider half extents need to match its local bounds');
+          } else {
+            if (s.half.some(n => n <= 0)) throw new RangeError('Bent boxes need positive half extents');
+            K.world.durability.validateBend(s.bend);
+          }
+        } catch (error) { bad(path, error.message); }
+      }
+      if (s.bodySurface !== undefined) {
+        try {
+          if (s.kind !== 'box' && !(s.kind === 'body-shape' && s.bend))
+            throw new TypeError('A retained body surface needs a box or bent box');
+          WSurface().captured(s.bodySurface, s);
+          if (s.bodySurface.fresh?.ramp?.some(index => index >= pal.length))
+            throw new RangeError('A fresh face swatch is outside the scene palette');
+        } catch (error) { bad(path + '.bodySurface', error.message); }
+      }
       if (s.surfaceState !== undefined) {
         try { K.procedural.surfaceState.projection(s.surfaceState); }
         catch (error) { bad(path + '.surfaceState', error.message); }
@@ -1682,6 +1707,7 @@
       return { min: bc.map(c => c - br), max: bc.map(c => c + br) };
   }
 
+  const WSurface = () => K.world.surfaceState;
   const brushField = Symbol('brush field');
   DIO.brushField = (spec, env) => DIO.build(spec, env, { [brushField]: true });
   DIO.sculptFieldReceivers = (spec, env) => DIO.build(spec, env, { [brushField]: 'receivers' });
@@ -1974,7 +2000,9 @@
         const locate = s.surfaceState && charts.projection(s.surfaceState);
         const paint = s.sdfPaint && K.procedural.sdfMaterialPaint.prepare(s.sdfPaint,st0.roles,B.P);
         const spray = s.sdfSpray && K.procedural.sdfVolumeSpray.prepare(s.sdfSpray);
-        const m = locate ? charts.bind(matOf(s.mat), locate, B.P) : matOf(s.mat);
+        const baseMaterial = matOf(s.mat);
+        const m = s.bodySurface ? WSurface().bindCaptured(baseMaterial, WSurface().captured(s.bodySurface, s), B.P, locate) :
+          locate ? charts.bind(baseMaterial, locate, B.P) : baseMaterial;
         const sub = q => make(q, true), k = s.kind;
         const baseOptions = modifiers.length || trace ? { ...o, hold: true } : o;
         if (s.mat !== undefined && (k === 'join' || unaryKinds.includes(k))) baseOptions.mat = m;
@@ -1983,6 +2011,13 @@
         else if (k === 'ball') p = S.ball(s.at, s.r, m, baseOptions);
         else if (k === 'rock') p = S.rock(s.at, s.r, m, baseOptions);
         else if (k === 'box') p = S.box(s.at, s.half, m, Object.assign(s.round ? { rd: s.round } : {}, baseOptions));
+        else if (k === 'body-shape') {
+          const body = { position: s.at, rotation: M.id(), half: s.half, collider: s.collider, bend: s.bend };
+          const { min, max } = K.world.colliders.geometry(body);
+          const margin = s.res ?? S.res;
+          p = S.implicitForm({ bounds: { min: min.map(n => n - margin), max: max.map(n => n + margin) },
+            sd: (x, y, z) => K.world.colliders.distance(body, [x, y, z], true) }, m, baseOptions);
+        }
         else if (k === 'lathe')
           p = S.lathe(s.at, s.h, Array.isArray(s.r) && Array.isArray(s.r[0]) ? t => K.kf(t, s.r.flat()) : s.r, m, baseOptions);
         else if (k === 'torus') p = S.torus(s.at, s.R, s.r, m, baseOptions);
