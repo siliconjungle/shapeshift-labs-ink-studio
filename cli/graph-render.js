@@ -7,10 +7,12 @@ const { history } = require('../src/render-graph.js');
 const { pose } = require('./diarama-pose.js');
 const { select, needsPartMotion, needsStrandMotion, needsSurfaceMotion } = require('../src/art-passes.js');
 const { encode, depthRange, labels } = require('./pass-preview.js');
+const { materialMesh } = require('./graph-scene-material.js');
 
 const defaults = ['coverage', 'depth', 'normal', 'objectId', 'materialId', 'emission'];
 const positionPass = new Set(['position', 'objectPosition']);
 const finitePass = new Set(['depth', 'emissionDepth', 'previousDepth', 'strandDepth', 'proxyDepth']);
+const frameColors = new WeakMap();
 
 function renderGraphScene(source, { camera, lights, channels = defaults, options = {}, renderGraphInputs, renderGraphCapture,
   take, time = take?.start ?? 0, kit, node } = {}) {
@@ -39,7 +41,9 @@ function renderGraphScene(source, { camera, lights, channels = defaults, options
       fragments: stats.fragments ?? null, frameMs: stats.frameMs ?? null,
       channels: requested.filter(name => frame.passes?.[name]), graphPasses: Object.keys(frame.renderGraphPasses ?? {}) });
   }
-  return { value: api.rasterFrame(frame), frame, motionReference: frame.motionReference ?? null,
+  const value = api.rasterFrame(frame);
+  frameColors.set(frame, value);
+  return { value, frame, motionReference: frame.motionReference ?? null,
     report: { width: frame.w, height: frame.h, time: at, splats: source.count,
       ...(sampledCamera && { camera: sampledCamera }),
       ...(frame.shutter && { shutter: frame.shutter }),
@@ -148,9 +152,40 @@ function graphRenderPass(frame, channel, { emptyDepth = 1e9, kit } = {}) {
       ...(depth && { emptyDepth }), ...(legend && { legend }) } };
 }
 
+function graphTexture(K, frame, channel, intent) {
+  const P = K.procedural;
+  let raster;
+  if (intent === 'color' && channel === 'color') {
+    raster = frameColors.get(frame);
+    if (!raster) {
+      raster = P.sceneGraph.rasterFrame(frame);
+      frameColors.set(frame, raster);
+    }
+  } else if (channel.startsWith('graph:')) {
+    const id = channel.slice(6), captures = frame.renderGraphPasses ?? {};
+    const expected = intent === 'color' ? 'image' : 'mask';
+    if (Object.hasOwn(captures, id) && captures[id].kind === expected) raster = captures[id];
+  } else if (intent === 'mask' && ['coverage', 'surfaceCoverage'].includes(channel)) {
+    const { w: width, h: height } = frame.passes ?? {}, data = frame.passes?.[channel];
+    if (data) raster = { width, height, channels: 1, data };
+  }
+  if (!raster) throw new RangeError('Render did not capture a ' + intent + ' texture for ' + channel);
+  const value = P.graphImages.declare(raster, { intent });
+  return { value, report: { channel, width: raster.width, height: raster.height,
+    sharedSamples: value.raster.data === raster.data } };
+}
+
 function graph3DOperations(kit) {
   const options = { type: 'record', default: {} };
   return {
+    'scene.materialMesh': {
+      description: 'Bind aligned typed material maps to a UV-mapped mesh for native scene rendering.',
+      inputs: { source: 'mesh', material: 'materialChannels', options },
+      outputs: { value: 'sceneMesh', report: 'record' },
+      run({ source, material, options }, { node }) {
+        return materialMesh(kit.KIT, source, material, { id: node, ...options });
+      }
+    },
     'scene.render': {
       inputs: { source: 'world', camera: options, lights: { type: 'array<record>', default: [] },
         channels: { type: 'array<string>', default: defaults }, options,
@@ -181,6 +216,18 @@ function graph3DOperations(kit) {
       inputs: { frame: 'renderFrame', channel: 'string', options },
       outputs: { value: 'raster', data: 'raster', valid: 'raster', report: 'record' },
       run({ frame, channel, options }) { return graphRenderPass(frame, channel, { ...options, kit }); }
+    },
+    'scene.colorTexture': {
+      description: 'Expose the rendered scene or a captured screen image as straight sRGB without copying sample bytes.',
+      inputs: { frame: 'renderFrame', channel: { type: 'string', default: 'color' } },
+      outputs: { value: 'colorImage', report: 'record' },
+      run({ frame, channel }) { return graphTexture(kit.KIT, frame, channel, 'color'); }
+    },
+    'scene.maskTexture': {
+      description: 'Expose native coverage or a captured screen mask as a typed image with its original precision.',
+      inputs: { frame: 'renderFrame', channel: { type: 'string', default: 'coverage' } },
+      outputs: { value: 'grayImage', report: 'record' },
+      run({ frame, channel }) { return graphTexture(kit.KIT, frame, channel, 'mask'); }
     }
   };
 }

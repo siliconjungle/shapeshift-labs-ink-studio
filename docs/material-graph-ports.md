@@ -21,6 +21,9 @@ The version 1 value serializes as `{ format: "ink-studio/material-channels", ver
 
 In code the corresponding Toolkit functions are `KIT.procedural.materialChannels.pack`, `KIT.procedural.materialChannels.channel`, and `KIT.procedural.materialChannels.replace`.
 
+Use [headless image and scene graphs](headless-scene-graphs.md) to bind
+typed material maps to UV-mapped geometry and capture the rendered textures.
+
 Use [material-channel painting](material-channel-paint.md) to apply an editable layer session directly to a packet. [Measured material recovery](measured-materials.md) can produce a packet from registered surface captures.
 
 ## Northstar seal demo

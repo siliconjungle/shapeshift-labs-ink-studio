@@ -1926,6 +1926,7 @@ const CMD = {
         '  graph material-preview <project.json> <plan.json> --out directory   link a native material carrier to its UV maps',
         '  graph inspect <project.json> [--output NAME | --node PATH --port NAME | --map ID [--component r|g|b|a]] [--out directory]',
         '  graph geometry <project.json> [--inputs values.json --at seconds --seed N --capture NODE[:PORT],... --out directory]   inspect typed geometry and node work',
+        '  graph evaluate <project.json> [--inputs values.json --at seconds --seed N --capture NODE[:PORT],... --out directory]   evaluate in software and record texture and port work',
         '  graph run <project.json> [--inputs values.json --at seconds --seed N --out directory]',
         '    run, inspect, batch, clip, session: --workers N   schedule eligible branches on 1–8 workers',
         '    run, inspect, batch, clip: --cache DIR [--cache-bytes N --cache-entries N]   reuse graph artifacts on disk',

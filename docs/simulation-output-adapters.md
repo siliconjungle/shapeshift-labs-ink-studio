@@ -18,6 +18,8 @@ unavailable probe reports its status.
 
 Existing `sim.run` raster simulations add typed `grid` and `pointBuffer`
 ports alongside their original `field` raster and `points` records.
+For shared field slices and UV-mapped relief meshes, see
+[headless image and scene graphs](headless-scene-graphs.md).
 `sim.model.events` publishes the committed events for its sampled tick.
 Use a longer recorded log if a consumer needs events from every tick
 between two graph samples.

@@ -20,6 +20,8 @@ const { snapshotFormat } = require('./graph-diff.js');
 const { fingerprint } = require('./graph-artifact-cache.js');
 const { estimateGraphMemory } = require('./graph-memory.js');
 const GraphGeometry = require('./graph-geometry.js');
+const GraphEvaluation = require('./graph-evaluation.js');
+const Draw = require('./performance-draw.js');
 const Assets = require('./asset-references.js');
 const { resolveTakeFile } = require('./take-document.js');
 const materialGraph = require('./material-graph.js');
@@ -817,6 +819,43 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     return { artifacts, report: { ...report, kind: 'geometry', ...prepareFrameChecks(frame), nodes, captured } };
   }
 
+  async function evaluateSoftware(capture, options) {
+    const targets = GraphGeometry.captures(capture), prepared = request(options);
+    const started = performance.now();
+    const { result: { frame, report }, trace } = await Draw.measure(() => evaluateAsync({ ...prepared, trace: true }, true));
+    const evaluationMs = performance.now() - started;
+    const { nodes, samples } = GraphEvaluation.receipt(frame, report.cache.nodes, describe);
+    const artifacts = [];
+    let capturedSamples = 0;
+    const captured = targets.map(({ node, port }) => {
+      const value = frame.preview(node, port), type = frame.stage(node).outputTypes[port];
+      const typed = imageContract(value), raster = typed ? value.raster : value;
+      const isImage = Number.isSafeInteger(raster?.width) && Number.isSafeInteger(raster?.height) && raster.data;
+      if (isImage && (capturedSamples += raster.data.length) > 8 * 1048576)
+        throw new RangeError('Graph evaluation captures exceed the sample budget');
+      const name = node + '/' + port;
+      let artifact;
+      if (typed) {
+        const { intent, precision, colorSpace, alpha, layout } = value.descriptor;
+        const png = precision === 'unorm8' && (layout === 'r' || intent === 'color' &&
+          colorSpace === 'srgb' && alpha !== 'premultiplied');
+        artifact = png ? encode(name, raster, 'png', { grayscale: true }) : encode(name, value, 'json');
+      } else if (isImage) {
+        const rendered = preview(value, { grayscale: true });
+        if (rendered) artifact = { ...rendered, file: 'artifacts/' + name + '.' + rendered.format };
+      }
+      const summary = type === 'sceneMesh' ? { id: value.id, vertices: value.vertices, triangles: value.triangles,
+        bounds: kit.KIT.sceneMeshes.bounds(value), materials: value.materials } : describe(value);
+      artifact ??= encode(name, summary, 'json');
+      artifacts.push(artifact);
+      return { node, port, type, value: summary, file: artifact.file, sha256: artifact.sha256,
+        format: artifact.format, bytes: artifact.bytes.length, ...(!isImage && { summaryOnly: true }) };
+    });
+    return { artifacts, report: { ...report, kind: 'evaluate', backend: 'software', ...prepareFrameChecks(frame),
+      performance: { evaluationMs, timingsMs: frame.timings, renderPasses: trace.passes, omittedRenderPasses: trace.omitted,
+        samples }, nodes, captured } };
+  }
+
   function audioTaps(targets,options={}) {
     const rows=named(targets,'audio taps');
     if (!rows.length || rows.length>2 || rows.some(([name])=>!['dry','wet'].includes(name)))
@@ -961,6 +1000,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     snapshot,
     run:options=>run(request(options)),
     geometry,
+    evaluateSoftware,
     clip(options, { frameInputs } = {}) {
       const { inputs, seed, ...settings } = fields(options,
         ['output','from','to','warmup','format','clock','renderOptions','capture','inputs','seed'], 'graph clip options');

@@ -791,6 +791,8 @@ const SceneMeshes = (() => {
   }
 
   return Object.freeze({create,fromObjectTexels,updateObjectTexels,objectTexelFrame,scanFrame:Mips.scanFrame,scanMaterial,paintMeshes,pose,withPose,geometry,inspectUV,channelUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
-    simulationFrame:(...args)=>simulationAPI().frame(...args),depthProxy,proxyPlan,sourceTriangle,trianglePigment,intersect,rayQuery,projector,sampleProjection,clipUV,revision:mesh=>read(mesh).revision});
+    simulationFrame:(...args)=>simulationAPI().frame(...args),depthProxy,proxyPlan,sourceTriangle,trianglePigment,intersect,rayQuery,projector,sampleProjection,clipUV,
+    valid:mesh=>Boolean(mesh?.[state]),bounds:mesh=>{const {min,max}=read(mesh).bounds;return {min:min.slice(),max:max.slice()};},
+    revision:mesh=>read(mesh).revision});
 })();
 if (typeof module !== 'undefined') module.exports = SceneMeshes;

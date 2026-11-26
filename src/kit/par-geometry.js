@@ -228,8 +228,8 @@
     },
     'scene.world': {
       seed: 'options',
-      inputs: { objects: 'array<record>', options },
-      ...value('world', ({ objects, options }, { seed }) => A.world(objects, { seed, ...options }))
+      inputs: { objects: { type: 'array<record>', default: [] }, meshes: { type: 'array<sceneMesh>', default: [] }, options },
+      ...value('world', ({ objects, meshes, options }, { seed }) => A.world(objects, { seed, ...options, meshes }))
     },
     'scene.diorama': {
       seed: 'definition',
