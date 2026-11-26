@@ -83,6 +83,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.CameraLens.matrix` | function | `(value)` | [source](../../src/camera-lens.js) |
 | `toolkit.CameraLens.orbitPose` | function | `(yaw, pitch, distance, at)` | [source](../../src/camera-lens.js) |
 | `toolkit.CameraLens.pose` | function | `(value)` | [source](../../src/camera-lens.js) |
+| `toolkit.CameraLens.rasterProjector` | function | `({ view, focal, ortho, width, height })` | [source](../../src/camera-lens.js) |
 | `toolkit.CameraLens.rays` | function | `(view, eye, W, H, focal, ortho)` | [source](../../src/camera-lens.js) |
 | `toolkit.CameraLens.resolve` | function | `(base = {}, override = {})` | [source](../../src/camera-lens.js) |
 | `toolkit.CameraLens.snapView` | function | `(view, pixelsPerUnit, anchor)` | [source](../../src/camera-lens.js) |

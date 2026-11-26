@@ -1211,12 +1211,55 @@
     return [id];
   }
 
+  function projectCamera(g, faceIds, operation, { camera, projectionPositions }, points, conflict) {
+    const { rect = [0, 0, 1, 1] } = operation;
+    if (!fields(operation, ['op', 'ids', 'selection', 'domain', 'rect']) ||
+        !tuple(rect,4,unit) || rect[2] <= 0 || rect[3] <= 0 || rect[0] + rect[2] > 1 || rect[1] + rect[3] > 1)
+      throw new RangeError('Camera projection needs a positive normalized atlas rectangle [u,v,width,height]');
+    const { width, height, view, focal, ortho, clipNear, clipFar, sample } = camera ?? {};
+    if (![width,height].every(n => Number.isSafeInteger(n) && n > 0) ||
+        !tuple(view,16) || view[3] !== 0 || view[7] !== 0 || view[11] !== 0 || view[15] !== 1 ||
+        typeof ortho !== 'boolean' || ![focal,clipNear,clipFar].every(Number.isFinite) ||
+        focal <= 0 || clipNear <= 0 || clipFar <= clipNear)
+      throw new TypeError('UV projection needs an approved native raster camera');
+    CameraLens.fromView(view);
+    const { viewPoint, project } = CameraLens.rasterProjector(camera);
+    const corners = [], projected = new Map(), bounded = n => Math.max(0,Math.min(1,n));
+    for (const face of faceIds) for (const { id, vertex } of g.faces.get(face).corners) {
+      if (!projected.has(vertex)) {
+        const position = projectionPositions ? projectionPositions.get(vertex) : g.corners.get(id).position;
+        if (!position || position.length !== 3 || !Array.from(position).every(Number.isFinite))
+          throw new RangeError('Missing finite source position for camera projection at vertex ' + vertex);
+        const point = viewPoint(position), depth = point[2];
+        const clipped = depth < clipNear || depth > clipFar;
+        const pixel = clipped ? null : project(point);
+        const frame = pixel?.map((n,axis)=>n / (axis ? height : width));
+        const status = clipped ? 'camera-depth-clip' :
+          frame.every(n => Number.isFinite(n) && n >= -1e-10 && n <= 1 + 1e-10) ? 'projected' : 'outside-camera-frame';
+        const uv = status === 'projected' ? frame.map((n,axis)=>rect[axis] + bounded(n)*rect[axis+2]) : null;
+        projected.set(vertex,{position:[...position],depth:Number.isFinite(depth) ? depth : null,
+          pixel:pixel?.map(n=>Number.isFinite(n) ? n : null) ?? null,uv,status});
+      }
+      const result = projected.get(vertex);
+      corners.push({id,face,vertex,...result});
+      if (result.uv) points.set(id,result.uv);
+      else conflict(result.status,{corner:id,face,depth:result.depth,pixel:result.pixel});
+    }
+    for (const { face, corners: triangle } of g.triangles()) {
+      const projectedUVs = triangle.map(id=>points.get(id));
+      if (projectedUVs.every(Boolean) && Math.abs(area2(...projectedUVs)) <= 1e-12)
+        conflict('collapsed-uv-triangle',{face,corners:triangle});
+    }
+    return {camera:{width,height,view:[...view],focal,ortho,clipNear,clipFar}, ...(sample && {sample}),
+      rect:[...rect], faces:faceIds, corners, edgeChanges:[]};
+  }
+
   function draft(g, operation, options) {
     const {atlasFor} = options;
     if (operation?.op === 'set-pivot') return setPivot(g,operation);
     if (!operation || typeof operation !== 'object' ||
-        !['cut', 'stitch', 'pin', 'transform', 'orient', 'normalize-orientation', 'scale', 'move-corners', 'nudge', 'snap', 'unwrap', 'flatten', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
-      throw new TypeError('Use a UV pivot, cut, stitch, pin, transform, orientation, reference normalization, scale, nudge, snap, flatten, corner move, face remap, local solve or texel budget operation');
+        !['cut', 'stitch', 'pin', 'transform', 'orient', 'normalize-orientation', 'scale', 'move-corners', 'nudge', 'snap', 'unwrap', 'flatten', 'project-camera', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
+      throw new TypeError('Use a UV pivot, cut, stitch, pin, transform, orientation, reference normalization, scale, nudge, snap, flatten, camera projection, corner move, face remap, local solve or texel budget operation');
     const points = new Map(), edges = new Map(), pins = new Map(), conflicts = [];
     let count = 0;
     function conflict(code, evidence) {
@@ -1226,17 +1269,19 @@
     let ids, evidence;
     const local = operation.op === 'unwrap' || operation.op === 'relax';
     const connected = operation.op==='unwrap' && operation.across==='geometry';
-    const precise = connected || ['remap-face','orient','normalize-orientation','scale','move-corners','nudge','snap','flatten'].includes(operation.op);
+    const precise = connected || ['remap-face','orient','normalize-orientation','scale','move-corners','nudge','snap','flatten','project-camera'].includes(operation.op);
     const preserveWinding = local || ['stitch','scale','move-corners','nudge','snap'].includes(operation.op);
     if (local) {
       ids = targets(g, 'faces', operation);
       evidence = connected ? connectedUnwrap(g,ids,operation,points,edges,conflict) :
         meshUVRegions.local(g, ids, operation, points, conflict);
-    } else if (operation.op==='flatten') {
+    } else if (operation.op==='flatten' || operation.op==='project-camera') {
       const domain = operation.domain ?? operation.selection?.domain ?? 'faces';
-      if (!['faces','islands'].includes(domain)) throw new TypeError('Flatten selected faces or UV islands');
+      if (!['faces','islands'].includes(domain)) throw new TypeError('Choose faces or UV islands for ' + operation.op);
       ids = targets(g,domain,operation);
-      evidence = meshUVFlatten.projection(g,selection(g,domain,ids).faces,operation,points,options,conflict);
+      const faces = selection(g,domain,ids).faces;
+      evidence = operation.op==='flatten' ? meshUVFlatten.projection(g,faces,operation,points,options,conflict) :
+        projectCamera(g,faces,operation,options,points,conflict);
     } else if (operation.op === 'texel-budget') {
       evidence = meshUVTexelBudget.assign(g, operation, points, conflict);
       ids = order((evidence.islands ?? []).map(row => row.id));

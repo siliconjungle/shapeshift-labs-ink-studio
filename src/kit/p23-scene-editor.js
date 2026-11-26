@@ -1048,7 +1048,7 @@
       return K.meshTopology.uv.select(row.document,query,{atlasFor});
     }
 
-    function planMeshUV(object, request, { part, projectTexelsPerUnit } = {}) {
+    function planMeshUV(object, request, { part, projectTexelsPerUnit, camera, projectionPositions } = {}) {
       const row = meshTopology(object,part);
       const operations = Array.isArray(request?.operations) ? request.operations : [];
       const tileGrid = operations.some(op=>['nudge','snap'].includes(op?.op));
@@ -1057,7 +1057,7 @@
         A.meshTopologyScene.uvAtlases(snapshot(),row,request.uvSet ?? 0,{tileGrid}) : undefined;
       const scene = operations.some(op=>op?.op==='flatten') ? snapshot() : undefined;
       const flattenAtlasFor = scene && A.meshTopologyScene.uvAtlases(scene,{...row,bakes:[]},request.uvSet ?? 0);
-      return K.meshTopology.uv.plan(row.document,request,{atlasFor,flattenAtlasFor,retainFlatten:true,
+      return K.meshTopology.uv.plan(row.document,request,{atlasFor,flattenAtlasFor,retainFlatten:true,camera,projectionPositions,
         texelsPerUnit:scene?.tilesetDefaults?.texelsPerUnit ?? projectTexelsPerUnit});
     }
 
