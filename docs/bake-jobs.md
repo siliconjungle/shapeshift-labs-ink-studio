@@ -93,3 +93,7 @@ See [curvature bakes](bake-curvature.md) for mesh and normal-input curvature, ed
 ## Bake positions and IDs
 
 See [position and ID bakes](bake-position-id.md) for object, world, and normalized coordinates, stable receiver vertex, material, and part labels, and deterministic swatches.
+
+## Transfer opacity and other textures
+
+See [opacity and texture transfer](bake-texture-transfer.md) to move color and scalar maps between UV layouts, choose input alpha association and coverage policy, and preserve source and output precision.

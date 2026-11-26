@@ -179,6 +179,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
         }
         if(stamp && stamp[i*4+3])color=color.map((value,k)=>value*(1-stamp[i*4+3])+stamp[i*4+k]);
       }
+      visibility?.material?.({color,emission,roughness,metallic,opacity:material.opacity??1},i);
       geometrySample?.(p,i,n);
       const source = authoredNormal ? (registered ? V.norm(authoredNormal) : authoredNormal) : n;
       const tx = V.norm(V.mad(tangent, n, -V.dot(tangent, n)), V.perp(n));
