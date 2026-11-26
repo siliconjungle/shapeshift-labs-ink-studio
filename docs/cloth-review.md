@@ -5,6 +5,8 @@ stretch, shear, and bend constraints. A review run starts from the currently
 displayed grid pose and keeps that pose available for a before/after comparison.
 It uses the panel's rest distances as the cloth's lengths.
 
+For sewn panels and ordered garment layers, use the [headless wardrobe pipeline](wardrobe.md).
+
 ## Author regions
 
 Give every grid point a role in row-major order.

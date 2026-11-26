@@ -1983,6 +1983,9 @@ const CMD = {
         '  authored-contacts <id> [--at seconds] [--out report.json]  inspect contact ranges and socket transfer timing',
         '  motion-fx <id> [--at seconds] [--out report.json]  inspect keyed FX layers and sampled effect output',
         '  cloth-review <id> [--pose seconds] [--through seconds] [--bake take.json]  preview a cloth pose and optionally bake it',
+        '  wardrobe bake <plan.json> --out take.json [--cache directory]   sew and simulate garment layers for deterministic replay',
+        '  wardrobe sample <plan.json> <take.json> [--frame N --out frame.json]   export panels, groom paths and articulated feather meshes',
+        '  wardrobe preview <plan.json> <take.json> --out frame.png [--frame N --view view.json]   render a saved wardrobe frame',
         '  animation-timeline <id> [--state context.json] [--stage block|spline|polish] [--at seconds] [--part name]',
         '    [--loop start,end|off] [--finding kind-or-id|off] [--direction index] [--fix accept|mute|enable|remove]',
         '    [--preview directory] [--frames count --w width --h height] [--before] [--out report.json]',
@@ -3737,6 +3740,9 @@ const CMD = {
       fs.writeFileSync(file, report);
       console.log('wrote', file);
     }
+  },
+  wardrobe() {
+    return require('./wardrobe.js').command(pos,opt,lib());
   },
   'cloth-review'() {
     const world = build(pos[0]), review = world.clothReview, demo = world.clothDemo;

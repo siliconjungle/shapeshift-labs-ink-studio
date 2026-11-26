@@ -530,6 +530,7 @@ All checked-in guides, indexed by title and section headings.
 - [Volume cutouts](../volume-cutouts.md)
 - [Voxel and relief-pixel surfaces](../voxel-surface.md)
 - [Wallpaper and frieze patterns](../wallpaper-frieze.md)
+- [Headless garments, grooms, and feathers](../wardrobe.md)
 - [Weather profiles for rendering and simulation](../weather-binding.md)
 - [Moving weather fronts](../weather-fronts.md)
 - [Weaving and braiding](../weaving-braiding.md)
