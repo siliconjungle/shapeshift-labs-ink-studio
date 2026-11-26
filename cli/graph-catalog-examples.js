@@ -476,6 +476,11 @@ const specifications = {
     inputs: { captures: link('captures'), settings: { width: 4, height: 4, pixelPitchMm: [.3, .3] } }
   },
   'material.pack': { inputs: materialSource.inputs },
+  'material.validate': { nodes: {
+    roughness: { op: 'image.uniform', inputs: { value: 1.12, width: 4, height: 3, descriptor: { intent: 'data' } } },
+    maps: { op: 'data.record', inputs: { roughness: link('roughness') } },
+    packet: { op: 'material.pack', inputs: { maps: link('maps') } }
+  }, inputs: { source: link('packet'), profile: { required: ['roughness'] } }, output: 'report' },
   'material.scanProcess': { nodes: {
     color: { op: 'image.uniform', inputs: { width: 8, height: 6, value: [.36, .27, .18],
       descriptor: { intent: 'color', colorSpace: 'srgb-linear' } } },

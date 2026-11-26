@@ -29,6 +29,7 @@ const MaterialMetadata = require('./material-metadata.js');
 const Base = require('../src/material-base-settings.js');
 const materialImage = require('./material-image-export.js');
 const OutputUsages = require('./material-output-usages.js');
+const MaterialValidation = require('./material-validation.js');
 
 const format = 'ink-studio/graph-project';
 const reportFormat = 'ink-studio/graph-report';
@@ -702,7 +703,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     function evaluate({inputs,...options},sequence) {
       const values=start(inputs);
       try {
-        return done(executable.evaluate(values,{...options,sequence,workers:workerPool,systemSize:systemSize(values)}),values,options);
+        return done(executable.evaluate(values,{...options,sequence,workers:options.materialDiagnostics ? undefined : workerPool,systemSize:systemSize(values)}),values,options);
       } catch (error) { return failed(error); }
     }
     async function evaluateAsync({inputs,...options},profile) {
@@ -806,6 +807,28 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
         ...(row && {outputUsage:row,materialPreview:previewed.details}),
         ...(workerPool && {workers:workerPool.stats()}),
         artifacts:artifact ? [{file:artifact.file,format:artifact.format,sha256:artifact.sha256,bytes:artifact.bytes.length}] : []}};
+  }
+
+  function validateMaterial(target = {}, profile = {}, options, { preview = true } = {}) {
+    const { output: chosen, node, port = 'value', channel } = fields(target,
+      ['output','node','port','channel'],'material validation target');
+    const packets = Object.entries(rootPlan.outputs).filter(([, value]) => value.type === 'materialChannels');
+    const output = chosen ?? (node === undefined && packets.length === 1 ? packets[0][0] : undefined);
+    if ((output === undefined) === (node === undefined) || output !== undefined &&
+        (!id(output) || !Object.hasOwn(rootPlan.outputs,output)) ||
+        node !== undefined && (typeof node !== 'string' || !node.split('/').every(id) || !id(port)) ||
+        channel !== undefined && !id(channel) || typeof preview !== 'boolean')
+      throw new TypeError('Choose a material validation output or node port');
+    const selection = { ...(output !== undefined ? {output} : {node,port}), ...(channel !== undefined && {channel}) };
+    const settings = MaterialValidation.validation(profile, maps, selection);
+    const prepared = request(options), common = { ...header, kind: 'material-validation', time: prepared.time, seed: prepared.seed };
+    let result;
+    try { result = evaluate({ ...prepared, materialDiagnostics: true }); }
+    catch (error) {
+      if (!error.graphMaterialNode) throw error;
+      return MaterialValidation.failed(error, selection, common, preview);
+    }
+    return MaterialValidation.review(procedural, result.frame, selection, settings, common, preview);
   }
 
   let inspectGeometry;
@@ -1025,6 +1048,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       } finally { runner.clear(); }
     },
     inspect,
+    validateMaterial,
     audioTaps,
     previewFrame,
     prepareBatch,

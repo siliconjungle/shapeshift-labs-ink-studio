@@ -181,7 +181,7 @@
     return wrap({ width, height, channels, data }, spec);
   }
 
-  function convert(source, target, { outOfRange = 'error', dropAlpha = false } = {}) {
+  function convert(source, target, { outOfRange = 'error', dropAlpha = false, onClip } = {}) {
     const { raster: grid, descriptor: from } = requireImage(source);
     if (!fields(target, ['intent', 'layout', 'precision', 'colorSpace', 'alpha']) ||
         !['error', 'clamp'].includes(outOfRange) || typeof dropAlpha !== 'boolean')
@@ -213,12 +213,28 @@
     const colorTarget = isColor && to.domain === 'unit' ? { space: toSpace, outOfRange } : toSpace;
     const decode = wasColor && !reencode && convertColor(from, colorTarget);
     const expand = !wasColor && isColor && ColorSpace.prepare('srgb-linear', colorTarget);
+    const measureClip = onClip && outOfRange === 'clamp' && to.domain === 'unit';
+    const unlimited = measureClip && isColor && !reencode && (wasColor ?
+      convertColor(from, toSpace) : ColorSpace.prepare('srgb-linear', toSpace));
+    const sample = unlimited && [0, 0, 0];
     for (let i = 0, o = 0; i < data.length; i += channels, o += next) {
       const a = decode ? decode(data, i, rgb) : alphaAt(data, i, from);
       if (wasColor && to.alpha === 'none' && a !== 1 && !dropAlpha)
         throw new RangeError('Image conversion would discard coverage. Set dropAlpha to acknowledge it.');
       if (hasAlpha) output[o + last] = pack(a, to, true, outOfRange);
       const zeroCoverage = to.alpha === 'premultiplied' && output[o + last] === 0;
+      if (measureClip && (a > 0 || !isColor)) {
+        let lo = Infinity, hi = -Infinity;
+        if (unlimited) {
+          if (wasColor) unlimited(data, i, sample);
+          else unlimited(sample.fill(data[i] / divisor), sample);
+          lo = Math.min(...sample); hi = Math.max(...sample);
+        } else for (let c = 0; c < next - Number(hasAlpha); c++) {
+          const value = decode ? luminance(rgb) : data[i + c] / divisor;
+          lo = Math.min(lo, value); hi = Math.max(hi, value);
+        }
+        if (lo < -1e-7 || hi > 1 + 1e-7) onClip(i / channels, lo, hi);
+      }
       if (isColor && !reencode) {
         if (expand) expand(rgb.fill(data[i] / divisor), rgb);
         const gain = to.alpha === 'premultiplied' ? a : 1;
@@ -752,7 +768,11 @@
         const { intent } = literalShape(literalDescriptor(node), 'image.convert');
         return { inputs: { source: 'typedImage', descriptor: 'record', outOfRange: { type: 'string', default: 'error' },
           dropAlpha: { type: 'boolean', default: false } }, outputs: typedOutput(intent),
-        run({ source, descriptor, ...options }) { return { value: convert(source, descriptor, options) }; } };
+        run({ source, descriptor, ...options }, { materialDiagnostics = false } = {}) {
+          const clips = materialDiagnostics && options.outOfRange === 'clamp' ? [] : null;
+          const value = convert(source, descriptor, { ...options, ...(clips && { onClip: (p, min, max) => clips.push([p, min, max]) }) });
+          return { value, ...(clips?.length && { materialClips: clips }) };
+        } };
       }
     },
     'image.split': {

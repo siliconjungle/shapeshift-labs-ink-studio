@@ -266,7 +266,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.materialPaint` | namespace |  |  |
-| `KIT.procedural.materialPaint.apply` | function | `(source, document, { masks = {}, charts = {}, flows = {} } = {})` | [source](../../src/kit/paq-material-paint.js) |
+| `KIT.procedural.materialPaint.apply` | function | `(source, document, { masks = {}, charts = {}, flows = {}, diagnostics = false } = {})` | [source](../../src/kit/paq-material-paint.js) |
 | `KIT.procedural.materialPaint.create` | function | `(source, document = { format, version, layers: [] }, options)` | [guide](../material-channel-paint.md#coordinates-and-editing), [source](../../src/kit/paq-material-paint.js) |
 | `KIT.procedural.materialPaint.format` | value | `string = "ink-studio/material-paint"` |  |
 | `KIT.procedural.materialPaint.operations` | namespace |  |  |
@@ -283,7 +283,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.materialPaint.operations["material.paint"].outputs` | namespace |  |  |
 | `KIT.procedural.materialPaint.operations["material.paint"].outputs.report` | value | `string = "record"` |  |
 | `KIT.procedural.materialPaint.operations["material.paint"].outputs.value` | value | `string = "materialChannels"` |  |
-| `KIT.procedural.materialPaint.operations["material.paint"].run` | function | `({ source, session, ...options })` | [source](../../src/kit/paq-material-paint.js) |
+| `KIT.procedural.materialPaint.operations["material.paint"].run` | function | `({ source, session, ...options }, { materialDiagnostics = false } = {})` | [source](../../src/kit/paq-material-paint.js) |
 | `KIT.procedural.materialPaint.version` | value | `number = 1` |  |
 
 ## KIT.procedural.materialParameters
@@ -301,6 +301,25 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.materialPresets` | namespace |  |  |
 | `KIT.procedural.materialPresets.compare` | function | `(parameters, applied)` | [source](../../src/material-presets.js) |
 | `KIT.procedural.materialPresets.prepare` | function | `(scope, material)` | [source](../../src/material-presets.js) |
+
+## KIT.procedural.materialValidation
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.materialValidation` | namespace |  |  |
+| `KIT.procedural.materialValidation.inspect` | function | `(source, settings = {}, { preview = false, provenance } = {})` | [source](../../src/kit/paq-material-validation.js) |
+| `KIT.procedural.materialValidation.operations` | namespace |  |  |
+| `KIT.procedural.materialValidation.operations["material.validate"]` | namespace |  |  |
+| `KIT.procedural.materialValidation.operations["material.validate"].description` | value | `string = "Check material physical ranges, map conventions and delivery clipping."` |  |
+| `KIT.procedural.materialValidation.operations["material.validate"].inputs` | namespace |  |  |
+| `KIT.procedural.materialValidation.operations["material.validate"].inputs.profile` | namespace |  |  |
+| `KIT.procedural.materialValidation.operations["material.validate"].inputs.profile.default` | namespace |  |  |
+| `KIT.procedural.materialValidation.operations["material.validate"].inputs.profile.type` | value | `string = "record"` |  |
+| `KIT.procedural.materialValidation.operations["material.validate"].inputs.source` | value | `string = "any"` |  |
+| `KIT.procedural.materialValidation.operations["material.validate"].outputs` | namespace |  |  |
+| `KIT.procedural.materialValidation.operations["material.validate"].outputs.passed` | value | `string = "boolean"` |  |
+| `KIT.procedural.materialValidation.operations["material.validate"].outputs.report` | value | `string = "record"` |  |
+| `KIT.procedural.materialValidation.operations["material.validate"].run` | function | `({ source, profile })` | [source](../../src/kit/paq-material-validation.js) |
 
 ## KIT.procedural.materials
 
