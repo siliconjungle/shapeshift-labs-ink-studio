@@ -92,7 +92,7 @@ async function main() {
     save(source + '.preset.json', { format: 'ink-studio/bake-preset', version: 1,
       label: source === 'mesh' ? 'Sculpted relief' : 'Normal-map engraving', defaults: { size, padding: 0, exposureDistance: .30 },
       maps: [...maps.map((id, i) => ({ id, overrides: { ...overrides, encoding: i ? 'png16' : 'exr' } })),
-        ...(source === 'mesh' ? [{ id: 'cavity', overrides: { samples: 16, cavityRadius: .30 } }] : [])] });
+        ...(source === 'mesh' ? [{ id: 'cavity', overrides: { samples: 40, cavityRadius: .30 } }] : [])] });
   }
   save('aster.bake.json', { format: 'ink-studio/bake-job', version: 1, label: 'Aster Relief',
     source: 'aster.glb', preset: 'mesh.preset.json', targets: [{ id: 'relief', mesh: 'Observatory relief', submeshes: [0] }],

@@ -55,7 +55,7 @@ Use static triangulated GLB or glTF with PNG source textures. Scene files in oth
 }
 ```
 
-Maps are `pigment`, `normal`, `roughness`, `metalness`, `emission`, `opacity`, `coverage`, `slope`, `cavity`, `exposure`, `thickness`, and `thickness-valid`. All accept square `size` from 8 to 1024 and `padding` from 0 to 32 pixels, strictly below half the size. Normal accepts `opengl` or `directx` tangent orientation. Slope takes an `up` vector. Cavity and exposure take `samples` from 4 to 64 and the corresponding `cavityRadius` or `exposureDistance` in mesh units. Thickness takes `thicknessScale`. Probe maps accept a `rayBias`. Job-wide geometry settings can be provided in preset defaults. Relative filenames in a job resolve from the job file.
+Base maps include `pigment`, `normal`, `roughness`, `metalness`, `emission`, `opacity`, `coverage`, `slope`, `cavity`, and `exposure`. See the guides below for additional maps. All maps accept square `size` from 8 to 1024 and `padding` from 0 to 32 pixels, strictly below half the size. Normal accepts `opengl` or `directx` tangent orientation. Slope takes an `up` vector. Cavity and exposure take `samples` from 4 to 64 and the corresponding `cavityRadius` or `exposureDistance` in mesh units. Thickness takes `thicknessScale`. Probe maps accept a `rayBias`. Job-wide geometry settings can be provided in preset defaults. Relative filenames in a job resolve from the job file.
 
 ## Review and refresh
 

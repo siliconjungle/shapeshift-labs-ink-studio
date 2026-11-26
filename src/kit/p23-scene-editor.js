@@ -388,6 +388,32 @@
       K.procedural.sdfProtection.check(value);
       return edit('Set SDF feature protection', targets, solid => patchFields(solid, { sdfProtection:value }));
     }
+    function stageSurfaceDecal(decal) {
+      const before=snapshot(), decals=K.surfaceDecals.add(before.surfaceDecals,decal);
+      const {id,kind,anchor:{object,part,face}}=decals.decals.at(-1);
+      const candidate={...before,surfaceDecals:decals};
+      const problems=DIO.check(candidate,buildEnv).filter(row=>row.level==='error');
+      const report=freeze({format:'ink-studio/surface-decal-placement',version:1,id,kind,
+        receiver:{object,...(part!==undefined && {part}),...(face!==undefined && {face})},
+        canCommit:!problems.length,problems});
+      return {before,candidate,report};
+    }
+
+    function planSurfaceDecal(decal) {
+      return stageSurfaceDecal(decal).report;
+    }
+
+    function addSurfaceDecal(decal) {
+      const {before,candidate,report}=stageSurfaceDecal(decal);
+      if (!report.canCommit) throw Object.assign(new RangeError('Surface decal placement needs review'),{report});
+      requireReviewEdit(before,candidate);
+      const write=()=>{
+        document.setEnvironment({surfaceDecals:candidate.surfaceDecals});
+        return report;
+      };
+      return document.pending() ? write() : document.transact('Place surface decal '+report.id,write);
+    }
+
     function editSurfaceDecal(id, operation) {
       const decals = K.surfaceDecals.edit(snapshot().surfaceDecals, id, operation);
       const write = () => document.setEnvironment({ surfaceDecals:decals });
@@ -1615,7 +1641,7 @@
       planSculptSpray, applySculptSpray, inspectSculptSprays: () => A.sculptSpray.inspect(snapshot()),
       setSdfPaint,
       setSdfProtection,
-      editSurfaceDecal,
+      planSurfaceDecal, addSurfaceDecal, editSurfaceDecal,
       setRole,
       materials: () => freeze(clone(DIO.sceneMaterials(snapshot()))),
       build,

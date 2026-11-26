@@ -1410,11 +1410,26 @@
           const document = K.surfaceDecals.create(spec.surfaceDecals);
           const solids = new Map(spec.solids.filter(solid => solid?.id && !solid.carve && !solid.hold)
             .map(solid => [solid.id, solid]));
+          const meshes=new Map(presentation.topologyMeshes);
           for (const {id, anchor} of document.decals) {
+            const mesh=meshes.get(anchor.object);
+            if (mesh) {
+              if (anchor.part!==undefined && mesh.mesh.partId!==anchor.part)
+                throw new RangeError('Decal '+id+' needs a matching mesh part');
+              if (anchor.face!==undefined && !mesh.document.faces.some(face=>face.id===anchor.face))
+                throw new RangeError('Decal '+id+' needs a named face on '+anchor.object);
+              if (anchor.node!==undefined) throw new RangeError('Decal '+id+' needs a mesh rest or UV anchor');
+              if (anchor.uv) {
+                if (anchor.material!==undefined && !mesh.mesh.materials.includes(anchor.material))
+                  throw new RangeError('Decal '+id+' needs a material used by '+anchor.object);
+                K.sceneMeshes.channelUV(mesh.mesh,0,[1,0,0],anchor.uvSet ?? 'decal');
+              }
+              continue;
+            }
             const solid = solids.get(anchor.object);
             if (!solid || anchor.part !== undefined && solid.part !== anchor.part)
               throw new Error('Decal ' + id + ' needs a matching visible solid ID and part');
-            if (anchor.uv || anchor.node !== undefined)
+            if (anchor.uv || anchor.face!==undefined || anchor.node !== undefined)
               throw new Error('Decal ' + id + ' needs a diorama rest projector. UV and node anchors use native receiver bindings.');
           }
           presentation.decals = {document, solids};
@@ -1786,6 +1801,12 @@
       if (!document?.decals.length) return;
       const receivers = new Map(), nodes = {}, parts = new Map();
       for (const {anchor:{object,part}} of document.decals) {
+        const mesh=world.topologyMeshes?.[object]?.mesh;
+        const key=JSON.stringify([object,part]), target={object,...(part!==undefined && {part})};
+        if (mesh) {
+          receivers.set(key,{...target,representation:'mesh',mesh});
+          continue;
+        }
         const rigPart = decals.solids.get(object).part;
         let node;
         if (rig?.has(rigPart)) {
@@ -1796,8 +1817,7 @@
           }
           node = parts.get(rigPart);
         }
-        receivers.set(JSON.stringify([object,part]), {object, ...(part!==undefined&&{part}),
-          representation:'splats', ...(node&&{node})});
+        receivers.set(key,{...target,representation:'splats',...(node && {node})});
       }
       const graph = parts.size ? K.sceneGraph.create({nodes}) : undefined;
       K.surfaceDecals.bind(world, document, {receivers:[...receivers.values()],graph});

@@ -58,14 +58,16 @@ function inputReader(libraries,onInput) {
 function faceFrame(tile,f,V) {
   const [a,b,c]=tile.faces[f].map(i=>tile.mesh.points[i]), [ua,ub,uc]=tile.uvs[f];
   const ab=V.sub(b,a),ac=V.sub(c,a),g=V.norm(V.cross(ab,ac));
-  const s=ub[0]-ua[0],t=ub[1]-ua[1],u=uc[0]-ua[0],v=uc[1]-ua[1], inv=1/(s*v-t*u);
-  const du=V.mul(V.sub(V.mul(ab,v),V.mul(ac,t)),inv),dv=V.mul(V.sub(V.mul(ac,s),V.mul(ab,u)),inv);
+  const bu=ub[0]-ua[0],bv=ub[1]-ua[1],cu=uc[0]-ua[0],cv=uc[1]-ua[1], inv=1/(bu*cv-bv*cu);
+  const du=V.mul(V.sub(V.mul(ab,cv),V.mul(ac,bv)),inv),dv=V.mul(V.sub(V.mul(ac,bu),V.mul(ab,cu)),inv);
   const [na,nb,nc]=tile.faces[f].map(i=>tile.normals[i]), dnb=V.sub(nb,na),dnc=V.sub(nc,na);
   const e1=V.norm(du),e2=V.cross(g,e1), span=V.dot(dv,e2), x=V.dot(dv,e1), length=V.len(du);
   return {
     tangentVector(value,uv) {
-      const u=uv[0]-ua[0],w=uv[1]-ua[1];
-      const n=V.norm(V.mad(V.mad(na,dnb,(u*v-w*(uc[0]-ua[0]))*inv),dnc,(s*w-t*u)*inv),g);
+      const u=uv[0]-ua[0],v=uv[1]-ua[1];
+      const b=(u*cv-v*cu)*inv,c=(bu*v-bv*u)*inv;
+      // Use the same tangent frame for both sides of the derivative.
+      const n=V.norm(V.mad(V.mad(na,dnb,b),dnc,c),g);
       const tx=V.norm(V.mad(du,n,-V.dot(du,n)),V.perp(n)), cross=V.cross(n,tx);
       const ty=V.mul(cross,V.dot(cross,dv)<0?-1:1);
       return V.mad(V.mad(V.mul(n,value[2]),tx,value[0]),ty,value[1]);
