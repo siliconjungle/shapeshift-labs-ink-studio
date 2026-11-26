@@ -137,6 +137,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.world.materialBonds.update` | function | `(previous,cells,loads,dt,adjacent,temperature)` | [source](../../src/kit/pu38-material-bonds.js) |
 | `KIT.world.materialBonds.validate` | function | `(state,cells,adjacent)` | [source](../../src/kit/pu38-material-bonds.js) |
 
+## KIT.world.materialLab
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.world.materialLab` | namespace |  |  |
+| `KIT.world.materialLab.presets` | function | `()` | [source](../../src/kit/pu4d-world-material-lab.js) |
+
 ## KIT.world.materialPhases
 
 | Member | Kind | Signature or value | Guides and source |

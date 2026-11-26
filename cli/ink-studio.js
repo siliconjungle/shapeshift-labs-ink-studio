@@ -1327,6 +1327,9 @@ const CMD = {
         '  fracture prepare <plan.json> [--out preparation.json]   fit feature-guided cells, hierarchy and seam constraints',
         '  fracture compile <plan.json> [--out world.json]   compile a portable native failure scene',
         '  fracture run <plan.json> [--out directory]   replay progressive failure and save native handoffs and checkpoints',
+        '  material-lab presets [--out presets.json]   list native elastic, grain and constraint profiles',
+        '  material-lab compile <plan.json> [--out world.json]   compose soft bodies, grains and contact surfaces',
+        '  material-lab run <plan.json> [--out directory]   record nonlinear strain, material pair impulses and work',
         '    sim run|resume|fork <file> [--branch ID]   name the branch in committed events',
         '    sim run <world> --workers N [--profile]   advance eligible systems in deterministic Node worker partitions',
         '    sim run <world> --record file.json [--observations plan.json]   retain reproducible execution evidence',
@@ -3698,6 +3701,9 @@ const CMD = {
   },
   fracture() {
     return require('./fracture.js').command(pos,opt,lib());
+  },
+  'material-lab'() {
+    return require('./material-lab.js').command(pos,opt,lib());
   },
   'skinned-crowd'() {
     return require('./skinned-crowd.js').command(pos,opt,lib());
