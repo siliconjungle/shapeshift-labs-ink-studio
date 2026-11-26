@@ -216,6 +216,10 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   splat-attributes plan <scene> <plan.json> --out directory   select, clean, transfer and deform splats
   splat-attributes export <scene> <plan directory> --out cloud.inksplats   export a materialized native cloud
   splat-attributes verify <scene> <plan directory> <cloud.inksplats> --views views.json --out directory   check render and export parity
+  stream-splats index <manifest.json> [--cell-size n --voxels n,...,0]   assign stable addresses to packed rows
+  stream-splats inspect <manifest.json> [--chunk id --start N --limit N --out catalog.json]   inspect groups, levels and row addresses
+  stream-splats edit <manifest.json> <patch.json> [--previous previous.json --out report.json]   edit only affected cells
+  stream-splats review <manifest.json> <views.json> [--previous previous.json] --out directory   export and measure streamed views
   splat-redistribute <scene> --plan operations.json --out fit.json --report review.json [--base fit.json]
   render/clip --shot-corrections file.json|off   load or bypass native shot corrections
   render or clip --multiprojection plan.json   use local projection for named mesh surfaces
@@ -1240,6 +1244,7 @@ These options are read by CLI code. Follow each source link for the accepted val
 - `--depth-tolerance` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--dir` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--dmx-port` · [cli/ink-studio.js](../../cli/ink-studio.js)
+- `--encoding` · [cli/stream-splats.js](../../cli/stream-splats.js)
 - `--endpoint` · [cli/music-critique-calibration.js](../../cli/music-critique-calibration.js)
 - `--epsilon` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--fade` · [cli/ink-studio.js](../../cli/ink-studio.js)
