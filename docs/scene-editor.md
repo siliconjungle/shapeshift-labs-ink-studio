@@ -48,13 +48,16 @@ A solid can store an ordered `modifiers` array in the diorama. Each entry has a 
 | `join` | `how` selects an existing boolean or blend operation. Supply an operand as `shape`. Optional `size` and `steps` control transitions. |
 | `mask` | `mode` is `keep` for the overlap or `cut` to remove it. Supply the mask volume as `shape`. The edited solid supplies the surface material. |
 | `fold` | Use one of `polar`, `mirror`, or `repeat`. Set `centre` and `axis` for polar repetition, `centre` for mirroring, or `count` for grid repetition. |
-| `warp` | Use `twist`, `bend`, or a two-value `taper`. Optional `centre` sets the pivot and `wide` bounds the twist's distance correction. |
+| `warp` | Use `twist`, `bend`, a two-value `taper`, or three XYZ `stretch` factors. Optional `centre` sets the pivot and `wide` bounds the twist's distance correction. |
 | `shell` | `t` sets the shell's thickness. |
 | `swell` | `by` grows or shrinks the solid by a signed distance. |
 | `rough` | `by` sets the height variation and `scale` sets the noise frequency. |
 | `bubbles` | `cell` sets the spacing and `h` sets the height of the raised pattern. |
 
 Use `setModifiers(list, keys)` to add, remove, or reorder entries. Use `updateModifier(id, patch, keys)` to edit an entry or bypass it with `enabled: false`. Optional parameter fields can be cleared with `null` in a patch. Mask and join operands appear in the tree even while bypassed. An unnamed operand's tree key follows the modifier ID when the stack is reordered. These edits share the same transactions and undo history as transforms and materials.
+
+Use the [sculpt contribution tools](sculpt-contributions.md) to edit a
+single entry by ID and compare the later cuts and material regions it affects.
 
 Use `setSurfaceState(state, keys)` to edit a solid's rest-chart marks or pass `null` to clear them. The marks are retained with the source and resampled when geometry is rebuilt. [Deformation-aware materials](deformation-materials.md)
 
