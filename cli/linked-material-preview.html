@@ -3,20 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ink Studio · Linked material preview</title>
+<title>Ink Studio · Material passes</title>
 <style>
 :root{color-scheme:dark;--ink:#edf0e4;--muted:#b6c6be;--accent:#f3c786;--line:#36534d;--ground:#101d1b;--panel:#172825;--stage:#263d36}
 *{box-sizing:border-box}
 body{margin:0;background:var(--ground);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
-main{max-width:1440px;margin:auto;padding:38px 46px 27px}
+main{max-width:1440px;margin:auto;padding:27px 42px 30px}
 .mono,label,select,button,.aside,.stat,.status{font:600 11px/1.3 ui-monospace,monospace;letter-spacing:.085em;text-transform:uppercase}
 .mono{color:var(--accent);letter-spacing:.16em}
-header{display:flex;align-items:end;justify-content:space-between;gap:20px;padding-bottom:27px;border-bottom:1px solid var(--line);margin-bottom:17px}
-h1{font:normal clamp(52px,7.8vw,113px)/.88 Georgia,serif;letter-spacing:-.07em;margin:9px 0 0}
+header{display:flex;align-items:end;justify-content:space-between;gap:20px;padding-bottom:18px;border-bottom:1px solid var(--line);margin-bottom:17px}
+h1{font:normal clamp(39px,6vw,76px)/.88 Georgia,serif;letter-spacing:-.07em;margin:9px 0 0}
 h2{font:normal 29px/1 Georgia,serif;letter-spacing:-.03em;margin:0}
 a{color:var(--accent);text-underline-offset:3px}
 header a{white-space:nowrap}
-.bar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.bar{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:12px}.bar label{flex:1 1 125px;min-width:0}
 .bar label{display:grid;gap:7px;color:var(--muted)}
 select{width:100%;padding:10px;text-transform:none;letter-spacing:.02em;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--ink)}
 .panels{display:grid;grid-template-columns:minmax(0,1.23fr) minmax(0,1fr);gap:12px}
@@ -28,7 +28,30 @@ section{border:1px solid var(--line);min-width:0;border-radius:4px;overflow:hidd
 .viewport{position:relative;aspect-ratio:var(--view-ratio);width:min(100%,calc(360px * var(--view-ratio)));max-height:100%;touch-action:none;cursor:grab}
 .viewport:active{cursor:grabbing}
 .viewport img,.viewport canvas{position:absolute;display:block;inset:0;width:100%;height:100%;image-rendering:pixelated;pointer-events:none}
+
 .viewport img{filter:drop-shadow(5px 13px 8px #151e1ab0)}
+button{min-height:29px;color:var(--ink);background:#26433b;border:1px solid #526e62;border-radius:3px;padding:5px 8px;white-space:nowrap;cursor:pointer}
+button:hover{background:#36564a}
+.head-actions,.pin-buttons{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.head-actions{justify-content:end}
+#pass-help{font-size:11px;font-weight:500;letter-spacing:0;color:var(--muted)}
+.readout{border-top:1px solid var(--line);padding:12px 17px}
+.readout h3{font:600 11px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.1em;color:var(--accent);margin:0 0 7px}
+.readout p{font-size:12px;margin:0;color:var(--muted)}
+dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:3px 10px;margin:0;font:12px/1.32 ui-monospace,monospace}
+dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+#comparison{margin:14px 0 0;padding:14px 15px}
+.compare-head{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;justify-content:space-between;margin:0 0 11px}
+.compare-head span{font-size:12px;color:var(--muted)}
+.compare-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pin-card{overflow:hidden;border:1px solid var(--line);border-radius:3px;background:#14251f}
+.pin-head{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 11px}
+.pin-head p{margin:0;color:var(--muted);font-size:11px}
+.pin-letter{display:inline-grid;place-items:center;width:22px;height:22px;margin-right:7px;background:var(--accent);color:#23241e;border-radius:2px;font:700 13px ui-monospace,monospace}
+.pin-stage{position:relative;aspect-ratio:var(--view-ratio);width:min(100%,calc(285px * var(--view-ratio)));margin:auto;background:radial-gradient(ellipse,#3b5a51,#233c34 75%);cursor:crosshair}
+.pin-stage canvas{width:100%;height:100%;display:block;image-rendering:pixelated}
+.pin-card dl{min-height:15px;padding:9px 11px}
+
 .map-stage{background-color:#243b34;background-image:conic-gradient(#2c463d 25%,transparent 0 50%,#2c463d 0 75%,transparent 0);background-size:24px 24px}
 .map-wrap{position:relative;width:min(86%,370px,calc(var(--map-ratio,1) * 310px));aspect-ratio:var(--map-ratio,1);max-height:100%;cursor:crosshair}
 .map-wrap img{width:100%;height:100%;display:block;image-rendering:pixelated}
@@ -39,42 +62,64 @@ section{border:1px solid var(--line);min-width:0;border-radius:4px;overflow:hidd
 .orbit-control{width:min(235px,67%);display:flex;gap:9px;align-items:center;color:var(--muted)}
 input[type=range]{width:100%;accent-color:var(--accent)}
 output{color:var(--accent);min-width:3ch;text-align:right}
-.note{color:var(--muted);margin:14px 0 0;font-size:13px}
+.head{min-height:75px}.readout{margin-top:12px}
 [hidden]{display:none!important}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media(max-width:900px){main{padding:25px 19px}.view,.map-stage{height:295px}.viewport{width:min(100%,calc(295px * var(--view-ratio)))}.map-wrap{width:min(86%,350px,calc(var(--map-ratio,1) * 260px))}}
-@media(max-width:640px){header{align-items:start;flex-direction:column;gap:12px}.bar{grid-template-columns:repeat(2,minmax(0,1fr))}.panels{grid-template-columns:1fr}.head,.foot{padding:12px 13px}}
+@media(max-width:640px){header{align-items:start;flex-direction:column;gap:12px}.bar label{flex-basis:120px}.panels,.compare-grid{grid-template-columns:1fr}.head,.foot{padding:12px 13px}}
 </style>
 <script defer src="data.js"></script>
+<script defer src="aov.js"></script>
 <script defer src="live.js"></script>
 </head>
 <body>
 <main>
-  <header><div><div class="mono">Ink Studio · Linked material preview</div><h1 id="title"></h1></div>
-    <a class="aside" href="preview.json">Preview report</a></header>
+  <header><div><div class="mono">Ink Studio · Material passes</div><h1 id="title"></h1></div>
+    <div class="head-actions"><a class="aside" id="compare-link" href="#comparison" hidden>Pinned A/B</a><a class="aside" href="preview.json">Preview report</a></div></header>
   <div class="bar">
+    <label id="look-control" hidden>Graph variant<select id="look"></select></label>
     <label>Carrier<select id="carrier"></select></label>
     <label>Material slot<select id="slot"></select></label>
     <label>UV tile<select id="tile"></select></label>
-    <label>Map<select id="channel"></select></label>
+    <label>Surface pass<select id="pass"></select></label>
+    <label>Source map<select id="channel"></select></label>
   </div>
   <div class="panels">
     <section>
-      <div class="head"><h2>Surface</h2><span class="aside">Native Ink render</span></div>
+      <div class="head"><div><h2 id="pass-label">Beauty</h2><div id="pass-help"></div></div><div class="pin-buttons"><button type="button" id="pin-a">Pin A</button><button type="button" id="pin-b">Pin B</button></div></div>
       <div class="view"><div id="viewport" class="viewport" aria-label="Drag to orbit or click to pick a surface">
-        <img id="render" alt=""><canvas id="overlay" aria-hidden="true"></canvas>
+        <img id="render" alt=""><canvas id="pass-canvas" aria-hidden="true" hidden></canvas><canvas id="overlay" aria-hidden="true"></canvas>
       </div></div>
       <div class="foot"><label class="orbit-control">Orbit<input type="range" id="orbit" min="0" value="0" step="1"><output for="orbit" id="angle"></output></label>
         <span class="status" id="status" aria-live="polite"></span></div>
     </section>
     <section>
       <div class="head"><h2>2D map</h2><span class="aside" id="map-title"></span></div>
-      <div class="map-stage"><div id="map-wrap" class="map-wrap"><img id="map" alt=""><span class="marker" id="marker" hidden></span></div>
+      <div class="map-stage"><div id="map-wrap" class="map-wrap" tabindex="0" aria-label="Source map. Click or use the arrow keys to inspect a texel."><img id="map" alt=""><span class="marker" id="marker" hidden></span></div>
         <p class="empty" id="empty" hidden>No graph map is bound to this slot and tile.</p></div>
       <div class="foot"><span class="stat" id="dimensions"></span><span class="stat" id="uv" aria-live="polite"></span></div>
     </section>
   </div>
-  <p class="note">Click the surface to locate its texel. Click a map to locate the nearest visible sample in the current view.</p>
+  <section class="readout" aria-label="Exact samples">
+    <h3>Exact samples</h3>
+    <p id="pick-hint">Pick the surface or 2D map to read a texel.</p>
+    <dl id="reading" aria-live="polite"></dl>
+  </section>
+  <section id="comparison" hidden>
+    <div class="compare-head"><h2>Pinned A/B</h2><span>Click either image to read the same screen pixel in both pins.</span></div>
+    <div class="compare-grid">
+      <article class="pin-card" id="pin-card-a" hidden>
+        <div class="pin-head"><div><span class="pin-letter">A</span><strong id="pin-name-a"></strong><p id="pin-detail-a"></p></div><button type="button" id="unpin-a" aria-label="Clear pin A">Clear</button></div>
+        <div class="pin-stage" id="pin-stage-a"><canvas id="pin-image-a" aria-label="Pinned view A"></canvas><span class="marker" id="pin-marker-a" hidden></span></div>
+        <dl id="pin-reading-a"></dl>
+      </article>
+      <article class="pin-card" id="pin-card-b" hidden>
+        <div class="pin-head"><div><span class="pin-letter">B</span><strong id="pin-name-b"></strong><p id="pin-detail-b"></p></div><button type="button" id="unpin-b" aria-label="Clear pin B">Clear</button></div>
+        <div class="pin-stage" id="pin-stage-b"><canvas id="pin-image-b" aria-label="Pinned view B"></canvas><span class="marker" id="pin-marker-b" hidden></span></div>
+        <dl id="pin-reading-b"></dl>
+      </article>
+    </div>
+  </section>
 </main>
 </body>
 </html>
