@@ -137,24 +137,35 @@
       sd: (x, y, z) => distance(root, x, y, z, Infinity) };
   }
 
-  function profiledSweep(brush, guide, step, blendRadius, pressureResponse) {
-    const api = P.markProfiles, plan = api.prepareBrush(brush), opacity = hasOpacity(pressureResponse);
-    const families = api.place(plan, guide, maxPoses).map(dabs => dabs.flatMap(dab => {
-      const { pose, bounds, sd, opacityAt } = dab;
+  function stampedSweep(brush, guide, step, blendRadius, pressureResponse, looseness) {
+    const api = P.paintLooseness, opacity = hasOpacity(pressureResponse);
+    let rows, cost, spacing;
+    if (brush?.kind === 'mark-profile') {
+      const plan = P.markProfiles.prepareBrush(brush);
+      rows = P.markProfiles.place(plan, guide, maxPoses, looseness);
+      cost = Math.max(...plan.profiles.map(profile => profile.cost));
+      spacing = step ?? Math.max(.0001, Math.min(.06, ...plan.profiles.map(profile => profile.spacing / 2)));
+    } else {
+      const brushForm = brushSource(brush);
+      spacing = step ?? Math.max(.0001, Math.min(.06, brushForm.feature / 2));
+      cost = brushForm.cost;
+      rows = [api.dabs(guide, spacing, looseness, maxPoses).map(row => ({ ...row, ...brushForm }))];
+    }
+    const families = rows.map((dabs, family) => dabs.flatMap(dab => {
+      const { pose, source: { bounds, sd, opacityAt }, size } = api.vary(looseness, dab, family, dab);
       const scale = pressureResponse === undefined ? pose.pressure : responseAt(pressureResponse.width ?? [1, 1], pose.pressure);
       if (scale <= 0) return [];
       const alpha = opacity ? responseAt(pressureResponse.opacity, pose.pressure) : 1;
-      const placed = transform(bounds, { ...pose, pressure: scale });
+      const width = scale * size, placed = transform(bounds, { ...pose, pressure: width });
       return [{ bounds: placed.bounds, sample: (x, y, z) => placed.local(x, y, z, sd),
-        ...(opacityAt || alpha < 1 ? { alphaAt: opacityAt ? (x, y, z) => alpha * placed.local(x, y, z, opacityAt) / scale
+        ...(opacityAt || alpha < 1 ? { alphaAt: opacityAt ? (x, y, z) => alpha * placed.local(x, y, z, opacityAt) / width
           : () => alpha } : {}) }];
     }));
     const stations = families.flat();
-    if (!stations.length) throw new RangeError('No profile dabs have positive width; change pressure or spacing');
+    if (!stations.length) throw new RangeError('No dabs have positive width; change pressure or spacing');
     const colorTree = stations.some(row => row.alphaAt) && tree(stations);
     return { ...field(families.flatMap(rows => blendRows(rows, blendRadius))), guide, sampleCount: stations.length,
-      cost: Math.max(...plan.profiles.map(profile => profile.cost)),
-      step: step ?? Math.max(.0001, Math.min(.06, ...plan.profiles.map(profile => profile.spacing / 2))),
+      cost, step: spacing,
       ...(colorTree && { opacityAt(x, y, z) {
         let source;
         distance(colorTree, x, y, z, Infinity, (entry, x, y, z, best) => {
@@ -191,7 +202,7 @@
     };
   }
 
-  function prepare({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse }) {
+  function prepare({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse, looseness }) {
     if (!Array.isArray(poses) || poses.length < 1 || poses.length > 1024 ||
         !finite(blendRadius) || blendRadius < 0 ||
         (step !== undefined && (!positive(step) || step > 1)))
@@ -202,7 +213,8 @@
         pressureResponse.opacity !== undefined && !range(pressureResponse.opacity, 1)))
       throw new TypeError('Pressure response needs [at zero, at one] ranges for width (0–4) or opacity (0–1)');
     const input = Array.from(poses, poseSource), guide = path === 'ruled' ? ruled(input) : input;
-    if (brush?.kind === 'mark-profile') return profiledSweep(brush, guide, step, blendRadius, pressureResponse);
+    if (brush?.kind === 'mark-profile' || looseness !== undefined)
+      return stampedSweep(brush, guide, step, blendRadius, pressureResponse, P.paintLooseness.prepare(looseness));
     const source = brushSource(brush);
     const authored = pressureResponse === undefined ? guide : guide.map(pose => ({
       ...pose, pressure: responseAt(pressureResponse.width ?? [1, 1], pose.pressure)
