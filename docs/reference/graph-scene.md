@@ -40,7 +40,7 @@ Origin: toolkit.
 | Input | `targets` | `array<record>` | Required | {"items":"record"} |
 | Output | `value` | `record` | — | {"layout":"Plain named object"} |
 
-Guides: [guide](../audiovisual-takes.md#bind-picture-options)
+Guides: [guide](../audiovisual-takes.md#bind-picture-options), [guide](../channel-routing.md#publish-comparisons-and-drive-named-controls)
 
 Get the runnable example with `ink-studio graph describe scene.bindControls --example > example.json`.
 Run it with `ink-studio graph run example.json`.
