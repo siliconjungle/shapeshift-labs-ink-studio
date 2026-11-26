@@ -7,6 +7,44 @@ import { surfaceEngravingFragment } from './engraving-shaders.mjs';
 import { simulationMasks,simulationMaterialSource } from './simulation-material-layers.mjs';
 
 const uvSlip = Symbol.for('ink-studio.spriteSurface.uvSlip');
+const tilesetSource = `
+uniform int u_tileAlpha;
+uniform bool u_tileFrontOnly,u_tileLit,u_tileMinLinear,u_tileMagLinear;
+uniform float u_tileCutoff,u_tileGain,u_tileScale;
+uniform vec3 u_tileLight;
+uniform vec2 u_tileIntensity;
+uniform ivec4 u_tileBounds;
+vec4 tileTexel(ivec2 at,ivec4 bounds){
+  vec4 ink=texelFetch(u_atlas,clamp(at,bounds.xy,bounds.zw),0);
+  if(u_tileAlpha==1)ink.a=1.;
+  return vec4(ink.rgb*ink.a,ink.a);
+}
+vec4 tileSample(vec2 at,bool filtered,ivec4 bounds){
+  if(!filtered){
+    vec4 ink=texelFetch(u_atlas,clamp(ivec2(floor(at)),bounds.xy,bounds.zw),0);
+    if(u_tileAlpha==1)ink.a=1.;
+    return ink;
+  }
+  ivec2 base=ivec2(floor(at-.5));
+  vec2 f=fract(at-.5);
+  vec4 ink=mix(mix(tileTexel(base,bounds),tileTexel(base+ivec2(1,0),bounds),f.x),
+    mix(tileTexel(base+ivec2(0,1),bounds),tileTexel(base+1,bounds),f.x),f.y);
+  return vec4(ink.a>0.?ink.rgb/ink.a:vec3(0),ink.a);
+}
+float tileThreshold(vec2 sampleAt){
+  ivec2 p=ivec2(floor(sampleAt*u_tileScale))&3;
+  const int ranks[16]=int[16](0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5);
+  return (float(ranks[p.y*4+p.x])+.5)/16.;
+}
+vec3 tileLinear(vec3 c){
+  return mix(pow((c+.055)/1.055,vec3(2.4)),c/12.92,lessThanEqual(c,vec3(.04045)));
+}
+vec3 tileDisplay(vec3 c){
+  c=clamp(c,0.,1.);
+  return mix(1.055*pow(c,vec3(1./2.4))-.055,12.92*c,lessThanEqual(c,vec3(.0031308)));
+}
+`;
+
 const eyeFromView = view => [0, 1, 2].map(
   k => -(view[k * 4] * view[12] + view[k * 4 + 1] * view[13] + view[k * 4 + 2] * view[14])
 );
@@ -90,9 +128,9 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
     const shaders = sharedShaders?.cache ?? new Map();
     const program = sharedShaders?.program ?? resources.program;
     function shaderFor(wet, section, lighting, normalMapped, environment, paletteSampling, styledProjection, maskedPart, glassLayers,
-      anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr,pbrSpecularSampling,pbrBands,authored,tintMode) {
-      const chart = lighting && !normalMapped;
-      const marks=anchors || engraving, rest=marks||simulation||objectTexels||pbrBands, needsFrame=normalMapped||semantic||pbr||authored;
+      anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr,pbrSpecularSampling,pbrBands,authored,tintMode,tilesets) {
+      const chart = lighting && !normalMapped, mappedNormals=normalMapped||tilesets;
+      const marks=anchors || engraving, rest=marks||simulation||objectTexels||pbrBands, needsFrame=normalMapped||semantic||pbr||authored||tilesets;
       const key = [
         wet?.airPockets,
         wet?.layered,
@@ -106,7 +144,7 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
         paletteSampling,
         styledProjection,
         maskedPart,
-        glassLayers,anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr,pbrSpecularSampling,pbrBands,authored,tintMode
+        glassLayers,anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr,pbrSpecularSampling,pbrBands,authored,tintMode,tilesets
       ].join('/');
       if (shaders.has(key)) return shaders.get(key);
       const shader = program(
@@ -154,6 +192,7 @@ precision highp float;
 precision highp int;
 flat in highp int v_historyId;
 uniform sampler2D u_atlas;
+${tilesets?tilesetSource:''}
 ${blockColor ? 'uniform highp sampler2D u_blockColor;uniform bool u_blockOn;uniform ivec2 u_blockOrigin;uniform vec3 u_blockTint;' : ''}
 uniform vec4 u_range,u_splatPlane;
 ${wet ? waterGLSL(wet.airPockets, wet.layered, wet.atlas) : 'uniform vec4 u_arrivalPlane;'}
@@ -170,7 +209,7 @@ ${section ? cutaway : ''}
 ${environment?.media ? environmentMediaSource(environment.lit) : ''}
 ${lighting ? emitterGLSL : ''}
 ${chart ? 'uniform highp sampler2DArray u_surfaceLit;uniform int u_surfaceLightCount;in vec2 v_light;' : ''}
-${normalMapped ? 'uniform highp sampler2D u_surfaceNormalMap;uniform bool u_hasSurfaceNormalMap;' : ''}
+${mappedNormals ? 'uniform highp sampler2D u_surfaceNormalMap;uniform bool u_hasSurfaceNormalMap;' : ''}
 ${needsFrame ? 'uniform bool u_surfaceNormals;uniform vec3 u_surfaceEye;' : ''}
 ${authored?'in vec3 v_shadingNormal;':''}
 ${tintMode?'in vec4 v_cornerTint;':''}
@@ -213,7 +252,7 @@ mat3 texelFrame(vec3 dx,vec3 dy){
 }
 ` : ''}
 void main(){
-  if(u_frontOnly&&!gl_FrontFacing)discard;
+  if((u_frontOnly${tilesets?'||u_tileFrontOnly':''})&&!gl_FrontFacing)discard;
   ${maskedPart ? 'if(!spriteGeometry(u_geometryCode,gl_FragCoord.xy*u_partGrid))discard;' : ''}
   vec2 uv=${styledProjection ? 'u_affine?v_affine*gl_FragCoord.w:v_texel' : 'v_texel'};
   vec2 rawTexel=u_uvSlip?uv*u_uvTransform.xy+u_uvTransform.zw:uv;
@@ -223,6 +262,10 @@ void main(){
   if(u_paletteSampling)texel=clamp(texel,u_sampleRegion.xy,u_sampleRegion.xy+u_sampleRegion.zw-1.0);
   ` : ''}
   vec4 ink=texelFetch(u_atlas,ivec2(texel),0);
+  ${tilesets?`
+  float tileSpan=max(length(dFdx(rawTexel)),length(dFdy(rawTexel)))*u_tileScale;
+  vec4 tileInk=u_tileAlpha!=0?tileSample(rawTexel,tileSpan>1.?u_tileMinLinear:u_tileMagLinear,u_uvSlip?ivec4(u_uvBounds):u_tileBounds):ink;
+  `:''}
   ${paletteSampling ? `
   float q=gl_FragCoord.w;
   vec2 numerator=v_texel*q;
@@ -260,7 +303,10 @@ void main(){
   ${objectTexels?'vec3 texelRestX=dFdx(v_rest),texelRestY=dFdy(v_rest);':''}
   ${simulation?'vec2 simUVx=dFdx(v_simUV),simUVy=dFdy(v_simUV);vec3 simRestX=dFdx(v_rest),simRestY=dFdy(v_rest);':''}
   ${engraving ? 'vec3 restX=dFdx(v_rest),restY=dFdy(v_rest),worldX=dFdx(v_world),worldY=dFdy(v_world);vec2 texX=dFdx(v_texel),texY=dFdy(v_texel);' : ''}
-  if(ink.a<.5||dot(u_arrivalPlane,vec4(v_world,1.0))<0.0||dot(u_splatPlane,vec4(v_camera,1.0))<0.0)discard;
+  ${tilesets?`if(u_tileAlpha!=0)ink=tileInk;
+  bool tileHide=u_tileAlpha==3?ink.a<tileThreshold(gl_FragCoord.xy):
+    ink.a<(u_tileAlpha==2?u_tileCutoff:.5);`:'bool tileHide=ink.a<.5;'}
+  if(tileHide||dot(u_arrivalPlane,vec4(v_world,1.0))<0.0||dot(u_splatPlane,vec4(v_camera,1.0))<0.0)discard;
   ${section ? 'float margin=sectionMargin(v_world,v_depth); if(margin<0.0)discard;' : ''}
   ${anchors ? 'color=vec4(v_world,v_marks.x);depth=vec4(v_rest,1);return;' : ''}
   if(u_filterMatte){color=vec4(vec3(u_filterSoftness),1);depth=vec4(0);water=vec4(0);return;}
@@ -272,9 +318,10 @@ void main(){
     ink.rgb+=tintShift*mix(1.0-ink.rgb,ink.rgb,lessThan(tintShift,vec3(0.0)));` :
     tintMode ? 'ink.rgb=clamp(v_cornerTint.rgb+ink.rgb*(1.0-clamp(v_cornerTint.a,0.0,1.0)),0.0,1.0);' : ''}
   vec3 mark=vec3(0.0), rgb=ink.rgb;
-  ${chart ? 'vec3 irradiance=vec3(0);for(int i=0;i<32;i++){if(i>=u_surfaceLightCount)break;irradiance+=texelFetch(u_surfaceLit,ivec3(ivec2(v_light),i),0).rgb;}rgb=eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+irradiance)));' : ''}
+  ${tilesets?'bool receivesLight=u_tileAlpha==0||u_tileLit;':'const bool receivesLight=true;'}
+  ${chart ? 'vec3 irradiance=vec3(0);for(int i=0;i<32;i++){if(i>=u_surfaceLightCount)break;irradiance+=texelFetch(u_surfaceLit,ivec3(ivec2(v_light),i),0).rgb;}if(receivesLight)rgb=eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+irradiance)));' : ''}
   ${needsFrame ? `
-  vec4 map=${normalMapped ? 'u_surfaceNormals&&u_hasSurfaceNormalMap?texelFetch(u_surfaceNormalMap,ivec2(texel),0):vec4(0)' : 'vec4(0)'};
+  vec4 map=${mappedNormals ? 'u_surfaceNormals&&u_hasSurfaceNormalMap?texelFetch(u_surfaceNormalMap,ivec2(texel),0):vec4(0)' : 'vec4(0)'};
   ${semantic?'if(u_semanticOn)map=u_semanticNormals&&u_surfaceNormals?vec4(detail.rgb,1):vec4(0);':''}
   vec3 base=geometricNormal;
   ${authored ? `if(dot(v_shadingNormal,v_shadingNormal)>1e-12){
@@ -298,11 +345,11 @@ void main(){
   ${semantic ? 'vec3 scanIrradiance=vec3(0),scanHighlight=vec3(0);':''}
   ${normalMapped ? `
   ${semantic?'if(u_semanticOn&&(u_scanMaterial||u_texelMaterial))scanIrradiance=eSurfaceLighting(v_world,normal,false,vec3(0),geometricNormal,semanticObserver(v_world),detail.a,sheen,scanHighlight);else':''}
-  rgb=eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+eLighting(v_world,normal,false,vec3(0),geometricNormal))));
+  if(receivesLight)rgb=eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+eLighting(v_world,normal,false,vec3(0),geometricNormal))));
   ` : ''}
-  ${semantic?'if(u_semanticOn&&!u_index)rgb=semanticFinish(rgb,normal,detail.a,sheen,emission,v_world,scanIrradiance,scanHighlight,captured);':''}
+  ${semantic?'if(u_semanticOn&&!u_index&&receivesLight)rgb=semanticFinish(rgb,normal,detail.a,sheen,emission,v_world,scanIrradiance,scanHighlight,captured);':''}
   ${pbr ? `
-  if(u_surfacePbr!=0){
+  if(u_surfacePbr!=0&&receivesLight){
     float det=uvDx.x*uvDy.y-uvDx.y*uvDy.x;
     vec3 tangent=(dpdx*uvDy.y-dpdy*uvDx.y)*sign(det);
     PbrTap taps[4];
@@ -317,6 +364,13 @@ void main(){
       u_pbrOrtho?u_pbrBack:u_surfaceEye-v_world,v_world,${pbrBands?'v_rest':'v_world'},
       ${semantic?'u_semanticOn?detail.a:.45,u_semanticOn?metalness:0.,0.,u_semanticOn?emission:vec3(0)':'0.45,0.0,0.0,vec3(0)'},taps);
   }` : ''}
+  ${tilesets?`
+  if(u_tileAlpha!=0&&!u_index){
+    float diffuse=1.;
+    if(u_tileLit${semantic?'&&!u_semanticOn':''}${pbr?'&&u_surfacePbr==0':''})
+      diffuse=u_tileIntensity.x+u_tileIntensity.y*max(0.,dot(normal,u_tileLight));
+    if(diffuse!=1.||u_tileGain!=0.)rgb=tileDisplay(tileLinear(rgb)*diffuse+tileLinear(ink.rgb)*u_tileGain);
+  }`:''}
   ${engraving ? `
   if(v_marks.y>0.0){
     vec3 restN=cross(restX,restY),liveN=cross(worldX,worldY);
@@ -754,7 +808,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         height = 1,
         paletteSampling,
         surfaceNormals = true, sceneryBlockTextures = true,
-        semanticMipmaps = true, scanFrame, simulationLayers, eye, back=[0,0,1], ortho, sun,
+        semanticMipmaps = true, scanFrame, simulationLayers, eye, back=[0,0,1], ortho, sun, tilesetLight,
         samplingScale = 1,
         geometryCode = 0,
         partGrid = [1,1],
@@ -772,7 +826,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       }
       upload(atlas,Boolean(blockReady && planBlocks.complete));
       stats.blockMode=planBlocks ? blockReady ? 'native-bc1' : 'decoded-rgba' : undefined;
-      const semantic=atlas.semanticMipmaps;
+      const semantic=atlas.semanticMipmaps, tileRanges=atlas.tilesetMaterials;
       const objectTexels=Boolean(semantic?.some(row=>row.objectTexels));
       const firstSimulation=!index&&!coverageFilter&&semantic?.find(row=>simulationLayers?.get(row.simulation)?.active);
       const simulation=Boolean(firstSimulation);
@@ -800,7 +854,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       const tinted = atlas.cornerTints && !index && !coverageFilter && !anchors;
       const tintMode = tinted ? atlas.tintBlend ?? 'multiply' : null;
       const normalMapped = lit && Boolean(authored||atlas.normalPixels||simulation||objectTexels||semantic?.some(row=>row.chain.scan));
-      if (normalMapped) {
+      if (normalMapped || tileRanges && !lit) {
         gl.activeTexture(gl.TEXTURE0 + 24);
         gl.bindTexture(gl.TEXTURE_2D, atlas.normalPixels?normalTexture:texture);
       } else if (lit) {
@@ -822,7 +876,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       if(etched || anchors || simulation || objectTexels || pbr?.hasBands)bindMarks(atlas,anchors,etched,simulation);
       if(etched)etched.bind();
       const shader = shaderFor(wet, section, lit, normalMapped, environment, useSampling, projections.length > 0, Boolean(geometryCode), glassLayers,
-        !!anchors,!!etched,!!semantic,simulation,!!blockRanges,objectTexels,!!pbr,!!pbr?.specularSampling,!!pbr?.hasBands,authored,tintMode);
+        !!anchors,!!etched,!!semantic,simulation,!!blockRanges,objectTexels,!!pbr,!!pbr?.specularSampling,!!pbr?.hasBands,authored,tintMode,!!tileRanges);
       if (pbr) bindPbr();
       gl.useProgram(shader.p);
       shader.set({
@@ -833,11 +887,13 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         u_atlas: 6,
         ...(blockRanges&&{u_blockColor:blockUnit}),
         u_frontOnly: Boolean(atlas.frontOnly),
+        ...(tileRanges && {u_tileScale:samplingScale,u_tileLight:tilesetLight.direction,
+          u_tileIntensity:[tilesetLight.ambient,tilesetLight.intensity]}),
         ...(useSampling && { u_sampleTotals: prefixUnits[0], u_sampleAccents: prefixUnits[1], u_samplingScale: samplingScale }),
         u_surfaceLightCount: lighting?.count ?? 0,
         u_surfaceLit: 24,
-        ...(normalMapped && {u_surfaceNormalMap:24,u_hasSurfaceNormalMap:!!atlas.normalPixels}),
-        ...((normalMapped||semantic||pbr||authored)&&{u_surfaceNormals:surfaceNormals,u_surfaceEye:eye??eyeFromView(view)}),
+        ...((normalMapped||tileRanges) && {u_surfaceNormalMap:24,u_hasSurfaceNormalMap:!!atlas.normalPixels}),
+        ...((normalMapped||semantic||pbr||authored||tileRanges)&&{u_surfaceNormals:surfaceNormals,u_surfaceEye:eye??eyeFromView(view)}),
         ...(pbr&&{...pbrUniforms,u_pbrOrtho:!!ortho,u_pbrBack:back,u_pbrArtScale:samplingScale}),
         ...(semantic&&{u_semanticAtlas:semanticUnit,u_semanticLevels:semanticMipmaps!==false,u_semanticScale:samplingScale,
           u_semanticEye:eye??eyeFromView(view),u_semanticBack:back,u_semanticOrtho:!!ortho}),
@@ -914,9 +970,9 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
           first = stop;
         }
       }
-      let chartIndex = 0, semanticIndex=0, blockIndex=0;
+      let chartIndex = 0, semanticIndex=0, blockIndex=0, tileIndex=0;
       function drawRange(first, end) {
-        if(!coverageFilter && !semantic && !blockRanges && !pbr){
+        if(!coverageFilter && !semantic && !blockRanges && !pbr && !tileRanges){
           drawProjected(first,end);
           return;
         }
@@ -928,8 +984,18 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
           const candidate=semantic?.[semanticIndex], mip=candidate?.first<=first?candidate:null;
           while(blockRanges?.[blockIndex]?.end<=first)blockIndex++;
           const nextBlock=blockRanges?.[blockIndex], block=nextBlock?.first<=first?nextBlock:null;
-          const stop=Math.min(end,(chart?chart.end:next?.first)??end,(mip?mip.end:candidate?.first)??end,
+          while(tileRanges?.[tileIndex]?.end<=first)tileIndex++;
+          const nextTile=tileRanges?.[tileIndex], tile=nextTile?.first<=first?nextTile:null;
+          const stop=Math.min(end,(tile?tile.end:nextTile?.first)??end,(chart?chart.end:next?.first)??end,(mip?mip.end:candidate?.first)??end,
             (block?block.end:nextBlock?.first)??end);
+          if (tile) {
+            const {x,y,width,height}=tile.region, rule=tile.settings;
+            shader.set({u_tileAlpha:['opaque','mask','blend'].indexOf(rule.alphaMode)+1,
+              u_tileFrontOnly:rule.sidedness==='front',u_tileLit:rule.lighting==='lit',
+              u_tileCutoff:rule.alphaCutoff,u_tileGain:rule.emissiveGain,
+              u_tileMinLinear:rule.minFilter==='linear',u_tileMagLinear:rule.magFilter==='linear',
+              u_tileBounds:[x,y,x+width-1,y+height-1]});
+          } else if (tileRanges) shader.set({u_tileAlpha:0,u_tileFrontOnly:false});
           if(block){
             bindBlock(block.texture);
             shader.set({u_blockOn:true,u_blockOrigin:[block.region.x,block.region.y],u_blockTint:block.tint});

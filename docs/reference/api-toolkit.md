@@ -384,6 +384,11 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.SpriteSurface.samplingGLSL` | value | `string` |  |
 | `toolkit.SpriteSurface.samplingPlan` | function | `(atlas)` | [source](../../src/sprite-surface.js) |
 | `toolkit.SpriteSurface.setShadowShell` | function | `(atlas, id, definition)` | [source](../../src/sprite-surface.js) |
+| `toolkit.SpriteSurface.tilesetLight` | namespace |  |  |
+| `toolkit.SpriteSurface.tilesetLight.ambient` | value | `number = 0.32` |  |
+| `toolkit.SpriteSurface.tilesetLight.direction` | value | `array` |  |
+| `toolkit.SpriteSurface.tilesetLight.intensity` | value | `number = 0.68` |  |
+| `toolkit.SpriteSurface.tilesetMaterial` | function | `(value)` | [source](../../src/sprite-surface.js) |
 | `toolkit.SpriteSurface.update` | function | `(atlas, rect, { w, h, rgba } = {})` | [source](../../src/sprite-surface.js) |
 | `toolkit.SpriteSurface.updatesSince` | function | `(atlas, revision)` | [source](../../src/sprite-surface.js) |
 | `toolkit.SpriteSurface.uvSlip` | function | `(atlas, edits = [])` | [source](../../src/sprite-surface.js) |

@@ -18,6 +18,7 @@ const TargetSelectors = require('../src/target-selectors.js');
 const PbrMaterials = require('../src/pbr-materials.js');
 const { createArtPasses, sampleFrames, selectVisibleSubjects } = require('./art-passes.js');
 const ArtPasses = require('../src/art-passes.js');
+const SpriteSurface = require('../src/sprite-surface.js');
 const PartMotion = require('./part-motion.js');
 const StrandPasses = require('./strand-passes.js');
 const { createEnvironmentPasses } = require('./environment-passes.js');
@@ -1249,7 +1250,8 @@ function renderFrame(world, o, preparedPalettes) {
   const emitterHits = (!isolate || pixelSelection?.review && o.reviewEmitters !== false) && areaLights.length && AreaRaster.rasterize(areaLights, { w:W, h:H, rayAt, near, capture:!!(reflectionPlane || probeView), clip:geometryClip });
   if (emitterHits) for (const hit of emitterHits) if (hit) surfaceFragments.push(hit);
   const surfaceDepth=surfaceFragments.length?new Float32Array(W*H).fill(Infinity):null;
-  for (const sample of surfaceFragments) if (selectiveEnabled ? sample.alpha >= 1 && !sample.effect : !deep || sample.alpha >= 1)
+  for (const sample of surfaceFragments) if (sample.tilesetMaterial?.alphaMode === 'blend' ? sample.alpha>=1 :
+    selectiveEnabled ? sample.alpha >= 1 && !sample.effect : !deep || sample.alpha >= 1)
     surfaceDepth[sample.p] = Math.min(surfaceDepth[sample.p], sample.z);
   const sprites=AtlasRaster.rasterize(spriteAtlases,{
     eye,V,W,H,focal,ortho,near,rayAt,time:t,interfaceTime:o.interfaceTime,override:o.spriteAtlasMode,sun,
@@ -2204,7 +2206,7 @@ function renderFrame(world, o, preparedPalettes) {
       }
       if (staged?.lit) color=RenderStages.apply(staged.lit,color,sample,undefined,claim?.[4] && paletteTrace.forStage(claim[4]));
     }
-    if(i<0&&sprite.surface&&!sprite.emission&&sprite.normal){
+    if(i<0&&sprite.surface&&!sprite.emission&&sprite.normal&&sprite.tilesetMaterial?.lighting!=='unlit'){
       const target=sprite.sdf?sprite.row.target:sprite.lightingTarget;
       const directTarget=artLighting ? target : undefined;
       if(directLight?.receives(directTarget)) {
@@ -2218,7 +2220,7 @@ function renderFrame(world, o, preparedPalettes) {
       color=LightingChannels.emission(emissionCurve,color);
       sprite={...sprite,emission:color.some(Boolean)?color:undefined};
     }
-    if (sprite.pbrMaterial) {
+    if (sprite.tilesetMaterial?.lighting!=='unlit' && sprite.pbrMaterial) {
       color = PbrMaterials.shade(pbr, sprite.pbrMaterial, {
         color: sprite.color, position, restPosition:sprite.objectPosition, normal: sprite.normal, tangent: sprite.pbrTangent,
         shadowNormal:sprite.biasNormal,receiveShadow:sprite.pbrReceives,
@@ -2226,17 +2228,28 @@ function renderFrame(world, o, preparedPalettes) {
         view: pbrView ?? eye.map((value, k) => value - position[k]), roughness: sprite.semantic?.roughness,
         metalness: sprite.semantic?.metalness, emission: sprite.semantic?.emission
       });
-    } else if(sprite.semantic)color=SemanticMipmaps.shade(color,sprite.normal,sprite.semanticView,sprite.semantic,sprite.semanticRule,
+    } else if(sprite.semantic && sprite.tilesetMaterial?.lighting!=='unlit')color=SemanticMipmaps.shade(color,sprite.normal,sprite.semanticView,sprite.semantic,sprite.semanticRule,
       sprite.scan ? {...scanFrame,scan:sprite.scan,position,...scanLight} :
         sprite.objectTexels || sprite.liveLight ? {sun,...scanLight} : undefined);
-    const texelEmission=art && sprite.objectTexels && sprite.semantic.emission.some(Boolean) ?
-      texelEmissionDisplay(sprite.semantic.emission.map(value=>Math.min(1,value))) : undefined;
+    let tileEmission;
+    if (sprite.tilesetMaterial) {
+      const {lighting,emissiveGain}=sprite.tilesetMaterial;
+      const light=sun ?? SpriteSurface.tilesetLight;
+      const diffuse=lighting==='lit' && !sprite.semantic && !sprite.pbrMaterial ?
+        light.ambient+light.intensity*Math.max(0,sprite.normal.reduce((n,v,k)=>n+v*light.direction[k],0)) : 1;
+      if (emissiveGain) tileEmission=toLinearSrgb(sprite.color).map(value=>value*emissiveGain);
+      if (diffuse!==1 || tileEmission) color=texelEmissionDisplay(toLinearSrgb(color).map((value,k)=>
+        clamp(value*diffuse+(tileEmission?.[k]??0),0,1)));
+    }
+    const meshEmission=tileEmission ?? (sprite.objectTexels ? sprite.semantic.emission : undefined);
+    const texelEmission=art && meshEmission?.some(Boolean) ?
+      texelEmissionDisplay(meshEmission.map(value=>Math.min(1,value))) : undefined;
     const ink = cutaway?.edge ? Cutaway.edgeWeight(cutaway.edge,sectionAt(position)) : 0;
     const rgb=color.map((value,c)=>{
       const shaded=value+(fog[c]-value)*fogMix;
       return ink ? shaded+(cutaway.edge.color[c]-shaded)*ink : shaded;
     });
-    return [i,z,dn,alpha,...rgb,!sprite.effect&&alpha>=.5,Boolean(emitted),highlight,paletteId,false,false,
+    return [i,z,dn,alpha,...rgb,!sprite.effect&&(sprite.tilesetMaterial?.alphaMode==='blend' ? alpha>=1 : alpha>=.5),Boolean(emitted),highlight,paletteId,false,false,
       Boolean(sprite.effect)||alpha<.5,false,undefined,z,sprite,fogMix,
       rule,reflected,false,1,ink>0,claim,paintStage && paintColor(stageBase),surfaceMatte,emitted?.tint ?? texelEmission];
   }

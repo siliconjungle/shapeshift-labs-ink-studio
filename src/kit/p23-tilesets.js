@@ -62,8 +62,9 @@
       throw new TypeError('Expected a version 1 tileset image');
     const {width,height,encoding,data,palette,alpha,paletteMetadata:metadata} = source;
     dimensions(width,height);
+    const material = SpriteSurface.tilesetMaterial(source.material);
     const tileSize = tileDimensions(source.tileSize), indexed = encoding === 'indexed8';
-    if (Object.keys(source).some(key => !['version','width','height','encoding','data','tileSize',...(indexed ? ['palette','alpha','paletteMetadata'] : [])].includes(key)) ||
+    if (Object.keys(source).some(key => !['version','width','height','encoding','data','tileSize','material',...(indexed ? ['palette','alpha','paletteMetadata'] : [])].includes(key)) ||
         !packed(data,width*height*(indexed ? 1 : 4)) ||
         indexed && (!Array.isArray(palette) || !palette.length || palette.length > 256 ||
           !Array.from(palette).every(color => Number.isInteger(color) && color >= 0 && color <= 0xffffff) ||
@@ -78,7 +79,7 @@
       for (let i=0;i<slots.length;i++) if (slots.charCodeAt(i) >= palette.length)
         throw new RangeError('Tileset image uses an index outside its palette');
     }
-    return freeze({version:1,width,height,encoding,data,...(tileSize && {tileSize}),
+    return freeze({version:1,width,height,encoding,data,...(tileSize && {tileSize}),...(material && {material}),
       ...(indexed && {palette:[...palette],...(alpha !== undefined && {alpha:[...alpha]}),...(named && {paletteMetadata:named})})});
   }
 
@@ -144,12 +145,14 @@
     const current = scene.tilesets === undefined ? {} : scene.tilesets;
     if (!record(current)) throw new TypeError('Scene tilesets need a map of image sources');
     if (Object.hasOwn(current,key)) {
-      const {tileSize:oldSize,...oldImage} = prepare(current,scene.tilesetDefaults).source(key);
-      const {tileSize:newSize,...newImage} = image(source);
+      const {tileSize:oldSize,material:oldMaterial,...oldImage} = prepare(current,scene.tilesetDefaults).source(key);
+      const {tileSize:newSize,material:newMaterial,...newImage} = image(source);
       if (JSON.stringify(oldImage) !== JSON.stringify(newImage))
         throw new RangeError('A different image is already registered as tileset '+key);
       if (newSize && JSON.stringify(newSize) !== JSON.stringify(oldSize))
         throw new RangeError('Edit the registered tile grid for '+key+' separately');
+      if (newMaterial && JSON.stringify(newMaterial) !== JSON.stringify(oldMaterial))
+        throw new RangeError('Edit the registered tileset material for '+key+' separately');
       return scene;
     }
     const tilesets = {...current,[key]:source};
@@ -162,14 +165,14 @@
     if (sourceId === targetId) throw new RangeError('Extract the crop under a different tileset ID');
     const source = prepare(scene.tilesets,scene.tilesetDefaults).source(sourceId);
     const {x,y,width,height} = TilesetSelection.pick(sourceId,source,rectangle);
-    const {encoding,palette,alpha,paletteMetadata} = source;
+    const {encoding,palette,alpha,paletteMetadata,material} = source;
     const channels = encoding === 'indexed8' ? 1 : 4, pixels = atob(source.data), rows = [];
     for (let row=0;row<height;row++) {
       const start = ((y+row)*source.width+x)*channels;
       rows.push(pixels.slice(start,start+width*channels));
     }
     const asset = {version:1,width,height,encoding,data:btoa(rows.join('')),tileSize:{width,height},
-      ...(palette && {palette}),...(alpha !== undefined && {alpha}),...(paletteMetadata && {paletteMetadata})};
+      ...(material && {material}),...(palette && {palette}),...(alpha !== undefined && {alpha}),...(paletteMetadata && {paletteMetadata})};
     return register(scene,targetId,asset);
   }
 

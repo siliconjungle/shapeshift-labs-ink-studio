@@ -2945,3 +2945,61 @@ The Tide Relay uses one authored texture for the original and reduced
 GLBs. The review includes both meshes, atlas maps, seam locations, and
 matching turntable frames. A deliberate overlap and a tight border
 clearance make the atlas diagnostics visible.
+
+## Save a shared tileset material
+
+Use `tileset material set` to save render settings on a registered sheet.
+Existing and future mesh faces using that sheet pick up the settings,
+including placed prefab members. The receipt lists the dependent faces
+and the earlier and proposed sheet revisions. Paint, UVs and per-corner
+tint remain authored separately.
+
+```json
+{
+  "lighting": "unlit",
+  "emissiveGain": 0.35,
+  "alphaMode": "blend",
+  "alphaCutoff": 0.5,
+  "sidedness": "double",
+  "minFilter": "linear",
+  "magFilter": "nearest"
+}
+```
+
+- `lighting` accepts `lit` or `unlit`. Lit tiles respond to scene lights.
+  `emissiveGain` adds the tinted pigment as emitted light in the surface
+  response, from 0 to 64. It can also be used on unlit tiles.
+- `alphaMode` accepts `opaque`, `mask`, or `blend`. Opaque ignores image
+  alpha. Mask uses `alphaCutoff` in the 0–1 range. Headless blend
+  composites fractional alpha in scene depth order. The interactive
+  WebGL preview uses ordered coverage for blended tiles.
+- `sidedness` accepts `front` or `double`. Front-facing visibility
+  follows the authored winding.
+- `minFilter` and `magFilter` each accept `nearest` or `linear`. Ink
+  switches to minification when a native art pixel spans more than
+  one source texel. Linear samples are confined to the sheet and use
+  alpha-weighted color for cutouts and blends.
+
+A settings file replaces the sheet's settings. Omitted fields use
+`lit`, gain 0, `mask`, cutoff 0.5, `double`, and nearest on both axes
+of scale. Use JSON `null` to restore the original per-mesh response
+for a sheet. Once a sheet has settings, its cutoff and texture sampler
+take precedence over the mesh material's cutoff and palette filter.
+
+```sh
+ink-studio tileset material set glass.json --scene station.json --id glass > review.json
+ink-studio tileset material set glass.json --scene station.json --id glass --expect review.json --out lit-station.json
+ink-studio tileset material inspect --scene lit-station.json --id glass
+ink-studio tileset material export --scene lit-station.json --id glass --out glass-preset.json
+ink-studio tileset material set glass-preset.json --scene dock.json --id painted-windows --out lit-dock.json
+```
+
+Cloning, extracting and replacing an image retain its settings. A
+combined atlas inherits settings when every source agrees, and its
+receipt lists any omitted material settings otherwise. The SDK uses
+`editor.planTilesetRevision({type:'material',id,settings})` and
+`editor.editTilesetRevision({type:'material',id,settings})`, with a single
+undo for the edit.
+
+Run `node examples/tileset-pick/tileset-material-demo.cjs material-review`
+for a headless comparison and reusable presets.

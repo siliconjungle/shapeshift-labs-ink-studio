@@ -6,6 +6,7 @@
   const sameImage = (a,b)=>JSON.stringify(imageShape(a)) === JSON.stringify(imageShape(b)) &&
     (a.data === b.data || atob(a.data) === atob(b.data));
   const sameMetadata = (a,b)=>JSON.stringify(a.paletteMetadata) === JSON.stringify(b.paletteMetadata);
+  const sameMaterial = (a,b)=>JSON.stringify(a.material) === JSON.stringify(b.material);
   function readTexels(asset) {
     const {palette,encoding,alpha} = asset, data = atob(asset.data);
     if (encoding === 'rgba8') return p=>{
@@ -25,7 +26,9 @@
   }
 
   const descriptor = (id,asset,tileSize)=>({id,width:asset.width,height:asset.height,encoding:asset.encoding,
-    tileSize,revision:hash(JSON.stringify([...imageShape(asset),asset.data,tileSize,...(asset.paletteMetadata ? [asset.paletteMetadata] : [])])).toString(16).padStart(8,'0')});
+    tileSize,...(asset.material && {material:asset.material}),
+    revision:hash(JSON.stringify([...imageShape(asset),asset.data,tileSize,...(asset.paletteMetadata ? [asset.paletteMetadata] : []),
+      ...(asset.material ? [asset.material] : [])])).toString(16).padStart(8,'0')});
 
   function clipDefinitions(timeline) {
     if (!timeline) return [];
@@ -127,7 +130,8 @@
         } else pixels.set(source.subarray(y*stride,(y+1)*stride),start);
       }
     }
-    const asset = {version:1,width,height,encoding:indexed ? 'indexed8' : 'rgba8',data:A.tilesets.encodeRaster(pixels),
+    const material = ids.every(id=>sameMaterial(tilesets.source(id),first)) ? first.material : undefined;
+    const asset = {version:1,width,height,...(material && {material}),encoding:indexed ? 'indexed8' : 'rgba8',data:A.tilesets.encodeRaster(pixels),
       tileSize:{width,height},...(indexed && {palette:first.palette,...(first.alpha !== undefined && {alpha:first.alpha}),...(first.paletteMetadata && {paletteMetadata:first.paletteMetadata})})};
     return {asset,width,height,placements};
   }
@@ -186,13 +190,13 @@
     return {patch:Object.keys(meshes).length ? {topologyMeshes:{...scene.topologyMeshes,...meshes}} : {},invalidatedBakes};
   }
 
-  const schemas = {clone:['id','newId'],replace:['id','asset'],palette:['id','asset'],combine:['ids','newId','axis'],
+  const schemas = {clone:['id','newId'],replace:['id','asset'],palette:['id','asset'],material:['id','settings'],combine:['ids','newId','axis'],
     deduplicate:['id','keepId'],remove:['id']};
 
   function plan(scene, request, external) {
     if (!request || Object.getPrototypeOf(request) !== Object.prototype ||
         !Object.hasOwn(schemas,request.type) || Object.keys(request).some(key=>key !== 'type' && !schemas[request.type].includes(key)))
-      throw new TypeError('Choose a tileset clone, replace, palette, combine, deduplicate or remove request');
+      throw new TypeError('Choose a tileset clone, replace, palette, material, combine, deduplicate or remove request');
     const {type,id,newId,keepId,axis='x'} = request;
     const ids = type === 'combine' ? request.ids : type === 'deduplicate' ? [id,keepId] : [id];
     const output = {...scene.tilesets}, API = A.tilesets;
@@ -214,15 +218,22 @@
         if (asset) output[newId] = asset;
         else blockers.push({reason:'combined-atlas-too-large',id:newId,width,height,limit:API.maxEdge});
         const omittedPalettes = asset?.encoding === 'rgba8' ? ids.filter(key=>tilesets.source(key).paletteMetadata) : [];
-        detail = {axis,placements,...(omittedPalettes.length && {omittedPalettes})};
+        const omittedMaterials = asset && !asset.material ? ids.filter(key=>tilesets.source(key).material) : [];
+        detail = {axis,placements,...(omittedPalettes.length && {omittedPalettes}),
+          ...(omittedMaterials.length && {omittedMaterials})};
       }
+    } else if (type === 'material') {
+      const {material,...image} = sources[0];
+      if (request.settings === undefined) throw new TypeError('Supply tileset material settings or null to reset');
+      const settings = request.settings === null ? undefined : SpriteSurface.tilesetMaterial(request.settings);
+      output[id] = {...image,...(settings && {material:settings})};
     } else if (type === 'replace' || type === 'palette') {
       const asset = request.asset, before = sources[0];
-      const {tileSize,...image} = API.prepare({replacement:asset}).source('replacement');
+      const {tileSize,material,...image} = API.prepare({replacement:asset}).source('replacement');
       const keepNames = type === 'replace' && !image.paletteMetadata && before.paletteMetadata &&
         JSON.stringify(before.palette) === JSON.stringify(image.palette);
       const revised = {...image,...(keepNames && {paletteMetadata:before.paletteMetadata}),
-        ...(before.tileSize && {tileSize:before.tileSize})};
+        ...(before.tileSize && {tileSize:before.tileSize}),...(before.material && {material:before.material})};
       const grid = tilesets.grid(id).tileSize;
       if (grid && !TilesetSelection.gridFits(revised,grid)) blockers.push({reason:'grid-does-not-fit',id,tileSize:grid});
       output[id] = revised;
@@ -240,7 +251,7 @@
         if (materials.length || prefabs.length) blockers.push({reason:'tileset-in-use',id});
       } else {
         const [from,to] = sources, sameGrid = JSON.stringify(tilesets.grid(id).tileSize) === JSON.stringify(tilesets.grid(keepId).tileSize);
-        if (!sameGrid || !sameImage(from,to) || !sameMetadata(from,to))
+        if (!sameGrid || !sameImage(from,to) || !sameMetadata(from,to) || !sameMaterial(from,to))
           blockers.push({reason:'different-tilesets',id,keepId});
         if (links[id] && JSON.stringify(links[id]) !== JSON.stringify(links[keepId]))
           blockers.push({reason:'different-source-links',id,keepId});
