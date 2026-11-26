@@ -127,6 +127,7 @@ All checked-in guides, indexed by title and section headings.
 - [Effect recipe library](../effect-recipes.md)
 - [Traveling emission bands](../emission-bands.md)
 - [Engraving and tonal art maps](../engraving.md)
+- [Promote objects from a running scene](../entity-promotion.md)
 - [Environment inspection](../environment-inspector.md)
 - [Reusable environment packs](../environment-packs.md)
 - [Environment review shots](../environment-review-shots.md)

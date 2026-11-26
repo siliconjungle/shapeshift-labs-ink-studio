@@ -8,7 +8,7 @@
   const record = value => value && Object.getPrototypeOf(value) === Object.prototype;
   const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
   const geometry = row => row.kind === 'sculpt' || row.kind === 'mesh';
-  const paintFields = ['sdfPaint', 'sdfSpray', 'surfaceState'];
+  const paintFields = ['sdfPaint', 'sdfSpray', 'surfaceState', 'bodySurface'];
   const addr = (kind, id) => kind + ':' + id;
   const paintKey = (kind, id) => addr('paint', kind + '/' + id);
   const areaKey = id => addr('light', 'area/' + id);

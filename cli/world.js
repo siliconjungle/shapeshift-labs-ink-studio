@@ -1305,7 +1305,40 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     }
     process.stdout.write(JSON.stringify(result.report, null, opt.json ? 0 : 2) + '\n');
   }
+  function promoteEntities(mode, file, selection, additional) {
+    const inspect = mode === 'inspect-entities', dry = opt['dry-run'] === true;
+    const flags = inspect ? ['place', 'json'] : ['place', 'into', 'out', 'dry-run', 'json'];
+    ensure(typeof file === 'string' && !additional.length &&
+      (inspect ? selection === undefined : typeof selection === 'string' && selection.endsWith('.json')) &&
+      Object.keys(opt).every(key => flags.includes(key)) &&
+      (opt.place === undefined || typeof opt.place === 'string') &&
+      (opt.into === undefined || typeof opt.into === 'string' && opt.into.endsWith('.json')) &&
+      (inspect || (dry ? opt.out === undefined : typeof opt.out === 'string' && opt.out.endsWith('.json'))),
+      'Use scene inspect-entities SOURCE [--place ID] or scene promote-entities SOURCE SELECTION.json [--into SCENE.json] with --out NEW.json or --dry-run');
+    let source;
+    if (/\.json$/i.test(file)) {
+      const { value } = readCheckpointFile(file);
+      source = [W.format, W.models.format].includes(value.format) ? document(value, file).world : value;
+    } else source = load(file).world;
+    const options = { place: opt.place }, api = W.entityPromotion;
+    if (inspect) return respond(api.inspect(source, options));
+    checkReportPath([file, selection, opt.into], opt.out, 'promotion sources');
+    if (opt.into !== undefined && !dry)
+      ensure(path.dirname(path.resolve(opt.out)) === path.dirname(path.resolve(opt.into)),
+        'Save beside the destination scene so its relative assets still resolve');
+    const request = read(selection);
+    let result;
+    if (opt.into !== undefined) {
+      const descriptor = dataScene(opt.into, undefined, { refreshTilesets: false });
+      ensure(descriptor.openEditor, 'Promotion needs a native editable diorama destination');
+      result = descriptor.openEditor().planEntityPromotion(source, request, options);
+    } else result = api.plan(source, request, options);
+    if (!dry) write(opt.out, result.scene);
+    process.stdout.write(JSON.stringify(result.report, null, opt.json ? 0 : 2) + '\n');
+  }
+
   function scene([mode,file,reference,...additional]) {
+    if (mode === 'inspect-entities' || mode === 'promote-entities') return promoteEntities(mode, file, reference, additional);
     if (mode === 'sync-prefab') return syncPrefab(file, reference === undefined ? [] : [reference, ...additional]);
     const input=load(file);
     if(mode==='upgrade'){
