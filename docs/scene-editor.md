@@ -666,3 +666,44 @@ In the SDK, use `planPrefabReparent`, `previewPrefabReparent`, and
 `reparentPrefab`. One undo restores the old link and its local transform.
 Run `node examples/tileset-pick/prefab-reparent-demo.cjs nested-bays`
 to compare a keep-world reparent with the subsequent motion of the parent.
+
+### Mirror a placed prefab while editing
+
+`mesh-topology mirror-prefab` adds a live reflected placement with its
+own instance ID. The mirror follows the source's prefab, local overrides,
+and world transform, including motion inherited from a parent. It also
+reflects the paint, restores front-face winding, and keeps the UV corners
+associated with their authored texels.
+
+```json
+{
+  "source": "west",
+  "instance": "east",
+  "plane": {"origin": [0, 0, 0], "normal": [1, 0, 0]}
+}
+```
+
+Omit `plane` to capture the active construction plane. The plane is
+stored in world coordinates. Submit the same source and mirror IDs
+with another plane to move the reflection plane. While linked, edit
+the authored source through the usual prefab commands. A scene-level
+decal belongs to its named receiver. Scene placements nested under
+the source keep their own links.
+
+```sh
+ink-studio mesh-topology mirror-prefab station.json mirror.json --preview link-review --view view.json --out live.json
+ink-studio mesh-topology mirror-prefab live.json commit.json --preview commit-review --view view.json --out independent.json
+```
+
+Use `{"action":"commit","instance":"east"}` in `commit.json` to retain
+the reflected pose and current overrides as an independent placement.
+Both sides can now move and take instance edits separately. They still
+share the prefab definition. Use `variant-prefab` to give one side its
+own definition. Commit and link updates are undoable. Commit the live
+mirror before removing its source or replacing that source with a
+different prefab.
+
+In the SDK, use `planPrefabMirror`, `previewPrefabMirror`, and
+`applyPrefabMirror`. Run
+`node examples/tileset-pick/prefab-mirror-demo.cjs mirror-bays`
+to link two bays, paint them together, and make a local variation.

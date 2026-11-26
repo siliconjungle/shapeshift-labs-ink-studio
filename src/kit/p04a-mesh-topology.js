@@ -473,6 +473,12 @@ const meshCornerTint = (() => {
         return output;
       };
       geometry.positions = map(geometry.positions, value => K.sceneGraph.point(place, value));
+      if (K.M.det(place.matrix) < 0) for (const [i,source] of triangleSources.entries()) {
+        const j = i*3;
+        [geometry.indices[j+1],geometry.indices[j+2]] = [geometry.indices[j+2],geometry.indices[j+1]];
+        const [a,b,c] = source.corners;
+        triangleSources[i] = frozen({face:source.face,corners:frozen([a,c,b])});
+      }
       if (geometry.normals) {
         const normals = K.M.tr(K.sceneGraph.inverse(place).matrix);
         geometry.normals = map(geometry.normals, value => K.M.app(normals, value));

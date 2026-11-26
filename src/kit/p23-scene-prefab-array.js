@@ -21,7 +21,7 @@
       if (!id(name) || !fields(row,['version','instance','count','spacing','space','origin','axes','parentFrame']) ||
           row.version !== 1 || !id(row.instance) || !vector(row.origin) || !vector(row.axes,axis => vector(axis)) ||
           row.axes.some((axis,i) => row.axes.some((other,j) => Math.abs(V.dot(axis,other)-(i===j ? 1 : 0))>1e-8)) ||
-          V.dot(V.cross(row.axes[0],row.axes[1]),row.axes[2])<1-1e-8)
+          Math.abs(V.dot(V.cross(row.axes[0],row.axes[1]),row.axes[2]))<1-1e-8)
         throw new TypeError('Invalid retained prefab array '+name);
       if (row.parentFrame !== undefined) {
         if (!fields(row.parentFrame,['instance','frame']) || !id(row.parentFrame.instance) ||
@@ -54,6 +54,7 @@
     layout(count,spacing,space);
     const template = Object.hasOwn(scene.instances ?? {},instance) && scene.instances[instance];
     if (!template) throw new RangeError('Unknown scene instance '+instance);
+    if (template.mirror) throw new RangeError('Commit the live mirror before using it as an array source');
     const frames = A.scenePrefabs.placements(scene.instances), frame = frames.get(instance);
     const source = {instance,instanceKind:'prefab',target:frame?.mesh.position ?? [0,0,0]};
     const axes = space === 'plane' ? A.constructionPlane.forScene(scene).axes : space === 'local' ?
@@ -95,6 +96,10 @@
       else occupied.set(key,instance);
       if (seed) {
         report.cells.push({cell,instance,status:'source',prefab:template.prefab,at:source.target});
+        continue;
+      }
+      if (existing?.mirror) {
+        report.conflicts.push({reason:'commit-live-mirror-first',instance});
         continue;
       }
       if (!validId(instance) || instance === source.instance || outside(cell) && existing) {

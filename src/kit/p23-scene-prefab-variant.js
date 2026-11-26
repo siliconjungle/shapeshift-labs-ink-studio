@@ -16,9 +16,9 @@
       Object.entries(link.definition.meshFrames).filter(([member]) => Object.hasOwn(topologyMeshes,member)));
     const sheets = A.scenePrefabs.tilesetRequirements(link.definition,topologyMeshes);
     if (sheets !== undefined) definition.usesTilesets = sheets;
-    const {transform,parent} = link.instance;
+    const {transform,parent,flipX} = link.instance;
     return {prefabs:{...scene.prefabs,[variant]:definition},
-      instances:{...scene.instances,[instance]:{prefab:variant,...(parent !== undefined && {parent}),...(transform !== undefined && {transform})}}};
+      instances:{...scene.instances,[instance]:{prefab:variant,...(flipX && {flipX}),...(parent !== undefined && {parent}),...(transform !== undefined && {transform})}}};
   }
 
   function hasPlacement(frame) {
@@ -28,8 +28,12 @@
   function placedMesh(row, placement) {
     const doc = T.create(row.document);
     const vertices = doc.vertices.map(vertex => ({...vertex,position:placement.point(vertex.position)}));
-    const faces = doc.faces.map(face => ({...face,corners:face.corners.map(corner => corner.normal ?
-      {...corner,normal:placement.direction(corner.normal)} : corner)}));
+    const faces = doc.faces.map(face => {
+      const corners = face.corners.map(corner => corner.normal ?
+        {...corner,normal:placement.direction(corner.normal)} : corner);
+      if (placement.reflected) corners.splice(1,corners.length-1,...corners.slice(1).reverse());
+      return {...face,corners};
+    });
     const bindings = row.bindings?.map(binding => meshUVFlatten.isBinding(binding) && placement.scale !== 1 ?
       {...binding,data:{...binding.data,texelsPerUnit:binding.data.texelsPerUnit/placement.scale}} : binding);
     return {...row,document:T.create({...doc,vertices,faces}),
@@ -38,8 +42,10 @@
 
   function detach(scene, spec, meshPlacements, link, report) {
     const {instance,provenance,conflicts} = report;
-    for (const [child,row] of Object.entries(scene.instances))
+    for (const [child,row] of Object.entries(scene.instances)) {
       if (row.parent === instance) conflicts.push({reason:'child-needs-reparent',instance:child,parent:instance});
+      else if (row.mirror?.source === instance) conflicts.push({reason:'dependent-live-mirror',instance:child,source:instance});
+    }
     if (conflicts.length) return;
     const instances = {...scene.instances};
     delete instances[instance];
@@ -48,9 +54,9 @@
       const frame = meshPlacements.get(object);
       if (!hasPlacement(frame)) return;
       if (!Object.hasOwn(link.definition.meshFrames ?? {},member))
-        return link.placement;
+        return {...link.placement,reflected:K.M.det(frame.matrix)<0};
       const scale = K.V.len([frame.matrix[0],frame.matrix[3],frame.matrix[6]]);
-      return {scale,point:value => K.sceneGraph.point(frame,value),
+      return {scale,reflected:K.M.det(frame.matrix)<0,point:value => K.sceneGraph.point(frame,value),
         direction:value => K.V.mul(K.M.app(frame.matrix,value),1/scale)};
     }
     const expanded = spec.topologyMeshes ?? {};
@@ -99,7 +105,7 @@
     const entry = scene.instances[instance];
     const {spec,instances,meshPlacements} = A.scenePrefabs.expand({prefabs:scene.prefabs,tilesets:scene.tilesets,
       prefabLibrary:scene.prefabLibrary,instances:scene.instances},env,{only:new Set([instance])});
-    const link = instances.get(instance), {prefab} = entry;
+    const link = instances.get(instance), {prefab} = link.instance;
     if (revision !== undefined && revision !== link.revision) throw new RangeError('Stale prefab variant revision');
     const provenance = {instance,prefab,revision:link.revision,
       ...(!own(scene.prefabs,prefab) && scene.prefabLibrary && {library:scene.prefabLibrary}),
@@ -114,7 +120,8 @@
         meshes:Object.keys(entry.meshOverrides ?? {}).sort()},conflicts:[]};
     report.instances = [{instance,objects:[...report.solids,...meshes.map(row => row.object)]}];
     let patch;
-    if (mode === 'fork') {
+    if (link.mirror) report.conflicts.push({reason:'commit-live-mirror-first',source:link.mirror.source});
+    else if (mode === 'fork') {
       if (own(scene.prefabs,variant) || own(env.prefabs,variant)) report.conflicts.push({reason:'prefab-in-use',prefab:variant});
       else patch = fork(scene,link,report);
     } else {
