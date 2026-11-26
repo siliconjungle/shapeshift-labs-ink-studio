@@ -96,11 +96,13 @@ test('simulation sweep captures the same checkpoint branches and scheduled obser
   assert.equal(report.format,'ink-studio/observation-sweep');
   assert.deepEqual(result.samples,{units:'ticks',poster:3,frames:[2,3,4],fps:6});
   assert.deepEqual(result.tiles.map(tile=>tile.id),report.runs.map(row=>row.id));
+  assert.deepEqual(result.tiles.map(tile=>tile.sampleId),report.runs.map(row=>row.sampleId));
   assert.deepEqual(report.runs.map(row=>row.samples.map(sample=>sample.value)),[[0,2],[0,6]]);
   const pin=f.out('pin.json');
   cli('sweep','pin',f.out('matrix/report.json'),result.tiles[1].id,'--out',pin);
   cli('sweep','nearby',pin,f.write('offsets.json',{flow:[-1,.5]}),'--out',f.out('near'));
   assert.deepEqual(f.report('near').runs.map(row=>row.samples[1].value),[4,6,7]);
+  assert.equal(f.report('near').runs[1].sampleId,result.tiles[1].sampleId);
   assert.deepEqual(f.bytes('near','cases/002.apng'),f.bytes('matrix','cases/002.apng'));
 
   const still=f.write('stills.json',{
@@ -294,12 +296,22 @@ test('ranges and seeded sampling honor cross-control constraints and replay sele
   assert.equal(one.tiles.length,4);
   assert.ok(one.tiles.every(({parameters:{a,b}}) => a >= 0 && a < b));
   assert.equal(new Set(one.tiles.map(tile => JSON.stringify(tile.parameters))).size,4);
-  cli('sweep','pin',f.out('run-one'),'2','--out',f.out('range-pin.json'));
+  const identities = one.tiles.map(tile => tile.sampleId);
+  assert.ok(identities.every(id => /^sample-[0-9a-f]{16}$/.test(id)));
+  assert.equal(new Set(identities).size,4);
+  const reordered = f.write('reordered.json',{...plan,parameters:{b:plan.parameters.b,a:plan.parameters.a}});
+  cli('sweep',scene,reordered,'--out',f.out('reordered'));
+  assert.deepEqual(f.report('reordered').tiles.map(tile => tile.sampleId),identities);
+  cli('sweep','compare',f.out('run-one'),identities[0],identities[1],'--out',f.out('sample-comparison'));
+  assert.equal(f.report('sample-comparison').rightSampleId,identities[1]);
+  cli('sweep','pin',f.out('run-one'),identities[1],'--out',f.out('range-pin.json'));
   const pin = JSON.parse(fs.readFileSync(f.out('range-pin.json')));
+  assert.equal(pin.anchor.sampleId,identities[1]);
   assert.equal(pin.recipe.plan.sampling,undefined);
   assert.deepEqual(pin.recipe.plan.parameters.a.values,[one.tiles[1].parameters.a]);
   cli('sweep','replay',f.out('range-pin.json'),'--out',f.out('range-replay'));
   assert.deepEqual(f.bytes('range-replay','cases/001.png'),f.bytes('run-one',one.tiles[1].image));
+  assert.equal(f.report('range-replay').tiles[0].sampleId,identities[1]);
 
   const fixed = f.write('fixed-grid.json',{
     ...plan,sampling:undefined,runBudget:2,
@@ -310,4 +322,7 @@ test('ranges and seeded sampling honor cross-control constraints and replay sele
   const impossible = f.write('impossible.json',{...plan, constraints:[{left:'a',op:'lt',right:{value:0}}]});
   assert.match(run('sweep',scene,impossible,'--out',f.out('no-runs')).stderr,/distinct sample count/);
   assert.ok(!fs.existsSync(f.out('no-runs')));
+  const capped = f.write('capped.json',{...plan,seeds:[7,9]});
+  assert.match(run('sweep',scene,capped,'--out',f.out('over-budget')).stderr,/sample count within the run budget/);
+  assert.ok(!fs.existsSync(f.out('over-budget')));
 });

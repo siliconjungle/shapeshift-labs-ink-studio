@@ -259,10 +259,10 @@ function runScene({ kit, source, plan, directory, loadScene, renderCase, anchor 
   for (const group of groups) {
     const controls = kit.world.apply({ ...plan.controls, ...group.controls }, group.edits, { validate: value => value }).world;
     for (const seed of actualSeeds) {
-      const id = group.id + '@' + seed;
+      const id = group.id + '@' + seed, sampleId = kit.world.observations.sampleId(group.case,seed,group.parameters);
       try {
         const { frames, approvals } = renderCase(source, { seed, controls }, settings, approval);
-        tiles.push({ id, case: group.case, seed, parameters: group.parameters, frames, ...(approvals && { approvals }) });
+        tiles.push({ id, sampleId, case: group.case, seed, parameters: group.parameters, frames, ...(approvals && { approvals }) });
       } catch (error) { throw Error('Sweep run ' + id + ': ' + error.message, { cause: error }); }
     }
   }
@@ -288,13 +288,18 @@ function runSimulation({ kit, source, plan, directory, input, workerPool, runtim
   return finish({ kit, directory, recipe, visual: settings, tiles: [...tiles.values()], numeric, name: numeric.world, anchor });
 }
 
+function selectTile(tiles, selection) {
+  if (typeof selection !== 'string') return;
+  return tiles.find(row => row.id === selection || row.sampleId === selection || String(row.tile) === selection);
+}
+
 function pin(report, selection, note) {
   check(note === undefined || typeof note === 'string' && note.length > 0 && note.length <= 512,
     'Sweep pin notes need 1–512 characters');
   const result = report.visual ?? report;
   check(result.format === format && result.version === 1 && Array.isArray(result.tiles) &&
     record(result.recipe) && record(result.recipe.plan), 'Expected a visual sweep report');
-  const tile = result.tiles.find(row => row.id === selection || String(row.tile) === selection);
+  const tile = selectTile(result.tiles, selection);
   check(tile, 'No visual sweep tile matches ' + selection);
   const { recipe } = result, { plan } = recipe;
   const choice = (plan.cases ?? [{ id: 'base' }]).find(row => row.id === tile.case);
@@ -304,7 +309,7 @@ function pin(report, selection, note) {
     const { range, ...binding } = parameter;
     return [name, { ...binding, values: [tile.parameters[name]] }];
   }));
-  const anchor = { id: tile.id, case: tile.case, seed: tile.seed, parameters: tile.parameters };
+  const anchor = { id: tile.id, ...(tile.sampleId && { sampleId: tile.sampleId }), case: tile.case, seed: tile.seed, parameters: tile.parameters };
   const { sampling, ...fixedPlan } = plan;
   return { format: pinFormat, version: 1, anchor, ...(note && { note }), recipe: {
     ...recipe, plan: { ...fixedPlan, seeds: [tile.seed], cases: [choice], parameters }
@@ -339,4 +344,4 @@ function sourcePath(id) {
   return /\.(?:js|json|obj|gltf|glb)$/i.test(id) || id.includes('/') ? path.resolve(id) : id;
 }
 
-module.exports = { read, outputPath, runScene, runSimulation, pin, loadPin, sourcePath, publish };
+module.exports = { read, outputPath, runScene, runSimulation, pin, loadPin, sourcePath, publish, selectTile };
