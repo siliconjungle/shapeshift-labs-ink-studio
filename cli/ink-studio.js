@@ -1523,6 +1523,7 @@ const CMD = {
         '  tileset reskin --scene <scene.json> --object <mesh-id> --face <face-id> --mode crop|tileset|relative (--selection <pick.json> | --id <tileset-id>) [--part ID] [--column N --row N] [--out <new-scene.json>]   change the paint on an existing mesh face',
         '  tileset paint open <request.json> --scene <scene.json> [--selection <pick.json>] --out directory   open a crop or sheet in the native pixel editor with optional reference overlays',
         '  tileset paint write <binding.json> <edited.json> --scene <scene.json> [--out <new-scene.json>]   preview or write edited pixels back to their registered tileset',
+        '  tileset paint face <request.json> --scene <scene.json> [--preview directory] [--expect receipt.json] [--out <new-scene.json>]   paint the source texel of a visible face and review shared uses',
         '  tileset gutters <request.json> --scene <scene.json> [--out <new-scene.json>]   copy exterior gutter pixels for tile rectangles or UV islands without moving UVs',
         '  tileset bleed-review <request.json> --scene <scene.json> --out directory   compare an inset and painted gutters over matched native camera samples',
         '  tileset assign <request.json> --scene <scene.json> [--preview dir] [--view view.json] [--out <new-scene.json>]   fit selected UVs to a tile or sheet, or preserve texel scale with an optional clamp',

@@ -344,6 +344,9 @@ module.exports = {
   writeTilesetPaint(editor, binding, document, options) {
     return require('./cli/tileset-paint.js').write(editor, binding, document, options);
   },
+  paintTilesetFace(editor, request, options) {
+    return require('./cli/tileset-face-paint.js').paint(editor, request, options);
+  },
   tilesetBrushUV: require('./cli/tileset-image.js').tilesetBrushUV,
   tilesetBrushCellUV: require('./cli/tileset-image.js').tilesetBrushCellUV,
   rasterizeTilesetBrush: require('./cli/tileset-image.js').rasterizeTilesetBrush,
