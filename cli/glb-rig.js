@@ -175,6 +175,17 @@ function rigWriter(doc, model, { V, M }) {
   let skin;
   return {
     size: joints.length,
+    attachment(name) {
+      const i = joints.findIndex(joint => joint.name === name);
+      if (i >= 0) return { node: jointNodes[i], frame: { matrix: rest[i].r, position: rest[i].t } };
+    },
+    staticTransforms({ matrix, position }) {
+      const frame = transform(matrix, position);
+      const { shear, ...trs } = decompose(frame);
+      if (shear <= 1e-8) return [trs];
+      const { left, right } = factor(frame);
+      return [left, right];
+    },
     skin() {
       if (skin === undefined) {
         const inverseBindMatrices = doc.accessor(Float32Array.from(bindInverse.flatMap(matrix)), 'MAT4');
