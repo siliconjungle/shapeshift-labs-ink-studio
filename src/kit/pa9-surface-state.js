@@ -327,7 +327,7 @@
         if(p.some(value=>value< -1e-6||value>1+1e-6))return null;
         return {chart,distance,facing,uv:p.map(value=>clamp(value,0,1))};
       }
-      return {chart,sampler,u,v,inspect};
+      return {chart,sampler,u,v,axis:n,inspect};
     });
     const byName=new Map(projectors.map(row=>[row.chart,row]));
     const locate=(point,normal)=>{
@@ -351,6 +351,10 @@
         ...(locate.hasInkControls&&{inkControls:inkAt(values)})};
     };
     return Object.assign(locate,{inspect:(chart,point,normal)=>byName.get(chart)?.inspect(point,normal,false)??null,
+      chart(id) {
+        const row=byName.get(id);
+        if(row)return {u:row.u,v:row.v,axis:row.axis,read:(point,normal)=>row.inspect(point,normal,true)?.uv};
+      },
       maskNames:spec.masks?.slice()??[],
       hasOpacity:Object.values(spec.charts).some(chart=>chart.stamps?.some(stamp=>stamp.channel==='opacity')),
       hasNormal:Object.values(spec.charts).some(chart=>chart.stamps?.some(stamp=>stamp.channel==='normal')),
