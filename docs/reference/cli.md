@@ -667,6 +667,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   graph impact <group.json> [--root folder] [--json]   find consumers of a shared group
   graph snapshot <project.json> [--inputs values.json] [--seed N] [--at T]   capture graph bindings and asset hashes
   graph diff <before.json> <after.json> [--json]   explain node, port and named output changes
+  graph displacement-preview <project.json> <plan.json> --out directory   compare flat, parallax and tessellated graph height
   graph material-preview <project.json> <plan.json> --out directory   link a native material carrier to its UV maps
   graph inspect <project.json> [--output NAME | --node PATH --port NAME | --map ID [--component r|g|b|a]] [--out directory]
   graph geometry <project.json> [--inputs values.json --at seconds --seed N --capture NODE[:PORT],... --out directory]   inspect typed geometry and node work
@@ -820,6 +821,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio graph dependencies` · `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph describe` · `--json`, `--example` · [source](../../cli/graph-cli.js)
 - `ink-studio graph diff` · `--adapters`, `--json` · [source](../../cli/graph-cli.js)
+- `ink-studio graph displacement-preview` · `--inputs`, `--at`, `--seed`, `--out`, `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph geometry` · `--inputs`, `--at`, `--seed`, `--out`, `--capture`, `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph impact` · `--root`, `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio graph import-pxc` · `--out`, `--adapters`, `--using`, `--translate`, `--json` · [source](../../cli/graph-cli.js)

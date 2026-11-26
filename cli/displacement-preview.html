@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ink Studio · Displacement preview</title>
+<style>
+:root{color-scheme:dark;--ground:#19191b;--stage:#302a30;--surface:#232124;--ink:#f5eee4;--muted:#beb5b6;--line:#4b4249;--gold:#f0b98b;--teal:#91d0c3}
+*{box-sizing:border-box}body{margin:0;background:var(--ground);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+main{max-width:1480px;margin:auto;padding:36px 34px 26px}
+header{display:flex;justify-content:space-between;align-items:end;gap:16px;border-bottom:1px solid var(--line);padding-bottom:24px;margin-bottom:18px}
+h1{font:normal clamp(58px,8vw,108px)/.86 Georgia,serif;letter-spacing:-.072em;margin:8px 0 0}h2{font:normal 27px/1.12 Georgia,serif;margin:0}
+p{margin:0;color:var(--muted)}button,a,input,select{font:inherit;color:var(--ink)}
+button,select,input[type=number]{border:1px solid var(--line);border-radius:3px;background:var(--surface);padding:8px 10px}
+button{cursor:pointer}button:disabled{opacity:.5;cursor:default}
+a{color:var(--gold);text-underline-offset:3px}
+.label,.mark,.value,.mode,.camera-meta,.stat{font:600 11px/1.38 ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase}
+.mark,.value{color:var(--gold)}.mark{letter-spacing:.16em}.label,.stat,.camera-meta{color:var(--muted)}
+.controls{display:grid;grid-template-columns:1fr 1fr 1.13fr 1fr 1.08fr 1fr;gap:10px;margin-bottom:16px}
+.controls label,.unit{display:grid;min-width:0;gap:6px}.controls select,.controls input{width:100%;min-width:0}.controls input[type=range]{margin:0;accent-color:var(--gold);height:36px}
+.split-label{display:flex;justify-content:space-between;gap:6px}.axes{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+input[type=number]{padding:8px 7px}
+.camera{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+#cameras{display:flex;gap:6px;flex-wrap:wrap}
+.camera button[aria-pressed=true]{background:#42362f;border-color:var(--gold);color:#ffe0be}
+.camera-meta{margin-left:auto;display:flex;gap:12px;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+article{min-width:0;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--surface)}
+article[data-choice=true]{border-color:var(--teal)}
+.caption,.readout{display:flex;justify-content:space-between;align-items:center;gap:5px;padding:12px 15px;min-height:50px}
+.caption .mode{color:var(--teal)}
+.stage{display:grid;place-items:center;grid-template:100% / 100%;height:280px;background:radial-gradient(ellipse at 45% 43%,#51424a,var(--stage) 72%);border-block:1px solid var(--line)}
+canvas{width:min(100%,calc(280px * var(--ratio)));height:auto;display:block;max-height:100%;image-rendering:pixelated}
+.readout{font-variant-numeric:tabular-nums;flex-wrap:wrap}.summary{margin-top:14px;display:flex;justify-content:space-between;gap:12px;align-items:start}.summary strong{color:var(--teal)}.notice{color:var(--gold)}
+footer{margin-top:11px;font-size:13px;color:var(--muted)}
+a:focus-visible,select:focus-visible,input:focus-visible,button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+@media(max-width:990px){main{padding:25px 18px}.controls{grid-template-columns:repeat(3,minmax(0,1fr))}.stage{height:230px}canvas{width:min(100%,calc(230px * var(--ratio)))}}
+@media(max-width:710px){.controls{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}header{align-items:start;flex-direction:column}.camera-meta{margin-left:0}.summary{flex-direction:column}.stage{height:247px}canvas{width:min(100%,calc(247px * var(--ratio)))}}
+</style>
+<script defer src="data.js"></script>
+<script defer src="camera-lens.js"></script>
+<script defer src="textured-surface.js"></script>
+<script defer src="shaders.js"></script>
+<script defer src="renderer.js"></script>
+<script defer src="live.js"></script>
+</head>
+<body>
+<main>
+  <header>
+    <div><div class="mark">Ink Studio · Displacement preview</div><h1 id="title"></h1></div>
+    <button id="download" disabled>Download review ↓</button>
+  </header>
+  <div class="controls">
+    <label><span class="split-label"><span class="label">Scale</span><output id="scale-value" class="value"></output></span>
+      <input id="scale" type="range" step="any"></label>
+    <label><span class="split-label"><span class="label">Bias</span><output id="bias-value" class="value"></output></span>
+      <input id="bias" type="range" step="any"></label>
+    <div class="unit"><span class="label">Tessellation</span><div class="axes">
+      <input id="segments-u" type="number" min="1" max="160" step="1" aria-label="U tessellation segments">
+      <input id="segments-v" type="number" min="1" max="160" step="1" aria-label="V tessellation segments"></div></div>
+    <label><span class="label">Tangent normal</span><select id="tangent"><option value="opengl">OpenGL · Y up</option><option value="directx">DirectX · Y down</option></select></label>
+    <label><span class="label">Seam behavior</span><select id="seam"><option value="clamp">Clamp at tile edges</option><option value="repeat">Repeat across edges</option><option value="fade">Fade to plane</option></select></label>
+    <label><span class="label">Tiles</span><select id="tiles"><option value="1">Single tile</option><option value="2">Two tiles</option></select></label>
+  </div>
+  <div class="camera"><div id="cameras" role="group" aria-label="Camera ranges"></div>
+    <label class="camera-meta"><span>View</span><select id="view"><option value="color">Surface</option><option value="depth">Depth</option><option value="difference">Difference</option></select></label>
+  </div>
+  <div class="grid">
+    <article id="flat"><div class="caption"><h2>Flat</h2><span class="mode"></span></div>
+      <div class="stage"><canvas aria-label="Flat displacement preview"></canvas></div>
+      <div class="readout"><span class="stat" data-error></span><span class="stat" data-triangles></span></div></article>
+    <article id="parallax"><div class="caption"><h2>Parallax</h2><span class="mode"></span></div>
+      <div class="stage"><canvas aria-label="Parallax displacement preview"></canvas></div>
+      <div class="readout"><span class="stat" data-error></span><span class="stat" data-triangles></span></div></article>
+    <article id="relief"><div class="caption"><h2>Real relief</h2><span class="mode"></span></div>
+      <div class="stage"><canvas aria-label="Geometric displacement preview"></canvas></div>
+      <div class="readout"><span class="stat" data-error></span><span class="stat" data-triangles></span></div></article>
+  </div>
+  <div class="summary"><p id="summary" aria-live="polite"></p><p id="evidence"></p></div>
+  <footer id="foot"></footer>
+</main>
+</body>
+</html>

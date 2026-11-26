@@ -31,6 +31,7 @@ const flags = {
   inspect:['inputs','at','seed','out','output','node','port','map','component','json',...executionFlags],
   geometry:['inputs','at','seed','out','capture','json'],
   'material-preview':['inputs','at','seed','out','json'],
+  'displacement-preview':['inputs','at','seed','out','json'],
   run:['inputs','at','seed','out','json',...executionFlags],
   batch:['inputs','at','seed','out','json','resume','progress',...executionFlags],
   session:['protocol','out','workers'],
@@ -312,12 +313,12 @@ async function graphCommand(pos,opt,settings) {
     if (result.passed===false) process.exitCode=2;
     return send(result,opt.json);
   }
-  if (!Object.hasOwn(flags,mode) || pos.length!==(['batch','material-preview'].includes(mode)?3:2) ||
+  if (!Object.hasOwn(flags,mode) || pos.length!==(['batch','material-preview','displacement-preview'].includes(mode)?3:2) ||
       Object.entries(opt).some(([key,value])=>key!=='adapters' && !flags[mode].includes(key) ||
         (['json','resume','memory'].includes(key) ? value!==true : key==='progress' ? value!=='ndjson' :
           typeof value!=='string' || !value.trim())) ||
       opt.port!==undefined && opt.node===undefined || opt.component!==undefined && opt.map===undefined || opt.protocol!==undefined && opt.protocol!=='ndjson')
-    throw new TypeError('Use graph validate|plan|dependencies|snapshot|inspect|geometry|material-preview|run|batch|session|clip <project.json> [cases-or-sweep.json]. See ink-studio help');
+    throw new TypeError('Use graph validate|plan|dependencies|snapshot|inspect|geometry|material-preview|displacement-preview|run|batch|session|clip <project.json> [cases-or-sweep.json]. See ink-studio help');
   if (opt.cache===undefined && cacheFlags.slice(1).some(flag=>opt[flag]!==undefined))
     throw new TypeError('Graph cache limits need --cache directory');
   if (opt.resume && opt.out===undefined) throw new TypeError('Graph batch --resume needs --out directory');
@@ -358,6 +359,11 @@ async function projectCommand(mode,file,caseFile,opt,settings) {
   }
   if (mode==='material-preview') {
     const result=await require('./linked-material-preview.js').writeLinkedMaterialPreview(project,caseFile,
+      {directory:output,toolkit:settings.kit,run,sources});
+    return send(result,opt.json);
+  }
+  if (mode==='displacement-preview') {
+    const result=await require('./material-displacement-preview.js').writeDisplacementPreview(project,caseFile,
       {directory:output,toolkit:settings.kit,run,sources});
     return send(result,opt.json);
   }

@@ -1,6 +1,6 @@
 # Linked 3D material preview
 
-Generate a preview from a material graph and a carrier plan. Pick a slot or UV tile in the controls, or click a visible surface to open its map and mark the source texel. Click the 2D map to locate the nearest visible sample of that UV in the current view. The selected region stays outlined as the camera moves.
+Generate a preview from a material graph and a carrier plan. Use [displacement preview](material-displacement-preview.md) to compare a graph height map as flat, parallax, and tessellated relief. Pick a slot or UV tile in the controls, or click a visible surface to open its map and mark the source texel. Click the 2D map to locate the nearest visible sample of that UV in the current view. The selected region stays outlined as the camera moves.
 
 ```sh
 ink-studio graph material-preview material.material.json preview.plan.json --out preview
