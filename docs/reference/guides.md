@@ -384,6 +384,7 @@ All checked-in guides, indexed by title and section headings.
 - [Guides for sculpt operations](../sculpt-guides.md)
 - [Snap a sculpt stroke](../sculpt-snaps.md)
 - [Split a sculpt](../sculpt-splits.md)
+- [Volume spray for sculpt surfaces](../sculpt-spray.md)
 - [Compound sculpt stamps](../sculpt-stamps.md)
 - [Retained sculpt sweeps](../sculpt-sweeps.md)
 - [SDF-assisted rendering](../sdf-assist.md)

@@ -1810,6 +1810,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sdfProtection.retainFaces` | function | `(guard,before,after)` | [source](../../src/kit/p59b-sdf-protection.js) |
 | `KIT.procedural.sdfProtection.verify` | function | `(guards,chunks,bricks,previous,dirty)` | [source](../../src/kit/p59b-sdf-protection.js) |
 
+## KIT.procedural.sdfVolumeSpray
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.sdfVolumeSpray` | namespace |  |  |
+| `KIT.procedural.sdfVolumeSpray.prepare` | function | `(strokes)` | [source](../../src/kit/p26c-sdf-volume-spray.js) |
+
 ## KIT.procedural.sectionMeshes
 
 | Member | Kind | Signature or value | Guides and source |
