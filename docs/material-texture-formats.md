@@ -53,3 +53,5 @@ node examples/texture-formats/demo.cjs /tmp/ink-glaze
 In Node, `readTexture(fileOrBytes, options)` returns the decoded native samples. `reportTexture(fileOrBytes, options)` returns a compact report with an ICC hash where present. `encodeTexture(value, options)` takes the same inputs and settings as the graph export.
 
 Open Glaze Archive's generated `index.html` to inspect the reopened pigment, PSD layers, named masks, and signed relief. The demo includes the editable material and its exported files.
+
+Use [color management](color-management.md) to interpret tagged color explicitly in a graph, write OCIO working-space EXR, or deliver an HDR PNG with cICP and static mastering metadata.

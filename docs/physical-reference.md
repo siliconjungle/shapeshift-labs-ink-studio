@@ -41,6 +41,10 @@ The reference scope is static triangle surfaces and homogeneous OpenPBR media in
 }
 ```
 
+## Managed color
+
+Set `colorManagement` in the render plan to proof the same linear film through an OCIO display and view. The browser review links to the managed display PNG and working-space EXR alongside the native linear data. See [color management](color-management.md) for resource mappings, HDR metadata, and palette proofing.
+
 ## Quality, accumulation, and denoising
 
 | Preset | Samples per pixel | Surface bounces |

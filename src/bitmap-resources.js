@@ -49,10 +49,17 @@ const BitmapResources = (() => {
     return source;
   }
   function interpretation(settings = {}) {
-    if (!fields(settings, ['intent', 'colorSpace', 'channel', 'units', 'alpha', 'sampling', 'tiling', 'normalSpace', 'normalOrientation', 'heightRange', 'valueRange', 'layout', 'vectorDomain']))
+    if (!fields(settings, ['intent', 'colorSpace', 'channel', 'units', 'alpha', 'sampling', 'tiling', 'normalSpace', 'normalOrientation', 'heightRange', 'valueRange', 'layout', 'vectorDomain', 'ocio']))
       throw new TypeError('Invalid bitmap interpretation settings');
     const { intent = 'color', colorSpace, channel, units, alpha, sampling, tiling, normalSpace, normalOrientation, heightRange, valueRange, layout, vectorDomain } = settings;
     const range=heightRange??valueRange;
+    const ocio=settings.ocio;
+    if (ocio!==undefined && (intent!=='color' || colorSpace!==undefined ||
+        !fields(ocio,['mode','space','intent']) || !['auto','space','icc'].includes(ocio.mode) ||
+        (ocio.mode==='space' ? typeof ocio.space!=='string'||!ocio.space.trim()||ocio.space.length>256||
+          /[\x00-\x1f]/.test(ocio.space) : ocio.space!==undefined) ||
+        ocio.intent!==undefined && (ocio.mode==='space'||!integer(ocio.intent,0,3))))
+      throw new TypeError('Invalid bitmap OCIO interpretation');
     if (!['color', 'data', 'mask', 'height', 'normal'].includes(intent) ||
         layout!==undefined&&(intent!=='data'||layout!=='xyz'||channel!==undefined) ||
         vectorDomain!==undefined&&(layout!=='xyz'||!['signed-unit','raw'].includes(vectorDomain)) ||
@@ -237,6 +244,8 @@ const BitmapResources = (() => {
   }
 
   function compile(definition, loaded, declare) {
+    if (definition.interpretation?.ocio!==undefined)
+      throw new TypeError('Bitmap OCIO interpretation requires a managed headless project');
     const { kind, rows, missing, first, fps, playback } = layout(definition);
     const entries = new Map();
     let expected, bytes = 0;
