@@ -1390,6 +1390,8 @@ const CMD = {
         '  sculpt-contribution list <scene.json> --solid id   list retained contributions in order',
         '  sculpt-contribution inspect <scene.json> --solid id --id contribution   compare with the contribution muted',
         '  sculpt-contribution edit <scene.json> <edit.json> --out scene.json   edit one contribution and report dependencies',
+        '  sculpt-split plan <scene.json> <split.json>   report a complementary sculpt split',
+        '  sculpt-split apply <scene.json> <split.json> --out scene.json   save separate sculpt pieces',
         '  sculpt-stamp place <scene.json> <stamp.json> <placement.json> --out scene.json   add and carve one compound stamp',
         '  sculpt-sweep add <scene.json> <sweep.json> [--target solid] --out scene.json   add a retained shaped sweep',
         '  sculpt-sweep cut <scene.json> <sweep.json> --target solid --out scene.json   carve a retained sweep into a solid',
@@ -2622,6 +2624,13 @@ const CMD = {
     return require('./sculpt-contribution.js')(pos, opt, file => {
       const descriptor = dataScene(file, undefined, { refreshTilesets: false });
       if (!descriptor.openEditor) throw new TypeError('Sculpt contribution edits need a plain editable JSON scene');
+      return descriptor.openEditor();
+    });
+  },
+  'sculpt-split'() {
+    return require('./sculpt-split.js')(pos, opt, file => {
+      const descriptor = dataScene(file, undefined, { refreshTilesets: false });
+      if (!descriptor.openEditor) throw new TypeError('Sculpt splits need a plain editable JSON scene');
       return descriptor.openEditor();
     });
   },

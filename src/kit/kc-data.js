@@ -111,6 +111,7 @@
     surfaceState: 1,
     sdfPaint: 1,
     sdfProtection: 1,
+    sockets: 'obj',
     prefabs: 'list',
     tags: 'list',
     mat: 'mat',
@@ -124,6 +125,7 @@
     transform: 'obj',
     modifiers: 'list',
     bump: 'vec2',
+    bumpPhase: 'num',
     hold: 'bool'
   };
   DIO.kinds = {
@@ -175,7 +177,7 @@
   modifierKinds.fold.may = { ...modifierKinds.fold.may, axis: ['x', 'y', 'z'] };
   modifierKinds.warp.may = { ...modifierKinds.warp.may, taper: 'vec2' };
   modifierKinds.join = { need: { how: 'join', shape: 'solid' }, may: DIO.kinds.join.may };
-  modifierKinds.mask = { need: { mode: ['keep', 'cut'], shape: 'solid' } };
+  modifierKinds.mask = { need: { mode: ['keep', 'cut'], shape: 'solid' }, may: { cutSurface: 'obj' } };
   modifierKinds['grid-brush'] = { need: { mode: ['add', 'cut', 'carve', 'through-cut', 'raise', 'fill', 'smooth', 'grab', 'flatten', 'scrape', 'crease', 'pinch'], brush: 1 } };
   const builtKinds = ['pillar', 'arch', 'stairs', 'fence', 'pipe'];
   const activeModifiers = solid => (solid.modifiers ?? []).filter(modifier => modifier.enabled !== false);
@@ -1153,6 +1155,10 @@
         const def = modifierKinds[kind];
         fields(modifier, at, def, { id: 'str', label: 'str', enabled: 'bool' });
         if (Object.hasOwn(modifier, 'do')) bad(at + '.do', 'a sculpt modifier uses kind');
+        if (kind === 'mask' && modifier.cutSurface && !Array.isArray(modifier.cutSurface)) {
+          keys(modifier.cutSurface, at + '.cutSurface', { material: 1 });
+          matOk(modifier.cutSurface.material, at + '.cutSurface.material');
+        }
         if (kind === 'grid-brush') {
           try {
             K.procedural.gridSculptBrush.check(modifier.brush,modifier.mode);
@@ -1200,6 +1206,14 @@
           if (s.turn !== undefined) throw new TypeError('Use transform to rotate a complete sweep');
           K.procedural.shapeSweeps.prepare(s);
         } catch (error) { bad(path, error.message); }
+      }
+      if (s.sockets !== undefined) {
+        const valid = s.id && !inner && !s.carve && !s.ghost && !s.hold && s.kind !== 'ground' && spec.brushRegion == null &&
+          s.sockets && typeof s.sockets === 'object' && !Array.isArray(s.sockets) &&
+          Object.entries(s.sockets).every(([name, row]) => K.world.data.id(name) && row &&
+            typeof row === 'object' && !Array.isArray(row) && Object.keys(row).every(key => key === 'p' || key === 'dir') &&
+            isVec(row.p, 3) && (row.dir === undefined || isVec(row.dir, 3) && V.len(row.dir) > 1e-9));
+        if (!valid) bad(path + '.sockets', 'solid sockets need stable names and rest points, with optional nonzero directions');
       }
       if (s.surfaceState !== undefined) {
         try { K.procedural.surfaceState.projection(s.surfaceState); }
@@ -1595,6 +1609,12 @@
     };
   }
 
+  function cleanCutMaterial(material) {
+    const cap = { ...material };
+    for (const key of ['rf', 'surfaceState', 'sdfPaint', 'sdfNewSurface', 'cutSurface', 'materialAt']) delete cap[key];
+    return cap;
+  }
+
   function traceBounds(solid) {
     const { bc, br } = solid;
     if (Number.isFinite(br) && br < 1e8)
@@ -1603,8 +1623,8 @@
 
   const brushField = Symbol('brush field');
   DIO.brushField = (spec, env) => DIO.build(spec, env, { [brushField]: true });
-  DIO.sculptRestTrace = (spec, solid, env) => {
-    const trace = { solid, stages: new Map() };
+  DIO.sculptRestTrace = (spec, solid, env, { measureBounds = false } = {}) => {
+    const trace = { solid, measureBounds, stages: new Map(), ...(measureBounds && { bumpPhases: new WeakMap() }) };
     DIO.build(spec, env, { [brushField]: trace });
     if (!trace.output) throw new RangeError('The resolved scene is missing the sculpt solid ' + solid);
     return trace;
@@ -1761,7 +1781,8 @@
     const shadowMarch = st0.finish.shadowMarch === undefined ? null : bakedShadowMarch(st0.finish.shadowMarch);
     let S, grp;
     function startSculpt() {
-      S = K.sculpt((env.makeSculpt || makeSculpt)(B));
+      const measureBounds = modelOptions?.[brushField]?.measureBounds;
+      S = K.sculpt((env.makeSculpt || makeSculpt)(B, measureBounds ? { measureBounds } : undefined));
       S.sun = B.norm(st0.sun);
       if (st0.finish.look?.pixel) S.pixel = true;
       S.keepPartRenderSdf = env.retainPartRenderSdf === true || retainedParts;
@@ -1871,7 +1892,10 @@
         if (s.carve) o.neg = true;
         if (s.ghost) o.ghost = true;
         if (s.separate && !modifiers.length) o.model = { separate: true, name: s.id ?? s.part ?? s.kind };
-        if (s.bump) o.bump = s.bump;
+        if (s.bump) {
+          o.bump = s.bump;
+          if (s.bumpPhase !== undefined) o.bumpPhase = s.bumpPhase;
+        }
         if (held || s.hold) o.hold = true;
         if (s.turn) o.ax = B.frame(s.turn[0], s.turn[1], s.turn[2]);
         const charts = K.procedural.surfaceState;
@@ -1881,7 +1905,7 @@
         const sub = q => make(q, true), k = s.kind;
         const baseOptions = modifiers.length || trace ? { ...o, hold: true } : o;
         if (s.mat !== undefined && (k === 'join' || unaryKinds.includes(k))) baseOptions.mat = m;
-        let p;
+        let p, recipeSockets;
         if (k === 'ground') p = S.ground(m, Object.assign({ rad: s.rad || 8 }, s.stretch ? { zs: s.stretch } : {}, baseOptions));
         else if (k === 'ball') p = S.ball(s.at, s.r, m, baseOptions);
         else if (k === 'rock') p = S.rock(s.at, s.r, m, baseOptions);
@@ -1934,17 +1958,18 @@
                     ? K.build.fence(S, s.a, s.b, oo)
                     : K.build.pipe(S, s.pts, oo);
           if (baseOptions.hold) {
-            const pieces = S.takeSolids(buildRecipe);
+            const pieces = S.takeSolids(() => { recipeSockets = buildRecipe().sockets; });
             p = pieces.length === 1 ? pieces[0] : S.join('union', pieces[0], pieces.slice(1), { hold: true, r: 0, mat: m });
           } else p = buildRecipe();
         }
+        if (p?.bump && audit?.bumpPhases) audit.bumpPhases.set(s, p.bumpPhase ?? p.g);
         if (locate && s.mat === undefined && (k === 'join' || unaryKinds.includes(k))) p.mat = charts.bind(p.mat, locate, B.P);
         if (modifiers.length) {
           const res = p.res;
           for (const modifier of modifiers) {
             const options = { hold: true };
             const before = trace && { ...p };
-            let reach = p.reach, tool;
+            let reach = p.reach, tool, operand;
             if (modifier.kind === 'grid-brush' && modifier.brush.version===3) {
               const api=K.procedural.freeformSculpt, {mode,brush:{stamps,settings}}=modifier;
               const form = api.prepare({mode,stamps,strength:settings.strength,depth:settings.depth});
@@ -1964,31 +1989,44 @@
                 if (surface) p.mat={ ...p.mat,sdfNewSurface:surface };
               }
             } else if (modifier.kind === 'join' || modifier.kind === 'mask') {
-              const operand = sub(modifier.shape);
+              operand = sub(modifier.shape);
               if (trace) tool = operand.geometryBounds ?? traceBounds(operand);
               reach = Math.max(reach, operand.reach);
               if (modifier.kind === 'join') {
                 const exact = ['union', 'cut', 'common'].includes(modifier.how);
                 p = S.join(modifier.how, p, operand, { ...options, r: modifier.size ?? (exact ? 0 : undefined), n: modifier.steps });
               } else {
-                const keep = modifier.mode === 'keep';
-                p = S.join(keep ? 'common' : 'cut', p, operand, {
-                  ...options, r: 0, mat: p.mat, mask: true
+                const keep = modifier.mode === 'keep', source = p;
+                p = S.join(keep ? 'common' : 'cut', source, operand, {
+                  ...options, r: 0, mat: source.mat, mask: true
                 });
+                if (modifier.cutSurface !== undefined) {
+                  const { material } = modifier.cutSurface, previous = source.mat.cutSurface;
+                  const cap = material === undefined ? cleanCutMaterial(source.mat) : matOf(material);
+                  p.mat = { ...p.mat, cutSurface: { locate(point, normal) {
+                    const edge = (keep ? 1 : -1) * S.psd(operand, ...point);
+                    const tolerance = res * .35;
+                    return Math.abs(edge) <= tolerance && edge > S.psd(source, ...point) + 1e-7 ?
+                      cap : previous?.locate(point, normal);
+                  } } };
+                }
               }
             } else p = deform(p, modifier, options);
             p.reach += reach;
-            if (trace) trace.stages.set(modifier.id, { before, after: { ...p }, tool });
+            if (trace) trace.stages.set(modifier.id, { before, after: { ...p }, tool, operand });
           }
           p = S.add(p, p.mat, { ...o, res, bump: undefined, reach: p.reach });
         }
         if (paint && p?.mat) p.mat = { ...p.mat,sdfPaint:paint };
         if (trace) {
           trace.output = { ...p };
+          trace.sockets = s.sockets ?? recipeSockets ?? {};
+          if (trace.bumpPhases) trace.memberBumpPhases = [...DIO.solids({ solids: [s] })].map(member => trace.bumpPhases.get(member));
           trace.distance = (shape, point) => S.psd(shape, ...point);
           trace.materialAt = (point, normal) => {
             const { mat } = trace.output;
             const { materialId, generatedSurface } = S.materialAt(mat, point, normal);
+            if (mat.cutSurface?.locate(point, normal)) return { role: materialId, paintIds: [] };
             const pickedRamp = mat.rf?.(...point);
             const rampRole = pickedRamp && Object.keys(st0.roles).find(key => st0.roles[key] === pickedRamp);
             const chart = mat.surfaceState?.locate(point, normal)?.chart;
@@ -2179,7 +2217,8 @@
       root === 'effects' && effects[index].do === 'lamp');
     if (timelineActive) applyCamera(timelineFrame(timeline, 0, effects));
     const authoredStage = moving.length || effects.length || spec.tap || timelineActive;
-    if (!authoredStage && !marksSystem) {
+    const socketSources = spec.solids.filter(solid => Object.keys(solid.sockets ?? {}).length);
+    if (!authoredStage && !marksSystem && !socketSources.length) {
       bindDecals(W);
       return W;
     }
@@ -2187,6 +2226,12 @@
     if (!authoredStage) st.stateful = false;
     if (marksSystem) st.add(marksSystem);
     rig.bind(st);
+    for (const solid of socketSources) {
+      const space = solidSpace(solid, B.frame);
+      for (const [name, { p, dir = [0, 1, 0] }] of Object.entries(solid.sockets))
+        st.socket(solid.id + '/' + name, space ? space.point(p) : p, solid.part,
+          V.norm(space ? space.direction(dir) : dir));
+    }
     const poseDecals = bindDecals(W, rig);
     let tracks = motion, activeEffects = effects, poses;
     if (dynamics?.active || timelineActive) st.add({ update(dt, t, stage) {
