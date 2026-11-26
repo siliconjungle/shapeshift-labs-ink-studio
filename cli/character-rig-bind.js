@@ -236,11 +236,16 @@ function loadBinding(rig, source, directory, kit) {
   if (ids.length) K.bones.bind(world,{ids,bid:Uint16Array.from(first),bid2:Uint16Array.from(second),
     w2:Float32Array.from(weights),M:matrices,pose(){},meshBindings:skins});
 
-  function apply(pose) {
-    const frame=openPose(rig,pose,K);
-    for(const [i,joint] of rig.joints.entries())matrices.set(frame.joints[joint.id].matrix,i*12);
+  function applyMatrices(values) {
+    if (values.length!==matrices.length || !values.every(Number.isFinite))
+      throw new RangeError('Character binding needs one finite matrix per joint');
+    matrices.set(values);
     if (ids.length) poseWorld(world,0,{kit});
     else for(const skin of skins)skin.pose(matrices);
+  }
+  function apply(pose) {
+    const frame=openPose(rig,pose,K);
+    applyMatrices(rig.joints.flatMap(joint=>frame.joints[joint.id].matrix));
     return frame;
   }
   function snapshot() {
@@ -262,7 +267,7 @@ function loadBinding(rig, source, directory, kit) {
       })}),report:{mode,points:after.length,moved,restBounds,bounds,evidence}};
     });
   }
-  return {world,apply,snapshot,assets};
+  return {world,apply,applyMatrices,snapshot,assets};
 }
 
 module.exports={ read, buildBinding, loadBinding };

@@ -457,6 +457,7 @@ All checked-in guides, indexed by title and section headings.
 - [React to events inside a timestep](../simulation-timed-events.md)
 - [Two-way transfer coupling](../simulation-transfer-coupling.md)
 - [Deterministic simulation workers](../simulation-workers.md)
+- [Headless tissue and skinned crowds](../skinned-crowd.md)
 - [Compose with recorded slices](../slice-composition.md)
 - [Sound design inserts](../sound-design-effects.md)
 - [Sparse volume exchange](../sparse-volumes.md)

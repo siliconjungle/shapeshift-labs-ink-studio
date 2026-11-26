@@ -146,7 +146,7 @@
           return n++;
         },
         /* tear: if given, the link breaks for good when it is stretched past tear times its length (cloth that rips, a rope that
-           snaps). A supplied rest length lets a stitch pull loose panel edges together. */
+           snaps). A supplied rest length can be a number or a time-sampled actuator function. */
         link(i, j, comp, tear, guards, restLength) {
           links.push([
             i,
@@ -305,12 +305,13 @@
                 dy = X[i + 1] - X[j + 1],
                 dz = X[i + 2] - X[j + 2],
                 d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-9;
-              if (L[4] && d > L[2] * L[4]) {
-                sim.breakLink(c,d/L[2]);
+              const rest = typeof L[2] === 'function' ? L[2](ts) : L[2];
+              if (L[4] && d > rest * L[4]) {
+                sim.breakLink(c,d/rest);
                 continue;
               }
               if(!ws)continue;
-              const C = d - L[2],
+              const C = d - rest,
                 dl = -C / (ws + L[3] / h2),
                 gx = dx / d,
                 gy = dy / d,
