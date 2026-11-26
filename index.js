@@ -107,6 +107,7 @@ module.exports = {
   importAxF: require('./cli/axf-material-adapter.js').importAxF,
   ...require('./cli/linked-material-preview.js'),
   ...require('./cli/material-displacement-preview.js'),
+  ...require('./cli/material-lighting-room.js'),
   exportAxF: require('./cli/axf-material-adapter.js').exportAxF,
   bakeSplatFit: require('./cli/splat-fit-asset.js').bake,
   planSplatGroups: require('./cli/splat-fit-asset.js').planSplatGroups,

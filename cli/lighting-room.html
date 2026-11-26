@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lighting room · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--paper:#e9e3d8;--low:#aea79d;--line:#373536;--ember:#efb778;--panel:#232224;--base:#19181b;font:14px system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;min-width:280px;color:var(--paper);background:var(--base)}
+main{max-width:1320px;margin:auto;padding:30px clamp(16px,4vw,54px) 28px}
+header{margin:0 0 19px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:end;gap:16px;padding:0 0 17px}
+h1{font-family:Georgia,serif;font-size:clamp(30px,5vw,54px);font-weight:400;letter-spacing:-.045em;margin:0;line-height:1.08}
+.brand{color:var(--ember);font-size:.72rem;font-weight:650;letter-spacing:.18em;margin:0 0 6px;text-transform:uppercase}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr) 326px;align-items:start;gap:16px}
+.preview,aside{background:var(--panel);border:1px solid var(--line)}
+.stage{position:relative;background:#171717;overflow:hidden}
+canvas{display:block;width:100%;height:auto;touch-action:none;cursor:grab}
+canvas:active{cursor:grabbing}
+.stage-label{position:absolute;left:15px;top:14px;background:#171618d9;color:#e9e3d8;border:1px solid #4c4845;padding:5px 9px;font-size:.72rem;pointer-events:none}
+footer{display:flex;gap:10px;justify-content:space-between;align-items:center;padding:11px 13px}
+footer span,.hint,#source-name{color:var(--low);font-size:.82rem}
+aside{padding:14px 15px;display:grid;gap:12px}
+section{border-bottom:1px solid var(--line);padding-bottom:12px}
+section:last-child{border:0;padding-bottom:0}
+h2{margin:0 0 8px;font:650 .73rem system-ui;text-transform:uppercase;letter-spacing:.12em;color:var(--ember)}
+label{font-size:.8rem}
+select,input[type="text"],button{color:var(--paper);background:#2d2b2e;border:1px solid #50494a;border-radius:3px;font:inherit;min-height:32px}
+select,input[type="text"]{width:100%;min-width:0;padding:4px 8px}
+button{padding:4px 9px;cursor:pointer;font-size:.8rem;white-space:nowrap}
+button:hover{background:#3a3535}
+input[type="checkbox"],input[type="range"]{accent-color:var(--ember)}
+input[type="range"]{width:100%;min-width:0;margin:0}
+select:focus-visible,input:focus-visible,button:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
+.range{display:grid;grid-template-columns:85px minmax(0,1fr) 48px;gap:6px;align-items:center;margin:5px 0}
+output{font-size:.72rem;color:var(--low);text-align:right;font-variant-numeric:tabular-nums}
+.row{display:flex;gap:6px;align-items:center;justify-content:space-between}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px}
+.two label{display:grid;gap:3px}
+#status{margin:8px 0 0;min-height:1.1em;color:#ffceaa;overflow-wrap:anywhere}
+#source-name{margin:6px 0;min-height:1em;overflow-wrap:anywhere}
+.save{background:#644a36;border-color:#8b6547}
+@media(max-width:820px){.workspace{grid-template-columns:minmax(0,1fr) 294px}main{padding-top:18px}}
+@media(max-width:660px){.workspace{grid-template-columns:1fr}footer{align-items:start}.hint{font-size:.74rem}}
+</style>
+</head>
+<body>
+<main>
+<header><div><p class="brand">Ink Studio · Lighting room</p><h1 id="title">Lighting room</h1></div></header>
+<div class="workspace">
+<div class="preview">
+<div class="stage"><canvas id="view" aria-label="Material under the selected light rig"></canvas><span id="stage-label" class="stage-label"></span></div>
+<footer><span class="hint">Drag to orbit · Scroll to dolly</span><button id="reset" type="button">Reset camera</button></footer>
+</div>
+<aside aria-label="Lighting room controls">
+<section>
+<h2>Room rig</h2>
+<select id="rig" aria-label="Room rig"></select>
+<p id="source-name"></p>
+<div class="row"><button type="button" id="open-hdr">Import HDRI</button><label><input type="checkbox" id="background"> Show panorama</label></div>
+<input id="hdr-file" type="file" accept=".hdr,.rgbe" hidden>
+<div class="range"><label for="rotation">Rotation</label><input type="range" id="rotation" min="-360" max="360" step="1"><output for="rotation"></output></div>
+<div class="range"><label for="light-ev">Light exposure</label><input type="range" id="light-ev" min="-12" max="12" step=".1"><output for="light-ev"></output></div>
+</section>
+<section>
+<h2>Camera</h2>
+<div class="two"><label>Carrier<select id="carrier"></select></label><label>Projection<select id="projection"><option value="perspective">Perspective</option><option value="orthographic">Orthographic</option></select></label></div>
+<div class="range"><label for="lens">Lens</label><input type="range" id="lens" min="10" max="240" step=".1"><output for="lens"></output></div>
+<div class="range"><label for="sensor">Sensor height</label><input type="range" id="sensor" min="12" max="42" step=".1"><output for="sensor"></output></div>
+<div class="range"><label for="distance">Distance</label><input type="range" id="distance" min=".3" max="80" step=".01"><output for="distance"></output></div>
+<div class="range"><label for="yaw">Orbit</label><input type="range" id="yaw" min="-360" max="360" step=".1"><output for="yaw"></output></div>
+<div class="range"><label for="pitch">Tilt</label><input type="range" id="pitch" min="-88" max="88" step=".1"><output for="pitch"></output></div>
+<div class="range"><label for="frame-x">Framing X</label><input type="range" id="frame-x" min=".05" max=".95" step=".01"><output for="frame-x"></output></div>
+<div class="range"><label for="frame-y">Framing Y</label><input type="range" id="frame-y" min=".05" max=".95" step=".01"><output for="frame-y"></output></div>
+<div class="range"><label for="camera-ev">Camera exposure</label><input type="range" id="camera-ev" min="-12" max="12" step=".1"><output for="camera-ev"></output></div>
+</section>
+<section>
+<h2>Reusable rigs</h2>
+<div class="row"><input id="rig-name" type="text" maxlength="100" placeholder="New rig name" aria-label="New rig name"><button type="button" id="save-rig" class="save">Save rig</button></div>
+<div class="row" style="margin-top:6px"><button type="button" id="open-rig">Load rig</button></div>
+<input id="rig-file" type="file" accept=".json" hidden>
+<p id="status" role="status"></p>
+</section>
+</aside>
+</div>
+</main>
+<script src="data.js"></script>
+<script src="camera-lens.js"></script>
+<script src="hdr-environment.js"></script>
+<script src="rig.js"></script>
+<script src="shaders.js"></script>
+<script src="renderer.js"></script>
+<script src="live.js"></script>
+</body>
+</html>

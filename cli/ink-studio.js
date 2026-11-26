@@ -1865,6 +1865,7 @@ const CMD = {
         '  graph impact <group.json> [--root folder] [--json]   find consumers of a shared group',
         '  graph snapshot <project.json> [--inputs values.json] [--seed N] [--at T]   capture graph bindings and asset hashes',
         '  graph diff <before.json> <after.json> [--json]   explain node, port and named output changes',
+        '  graph lighting-room <project.json> <plan.json> --out directory   review a material under HDRI and reusable camera rigs',
         '  graph displacement-preview <project.json> <plan.json> --out directory   compare flat, parallax and tessellated graph height',
         '  graph material-preview <project.json> <plan.json> --out directory   link a native material carrier to its UV maps',
         '  graph inspect <project.json> [--output NAME | --node PATH --port NAME | --map ID [--component r|g|b|a]] [--out directory]',
