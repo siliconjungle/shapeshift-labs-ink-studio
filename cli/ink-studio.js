@@ -1426,6 +1426,11 @@ const CMD = {
         '  sculpt-guide apply <scene.json> <operation.json> --out scene.json   retain a guided stroke or stamp',
         '  sculpt-guide update <scene.json> <edit.json> --out scene.json   revise an existing guided operation',
         '  sculpt-guide inspect <scene.json>   report generated copies and placements',
+        '  painting-3d plan <scene.json> <placement.json>   validate attachment slots and mark contacts',
+        '  painting-3d apply <scene.json> <placement.json> --out scene.json   retain a 3D painting',
+        '  painting-3d update <scene.json> <edit.json> --out scene.json   edit marks, order or placement',
+        '  painting-3d inspect <scene.json>   report marks and resolved attachments',
+        '  painting-3d extract <scene.json> --id painting --out painting.json   export a reusable painting',
         '  sculpt-spray plan <scene.json> <brush.json>   capture receivers for a volumetric paint brush',
         '  sculpt-spray apply <scene.json> <brush.json> --out scene.json   retain a shaped surface tint',
         '  sculpt-spray inspect <scene.json>   show retained volumes and receiver coverage',
@@ -2738,6 +2743,13 @@ const CMD = {
   'sculpt-guide'() {
     return require('./sculpt-guide.js')(pos, opt, lib().KIT,
       (file, source) => dataScene(file, source, { refreshTilesets: false }));
+  },
+  'painting-3d'() {
+    return require('./painting-3d.js')(pos, opt, file => {
+      const descriptor = dataScene(file, undefined, { refreshTilesets: false });
+      if (!descriptor.openEditor) throw new TypeError('3D painting placement needs a plain editable JSON scene');
+      return descriptor.openEditor();
+    });
   },
   'sculpt-spray'() {
     return require('./sculpt-spray.js')(pos, opt, file => {

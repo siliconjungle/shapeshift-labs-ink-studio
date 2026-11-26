@@ -70,6 +70,8 @@ Use `setSurfaceState(state, keys)` to edit a solid's rest-chart marks or pass `n
 
 Pass the result of `build()` to `createSceneEditor` to reopen its source at the time of the bake. Retain `serialize()` output for durable storage alongside any exported splat or image data. Opening a scene with mesh operands uses the same asset lookup as opening its source JSON. Active modifiers on a separate analytic shape send its edited surface through the general mesh export path.
 
+Use [3D paintings](painting-3d.md) to retain editable sweep marks together with their surface and rig attachments. A painting can be extracted and placed in another scene.
+
 ## Native mesh topology
 
 A diorama can retain polygon meshes under `topologyMeshes`. Use
