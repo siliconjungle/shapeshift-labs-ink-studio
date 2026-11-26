@@ -205,21 +205,27 @@ const MeshUV = (() => {
   }
 
   // Compare a proposed local layout only where coordinates actually moved.
-  function changedOverlaps(rows, maxChecks, visit) {
+  function scanOverlaps(rows, coordinates, maxChecks, visit, eligible) {
     let checks = 0;
     const sheets = new Map();
     for (const [id, row] of rows.entries()) {
+      const uv = coordinates(row);
       if (!sheets.has(row.material)) sheets.set(row.material, []);
-      sheets.get(row.material).push({ ...row, id, box: bounds(row.after) });
+      sheets.get(row.material).push({ row, id, uv, box: bounds(uv) });
     }
     for (const sheet of sheets.values()) {
-      const complete = sweep(sheet, 0, () => checks++ < maxChecks, (a, b) => {
-        if ((a.changed || b.changed) && overlaps(a.after, b.after) && !overlaps(a.before, b.before))
-          visit(a.face, b.face);
+      const complete = sweep(sheet, 0, () => checks < maxChecks && ++checks, (a, b) => {
+        if ((!eligible || eligible(a.row, b.row)) && overlaps(a.uv, b.uv)) visit(a.row, b.row);
       });
-      if (!complete) return false;
+      if (!complete) return { complete: false, checks };
     }
-    return true;
+    return { complete: true, checks };
+  }
+
+  function changedOverlaps(rows, maxChecks, visit) {
+    return scanOverlaps(rows, row => row.after, maxChecks, (a, b) => {
+      if (!overlaps(a.before, b.before)) visit(a.face, b.face);
+    }, (a, b) => a.changed || b.changed).complete;
   }
 
   // UV coordinates are expressed in native texel centers before scanning.
@@ -341,6 +347,6 @@ const MeshUV = (() => {
       fraction:covered/(width*height),complete,scanlines:work.rows,perFace};
   }
 
-  return Object.freeze({ area2, sameUV, validate, topology, overlaps, metrics, changedOverlaps, inspect, sampleCoverage, texelMask, scanSampled });
+  return Object.freeze({ area2, sameUV, validate, topology, overlaps, metrics, scanOverlaps, changedOverlaps, inspect, sampleCoverage, texelMask, scanSampled });
 })();
 if (typeof module !== 'undefined') module.exports = MeshUV;

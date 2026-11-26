@@ -188,5 +188,5 @@ const meshUVFlatten = (function (K) {
     return result;
   }
 
-  return Object.freeze({isBinding,projection,updateBindings,install});
+  return Object.freeze({isBinding,projection,updateBindings,install,unfold});
 })(KIT);
