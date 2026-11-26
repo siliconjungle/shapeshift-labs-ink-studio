@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 const PNG = require('./png.js');
 const Assets = require('./asset-files.js');
 const FrameComposite = require('../src/frame-composite.js');
@@ -230,11 +231,24 @@ function canonicalVisual(plan, settings) {
   const { width, height, columns, pixelSize, at } = settings;
   return { ...plan, visual: { ...plan.visual, width, height, columns, pixelSize, at, ...(settings.views && { views: settings.views }) } };
 }
+function inputReceipts(source, dependencies) {
+  check(dependencies === undefined || Array.isArray(dependencies) && dependencies.length <= 128 &&
+    Array.from(dependencies).every(file => typeof file === 'string' && file.length && !path.isAbsolute(file)),
+    'Sweep dependencies need up to 128 source-relative filenames');
+  if (dependencies?.length) check(path.isAbsolute(source), 'Sweep dependencies require a scene file');
+  if (!path.isAbsolute(source)) return [];
+  const names = [source, ...(dependencies ?? []).map(file => path.resolve(path.dirname(source), file))];
+  return [...new Set(names)].map(file => ({
+    file, sha256: createHash('sha256').update(fs.readFileSync(file)).digest('hex')
+  }));
+}
+
 function runScene({ kit, source, plan, directory, loadScene, renderCase, anchor }) {
-  check(fields(plan, ['controls', 'visual', 'seeds', 'parameters', 'cases', 'approval']) && record(plan.controls ?? {}),
-    'Scene sweep plans use controls, seeds, parameters, cases, approval and visual settings');
+  check(fields(plan, ['controls', 'visual', 'seeds', 'parameters', 'cases', 'approval', 'dependencies']) && record(plan.controls ?? {}),
+    'Scene sweep plans use controls, seeds, parameters, cases, approval, dependencies and visual settings');
   checkDirectory(directory);
   const settings = visual(plan.visual, { kit, mode: 'scene' });
+  const inputs = inputReceipts(source, plan.dependencies);
   const approval = approvalPlans(plan.approval, settings);
   const { seeds, groups, runCount } = kit.world.observations.matrix(plan, { scene: true, limit: maxRuns });
   sizeOf(settings, runCount * (settings.views?.length ?? 1));
@@ -252,7 +266,7 @@ function runScene({ kit, source, plan, directory, loadScene, renderCase, anchor 
       } catch (error) { throw Error('Sweep run ' + id + ': ' + error.message, { cause: error }); }
     }
   }
-  const recipe = { mode: 'scene', source, plan: canonicalVisual(plan, settings) };
+  const recipe = { mode: 'scene', source, ...(inputs.length && { inputs }), plan: canonicalVisual(plan, settings) };
   return finish({ kit, directory, recipe, visual: settings, tiles, name: scene.name ?? scene.id, anchor });
 }
 
@@ -274,7 +288,9 @@ function runSimulation({ kit, source, plan, directory, input, workerPool, runtim
   return finish({ kit, directory, recipe, visual: settings, tiles: [...tiles.values()], numeric, name: numeric.world, anchor });
 }
 
-function pin(report, selection) {
+function pin(report, selection, note) {
+  check(note === undefined || typeof note === 'string' && note.length > 0 && note.length <= 512,
+    'Sweep pin notes need 1–512 characters');
   const result = report.visual ?? report;
   check(result.format === format && result.version === 1 && Array.isArray(result.tiles) &&
     record(result.recipe) && record(result.recipe.plan), 'Expected a visual sweep report');
@@ -288,7 +304,7 @@ function pin(report, selection) {
     return [name, { ...parameter, values: [tile.parameters[name]] }];
   }));
   const anchor = { id: tile.id, case: tile.case, seed: tile.seed, parameters: tile.parameters };
-  return { format: pinFormat, version: 1, anchor, recipe: {
+  return { format: pinFormat, version: 1, anchor, ...(note && { note }), recipe: {
     ...recipe, plan: { ...plan, seeds: [tile.seed], cases: [choice], parameters }
   } };
 }
@@ -298,6 +314,11 @@ function loadPin(file, nearby) {
   check(pin?.format === pinFormat && pin.version === 1 && record(pin.anchor) && record(pin.recipe) &&
     ['sim', 'scene'].includes(pin.recipe.mode) && typeof pin.recipe.source === 'string' &&
     record(pin.recipe.plan) && record(pin.recipe.plan.parameters), 'Expected a saved sweep pin');
+  if (pin.recipe.mode === 'scene' && pin.recipe.inputs !== undefined) {
+    const inputs = inputReceipts(pin.recipe.source, pin.recipe.plan.dependencies);
+    check(Array.isArray(pin.recipe.inputs) && JSON.stringify(pin.recipe.inputs) === JSON.stringify(inputs),
+      'Sweep pin scene or declared dependency changed');
+  }
   if (nearby === undefined) return pin;
   const offsets = read(nearby);
   check(record(offsets) && Object.keys(offsets).length, 'Nearby sweeps need named parameter offsets');
@@ -316,4 +337,4 @@ function sourcePath(id) {
   return /\.(?:js|json|obj|gltf|glb)$/i.test(id) || id.includes('/') ? path.resolve(id) : id;
 }
 
-module.exports = { read, outputPath, runScene, runSimulation, pin, loadPin, sourcePath };
+module.exports = { read, outputPath, runScene, runSimulation, pin, loadPin, sourcePath, publish };

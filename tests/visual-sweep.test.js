@@ -190,3 +190,35 @@ test('sweep approval preserves failing camera evidence and exits after publishin
     assert.deepEqual(f.bytes('approval',failed.evidence.image),f.bytes('approval',tile.views[1].image));
   }
 });
+
+test('headless candidate review compares views, ranks checks and reapplies verified controls', t => {
+  const f = fixtures(t), declared = f.write('resource.txt','matching resource');
+  const scene = f.write('review.js', `module.exports = ({makeBuilder}) => ({
+    id:'review', seed:7, build(seed, { controls } = {}) {
+      const B = makeBuilder(seed,[0x172337,0x8096c6]);
+      B.iso(0,0,0,controls.radius,B.P[1],2.7);
+      return B.finish({dither:0, cam:{target:[0,0,0],dist:4,yaw:0,pitch:0,sway:0}});
+    }
+  });`);
+  const plan = f.write('review.json', {
+    dependencies:['resource.txt'], parameters:{radius:{values:[.30,.50]}},
+    visual:{width:96,height:64,pixelSize:1}
+  });
+  cli('sweep',scene,plan,'--out',f.out('review'));
+  assert.equal(f.report('review').recipe.inputs.length,2);
+  cli('sweep','compare',f.out('review'),'1','2','--out',f.out('differences'));
+  const comparison = f.report('differences');
+  assert.ok(comparison.views[0].changedPixels > 0);
+  assert.equal(PNG.read(f.out('differences/default-comparison.png')).w,192);
+  cli('sweep','rank',f.out('review'),'--out',f.out('ranking.json'));
+  const ranking = JSON.parse(fs.readFileSync(f.out('ranking.json')));
+  assert.deepEqual(ranking.candidates.map(row => row.passed),[null,null]);
+  cli('sweep','pin',f.out('review'),'2','--note','Hold this shape','--out',f.out('chosen.json'));
+  const pin = JSON.parse(fs.readFileSync(f.out('chosen.json')));
+  assert.equal(pin.note,'Hold this shape');
+  cli('sweep','apply',f.out('chosen.json'),'--out',f.out('controls.json'));
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.out('controls.json'))),{radius:.5});
+  fs.writeFileSync(declared,'changed resource');
+  assert.match(run('sweep','replay',f.out('chosen.json'),'--out',f.out('stale')).stderr,/dependency changed/);
+  assert.ok(!fs.existsSync(f.out('stale')));
+});

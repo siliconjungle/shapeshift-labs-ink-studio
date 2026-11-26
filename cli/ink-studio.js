@@ -1626,6 +1626,9 @@ const CMD = {
         '  review <id> [--ref pic --px 2]     a sheet of fixed shots (four sides, top, low, far, near, close), beside the last one',
         '  sweep <scene> <plan.json> --out directory   render still and clip contact sheets across settings and seeds',
         '  sweep pin <report-or-directory> <run-id-or-tile> --out pin.json   save one exact case',
+        '  sweep compare <report> <left> <right> --out directory   export matched view differences',
+        '  sweep rank <report> --out ranking.json   order candidates by approval results',
+        '  sweep apply <pin.json> --out controls.json [--scene]   write selected scene controls',
         '  sweep replay <pin.json> --out directory   render the saved case',
         '  sweep nearby <pin.json> <offsets.json> --out directory   vary numeric settings around the saved case',
         '  variants <id> --seeds 3,7,12 [--group silhouette|openness|wear --motion]  render a ranked seed contact sheet',
@@ -3200,13 +3203,24 @@ const CMD = {
   },
   sweep() {
     const sweeps = require('./visual-sweep.js');
-    const directory = sweeps.outputPath(opt);
-    if (pos[0] === 'pin') {
+    const command = pos[0];
+    const directory = sweeps.outputPath(opt, command === 'pin' ? ['note'] : command === 'apply' ? ['scene'] : []);
+    if (command === 'compare' || command === 'rank' || command === 'apply') {
+      const review = require('./sweep-review.js');
+      if (command === 'compare' && pos.length === 4) review.compare(lib().KIT, pos[1], pos[2], pos[3], directory);
+      else if (command === 'rank' && pos.length === 2) review.rank(pos[1], directory);
+      else if (command === 'apply' && pos.length === 2 && (opt.scene === undefined || opt.scene === true))
+        review.apply(lib().KIT, pos[1], directory, opt.scene === true);
+      else die('Use sweep compare <report> <left> <right>, rank <report>, or apply <pin.json> with --out');
+      console.log('wrote', directory);
+      return;
+    }
+    if (command === 'pin') {
       if (pos.length !== 3) die('Use sweep pin <report-or-directory> <run-id-or-tile> --out pin.json');
       const input = path.resolve(pos[1]);
       const report = fs.statSync(input).isDirectory() ? path.join(input, 'report.json') : input;
       if (report === directory) die('Choose a separate filename for the pin');
-      require('./asset-files.js').json(directory, sweeps.pin(sweeps.read(report),pos[2]));
+      require('./asset-files.js').json(directory, sweeps.pin(sweeps.read(report),pos[2],opt.note));
       console.log('wrote', directory);
       return;
     }

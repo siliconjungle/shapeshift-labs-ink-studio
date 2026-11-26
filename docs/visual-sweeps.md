@@ -120,6 +120,29 @@ recording uses its saved seed and permits variation through scheduled
 actions and inputs. Visual output takes a new or empty directory.
 Numeric-only sweeps still take a report filename.
 
+## Review and apply a candidate
+
+Run `sweep compare` with two tile numbers or run IDs to write matched
+still comparisons and signed differences per view. Its report gives
+changed pixel counts and RGB RMS error on the exported image grid.
+`sweep rank` lists passed candidates first, then candidates with failed
+checks, then unchecked candidates. Fewer recorded findings break ties
+among failures. Ranking measures the declared checks.
+
+```sh
+ink-studio sweep compare bear-approval 1 6 --out bear-compare
+ink-studio sweep rank bear-approval --out bear-ranking.json
+ink-studio sweep pin bear-approval 5 --note "Keep the eyes and jaw clear" --out bear-choice.json
+ink-studio sweep apply bear-choice.json --out bear-controls.json
+```
+
+For a JSON scene that declares the selected controls, append `--scene`
+to write a revised scene beside the source so relative asset paths
+resolve as before. A JavaScript scene uses the controls document with
+`--params`. Replay and apply verify the scene file's hash and those
+of any extra source-relative files named in the plan's `dependencies`
+array. Include any local file reads your JavaScript scene relies on.
+
 ## Pin and explore
 
 Pick the tile number printed on the sheet or the exact run ID from
