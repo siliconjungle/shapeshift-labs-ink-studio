@@ -146,6 +146,7 @@ function makeSculpt(B, rest) {
     p.k = o.k || 0;
     p.g = o.g || gid++;
     p.bump = o.bump || null;
+    if (o.bumpPhase !== undefined) p.bumpPhase = o.bumpPhase;
     p.tag = o.tag || null;
     p.renderOwner = o.objectId ?? p.tag;
     p.renderTarget = o.surfaceId !== undefined ? { surface: o.surfaceId, ...o.target } : o.target;
@@ -183,6 +184,8 @@ function makeSculpt(B, rest) {
   }
   S.materialAt = (material, point, normal) => {
     if (!material) return material;
+    const cap = material.cutSurface?.locate(point,normal);
+    if (cap) return cap;
     const base = baseMaterialAt(material,point,normal), paint = material.sdfPaint?.locate(point,normal);
     const surface = material.sdfNewSurface?.locate(point,normal);
     const appearance=surface ? KIT.procedural.sdfBrushSurfaces.appearance(surface,paint) : paint;
@@ -201,12 +204,14 @@ function makeSculpt(B, rest) {
   };
   S.mapSurfaceState = (material, inverse, pullNormal, pushNormal) => {
     const state = material?.surfaceState, paint = material?.sdfPaint, surface = material?.sdfNewSurface;
-    if (!state && !paint && !surface) return material;
+    const cut = material?.cutSurface;
+    if (!state && !paint && !surface && !cut) return material;
     const map = program=>({ locate(point,normal,...options) {
       const rest = inverse(point);
       return program.locate(rest,pullNormal ? pullNormal(normal,rest,point) : normal,...options);
     } });
     return { ...material,...(paint && { sdfPaint:map(paint) }),...(surface && {sdfNewSurface:map(surface)}),
+      ...(cut && { cutSurface:map(cut) }),
       ...(state && { surfaceState: { ...state, locate(point, normal) {
       const rest = inverse(point);
       const hit = state.locate(rest, pullNormal ? pullNormal(normal, rest, point) : normal);
@@ -242,7 +247,7 @@ function makeSculpt(B, rest) {
       if (lowerBound) solid.lowerBound = (x, y, z, limit) => scale * lowerBound(...inverse([x, y, z]), limit / scale);
       if (along) solid.along = (x, y, z) => along(...inverse([x, y, z]));
       if (mat.rf) solid.mat = { ...mat, rf: (x, y, z) => mat.rf(...inverse([x, y, z])) };
-      if (mat.surfaceState || mat.sdfPaint || mat.sdfNewSurface) {
+      if (mat.surfaceState || mat.sdfPaint || mat.sdfNewSurface || mat.cutSurface) {
         const axes = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map(direction);
         solid.mat = S.mapSurfaceState(solid.mat, inverse,
           normal => axes.map(axis => axis[0] * normal[0] + axis[1] * normal[1] + axis[2] * normal[2]), direction);
@@ -670,7 +675,7 @@ function makeSculpt(B, rest) {
   function psd(p, x, y, z) {
     let d = p.sd(x, y, z);
     if (p.bump && d > p.bump[0] + 0.25) return d - p.bump[0]; // far away: skip the noise, stay conservative
-    if (p.bump) d -= p.bump[0] * (n3(x * p.bump[1] + p.g * 3.7, y * p.bump[1], z * p.bump[1]) * 1.5 - 0.75);
+    if (p.bump) d -= p.bump[0] * (n3(x * p.bump[1] + (p.bumpPhase ?? p.g) * 3.7, y * p.bump[1], z * p.bump[1]) * 1.5 - 0.75);
     return d;
   }
   // A coarse grid lists, for each cell, only the solids that can come within MARG of it; beyond that the
@@ -1895,7 +1900,9 @@ function makeSculpt(B, rest) {
   }
 
   function shadeOwned(owner, material, ...sample) {
-    if (material.materialAt || material.surfaceState)
+    const cap = material.cutSurface?.locate(sample.slice(1, 4), sample.slice(4, 7));
+    if (cap) material = cap;
+    else if (material.materialAt || material.surfaceState)
       material = baseMaterialAt(material, sample.slice(1, 4), sample.slice(4, 7));
     material = controlled(material);
     const preview = typeof globalThis !== 'undefined' && globalThis.INK_LOOK_ALBEDO;
@@ -1951,7 +1958,7 @@ function makeSculpt(B, rest) {
     const surfaceId = effective.surfaceId ?? (effective === material ? undefined : effective.surface?.id) ?? material.surfaceId;
     const baseId = effective.materialId ?? material.materialId;
     let appearance;
-    if (first<end && (owner?.mat?.sdfPaint || owner?.mat?.sdfNewSurface)) {
+    if (!cap && first<end && (owner?.mat?.sdfPaint || owner?.mat?.sdfNewSurface)) {
       const point=sample.slice(1,4), normal=sample.slice(4,7);
       const paint=owner.mat.sdfPaint?.locate(point,normal), surface=owner.mat.sdfNewSurface?.locate(point,normal);
       appearance=surface ? KIT.procedural.sdfBrushSurfaces.appearance(surface,paint) : paint;
