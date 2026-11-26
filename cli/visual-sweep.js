@@ -244,8 +244,8 @@ function inputReceipts(source, dependencies) {
 }
 
 function runScene({ kit, source, plan, directory, loadScene, renderCase, anchor }) {
-  check(fields(plan, ['controls', 'visual', 'seeds', 'parameters', 'cases', 'approval', 'dependencies']) && record(plan.controls ?? {}),
-    'Scene sweep plans use controls, seeds, parameters, cases, approval, dependencies and visual settings');
+  check(fields(plan, ['controls', 'visual', 'seeds', 'parameters', 'cases', 'approval', 'dependencies', 'constraints', 'sampling', 'runBudget']) && record(plan.controls ?? {}),
+    'Invalid scene sweep plan');
   checkDirectory(directory);
   const settings = visual(plan.visual, { kit, mode: 'scene' });
   const inputs = inputReceipts(source, plan.dependencies);
@@ -301,11 +301,13 @@ function pin(report, selection, note) {
   check(choice && Number.isSafeInteger(tile.seed), 'The sweep report is missing its selected case or seed');
   const parameters = Object.fromEntries(Object.entries(plan.parameters ?? {}).map(([name, parameter]) => {
     check(Object.hasOwn(tile.parameters, name), 'The sweep report is missing parameter ' + name);
-    return [name, { ...parameter, values: [tile.parameters[name]] }];
+    const { range, ...binding } = parameter;
+    return [name, { ...binding, values: [tile.parameters[name]] }];
   }));
   const anchor = { id: tile.id, case: tile.case, seed: tile.seed, parameters: tile.parameters };
+  const { sampling, ...fixedPlan } = plan;
   return { format: pinFormat, version: 1, anchor, ...(note && { note }), recipe: {
-    ...recipe, plan: { ...plan, seeds: [tile.seed], cases: [choice], parameters }
+    ...recipe, plan: { ...fixedPlan, seeds: [tile.seed], cases: [choice], parameters }
   } };
 }
 

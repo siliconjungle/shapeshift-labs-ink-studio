@@ -89,6 +89,31 @@ available previous and marked images. Every candidate is published
 before the command returns exit code 2 for a failed check. A render or
 configuration error returns exit code 1.
 
+### Sample ranges with constraints
+
+A parameter can define `range: { "min": 0, "max": 1, "steps": 5 }`
+in place of `values`. Without `sampling`, this produces five evenly
+spaced settings including both endpoints. With `sampling: { "seed": 42,
+"count": 8 }`, each accepted combination is drawn from independent,
+named parameter streams. Explicit values and stepped ranges are
+sampled discretely. A range without `steps` is sampled continuously
+and requires `sampling`. The sampling seed is independent of scene seeds.
+
+A constraint such as `{ "left": "jaw", "op": "lte", "right":
+{ "parameter": "overlap" } }` compares one named control to another.
+Use `{ "value": 1 }` for a literal. Valid comparisons are `eq`, `ne`,
+`lt`, `lte`, `gt`, and `gte`. Ordering comparisons require numbers.
+All constraints must pass. `runBudget` caps accepted runs after multiplying
+by the authored cases and seeds. An empty grid or an unfillable random
+request is an error. The sweep report records the exact accepted values.
+A pin stores those values directly and remains compatible with nearby
+exploration. This plan syntax also works for numeric and visual simulation
+sweeps.
+
+```sh
+ink-studio sweep examples/visual-sweep-attractor.js examples/visual-sweep-sampling.plan.json --out sampled-attractors
+```
+
 ## Sweep runtime worlds
 
 Add a `visual` object to the existing [observation sweep plan](headless-worlds.md#scheduled-observations-and-parameter-sweeps).

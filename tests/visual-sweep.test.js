@@ -222,3 +222,43 @@ test('headless candidate review compares views, ranks checks and reapplies verif
   assert.match(run('sweep','replay',f.out('chosen.json'),'--out',f.out('stale')).stderr,/dependency changed/);
   assert.ok(!fs.existsSync(f.out('stale')));
 });
+
+test('ranges and seeded sampling honor cross-control constraints and replay selected values', t => {
+  const f = fixtures(t);
+  const scene = f.write('ranges.js', `module.exports = ({makeBuilder}) => ({
+    id:'ranges', seed:5, build(seed, { controls } = {}) {
+      const B = makeBuilder(seed,[0x172337,0x8096c6]);
+      B.iso(controls.a,0,controls.b,.26,B.P[1],2.7);
+      return B.finish({dither:0,cam:{target:[.35,0,.35],dist:4,yaw:.5,pitch:.15,sway:0}});
+    }
+  });`);
+  const plan = {
+    parameters:{a:{range:{min:0,max:.6}},b:{values:[.25,.5,.75]}},
+    sampling:{count:4,seed:91}, runBudget:4,
+    constraints:[{left:'a',op:'lt',right:{parameter:'b'}}],
+    visual:{width:96,height:64,pixelSize:2}
+  };
+  const first = f.write('ranges.json',plan);
+  for (const key of ['run-one','run-two']) cli('sweep',scene,first,'--out',f.out(key));
+  const [one,two] = ['run-one','run-two'].map(key => f.report(key));
+  assert.deepEqual(one.tiles,two.tiles);
+  assert.equal(one.tiles.length,4);
+  assert.ok(one.tiles.every(({parameters:{a,b}}) => a >= 0 && a < b));
+  assert.equal(new Set(one.tiles.map(tile => JSON.stringify(tile.parameters))).size,4);
+  cli('sweep','pin',f.out('run-one'),'2','--out',f.out('range-pin.json'));
+  const pin = JSON.parse(fs.readFileSync(f.out('range-pin.json')));
+  assert.equal(pin.recipe.plan.sampling,undefined);
+  assert.deepEqual(pin.recipe.plan.parameters.a.values,[one.tiles[1].parameters.a]);
+  cli('sweep','replay',f.out('range-pin.json'),'--out',f.out('range-replay'));
+  assert.deepEqual(f.bytes('range-replay','cases/001.png'),f.bytes('run-one',one.tiles[1].image));
+
+  const fixed = f.write('fixed-grid.json',{
+    ...plan,sampling:undefined,runBudget:2,
+    parameters:{a:{range:{min:0,max:1,steps:3}},b:{values:[.25]}}
+  });
+  cli('sweep',scene,fixed,'--out',f.out('grid'));
+  assert.deepEqual(f.report('grid').tiles.map(row => row.parameters),[{a:0,b:.25}]);
+  const impossible = f.write('impossible.json',{...plan, constraints:[{left:'a',op:'lt',right:{value:0}}]});
+  assert.match(run('sweep',scene,impossible,'--out',f.out('no-runs')).stderr,/distinct sample count/);
+  assert.ok(!fs.existsSync(f.out('no-runs')));
+});
