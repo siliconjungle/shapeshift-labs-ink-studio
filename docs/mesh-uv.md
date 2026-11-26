@@ -2125,6 +2125,61 @@ mesh against a scene camera, also pass `projectionPositions`, a
 `Map` from stable vertex IDs to positions in that camera's world space.
 The CLI supplies those positions from the captured authored mesh.
 
+## Pack connected UV charts
+
+Run `pack-charts` through `mesh-uv edit` to reposition complete UV islands at
+their current texel density and orientation. Use island IDs from
+`mesh-uv layout`, or pass a revision-checked UV selection of islands or faces. A
+selected face brings along its entire connected UV island. Named groups
+move as one, preserving the relative positions of their islands.
+
+```json
+{
+  "operations": [{
+    "op": "pack-charts",
+    "ids": ["badge", "sign-panel", "trim", "maker-mark"],
+    "groups": [{ "id": "badge-and-sign", "islands": ["badge", "sign-panel"] }],
+    "atlas": [128, 96],
+    "pool": [0, 0, 96, 80],
+    "gutter": 2
+  }]
+}
+```
+
+```sh
+ink-studio mesh-uv edit gate.json pack.json --object panel --preview pack-review
+ink-studio mesh-uv edit gate.json pack.json --object panel --out packed.json --report pack-receipt.json
+```
+
+Pack one material sheet and up to 256 islands per operation. An editable scene
+can infer the active material atlas when `atlas` is omitted. `pool` is an
+integer texel rectangle `[x,y,width,height]` and defaults to the full atlas.
+The packer places axis-aligned chart or group envelopes with a gutter on
+each side, with a default gutter of two texels. An unselected chart reserves its
+current footprint. A pin or a span marked with `protect.painted` or
+`protect.seams` holds its whole island and any group it belongs to.
+
+The receipt lists source and destination bounds as texel edges
+`[left,top,right,bottom]`, the integer translation, held charts, and
+`unpacked` island IDs. `chart-exceeds-pool` gives the required padded
+dimensions when a chart or group is too large. `chart-no-free-rectangle`
+means the chart would fit the empty pool and the packer found no placement
+among the reserved and already placed footprints. The packer uses a
+deterministic, largest-first best-area fit. Any failed placement leaves the
+whole edit uncommitted. The failed preview shows proposed placements and
+marks unpacked footprints in pink.
+
+The command changes UV coordinates. Use it before painting a new atlas, or
+rebake the moved charts against the reported layout. Pinned and protected
+paint keeps its exact coordinates. If two separate UV islands meet after a
+zero-gutter pack, the receipt records any inferred cut that Ink made
+explicit to retain the original chart separation.
+
+The same operation works in `KIT.meshTopology.uv.plan` and the scene
+editor's `planMeshUV` and `editMeshUV` methods. The
+[packing demo](../examples/tileset-pick/uv-pack-charts-demo.cjs) compares a
+successful pack with an undersized pool using the same source layout.
+
 ## Allocate texels for a shot
 
 A `texel-budget` operation redistributes space among named features on one

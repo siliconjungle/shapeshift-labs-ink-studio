@@ -1053,7 +1053,7 @@
       const operations = Array.isArray(request?.operations) ? request.operations : [];
       const tileGrid = operations.some(op=>['nudge','snap'].includes(op?.op));
       const atlasFor = tileGrid || operations.some(op=>op && op.atlas===undefined &&
-        (op.op==='orient' && op.space==='texel' || op.op==='scale' && op.snapBounds===true)) ?
+        (op.op==='orient' && op.space==='texel' || op.op==='scale' && op.snapBounds===true || op.op==='pack-charts')) ?
         A.meshTopologyScene.uvAtlases(snapshot(),row,request.uvSet ?? 0,{tileGrid}) : undefined;
       const scene = operations.some(op=>op?.op==='flatten') ? snapshot() : undefined;
       const flattenAtlasFor = scene && A.meshTopologyScene.uvAtlases(scene,{...row,bakes:[]},request.uvSet ?? 0);
