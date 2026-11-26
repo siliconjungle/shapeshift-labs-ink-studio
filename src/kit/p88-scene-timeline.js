@@ -123,15 +123,18 @@
         return { cue, duration, offset, gain };
       });
       const clips = items(input.clips, 'clip', clock, row => {
-        check(has(row, ['id', 'time', 'sequence', 'in', 'out', 'duration']) &&
+        check(has(row, ['id', 'time', 'sequence', 'in', 'out', 'duration', 'until', 'endExclusive']) &&
           id(row.sequence) && own(catalog, row.sequence), 'Unknown timeline sequence ' + row.sequence);
+        check((row.endExclusive === undefined || typeof row.endExclusive === 'boolean') &&
+          !(row.until !== undefined && row.duration !== undefined), 'Use one clip duration or end time and a boolean endExclusive');
         const source = named(row.sequence, depth + 1);
         const start = point(row.in === undefined ? 0 : row.in, source.clock);
         const end = row.out === undefined ? source.duration : point(row.out, source.clock);
-        const duration = row.duration === undefined ? sub(end, start) : point(row.duration);
+        const time = point(row.time, clock), until = row.until === undefined ? undefined : point(row.until, clock);
+        const duration = until !== undefined ? sub(until, time) : row.duration === undefined ? sub(end, start) : point(row.duration);
         check(valid(duration) && compare(start, end) < 0 && compare(end, source.duration) <= 0 && compare(duration, zero) > 0,
           'Invalid trim or duration on timeline clip ' + row.id);
-        return { source, start, end, duration };
+        return { source, start, end, duration, finish: until ?? add(time, duration), endExclusive: row.endExclusive === true };
       });
       const cueTracks = input.cueTracks;
       const imported = cueTracks === undefined ? [] : (importCueTracks ??= K.procedural.mediaGraph.cueTrackCompiler(maxItems))(cueTracks)
@@ -140,7 +143,7 @@
         'Timeline clips and cue tracks need distinct names within a sequence');
       const content = [...markers, ...audio, ...events, ...imported, ...presentation];
       let end = tracks.reduce((end, track) => max(end, track.duration), zero);
-      for (const item of [...content, ...clips]) end = max(end, add(item.time, item.duration ?? zero));
+      for (const item of [...content, ...clips]) end = max(end, item.finish ?? add(item.time, item.duration ?? zero));
       const duration = input.duration == null ? end : point(input.duration, clock);
       check(valid(duration) && compare(duration, end) >= 0, 'Timeline duration must contain its keys, cues and clips');
       return { duration, tracks, content, clips, clock };
@@ -167,7 +170,7 @@
       if (exact) precise.set(row, time);
       points.push(row);
     }
-    function expand(node, low, high, start, end, rate, path, depth) {
+    function expand(node, low, high, start, end, rate, path, depth, endExclusive = false) {
       check(depth <= 32 && Number.isFinite(seconds(rate)) && seconds(rate) > 0, 'Timeline nesting or retiming limit exceeded');
       spend(node.tracks.length + node.content.length + node.clips.length + 1);
       const mapped = local => !compare(local, low) ? start :
@@ -175,7 +178,7 @@
       for (const tr of node.tracks) {
         const key = JSON.stringify(tr.target);
         targets.set(key, tr.target);
-        lanes.push({ key, tr, low, high, start, end, rate });
+        lanes.push({ key, tr, low, high, start, end, rate, endExclusive });
       }
       for (const item of node.content) {
         if (item.type === 'audio' && compare(item.duration, zero) > 0) {
@@ -191,13 +194,15 @@
           mappedPoint(item, path, mapped(item.time), item.type === 'audio' ? { duration: 0, offset: seconds(item.offset) } : {});
       }
       for (const clip of node.clips) {
-        const finish = add(clip.time, clip.duration);
+        const finish = clip.finish;
         const from = max(low, clip.time), to = min(high, finish);
         if (compare(from, to) > 0) continue;
         const scale = div(sub(clip.end, clip.start), clip.duration);
         const local = time => !compare(time, clip.time) ? clip.start :
           !compare(time, finish) ? clip.end : add(clip.start, mul(sub(time, clip.time), scale));
-        expand(clip.source, local(from), local(to), mapped(from), mapped(to), mul(rate, scale), [...path, clip.id], depth + 1);
+        const exclusive = clip.endExclusive && !compare(to, finish) || endExclusive && !compare(to, high);
+        expand(clip.source, local(from), local(to), mapped(from), mapped(to), mul(rate, scale),
+          [...path, clip.id], depth + 1, exclusive);
       }
     }
     expand(graph, zero, graph.duration, zero, graph.duration, one, [], 0);
@@ -221,8 +226,9 @@
     }
     function sampleAt(time) {
       const edits = new Map(), clamped = min(time, graph.duration);
-      for (const { key, tr, low, high, start, end, rate } of lanes) {
-        if (compare(clamped, start) >= 0 && compare(clamped, end) <= 0) {
+      for (const { key, tr, low, high, start, end, rate, endExclusive } of lanes) {
+        const edge = compare(clamped, end);
+        if (compare(clamped, start) >= 0 && (edge < 0 || edge === 0 && !endExclusive)) {
           const at = !compare(clamped, end) ? high : add(low, mul(sub(clamped, start), rate));
           edits.set(key, { op: 'set', path: tr.target, value: tr.sample(seconds(at)) });
         }
