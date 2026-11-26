@@ -313,9 +313,19 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.paintBoil` | namespace |  |  |
-| `KIT.procedural.paintBoil.apply` | function | `(form, plan, mark, drawing)` | [source](../../src/kit/p26i-paint-boil.js) |
+| `KIT.procedural.paintBoil.apply` | function | `(form, plan, mark, drawing, gain)` | [source](../../src/kit/p26i-paint-boil.js) |
 | `KIT.procedural.paintBoil.prepare` | function | `(raw)` | [source](../../src/kit/p26i-paint-boil.js) |
 | `KIT.procedural.paintBoil.state` | function | `(plan, time = 0, celTime)` | [source](../../src/kit/p26i-paint-boil.js) |
+
+## KIT.procedural.paintEffects
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.paintEffects` | namespace |  |  |
+| `KIT.procedural.paintEffects.format` | value | `string = "ink-studio/paint-effects-track"` |  |
+| `KIT.procedural.paintEffects.header` | function | `(track,source)` | [source](../../src/kit/p26o-paint-effects.js) |
+| `KIT.procedural.paintEffects.native` | function | `(track,row)` | [source](../../src/kit/p26o-paint-effects.js) |
+| `KIT.procedural.paintEffects.scene` | function | `(source, time=0)` | [source](../../src/kit/p26o-paint-effects.js) |
 
 ## KIT.procedural.paintEvaporation
 
@@ -328,6 +338,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.paintEvaporation.prepare` | function | `(raw, baked=false)` | [source](../../src/kit/p26l-paint-evaporation.js) |
 | `KIT.procedural.paintEvaporation.reserve` | function | `(B,layers)` | [source](../../src/kit/p26l-paint-evaporation.js) |
 | `KIT.procedural.paintEvaporation.scene` | function | `(source,time=0)` | [source](../../src/kit/p26l-paint-evaporation.js) |
+
+## KIT.procedural.paintFlow
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.paintFlow` | namespace |  |  |
+| `KIT.procedural.paintFlow.fields` | function | `(value, keys)` | [source](../../src/kit/p26n-paint-flow.js) |
+| `KIT.procedural.paintFlow.prepare` | function | `(raw, asset, placement, mask)` | [source](../../src/kit/p26n-paint-flow.js) |
 
 ## KIT.procedural.paintLooseness
 
@@ -343,7 +361,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.paintRelief` | namespace |  |  |
-| `KIT.procedural.paintRelief.gradient` | function | `(relief, form, space, accepts, remaining)` | [source](../../src/kit/p26g-paint-relief.js) |
+| `KIT.procedural.paintRelief.gradient` | function | `(relief, form, space, accepts, remaining, heightAt)` | [source](../../src/kit/p26g-paint-relief.js) |
 | `KIT.procedural.paintRelief.prepare` | function | `(raw)` | [source](../../src/kit/p26g-paint-relief.js) |
 
 ## KIT.procedural.paintThrob
@@ -364,7 +382,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.paintWave.format` | value | `string = "ink-studio/painting-wave"` |  |
 | `KIT.procedural.paintWave.prepare` | function | `(raw)` | [source](../../src/kit/p26k-paint-wave.js) |
 | `KIT.procedural.paintWave.scene` | function | `(source,time)` | [source](../../src/kit/p26k-paint-wave.js) |
-| `KIT.procedural.paintWave.stroke` | function | `(shape, frame, {plan,map})` | [source](../../src/kit/p26k-paint-wave.js) |
+| `KIT.procedural.paintWave.stroke` | function | `(shape, frame, {plan,map}, gain)` | [source](../../src/kit/p26k-paint-wave.js) |
 
 ## KIT.procedural.panelFrames
 

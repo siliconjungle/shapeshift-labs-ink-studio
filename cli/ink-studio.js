@@ -1476,6 +1476,11 @@ const CMD = {
         '  painting-cels export <scene.json> <clip.json> --out directory [--view view.json]   render held exposures and animated PNG',
         '  painting-flow sample <scene.json> <plan.json> [--at seconds] --out scene.json   advect retained marks through a painted field',
         '  painting-flow bake <scene.json> <plan.json> [--from seconds --fps 12 --frames 24 --playback once] --out clip.json   bake editable flow poses into cels',
+        '  paint-effects apply <scene.json> <track.json> --out scene.json   add a shared paint effects track',
+        '  paint-effects inspect <scene.json> [--at seconds] [--point x,y,z]   sample cue windows and mask influence',
+        '  paint-effects erase <scene.json> <clip id> <brush.json> --out scene.json   edit local effect erasure',
+        '  paint-effects sample <scene.json> --at seconds --out scene.json   hold the effect track at one pose',
+        '  paint-effects bake <scene.json> --out directory [--from seconds --fps n --frames n --w n --h n --raw --ortho --flipbook]   export frames and an optional animated PNG',
         '  paint-throb apply <scene.json> <plan.json> --out scene.json   retain independent paint pulses and embed WAV envelopes',
         '  paint-throb inspect <scene.json> [--at seconds] [--pulse id]   sample paint pulse drivers and channel multipliers',
         '  paint-evaporation apply <scene.json> <plan.json> [--at seconds] --out scene.json   bake a painted region into a particle layer',
@@ -1708,6 +1713,7 @@ const CMD = {
         '  pixel-art directions open <atlas> --out document.json   open directional tiles as editable frames',
         '  pixel-art directions review <document.json> [--anchor id] [--out report.json] [--review review.html]   compare adjacent views',
         '  pixel-art directions export <document.json> --out atlas.json [--base registered-atlas.json]   export approved views',
+        '  pixel-art directions uv-clips <atlas> --settings bindings.json --out clips.json   bind approved atlas views as mesh UV clips',
         '  pixel-art export <document.json|layers.json> --preset preset.json --out directory   run a saved asset export preset',
         '  pixel-art slices inspect <document.json> [--frame id] [--out report.json]   inspect slice keys and registration',
         '  pixel-art slices export <document.json> --slice id [--frame id] --out slice.png [--metadata registration.json]   export a native slice',
@@ -2135,7 +2141,7 @@ const CMD = {
         'lightning options: --lightning on|off|file.json',
         'exposure options: --scene-exposure on|off|file.json',
         'aerial options: --aerial-perspective on|off --aerial-start units --aerial-density per-unit --aerial-contrast 0..1',
-        'view options: --surface off (no finish layers) --pbr-materials file.json|off --pbr-shadows on|off --pbr-specular-sampling on|off --facing-colors off --directional-colors off --water off --reflections off --reflection-probes off --transmission off --surface-detail-kits off --atmosphere off --edges off (no edge sprites) --yaw --pitch --zoom 2 --target x,y,z --w 900 --h 620 --px 2 (screen pixels per art pixel) --px1 (native art pixels) --tone stipple|off --raw (no palette) --colored (smooth body-colored contours) --fine (inked detail: colours looked up per pixel) --bounce (bounce light baked in) --focus x,y,z[,near,far,coarse] (uneven detail) --follow [stretch,broad] (dabs along the form) --adaptive-sampling on|off|file.json --clean (remove lone pixels) --camera-shot id --ortho [on|off] (override authored projection) --cols 4 --out file.png --seed n',
+        'view options: --directional-uv-report report.json (render) --surface off (no finish layers) --pbr-materials file.json|off --pbr-shadows on|off --pbr-specular-sampling on|off --facing-colors off --directional-colors off --water off --reflections off --reflection-probes off --transmission off --surface-detail-kits off --atmosphere off --edges off (no edge sprites) --yaw --pitch --zoom 2 --target x,y,z --w 900 --h 620 --px 2 (screen pixels per art pixel) --px1 (native art pixels) --tone stipple|off --raw (no palette) --colored (smooth body-colored contours) --fine (inked detail: colours looked up per pixel) --bounce (bounce light baked in) --focus x,y,z[,near,far,coarse] (uneven detail) --follow [stretch,broad] (dabs along the form) --adaptive-sampling on|off|file.json --clean (remove lone pixels) --camera-shot id --ortho [on|off] (override authored projection) --cols 4 --out file.png --seed n',
         'socket emitter options: --atmosphere-emitters on|off|file.json',
         'animated splat options: --splat-fields on|off|file.json',
         'sprite options: --sprite-atlas on|off|atlas.json --sprite-at x,y,z --sprite-scale n --sprite-atlas-mode card|impostor|scenery --sprite-reconstruction auto|geometry|sprite --impostor-blend nearest|depth-reprojected --protected-lod guard.json|off',
@@ -2875,6 +2881,10 @@ const CMD = {
       return descriptor.openEditor({ historyLimit: 0 });
     });
   },
+  'paint-effects'() {
+    return require('./paint-effects.js')(pos,opt,lib(),
+      (file,source)=>dataScene(file,source,{refreshTilesets:false}));
+  },
   'paint-throb'() {
     return require('./paint-throb.js')(pos,opt,lib(),
       (file,source)=>dataScene(file,source,{refreshTilesets:false}));
@@ -3534,7 +3544,11 @@ const CMD = {
         [outputFile(w.id+'.png'),path.resolve(pos[0]),opt['transparency-settings'] && path.resolve(opt['transparency-settings']),
           report && path.resolve(report),opt.recipe && path.resolve(opt.recipe)].includes(path.resolve(transparencyReport))))
       die('--transparency-report needs a separate JSON output path');
-    const output = outputFile(w.id+'.png');
+    const output = outputFile(w.id+'.png'), directionalUVReport = opt['directional-uv-report'];
+    if (directionalUVReport !== undefined && (typeof directionalUVReport !== 'string' || !/\.json$/i.test(directionalUVReport) ||
+        [output,pos[0],report,transparencyReport,opt.recipe].some(file=>
+          typeof file==='string' && path.resolve(file)===path.resolve(directionalUVReport))))
+      die('--directional-uv-report needs a separate JSON output path');
     const compatibilityFile = onOffOption('compatibility-report') &&
       Compatibility.sidecar(output, pos[0], report, transparencyReport, opt.recipe);
     if (compatibilityFile) suffixes.push(Compatibility.suffix);
@@ -3543,6 +3557,8 @@ const CMD = {
     const t0 = Date.now(),
       im = R.render(w, view({ t, ...diagnostics?.settings, ...(report&&{renderStats:true}), captureCompatibility: true }));
     Compatibility.preview(im.compatibility, compatibilityFile);
+    if (directionalUVReport) require('./asset-files.js').json(path.resolve(directionalUVReport),
+      {format:'ink-studio/directional-uv-report',version:1,scene:w.id,time:t,choices:im.directionalUV ?? []});
     if(report)require('./asset-files.js').json(path.resolve(report),{
       scene:w.id,time:t,width:im.w,height:im.h,
       receivers:im.renderStats?.reflectionSources?.receivers??[],planarCaptures:im.renderStats?.planarCaptures??0,
@@ -4793,7 +4809,7 @@ const CMD = {
       fps = num('fps', 12),
       from = num('from', 0),
       duration = Math.max(w.timeline?.duration ?? 0, w.cameraRig?.duration ?? 0, w.materialResponse?.duration ?? 0,
-        w.paintEvaporation?.duration ?? 0, w.paintThrob?.duration ?? 0),
+        w.paintEvaporation?.duration ?? 0, w.paintThrob?.duration ?? 0, w.paintEffects?.duration ?? 0),
       to = num('to', duration > from ? duration : 6),
       n = Math.max(2, Math.round((to - from) * fps)),
       frames = [], ts = [], camera = clipCamera(w),
@@ -4814,12 +4830,13 @@ const CMD = {
     const replay = feedbackReplay(w, from, view(frame));
     let exposure = w;
     function sampleWorld(t) {
-      if (!w.paintBoil && w.paintWave===undefined && !w.paintEvaporation && !w.paintThrob) return w;
+      if (!w.paintBoil && w.paintWave===undefined && !w.paintEvaporation && !w.paintThrob && !w.paintEffects?.animated) return w;
       const time = num('parameter-time', t);
       if (w.paintBoil && exposure.paintBoil?.key !== w.paintBoil.at(time) ||
           w.paintWave!==undefined && exposure.paintWave!==time ||
           w.paintEvaporation && exposure.paintEvaporation?.key!==w.paintEvaporation.at(time) ||
           w.paintThrob && exposure.paintThrob?.key!==w.paintThrob.at(time) ||
+          w.paintEffects?.animated && exposure.paintEffects?.time!==time ||
           exposure.anim?.stateful && t < exposure.clock)
         exposure = buildPreview(pos[0], { parameterInputs: { time } });
       return exposure;

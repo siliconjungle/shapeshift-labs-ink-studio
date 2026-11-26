@@ -47,7 +47,7 @@
     }
   }
 
-  function expand(source, time = 0, waveMarks, throbMarks) {
+  function expand(source, time = 0, waveMarks, throbMarks, track) {
     const anchors = new Map(), layers = new Set(), looseness = new Map(), boils = new Map(), reports = [];
     if (source?.paintings3d === undefined) return { spec: source, anchors, layers, looseness, boils, reports };
     const { paintings3d, ...scene } = source;
@@ -105,7 +105,8 @@
         ids.add(key);
         const solid = 'paint.' + id + '.' + key;
         const markFrame = graph.transform(transform), guideFrame = graph.compose(frame, markFrame);
-        const wave = waveMarks?.get(solid), pulse = throbMarks?.get(solid);
+        const original = track?.origins.get(solid) ?? solid;
+        const wave = waveMarks?.get(original), pulse = throbMarks?.get(original);
         let restAffine = guideFrame, part, target;
         if (!fields(attachment, ['kind', 'slot', 'snap']) || !['free', 'surface', 'part'].includes(attachment.kind) ||
             (attachment.kind === 'free' ? attachment.slot !== undefined : !name(attachment.slot)) ||
@@ -158,6 +159,8 @@
             throw new RangeError('Raised volume needs positive silhouette clearance. Use shading relief for a zero silhouette allowance');
           shape = { kind: 'sweep', id: solid, ...stroke, brush: resolveBrush(stroke.brush, profiles) };
           if (wave) shape = K.procedural.paintWave.stroke(shape, markFrame, wave);
+          for (const entry of track?.marks.get(original) ?? []) if (entry.kind==='wave')
+            shape = K.procedural.paintWave.stroke(shape, markFrame, entry, entry.gain);
           K.procedural.shapeSweeps.prepare({ ...shape, looseness: authoredStyle });
           if (attachment.kind === 'surface') K.procedural.sweepSnap.check(attachment.snap, shape);
         } catch (error) {

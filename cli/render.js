@@ -444,6 +444,12 @@ function renderFrame(world, o, preparedPalettes) {
       world = { ...posed, timeDomains:world.timeDomains };
     }
   }
+  let directionalUV;
+  if (world.directionalUV && !o.reflectionPlane && !o[probeCamera]) {
+    const sampled = world.directionalUV.sample(world,CameraLens.listenerPose(camera.pose,camera.setback),t);
+    world = sampled.world;
+    directionalUV = sampled.rows;
+  }
   if (world.anim?.bones) {
     const {viewPoses}=require('../index.js').load().KIT;
     if (viewPoses.forWorld(world)?.active) {
@@ -833,6 +839,7 @@ function renderFrame(world, o, preparedPalettes) {
     if (requestedPasses.length) frame.passes = ArtPasses.subset(requestedPasses.includes('inkMask') ?
       { w:frame.w, h:frame.h, ...passes, inkMask:frame.inkMask ?? new Uint8Array(frame.w*frame.h) } : passes,
       requestedPasses);
+    if (directionalUV) frame.directionalUV = directionalUV;
     if (readabilitySelectors && frame.readabilityMask) o.captureReadabilityFrame?.(frame);
     return frame;
   };
