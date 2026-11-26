@@ -19,13 +19,15 @@ const PbrShadows = (() => {
       if (!(layer?.sceneMeshId || layer?.brickField)) continue;
       const {vertices,pixels,width,height,surfaceCharts:charts=[]}=layer;
       const shifts=layer[slip]?.vertices===vertices ? layer[slip].ranges : [];
-      let chart=0, shift=0;
+      let chart=0, shift=0, tile=0;
       for (let first=0;first<vertices.length/5;first+=3) {
         while(charts[chart]?.end<=first)chart++;
         const target=charts[chart]?.first<=first ? charts[chart] : null;
         if (!art.allows(settings?.cast,subject(target))) continue;
         while(shifts[shift]?.end<=first)shift++;
         const change=shifts[shift]?.first<=first?shifts[shift]:null;
+        while(layer.tilesetMaterials?.[tile]?.end<=first)tile++;
+        const material=layer.tilesetMaterials?.[tile]?.first<=first ? layer.tilesetMaterials[tile].settings : null;
         const points=[],uv=[];
         for (let k=0;k<3;k++){
           const at=(first+k)*5;
@@ -39,7 +41,8 @@ const PbrShadows = (() => {
             y=Math.max(loY,Math.min(hiY+.99999,y*sy+ty));
           }
           const i=Math.floor(Math.max(0,Math.min(width-1,x))),j=Math.floor(Math.max(0,Math.min(height-1,y)));
-          return pixels[(j*width+i)*4+3]>=128;
+          return material?.alphaMode==='opaque' ||
+            pixels[(j*width+i)*4+3]/255>=(material?.alphaMode==='mask' ? material.alphaCutoff : .5);
         };
         triangles.push({points,uv,sample});
       }

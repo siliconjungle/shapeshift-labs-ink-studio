@@ -1,4 +1,4 @@
-// Rasterize opaque, cutout atlas triangles into the existing scene compositor.
+// Rasterize opaque, cutout and translucent atlas triangles into the existing scene compositor.
 const SpriteSurface = require('../src/sprite-surface.js');
 const Mips = require('../src/semantic-texture-mipmaps.js');
 const Simulation = require('../src/simulation-material-layers.js');
@@ -24,9 +24,28 @@ function triangleAxes([a,b,c]) {
   return [right,cross(normal,right),normal];
 }
 
+function sampleRgba(pixels,stride,bounds,x,y,linear,opaque) {
+  const texel = (u,v) => 4*(Math.max(bounds[1],Math.min(bounds[3],v))*stride + Math.max(bounds[0],Math.min(bounds[2],u)));
+  if (!linear) {
+    const at=texel(Math.floor(x),Math.floor(y));
+    return [pixels[at]/255,pixels[at+1]/255,pixels[at+2]/255,opaque ? 1 : pixels[at+3]/255];
+  }
+  const u=Math.floor(x-.5), v=Math.floor(y-.5), fu=x-.5-u, fv=y-.5-v;
+  const result=[0,0,0,0];
+  for (let j=0;j<2;j++) for (let i=0;i<2;i++) {
+    const at=texel(u+i,v+j), weight=(i ? fu : 1-fu)*(j ? fv : 1-fv);
+    const a=opaque ? weight : weight*pixels[at+3]/255;
+    for (let k=0;k<3;k++) result[k]+=pixels[at+k]/255*a;
+    result[3]+=a;
+  }
+  if (result[3]>0) for (let k=0;k<3;k++) result[k]/=result[3];
+  return result;
+}
+
 function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,sourceBinding=false,captureRestNormal=false,trackMesh,allow,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection,pbr,paintIndex,captureMeshTint}) {
   if(!atlas)return [];
   const depth=depthOnly && new Float32Array(W*H).fill(Infinity);
+  const blended=[];
   const fragments=depthOnly ? null : new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
   function transform(v, step, weights, local) {
     let x=V[0]*v[0]+V[4]*v[1]+V[8]*v[2]+V[12], y=V[1]*v[0]+V[5]*v[1]+V[9]*v[2]+V[13];
@@ -73,9 +92,13 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
     const semantic=depthOnly ? [] : layer.semanticMipmaps??[];
     const charts=(allow || sampleCharts || lightingMesh || captureFogOwners || multiprojection || pbr ||
       semantic.some(row=>row.objectTexels)) && layer.surfaceCharts;
-    let rangeIndex=0, filterIndex=0, projectionIndex=0, chartIndex=0, semanticIndex=0;
+    const materials=layer.tilesetMaterials;
+    let rangeIndex=0, filterIndex=0, projectionIndex=0, chartIndex=0, semanticIndex=0, materialIndex=0;
     for(let offset=0;offset<vertices.length;offset+=15){
       const first=offset/5;
+      while(materials?.[materialIndex]?.end<=first)materialIndex++;
+      const entry=materials?.[materialIndex]?.first<=first ? materials[materialIndex] : null;
+      const settings=entry?.settings, frontOnly=layer.frontOnly || settings?.sidedness==='front';
       while(ranges[rangeIndex]?.end<=first)rangeIndex++;
       const range=ranges[rangeIndex];
       const shifted=range&&range.first<=first;
@@ -153,15 +176,16 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
         if(Math.abs(area)<1e-10)continue;
         const loX=Math.max(0,Math.ceil(Math.min(a.sx,b.sx,c.sx)-.5)),hiX=Math.min(W-1,Math.floor(Math.max(a.sx,b.sx,c.sx)-.5));
         const loY=Math.max(0,Math.ceil(Math.min(a.sy,b.sy,c.sy)-.5)),hiY=Math.min(H-1,Math.floor(Math.max(a.sy,b.sy,c.sy)-.5));
-        const face=(!depthOnly||layer.frontOnly) && cross(sub(b.p,a.p),sub(c.p,a.p));
-        if (layer.frontOnly && (local ? area : dot(face,ortho ? [V[2],V[6],V[10]] : sub(eye,a.p)))<=0) continue;
+        const face=(!depthOnly||frontOnly) && cross(sub(b.p,a.p),sub(c.p,a.p));
+        if (frontOnly && (local ? area : dot(face,ortho ? [V[2],V[6],V[10]] : sub(eye,a.p)))<=0) continue;
         const normal=!depthOnly && unit(face);
-        const facing=mip?.objectTexels && ortho ? [V[2],V[6],V[10]] : sub(eye,a.p);
+        const facing=(settings || mip?.objectTexels) && ortho ? [V[2],V[6],V[10]] : sub(eye,a.p);
         if(normal && dot(normal,facing)<0)for(let k=0;k<3;k++)normal[k]=-normal[k];
         const bitangent = axes && cross(normal, axes.right);
         if (bitangent && dot(bitangent, axes.up)<0) for(let k=0;k<3;k++)bitangent[k]=-bitangent[k];
         const row=[a,b,c], transform=uvTransform;
-        const bounds = shifted ? range.bounds : filter ? [filter.rect.x,filter.rect.y,
+        const region=entry?.region;
+        const bounds = shifted ? range.bounds : region ? [region.x,region.y,region.x+region.width-1,region.y+region.height-1] : filter ? [filter.rect.x,filter.rect.y,
           filter.rect.x + filter.rect.width - 1,filter.rect.y + filter.rect.height - 1] : style?.bounds ?? [0,0,width-1,height-1];
         let gradients, worldWeights, restTriangle, maskTriangle;
         if(driven?.active){
@@ -171,7 +195,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
               (corner.uv[1]-region.y-.5)/Math.max(1,region.height-1)]);
           maskTriangle=row.map(v=>[0,1].map(k=>v.weights.reduce((n,w,i)=>n+w*original[i][k],0)));
         }
-        if (filter || mip) {
+        if (filter || mip || entry) {
           const edges=[[b.sy-c.sy,c.sy-a.sy,a.sy-b.sy],[c.sx-b.sx,a.sx-c.sx,b.sx-a.sx]];
           gradients=edges.map(edge=>{
             const dw=edge.map((n,k)=>n*artScale/(area*(linearUV?1:row[k].w)));
@@ -184,10 +208,14 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             restTriangle=row.map(v=>[0,1,2].map(k=>v.weights.reduce((n,w,i)=>n+w*chart.rest[(at+i)*3+k],0)));
           }
         }
+        const blend=settings?.alphaMode==='blend';
+        const sharedEdges=blend && [[b,c],[c,a],[a,b]].map(([u,v])=>area<0 ?
+          v.sy<u.sy || v.sy===u.sy && v.sx>u.sx :
+          u.sy<v.sy || u.sy===v.sy && u.sx>v.sx);
         for(let y=loY;y<=hiY;y++)for(let x=loX;x<=hiX;x++){
           if (code && !spriteLOD.geometry(code,x,y)) continue;
           const weights=[edge(b,c,x+.5,y+.5)/area,edge(c,a,x+.5,y+.5)/area,edge(a,b,x+.5,y+.5)/area];
-          if(weights.some(n=>n < -1e-7))continue;
+          if(weights.some((n,i)=>n < -1e-7 || blend && Math.abs(n)<=1e-7 && !sharedEdges[i]))continue;
           const w=weights.map((n,k)=>ortho?n:n/row[k].w),sum=w[0]+w[1]+w[2];
           const z=local ? w.reduce((s,n,k)=>s+n*row[k].z,0)/sum :
             ortho ? weights.reduce((s,n,k)=>s+n*row[k].z,0) : 1/sum;
@@ -206,31 +234,40 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
           const tx = Math.max(bounds[0], Math.min(bounds[2], Math.floor(S)));
           const ty = Math.max(bounds[1], Math.min(bounds[3], Math.floor(T)));
           const texel = (ty * width + tx) * 4;
-          let ink, material, filteredPaint;
-          if (filter || mip) {
+          let ink, material, filteredPaint, rgba, alpha=1, linear;
+          if (filter || mip || entry) {
             const [[dxU, dxV, dxZ], [dyU, dyV, dyZ]] = gradients;
             const dx=[transform[0]*(dxU-s*dxZ)/uvSum,transform[1]*(dxV-t*dxZ)/uvSum],
               dy=[transform[0]*(dyU-s*dyZ)/uvSum,transform[1]*(dyV-t*dyZ)/uvSum];
+            if (entry) {
+              const span=Math.max(Math.hypot(...dx),Math.hypot(...dy));
+              linear=(span>1 ? settings.minFilter : settings.magFilter)==='linear';
+              rgba=sampleRgba(pixels,width,bounds,S,T,linear,settings.alphaMode==='opaque');
+              if (blend) {
+                alpha=rgba[3];
+                if (alpha<=0) continue;
+              } else if (settings.alphaMode==='mask' && rgba[3]+1e-9<settings.alphaCutoff) continue;
+            }
             if(mip){
               const {region,chain}=mip;
               const span=semanticMipmaps===false?1:Math.max(Math.hypot(...dx),Math.hypot(...dy));
               const scale=[Math.max(1,region.width-1),Math.max(1,region.height-1)];
               material=Mips.sample(chain,(S-region.x-.5)/scale[0],(T-region.y-.5)/scale[1],span);
-              if(!material.visible)continue;
-            } else {
+              if(!entry && !material.visible)continue;
+            } else if (filter && !entry) {
               ink=filter.sample(S,T,...dx,...dy);
               if(ink===null)continue;
               filteredPaint=ink!==undefined;
             }
           }
-          if (ink === undefined && !material) {
+          if (!rgba && ink === undefined && !material) {
             if (pixels[texel+3] < 128) continue;
             ink = (pixels[texel] << 16) | (pixels[texel + 1] << 8) | pixels[texel + 2];
           }
           const position=[0,1,2].map(k=>row.reduce((s,n,i)=>s+n.p[k]*w[i]/sum,0));
           if(clip&&!clip(position) || omitLayer && omit(omitLayer,chart?.materialId,position))continue;
           const weights3=trackWeights && identity.map((_,k)=>row.reduce((s,v,i)=>s+v.weights[k]*w[i]/sum,0));
-          const pigment = material?.color ?? [ink>>>16,(ink>>>8)&255,ink&255].map(n=>n/255);
+          const pigment = rgba?.slice(0,3) ?? material?.color ?? [ink>>>16,(ink>>>8)&255,ink&255].map(n=>n/255);
           let tinted = pigment;
           const channel = tint && (k=>clampTint(weights3[0]*tint[k]+weights3[1]*tint[tintStride+k]+weights3[2]*tint[2*tintStride+k]));
           if (tint) {
@@ -243,7 +280,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
               tinted=pigment.map((base,k)=>clampTint(channel(k)+remain*base));
             } else tinted=pigment.map((base,k)=>base*channel(k));
           }
-          if (tint && material) material.color=tinted;
+          if (material && (tint || rgba)) material.color=tinted;
           let meshTintInspection;
           if (captureMeshTint && layer.featureFaces) {
             // Tint-only displays the interpolated paint. Premultiplied modes use gray as the substrate.
@@ -309,7 +346,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
           const faceId = p===paintIndex && layer.featureFaces?.[first/3];
           if (faceId && chart) {
             const region = chart.region;
-            const mode = filteredPaint ? 'palette' : material?.lod>=.5 ? 'mip' : 'texel';
+            const mode = linear ? 'linear' : filteredPaint ? 'palette' : material?.lod>=.5 ? 'mip' : 'texel';
             const uv = [(S-region.x-.5)/Math.max(1,region.width-1),(T-region.y-.5)/Math.max(1,region.height-1)];
             const at = material ? [region.width,region.height].map((n,k)=>Math.max(0,Math.min(n-1,
               Math.floor(.5+uv[k]*(n-1))))) : [tx-region.x,ty-region.y];
@@ -317,7 +354,8 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
               at,drawTriangle:first/3,barycentric:weights3,mesh:layer.sceneMeshId
             })};
           }
-          fragments[p]={p,z,alpha:1,color:material?.color ?? tinted,position,
+          const fragment={p,z,alpha,color:material?.color ?? tinted,position,
+            ...(settings && {tilesetMaterial:settings}),
             ...(pbrMaterial && {pbrMaterial,pbrReceives,pbrTangent:axes?.right}),
             ...(material && {semantic:material,semanticRule:mip.chain.rule,scan:mip.chain.scan,objectTexels:mip.objectTexels,liveLight:mip.liveLight,
               semanticView:ortho ? [V[2],V[6],V[10]] : unit(sub(eye,position))}),
@@ -330,11 +368,14 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
               restNormal:restNormal && (dot(face,normal) < 0 ?
                 restNormal.map(n=>-n) : restNormal) }}),
             ...(mesh && {mesh,...(motion&&{weights:weights3}),...(uv&&{uv})})};
+          if (alpha<1) blended.push(fragment);
+          else fragments[p]=fragment;
         }
       }
     }
   }
-  return depthOnly ? depth : fragments.filter(Boolean);
+  return depthOnly ? depth : fragments.filter(Boolean).concat(blended.filter(sample=>
+    !fragments[sample.p] || sample.z<fragments[sample.p].z));
 }
 function labels(atlas,bricks=[]) {
   const objects=new Set(), materials=new Set(), parts=new Map();

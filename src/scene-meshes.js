@@ -72,7 +72,7 @@ const SceneMeshes = (() => {
   }
 
   function materialOf({ id, color = 0xffffff, texture: input, normal, roughness, metalness, emission, emissionStrength,
-      alphaCutoff = .5, sampling, engraving, mipmaps, simulationLayers, scan } = {}) {
+      alphaCutoff = .5, sampling, engraving, mipmaps, simulationLayers, scan, tilesetMaterial } = {}) {
     const texture=Mips.texture(input);
     const { width = 1, height = 1, pixels, indices, palette } = texture ?? {};
     const simulation=simulationLayers===undefined ? undefined :
@@ -87,6 +87,7 @@ const SceneMeshes = (() => {
       throw new RangeError('Mesh textures need top-down RGBA8 pixels and dimensions up to 2048');
     if (normal !== undefined && (!bytes(normal) || normal.length !== width * height * 4))
       throw new RangeError('Mesh normal maps need matching top-down RGBA8 pixels');
+    const settings = Sprite.tilesetMaterial(tilesetMaterial);
     const tint = [color >> 16, color >> 8 & 255, color & 255];
     const blockTexture = input?.blockTexture;
     if (blockTexture && (rules || sampling || indices || !pixels || blockTexture.width !== width ||
@@ -96,10 +97,17 @@ const SceneMeshes = (() => {
     function paint(x, y) {
       if (!pixels) return color;
       const at = (y * width + x) * 4;
-      if (pixels[at+3] / 255 < alphaCutoff) return;
+      const mode = settings?.alphaMode ?? 'mask';
+      if (mode === 'mask' && pixels[at+3] / 255 < (settings?.alphaCutoff ?? alphaCutoff) ||
+          mode === 'blend' && pixels[at+3] === 0) return;
       let ink = 0;
       for (let c = 0; c < 3; c++) ink = ink * 256 + Math.round(pixels[at+c] * tint[c] / 255);
       return ink;
+    }
+    const rgba = settings && pixels && new Uint8Array(pixels.length);
+    if (rgba) for (let i=0;i<pixels.length;i+=4) {
+      for (let k=0;k<3;k++) rgba[i+k]=Math.round(pixels[i+k]*tint[k]/255);
+      rgba[i+3]=pixels[i+3];
     }
     function chain() {
       const pigment=new Uint8Array(width*height*4);
@@ -111,7 +119,7 @@ const SceneMeshes = (() => {
       return Mips.build({width,height,pigment,indices,palette:palette?.map(tintColor),normal,roughness,metalness,emission,emissionStrength,scan},
         {...rules,protect:rules.protect.map(tintColor)});
     }
-    return { id, width, height, paint, normal, sampling, engraving, simulation, blockTexture, tint, ...(rules&&{chain}) };
+    return { id, width, height, paint, normal, sampling, engraving, simulation, blockTexture, tint, settings, rgba, ...(rules&&{chain}) };
   }
 
   function atlasWidth(materials) {
@@ -189,9 +197,9 @@ const SceneMeshes = (() => {
     if (tiles.reduce((sum,tile) => sum+tile.width*tile.height,0) > maxEdge ** 2)
       throw new RangeError('Mesh textures exceed the 2048 × 2048 atlas budget');
     const atlas = Sprite.make(atlasWidth(tiles),maxEdge), regions = [];
-    for (const tile of tiles) regions[tile.index] = atlas.reserve(tile.width,tile.height,tile.paint,{normal:tile.normal});
+    for (const tile of tiles) regions[tile.index] = atlas.reserve(tile.width,tile.height,tile.paint,{normal:tile.normal,rgba:tile.rgba});
     const uvs = layouts.get(UV.resolve(bindings,'pigment')), source = Uint32Array.from(indices);
-    const drawIndices = new Uint32Array(source.length), drawTriangles = new Uint32Array(triangles), semantic=[], blocks=[];
+    const drawIndices = new Uint32Array(source.length), drawTriangles = new Uint32Array(triangles), semantic=[], blocks=[], tilesetMaterials=[];
     if(tiles.reduce((sum,tile)=>sum+(tile.chain?tile.width*tile.height:0),0)>2**20)
       throw new RangeError('Mesh semantic mipmaps exceed the texel budget');
     let cursor = 0;
@@ -207,6 +215,7 @@ const SceneMeshes = (() => {
       atlas.meshRegion({ points:positions, restPoints:positions, uvs, triangles:drawIndices.subarray(offset,cursor) },
         regions[index], {id:material.id, objectId, partId, materialId:material.id, sampling:material.sampling,
           engraving:material.engraving});
+      if (material.settings) tilesetMaterials.push({first:offset,end:cursor,region:regions[index],settings:material.settings});
       if (material.blockTexture) blocks.push({ first:offset, end:cursor, region:regions[index],
         texture:material.blockTexture, tint:material.tint });
       if(material.chain)semantic.push({first:offset,end:cursor,region:regions[index],chain:material.chain(),
@@ -223,6 +232,7 @@ const SceneMeshes = (() => {
     }
     if (tintStride===4) layer.tintBlend=tintBlend;
     if(semantic.length)layer.semanticMipmaps=semantic;
+    if(tilesetMaterials.length)layer.tilesetMaterials=tilesetMaterials;
     if (blocks.length) layer.blockTextures = { revision:layer.revision, ranges:blocks,
       complete:blocks.reduce((sum,row)=>sum+row.end-row.first,0)===source.length };
     let sourceToDraw;
@@ -234,7 +244,7 @@ const SceneMeshes = (() => {
     layer.sceneMeshId = id;
     const restBounds=bounds(positions);
     const data = { positions, rest:positions, restBounds, uvs, layouts, bindings, indices:source, drawIndices, drawTriangles, layer, regions, revision:0,
-      materials:rows.map(row => row.id), faceMaterials:faceMaterials && Uint8Array.from(faceMaterials), bounds:restBounds,
+      materials:rows.map(row => row.id), ...(tilesetMaterials.length && {tilesetSettings:rows.map(row=>row.settings)}), faceMaterials:faceMaterials && Uint8Array.from(faceMaterials), bounds:restBounds,
       ...(authoredNormals && { authoredNormals, sourceToDraw }),
       ...(cornerTints && {cornerTints:Float32Array.from(cornerTints)}),tintBlend,
       ...(scanSources && {scanSources,scanInfo:new Map()}) };
@@ -636,20 +646,22 @@ const SceneMeshes = (() => {
       const ab = V.sub(positions.subarray(b*3,b*3+3),p), ac = V.sub(positions.subarray(c*3,c*3+3),p);
       const h = V.cross(direction,ac), det = V.dot(ab,h);
       const epsilon=1e-12 * V.len(ab) * V.len(ac);
-      if (restSpace ? det<=epsilon : Math.abs(det)<=epsilon) continue;
+      const triangle = offset/3, slot = faceMaterials?.[triangle] ?? 0, settings=data.tilesetSettings?.[slot];
+      if (restSpace || settings?.sidedness==='front' ? det<=epsilon : Math.abs(det)<=epsilon) continue;
       const delta = V.sub(origin,p), v = V.dot(delta,h)/det;
       if (v < -1e-7 || v > 1+1e-7) continue;
       const q = V.cross(delta,ab), w = V.dot(direction,q)/det, u = 1-v-w;
       if (w < -1e-7 || u < -1e-7) continue;
       const distance = V.dot(ac,q)/det;
-      const triangle = offset/3, slot = faceMaterials?.[triangle] ?? 0;
       if (distance <= 0 || distance > stop || distance === stop && slot >= closestMaterial) continue;
       const interpolate = (data,size) => Array.from({length:size},(_,k) =>
         data[a*size+k]*u + data[b*size+k]*v + data[c*size+k]*w);
       const uv = interpolate(uvs,2).map(n => Math.max(0,Math.min(1,n)));
       const region = regions[slot];
       const at=pigmentAt(layer,region,uv);
-      if (layer.pixels[at+3] < 128) continue;
+      const alpha=layer.pixels[at+3]/255;
+      if (settings?.alphaMode==='blend' ? alpha===0 :
+          settings?.alphaMode!=='opaque' && alpha<(settings?.alphaCutoff ?? .5)) continue;
       const normal = V.norm(V.cross(ab,ac).map(n => n*Math.sign(det)));
       let shadingNormal;
       if (data.authoredNormals) {
@@ -661,7 +673,8 @@ const SceneMeshes = (() => {
       }
       const hit = { kind:'mesh', index:-1, id:mesh.objectId, mesh:mesh.id, triangle,
         target:{object:mesh.objectId,material:materials[slot],...(mesh.partId && {entity:mesh.objectId,part:mesh.partId})},
-        distance, point:V.mad(origin,direction,distance), normal, ...(shadingNormal && { geometricNormal: normal, shadingNormal }), uv, restPosition:interpolate(rest,3), alpha:1, solid:true,
+        distance, point:V.mad(origin,direction,distance), normal, ...(shadingNormal && { geometricNormal: normal, shadingNormal }), uv, restPosition:interpolate(rest,3),
+        alpha:settings?.alphaMode==='blend' ? alpha : 1, solid:settings?.alphaMode!=='blend' || alpha===1,
         ...(pigment && {pigment:layer.pixels[at]*65536+layer.pixels[at+1]*256+layer.pixels[at+2]}),
         ...(restSpace && {vertices:[a,b,c],weights:[u,v,w]}) };
       if (accept && !accept(hit)) continue;
