@@ -17,6 +17,14 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   cable-route review <scene> <views.json> --out directory [--strict on]   measure visible cable gaps on approved native grids
   curve topology inspect <splines.json> [--out file.json]   describe retained control points, segments and attachments
   curve topology edit <splines.json> <operations.json> [--out file.json] [--report file.json]   preview and commit spline edits
+  curve bend <splines.json> <bend.json> --at seconds [--out file.json] [--report file.json]   pose a retained spline and its attachments
+  surface inspect <patch.json> [--out file.json]   report rational surface knots, trims and revision
+  surface edit <patch.json> <request.json> [--out file.json] [--report file.json]   edit rational controls and trim loops
+  surface sample <patch.json> <uv-pairs.json> [--out file.json]   query positions, derivatives and trim membership
+  surface mesh <patch.json> [--resolution N] [--out file.json] [--report file.json]   tessellate a trimmed rational surface
+  attributes init <geometry.json> <request.json> [--out file.json]   initialize a named attribute asset for a geometry domain
+  attributes inspect <asset.json> [selection.json] [--out file.json]   report attribute ranges, labels and selected values
+  attributes edit <asset.json> <request.json> [--out file.json] [--report file.json]   edit typed values or channel metadata by name and ID
   ornament <pattern.json> [--format pigment|relief|tiles] [--out file]   export a wallpaper or frieze pattern
   palette plot <plot.json> [--space rgb|oklab] [--orbit degrees] [--format png|data]   render a palette in 3D
   palette extract <reference.png> [--size 32] [--alpha visible|opaque|all] [--out report.json]
@@ -1130,7 +1138,6 @@ These options are read by CLI code. Follow each source link for the accepted val
 - `--ratio` · [cli/mesh-uv.js](../../cli/mesh-uv.js)
 - `--reference-exposure` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--relight` · [cli/depth.js](../../cli/depth.js)
-- `--resolution` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--retain` · [cli/world.js](../../cli/world.js)
 - `--reversal-tolerance` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--ribbon` · [cli/ink-studio.js](../../cli/ink-studio.js)

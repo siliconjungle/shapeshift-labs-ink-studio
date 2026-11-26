@@ -186,6 +186,15 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.attractors.families` | value | `array` |  |
 | `KIT.procedural.attractors.trace` | function | `({ family = 'lorenz', parameters = {}, start, steps, burnIn, dt, stride = 1, escape = 1e5, pose } = {})` | [guide](../math-fields.md#bounded-chaotic-dynamics), [guide](../orbit-attractors.md), [source](../../src/kit/p57-orbit-attractors.js) |
 
+## KIT.procedural.attributeAuthoring
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.attributeAuthoring` | namespace |  | [guide](../headless-authoring.md#named-attributes-by-domain) |
+| `KIT.procedural.attributeAuthoring.edit` | function | `(source, request)` | [guide](../headless-authoring.md#named-attributes-by-domain), [source](../../src/kit/pas-attribute-authoring.js) |
+| `KIT.procedural.attributeAuthoring.initialize` | function | `(geometry, request)` | [guide](../headless-authoring.md#named-attributes-by-domain), [source](../../src/kit/pas-attribute-authoring.js) |
+| `KIT.procedural.attributeAuthoring.inspect` | function | `(source, selection = {})` | [guide](../headless-authoring.md#named-attributes-by-domain), [source](../../src/kit/pas-attribute-authoring.js) |
+
 ## KIT.procedural.attributes
 
 | Member | Kind | Signature or value | Guides and source |

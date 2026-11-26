@@ -1143,6 +1143,18 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.rasterWarp.surface` | function | `(source,mesh,{alphaThreshold=128,sampling,projection}={})` | [guide](../headless-authoring.md#raster-warps-and-3d-projection), [guide](../headless-authoring.md#program-texture-addresses), [source](../../src/kit/par-distort-raster-world.js) |
 | `KIT.procedural.rasterWarp.timeRemap` | function | `(source,map,options={})` | [guide](../headless-authoring.md#selectively-refresh-a-frame-bank), [guide](../headless-authoring.md#raster-warps-and-3d-projection), [guide](../headless-authoring.md#program-texture-addresses), [source](../../src/kit/par-distort-raster-time.js) |
 
+## KIT.procedural.rationalSurface
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.rationalSurface` | namespace |  | [guide](../headless-authoring.md#weighted-patches-and-trims) |
+| `KIT.procedural.rationalSurface.create` | function | `(source)` | [guide](../headless-authoring.md#weighted-patches-and-trims), [source](../../src/kit/pas-rational-surfaces.js) |
+| `KIT.procedural.rationalSurface.edit` | function | `(source, request)` | [guide](../headless-authoring.md#weighted-patches-and-trims), [source](../../src/kit/pas-rational-surfaces.js) |
+| `KIT.procedural.rationalSurface.format` | value | `string = "ink-studio/rational-surface"` | [guide](../headless-authoring.md#weighted-patches-and-trims) |
+| `KIT.procedural.rationalSurface.inspect` | function | `(source)` | [guide](../headless-authoring.md#weighted-patches-and-trims), [source](../../src/kit/pas-rational-surfaces.js) |
+| `KIT.procedural.rationalSurface.mesh` | function | `(source, { resolution = 24 } = {})` | [guide](../headless-authoring.md#weighted-patches-and-trims), [source](../../src/kit/pas-rational-surfaces.js) |
+| `KIT.procedural.rationalSurface.sample` | function | `(source, uv)` | [guide](../headless-authoring.md#weighted-patches-and-trims), [source](../../src/kit/pas-rational-surfaces.js) |
+
 ## KIT.procedural.relighting
 
 | Member | Kind | Signature or value | Guides and source |
