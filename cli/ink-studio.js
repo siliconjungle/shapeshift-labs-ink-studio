@@ -1437,6 +1437,12 @@ const CMD = {
         '  painting-3d update <scene.json> <edit.json> --out scene.json   edit marks, profiles, erasers, order or placement',
         '  painting-3d inspect <scene.json>   report marks and resolved attachments',
         '  painting-3d extract <scene.json> --id painting --out painting.json   export a reusable painting',
+        '  painting-cels init <scene.json> --id painting --out clip.json [--fps 12 --playback loop]   start with an editable 3D painting',
+        '  painting-cels inspect <clip.json>   list cel IDs, mark IDs, and holds',
+        '  painting-cels edit <scene.json> <clip.json> <edit.json> --out clip.json   insert, retime, or edit retained cels',
+        '  painting-cels sample <scene.json> <clip.json> --out scene.json [--frame cel-1 | --at seconds]   write one editable cel into the scene',
+        '  painting-cels preview <scene.json> <clip.json> --out directory [--frame cel-1 | --at seconds] [--view view.json]   render neighboring poses in one camera',
+        '  painting-cels export <scene.json> <clip.json> --out directory [--view view.json]   render numbered cels and animated PNG',
         '  sculpt-spray plan <scene.json> <brush.json>   capture receivers for a volumetric paint brush',
         '  sculpt-spray apply <scene.json> <brush.json> --out scene.json   retain a shaped surface tint',
         '  sculpt-spray inspect <scene.json>   show retained volumes and receiver coverage',
@@ -2801,6 +2807,10 @@ const CMD = {
       if (!descriptor.openEditor) throw new TypeError('3D painting placement needs a plain editable JSON scene');
       return descriptor.openEditor();
     });
+  },
+  'painting-cels'() {
+    return require('./painting-cels.js')(pos, opt, lib(),
+      (file, source) => dataScene(file, source, { refreshTilesets: false }));
   },
   'sculpt-spray'() {
     return require('./sculpt-spray.js')(pos, opt, file => {

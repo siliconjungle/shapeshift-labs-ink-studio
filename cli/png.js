@@ -155,11 +155,14 @@ function animationDelay(fps) {
 }
 
 // The numbered PNG frames and APNG share their compressed image data.
-function encodeAnimation(frames, fps) {
+function encodeAnimation(frames, fps, { holds, loop = true } = {}) {
   const hd = frames[0].header, delay = animationDelay(fps);
+  if (typeof loop !== 'boolean' || holds !== undefined && (!Array.isArray(holds) || holds.length !== frames.length ||
+      !Array.from(holds).every(hold => Number.isSafeInteger(hold) && hold >= 1 && hold * delay.numerator <= 65535)))
+    throw new RangeError('APNG needs one representable positive hold per frame and a loop switch');
   const ac = Buffer.alloc(8);
   ac.writeUInt32BE(frames.length, 0);
-  ac.writeUInt32BE(0, 4);
+  ac.writeUInt32BE(loop ? 0 : 1, 4);
   const out = [signature, chunk('IHDR', hd), chunk('acTL', ac)];
   let seq = 0;
   frames.forEach((frame, i) => {
@@ -167,7 +170,7 @@ function encodeAnimation(frames, fps) {
     const fc = Buffer.alloc(26);
     fc.writeUInt32BE(seq++, 0);
     hd.copy(fc, 4, 0, 8);
-    fc.writeUInt16BE(delay.numerator, 20);
+    fc.writeUInt16BE(delay.numerator * (holds?.[i] ?? 1), 20);
     fc.writeUInt16BE(delay.denominator, 22);
     out.push(chunk('fcTL', fc));
     const z = frame.compressed;
