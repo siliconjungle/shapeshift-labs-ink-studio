@@ -2338,6 +2338,61 @@ ink-studio graph run graph-3d-review/relay-foundry.json --at 1.13 --out graph-3d
 
 ## Geometry and attributes
 
+`geo.box` exposes typed `center` and `half` sockets. `geo.tube`
+exposes typed endpoints, radius, and side count. `geo.transform`
+accepts typed position, rotation, and scale. An authored typed socket
+takes precedence over its matching option. `geo.measure` accepts an
+indexed mesh and returns its bounds, counts, material slots, and
+attribute inventory. Connect its `min`, `max`, `center`, and `size`
+vector outputs to other stages.
+
+### Inspect geometry and replay a control edit
+
+Use `graph geometry` for per-node receipts and intermediate captures.
+Each receipt includes the operation, typed ports, upstream links,
+geometry bounds and attributes where available, and the work the node
+performed. Mesh reports include face and triangle counts. Bounded
+fields include their registered object and material IDs. Attribute
+tables report their domain, interpolation, and missing elements.
+
+```sh
+ink-studio graph geometry tidegate.json --capture gate/lining,gate/surface,gateBounds:size,image --out inspection
+```
+
+Select up to 64 intermediate ports by `node[:port]`. Use slash paths
+for nodes inside groups. Captures include a SHA-256 digest, type and
+artifact path. Buffers are written as JSON arrays. Display images can
+be captured as PNG. Runtime-only values such as signed-field samplers
+save a marked summary. Connect a field to `sdf.mesh` or `sdf.slices`
+to capture its sampled geometry or slices.
+
+Keep one `graph session` open to measure incremental evaluation. Send
+a `geometry` request with a list of captures and the exposed input
+values. Requests in the same session share evaluated node values.
+
+```json
+{"id":"initial","op":"geometry","capture":["cradle","gate/surface","image"]}
+{"id":"wider","op":"geometry","inputs":{"boreRadius":0.58},"capture":["cradle","gate/surface","image"]}
+```
+
+A cached node records zero compute time and no invalidations. An
+evaluated node identifies the changed input, upstream port, or context
+that caused its cache miss. Timings cover operation execution, with
+group timings inclusive of their children. Start a new process or
+send a `clear` request for a cold evaluation. The session writes
+captures and reports per request when launched with `--out`.
+
+The [Tidegate demo](../examples/geometry-network-demo.cjs) widens one
+bore, captures signed-field metadata and meshes, and compares the
+rendered results. It checks the fixed cradle's captured bytes and
+repeats the edited input to verify complete reuse.
+
+```sh
+node examples/geometry-network-demo.cjs tidegate-review
+```
+
+### Sample geometry and surface channels
+
 `geometry.meshPaths(mesh, { sources, edgeCost, maxCost })` supports native and imported indexed meshes. It returns per-vertex distances and predecessors, plus `path(vertex)`, `curves(vertices)` and a sampled `distanceAt(point)` field. The cost function receives positions, vertex IDs, length and adjacent faces. Return infinity to block an edge.
 
 `attributes.mesh(mesh, { vertex, face, edge, corner })` builds a nearest-surface

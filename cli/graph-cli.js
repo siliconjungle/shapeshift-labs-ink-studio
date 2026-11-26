@@ -29,6 +29,7 @@ const executionFlags=['workers',...cacheFlags];
 const flags = {
   validate:['inputs','json'], plan:['inputs','json','memory'], dependencies:['json'], snapshot:['inputs','at','seed','json'],
   inspect:['inputs','at','seed','out','output','node','port','map','component','json',...executionFlags],
+  geometry:['inputs','at','seed','out','capture','json'],
   'material-preview':['inputs','at','seed','out','json'],
   'displacement-preview':['inputs','at','seed','out','json'],
   run:['inputs','at','seed','out','json',...executionFlags],
@@ -80,6 +81,11 @@ async function session(project, directory, inputs) {
         if (op==='inspect') {
           const {output,node,port,map,component,...settings}=options;
           result=project.inspect({output,node,port,map,component},settings);
+        } else if (op==='geometry') {
+          const {capture = [], ...settings}=options;
+          if (Array.isArray(capture) && capture.length && !directory)
+            throw new TypeError('Geometry captures need a session output directory');
+          result=await project.geometry(capture, settings);
         } else if (op==='run') result=project.run(options);
         else throw new TypeError('Unknown graph session operation '+op);
         const folder=directory && 'request-'+sequence;
@@ -312,7 +318,7 @@ async function graphCommand(pos,opt,settings) {
         (['json','resume','memory'].includes(key) ? value!==true : key==='progress' ? value!=='ndjson' :
           typeof value!=='string' || !value.trim())) ||
       opt.port!==undefined && opt.node===undefined || opt.component!==undefined && opt.map===undefined || opt.protocol!==undefined && opt.protocol!=='ndjson')
-    throw new TypeError('Use graph validate|plan|dependencies|snapshot|inspect|material-preview|displacement-preview|run|batch|session|clip <project.json> [cases-or-sweep.json]. See ink-studio help');
+    throw new TypeError('Use graph validate|plan|dependencies|snapshot|inspect|geometry|material-preview|displacement-preview|run|batch|session|clip <project.json> [cases-or-sweep.json]. See ink-studio help');
   if (opt.cache===undefined && cacheFlags.slice(1).some(flag=>opt[flag]!==undefined))
     throw new TypeError('Graph cache limits need --cache directory');
   if (opt.resume && opt.out===undefined) throw new TypeError('Graph batch --resume needs --out directory');
@@ -343,6 +349,14 @@ async function projectCommand(mode,file,caseFile,opt,settings) {
   if (mode==='dependencies') return send(project.dependencies(),opt.json);
   if (mode==='snapshot') return send(project.snapshot(run),opt.json);
   if (mode==='session') return session(project,output,sources);
+  if (mode==='geometry') {
+    if (opt.capture !== undefined && !output) throw new TypeError('Geometry captures need --out directory');
+    result=await project.geometry(opt.capture?.split(',').map(value=>value.trim()) ?? [],run);
+    if (output) save(output,result,sources);
+    await send(result.report,opt.json);
+    if (!result.report.passed) process.exitCode=2;
+    return;
+  }
   if (mode==='material-preview') {
     const result=await require('./linked-material-preview.js').writeLinkedMaterialPreview(project,caseFile,
       {directory:output,toolkit:settings.kit,run,sources});

@@ -260,7 +260,13 @@
           target:id=>Object.hasOwn(targets,id)?targets[id]:undefined});
         const {stages}=plan.report;
         if (context.modeling) context.recordModeling({stages,lineage:plan.diagnosticLineage});
-        const report=context.modeling ? {...plan.report,stages:stages.map(({diagnostics,elapsedMs,...stage})=>stage)} : plan.report;
+        const report=context.modeling ? {...plan.report,stages:stages.map(({diagnostics,elapsedMs,...stage})=>{
+          if (stage.kind==='mirror' && stage.evidence?.facing && !stage.evidence.viewFrom) {
+            const {facing,...evidence}=stage.evidence;
+            return {...stage,evidence};
+          }
+          return stage;
+        })} : plan.report;
         return {value:plan.document,report,lineage:plan.lineage};
       }
     },

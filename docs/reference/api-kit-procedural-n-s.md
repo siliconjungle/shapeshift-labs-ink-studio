@@ -1267,18 +1267,27 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.facetedSDF` | function | `(source,{bounds:explicitBounds,time=0,appearance={},...options}={})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-sdf.js) |
 | `KIT.procedural.sceneGraph.light` | function | `(kind, options = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-scene.js) |
 | `KIT.procedural.sceneGraph.lightOptions` | function | `(lights)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-scene.js) |
+| `KIT.procedural.sceneGraph.measure` | function | `(source)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-mesh.js) |
 | `KIT.procedural.sceneGraph.merge` | function | `(sources)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-mesh.js) |
 | `KIT.procedural.sceneGraph.mesh` | function | `(source)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-base.js) |
 | `KIT.procedural.sceneGraph.object` | function | `(source, { id = 'object', material = id, color: tint, resolution = .075, cells = 52, thickness, emissive = false, facets = false } = {})` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry-scene.js) |
 | `KIT.procedural.sceneGraph.operations` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.box"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.box"].description` | value | `string = "Build an indexed box with typed center and half sizes."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.box"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.box"].inputs.center` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.box"].inputs.center.default` | value | `array` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.box"].inputs.center.type` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.box"].inputs.half` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.box"].inputs.half.default` | value | `array` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.box"].inputs.half.type` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.box"].inputs.options` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.box"].inputs.options.default` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.box"].inputs.options.type` | value | `string = "record"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.box"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.box"].outputs.value` | value | `string = "mesh"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.box"].run` | function | `(inputs, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
+| `KIT.procedural.sceneGraph.operations["geo.box"].specialize` | function | `(spec)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
 | `KIT.procedural.sceneGraph.operations["geo.clip"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.clip"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.clip"].inputs.options` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.options` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
@@ -1297,6 +1306,17 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.operations["geo.extrudeImage"].outputs.report` | value | `string = "record"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.extrudeImage"].outputs.value` | value | `string = "mesh"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.extrudeImage"].run` | function | `({ source, options })` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
+| `KIT.procedural.sceneGraph.operations["geo.measure"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.measure"].description` | value | `string = "Measure indexed geometry bounds, topology counts, materials and attribute channels."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.measure"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.measure"].inputs.source` | value | `string = "mesh"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.measure"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.measure"].outputs.center` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.measure"].outputs.max` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.measure"].outputs.min` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.measure"].outputs.size` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.measure"].outputs.value` | value | `string = "record"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.measure"].run` | function | `({ source })` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
 | `KIT.procedural.sceneGraph.operations["geo.merge"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.merge"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.merge"].inputs.sources` | value | `string = "array<mesh>"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
@@ -1329,12 +1349,19 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.operations["geo.sliceStack"].outputs.value` | value | `string = "mesh"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.sliceStack"].run` | function | `({ slices, options })` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
 | `KIT.procedural.sceneGraph.operations["geo.transform"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.transform"].description` | value | `string = "Transform an indexed mesh with typed translation, rotation and scale."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.transform"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.transform"].inputs.options` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.options` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.transform"].inputs.position` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.transform"].inputs.rotation` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.transform"].inputs.scale` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.transform"].inputs.scale.default` | value | `array` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.transform"].inputs.scale.type` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.transform"].inputs.source` | value | `string = "mesh"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.transform"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.transform"].outputs.value` | value | `string = "mesh"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.transform"].run` | function | `(inputs, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
+| `KIT.procedural.sceneGraph.operations["geo.transform"].specialize` | function | `(spec)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
 | `KIT.procedural.sceneGraph.operations["geo.triangulate"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.triangulate"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.triangulate"].inputs.options` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.options` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
@@ -1343,13 +1370,21 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.operations["geo.triangulate"].outputs.value` | value | `string = "mesh"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.triangulate"].run` | function | `(inputs, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
 | `KIT.procedural.sceneGraph.operations["geo.tube"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.tube"].description` | value | `string = "Construct an indexed tube with typed endpoints, radius and side count."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.tube"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.tube"].inputs.end` | value | `string = "worldPosition"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.tube"].inputs.options` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.options` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.tube"].inputs.radius` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.tube"].inputs.radius.default` | value | `number = 0.2` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.tube"].inputs.radius.type` | value | `string = "number"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.tube"].inputs.sides` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.tube"].inputs.sides.default` | value | `number = 12` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["geo.tube"].inputs.sides.type` | value | `string = "integer"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.tube"].inputs.start` | value | `string = "worldPosition"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.tube"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.tube"].outputs.value` | value | `string = "mesh"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["geo.tube"].run` | function | `(inputs, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
+| `KIT.procedural.sceneGraph.operations["geo.tube"].specialize` | function | `(spec)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
 | `KIT.procedural.sceneGraph.operations["paper.relief"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["paper.relief"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["paper.relief"].inputs.options` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.options` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
@@ -1483,9 +1518,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.operations["sdf.bound"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.bound"].description` | value | `string = "Replace the sampling bounds of a signed field."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.bound"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
-| `KIT.procedural.sceneGraph.operations["sdf.bound"].inputs.max` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
-| `KIT.procedural.sceneGraph.operations["sdf.bound"].inputs.max.default` | value | `array` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
-| `KIT.procedural.sceneGraph.operations["sdf.bound"].inputs.max.type` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.bound"].inputs.max` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.transform"].inputs.scale` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.bound"].inputs.min` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.bound"].inputs.min.default` | value | `array` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.bound"].inputs.min.type` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
@@ -1531,16 +1564,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.operations["sdf.primitive"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.primitive"].description` | value | `string = "Construct a bounded signed primitive with typed size and pose inputs."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
-| `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.center` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
-| `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.center.default` | value | `array` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
-| `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.center.type` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.center` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.kind` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.kind.default` | value | `string = "sphere"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.kind.type` | value | `string = "string"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.radius` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.radius.default` | value | `number = 0.7` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.radius.type` | value | `string = "number"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
-| `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.rotation` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.rotation` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.primitive"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.primitive"].outputs.value` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.primitive"].run` | function | `(inputs, ctx)` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs), [source](../../src/kit/par-geometry.js) |
@@ -1562,7 +1593,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.operations["sdf.repeat"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.repeat"].description` | value | `string = "Repeat a bounded field in a finite grid, optionally assigning object IDs from the cell indices."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
-| `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs.center` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs.center` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs.count` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs.count.default` | value | `array` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.repeat"].inputs.count.type` | value | `string = "vec3"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
@@ -1579,7 +1610,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.operations["sdf.sample"]` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.sample"].description` | value | `string = "Query signed distance and surface attributes at a point."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.sample"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
-| `KIT.procedural.sceneGraph.operations["sdf.sample"].inputs.position` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.sample"].inputs.position` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.sample"].inputs.source` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.sample"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.sample"].outputs.color` | value | `string = "srgb"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
@@ -1627,9 +1658,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sceneGraph.operations["sdf.transform"].description` | value | `string = "Translate, rotate or scale a signed field and its attributes."` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.transform"].inputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.transform"].inputs.options` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.options` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
-| `KIT.procedural.sceneGraph.operations["sdf.transform"].inputs.position` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
-| `KIT.procedural.sceneGraph.operations["sdf.transform"].inputs.rotation` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.primitive"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
-| `KIT.procedural.sceneGraph.operations["sdf.transform"].inputs.scale` | alias | `Alias of KIT.procedural.sceneGraph.operations["sdf.bound"].inputs.max` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.transform"].inputs.position` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.transform"].inputs.rotation` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.box"].inputs.center` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
+| `KIT.procedural.sceneGraph.operations["sdf.transform"].inputs.scale` | alias | `Alias of KIT.procedural.sceneGraph.operations["geo.transform"].inputs.scale` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.transform"].inputs.source` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.transform"].outputs` | namespace |  | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
 | `KIT.procedural.sceneGraph.operations["sdf.transform"].outputs.value` | value | `string = "field"` | [guide](../headless-authoring.md#3d-scenes-signed-fields-and-sprite-rigs) |
