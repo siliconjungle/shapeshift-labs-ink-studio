@@ -214,7 +214,14 @@ const quadrantExample={format:'ink-studio/fx-map',version:1,root:'divide',
   nodes:{divide:{kind:'quadrant',children:'cell'},
     cell:{kind:'iterate',body:'dab',count:2,step:[.05,.05],turn:7,limit:4},
     dab:{kind:'quadrant',stamps:[{id:'ink',pattern:'disc',color:'#d68c71',size:[.8,.8],opacity:.7}]}}};
+const exampleField = { op:'sdf.primitive', inputs:{kind:'sphere',radius:.45} };
+const fieldExample = inputs => ({ nodes:{shape:exampleField}, inputs:{source:link('shape'),...inputs} });
 const dynamic = {
+  'sdf.primitive': {inputs:{kind:'cylinder',radius:.45,length:1.25}},
+  'sdf.bound': fieldExample({min:[-.75,-.75,-.75],max:[.75,.75,.75]}),
+  'sdf.transform': fieldExample({position:[.25,0,.1],scale:[1,.6,1]}),
+  'sdf.attributes': fieldExample({objectId:'clasp',materialId:'brass',color:[.86,.62,.25]}),
+
   'image.fxMap': {inputs:{map:quadrantExample,width:12,height:12,options:{seed:42}}},
   'fn.valueProcessor': {inputs:{program:valueExample}},
   'image.pixelProcessor': {nodes:{grain:{op:'image.uniform',inputs:{width:3,height:2,value:.375,descriptor:processorData}}},
@@ -569,7 +576,10 @@ const specifications = {
   'paper.stack': {inputs:{layers:[{id:'sheet',profile:[[0,0],[1,0],[1,1],[0,1]],color:'#d9b07a'}]}},
   'paper.relief': {inputs:{options:{levels:[.1,.3],cell:.12}}},
   'paper.world': {nodes:{sheet:{op:'paper.stack',inputs:{layers:[{profile:[[-1,-1],[1,-1],[1,1],[-1,1]],color:'#d9b07a'}]}}},inputs:{source:link('sheet'),options:{draw:{shadowSamples:1}}}},
-  'sdf.bound': { inputs: { bounds: { min: [-1, -1, -1], max: [1, 1, 1] } } },
+  'sdf.boolean': {nodes:{first:exampleField,second:{op:'sdf.primitive',inputs:{kind:'sphere',radius:.4,center:[.3,0,0]}}},
+    inputs:{a:link('first'),b:link('second'),operation:'subtract'}},
+  'sdf.repeat': fieldExample({count:[3,1,1],spacing:[1,1,1],idPrefix:'button'}),
+  'sdf.symmetry': fieldExample({axis:'x',plane:.6}),
   'sdf.combine': { nodes: {
     shape: { op: 'sdf.shape' }, fields: { op: 'data.record', inputs: { first: link('shape') } },
     sources: { op: 'data.collect', inputs: { source: link('fields'), keys: ['first'] } }

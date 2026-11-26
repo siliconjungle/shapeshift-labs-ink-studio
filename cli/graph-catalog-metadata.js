@@ -82,6 +82,17 @@ const texturePointPorts = {
 };
 const systemVariableNames = oneOf('position','size','time','seed','context');
 const ports = {
+  'sdf.primitive': {
+    kind:{constraints:{...oneOf('sphere','box','torus','capsule','cylinder').constraints,literal:true}},
+    center:{unit:'world units'},radius:limit(.0001,1e4),length:limit(.0001,1e4),rotation:{unit:'radians'}
+  },
+  'sdf.transform': {position:{unit:'world units'},rotation:{unit:'radians'}},
+  'sdf.boolean': {operation:oneOf('union','intersection','subtract')},
+  'sdf.repeat': {count:{constraints:{integer:true,min:1,max:32,maxProduct:256}},
+    spacing:{unit:'world units',constraints:{min:.0001,max:10000}},center:{unit:'world units'}},
+  'sdf.symmetry': {axis:oneOf('x','y','z'),plane:{unit:'world units'}},
+  'sdf.sample': {position:{unit:'world units'}},
+
   'image.fxMap':{map:{constraints:{format:'ink-studio/fx-map',version:1,literal:true}},
     width:dimension,height:dimension},
   'fn.valueProcessor': {program:{constraints:{format:'ink-studio/value-processor',version:1,precision:'f32',literal:true}}},
@@ -747,6 +758,11 @@ const simulationClock = { dt: property('number', { ...seconds, ...limit(.001, .1
   maxTicks: property('number', limit(1, 12000, true), 2400) };
 
 const specialization = {
+  'sdf.primitive': {field:'kind',description:'Select a sphere, rounded box, torus, capsule, or cylinder and show its dimension sockets.'},
+  'sdf.bound': {field:'bounds',optional:true,description:'Use typed min and max, or connect the legacy bounds record.'},
+  'sdf.transform': {field:'options',optional:true,description:'Typed position, rotation and scale override corresponding settings in the legacy options record.'},
+  'sdf.attributes': {field:'color',optional:true,description:'Omit color to keep the input surface pigment.'},
+
   'fn.valueProcessor': {field:'program',description:'A literal program defines typed uniform inputs and named value outputs.'},
   'fn.scope': {field:'variables',description:'Literal variable names and types become initialization sockets.'},
   'fn.get': {field:'type',description:'Declare the type of the binding to read. The name is also literal.'},
@@ -782,6 +798,11 @@ const specialization = {
   'anim.retime': { field: 'group', description: 'Uses the group’s inputs and outputs and adds a timing record. The group cannot declare timing.' }
 };
 const notes = {
+  'sdf.bound': ['Overrides the sampling domain. Use sdf.boolean intersection with a shape for a physical cut.'],
+  'sdf.repeat': ['Evaluate all translated copies as a union, centered on the grid offset. An optional object ID prefix appends the zero-based X, Y and Z indices.'],
+  'sdf.boolean': ['Earlier inputs win ties. A subtractor can color the cut and supply its material ID while the body keeps its object ID.'],
+  'sdf.slices': ['Object and material ID layers use the name tables in layout. ID zero is untagged or empty.'],
+
   'image.fxMap': ['Quadrants subdivide local space. Iterate repeats in place with optional state and transforms. Switch visits one branch.',
     'Image stamps use source, ignored, or luminance alpha with nearest or linear filtering in premultiplied linear light.',
     'Coverage excludes the background. Stamp IDs identify the top contributor at the texel center and resolve to paths in layout.'],
@@ -814,7 +835,8 @@ const notes = {
     'Alpha defaults to one when composing RGBA. Components and luminance return numbers.'],
   'fn.text': ['Length counts UTF-16 code units. Contains performs a case-sensitive substring search.'],
   'image.shapeSplatter': ['Planar definitions become rounded extrusions. Volumetric fields need local XYZ bounds and use local Y as their height axis.',
-    'Projection keeps the top visible hit. Height, normal, IDs and stamp UVs refer to that hit; coverage measures subpixel visibility.',
+    'Projection keeps the top visible hit. Height, normal, IDs and stamp UVs refer to that hit. Coverage measures subpixel visibility.',
+    'Object and material IDs resolve through layout. Pigment carries the authored surface color with coverage in alpha.',
     'Density and mask gate placements; clip gates individual surface samples. Background height also drives slope alignment and occlusion.',
     'Connect surface to a scatter mapper. Use edits from image.scatterEdit on a downstream copy of the bake to hide or replace stamps.'],
   'image.scatterColor': ['Connect a scatterMask selection output or supply selection rules directly.',

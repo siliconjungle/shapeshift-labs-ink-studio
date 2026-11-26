@@ -9,6 +9,106 @@
   const clock = (options, ctx) => ({ time: ctx.time, ...options });
   const slices = { value: 'mesh', bounds: 'record', report: 'record' };
 
+  const zero = param('vec3', [0, 0, 0]), one = param('vec3', [1, 1, 1]);
+  const has = (spec, name) => Object.hasOwn(spec.inputs ?? {}, name) || Object.hasOwn(spec.params ?? {}, name);
+  const primitiveInputs = {
+    sphere: { radius: param('number', .7) },
+    box: { half: param('vec3', [.6, .6, .6]), round: param('number', 0) },
+    torus: { major: param('number', .68), minor: param('number', .19) },
+    capsule: { radius: param('number', .32), length: param('number', 1) },
+    cylinder: { radius: param('number', .55), length: param('number', 1) }
+  };
+  const primitive = kind => ({
+    description: 'Construct a bounded signed primitive with typed size and pose inputs.',
+    inputs: { kind: param('string', kind), center: zero, rotation: zero, ...primitiveInputs[kind] },
+    ...value('field', ({ kind, ...dimensions }) => A.shape(kind, dimensions))
+  });
+  const bound = {
+    description: 'Replace the sampling bounds of a signed field.',
+    inputs: { source: 'field', min: param('vec3', [-1, -1, -1]), max: one },
+    ...value('field', ({ source, min, max }) => A.boundSDF(source, { min, max }))
+  };
+  const transform = {
+    description: 'Translate, rotate or scale a signed field and its attributes.',
+    inputs: { source: 'field', options, position: zero, rotation: zero, scale: one },
+    ...value('field', ({ source, options, ...pose }) => A.transformSDF(source, { ...pose, ...options }))
+  };
+  const attributes = {
+    description: 'Assign a stable object ID, material ID, or normalized RGB to a signed field.',
+    inputs: { source: 'field', objectId: param('string', ''), materialId: param('string', ''),
+      color: param('srgb', [1, 1, 1]) },
+    ...value('field', ({ source, ...settings }) => A.tagSDF(source, settings))
+  };
+  A.sdfOperations = Object.freeze({
+    'sdf.shape': {
+      inputs: { kind: param('string', 'sphere'), options },
+      ...value('field', ({ kind, options }) => A.shape(kind, options))
+    },
+    'sdf.primitive': {
+      ...primitive('sphere'),
+      specialize(spec) {
+        const kind = GraphControlReferences.literal(spec, 'kind', 'sphere');
+        if (typeof kind !== 'string' || !Object.hasOwn(primitiveInputs, kind)) throw new RangeError('SDF primitive needs a literal shape kind');
+        return primitive(kind);
+      }
+    },
+    'sdf.bound': { ...bound, specialize: spec => has(spec, 'bounds') ? {
+      inputs: { source: 'field', bounds: 'record' },
+      ...value('field', ({ source, bounds }) => A.boundSDF(source, bounds))
+    } : bound },
+    'sdf.bounds': {
+      description: 'Read the minimum, maximum, center and size of a field domain.',
+      inputs: { source: 'field' }, outputs: { value: 'vec3', min: 'vec3', max: 'vec3', center: 'vec3' },
+      run({ source }) {
+        const { min, max } = sdfExtent(source);
+        return { value: max.map((n, i) => n - min[i]), min, max, center: max.map((n, i) => (n + min[i]) / 2) };
+      }
+    },
+    'sdf.transform': {
+      ...transform,
+      specialize: spec => ({ ...transform, ...value('field', ({ source, options, ...pose }) =>
+        A.transformSDF(source, { ...options, ...Object.fromEntries(Object.entries(pose).filter(([key]) => has(spec, key))) })) })
+    },
+    'sdf.combine': {
+      inputs: { sources: 'array<field>', options },
+      ...value('field', ({ sources, options }) => A.combineSDF(sources, options))
+    },
+    'sdf.boolean': {
+      description: 'Union, intersect or subtract two signed fields with deterministic surface ownership.',
+      inputs: { a: 'field', b: 'field', operation: param('string', 'union') },
+      ...value('field', ({ a, b, operation }) => A.combineSDF([a, b], { operation }))
+    },
+    'sdf.repeat': {
+      description: 'Repeat a bounded field in a finite grid, optionally assigning object IDs from the cell indices.',
+      inputs: { source: 'field', count: param('vec3', [2, 1, 1]), spacing: param('vec3', [1.5, 1.5, 1.5]),
+        center: zero, idPrefix: param('string', '') },
+      ...value('field', ({ source, ...settings }) => A.repeatSDF(source, settings))
+    },
+    'sdf.symmetry': {
+      description: 'Union a field with its reflection across an axis-aligned plane.',
+      inputs: { source: 'field', axis: param('string', 'x'), plane: param('number', 0) },
+      ...value('field', ({ source, ...settings }) => A.symmetrySDF(source, settings))
+    },
+    'sdf.attributes': {
+      ...attributes,
+      specialize(spec) {
+        if (has(spec, 'color')) return attributes;
+        const { color, ...inputs } = attributes.inputs;
+        return { ...attributes, inputs };
+      }
+    },
+    'sdf.sample': {
+      description: 'Query signed distance and surface attributes at a point.',
+      inputs: { source: 'field', position: zero }, outputs: { value: 'number', objectId: 'string',
+        materialId: 'string', color: 'srgb', hasColor: 'boolean' }, time: true, system: true,
+      run({ source, position }, { time }) {
+        const tags = A.sdfTags(source, time)?.(...position);
+        return { value: sdfSampler(source, time)(...position), objectId: tags?.objectId ?? '',
+          materialId: tags?.materialId ?? '', color: tags?.color ?? [1, 1, 1], hasColor: !!tags?.color };
+      }
+    }
+  });
+
   A.operations = Object.freeze({
     'textile.pattern': {
       inputs: { kind: param('string', 'stitch'), options },
@@ -62,22 +162,7 @@
       return K.paper.relief((x,y)=>-sample(x,y,slice),{...rest,levels,bounds:bounds??{min:box.min.slice(0,2),max:box.max.slice(0,2)}});
     })},
     'paper.world': {inputs:{source:'record',options},...value('world',({source,options})=>K.paper.world(source,options))},
-    'sdf.shape': {
-      inputs: { kind: param('string', 'sphere'), options },
-      ...value('field', ({ kind, options }) => A.shape(kind, options))
-    },
-    'sdf.bound': {
-      inputs: { source: 'field', bounds: 'record' },
-      ...value('field', ({ source, bounds }) => A.boundSDF(source, bounds))
-    },
-    'sdf.transform': {
-      inputs: { source: 'field', options },
-      ...value('field', ({ source, options }) => A.transformSDF(source, options))
-    },
-    'sdf.combine': {
-      inputs: { sources: 'array<field>', options },
-      ...value('field', ({ sources, options }) => A.combineSDF(sources, options))
-    },
+    ...A.sdfOperations,
     'sdf.mesh': {
       inputs: { source: 'field', options }, time: true,
       ...value('mesh', ({ source, options }, ctx) => A.sdfMesh(source, {...clock(options, ctx),onModelingWork:ctx.recordWork}))
@@ -95,7 +180,7 @@
       run:({source,options},ctx)=>A.facetedSDF(source,clock(options,ctx))
     },
     'sdf.slices': {
-      inputs: { source: 'field', options }, outputs: { value: 'array<raster>', layout: 'record' }, time: true,
+      inputs: { source: 'field', options }, outputs: { value: 'array<raster>', objectId: 'array<raster>', materialId: 'array<raster>', layout: 'record' }, time: true,
       run: ({ source, options }, ctx) => A.sdfSlices(source, clock(options, ctx))
     },
     'sdf.render': {

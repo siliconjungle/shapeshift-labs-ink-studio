@@ -35,6 +35,8 @@ Function inputs and results support finite `number`, signed safe `integer`, norm
 
 A function body uses typed values, the value operations below, and calls to other functions with declared results. It can also take named color and grayscale inputs for [texture sampling](function-texture-sampling.md). It takes all its state through its arguments. The compiler validates the result link, disallows animated bindings and effect operations inside the body, and rejects cycles. Use caller-side animation inputs to supply values that change over time.
 
+Functions can also accept and return bounded signed-distance fields. See [SDF function graphs](sdf-functions.md) for the geometry nodes and their consumers.
+
 ## Value nodes
 
 Set a literal `inputs.operation` where an operation is needed. Declare `type` on the node when it selects an overload. The standard graph catalog shows an example and its typed sockets.
