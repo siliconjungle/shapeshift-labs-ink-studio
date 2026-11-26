@@ -144,11 +144,11 @@
     const group = Object.hasOwn(groups, spec.group) && groups[spec.group];
     if (!group?.instantiate || Object.hasOwn(group.inputs, 'timing'))
       throw new TypeError('anim.retime needs a reusable group without an input named timing');
-    return { inputs: { ...group.inputs, timing: options }, outputs: group.outputs, time: true, workerGroup: true,
+    return { inputs: { ...group.inputs, timing: options }, outputs: group.outputs, time: true, system: group.system, workerGroup: true,
       instantiate() {
         const evaluate = group.instantiate();
         let priorTiming, at, parentSequence, localSequence, segment;
-        const run = ({ timing, ...inputs }, { time, take, sequence, ...ctx }, workers) => {
+        const run = ({ timing, ...inputs }, { time, take, sequence, functionExecution, textureCache, ...ctx }, workers) => {
           if (timing !== priorTiming) { at = compile(timing); priorTiming = timing; }
           const { value, cut } = at(timing.time ?? time, exactStart(take, timing.time));
           if (parentSequence !== sequence || segment !== cut) {
@@ -156,7 +156,8 @@
             parentSequence = sequence;
             segment = cut;
           }
-          return evaluate(inputs, { ...ctx, time: value, sequence: localSequence }, workers);
+          const flow = functionExecution && { ...functionExecution, system: Object.freeze({ ...functionExecution.system, time: value }) };
+          return evaluate(inputs, { ...ctx, time: value, sequence: localSequence, textureCache, functionExecution: flow }, workers);
         };
         run.clear = () => {
           priorTiming = parentSequence = localSequence = segment = undefined;

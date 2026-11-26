@@ -9,7 +9,7 @@ const { createGraphHost } = require('./graph-host.js');
 const { clip } = require('./graph-clip.js');
 const { resolveCheckpoint } = require('./checkpoint-file.js');
 const { embedModels, isModel } = require('./simulation-model-files.js');
-const { loadGraphGroups, groupFor, groupUsage, groupDependencies } = require('./graph-groups.js');
+const { loadGraphGroups, groupFor, groupsFor, groupUsage, groupDependencies } = require('./graph-groups.js');
 const { snapshotFormat } = require('./graph-diff.js');
 const { fingerprint } = require('./graph-artifact-cache.js');
 const { estimateGraphMemory } = require('./graph-memory.js');
@@ -293,7 +293,8 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const procedural=kit.KIT.procedural, {graph,data,mediaGraph,takeTime}=procedural;
   const host=createGraphHost(adapters,{kit});
   const {broadcast}=graph.arrays;
-  const groupOperators=[...graph.arrays.groupOperators,...kit.KIT.procedural.animationGraph.groupOperators];
+  const groupOperators=[...graph.arrays.groupOperators,...kit.KIT.procedural.animationGraph.groupOperators,
+    ...procedural.graphControl.groupOperators];
   const typedOperations=['data.typed',...procedural.graphFunctions.typedOperations];
   const project=data.freeze(data.clone(source));
   materialMetadata=materialMetadata && data.freeze(structuredClone(materialMetadata));
@@ -383,10 +384,8 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
 
   function compile(spec,scope) {
     let expandedNodes=Object.keys(spec.nodes).length;
-    for (const node of Object.values(spec.nodes)) {
-      const dependency=groupFor(scope,node);
-      if (dependency) expandedNodes+=compileGroup(dependency).expandedNodes;
-    }
+    for (const node of Object.values(spec.nodes)) for (const dependency of groupsFor(scope,node))
+      expandedNodes+=compileGroup(dependency).expandedNodes;
     if (expandedNodes>maxNodes) throw new RangeError('Expanded graph exceeds its '+maxNodes+' node budget');
     const compiled=graph.create(spec,{operations:ops,groups:operationsIn(scope),planOnly:true}), plan=compiled.plan();
     for (const {id,op,inputs} of plan.nodes) {
@@ -410,7 +409,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     const spec=groupSpecs.get(group), {plan,compiled}=compile(spec,scope);
     visiting.delete(group);
     const outputs=Object.fromEntries(Object.entries(plan.outputs).map(([key,{type,quantity}])=>[key,{type,...(quantity && {quantity})}]));
-    operationsIn(owner)[name]={...graph.group(spec,{operations:ops,groups:operationsIn(scope),outputs}),
+    operationsIn(owner)[name]={...graph.group(spec,{operations:ops,groups:operationsIn(scope),outputs,system:compiled.readsSystem}),
       expandedNodes:plan.expandedNodes};
     preparedGroups.set(alias,{plan,scope,compiled});
     return plan;
@@ -498,8 +497,9 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     const {inputs,nodes,outputs,result}=compiled.plan({bindings:true});
     for (const [name,value] of Object.entries(overrides)) inputs[name].default=value;
     return {inputs,...(result!==undefined && {result}),nodes:Object.fromEntries(nodes.map(({id,...node})=>{
-      const group=groupFor(scope,node);
+      const group=groupFor(scope,node), paths=groupsFor(scope,compiled.spec.nodes[id]).map(item=>item.alias);
       return [id,{...node,...(group && {groupPath:group.alias}),
+        ...(paths.length && Object.hasOwn(procedural.graphControl.operations,node.op) && {groupPaths:paths}),
         ...(node.seed===undefined && Object.hasOwn(operations,node.op) && {seed:true})}];
     })),outputs,order:nodes.map(node=>node.id)};
   }
@@ -647,17 +647,18 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       try { reset(); } catch { /* Preserve the evaluation error after discarding this instance. */ }
       throw error;
     }
+    const systemSize=values=>base ? [values.materialBase.size.width,values.materialBase.size.height] : undefined;
     function evaluate({inputs,...options},sequence) {
       const values=start(inputs);
       try {
-        return done(executable.evaluate(values,{...options,sequence,workers:workerPool}),values,options);
+        return done(executable.evaluate(values,{...options,sequence,workers:workerPool,systemSize:systemSize(values)}),values,options);
       } catch (error) { return failed(error); }
     }
     async function evaluateAsync({inputs,...options},profile) {
       const values=start(inputs);
       busy=true;
       try {
-        return done(await executable.evaluateAsync(values,{...options,profile}),values,options);
+        return done(await executable.evaluateAsync(values,{...options,profile,systemSize:systemSize(values)}),values,options);
       } catch (error) { return failed(error); }
       finally { busy=false; }
     }

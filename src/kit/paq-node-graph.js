@@ -28,8 +28,8 @@
   function create(source, { operations = {}, groups = {}, planOnly = false } = {}) {
     const stored = P.data.freeze(P.data.clone(source));
     const specInputs = schema(stored.inputs || {});
-    const fn = P.graphFunctions, declared = Object.hasOwn(stored, 'result');
-    if (declared && (!fn.validType(stored.result) || !record(stored.outputs) ||
+    const fn = P.graphFunctions, control = P.graphControl, declared = Object.hasOwn(stored, 'result');
+    if (declared && (!fn.validResultType(stored.result) || !record(stored.outputs) ||
         Object.keys(stored.outputs).length !== 1 || !Object.hasOwn(stored.outputs, 'result')))
       throw new TypeError('Function graph needs one output named result and a declared value type');
     if (declared && Object.values(specInputs).some(socket => !fn.validInputType(socket.type)))
@@ -84,7 +84,7 @@
       if (declared) {
         const fnOp = Object.hasOwn(fn.operations,spec.op) && fn.operations[spec.op] === template;
         const typedValue = spec.op === 'data.typed' && template === P.graph.arrays.operations['data.typed'] && fn.validType(spec.type);
-        const fnCall = Object.hasOwn(groups,spec.op) && groups[spec.op] === template && fn.validType(template?.functionResult);
+        const fnCall = Object.hasOwn(groups,spec.op) && groups[spec.op] === template && fn.validResultType(template?.functionResult);
         if (!fnOp && !typedValue && !fnCall)
           throw new TypeError('Function graph node ' + name + ' needs a pure value operation or declared function call: ' + spec.op);
       }
@@ -124,13 +124,14 @@
       }
       const run = planOnly ? undefined : operation.instantiate ? operation.instantiate() : operation.run;
       configs.set(name, { name, op: spec.op, group:spec.group, type:spec.type, run, outputs, bindings,
-        clock: !!operation.time, seed: operation.seed, asset: operation.asset,
+        clock: !!operation.time, system: !!operation.system, seed: operation.seed, asset: operation.asset,
         stock: template === P.graph.operations?.[spec.op] && !operation.instantiate,
         local: operation.workerLocal === true && !operation.instantiate,
         nested: Object.hasOwn(groups, spec.op) && groups[spec.op] === template || operation.workerGroup === true });
       order.push(name);
     }
     for (const name of Object.keys(specs)) visit(name);
+    const readsSystem = [...configs.values()].some(node=>node.system);
     const results = Object.entries(stored.outputs).map(([name, link]) => {
       if (!id(name)) throw new RangeError('Invalid graph output name ' + name);
       const bound = binding(link);
@@ -189,7 +190,8 @@
       return schedule;
     }
 
-    function begin(input, { take, sequence, time = take?.start ?? 0, seed = 0, workers, modeling = false, textureCache: inheritedTextureCache }) {
+    function begin(input, { take, sequence, time = take?.start ?? 0, seed = 0, workers, modeling = false, textureCache: inheritedTextureCache,
+      functionExecution: inheritedExecution, systemSize }) {
       if (take !== undefined) {
         P.takeTime.requireFrame(take);
         if (time !== take.start) throw new RangeError('Graph seconds must match the take frame start');
@@ -199,6 +201,7 @@
       let textures;
       const textureCache = inheritedTextureCache ?? (()=>textures ??= P.graphImages.textureSampling.createCache());
       const values = parameters(input,declared ? textureCache : undefined);
+      const functionExecution = inheritedExecution ?? control.execution(time,seed,systemSize);
       const pending = new Map();
       function prepare(name) {
         const config = configs.get(name), { bindings, clock } = config;
@@ -210,6 +213,7 @@
         });
         const previous = marks.get(name), comparable = entries.map(([, value]) => value);
         const reused = previous?.seed === seed && (!clock || previous.time === time && previous.take === take && previous.sequence === sequence) &&
+          (!config.system || control.sameSystem(previous.system,functionExecution.system)) &&
           comparable.every((value, i) => {
             const prior = previous.values[i];
             return Object.is(value, prior) || bindings[i][2].kind === 'track' && Array.isArray(value) &&
@@ -223,7 +227,9 @@
             if (work.length<256) work.push(P.modelingDiagnostics.receipt(receipt));
             else evidence.workOmitted=(evidence.workOmitted??0)+1;
           }, recordModeling(value) { evidence.modeling=value; }}) };
-        if (context) Object.defineProperty(context,'textureCache',{value:textureCache});
+        if (context) Object.defineProperties(context,{
+          textureCache:{value:textureCache},functionExecution:{value:functionExecution}
+        });
         return { config, inputs: reused ? undefined : Object.fromEntries(entries), context, comparable, reused, previous, work,evidence };
       }
       function invoke(row, asynchronous = false) {
@@ -232,7 +238,7 @@
         return nested && workers ? run(inputs, context, workers) : run(inputs, context);
       }
       function complete(row, ...answers) {
-        const { config: { name, run, outputs }, comparable, reused, previous, work,evidence } = row;
+        const { config: { name, run, outputs, system }, comparable, reused, previous, work,evidence } = row;
         if (reused) pending.set(name, previous);
         else {
           const produced = answers.length ? answers[0] : invoke(row);
@@ -244,7 +250,7 @@
           for (const [key, socket] of Object.entries(outputs))
             if (!Object.hasOwn(produced, key) || !validator(socket.type)(produced[key]))
               throw new TypeError('Wrong output from graph node ' + name + '.' + key);
-          pending.set(name, { seed, time, take, sequence, values: comparable, outputs: produced, work:work && Object.freeze(work),
+          pending.set(name, { seed, time, take, sequence, ...(system && {system:functionExecution.system}), values: comparable, outputs: produced, work:work && Object.freeze(work),
             modeling:evidence?.modeling,workOmitted:evidence?.workOmitted,
             subgraph: run.inspect?.() });
         }
@@ -357,27 +363,28 @@
         outputs: config.outputs, time: config.clock });
     }
 
-    return Object.freeze({ spec: stored, evaluate, evaluateAsync, parameters, plan, sockets, clear() {
+    return Object.freeze({ spec: stored, readsSystem, evaluate, evaluateAsync, parameters, plan, sockets, clear() {
       if (awaiting) throw new Error('Cannot clear a graph during asynchronous evaluation');
       marks.clear();
       for (const config of configs.values()) config.run?.clear?.();
     } });
   }
 
-  function group(spec, { operations, groups, outputs } = {}) {
+  function group(spec, { operations, groups, outputs, system } = {}) {
     const inputTypes = schema(spec.inputs || {});
     const declared = Object.hasOwn(spec,'result');
-    const inferred = outputs === undefined && create(spec,{operations,groups,planOnly:true}).plan().outputs;
+    const planned = outputs === undefined || system === undefined ? create(spec,{operations,groups,planOnly:true}) : undefined;
+    const inferred = outputs === undefined && planned.plan().outputs;
     const outputTypes = schema(outputs ?? Object.fromEntries(Object.entries(inferred).map(([name,{type,quantity}]) =>
       [name,quantity ? {type,quantity} : declared ? type : 'any'])));
     if (declared && (Object.keys(outputTypes).length !== 1 || outputTypes.result?.type !== spec.result))
       throw new TypeError('Function group outputs must match its declared result');
     return { inputs: inputTypes, outputs: outputTypes, expandedNodes:Object.keys(spec.nodes ?? {}).length,
-      time: !declared, ...(declared && {functionResult:spec.result}), instantiate() {
+      time: !declared, system: system ?? planned?.readsSystem, ...(declared && {functionResult:spec.result}), instantiate() {
       const graph = create(spec, { operations, groups });
       let latest;
       const run = (inputs, context, workers) => {
-        latest = graph.evaluate(inputs, workers ? { ...context, textureCache:context.textureCache, workers } : context);
+        latest = graph.evaluate(inputs, workers ? { ...context, textureCache:context.textureCache, functionExecution:context.functionExecution, workers } : context);
         return latest.outputs;
       };
       run.async = async (inputs, context) => {

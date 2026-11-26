@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Last Light · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--paper:#f1e4cd;--muted:#b9bbbc;--edge:#384756;--bg:#111924;--panel:#1a2532;--sand:#e3ad83;--cyan:#a3ced1}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:var(--paper);background:radial-gradient(ellipse at 29% -18%,#35475a,transparent 58%),var(--bg);font:14px system-ui,sans-serif}
+main{max-width:1260px;margin:auto;padding:clamp(22px,4vw,56px) clamp(16px,4vw,54px) 27px}
+header{margin-bottom:25px}
+.brand,.eyebrow,.readout,output{font:11px ui-monospace,monospace;letter-spacing:.065em}
+.brand,.eyebrow{color:var(--sand);text-transform:uppercase}
+h1,h2,p{margin:0}h1{font:400 clamp(52px,7vw,86px)/.98 Georgia,serif;letter-spacing:-.067em;margin:3px 0 9px}
+h2{font:400 23px/1.05 Georgia,serif;letter-spacing:-.026em}
+p{color:var(--muted);line-height:1.5}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(315px,361px);gap:16px;align-items:start}
+figure,aside,.receipt{margin:0;border:1px solid var(--edge);border-radius:10px;overflow:hidden;background:var(--panel)}
+figure{background:#141e2b}
+figcaption{padding:11px 14px;border-top:1px solid var(--edge);display:flex;justify-content:space-between;gap:9px;align-items:center}
+#scene{display:block;width:100%;height:auto;image-rendering:pixelated;cursor:crosshair;touch-action:pan-y}
+.receipt{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin-top:12px}
+.stage{padding:11px 12px;min-width:0}.stage+.stage{border-left:1px solid var(--edge)}
+.stage b,.stage small{display:block}.stage b{font:400 26px/1.15 Georgia,serif;color:var(--paper);margin:4px 0 1px}
+.stage small{font-size:11px;color:var(--muted);line-height:1.28}.stage:last-child b{color:var(--cyan)}
+aside{padding:14px}
+aside section+section{border-top:1px solid var(--edge);margin-top:13px;padding-top:12px}
+#settings,#clock{display:grid;grid-template-columns:1fr 1fr;gap:9px 12px;margin-top:10px}
+.field{display:grid;grid-template-columns:1fr auto;gap:4px;align-items:center;min-width:0}
+.field label{font-size:11px;color:var(--muted)}
+.field select,.field input{width:100%;min-width:0;grid-column:1/-1;margin:0}
+.field:has(select){grid-column:1/-1}
+output,.readout{color:var(--cyan)}
+button,input,select{font:inherit;accent-color:var(--sand)}
+button,select{color:var(--paper);background:#263746;border:1px solid #4c6175;border-radius:5px;padding:6px 8px;cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible,canvas:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+button:hover,select:hover{border-color:var(--sand)}
+#system-values{display:grid;gap:7px;margin:11px 0 0}
+#system-values div{display:flex;justify-content:space-between;gap:10px}
+#system-values dt{font-size:11px;color:var(--muted)}#system-values dd{margin:0;text-align:right}
+footer{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:7px;margin-top:13px;padding-top:11px;border-top:1px solid var(--edge)}
+footer a{color:var(--sand);font-size:11px;text-underline-offset:3px}
+footer button{font-size:11px}
+#save{background:var(--sand);border-color:var(--sand);color:#231f24;font-weight:650}
+#error{font-size:12px;color:#ffb5a0;margin-top:8px}#error:empty{display:none}
+@media(max-width:880px){.layout{grid-template-columns:1fr}.receipt{margin-top:10px}header{margin-bottom:15px}}
+@media(max-width:440px){figcaption{padding:10px}.stage{padding:9px 7px}.stage b{font-size:22px}.stage small{font-size:10px}.eyebrow{letter-spacing:.01em}}
+</style>
+</head>
+<body>
+<main>
+  <header><span class="brand">Ink Studio · Function graphs</span><h1>Last Light</h1>
+    <p>Prime a harbor beacon, switch circuits, and watch the crank stop at the charge target.</p></header>
+  <div class="layout">
+    <section aria-label="Beacon preview">
+      <figure>
+        <canvas id="scene" width="152" height="104" tabindex="0" aria-label="Harbor at night. Click or use the arrow keys to move the light meter."></canvas>
+        <figcaption><h2>Harbor watch</h2><span class="eyebrow">Click to move the meter</span></figcaption>
+      </figure>
+      <div class="receipt" aria-label="Execution stages">
+        <div class="stage"><span class="eyebrow">Local</span><b id="before"></b><small>Starting charge</small></div>
+        <div class="stage"><span class="eyebrow">Sequence</span><b id="primed"></b><small>After priming</small></div>
+        <div class="stage"><span class="eyebrow">Branch</span><b id="routed"></b><small id="branch"></small></div>
+        <div class="stage"><span class="eyebrow">Loop</span><b id="charge"></b><small id="iterations"></small></div>
+      </div>
+    </section>
+    <aside aria-label="Beacon controls">
+      <section>
+        <h2>Signal circuit</h2>
+        <div id="settings"></div>
+      </section>
+      <section>
+        <h2>System values</h2>
+        <div id="clock"></div>
+        <dl id="system-values">
+          <div><dt>Position</dt><dd class="readout" id="spot"></dd></div>
+          <div><dt>Size</dt><dd class="readout" id="size"></dd></div>
+          <div><dt>Context</dt><dd class="readout" id="context"></dd></div>
+          <div><dt>Pulse gain</dt><dd class="readout" id="pulse"></dd></div>
+        </dl>
+      </section>
+      <footer>
+        <a href="last-light.material.json" download>Original material</a>
+        <button id="reset" type="button">Reset</button>
+        <button id="save" type="button">Save material</button>
+      </footer>
+      <p id="error" role="alert"></p>
+    </aside>
+  </div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="data.js"></script>
+<script src="live.js"></script>
+</body>
+</html>

@@ -7,7 +7,8 @@
   const types = Object.freeze([...scalarTypes, ...vectorTypes, ...colorTypes, 'unitScalar', 'boolean', 'string']);
   const validType = type => types.includes(type);
   const textureType = type => type === 'colorImage' || type === 'grayImage';
-  const validInputType = type => validType(type) || textureType(type);
+  const validResultType = type => validType(type) || type === 'functionLocals';
+  const validInputType = type => validResultType(type) || textureType(type);
   const compatible = (from, to) => from === to ||
     to === 'number' && ['integer','unitScalar'].includes(from) ||
     to === 'unitScalar' && scalarTypes.includes(from);
@@ -32,13 +33,7 @@
     return { inputs: sockets, outputs: { value: type }, run(values) { return { value: signed(evaluate(values), type) }; } };
   }
 
-  function literal(node, key, fallback) {
-    const definition = Object.hasOwn(node.inputs ?? {}, key) ? node.inputs[key] : node.params?.[key];
-    if (definition === undefined) return fallback;
-    if (definition && typeof definition === 'object' && !Array.isArray(definition))
-      return Object.hasOwn(definition, 'value') ? definition.value : undefined;
-    return definition;
-  }
+  const {literal}=GraphControlReferences;
 
   function selectOperation(node, family, variants, fallback) {
     const name = literal(node, 'operation', fallback);
@@ -311,6 +306,7 @@
   }
 
   const operations = Object.freeze({
+    ...P.graphControl.operations,
     'fn.math': math, 'fn.toInteger': integer, 'fn.cast': cast, 'fn.compare': compare, 'fn.logic': logic,
     'fn.select': select, 'fn.vector': vector, 'fn.color': color, 'fn.text': text,
     'fn.sampleColor': sampleTexture('colorImage','sampleColor','srgb-linear',
@@ -318,6 +314,6 @@
     'fn.sampleGray': sampleTexture('grayImage','sampleGray','number',
       'Sample a typed unitless grayscale texture or mask at explicit UVs.')
   });
-  const typedOperations = Object.freeze(['fn.math','fn.cast','fn.compare','fn.select','fn.vector','fn.color']);
-  P.graphFunctions = Object.freeze({ types, validType, validInputType, textureType, compatible, operations, typedOperations });
+  const typedOperations = Object.freeze(['fn.math','fn.cast','fn.compare','fn.select','fn.vector','fn.color',...P.graphControl.typedOperators]);
+  P.graphFunctions = Object.freeze({ types, validType, validResultType, validInputType, textureType, compatible, operations, typedOperations });
 })(KIT);

@@ -1,4 +1,5 @@
 const types = {
+  functionLocals: { layout: 'Versioned linked frames of named typed local bindings', maxDepth: 16, maxBindingsPerScope: 32 },
   number: { finite: true },
   integer: { integer: true, safe: true, signed: true },
   vec2: { dimensions: 2, finite: true },
@@ -79,7 +80,17 @@ const texturePointPorts = {
   mip:{unit:'mip levels',constraints:{min:0}},
   ...Object.fromEntries(['wrapU','wrapV'].map(axis=>[axis,oneOf('image','clamp','wrap','mirror','transparent')]))
 };
+const systemVariableNames = oneOf('position','size','time','seed','context');
 const ports = {
+  'fn.scope': {variables:{constraints:{maxProperties:32,literal:true}}},
+  'fn.get': {name:{constraints:{literal:true}}},
+  'fn.set': {name:{constraints:{literal:true}}},
+  'fn.system': {name:{constraints:{...systemVariableNames.constraints,literal:true}}},
+  'fn.branch': {whenTrue:{constraints:{literal:true}},whenFalse:{constraints:{literal:true}}},
+  'fn.sequence': {steps:{constraints:{minItems:1,maxItems:64,literal:true}}},
+  'fn.loop': {limit:{constraints:{integer:true,min:1,max:1024,literal:true}},
+    count:{constraints:{integer:true,min:0,max:1024}},while:{constraints:{literal:true}}},
+  'fn.withSystem': {size:{unit:'pixels',constraints:{integer:true,min:1}},context:{constraints:{maxProperties:64}}},
   'fn.sampleColor':texturePointPorts,
   'fn.sampleGray':texturePointPorts,
   'fn.toInteger': { rounding: oneOf('exact','floor','ceil','round','trunc') },
@@ -730,6 +741,14 @@ const simulationClock = { dt: property('number', { ...seconds, ...limit(.001, .1
   maxTicks: property('number', limit(1, 12000, true), 2400) };
 
 const specialization = {
+  'fn.scope': {field:'variables',description:'Literal variable names and types become initialization sockets.'},
+  'fn.get': {field:'type',description:'Declare the type of the binding to read. The name is also literal.'},
+  'fn.set': {field:'type',description:'Declare the type of the value to write. The name is also literal.'},
+  'fn.system': {field:'name',description:'A literal name selects the output type. Context reads also declare node type.'},
+  'fn.branch': {field:'whenTrue',description:'The two literal function names select a shared input and result contract.'},
+  'fn.sequence': {field:'steps',description:'Literal function names select ordered stages with a common state type.'},
+  'fn.loop': {field:'group',description:'The body function defines state and shared inputs. An optional continuation returns Boolean.'},
+  'fn.withSystem': {field:'group',description:'The called function defines its additional inputs and result.'},
   'fn.math': { field: 'operation', description: 'A literal operation selects operands. Node type is number or integer.' },
   'fn.compare': { field: 'type', description: 'The declared value type selects both operands. Ordered comparisons require scalar numbers or strings.' },
   'fn.logic': { field: 'operation', description: 'A literal operation selects one or two Boolean operands.' },
@@ -754,6 +773,13 @@ const specialization = {
   'anim.retime': { field: 'group', description: 'Uses the group’s inputs and outputs and adds a timing record. The group cannot declare timing.' }
 };
 const notes = {
+  'fn.scope': ['A child can shadow a parent binding. All initial values are explicit.'],
+  'fn.set': ['Updates the nearest binding and returns a new scope. Earlier scope outputs retain their values.'],
+  'fn.system': ['Position defaults to [0,0]. Size uses the effective material extent when available and otherwise defaults to [1,1]. Time is in seconds. Seed is the project seed.'],
+  'fn.branch': ['Only the selected function runs. The taken output records the selected condition.'],
+  'fn.sequence': ['Each stage receives the previous result as state. Additional arguments are shared.'],
+  'fn.loop': ['The count is checked against the literal limit. An optional continuation sees the current state and zero-based index before each iteration. The iterations port reports completed iterations.'],
+  'fn.withSystem': ['The supplied context extends the caller’s context for this call. Time and seed propagate from the enclosing evaluation.'],
   'fn.sampleColor': ['Samples use top-left UVs and straight linear sRGB RGBA output. Filtering works in coverage-associated linear light.',
     'Explicit mip levels clamp to the available chain. Fractional levels blend unless mipFilter is nearest.'],
   'fn.sampleGray': ['Read a unitless one-channel data or mask texture. UNORM samples decode to unit values. Floating-point data retains signed and over-one values.',
