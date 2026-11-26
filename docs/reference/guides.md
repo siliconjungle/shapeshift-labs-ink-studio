@@ -307,6 +307,7 @@ All checked-in guides, indexed by title and section headings.
 - [Orbits and attractors](../orbit-attractors.md)
 - [Calibrate display and speaker latency](../output-latency.md)
 - [Program the pads](../pad-patterns.md)
+- [Paint a finish over an existing material](../paint-finish.md)
 - [Paint looseness inside a protected edge](../paint-looseness.md)
 - [Paint mixing](../paint-mixing.md)
 - [Apply multiple paint channels with a brush preset](../paint-presets.md)

@@ -110,7 +110,7 @@
     const index = Number.isInteger(sampled) ? sampled : ramp?.[Math.min(ramp.length - 1, Math.floor(ramp.length * t))];
     const color = rgb(palette[index] ?? 0xa8a8a8);
     const authored = typeof material?.model === 'function' ? material.model(p, n) : material?.model;
-    return {
+    const sample = {
       name: material?.exportName,
       color,
       roughness: 0.8,
@@ -121,6 +121,14 @@
       ...(material?.opacityAt && { opacity: Math.round(
         material.opacityAt(x, y, z) * K.clamp(authored?.opacity ?? material.a ?? 1, 0, 1) * 255) / 255 })
     };
+    const finish = material?.paintFinishSample;
+    if (finish) {
+      sample.color = PaintFinish.gradeLinear(finish, sample.color);
+      sample.roughness = PaintFinish.roughness(finish, sample.roughness);
+      const emission = PaintFinish.emission(finish);
+      if (emission) sample.emission = sample.emission.map((n, i) => n + emission[i]);
+    }
+    return sample;
   }
 
   function cageSource(sculpt, { palette } = {}) {

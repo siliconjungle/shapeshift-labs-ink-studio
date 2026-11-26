@@ -220,6 +220,28 @@ function makeSculpt(B, rest) {
       stack.push({ id, sample });
     }
   };
+  const finishLayers = new WeakMap();
+  S.addPaintFinish = (entity, id, plan, coverage) => {
+    for (const solid of pos) {
+      if (solid.renderTarget?.entity !== entity) continue;
+      let stack = finishLayers.get(solid);
+      if (!stack) {
+        stack = [];
+        finishLayers.set(solid, stack);
+        solid.mat = { ...solid.mat, paintFinish(point, normal, spillAt) {
+          let row;
+          for (let i = stack.length - 1; i >= 0; i--) {
+            const layer = stack[i], weight = layer.coverage(point, normal) * layer.plan.opacity;
+            if (!weight) continue;
+            row = PaintFinish.add(row, layer.plan, weight);
+            if (layer.plan.spill) spillAt?.(layer.id, layer.plan.spill, weight);
+          }
+          return row?.[0] ? row : undefined;
+        } };
+      }
+      stack.push({ id, plan, coverage });
+    }
+  };
   const reliefLayers = new WeakMap();
   S.addSurfaceRelief = (entity, sample) => {
     for (const solid of pos) {
@@ -276,7 +298,9 @@ function makeSculpt(B, rest) {
   S.materialAt = (material, point, normal) => {
     if (!material) return material;
     const cap = material.cutSurface?.locate(point,normal);
-    const base = cap ?? reliefMaterial(baseMaterialAt(material, point, normal), material.paintRelief, point, normal);
+    let base = cap ?? reliefMaterial(baseMaterialAt(material, point, normal), material.paintRelief, point, normal);
+    const finish = !cap && material.paintFinish?.(point, normal);
+    if (finish) base = { ...base, paintFinishSample: finish };
     const appearance = paintAppearance(material, point, normal, cap);
     if (!appearance && !base.paintReliefActive) return base;
     const { material:role,masks,tint }=appearance ?? {};
@@ -1076,18 +1100,26 @@ function makeSculpt(B, rest) {
   }
   const RR = [null, 0];
   const finishProfiles = new Map();
-  function paintedFinish(surface,roughness) {
-    if(roughness===undefined)return surface;
+  function paintedFinish(surface,roughness,row) {
+    if(roughness===undefined&&!(row?.[0]&6))return surface;
+    const specular=Object.keys(surface?.layers ?? {}).filter(key=>surface.layers[key]?.type==='specular');
+    const base = surface?.layers?.[specular[0]]?.roughness ?? .65;
+    const [coat, coatRoughness] = PaintFinish.coat(row, 0, .18);
+    roughness = PaintFinish.roughness(row, roughness ?? (row?.[0] & 2 ? base : undefined));
+    if(roughness===undefined&&!coat)return surface;
     if(!finishProfiles.has(surface))finishProfiles.set(surface,new Map());
-    const profiles=finishProfiles.get(surface), level=Math.round(roughness*16);
-    if(!profiles.has(level)){
+    const profiles=finishProfiles.get(surface), level=roughness===undefined ? -1 : Math.round(roughness*16);
+    const coatLevel=Math.round(coat*16), coatR=Math.round(coatRoughness*16), key=level+1+(coatLevel*17+coatR)*18;
+    if(!profiles.has(key)){
       const layers={...surface?.layers};
-      const specular=Object.keys(layers).filter(key=>layers[key]?.type==='specular');
-      for(const key of specular)layers[key]={...layers[key],roughness:level/16};
-      if(!specular.length)layers['painted-roughness']={type:'specular',roughness:level/16,strength:.28,color:'#ffffff'};
-      profiles.set(level,{...surface,layers});
+      if(level>=0) {
+        for(const id of specular)layers[id]={...layers[id],roughness:level/16};
+        if(!specular.length)layers['painted-roughness']={type:'specular',roughness:level/16,strength:.28,color:'#ffffff'};
+      }
+      if(coatLevel)layers['painted-coating']={type:'specular',roughness:coatR/16,strength:.75*coatLevel/16,color:'#ffffff'};
+      profiles.set(key,{...surface,layers});
     }
-    return profiles.get(level);
+    return profiles.get(key);
   }
   function light(m, res, x, y, z, nx, ny, nz, full, selected, fine, coarse = false) {
     if (!coarse && S.clip && !S.clip(x, y, z)) return;
@@ -1325,7 +1357,7 @@ function makeSculpt(B, rest) {
     }
     /* a wet or polished thing has a small hard highlight where it mirrors the sun to the eye. The eye is taken to be at S.view (set it to the
        way the camera looks from); gloss: { c (palette index), at (how small: 0.95), c2 and at2 (a dimmer ring round it) } */
-    const surface = paintedFinish(m.surface === undefined ? m0.surface : m.surface,m0.paintedRoughness);
+    const surface = paintedFinish(m.surface === undefined ? m0.surface : m.surface,m0.paintedRoughness,m0.paintFinishSample);
     let glint = false;
     if (m.gloss && !style?.highlight && !surface && !m.em && !flat) {
       const g = m.gloss,
@@ -2034,13 +2066,16 @@ function makeSculpt(B, rest) {
   }
 
   function shadeOwned(owner, material, ...sample) {
-    const { sdfSpray: spray, paintRelief } = material;
+    const { sdfSpray: spray, paintRelief, paintFinish } = material;
     const cap = material.cutSurface?.locate(sample.slice(1, 4), sample.slice(4, 7));
     if (cap) material = cap;
     else if (material.materialAt || material.surfaceState)
       material = baseMaterialAt(material, sample.slice(1, 4), sample.slice(4, 7));
     if (!cap && paintRelief)
       material = reliefMaterial(material, paintRelief, sample.slice(1, 4), sample.slice(4, 7));
+    let spills;
+    const finish = !cap && paintFinish?.(sample.slice(1, 4), sample.slice(4, 7), (...source) => (spills ??= []).push(source));
+    if (finish) material = { ...material, paintFinishSample: finish };
     material = controlled(material);
     const preview = typeof globalThis !== 'undefined' && globalThis.INK_LOOK_ALBEDO;
     const pigment = material.indexedPigment, glow = material.paintedEmission;
@@ -2061,6 +2096,7 @@ function makeSculpt(B, rest) {
       .map((n,i)=>Math.min(255,Math.round(n+255*(glowRGB?.[i]??0)))),shade);
     else shade();
     const end = B.count();
+    if (finish && end > first) B.describePaintFinish?.(first, end, finish, spills);
     if (material.paintedNormal || glowRGB?.some(Boolean) || material.inkControls)
       B.describePaintedShading?.(first,end,material.paintedNormal,glowRGB,material.inkControls);
     const referenceRows = referenceSdf?.rows.get(owner);
