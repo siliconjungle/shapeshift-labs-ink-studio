@@ -600,6 +600,144 @@
       faces:order([...points.keys()].map(id=>g.corners.get(id).face)),edgeChanges:[]}};
   }
 
+  function faceGrain(g,face) {
+    const row = g.faces.get(face), positions = row.corners.map(({id})=>g.corners.get(id).position);
+    const edges = positions.map(point=>V.sub(point,positions[0]));
+    const geometryScale = Math.max(...edges.flat().map(Math.abs));
+    const uv = row.corners.map(({uv})=>[uv[0]-row.corners[0].uv[0],uv[1]-row.corners[0].uv[1]]);
+    const uvScale = Math.max(...uv.flat().map(Math.abs));
+    if (!geometryScale || !Number.isFinite(geometryScale) || !uvScale) return;
+    const points = edges.map(point=>point.map(n=>n/geometryScale));
+    const coords = uv.map(pair=>pair.map(n=>n/uvScale));
+    let normal = [0,0,0], u = [0,0,0], v = [0,0,0], area = 0;
+    // Boundary sums produce the area-weighted surface tangents for increasing U and V.
+    for (const [i,a] of points.entries()) {
+      const next = (i+1)%points.length, b = points[next], [s,t] = coords[i], [x,y] = coords[next];
+      normal = V.add(normal,V.cross(a,b));
+      u = V.add(u,V.sub(V.mul(a,y),V.mul(b,t)));
+      v = V.add(v,V.sub(V.mul(b,s),V.mul(a,x)));
+      area += s*y-x*t;
+    }
+    if (Math.abs(area)<1e-12 || V.len(normal)<1e-12) return;
+    normal = V.norm(normal);
+    const tangent = direction=>V.mad(direction,normal,-V.dot(direction,normal));
+    u = V.mul(tangent(u),Math.sign(area));
+    v = V.mul(tangent(v),Math.sign(area));
+    const handedness = V.dot(V.cross(V.norm(u),V.norm(v)),normal);
+    if (Math.abs(handedness)<1e-10) return;
+    return {normal,tangents:[u,v],handedness:Math.sign(handedness)};
+  }
+
+  function grainReference(g,request,axis) {
+    if (!fields(request,['face','edge','selection','from']) ||
+        [request.face,request.edge,request.selection].filter(value=>value!==undefined).length!==1)
+      throw new TypeError('Choose a reference face, directed edge, or saved single face or edge selection');
+    const {selection:saved,from} = request;
+    const picked = saved===undefined ? undefined : select(g.doc,{domain:saved?.domain,from:saved,uvSet:g.set});
+    if (picked && (picked.ids.length!==1 || !['faces','edges'].includes(picked.domain)))
+      throw new RangeError('Choose one reference face or edge');
+    const face = request.face ?? (picked?.domain==='faces' ? picked.ids[0] : undefined);
+    if (face!==undefined) {
+      if (from!==undefined || !g.faces.has(face)) throw new RangeError('Choose an existing reference face');
+      const basis = faceGrain(g,face);
+      const {material,corners} = g.faces.get(face);
+      const contour = corners.map(row=>row.uv);
+      return {kind:'face',face,direction:basis ? V.norm(basis.tangents[axis]) : null,
+        handedness:basis?.handedness ?? null,guides:[{material,points:[...contour,contour[0]]}]};
+    }
+    const edge = request.edge ?? picked?.ids[0], row = g.edges.get(edge);
+    if (!row || from!==undefined && !row.vertices.includes(from)) throw new RangeError('Choose an existing reference edge and optional start vertex');
+    const sides = edgeSides(g,[edge],picked?.edgeSides);
+    const [a,b] = sides[0].corners.map(id=>g.corners.get(id).position);
+    const reverse = from===row.vertices[1], delta = reverse ? V.sub(a,b) : V.sub(b,a);
+    const scale = Math.max(...delta.map(Math.abs));
+    return {kind:'edge',edge,from:row.vertices[reverse ? 1 : 0],to:row.vertices[reverse ? 0 : 1],
+      direction:scale>0 && Number.isFinite(scale) ? V.norm(delta.map(n=>n/scale)) : null,
+      guides:sides.map(side=>({material:g.faces.get(side.face).material,points:side.corners.map(id=>g.corners.get(id).uv)}))};
+  }
+
+  const grainError = (a,b)=>Math.atan2(V.len(V.cross(a,b)),V.dot(a,b))*180/Math.PI;
+
+  function closestGrainTurn(tangents,direction,axis,flipX) {
+    let best;
+    for (const degrees of [0,90,270,180]) {
+      const turn = TilesetSelection.paintTransform({rotation:degrees,flipX,flipY:false},1,1).point;
+      const origin = turn([0,0])[axis];
+      const coefficients = [turn([1,0])[axis]-origin,turn([0,1])[axis]-origin];
+      const after = V.norm(V.add(V.mul(tangents[0],coefficients[0]),V.mul(tangents[1],coefficients[1])));
+      const error = grainError(after,direction);
+      if (!best || error<best.error-1e-9) best = {degrees,turn,after,error};
+    }
+    return best;
+  }
+
+  function normalizeGrain(g,operation,points,conflict) {
+    const {reference:target,domain=operation.selection?.domain ?? 'faces',axis='u',method='quarter-turn',
+      maxError=45,matchHandedness=true} = operation;
+    if (!fields(operation,['op','ids','selection','domain','reference','axis','method','maxError','matchHandedness']) ||
+        !['faces','islands'].includes(domain) || !['u','v'].includes(axis) || !['quarter-turn','continuous'].includes(method) ||
+        !Number.isFinite(maxError) || maxError<0 || maxError>180 || typeof matchHandedness!=='boolean')
+      throw new TypeError('Normalize selected faces or islands with a reference, U or V axis, and optional alignment method and angular tolerance');
+    const {ids,groups} = selectedUVGroups(g,operation,domain,'per-face');
+    const dimension = axis==='u' ? 0 : 1, reference = grainReference(g,target,dimension), faces = [];
+    if (!reference.direction) conflict('degenerate-orientation-reference',
+      reference.kind==='face' ? {face:reference.face} : {edge:reference.edge});
+    else for (const {face,corners} of groups) {
+      if (face===reference.face) {
+        faces.push({face,status:'reference'});
+        continue;
+      }
+      const basis = faceGrain(g,face);
+      if (!basis) {
+        faces.push({face,status:'degenerate'});
+        conflict('degenerate-face-orientation',{face});
+        continue;
+      }
+      const {normal,tangents:[u,v],handedness} = basis;
+      const projected = V.mad(reference.direction,normal,-V.dot(reference.direction,normal));
+      if (V.len(projected)<=1e-8) {
+        faces.push({face,status:'perpendicular'});
+        conflict('reference-perpendicular-to-face',{face});
+        continue;
+      }
+      const direction = V.norm(projected), before = V.norm(basis.tangents[dimension]);
+      const flipX = matchHandedness && reference.kind==='face' && handedness!==reference.handedness;
+      const closest = method==='quarter-turn' ? closestGrainTurn([u,v],direction,dimension,flipX) : undefined;
+      let degrees, error, after;
+      if (closest) ({degrees,error,after} = closest);
+      else {
+        // Solve the desired tangent in the current UV basis, then rotate it onto the requested UV axis.
+        const x = V.dot(V.cross(direction,v),normal)*handedness*(flipX ? -1 : 1);
+        const y = V.dot(V.cross(u,direction),normal)*handedness;
+        const turn = dimension*90-Math.atan2(y,x)*180/Math.PI;
+        degrees = ((turn+180)%360+360)%360-180;
+        if (Math.abs(degrees)<1e-9) degrees = 0;
+        after = degrees===0 ? V.norm(V.mul(basis.tangents[dimension],flipX && dimension===0 ? -1 : 1)) : direction;
+        error = grainError(after,direction);
+      }
+      const row = {face,status:'aligned',degrees,flipX,desiredDirection:direction,beforeDirection:before,afterDirection:after,
+        beforeError:grainError(before,direction),afterError:error};
+      faces.push(row);
+      if (error>maxError+1e-8) {
+        row.status = 'outside-tolerance';
+        conflict('orientation-outside-tolerance',{face,degrees,error,maxError});
+        continue;
+      }
+      if (degrees===0 && !flipX) {
+        row.status = 'already-aligned';
+        continue;
+      }
+      if (closest) {
+        const bounds = boundsOf(corners.map(({uv})=>uv)), spans = bounds.slice(2).map((n,i)=>n-bounds[i]);
+        for (const {id,uv} of corners) {
+          const rotated = closest.turn(uv.map((n,i)=>(n-bounds[i])/spans[i]));
+          points.set(id,rotated.map((n,i)=>n===1 ? bounds[i+2] : bounds[i]+n*spans[i]));
+        }
+      } else orient(g,{op:'orient',domain:'faces',ids:[face],mode:'per-face',degrees,flipX},points);
+    }
+    return {ids,evidence:{domain,axis,method,maxError,matchHandedness,reference,faces,edgeChanges:[]}};
+  }
+
   function snappedUVScale(axes,requested) {
     const result = factor=>{
       const bounds = [];
@@ -1042,8 +1180,8 @@
   function draft(g, operation, atlasFor) {
     if (operation?.op === 'set-pivot') return setPivot(g,operation);
     if (!operation || typeof operation !== 'object' ||
-        !['cut', 'stitch', 'pin', 'transform', 'orient', 'scale', 'move-corners', 'nudge', 'snap', 'unwrap', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
-      throw new TypeError('Use a UV pivot, cut, stitch, pin, transform, orientation, scale, nudge, snap, corner move, face remap, local solve or texel budget operation');
+        !['cut', 'stitch', 'pin', 'transform', 'orient', 'normalize-orientation', 'scale', 'move-corners', 'nudge', 'snap', 'unwrap', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
+      throw new TypeError('Use a UV pivot, cut, stitch, pin, transform, orientation, reference normalization, scale, nudge, snap, corner move, face remap, local solve or texel budget operation');
     const points = new Map(), edges = new Map(), pins = new Map(), conflicts = [];
     let count = 0;
     function conflict(code, evidence) {
@@ -1052,7 +1190,7 @@
     }
     let ids, evidence;
     const local = operation.op === 'unwrap' || operation.op === 'relax';
-    const precise = ['remap-face','orient','scale','move-corners','nudge','snap'].includes(operation.op);
+    const precise = ['remap-face','orient','normalize-orientation','scale','move-corners','nudge','snap'].includes(operation.op);
     const preserveWinding = local || ['stitch','scale','move-corners','nudge','snap'].includes(operation.op);
     if (local) {
       ids = targets(g, 'faces', operation);
@@ -1063,6 +1201,7 @@
     } else if (operation.op === 'remap-face') ids = remapFace(g,operation,points,conflict);
     else if (operation.op === 'transform') ({ids,evidence} = transform(g, operation, points));
     else if (operation.op === 'orient') ({ids,evidence} = orient(g,operation,points,atlasFor));
+    else if (operation.op === 'normalize-orientation') ({ids,evidence} = normalizeGrain(g,operation,points,conflict));
     else if (operation.op === 'scale') ({ids,evidence} = scaleUV(g,operation,points,atlasFor,conflict));
     else if (operation.op === 'move-corners') ({ids,evidence} = moveCorners(g,operation,points));
     else if (operation.op === 'nudge') ({ids,evidence} = nudge(g,operation,points,atlasFor));
@@ -1079,6 +1218,8 @@
       for (const id of ids) pins.set(id, operation.pinned);
     }
     const mirrored = operation.op==='orient' && evidence.mirrored ? new Set(points.keys()) : null;
+    const normalized = operation.op==='normalize-orientation' ?
+      new Set(evidence.faces.filter(row=>row.flipX).map(row=>row.face)) : null;
     for (const [id, uv] of points) {
       const corner = g.corners.get(id);
       const unchanged = precise ? uv.every((n,i)=>n === corner.uv[i]) : sameUV(uv,corner.uv);
@@ -1094,7 +1235,8 @@
       const after = area2(...corners.map(id => points.get(id) ?? g.corners.get(id).uv));
       if (Math.abs(before) > 1e-12 && Math.abs(after) <= 1e-12)
         conflict('collapsed-uv-triangle', { face, corners });
-      else if ((preserveWinding || operation.op==='orient' && !corners.every(id=>mirrored?.has(id))) && before * after < 0)
+      else if (before * after < 0 && (preserveWinding || operation.op==='orient' && !corners.every(id=>mirrored?.has(id)) ||
+          normalized && !normalized.has(face)))
         conflict('flipped-uv-triangle', { face, corners });
     }
     if (!count && local && points.size) meshUVRegions.checkOverlaps(g, points, conflict);

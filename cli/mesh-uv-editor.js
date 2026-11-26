@@ -127,7 +127,7 @@ function atlas(layout, material, selection, settings, kit, paint) {
   for (const highlight of highlights) draw.push(highlight);
   for (const guide of selection?.snapGuides ?? []) if (guide.material===material) {
     const points = guide.points.map(at);
-    draw.push(points.length===2 ? line(points,ink.snap,2) : rect(center(points[0],4),ink.snap));
+    draw.push(points.length>1 ? line(points,ink.snap,2) : rect(center(points[0],4),ink.snap));
   }
   const marks = cornerMarkers(corners.values(),selection,corner=>faces.has(corner.face) ? at(corner.uv) : undefined);
   const pivot = settings.pivot ?? layout.pivot;
@@ -220,7 +220,7 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     layouts[0].faces[0]?.material;
   if (!layouts[0].faces.some(row => row.material === material)) throw new RangeError('Choose an authored UV material');
   const captures = [nativeBefore, nativeAfter], views = [];
-  const {orientation,scaling} = selected ?? {};
+  const {orientation,scaling,normalization} = selected ?? {};
   const basis = scaling ?? orientation;
   const useAtlasPaint = basis || selected?.cornerScope || selected?.snapGuides || settings.pivot || layouts.some(layout=>layout.pivot);
   let crossHighlight;
@@ -253,7 +253,8 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
   }
   const scope = selected?.cornerScope;
   const [pivotBefore,pivotAfter] = layouts.map(layout=>basis ? null : settings.pivot ?? layout.pivot ?? null);
-  const hasPivot = basis || pivotBefore || pivotAfter, snapGuide = scaling?.snapBounds ? 'Snapped bounds' : selected?.snapGuides && 'Snap target';
+  const hasPivot = basis || pivotBefore || pivotAfter;
+  const snapGuide = scaling?.snapBounds ? 'Snapped bounds' : normalization ? 'UV reference' : selected?.snapGuides && 'Snap target';
   draw.push(text(snapGuide || 'Cut seam', [width * .18, height - 8], snapGuide ? ink.snap : ink.seam, 8),
     text(scope ? 'Held overlap' : 'Pinned corner', [width * .49, height - 8], scope ? ink.held : ink.pin, 8),
     text(scope ? 'Move scope' : hasPivot ? 'UV pivot' : 'Linked selection', [width * .80, height - 8],
@@ -267,16 +268,20 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
   };
   return { material, grid: [w, h], files: [...imageNames, ...crossHighlight?.sheets.slice(1).map(row => row.file) ?? []],
     ...(scope && {cornerScope:scope}), ...(orientation && {orientation}), ...(scaling && {scaling}),
+    ...(normalization && {normalization}),
     ...((pivotBefore || pivotAfter) && {pivot:{before:pivotBefore,after:pivotAfter}}),
     ...(crossHighlight && { crossHighlight }), ...(evidence && { readability: evidence }) };
 }
 
 function editSelection(UV,document,plan,selectionFile) {
   const uvSet = plan.report.uvSet ?? 0;
-  const guides = plan.report.operations.flatMap(row=>row.op==='snap' ? row.evidence.guides : []);
+  const normalized = plan.report.operations.findLast(row=>row.op==='normalize-orientation')?.evidence;
+  const guides = plan.report.operations.flatMap(row=>row.op==='snap' ? row.evidence.guides : [])
+    .concat(normalized?.reference.guides ?? []);
   const basis = plan.report.operations.findLast(row=>row.op==='orient' || row.op==='scale');
   const applied = basis?.evidence;
   const inspection = {...(guides.length && {snapGuides:guides}),
+    ...(normalized && {normalization:{axis:normalized.axis,method:normalized.method,reference:normalized.reference,faces:normalized.faces}}),
     ...(applied && {[basis.op==='orient' ? 'orientation' : 'scaling']:{
       mode:applied.mode,faces:applied.faces,pivotSource:applied.pivotSource,pivots:applied.pivots,
       ...(basis.op==='scale' && {snapBounds:applied.snapBounds,bounds:applied.bounds})
@@ -292,7 +297,7 @@ function editSelection(UV,document,plan,selectionFile) {
     const selected = UV.select(document,{domain:'corners',uvSet,ids:[...moving]});
     return {...selected,...inspection,heldCorners:held,cornerScope:{modes:scopes.map(row=>row.scope),moving:selected.ids,held}};
   }
-  const ids = [...new Set([...plan.report.corners.map(row=>row.face),...applied?.faces ?? []])];
+  const ids = [...new Set([...plan.report.corners.map(row=>row.face),...applied?.faces ?? [],...normalized?.faces.map(row=>row.face) ?? []])];
   return {...UV.select(document,{domain:'faces',uvSet,ids}),...inspection};
 }
 
