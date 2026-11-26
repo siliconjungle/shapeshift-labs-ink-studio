@@ -139,7 +139,7 @@
     'body-shape': { need: { at: 'vec3', half: 'vec3' }, may: { collider: 'obj', bend: 'obj' } },
     lathe: { need: { at: 'vec3', h: 'pos', r: 'num|vec2|profile' } },
     torus: { need: { at: 'vec3', R: 'pos', r: 'pos' } },
-    sweep: { need: { brush: 'obj', poses: 'list' }, may: { step: 'pos', blendRadius: 'num' } },
+    sweep: { need: { brush: 'obj', poses: 'list' }, may: { step: 'pos', blendRadius: 'num', path: 'str', pressureResponse: 'obj' } },
     tube: { need: { pts: 'pts', r: 'num|vec2' } },
     stroke: {
       need: { points: 'list' },
@@ -1987,7 +1987,7 @@
             const carrier = carriers.get(anchor.host.id) ?? makeSolid(anchor.host, true);
             const { poses, contacts } = K.procedural.sweepSnap.resolve({ ...s, restAffine: anchor.guideFrame },
               anchor.snap, (x, y, z) => S.psd(carrier, x, y, z));
-            s = { ...s, poses };
+            s = { ...s, poses, path: 'free' };
             paintContacts.set(s.id, contacts.length);
           } catch (error) {
             throw new RangeError(s.id + ' on ' + anchor.host.id + ' — ' + error.message, { cause: error });
@@ -2054,7 +2054,13 @@
         else if (k === 'lathe')
           p = S.lathe(s.at, s.h, Array.isArray(s.r) && Array.isArray(s.r[0]) ? t => K.kf(t, s.r.flat()) : s.r, m, baseOptions);
         else if (k === 'torus') p = S.torus(s.at, s.R, s.r, m, baseOptions);
-        else if (k === 'sweep') p = S.implicitForm(K.procedural.shapeSweeps.prepare(s), m, baseOptions);
+        else if (k === 'sweep') {
+          const form = K.procedural.shapeSweeps.prepare(s);
+          const paintOverlay = form.opacityAt && !held && !s.hold && !s.carve && !s.ghost && !s.group && !modifiers.length;
+          const material = form.opacityAt ? { ...m, opacityAt: form.opacityAt } : m;
+          p = S.implicitForm(form, material, paintOverlay ? { ...baseOptions, whole: true, paintOverlay } : baseOptions);
+          if (paintOverlay) p.geometryBounds = form.bounds;
+        }
         else if (k === 'tube')
           p = S.tube(s.pts, Array.isArray(s.r) ? s.r[0] : s.r, Array.isArray(s.r) ? s.r[1] : s.r, m, baseOptions);
         else if (K.drawing.kind(s)) p = K.drawing.solid(S, s, m, baseOptions);
@@ -2144,7 +2150,7 @@
                 } catch (error) {
                   throw new RangeError('Sculpt snap ' + (s.id ?? s.kind) + '/' + modifier.id + ': ' + error.message, { cause: error });
                 }
-                shape = { ...shape, poses: snapped.poses };
+                shape = { ...shape, poses: snapped.poses, path: 'free' };
               }
               operand = sub(shape);
               if (trace) tool = operand.geometryBounds ?? traceBounds(operand);
@@ -2248,10 +2254,11 @@
       for (const name of [null, ...names]) {
         if (!groups.has(name)) continue;
         startSculpt();
-        for (const solid of groups.get(name)) make(solid);
+        const members = groups.get(name), built = members.map(solid => make(solid));
         let detail = name === null ? resolution ?? 0.08 :
           Math.min(resolution ?? 0.08, ...groups.get(name).map(solid => solid.res ?? Infinity));
-        const hasBody = groups.get(name).some(solid => (!solid.separate || activeModifiers(solid).length) && !solid.carve);
+        const hasBody = members.some((solid, i) => (!solid.separate || activeModifiers(solid).length) && !solid.carve &&
+          !built[i]?.paintOverlay);
         const restBounds = (name === null ? bounds : undefined) ?? (hasBody ? S.modelBounds(detail * 2) : undefined);
         if (resolution === undefined && name === null && restBounds) {
           const volume = restBounds.max.reduce((v, high, i) => v * (high - restBounds.min[i]), 1);

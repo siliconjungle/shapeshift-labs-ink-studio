@@ -36,7 +36,7 @@ const SdfAssist = (() => {
   }
 
   function opaque(material) {
-    return !material.skip && (material.a === undefined || material.a >= 1) && !material.glass &&
+    return !material.skip && !material.opacityAt && (material.a === undefined || material.a >= 1) && !material.glass &&
       !material.optical && !material.surface?.opacity &&
       !Object.values(material.surface?.layers ?? {}).some(layer=>layer?.type==='projected' &&
         (layer.revealChannel || typeof layer.pattern==='function')) && !material.em && !material.fur && !material.leaf &&
