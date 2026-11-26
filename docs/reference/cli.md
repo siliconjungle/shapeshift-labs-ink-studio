@@ -113,6 +113,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   fracture prepare <plan.json> [--out preparation.json]   fit feature-guided cells, hierarchy and seam constraints
   fracture compile <plan.json> [--out world.json]   compile a portable native failure scene
   fracture run <plan.json> [--out directory]   replay progressive failure and save native handoffs and checkpoints
+  material-lab presets [--out presets.json]   list native elastic, grain and constraint profiles
+  material-lab compile <plan.json> [--out world.json]   compose soft bodies, grains and contact surfaces
+  material-lab run <plan.json> [--out directory]   record nonlinear strain, material pair impulses and work
     sim run|resume|fork <file> [--branch ID]   name the branch in committed events
     sim run <world> --workers N [--profile]   advance eligible systems in deterministic Node worker partitions
     sim run <world> --record file.json [--observations plan.json]   retain reproducible execution evidence
@@ -229,6 +232,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   painting-cels sample <scene.json> <clip.json> --out scene.json [--frame cel-1 | --at seconds]   write one editable cel into the scene
   painting-cels preview <scene.json> <clip.json> --out directory [--frame cel-1 | --at seconds] [--view view.json]   render neighboring poses in one camera
   painting-cels export <scene.json> <clip.json> --out directory [--view view.json]   render numbered cels and animated PNG
+  paint-survival review <scene.json> <plan.json> --out directory   compare painted fallbacks across native grids and angles
+  paint-survival apply <scene.json> <plan.json> <review.json> --case angle/resolution --out scene.json   accept one reviewed paint variant
   sculpt-spray plan <scene.json> <brush.json>   capture receivers for a volumetric paint brush
   sculpt-spray apply <scene.json> <brush.json> --out scene.json   retain a shaped surface tint
   sculpt-spray inspect <scene.json>   show retained volumes and receiver coverage
@@ -1182,7 +1187,6 @@ These options are read by CLI code. Follow each source link for the accepted val
 - `--brick-meshes` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--buildup-threshold` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--camera-impulse-time` · [cli/ink-studio.js](../../cli/ink-studio.js)
-- `--case` · [cli/music-instrument-benchmark.js](../../cli/music-instrument-benchmark.js)
 - `--closest` · [cli/curve.js](../../cli/curve.js)
 - `--cloud` · [cli/scan-mesh.js](../../cli/scan-mesh.js)
 - `--coalesce` · [cli/ink-studio.js](../../cli/ink-studio.js)
