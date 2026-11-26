@@ -63,6 +63,8 @@ Marks use native [sweep brushes and pressure poses](sculpt-sweeps.md). They rend
 
 [Painting cels](painting-cels.md) animate retained strokes with editable frame holds, stable mark IDs, and a headless onion-skin preview.
 
+[Paint fallbacks](paint-survival.md) compare and accept simplified paint regions at several native art sizes and angles.
+
 ## Dabs, pressure, and ruled strokes
 
 Use one pose for a precise dab or multiple poses for a stroke. Both use the same brush, quaternion orientation, pressure, and edit operations. Set `path: "ruled"` to lay the recorded poses along a straight line between the first and last points. Ink distributes the poses along the line by their original spacing along the stroke. A surface-bound mark rules the guide before projecting it onto the receiver.
