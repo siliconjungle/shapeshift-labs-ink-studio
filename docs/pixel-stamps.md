@@ -1,5 +1,7 @@
 # Indexed pixel drawing and animated stamps
 
+Use [painting cels](painting-cels.md) for frame-by-frame edits and onion-skin previews of retained 3D strokes.
+
 Pixel stamps use a shared art grid and exact palette indices for material
 paint, contour masks, and animated effects. Draw one cel for a patch of
 moss, or give several cels different holds for a sparkle, bubble, or spell.
