@@ -11,6 +11,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `webgpu.createGaussianChunkStream` | function | `(renderer, toolkit, manifest, { url, fetch: fetchFile = globalThis.fetch, budgetBytes, maxSplats, layers, projectedError = {}, guardPixels = 12, startsPerFrame, concurrency } = {})` | [source](../../src/webgpu/gaussian-stream.mjs) |
 | `webgpu.createGaussianSplatRenderer` | function | `(device, { format = 'rgba8unorm' } = {})` | [source](../../src/webgpu/gaussian-renderer.mjs) |
 | `webgpu.createWebGPUGraph` | function | `(device, definition)` | [source](../../src/webgpu/graph.mjs) |
+| `webgpu.createWebGPUPixelProcessor` | function | `(device, program)` | [guide](../pixel-processor.md), [source](../../src/webgpu/pixel-processor.mjs) |
 | `webgpu.decodeGaussianPly` | function | `(input, { maxPoints = pointLimit } = {})` | [source](../../src/gaussian-splats.mjs) |
 | `webgpu.decodeGaussianSplat` | function | `(input, options)` | [source](../../src/gaussian-splats.mjs) |
 | `webgpu.decodeGaussianSpz` | function | `(input, { maxPoints = pointLimit, decompress = decompressStream } = {})` | [source](../../src/gaussian-splats.mjs) |
