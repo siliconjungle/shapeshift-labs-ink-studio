@@ -53,8 +53,7 @@ function clips(kit, temp, asset, reference, candidate, still, timing) {
 
 function compare(kit, source, left, right, out) {
   const { report, asset } = open(source);
-  const select = value => report.tiles.find(tile => tile.id === value || String(tile.tile) === value);
-  const a = select(left), b = select(right), timing = report.samples;
+  const a = Sweep.selectTile(report.tiles,left), b = Sweep.selectTile(report.tiles,right), timing = report.samples;
   if (!a || !b) throw new RangeError('Both comparison candidates must exist');
   const views = tile => tile.views ?? [{ id: 'default', image: tile.image, clip: tile.clip }];
   const referenceViews = views(a), candidates = views(b);
@@ -79,7 +78,8 @@ function compare(kit, source, left, right, out) {
       return { view: id, ...metrics, sideBySide, difference: signedDifference, ...(clip && { clip }) };
     });
     Assets.json(path.join(temp, 'report.json'), { format: 'ink-studio/sweep-comparison', version: 1,
-      left: a.id, right: b.id, ...(animated && { samples: timing }), views: rows });
+      left: a.id, right: b.id, ...(a.sampleId && { leftSampleId: a.sampleId }),
+      ...(b.sampleId && { rightSampleId: b.sampleId }), ...(animated && { samples: timing }), views: rows });
   });
 }
 
@@ -92,7 +92,7 @@ function rank(source, out) {
     const checks = tile.approval ?? [];
     const findings = checks.reduce((count, row) => count + Sweep.read(asset(row.report)).findings.length, 0);
     const passed = checks.length ? checks.every(row => row.passed) : null;
-    return { id: tile.id, tile: tile.tile, seed: tile.seed, parameters: tile.parameters, passed, findings };
+    return { id: tile.id, ...(tile.sampleId && { sampleId: tile.sampleId }), tile: tile.tile, seed: tile.seed, parameters: tile.parameters, passed, findings };
   });
   const priority = new Map([[true, 0], [false, 1], [null, 2]]);
   candidates.sort((a,b) => priority.get(a.passed) - priority.get(b.passed) || a.findings - b.findings || a.tile - b.tile);

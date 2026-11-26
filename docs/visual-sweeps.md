@@ -106,9 +106,13 @@ Use `{ "value": 1 }` for a literal. Valid comparisons are `eq`, `ne`,
 All constraints must pass. `runBudget` caps accepted runs after multiplying
 by the authored cases and seeds. An empty grid or an unfillable random
 request is an error. The sweep report records the exact accepted values.
-A pin stores those values directly and remains compatible with nearby
-exploration. This plan syntax also works for numeric and visual simulation
-sweeps.
+Each run has a `sampleId` derived from the case ID, render or world seed,
+and named parameter values. It stays the same when parameters are reordered,
+other candidates are filtered out, or a pin is replayed. Use it with
+`sweep pin` and `sweep compare`. The existing run IDs still identify
+positions within one report. A pin stores the selected values directly
+and remains compatible with nearby exploration. Numeric and visual
+simulation sweeps report the same stable ID for the same sample.
 
 ```sh
 ink-studio sweep examples/visual-sweep-attractor.js examples/visual-sweep-sampling.plan.json --out sampled-attractors
@@ -172,8 +176,8 @@ array. Include any local file reads your JavaScript scene relies on.
 
 ## Pin and explore
 
-Pick the tile number printed on the sheet or the exact run ID from
-`report.json`.
+Pick the tile number printed on the sheet, run ID, or stable sample ID
+from `report.json`.
 
 ```sh
 ink-studio sweep pin attractor-sweep 5 --out selected.json
