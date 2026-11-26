@@ -864,6 +864,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.scenePrefabs.expand` | function | `(source, { prefabs: external } = {})` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.origin` | function | `(transform)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.review` | function | `(source, before, after)` | [source](../../src/kit/p23-scene-prefabs.js) |
+| `KIT.authoring.sculptStamps` | namespace |  |  |
+| `KIT.authoring.sculptStamps.format` | value | `string = "ink-studio/sculpt-stamp"` |  |
+| `KIT.authoring.sculptStamps.place` | function | `(scene, stamp, placement)` | [source](../../src/kit/p23a-sculpt-stamps.js) |
+| `KIT.authoring.sculptStamps.version` | value | `number = 1` |  |
 | `KIT.authoring.storyExchange` | namespace |  |  |
 | `KIT.authoring.storyExchange.kindOf` | function | `(format)` | [source](../../src/kit/p23zz-story-exchange.js) |
 | `KIT.authoring.storyExchange.open` | function | `(entry,resolvePath,io)` | [source](../../src/kit/p23zz-story-exchange.js) |
@@ -1687,6 +1691,11 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.diorama.scene` | function | `(spec, env)` | [guide](../../README.md#scenes-as-json), [guide](../../README.md#editable-3d-drawing), [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.sceneLook` | function | `(spec)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.sceneMaterials` | function | `(spec)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
+| `KIT.diorama.solidFrames` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.solidFrames.authored` | function | `(raw, fallback)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
+| `KIT.diorama.solidFrames.compose` | function | `(outer, inner)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
+| `KIT.diorama.solidFrames.inverse` | function | `(frame)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
+| `KIT.diorama.solidFrames.transform` | function | `({ basis, scale, mesh })` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidTransform` | function | `(value)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solids` | function | `(spec, { activeOnly = false } = {})` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.styles` | namespace |  | [guide](../../README.md#scenes-as-json), [guide](../build-profiles.md#bake-and-render-in-the-browser) |
