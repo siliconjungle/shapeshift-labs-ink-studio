@@ -1,6 +1,7 @@
 /* Portable material parameters and the matching CPU/WebGL lighting equations. */
 const PbrMaterials = (() => {
-  let selectors, colors, surface, pixelLook, shadows, curves;
+  let selectors, colors, surface, pixelLook, shadows, curves, finishPaint;
+  try { finishPaint = PaintFinish; } catch { finishPaint = require('./paint-finish.js'); }
   try { selectors = TargetSelectors; } catch { selectors = require('./target-selectors.js'); }
   try { colors = ColorSpace; } catch { colors = require('./color-space.js'); }
   try { surface = SurfaceLook; } catch { surface = require('./surface-look.js'); }
@@ -236,6 +237,14 @@ const PbrMaterials = (() => {
       if (p.coat >= 0) coat = mix(coat, p.coat, weight);
       if (p.emission) emission = emission.map((value, i) => mix(value, p.emission[i], weight));
     }
+    let coatRoughness = m.coatRoughness;
+    const finish = sample.paintedFinish;
+    if (finish) {
+      base = finishPaint.gradeLinear(finish, base);
+      rough = finishPaint.roughness(finish, rough);
+      [coat, coatRoughness] = finishPaint.coat(finish, coat, coatRoughness);
+      if (sample.finishEmission) emission = emission.map((value, i) => value + sample.finishEmission[i]);
+    }
     const frame = shadingFrame(sample.normal, sample.tangent, sample.view);
     const { n, v, nv } = frame, env = plan.environment;
     const envAt = y => env.horizon.map((value, i) => mix(value, (y >= 0 ? env.sky : env.ground)[i], Math.abs(y)));
@@ -251,7 +260,7 @@ const PbrMaterials = (() => {
       return emission[i] + env.intensity * ((diffuse + reflected) * (1 - coatView) + coatView * reflectionEnv[i]);
     });
     const aspect = Math.sqrt(1 - .9 * m.anisotropy);
-    const a = Math.max(.012, rough * rough), ac = Math.max(.012, m.coatRoughness ** 2);
+    const a = Math.max(.012, rough * rough), ac = Math.max(.012, coatRoughness ** 2);
     const axes=[a/aspect,a*aspect,ac], taps=plan.specularSampling && sample.highlightSamples;
     const visibilityAt=(index,point,normal)=>sample.receiveShadow!==false && plan.shadows ?
       plan.shadows.visibility(index,point,normal) : 1;
@@ -318,7 +327,7 @@ const PbrMaterials = (() => {
     }
     let display = rgb.map(channel => clamp(channel * plan.exposure));
     if (m.diffuseRamp) {
-      const {tint,amount} = m.diffuseRamp, swatch = toLinear(tint(incidence));
+      const {tint,amount} = m.diffuseRamp, swatch = finishPaint.gradeLinear(finish, toLinear(tint(incidence)));
       const weight = m.rampStrength * (amount?.(incidence) ?? 1);
       display = rgb.map((channel,i) => clamp(mix(clamp((channel-emission[i])*plan.exposure),swatch[i],weight) +
         emission[i]*plan.exposure));

@@ -15,7 +15,7 @@ Store reusable [3D painting](painting-3d.md) styles under `painting.presets`. A 
 }
 ```
 
-This preset uses the painting's `profiles.reed` and `flowMaps.grain` assets. `looseness.spacing` multiplies the interval between dabs, so a value below 1 places them closer together. The full set of preset channels is `brush`, `step`, `blendRadius`, `pressureResponse`, `looseness`, `direction`, `grid`, `relief`, and `mat`. The resolved mark still needs a valid brush, material, and attachment for its style.
+This preset uses the painting's `profiles.reed` and `flowMaps.grain` assets. `looseness.spacing` multiplies the interval between dabs, so a value below 1 places them closer together. The full set of preset channels is `brush`, `step`, `blendRadius`, `pressureResponse`, `looseness`, `direction`, `grid`, `relief`, `finish`, and `mat`. The resolved mark still needs a valid brush and attachment for its style, along with a material for pigment and volume marks.
 
 Use an `apply-preset` edit to put the same style on an existing stroke.
 
