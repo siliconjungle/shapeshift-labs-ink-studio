@@ -207,6 +207,7 @@ All checked-in guides, indexed by title and section headings.
 - [Cycle detection and loop authoring](../loop-authoring.md)
 - [Lumped effort/flow networks](../lumped-networks.md)
 - [Comb and ruffle retained surface marks](../mark-direction.md)
+- [Align retained marks to a surface grid](../mark-grid.md)
 - [Paint with custom mark profiles](../mark-profiles.md)
 - [Measure physical properties of assemblies](../mass-properties.md)
 - [Match-cut finder](../match-cut.md)

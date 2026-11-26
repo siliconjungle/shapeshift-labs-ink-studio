@@ -2008,20 +2008,36 @@
             const carrier = carriers.get(anchor.host.id) ?? makeSolid(anchor.host, true);
             const psd = S.psd, distance = (x, y, z) => psd(carrier, x, y, z), allowance = style?.silhouetteAllowance;
             const pigmentOnly = allowance === 0;
-            const warp = anchor.direction && carrier.markWarp;
+            const { direction: comb, grid } = anchor;
+            let warp = (comb || grid) && carrier.markWarp, chart;
+            if (grid?.settings.kind === 'uv') {
+              chart = warp?.base.markCharts?.(grid.settings.chart);
+              if (!chart) {
+                chart = carrier.markCharts?.(grid.settings.chart);
+                if (chart) warp = undefined;
+              }
+            }
             const restDistance = warp ? (x, y, z) => psd(warp.base, x, y, z) : distance;
+            const gridDab = grid && K.procedural.markGrid.align(grid, { chart, distance: restDistance,
+              reach: anchor.snap.maxDistance, minFacing: anchor.snap.minFacing ?? .25 });
             const { poses, contacts } = K.procedural.sweepSnap.resolve({ ...s, restAffine: anchor.guideFrame },
               pigmentOnly ? { ...anchor.snap, offset: 0 } : anchor.snap, restDistance);
             s = { ...s, poses, path: 'free' };
             paintContacts.set(s.id, contacts.length);
-            if (anchor.direction) {
-              const report = modelOptions?.[brushField] === 'paintings' && { space: 'receiver-rest', warped: !!warp, samples: 0, frames: [] };
+            if (comb || gridDab) {
+              const report = modelOptions?.[brushField] === 'paintings' && {
+                space: 'receiver-rest', warped: !!warp, samples: 0, frames: [], ...(gridDab && { gridResults: {} })
+              };
               if (report) paintDirections.set(s.id, report);
-              orient = K.procedural.markDirection.align(anchor.direction, { frame: anchor.guideFrame, distance: restDistance,
-                forward: warp?.forward, root: anchor.snap.mode === 'root' ? contacts[0] : undefined,
-                spacing: anchor.direction.brush.probe ?? s.res ?? S.res, mark: s.id,
+              orient = K.procedural.markDirection.align(comb, { frame: anchor.guideFrame, distance: restDistance,
+                forward: warp?.forward, root: anchor.snap.mode === 'root' ? contacts[0] : undefined, grid: gridDab,
+                spacing: comb?.brush.probe ?? grid?.brush?.probe ?? s.res ?? S.res, mark: s.id,
                 ...(report && { observe(frame) {
                   report.samples++;
+                  if (frame.grid) {
+                    const { status } = frame.grid;
+                    report.gridResults[status] = 1 + (report.gridResults[status] ?? 0);
+                  }
                   if (report.frames.length < 8) report.frames.push(frame);
                 } })
               });
@@ -2187,6 +2203,7 @@
         if (p?.bump && audit?.bumpPhases) audit.bumpPhases.set(s, p.bumpPhase ?? p.g);
         if (locate && s.mat === undefined && (k === 'join' || unaryKinds.includes(k))) p.mat = charts.bind(p.mat, locate, B.P);
         if (modifiers.length) {
+          if (locate) p.markCharts = locate.chart;
           const res = p.res;
           let snapGroup, snapCarrier;
           for (const modifier of modifiers) {
@@ -2262,6 +2279,7 @@
           }
           p = S.add(p, p.mat, { ...o, res, bump: undefined, reach: p.reach });
         }
+        if (locate && p) p.markCharts = locate.chart;
         if ((paint || spray) && p?.mat)
           p.mat = { ...p.mat, ...(paint && { sdfPaint: paint }), ...(spray && { sdfSpray: spray }) };
         if (p?.sd && carrierIds.has(s.id)) carriers.set(s.id, { ...p });
