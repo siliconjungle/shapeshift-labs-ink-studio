@@ -194,10 +194,13 @@
         const mesh = meshes[node.mesh], morphs = mesh?.primitives[0]?.targets?.length,
           weights = node.weights ?? mesh?.weights ?? (morphs ? Array(morphs).fill(0) : undefined);
         world[id] = mul(parent === -1 ? identity : world[parent], local);
+        const metadata = node.extras?.inkStudio;
         return { id, name: node.name, parent: parent === -1 ? null : parent, local, world: world[id],
           ...(mesh && { mesh: node.mesh, materials: mesh.primitives.map(part => part.material ?? null) }),
           ...(node.skin !== undefined && { skin: node.skin }),
-          ...(node.extras?.inkStudio?.pivot && { pivot: structuredClone(node.extras.inkStudio.pivot) }),
+          ...(metadata?.pivot && { pivot: structuredClone(metadata.pivot) }),
+          ...(typeof metadata?.helperId === 'string' && { helper: structuredClone(metadata) }),
+          ...(typeof metadata?.socketId === 'string' && { socketId: metadata.socketId }),
           ...(weights && { weights: weights.slice() })
         };
       });

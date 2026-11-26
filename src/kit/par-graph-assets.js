@@ -275,6 +275,7 @@
     ...P.motionDeformation.operations,
     ...P.rasterColor.operations,
     ...P.materialChannels.operations,
+    ...P.openPbr.operations,
     ...P.materialValidation.operations,
     ...P.smartMasks.operations,
     ...P.measuredMaterials.operations,

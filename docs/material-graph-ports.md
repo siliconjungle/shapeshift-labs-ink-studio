@@ -17,6 +17,8 @@ The package keeps sample values as supplied. A signed height raster or float nor
 - `material.channel` exposes a named map as `value` and its metadata as `metadata`. A missing name is an error.
 - `material.replace` uses the names supplied in `maps` as its write list. It can add a channel or replace its raster while keeping the old metadata. To also replace metadata, supply an entry for that channel. All other channel entries and sample buffers pass through by reference.
 
+Use [OpenPBR core](openpbr-core.md) to publish a physical reference surface with standard input names and units.
+
 Use [material validation](material-validation.md) to inspect physical ranges, image conventions and delivery clipping before publishing.
 
 Use [whole-material layering](material-layering.md) to composite the channels together under a shared mask, UV transform and height comparison.

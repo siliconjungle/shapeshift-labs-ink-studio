@@ -5,6 +5,7 @@ const { document, readGlb, embed } = require('./glb-file');
 const files = require('./asset-files');
 const writeRig = require('./glb-rig');
 const writeMesh = require('./glb-mesh');
+const writeHelpers = require('./glb-helpers');
 const registeredMaterial = require('./registered-material-bake.js');
 
 function summarize({ meshes = [], skins = [], accessors = [] }) {
@@ -55,7 +56,9 @@ function exportGlb(modelOrFile, { out, uvMargin = 0.008, textureSize, bakeDir, p
     }
     if (modelOrFile?.format === 'ink-studio/mesh-topology') modelOrFile = K.model.fromTopology(modelOrFile);
     const model = modelOrFile?.meshes ? modelOrFile : { meshes: [modelOrFile] };
-    if (!model.meshes.length || model.meshes.some(m => !m)) throw new Error('GLB export requires a model');
+    if ((!model.meshes.length && !model.helpers?.length) || model.meshes.some(m => !m))
+      throw new Error('GLB export requires a model');
+    if (registered && !model.meshes.length) throw new Error('Registered baking requires visual mesh geometry');
     const doc = document(), rig = writeRig(doc, model, K);
     const geometry = model.meshes.flatMap(mesh => K.model.mapModelMeshes(mesh, part => part));
     registered?.validate(geometry.length);
@@ -63,8 +66,9 @@ function exportGlb(modelOrFile, { out, uvMargin = 0.008, textureSize, bakeDir, p
       ...mesh,
       name: mesh.name || registered?.name(i) || path.parse(output).name + (geometry.length > 1 ? ' ' + (i + 1) : '')
     }, rig, K, { uvMargin, textureSize, registered, meshIndex:i }));
+    const helpers = model.helpers?.length && writeHelpers(doc, model.helpers, rig, K.sceneGraph);
     bytes = doc.finish();
-    report = { meshes, joints: rig.size };
+    report = { meshes, joints: rig.size, ...(helpers && { helpers }) };
   }
   files.write(output, bytes);
   if(registered)report.materialBake=registered.write(output);
