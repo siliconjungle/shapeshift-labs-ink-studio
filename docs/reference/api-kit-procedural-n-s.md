@@ -405,6 +405,19 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.pixelEffects.tileStrideSlip` | function | `(source, options = {})` | [guide](../headless-authoring.md#slip-tile-row-addresses), [guide](../headless-authoring.md#pixel-effects-and-raster-analysis), [guide](../tile-attributes.md), [source](../../src/kit/par-effects-raster-tiles.js) |
 | `KIT.procedural.pixelEffects.tvStatic` | function | `(source, options = {})` | [guide](../headless-authoring.md#pixel-effects-and-raster-analysis), [guide](../tile-attributes.md), [source](../../src/kit/par-effects-raster.js) |
 
+## KIT.procedural.pixelProcessor
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.pixelProcessor` | namespace |  |  |
+| `KIT.procedural.pixelProcessor.compile` | function | `(program)` | [guide](../pixel-processor.md#a-minimal-program), [guide](../pixel-processor.md#compare-cpu-and-webgpu), [source](../../src/kit/paq-pixel-processor.js) |
+| `KIT.procedural.pixelProcessor.format` | value | `string = "ink-studio/pixel-processor"` |  |
+| `KIT.procedural.pixelProcessor.operations` | namespace |  |  |
+| `KIT.procedural.pixelProcessor.operations["image.pixelProcessor"]` | namespace |  |  |
+| `KIT.procedural.pixelProcessor.operations["image.pixelProcessor"].description` | value | `string = "Run a portable typed per-texel program with named images, parameters, bounded loops and native output precision."` |  |
+| `KIT.procedural.pixelProcessor.operations["image.pixelProcessor"].specialize` | function | `(node)` | [source](../../src/kit/paq-pixel-processor.js) |
+| `KIT.procedural.pixelProcessor.version` | value | `number = 1` |  |
+
 ## KIT.procedural.placeFootprintRequests
 
 | Member | Kind | Signature or value | Guides and source |

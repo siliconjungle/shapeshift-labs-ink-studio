@@ -946,6 +946,31 @@ Guides: [guide](../material-image-transforms.md)
 Get the runnable example with `ink-studio graph describe image.perspective --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### image.pixelProcessor
+
+Run a portable typed per-texel program with named images, parameters, bounded loops and native output precision.
+
+Origin: toolkit.
+The literal program declares image resource, uniform parameter and output sockets.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `program` | `record` | Required | {"layout":"Plain named object","format":"ink-studio/pixel-processor","version":1,"precision":"f32","literal":true} |
+| Input | `width` | `pixelCount` | Required | pixels · {"integer":true,"min":1,"max":8192} |
+| Input | `height` | `pixelCount` | Required | pixels · {"integer":true,"min":1,"max":8192} |
+| Input | `grain` | `grayImage` | Required | {"layout":"Typed unitless single-channel data or mask"} |
+| Input | `gain` | `number` | `0.800000011920929` | {"finite":true} |
+| Output | `value` | `grayImage` | — | {"layout":"Typed unitless single-channel data or mask"} |
+
+- Each texel runs independently. A loop counts up from zero and clamps its runtime count to the authored limit of 1 through 64.
+- f32 compute preserves named image contracts. Native output storage supports UNORM8, UNORM16, and float32.
+- The WebGPU module compares raw values within editable absolute and relative tolerances and separately reports changed stored samples.
+
+Guides: [guide](../pixel-processor.md)
+
+Get the runnable example with `ink-studio graph describe image.pixelProcessor --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### image.polar
 
 Convert between Cartesian images and angular strips with aspect-correct radii.
