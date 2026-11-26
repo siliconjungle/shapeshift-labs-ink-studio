@@ -173,6 +173,9 @@ including duplicate swatches. The node returns the one-channel slot
 raster as `value`, the ordered swatches as `palette`, and per-pixel
 opacity bytes as `alpha`.
 
+For linked or embedded PNG and float bitmaps, use [bitmap resources](bitmap-resources.md) with `bitmapAsset`.
+Its output keeps the source precision and declares the color interpretation, with frame and tile selection as graph inputs.
+
 ### Reference a shared group
 
 Put a reusable graph in its own file. Its `inputs` declare named sockets and

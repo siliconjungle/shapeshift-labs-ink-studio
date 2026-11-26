@@ -184,7 +184,7 @@ A literal target intent selects the output type. Optional fields change how samp
 | Input | `dropAlpha` | `boolean` | `false` |  |
 | Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
 
-Guides: [guide](../graph-image-types.md#make-and-convert-uniform-images), [guide](../material-image-blend.md#inputs-and-output), [guide](../material-image-channels.md), [guide](../material-image-channels.md#routing-and-encoding)
+Guides: [guide](../bitmap-resources.md#choose-the-source-and-interpretation), [guide](../graph-image-types.md#make-and-convert-uniform-images), [guide](../material-image-blend.md#inputs-and-output), [guide](../material-image-channels.md), [guide](../material-image-channels.md#routing-and-encoding)
 
 Get the runnable example with `ink-studio graph describe image.convert --example > example.json`.
 Run it with `ink-studio graph run example.json`.
@@ -1581,7 +1581,7 @@ Origin: toolkit.
 | Input | `outOfRange` | `string` | `"clamp"` |  |
 | Output | `value` | `displayRaster` | — | display byte levels · {"channels":[1,4],"samples":[0,255]} |
 
-Guides: [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes)
+Guides: [guide](../bitmap-resources.md#choose-the-source-and-interpretation), [guide](../graph-image-types.md#send-images-through-materials-and-legacy-nodes)
 
 Get the runnable example with `ink-studio graph describe image.toDisplay --example > example.json`.
 Run it with `ink-studio graph run example.json`.

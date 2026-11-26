@@ -8,6 +8,7 @@ const Parameters = require('../src/material-parameters.js');
 const Presets = require('../src/material-presets.js');
 const OutputUsages = require('./material-output-usages.js');
 const Metadata = require('./material-metadata.js');
+const Bitmap = require('../src/bitmap-resources.js');
 
 const format = 'ink-studio/material-graph';
 const version = 1;
@@ -196,9 +197,11 @@ function lower(document, { requireOutputs, instance } = {}) {
     throw new RangeError('Material primaryInput must name a declared graph input');
   const assets = Object.fromEntries(entries(resources, 'resources').map(([id, resource]) => {
     entity(resource, ['definition'], 'resource ' + id);
-    if (!record(resource.definition) || !Object.hasOwn(resource.definition, 'file'))
+    const { definition } = resource;
+    if (definition?.format === Bitmap.format) Bitmap.layout(definition);
+    else if (!record(definition) || !Object.hasOwn(definition, 'file'))
       throw new TypeError('Resource ' + id + ' needs a graph asset definition');
-    return [id, resource.definition];
+    return [id, definition];
   }));
   const exposed = new Set();
   for (const [id, control] of entries(controls, 'controls')) {
@@ -275,8 +278,13 @@ function writeMaterialGraph(file, source, { baseDir = path.dirname(path.resolve(
   if (document.metadata?.thumbnail) document.metadata.thumbnail.file = relocate(document.metadata.thumbnail.file);
   if (typeof document.settings?.assetRegistry === 'string')
     document.settings.assetRegistry = relocate(document.settings.assetRegistry);
-  for (const { definition } of Object.values(document.resources ?? {}))
-    if (typeof definition.file === 'string') definition.file = relocate(definition.file);
+  for (const resource of Object.values(document.resources ?? {})) {
+    const { definition } = resource;
+    if (definition.format === Bitmap.format) resource.definition = Bitmap.mapMembers(definition, member => member && {
+      ...member, ...(member.file && { file: relocate(member.file) }), ...(member.origin && { origin: relocate(member.origin) })
+    });
+    else if (typeof definition.file === 'string') definition.file = relocate(definition.file);
+  }
   files.json(target, document);
   return document;
 }

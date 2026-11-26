@@ -3,6 +3,9 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { isDeepStrictEqual } = require('node:util');
 const PNG = require('./png.js');
+const Bitmap = require('../src/bitmap-resources.js');
+const bitmapFiles = require('./bitmap-resources.js');
+const { literal } = require('../src/graph-control-references.js');
 const WAV = require('./wav.js');
 const Sound = require('./sound-source.js');
 const { createGraphHost } = require('./graph-host.js');
@@ -198,7 +201,24 @@ function nativeOperations(kit, assets) {
       return {value:entry.value};
     }};
   }
+  function bitmap(name) {
+    const entry = assets.get(name);
+    if (entry?.format !== Bitmap.format) throw new RangeError('Unknown bitmap graph asset ' + name);
+    return entry.value;
+  }
+  const bitmapOp = Bitmap.operation(bitmap, bitmap);
   return {
+    bitmapAsset: {
+      ...bitmapOp,
+      specialize(spec) {
+        const entry = assets.get(literal(spec, 'name'));
+        if (entry?.format !== Bitmap.format) return bitmapOp;
+        const { intent, units } = entry.value.interpretation;
+        const type = intent === 'color' ? 'colorImage' : intent === 'height' ? 'heightImage' :
+          units === 'unitless' || units === undefined ? 'grayImage' : 'typedImage';
+        return { ...bitmapOp, outputs: { ...bitmapOp.outputs, value: type } };
+      }
+    },
     add:binary(({a,b})=>a+b),
     multiply:binary(({a,b})=>a*b),
     lessThan:binary(({a,b})=>a<b,'boolean'),
@@ -327,6 +347,13 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const groupTree=loadGraphGroups(definitions,baseDir,{onFile:file=>paths.add(file),inspectors:groupInspectors});
   const groupSpecs=new Map(groupTree.entries.map(group=>[group,graphSpec(group.spec,'group '+group.alias,groupOperators,typedOperations)]));
   const assets=new Map(named(assetDefinitions,'assets').map(([name,definition])=>{
+    if (definition?.format === Bitmap.format) {
+      const { info, select, sha256 } = bitmapFiles.load(definition, {
+        baseDir, declare: planAssets ? undefined : procedural.graphImages.declare, onFile: file => paths.add(file)
+      });
+      const interpretation = { intent: 'color', ...definition.interpretation };
+      return [name, { format: Bitmap.format, type: 'typedImage', info, sha256, value: { info, select, interpretation } }];
+    }
     const {format,file,type,codec,options,precision}=fields(definition,
       definition?.format==='codec' ? ['format','file','type','codec','options'] :
         definition?.format==='png' ? ['format','file','precision'] : ['format','file'],'graph asset '+name);
@@ -389,11 +416,11 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     if (expandedNodes>maxNodes) throw new RangeError('Expanded graph exceeds its '+maxNodes+' node budget');
     const compiled=graph.create(spec,{operations:ops,groups:operationsIn(scope),planOnly:true}), plan=compiled.plan();
     for (const {id,op,inputs} of plan.nodes) {
-      if (ops[op]!==stock[op] || !['pngAsset','indexedPngAsset','jsonAsset','audioAsset','rasterAsset','inputAsset'].includes(op) ||
+      if (ops[op]!==stock[op] || !['pngAsset','indexedPngAsset','jsonAsset','audioAsset','rasterAsset','inputAsset','bitmapAsset'].includes(op) ||
           inputs.name.source.kind!=='value') continue;
       const node=spec.nodes[id], definition=node.inputs?.name ?? node.params?.name;
       const name=record(definition) ? definition.value : definition;
-      try { stock[op].run({name}); }
+      try { stock[op].validateAsset ? stock[op].validateAsset(name) : stock[op].run({name}); }
       catch (error) { throw new RangeError('Unknown graph asset '+name+' at '+id,{cause:error}); }
     }
     return {compiled,plan:{...plan,expandedNodes}};

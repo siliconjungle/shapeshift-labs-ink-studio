@@ -1056,6 +1056,11 @@ function runtimeExample(id, { inputs, output = 'value', type = 'field', factory 
 
 function exampleFor(id, operation, kit) {
   if (Object.hasOwn(runtime, id)) return runtimeExample(id, runtime[id]);
+  if (id === 'bitmapAsset') {
+    const source = { file: path.join(__dirname, 'graph-catalog-assets', 'swatch.png') };
+    return { kind: 'graph', project: project({ op: id, inputs: { name: 'sample' } }, 'value',
+      { assets: { sample: { format: 'bitmap', source } } }) };
+  }
   if (Object.hasOwn(assetFixtures, id)) {
     const [format, file] = assetFixtures[id];
     return { kind: 'graph', project: project({ op: id, inputs: { name: 'sample' } }, 'value',

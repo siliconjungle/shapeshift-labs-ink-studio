@@ -139,6 +139,28 @@ Origin: headless.
 Get the runnable example with `ink-studio graph describe audioAsset --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### bitmapAsset
+
+Sample a linked or embedded bitmap at graph time, an explicit frame, or a tile.
+
+Origin: headless.
+Samples the graph clock.
+A literal resource name resolves its declared image intent. A linked name uses typedImage.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `name` | `string` | Required |  |
+| Input | `frame` | `integer` | `-1` | {"integer":true,"safe":true,"signed":true,"min":-1} |
+| Input | `tile` | `vec2` | `[0,0]` | {"dimensions":2,"finite":true,"integer":true} |
+| Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
+| Output | `info` | `record` | — | {"layout":"Plain named object"} |
+
+- Reads a bitmap resource without converting its native sample precision.
+- Frame -1 samples the sequence at graph time. Use a frame number or signed UV tile coordinates to select an authored member.
+
+Get the runnable example with `ink-studio graph describe bitmapAsset --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### densityMesh
 
 
