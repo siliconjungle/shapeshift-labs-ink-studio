@@ -665,6 +665,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   graph impact <group.json> [--root folder] [--json]   find consumers of a shared group
   graph snapshot <project.json> [--inputs values.json] [--seed N] [--at T]   capture graph bindings and asset hashes
   graph diff <before.json> <after.json> [--json]   explain node, port and named output changes
+  graph material-preview <project.json> <plan.json> --out directory   link a native material carrier to its UV maps
   graph inspect <project.json> [--output NAME | --node PATH --port NAME | --map ID [--component r|g|b|a]] [--out directory]
   graph run <project.json> [--inputs values.json --at seconds --seed N --out directory]
     run, inspect, batch, clip, session: --workers N   schedule eligible branches on 1–8 workers
@@ -827,6 +828,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio graph material-library` · `--audience`, `--query`, `--tag`, `--offset`, `--limit`, `--out` · [source](../../cli/graph-cli.js)
 - `ink-studio graph material-parameters` · `--out`, `--instance`, `--inputs`, `--adapters` · [source](../../cli/graph-cli.js)
 - `ink-studio graph material-presets` · `--out`, `--instance`, `--export`, `--presets` · [source](../../cli/graph-cli.js)
+- `ink-studio graph material-preview` · `--inputs`, `--at`, `--seed`, `--out`, `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph material-vector` · `--out` · [source](../../cli/graph-cli.js)
 - `ink-studio graph material-visibility` · `--inputs`, `--instance`, `--scope` · [source](../../cli/graph-cli.js)
 - `ink-studio graph nodes` · `--json` · [source](../../cli/graph-cli.js)

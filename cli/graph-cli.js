@@ -29,6 +29,7 @@ const executionFlags=['workers',...cacheFlags];
 const flags = {
   validate:['inputs','json'], plan:['inputs','json','memory'], dependencies:['json'], snapshot:['inputs','at','seed','json'],
   inspect:['inputs','at','seed','out','output','node','port','map','component','json',...executionFlags],
+  'material-preview':['inputs','at','seed','out','json'],
   run:['inputs','at','seed','out','json',...executionFlags],
   batch:['inputs','at','seed','out','json','resume','progress',...executionFlags],
   session:['protocol','out','workers'],
@@ -305,12 +306,12 @@ async function graphCommand(pos,opt,settings) {
     if (result.passed===false) process.exitCode=2;
     return send(result,opt.json);
   }
-  if (!Object.hasOwn(flags,mode) || pos.length!==(mode==='batch'?3:2) ||
+  if (!Object.hasOwn(flags,mode) || pos.length!==(['batch','material-preview'].includes(mode)?3:2) ||
       Object.entries(opt).some(([key,value])=>key!=='adapters' && !flags[mode].includes(key) ||
         (['json','resume','memory'].includes(key) ? value!==true : key==='progress' ? value!=='ndjson' :
           typeof value!=='string' || !value.trim())) ||
       opt.port!==undefined && opt.node===undefined || opt.component!==undefined && opt.map===undefined || opt.protocol!==undefined && opt.protocol!=='ndjson')
-    throw new TypeError('Use graph validate|plan|dependencies|snapshot|inspect|run|batch|session|clip <project.json> [cases-or-sweep.json]. See ink-studio help');
+    throw new TypeError('Use graph validate|plan|dependencies|snapshot|inspect|material-preview|run|batch|session|clip <project.json> [cases-or-sweep.json]. See ink-studio help');
   if (opt.cache===undefined && cacheFlags.slice(1).some(flag=>opt[flag]!==undefined))
     throw new TypeError('Graph cache limits need --cache directory');
   if (opt.resume && opt.out===undefined) throw new TypeError('Graph batch --resume needs --out directory');
@@ -341,6 +342,11 @@ async function projectCommand(mode,file,caseFile,opt,settings) {
   if (mode==='dependencies') return send(project.dependencies(),opt.json);
   if (mode==='snapshot') return send(project.snapshot(run),opt.json);
   if (mode==='session') return session(project,output,sources);
+  if (mode==='material-preview') {
+    const result=await require('./linked-material-preview.js').writeLinkedMaterialPreview(project,caseFile,
+      {directory:output,toolkit:settings.kit,run,sources});
+    return send(result,opt.json);
+  }
   const artifactCache=opt.cache===undefined ? undefined : openGraphArtifactCache(opt.cache,{
     kit:settings.kit, maxBytes:opt['cache-bytes']===undefined ? undefined : Number(opt['cache-bytes']),
     maxEntries:opt['cache-entries']===undefined ? undefined : Number(opt['cache-entries'])
