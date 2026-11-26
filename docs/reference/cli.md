@@ -856,6 +856,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   take approve-video <plan.json> --out directory   check decoded video for palette, accent and flicker damage
   take review-flashes <plan.json> --out directory   trace composited and decoded flashes and verify a reduced-flicker preview
   take check-sync <recipe.json> [--out report.json] [--fail-on-flags]   compare visible contact and rendered attack
+  scene-pose capture <scene.json> <edits-or-scene.json> --at seconds --out poses.json   capture only changed timeline properties
+    [--sequence poses.json --id name --duration seconds --hold seconds --blend ease]
+  scene-pose apply <scene.json> <poses.json> --out scene.json   overlay sparse pose ranges onto the timeline
   scene-record capture <scene.json> <plan.json> [--input changes.ndjson] --out take.json   capture timed scene manipulation
   scene-record apply <scene.json> <take.json> --out scene.json   overdub a take or punch selected timeline channels
   timeline <scene> [--at seconds] [--from seconds --to seconds] [--out report.json]  sample tracks and export cues

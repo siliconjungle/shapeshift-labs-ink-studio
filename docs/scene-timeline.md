@@ -10,7 +10,7 @@ Add `timeline` to a JSON diorama, an authored simulation world, or a scene built
 | `cueTracks` | Named portable musical tracks or pulse recordings, with optional offsets and channel filters. [Audio cue routing](event-actions.md#route-audio-cue-tracks) |
 | `events` | A unique `id`, a `time`, a world event `kind`, and optional JSON object `detail`. |
 | `sequences` | A catalog of named reusable timelines with their own tracks, markers, audio, events, and clips. |
-| `clips` | A unique instance `id`, a `sequence`, and a start `time`. Optional `in` and `out` trim source seconds. Optional `duration` scales the retained range in the parent. |
+| `clips` | A unique instance `id`, a `sequence`, and a start `time`. Optional `in` and `out` trim source seconds. Set `duration` or `until` to scale the retained range in the parent. Set `endExclusive` to hand back track values at the end boundary. |
 
 Keys hold their first and last values within the sequence. The easing on a key controls the interval after it. Supported easings are `smooth` (the default), `linear`, `step`, `in-sine`, `out-sine`, and `in-out-sine`. Angle channels interpolate by the shortest arc. Positive channels such as camera distance and pose scale interpolate geometrically. Boolean and string channels hold their values until the next key.
 
@@ -145,3 +145,5 @@ Diorama builds, simulation runs, and visual snapshots expose the compiled progra
 [Simulation scrubbing and takes](simulation-scrubbing.md) describes recording simulated poses and field values into timeline tracks.
 
 [Scene recording](scene-recording.md) captures live headless manipulation with count-in, overdub, and punch-in.
+
+[Scene poses](scene-poses.md) capture sparse property keys with holds, blends, and blank ranges.

@@ -1312,6 +1312,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.sceneMeshes.valid` | function | `(mesh)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.withPose` | function | `(mesh, positions, { id = mesh.id, objectId = mesh.objectId } = {})` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 
+## KIT.scenePoses
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.scenePoses` | namespace |  |  |
+| `KIT.scenePoses.bind` | function | `(source,scene,channel,timeline,time,cameraAt)` | [source](../../src/kit/p88b-scene-poses.js) |
+| `KIT.scenePoses.format` | value | `string = "ink-studio/sparse-scene-poses"` |  |
+
 ## KIT.sceneRecording
 
 | Member | Kind | Signature or value | Guides and source |
