@@ -40,6 +40,7 @@ const analysisFlags = { impact: ['root', 'json'], diff: ['adapters', 'json'], ma
   subgraph: ['out', 'adapters'], 'publish-subgraph': ['out', 'revision', 'adapters'],
   'material-presets': ['out', 'instance', 'export', 'presets'],
   'material-parameters': ['out', 'instance', 'inputs', 'adapters'], 'material-bitmap': ['out'], 'material-vector': ['out'], 'material-font': ['out'],
+  'texture-info': ['page', 'channels'],
   'material-visibility': ['inputs', 'instance', 'scope'], 'material-info': ['audience'], 'material-library': ['audience', 'query', 'tag', 'offset', 'limit', 'out'] };
 const commandOptions = { ...flags, ...discoveryFlags, ...analysisFlags, ...host.commands };
 
@@ -126,6 +127,15 @@ function clipOptions(opt, sources, defaultClock) {
 
 async function graphCommand(pos,opt,settings) {
   const [mode,file,caseFile]=pos;
+  if (mode==='texture-info') {
+    if (pos.length!==2 || Object.entries(opt).some(([key,value])=>
+      !analysisFlags['texture-info'].includes(key) || typeof value!=='string' || !value.trim()))
+      throw new TypeError('Use graph texture-info <texture> [--page N | --channels R,G,B,A]');
+    return send(require('./texture-files.js').reportTexture(path.resolve(file),{
+      ...(opt.page!==undefined&&{page:Number(opt.page)}),
+      ...(opt.channels!==undefined&&{channels:opt.channels.split(',').map(name=>name.trim())})
+    }));
+  }
   if (Object.hasOwn(discoveryFlags, mode)) {
     const listing=mode==='nodes';
     if (pos.length!==(listing ? 1 : 2) || opt.json && opt.example ||

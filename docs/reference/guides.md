@@ -220,6 +220,7 @@ All checked-in guides, indexed by title and section headings.
 - [Scatter mappers](../material-scatter-mappers.md)
 - [Editable material shape library](../material-shape-library.md)
 - [SDF Shape Splatter](../material-shape-splatter.md)
+- [Material texture file formats](../material-texture-formats.md)
 - [Material Tile Generator](../material-tile-generator.md)
 - [Map-driven Tile Sampler](../material-tile-sampler.md)
 - [Surface materialisation](../materialisation.md)

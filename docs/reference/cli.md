@@ -636,6 +636,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   graph material-bitmap <material.json> <id|request.json> [--out material.json]   inspect or edit a bitmap resource
   graph material-vector <material.json> <id|request.json> [--out material.json]   inspect or edit an SVG resource
   graph material-font <material.json> <id|request.json> [--out material.json]   inspect or edit TrueType resources
+  graph texture-info <texture> [--page N | --channels R,G,B,A]   reopen and validate a material texture or layered PSD
   graph material-visibility <material.json> [--inputs values.json] [--instance ID] [--scope GROUP/PATH]   show inspector visibility and expression diagnostics
   graph material-library [registry.json] [--audience library|workspace|publication] [--query TEXT] [--tag TAG] [--offset N] [--limit N] [--out directory]
   graph subgraph <material.json> <request.json> [--out material.json]   inspect or edit reusable material instances
@@ -819,6 +820,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio graph session` · `--protocol`, `--out`, `--workers`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph snapshot` · `--inputs`, `--at`, `--seed`, `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph subgraph` · `--out`, `--adapters` · [source](../../cli/graph-cli.js)
+- `ink-studio graph texture-info` · `--page`, `--channels` · [source](../../cli/graph-cli.js)
 - `ink-studio graph validate` · `--inputs`, `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph verify-pxc` · `--out`, `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio music analyze` · [source](../../cli/music-composer.js)
