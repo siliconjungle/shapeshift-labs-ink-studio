@@ -347,6 +347,69 @@ undo removes the entire run.
 Run `node examples/tileset-pick/prefab-stamp-demo.cjs stamp-demo` to
 compare floor and ceiling rounding with placement on a tilted plane.
 
+### Edit a prefab source in context
+
+`mesh-topology edit-prefab` edits a shared visual prefab from a placed
+instance. The selected instance supplies the placement frame for mesh
+transforms. The edit starts from the source definition so its local
+overrides don't become part of the shared asset.
+
+```json
+{
+  "instance": "bay.1",
+  "revision": 3,
+  "sourceEdits": [
+    { "op": "set", "path": "/solids/body/mat", "value": "stone" }
+  ],
+  "edits": [
+    { "member": "panel", "transform": {
+      "operation": { "kind": "move", "offset": [0, 0.1, 0] }
+    } }
+  ]
+}
+```
+
+Use `sourceEdits` to set, merge, remove, or test named records for solids,
+parts, groups, motion, and effects. Use `edits` for the same mesh patch,
+transform, pivot, and paint operations available in prefab isolation.
+Omit `faces` to edit whole mesh members or provide a face scope to check
+for changes outside it. The source revision advances once per committed
+batch.
+
+```sh
+ink-studio mesh-topology edit-prefab station.json edit.json --preview review --view view.json
+ink-studio mesh-topology edit-prefab station.json edit.json --out revised.json
+```
+
+The receipt lists every linked instance in the current scene. It records
+changed members and face or corner IDs, path overrides that touch a
+source change, masked members, and rebased mesh overrides. Ordered path
+overrides still apply over the source. A failed test, a removed target,
+or an array index that moved to another element blocks the commit.
+Mesh overrides merge disjoint changes by stable element ID. Competing
+values and incompatible changes to element order block the commit and
+identify the conflicting paths.
+
+The optional native preview saves `before.png`, `after.png`, and
+`changes.png` with the same camera and time. It counts changed visible
+pixels by instance. On a mesh conflict it can show a draft that retains
+the local value at the disputed field. A conflict that prevents building
+a draft produces the before capture and a report.
+
+Inline definitions save with the scene. For a shared file, supply
+`--library-out revised-library.json` with `--out`. The new scene points
+at the revised library and the existing library remains available to
+other scenes. Output the scene and library beside their respective
+sources so relative references keep working.
+
+In the SDK, `planPrefabSourceEdit(request)` returns the receipt.
+`previewPrefabSourceEdit(request)` also returns the staged scene, library
+when applicable, and preview worlds. Use `editPrefabSource(request)`
+to commit an inline revision with one undo.
+
+Run `node examples/tileset-pick/prefab-source-edit-demo.cjs bay-review`
+to review three linked bays and a blocked overlap.
+
 ## Breakable groups
 
 Use `editor.suggestBreakable({ at, radius, voxel })` to query a nearby

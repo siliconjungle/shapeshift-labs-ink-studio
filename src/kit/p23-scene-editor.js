@@ -510,6 +510,48 @@
       else document.transact('Edit prefab instance ' + id, write);
     }
 
+    function stagePrefabSourceEdit(request) {
+      const before = snapshot();
+      const {candidate,bindings,library,report} = A.prefabSourceEdit.plan(
+        before,buildEnv,request,requireMeshShapeOwner,authoredTransformCamera);
+      if (!candidate) return {before,report};
+      const problems = DIO.check(candidate,bindings).filter(row => row.level === 'error');
+      try {
+        if (!problems.length) requireReviewEdit(before,candidate,bindings);
+      } catch (error) {
+        problems.push({level:'error',problem:error.message});
+      }
+      if (problems.length) return {before,report:freeze({...report,canCommit:false,problems})};
+      return {before,candidate,bindings,library,report};
+    }
+
+    function planPrefabSourceEdit(request) {
+      return stagePrefabSourceEdit(request).report;
+    }
+
+    function previewPrefabSourceEdit(request, {time=0,render=true} = {}) {
+      if (!Number.isFinite(time) || time < 0 || typeof render !== 'boolean')
+        throw new TypeError('Prefab review time must be nonnegative');
+      const {before,candidate,bindings,library,report} = stagePrefabSourceEdit(request);
+      const build = (scene,env) => DIO.build(scene,{...env,parameterInputs:{...env.parameterInputs,time}});
+      return {report,scene:candidate,library,
+        ...(render && {before:build(before,buildEnv),after:candidate && build(candidate,bindings)})};
+    }
+
+    function editPrefabSource(request) {
+      const {candidate,report} = stagePrefabSourceEdit(request);
+      if (!report.canCommit || report.source === 'library')
+        throw Object.assign(new RangeError(report.source === 'library' ?
+          'Publish a revised library and scene from the prefab source preview' : 'Prefab source edit needs review'),{report});
+      if (!report.changed) return report;
+      const write = () => document.batchSession(() => {
+        document.setEnvironment({prefabs:null,instances:null});
+        document.setEnvironment({prefabs:candidate.prefabs,instances:candidate.instances});
+        return report;
+      });
+      return document.pending() ? write() : document.transact('Edit prefab '+report.prefab+' in context',write);
+    }
+
     function stagePrefabStamp(request) {
       const before = snapshot(), {instances,report} = A.prefabStamp.plan(before,request,buildEnv);
       if (!instances) return {report};
@@ -1607,6 +1649,7 @@
       planPainting3d, applyPainting3d, inspectPaintings3d,
       extractPainting3d: id => A.paintings3d.extract(snapshot(), id),
       placeSculptStamp, planSculptSplit, splitSculpt, planAssemblyStretch, stretchAssembly,
+      planPrefabSourceEdit, previewPrefabSourceEdit, editPrefabSource,
       setPrefabInstance, planPrefabStamp, stampPrefab, planTilesetPrefab, promoteTilesetPrefab,
       planPrefabIsolation, previewPrefabIsolation, editIsolatedPrefab,
       planPrefabRefresh, refreshPrefabs,
