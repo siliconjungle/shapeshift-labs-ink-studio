@@ -68,7 +68,10 @@
       const objects = Array.from(meshes.values(), entry => entry.object);
       const node = Object.assign(parent('prefab', id), { instance, revision, solids, ...(objects.length && { meshes: objects }) });
       for (const name of [...solids, ...objects]) byEntity.set(name, node.key);
-      roots.push(node);
+    }
+    for (const [id,{instance}] of linked) {
+      const owner = nodes.get('prefab:'+instance.parent);
+      (owner?.children ?? roots).push(nodes.get('prefab:'+id));
     }
     for (const [id, mesh] of Object.entries(scene.topologyMeshes ?? {})) {
       const node = Object.assign(parent('mesh-topology', id, mesh.label), { mesh });
@@ -508,6 +511,38 @@
       };
       if (document.pending()) document.batchSession(write);
       else document.transact('Edit prefab instance ' + id, write);
+    }
+
+    function stagePrefabReparent(request) {
+      const before = snapshot(), {patch,report} = A.scenePrefabs.planReparent(before,buildEnv,request);
+      if (!patch) return {before,report};
+      const candidate = {...before,...patch};
+      const problems = DIO.check(candidate,buildEnv).filter(row => row.level === 'error');
+      try {
+        if (!problems.length) requireReviewEdit(before,candidate);
+      } catch (error) {
+        problems.push({level:'error',problem:error.message});
+      }
+      if (problems.length) return {before,report:freeze({...report,canCommit:false,problems})};
+      return {before,candidate,report};
+    }
+
+    function planPrefabReparent(request) {
+      return stagePrefabReparent(request).report;
+    }
+
+    function previewPrefabReparent(request, {time=0} = {}) {
+      if (!Number.isFinite(time) || time < 0) throw new RangeError('Prefab preview time must be nonnegative');
+      const {before,candidate,report} = stagePrefabReparent(request);
+      const env = {...buildEnv,parameterInputs:{...buildEnv.parameterInputs,time}};
+      return {report,before:DIO.build(before,env),after:candidate && DIO.build(candidate,env)};
+    }
+
+    function reparentPrefab(request) {
+      const {candidate,report} = stagePrefabReparent(request);
+      if (!candidate) throw Object.assign(new RangeError('Prefab reparent needs review'),{report});
+      if (report.changed) setPrefabInstance(report.instance,candidate.instances[report.instance]);
+      return report;
     }
 
     function stagePrefabCombination(request) {
@@ -1795,6 +1830,7 @@
       planPainting3d, applyPainting3d, inspectPaintings3d,
       extractPainting3d: id => A.paintings3d.extract(snapshot(), id),
       placeSculptStamp, planSculptSplit, splitSculpt, planAssemblyStretch, stretchAssembly,
+      planPrefabReparent, previewPrefabReparent, reparentPrefab,
       planPrefabCombination, previewPrefabCombination, combinePrefabs,
       planPrefabArray, previewPrefabArray, applyPrefabArray,
       planPrefabReplacement, previewPrefabReplacement, replacePrefabs,

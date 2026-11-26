@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Lantern Relay · Ink Studio</title>
+  <style>
+    :root{color-scheme:dark;--bg:#101516;--panel:#191f20;--line:#343d3b;--ink:#f0e8d5;--muted:#aeb8ae;--gold:#e6b977;--jade:#a8dbca}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,sans-serif}
+    main{max-width:1240px;margin:auto;padding:34px clamp(18px,4vw,52px) 37px}
+    header{display:flex;justify-content:space-between;align-items:end;gap:18px;padding-bottom:25px}
+    h1,h2,p{margin:0}
+    h1{font:500 clamp(44px,6vw,75px)/1 Georgia,serif;letter-spacing:-.048em}
+    header p{margin-top:8px;color:var(--muted)}
+    a{color:var(--gold);text-underline-offset:3px}
+    .workspace{display:grid;grid-template-columns:minmax(0,1fr) 294px;gap:18px;align-items:stretch}
+    .preview,.controls{border:1px solid var(--line);background:var(--panel);border-radius:4px;min-width:0}
+    .preview{overflow:hidden;display:flex;flex-direction:column;margin:0}
+    .toolbar,.footer{display:flex;gap:6px;flex-wrap:wrap;padding:12px 14px;align-items:center}
+    .toolbar{border-bottom:1px solid var(--line)}
+    .footer{border-top:1px solid var(--line);color:var(--muted);justify-content:space-between;font-size:12px}
+    .stage{display:grid;place-items:center;flex:1;min-height:340px;padding:12px;
+      background:radial-gradient(ellipse at 44% 34%,#3b4b4b 0%,#273536 50%,#1b2427 100%)}
+    .stage canvas{display:block;width:min(100%,576px);height:auto;image-rendering:pixelated;
+      filter:drop-shadow(0 10px 0 #101616) drop-shadow(1px 18px 14px #0c1113b5)}
+    .controls{padding:0 17px}
+    .layer{padding:15px 0;border-bottom:1px solid var(--line)}
+    .layer:last-child{border:0}
+    h2{font-size:15px;font-weight:650}
+    .layer header{display:block;padding:0}
+    .layer header p{font-size:12px;margin-top:4px}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:13px;margin-top:10px}
+    .row label,.row>span{font-size:12px;white-space:nowrap}
+    .row output{font:11px ui-monospace,monospace;color:var(--jade)}
+    button,select{background:#1d2828;color:var(--ink);font:inherit;font-size:12px;border:1px solid #465452;border-radius:3px;padding:6px 10px}
+    button{cursor:pointer}
+    .toolbar button{background:transparent;border-color:transparent}
+    .toolbar button[aria-pressed="true"]{background:#283b39;border-color:#5e7d74;color:var(--jade)}
+    button:hover,select:hover{border-color:var(--jade)}
+    button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+    .swatches{display:flex;gap:5px}
+    .swatch{display:flex;align-items:center;gap:5px;padding:5px 6px;color:var(--muted)}
+    .swatch::before{content:'';width:9px;height:9px;background:var(--swatch);border-radius:50%}
+    .swatch[aria-pressed="true"]{color:var(--ink);border-color:var(--gold)}
+    input{accent-color:#94d4bf}
+    input[type=range]{width:100%;margin:0}
+    input[type=checkbox]{margin:0;width:16px;height:16px}
+    .range{display:grid;grid-template-columns:45px 1fr 35px}
+    .range output{text-align:right}
+    .check{justify-content:start;gap:8px}
+    .light{margin-left:auto;display:flex;align-items:center;gap:8px;color:var(--muted)}
+    .light input{width:76px}
+    @media(max-width:760px){.workspace{grid-template-columns:1fr}.controls{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+      .layer{border:0}.layer:last-child{grid-column:1/-1;border-top:1px solid var(--line)}}
+    @media(max-width:490px){header{align-items:start;flex-direction:column}.controls{display:block}.layer{border-bottom:1px solid var(--line)}
+      .layer:last-child{border:0}.stage{min-height:0;padding-bottom:22px}.light{margin-left:0}.toolbar{gap:2px}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>Lantern Relay</h1><p>A cast-brass lighthouse plaque with fired enamel and a movable maker’s mark.</p></div>
+    <a download href="lantern-relay.material.json">Download material graph</a>
+  </header>
+  <div class="workspace">
+    <figure class="preview">
+      <div class="toolbar" aria-label="Preview maps">
+        <button type="button" data-view="lit" aria-pressed="true">Lit</button>
+        <button type="button" data-view="baseColor" aria-pressed="false">Pigment</button>
+        <button type="button" data-view="height" aria-pressed="false">Height</button>
+        <button type="button" data-view="normal" aria-pressed="false">Normal</button>
+        <button type="button" data-view="roughness" aria-pressed="false">Roughness</button>
+        <label class="light" for="light">Light <input id="light" type="range" min="0" max="359" value="133"></label>
+      </div>
+      <div class="stage"><canvas id="surface" width="144" height="128" aria-label="Rendered lighthouse plaque"></canvas></div>
+      <figcaption class="footer"><span id="status" role="status">Loading material graph</span><span>144 × 128 texels</span></figcaption>
+    </figure>
+    <aside class="controls" aria-label="Material layers in top-down order">
+      <section class="layer">
+        <header><h2>Maker’s mark</h2><p>Stamped brass over the enamel</p></header>
+        <div class="row check"><input id="stamp" type="checkbox" checked><label for="stamp">Show mark</label></div>
+        <div class="row range"><label for="stamp-x">Slide</label><input id="stamp-x" type="range" min="-28" max="28" value="18">
+          <output for="stamp-x" id="x-value">18%</output></div>
+        <div class="row range"><label for="stamp-turn">Rotate</label><input id="stamp-turn" type="range" min="-90" max="90" value="-11">
+          <output for="stamp-turn" id="turn-value">−11°</output></div>
+      </section>
+      <section class="layer">
+        <header><h2>Fired enamel</h2><p>Masked glaze with its own relief and finish</p></header>
+        <div class="row"><span id="pigment-label">Pigment</span><div class="swatches" role="group" aria-labelledby="pigment-label">
+          <button type="button" class="swatch" style="--swatch:#46998b" data-pigment="jade" aria-pressed="true">Jade</button>
+          <button type="button" class="swatch" style="--swatch:#bd593c" data-pigment="ember" aria-pressed="false">Ember</button>
+          <button type="button" class="swatch" style="--swatch:#5989bd" data-pigment="cobalt" aria-pressed="false">Cobalt</button>
+        </div></div>
+        <div class="row"><label for="finish">Finish</label><select id="finish"><option value="gloss">Gloss enamel</option><option value="matte">Matte enamel</option></select></div>
+        <div class="row check"><input id="dominance" type="checkbox" checked><label for="dominance">Protect raised brass with height</label></div>
+      </section>
+      <section class="layer">
+        <header><h2>Cast brass</h2><p>Foundation with raised lighthouse, screws and rim</p></header>
+      </section>
+    </aside>
+  </div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="data.js"></script>
+<script src="preview.js"></script>
+<script src="live.js"></script>
+</body>
+</html>

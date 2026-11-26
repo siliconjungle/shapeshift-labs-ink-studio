@@ -2,7 +2,7 @@
 (function (K) {
   const A = K.authoring, DIO = K.diorama, { M,V } = K;
   const tables = ['solids', 'parts', 'groups', 'motion', 'effects', 'topologyMeshes'];
-  const { authored, compose, transform } = DIO.solidFrames;
+  const { authored, compose, inverse, transform } = DIO.solidFrames;
 
   function scopedSolid(solid, name, tasks, { primary, key, placement, prefab }) {
     const next = { ...solid };
@@ -62,7 +62,120 @@
     }));
   }
 
-  function expand(source, { prefabs: external } = {}) {
+  function placementError(key, field, message) {
+    const problem = {level:'error',path:'instances.'+key+(field ? '.'+field : ''),problem:message,hint:''};
+    return Object.assign(new Error(DIO.report([problem])), {problems:[problem]});
+  }
+
+  function placements(instances = {}) {
+    const {check,id,own,record} = K.world.data;
+    check(record(instances),'Expected an instance map');
+    const locals = new Map(), world = new Map();
+    for (const [key,entry] of Object.entries(instances)) {
+      check(id(key) && record(entry),'Invalid visual prefab instance '+key);
+      if (entry.parent !== undefined && (!id(entry.parent) || !own(instances,entry.parent)))
+        throw placementError(key,'parent','Parent must name another visual prefab instance');
+      try {
+        locals.set(key,entry.transform === undefined ? null : authored(entry.transform));
+      } catch (error) {
+        throw placementError(key,'transform',error.message);
+      }
+    }
+    for (const key of locals.keys()) {
+      const chain = new Set();
+      let current = key;
+      while (current !== undefined && !world.has(current)) {
+        if (chain.has(current)) throw placementError(current,'parent','Prefab parent cycle: '+[...chain,current].join(' -> '));
+        chain.add(current);
+        current = instances[current].parent;
+      }
+      let frame = world.get(current);
+      for (const name of [...chain].reverse()) {
+        const local = locals.get(name);
+        frame = frame && local ? compose(frame,local) : local ?? frame;
+        if (frame && (!Number.isFinite(frame.scale) || frame.scale <= 0 || !frame.mesh.position.every(Number.isFinite)))
+          throw placementError(name,'transform','World transform exceeds numeric precision');
+        world.set(name,frame ?? null);
+      }
+    }
+    return world;
+  }
+
+  function sameFrame(a,b) {
+    return ['position','matrix'].every(key => a.mesh[key].every((value,i) => {
+      const next = b.mesh[key][i];
+      return Math.abs(value-next) <= 1e-8*Math.max(1,Math.abs(value),Math.abs(next));
+    }));
+  }
+
+  function planReparent(scene, env, request) {
+    const {id,own,record} = K.world.data, {clone,freeze} = K.procedural.data;
+    const {instance,parent} = request ?? {};
+    if (!record(request) || Object.keys(request).some(key => !['instance','parent'].includes(key)) ||
+        !id(instance) || parent !== null && !id(parent))
+      throw new TypeError('Name a visual prefab instance and its new parent, or use null for the scene root');
+    if (!own(scene.instances,instance)) throw new RangeError('Unknown visual prefab instance '+instance);
+    const expanded = expand(scene,env), entry = scene.instances[instance];
+    const world = expanded.instances.get(instance).placement ?? authored();
+    const before = {parent:entry.parent ?? null,transform:clone(entry.transform ?? null),world:world.mesh};
+    const changed = parent !== before.parent;
+    const report = {format:'ink-studio/prefab-reparent',version:1,scene:scene.id,instance,before,
+      requestedParent:parent,changed,canCommit:false,instances:[],conflicts:[]};
+    const finish = patch => ({patch,report:freeze(report)});
+    const children = new Map();
+    for (const [key,{parent}] of Object.entries(scene.instances)) {
+      if (!children.has(parent)) children.set(parent,[]);
+      children.get(parent).push(key);
+    }
+    const subtree = [instance];
+    for (let i=0; i<subtree.length; i++) subtree.push(...(children.get(subtree[i]) ?? []));
+    for (const id of subtree) {
+      const link = expanded.instances.get(id);
+      const frame = (link.placement ?? authored()).mesh;
+      report.instances.push({instance:id,objects:[...link.solids,...Array.from(link.meshes.values(),row=>row.object)],
+        beforeWorld:frame});
+    }
+    if (parent !== null && !own(scene.instances,parent)) {
+      report.conflicts.push({reason:'unknown-parent',parent});
+      return finish();
+    }
+    if (subtree.includes(parent)) {
+      report.conflicts.push({reason:'parent-cycle',parent});
+      return finish();
+    }
+
+    const instances = {...scene.instances};
+    if (changed) {
+      const carrier = expanded.instances.get(parent)?.placement;
+      const relative = carrier ? compose(inverse(carrier),world) : world;
+      const next = {...entry,transform:transform(relative)};
+      if (entry.transform?.pivot) {
+        const pivot = entry.transform.pivot;
+        next.transform.pivot = pivot;
+        next.transform.translation = V.sub(relative.point(pivot),pivot);
+      }
+      if (parent === null) delete next.parent;
+      else next.parent = parent;
+      instances[instance] = next;
+    }
+    let resolved;
+    try {
+      resolved = placements(instances);
+    } catch (error) {
+      report.problems = error.problems ?? [{level:'error',problem:error.message}];
+      return finish();
+    }
+    for (const row of report.instances) {
+      const actual = resolved.get(row.instance) ?? authored();
+      row.afterWorld = actual.mesh;
+      if (!sameFrame({mesh:row.beforeWorld},actual)) report.conflicts.push({reason:'world-placement-drift',instance:row.instance});
+    }
+    report.after = {parent,transform:clone(instances[instance].transform ?? null),world:report.instances[0].afterWorld};
+    report.canCommit = !report.conflicts.length;
+    return finish(report.canCommit ? {instances} : undefined);
+  }
+
+  function expand(source, { prefabs: external } = {}, {only, origin} = {}) {
     if (!source || source.prefabs === undefined && source.instances === undefined && source.prefabLibrary === undefined)
       return { spec: source, instances: new Map(), meshPlacements: new Map() };
     const W = K.world, tasks = W.data, { check, own, record, id, selector } = tasks;
@@ -94,11 +207,13 @@
     }
     const spec = { ...rest, solids: [...(rest.solids ?? [])], parts: { ...rest.parts }, groups: { ...rest.groups },
       motion: [...(rest.motion ?? [])], effects: [...(rest.effects ?? [])] };
-    const links = new Map(), meshPlacements = new Map();
+    const links = new Map(), meshPlacements = new Map(), framesByInstance = placements(instances);
+    const offset = origin?.some(Boolean) ? authored({translation:V.mul(origin,-1)}) : null;
     for (const [key, instance] of Object.entries(instances)) {
+      if (only && !only.has(key)) continue;
       try {
         check(id(key) && record(instance) &&
-          Object.keys(instance).every(field => ['prefab', 'transform', 'overrides', 'meshOverrides'].includes(field)) &&
+          Object.keys(instance).every(field => ['prefab', 'parent', 'transform', 'overrides', 'meshOverrides'].includes(field)) &&
           available.has(instance.prefab), 'Unknown visual prefab or invalid instance');
         const {definition,frames} = available.get(instance.prefab);
         for (const sheet of definition.usesTilesets ?? [])
@@ -134,7 +249,8 @@
             'Mesh override for ' + member + ' needs review against prefab revision ' + definition.revision);
         }
         const name = local => key + '.' + local;
-        const placement = instance.transform === undefined ? null : authored(instance.transform);
+        const frame = framesByInstance.get(key);
+        const placement = offset && frame ? compose(offset,frame) : offset ?? frame;
         const ids = [], meshes = new Map();
         for (const [local, solid] of Object.entries(resolved.solids)) {
           check(record(solid), 'Expected a solid at ' + local);
@@ -189,12 +305,9 @@
           }
           spec.effects.push(next);
         }
-        links.set(key, { instance, definition, resolved, revision: definition.revision, solids: ids, meshes, frame: placement?.mesh });
+        links.set(key, { instance, definition, resolved, revision: definition.revision, solids: ids, meshes, placement, frame: placement?.mesh });
       } catch (error) {
-        const problem = { level: 'error', path: 'instances.' + key, problem: error.message, hint: '' };
-        const failure = new Error(DIO.report([problem]));
-        failure.problems = [problem];
-        throw failure;
+        throw placementError(key,null,error.message);
       }
     }
     return { spec, instances: links, meshPlacements };
@@ -242,5 +355,5 @@
     return authored(transform).point([0, 0, 0]);
   }
 
-  A.scenePrefabs = Object.freeze({ expand, review, origin, checkProvenance, tilesetRequirements, indexedTargets });
+  A.scenePrefabs = Object.freeze({ expand, placements, planReparent, review, origin, checkProvenance, tilesetRequirements, indexedTargets });
 })(KIT);
