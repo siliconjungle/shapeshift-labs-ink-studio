@@ -62,7 +62,7 @@ A `packed` usage declares every RGB channel and, optionally, alpha. Assign each 
 }
 ```
 
-Use `graph inspect --map ID` or `project.inspect({ map: ID })` for a visual preview. The preview selects sRGB for color, encoded XYZ for normals, and grayscale for scalar maps. Height previews show the measured range and units. Packed RGB previews display the three channels with full coverage so a fourth data sample stays independent. Pass `--component r|g|b|a` to preview one assigned channel. Node preview watches also accept `{ map, component }`.
+Use `graph inspect --map ID` or `project.inspect({ map: ID })` for a visual preview. Use the [linked material preview](linked-material-preview.md) to pick a surface texel in a rendered slot and tile. The preview selects sRGB for color, encoded XYZ for normals, and grayscale for scalar maps. Height previews show the measured range and units. Packed RGB previews display the three channels with full coverage so a fourth data sample stays independent. Pass `--component r|g|b|a` to preview one assigned channel. Node preview watches also accept `{ map, component }`.
 
 ```sh
 node examples/material-output-usages/demo.cjs /tmp/ink-lantern
