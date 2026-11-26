@@ -26,7 +26,7 @@ const BitmapResources = (() => {
     for (const row of value) {
       if (!fields(row, ['x', 'y', 'value']) || !integer(row.x, 0, 8191) || !integer(row.y, 0, 8191) ||
           !Array.isArray(row.value) || ![1, 3, 4].includes(row.value.length) || !Array.from(row.value).every(Number.isFinite))
-        throw new TypeError('Bitmap edits need integer x and y and one or four finite samples');
+        throw new TypeError('Bitmap edits need integer x and y and one, three or four finite samples');
       const key = row.y * 8192 + row.x;
       if (seen.has(key)) throw new RangeError('Duplicate bitmap pixel edit at ' + row.x + ',' + row.y);
       seen.add(key);
@@ -49,11 +49,14 @@ const BitmapResources = (() => {
     return source;
   }
   function interpretation(settings = {}) {
-    if (!fields(settings, ['intent', 'colorSpace', 'channel', 'units', 'alpha', 'sampling', 'tiling', 'normalOrientation']))
+    if (!fields(settings, ['intent', 'colorSpace', 'channel', 'units', 'alpha', 'sampling', 'tiling', 'normalSpace', 'normalOrientation', 'heightRange']))
       throw new TypeError('Invalid bitmap interpretation settings');
-    const { intent = 'color', colorSpace, channel, units, alpha, sampling, tiling, normalOrientation } = settings;
+    const { intent = 'color', colorSpace, channel, units, alpha, sampling, tiling, normalSpace, normalOrientation, heightRange } = settings;
     if (!['color', 'data', 'mask', 'height', 'normal'].includes(intent) ||
-        normalOrientation !== undefined && (intent !== 'normal' || !['opengl','directx'].includes(normalOrientation)) ||
+        normalSpace !== undefined && (intent !== 'normal' || !['tangent','world'].includes(normalSpace)) ||
+        normalOrientation !== undefined && (intent !== 'normal' || normalSpace==='world' || !['opengl','directx'].includes(normalOrientation)) ||
+        heightRange !== undefined && (intent!=='height'||!Array.isArray(heightRange)||heightRange.length!==2||
+          !Array.from(heightRange).every(n=>Number.isFinite(n)&&Number.isFinite(Math.fround(n)))||heightRange[1]<=heightRange[0]) ||
         intent === 'normal' && (channel !== undefined || units !== undefined && units !== 'unitless') ||
         (intent === 'color' ? colorSpace !== undefined && !spaces.includes(colorSpace) || channel !== undefined ||
           alpha !== undefined && !['straight', 'premultiplied'].includes(alpha) :
@@ -63,7 +66,7 @@ const BitmapResources = (() => {
           ['color', 'mask'].includes(intent) && units !== 'unitless') ||
         sampling !== undefined && !['nearest', 'linear'].includes(sampling) ||
         tiling !== undefined && (!fields(tiling, ['u', 'v']) || Object.values(tiling).some(mode => !borders.includes(mode))))
-      throw new TypeError('Invalid bitmap color space, channels, units, alpha or sampling');
+      throw new TypeError('Invalid bitmap interpretation, channels, units, alpha or sampling');
     return settings;
   }
 
@@ -168,10 +171,11 @@ const BitmapResources = (() => {
     const { intent = 'color', colorSpace = raw.colorSpace ?? (codec === 'pfm' || codec === 'exr' ? 'srgb-linear' : 'srgb'), units,
       sampling = 'nearest', tiling = {}, alpha = raw.alpha === 'premultiplied' ? 'premultiplied' : 'straight' } = settings;
     const color = intent === 'color', normal = intent === 'normal';
-    if (normal && raw.channels!==undefined && raw.channels<3) throw new TypeError('Tangent normal bitmaps need three source lanes');
+    if (normal && raw.channels!==undefined && raw.channels<3) throw new TypeError('Normal bitmaps need three source lanes');
+    const normalSpace=settings.normalSpace??'tangent';
     return { width, height, channels: color ? 4 : normal ? 3 : 1, descriptor: {
       intent, layout: color ? 'rgba' : normal ? 'xyz' : 'r', colorSpace: color ? colorSpace : 'none',
-      ...(normal && { normalSpace:'tangent',normalOrientation:settings.normalOrientation??'opengl' }),
+      ...(normal && { normalSpace,...(normalSpace==='tangent'&&{normalOrientation:settings.normalOrientation??'opengl'}) }),
       alpha: color ? alpha : 'none', sampling, tiling: { u: tiling.u ?? 'clamp', v: tiling.v ?? 'clamp' },
       units: units ?? (intent === 'height' ? 'shape-units' : 'unitless'),
       precision: intent === 'height' ? 'float32' : native
@@ -198,9 +202,14 @@ const BitmapResources = (() => {
         const lane = stride >= 3 || channels === 1 && stride === 2 && raw.alpha === 'none' && c === 1 ? c : 0;
         return src[p * stride + lane];
       }
-      const ratio = targetMax / sourceMax;
+      const ratio = targetMax / sourceMax, range=settings?.heightRange;
+      const decodeHeight=n=>{
+        const unit=n/sourceMax;
+        if(unit<0||unit>1)throw new RangeError('Encoded bitmap height range needs samples in [0, 1]');
+        return range[0]+unit*(range[1]-range[0]);
+      };
       for (let p = 0; p < count; p++) {
-        if (channels === 1) data[p] = read(p, lane) * ratio;
+        if (channels === 1) data[p] = range?decodeHeight(read(p,lane)):read(p, lane) * ratio;
         else for (let c = 0; c < channels; c++) data[p * channels + c] = read(p, c) * ratio;
       }
     }

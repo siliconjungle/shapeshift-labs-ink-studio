@@ -8,6 +8,7 @@ const {readMaterialGraph,writeMaterialGraph}=require('./material-graph.js');
 const Plan=require('./bake-job-plan.js');
 const Meshes=require('./bake-job-mesh.js');
 const Projection=require('./bake-job-projection.js');
+const Surface=require('./bake-job-surface.js');
 const Geometry=require('./geometry-masks.js');
 const UV=require('./material-preview-geometry.js');
 const bake=require('./glb-bake.js');
@@ -22,10 +23,25 @@ const snapshot=(paths,file)=>{
 const emit=row=>process.stdout.write(JSON.stringify(row)+'\n');
 const directory=(root,...parts)=>path.join(root,...parts);
 
-function interpretation(map,orientation) {
-  if(map==='normal')return {intent:'normal',normalOrientation:orientation};
-  if(['pigment','emission'].includes(map))return {intent:'color',colorSpace:'srgb'};
+function interpretation(row) {
+  if(row.output?.kind==='normal') {
+    const {space,orientation}=row.output;
+    return {intent:'normal',normalSpace:space,...(orientation&&{normalOrientation:orientation})};
+  }
+  if(row.output?.kind==='height')return {intent:'height',units:row.output.units,
+    ...(row.output.range&&{heightRange:row.output.range})};
+  if(['pigment','emission'].includes(row.map))return {intent:'color',colorSpace:'srgb'};
   return {intent:'mask'};
+}
+
+function sameInterpretation(prior,fresh) {
+  const intent=prior.intent??'color';
+  if(intent!==fresh.intent)return false;
+  if(intent==='normal')return (prior.normalSpace??'tangent')===fresh.normalSpace&&
+    (fresh.normalSpace==='world'||(prior.normalOrientation??'opengl')===fresh.normalOrientation);
+  if(intent==='height')return (prior.units??'shape-units')===fresh.units&&
+    JSON.stringify(prior.heightRange??null)===JSON.stringify(fresh.heightRange??null);
+  return intent!=='color'||!prior.colorSpace||prior.colorSpace===fresh.colorSpace;
 }
 
 function refreshGraph(report,refresh,output,K) {
@@ -44,9 +60,12 @@ function refreshGraph(report,refresh,output,K) {
     if(prior&&prior.format!=='bitmap')throw new TypeError('Bake cannot refresh a non-bitmap resource '+resource);
     const layout=prior&&Bitmap.layout(prior);
     if(layout?.kind==='sequence')throw new TypeError('Bake refresh targets a single image or a UV tile set');
-    const read=row=>storage==='linked'?{file:row.file,encoding:'png'}:
-      {base64:fs.readFileSync(directory(output,row.file)).toString('base64'),origin:row.file,encoding:'png'};
-    const fresh=interpretation(map,rows[0].settings.orientation), authored=prior?.interpretation;
+    function read(row) {
+      const encoding=row.file.endsWith('.exr')?'exr':'png';
+      return storage==='linked'?{file:row.file,encoding}:
+        {base64:fs.readFileSync(directory(output,row.file)).toString('base64'),origin:row.file,encoding};
+    }
+    const fresh=interpretation(rows[0]), authored=prior?.interpretation??{};
     const tiled=layout?.kind==='tiles'||rows.length>1||rows[0].tile.some(Boolean);
     let definition={format:'bitmap',interpretation:{...(authored?.sampling&&{sampling:authored.sampling}),
       ...(authored?.tiling&&{tiling:authored.tiling}),...fresh},...(prior?.missing&&{missing:prior.missing})};
@@ -59,10 +78,7 @@ function refreshGraph(report,refresh,output,K) {
         if(!members.has(key))members.set(key,old);
         else if(old.udim!==undefined)members.set(key,{udim:old.udim,source:members.get(key).source});
       }
-      if(members.size>rows.length&&authored&&
-        ((authored.intent??'color')!==fresh.intent||fresh.intent==='normal'&&
-        (authored.normalOrientation??'opengl')!==fresh.normalOrientation||
-        fresh.intent==='color'&&authored.colorSpace&&authored.colorSpace!==fresh.colorSpace))
+      if(members.size>rows.length&&!sameInterpretation(authored,fresh))
         throw new TypeError('Refresh would reinterpret untouched tiles on '+resource);
       definition.tiles=[...members.values()];
     } else definition.source=read(rows[0]);
@@ -78,11 +94,6 @@ function refreshGraph(report,refresh,output,K) {
 function mapBytes(result,id,settings) {
   const {size}=settings,{textures,registeredMaps,raster}=result;
   if(id==='pigment')return textures.base;
-  if(id==='normal'&&settings.orientation==='directx') {
-    const data=raster.pixels.normal.slice();
-    for(let i=0;i<data.length;i+=3)if(data[i]||data[i+1]||data[i+2])data[i+1]=255-data[i+1];
-    return PNG.encode(size,size,data);
-  }
   if(id==='metalness')return PNG.encodeGray(size,size,Uint8Array.from(raster.footprint,(_,i)=>raster.pixels.surface[i*3+2]));
   return textures[id]??registeredMaps[id]??registeredMaps.masks[id];
 }
@@ -109,7 +120,7 @@ function steps(plan,model,library,K,onInput) {
   return tasks;
 }
 
-function render(task,K) {
+function renderGeometry(task,K) {
   const {tile,settings,selection,map}=task,{mesh,faces,normals,uvs,source}=tile;
   const kernel=settings.geometry&&Geometry.prepare(selection.points,selection.faces,selection.geometryNormals,
     settings.geometry,K,[map]);
@@ -118,6 +129,54 @@ function render(task,K) {
     chartBake:{state:{faceCharts:faces.map(()=>0)},...(geometry&&{geometry})}});
   return {bytes:mapBytes(result,map,settings),texels:result.sampledTexels,coverage:result.coverage,
     ...(result.geometryMasks&&{geometry:result.geometryMasks})};
+}
+
+function renderTasks(tasks,model,K) {
+  const shared=new Map(), details=new Map(), heightTasks=new Map(), heightGroups=new Map();
+  const rasterKey=({authored,tile,settings})=>JSON.stringify([authored.id,tile.tile,settings.size,settings.padding]);
+  for(const task of tasks) {
+    const {map,settings,authored}=task, key=rasterKey(task);
+    if(settings.space==='world'||settings.space==='tangent'&&settings.encoding!=='png8'||map==='height') {
+      if(!details.has(key))details.set(key,{});
+      details.get(key)[map==='height'?'height':settings.space]=true;
+    }
+    if(map==='height') {
+      if(!heightTasks.has(authored.id))heightTasks.set(authored.id,[]);
+      heightTasks.get(authored.id).push(task);
+    }
+  }
+  function raster(task) {
+    const key=rasterKey(task);
+    if(!shared.has(key)) {
+      const {authored,tile,settings,selection}=task,{mesh,faces,uvs,normals,source}=tile;
+      const cage=task.cast?.(tile,settings.size), detail=details.get(key);
+      const worldNormal=detail?.world&&!authored.projection&&Meshes.sceneTransform(model,selection.index,K)?.normal;
+      const value=bake(mesh,faces,uvs,normals,settings.size,settings.padding,K,{registered:true,sourceFaces:source,
+        chartBake:{state:{faceCharts:faces.map(()=>0)},cage}, ...(detail&&{samples:{...detail,worldNormal}})});
+      shared.set(key,value);
+      if(shared.size>3)shared.delete(shared.keys().next().value);
+    }
+    return shared.get(key);
+  }
+  const info=cache=>({texels:cache.sampledTexels,coverage:cache.coverage,...(cache.cageBake&&{projection:cache.cageBake})});
+  return task=>{
+    const {map,settings,authored}=task;
+    if(settings.geometry)return renderGeometry(task,K);
+    if(map==='height') {
+      if(!heightGroups.has(authored.id)) {
+        const tiles=new Map(heightTasks.get(authored.id).map(row=>{
+          const cache=raster(row);
+          return [row,{...Surface.measureHeight(cache),info:info(cache)}];
+        }));
+        heightGroups.set(authored.id,{tiles,scale:Surface.heightScale(tiles.values(),settings)});
+      }
+      const {tiles,scale}=heightGroups.get(authored.id), row=tiles.get(task);
+      tiles.delete(task);
+      return {...Surface.height(row,scale,settings),...row.info};
+    }
+    const cache=raster(task), result=settings.space?Surface.normal(cache,settings):{bytes:mapBytes(cache,map,settings)};
+    return {...result,...info(cache)};
+  };
 }
 
 function main(request,base) {
@@ -135,31 +194,18 @@ function main(request,base) {
   const report={format:'ink-studio/bake-job-report',version:1,label:plan.label,preset:plan.preset,targets:plan.targets,
     catalog:Meshes.catalog(model),maps:[],inputs:[]};
   emit({event:'planned',completed:0,total:pending.length});
-  const shared=new Map();
+  const render=renderTasks(pending,model,K);
   for(const [i,task] of pending.entries()) {
     const {map,tile,selection,authored,settings}=task;
     const detail={map,target:authored.id,tile:tile.label,total:pending.length};
     emit({event:'map-started',...detail,completed:i});
-    const key=JSON.stringify([authored.id,tile.tile,settings.size,settings.padding]);
-    let result;
-    if(!settings.geometry) {
-      // Both normal conventions are kept in the same registered raster.
-      if(!shared.has(key)) {
-        const {mesh,faces,uvs,normals,source}=tile, cage=task.cast?.(tile,settings.size);
-        const value=bake(mesh,faces,uvs,normals,settings.size,settings.padding,K,{registered:true,
-          sourceFaces:source,chartBake:{state:{faceCharts:faces.map(()=>0)},cage}});
-        shared.set(key,value);
-        if(shared.size>3)shared.delete(shared.keys().next().value);
-      }
-      const cache=shared.get(key);
-      result={bytes:mapBytes(cache,map,settings),texels:cache.sampledTexels,coverage:cache.coverage,
-        ...(cache.cageBake&&{projection:cache.cageBake})};
-    } else result=render(task,K);
-    const [u,v]=tile.tile, relative='maps/'+authored.id+'/'+u+'_'+v+'/'+map+'.png';
-    Assets.write(directory(out,relative),result.bytes);
-    const {bytes,...rest}=result;
+    const {bytes,preview,...rest}=render(task);
+    const [u,v]=tile.tile, stem='maps/'+authored.id+'/'+u+'_'+v+'/'+map, relative=stem+'.'+Surface.ext(settings.encoding);
+    Assets.write(directory(out,relative),bytes);
+    const previewFile=preview&&stem+'.preview.png';
+    if(preview)Assets.write(directory(out,previewFile),preview);
     report.maps.push({target:authored.id,mesh:selection.mesh,meshIndex:selection.index,uvSet:authored.uvSet,
-      tile:tile.tile,tileLabel:tile.label,map,settings,file:relative,sha256:digest(bytes),...rest});
+      tile:tile.tile,tileLabel:tile.label,map,settings,file:relative,sha256:digest(bytes),...(previewFile&&{previewFile}),...rest});
     emit({event:'map-finished',...detail,completed:i+1});
   }
   if(plan.sources.size||plan.skewMaps.size||plan.targets.some(row=>row.projection))

@@ -27,8 +27,11 @@ function opaquePigment(texture) {
   };
 }
 
-function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = false, projection, chartBake, sourceFaces, pigmentUVs } = {}) {
+function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = false, projection, chartBake, sourceFaces, pigmentUVs, samples } = {}) {
   const count = size * size, covered = new Uint8Array(count);
+  const tangentNormals = samples?.tangent && new Float32Array(count * 3);
+  const worldNormals = samples?.world && new Float32Array(count * 3);
+  const height = samples?.height && new Float32Array(count), heightValid = height && new Uint8Array(count);
   if(projection && count*projection.views>64000000)throw new RangeError('Paint views exceed the projected texel budget');
   const { previous, state, dirty, reproject, geometry, layout, rebuild, release, transfer, cage } = chartBake || {};
   const revised = Boolean(rebuild?.size || release?.size), layoutRows = new Map(layout?.charts.map(row => [row.id, row]));
@@ -62,6 +65,8 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
   const hot = previous ? null : new Float32Array(count * 3), mats = mesh.materials;
   const footprint = registered && (revised ? previous.footprint.slice() : previous?.footprint ?? new Uint8Array(count));
   const layers = Object.values(pixels), paintLayers = [];
+  if(tangentNormals)layers.push(tangentNormals);
+  if(worldNormals)layers.push(worldNormals);
   if (revised && transfer) for (const name of transfer.paintNames) {
     const prior = previous.masks.get(name);
     if (!prior || !masks.has(name)) continue;
@@ -178,6 +183,14 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
       const ty = V.mul(V.cross(n, tx), V.dot(V.cross(n, tx), bitangent) < 0 ? -1 : 1);
       const yNormal = [V.dot(source, tx), V.dot(source, ty), V.dot(source, n)];
       const at = i * 3;
+      if(tangentNormals)tangentNormals.set(yNormal,at);
+      if(worldNormals)worldNormals.set(samples.worldNormal ? samples.worldNormal(source) : source,at);
+      if(height&&(!cage||projected?.offset!==undefined)) {
+        const offset=Math.fround(projected?.offset??0);
+        if(!Number.isFinite(offset))throw new RangeError('Signed bake height exceeds float32 range');
+        height[i]=offset;
+        heightValid[i]=1;
+      }
       pixels.base.set(color.map(sRGB), at);
       pixels.normal.set(yNormal.map(value => byte(0.5 + 0.5 * value)), at);
       pixels.surface.set([255, byte(roughness), byte(metallic)], at);
@@ -222,6 +235,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
       for (let k = 0; k < 3; k++) layer[j * 3 + k] = layer[i * 3 + k];
     }
     for (const layer of masks.values()) layer[j]=layer[i];
+    if(height)height[j]=height[i];
     if(alpha)alpha[j]=alpha[i];
   };
   for (let step = 0; step < padding && front.length; step++) {
@@ -252,6 +266,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
   };
   const coverage = previous ? footprint.reduce((n,value)=>n+Number(value!==0),0)/count : used/count;
   const raster = registered && {pixels,opacity:alpha,footprint,masks,owners,
+    ...(samples && { samples:{tangent:tangentNormals,world:worldNormals,height,heightValid} }),
     ...(revised && { oldOwners: previous.owners })};
   return { textures, strength, coverage, registeredMaps, owners, stamp, translucent, sampledTexels:used, raster,
     ...(revised && { layoutRevised: true }),

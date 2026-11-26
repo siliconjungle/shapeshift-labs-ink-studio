@@ -27,6 +27,7 @@ label{font-size:12px;color:var(--muted);display:grid;gap:3px}summary{cursor:poin
 .map-main{display:grid;grid-template-columns:24px minmax(80px,1fr) 65px 25px 25px 25px;gap:3px;align-items:center}
 .map-main input{padding:3px;font-size:12px;min-height:25px}.map-main button{padding:2px;font-size:11px;min-height:25px}
 .map-main label{display:block;color:var(--paper)}.map-row .form{padding:6px 0 0 25px}
+.map-controls{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 p{margin:6px 0;color:var(--muted);font-size:12px}
 progress{width:100%;height:9px;accent-color:var(--gold)}
 .preview{display:grid;place-items:center;margin:11px 0;min-height:270px;height:min(49vw,429px);max-height:463px;border:1px solid var(--line);
@@ -63,6 +64,7 @@ dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 9px;font
 <section class="card">
 <h2>Baked map</h2><label>Map, target and tile<select id="result"></select></label>
 <div class="preview"><img id="image" alt="" hidden><p id="empty">Run a bake to preview its maps.</p></div><dl id="details"></dl>
+<div class="toolbar"><a id="download-map" download hidden>Download map</a></div>
 </section>
 <section class="card" id="refresh-wrap" hidden><h2>Refreshed resources</h2><div id="refresh"></div><a id="material" href="material.material.json" download>Material graph</a></section>
 </div>
