@@ -221,6 +221,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.MeshUV.metrics` | function | `([a,b,c], uv)` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
 | `toolkit.MeshUV.overlaps` | function | `(a,b,epsilon=uvEpsilon)` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
 | `toolkit.MeshUV.sameUV` | function | `(a,b)` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
+| `toolkit.MeshUV.sampleCoverage` | function | `(faces, crop, image, maxRows = 4000000)` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
 | `toolkit.MeshUV.topology` | function | `(points, triangles, uvs, protectedSeams = [], cutSeams = [])` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
 | `toolkit.MeshUV.validate` | function | `(points, triangles, uvs, missing = false)` | [guide](../mesh-uv.md), [source](../../src/mesh-uv.js) |
 | `toolkit.PALETTES` | value | `array` |  |

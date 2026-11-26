@@ -222,6 +222,9 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
   const captures = [nativeBefore, nativeAfter], views = [];
   const {orientation,scaling,normalization} = selected ?? {};
   const basis = scaling ?? orientation;
+  const assignment = selected?.assignment;
+  const materialAfter = captures[0]===captures[1] ? material :
+    assignment?.faces.find(row=>row.before.material===material)?.after.material ?? material;
   const useAtlasPaint = basis || selected?.cornerScope || selected?.snapGuides || settings.pivot || layouts.some(layout=>layout.pivot);
   let crossHighlight;
   if (selectionOutput) {
@@ -240,8 +243,9 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     }
     crossHighlight = { sheets, faces: selected.faces.map(id => ({ id, material: byId.get(id).material, visiblePixels: visible.get(id) })) };
   } else for (const [i, layout] of layouts.entries()) {
-    const paint = useAtlasPaint ? atlasPaint(captures[i].mesh,material,layout,kit) : undefined;
-    views.push(atlas(layout, material, selected, settings, kit, paint), model(layout, captures[i], selected, kit));
+    const slot = i ? materialAfter : material;
+    const paint = useAtlasPaint ? atlasPaint(captures[i].mesh,slot,layout,kit) : undefined;
+    views.push(atlas(layout, slot, selected, settings, kit, paint), model(layout, captures[i], selected, kit));
   }
   const gap = 6, { w, h } = settings, width = h + w + 3 * gap, height = h * 2 + 64;
   const layers = [], draw = [text('Atlas', [h / 2 + gap, 13]), text('Native model', [h + 2 * gap + w / 2, 13])];
@@ -254,9 +258,15 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
   const scope = selected?.cornerScope;
   const [pivotBefore,pivotAfter] = layouts.map(layout=>basis ? null : settings.pivot ?? layout.pivot ?? null);
   const hasPivot = basis || pivotBefore || pivotAfter;
-  const snapGuide = scaling?.snapBounds ? 'Snapped bounds' : normalization ? 'UV reference' : selected?.snapGuides && 'Snap target';
-  draw.push(text(snapGuide || 'Cut seam', [width * .18, height - 8], snapGuide ? ink.snap : ink.seam, 8),
-    text(scope ? 'Held overlap' : 'Pinned corner', [width * .49, height - 8], scope ? ink.held : ink.pin, 8),
+  const snapGuide = scaling?.snapBounds ? 'Snapped bounds' : normalization ? 'UV reference' :
+    assignment ? 'Assigned region' : selected?.snapGuides && 'Snap target';
+  draw.push(text(snapGuide || 'Cut seam', [width * .18, height - 8], snapGuide ? ink.snap : ink.seam, 8));
+  if (assignment) {
+    const stretch = assignment.faces.reduce((max,row)=>Math.max(max,row.after.metrics.maxStretch ?? 0),0);
+    const {covered,texels,complete} = assignment.coverage;
+    draw.push(text((complete ? 'Coverage ' : 'Partial ')+covered+'/'+texels,[width*.49,height-8],ink.selected,8),
+      text(stretch ? 'Peak stretch '+stretch.toFixed(2)+'x' : 'No 2D stretch measure',[width*.80,height-8],ink.pin,8));
+  } else draw.push(text(scope ? 'Held overlap' : 'Pinned corner', [width * .49, height - 8], scope ? ink.held : ink.pin, 8),
     text(scope ? 'Move scope' : hasPivot ? 'UV pivot' : 'Linked selection', [width * .80, height - 8],
       !scope && hasPivot ? ink.pivot : ink.selected, 8));
   views.push(composite(width, height, layers, draw, kit));
@@ -267,10 +277,26 @@ function review(before, after, nativeBefore, nativeAfter, selected, settings, ki
     after: UV.readability(nativeAfter.mesh, nativeAfter.frame, readability)
   };
   return { material, grid: [w, h], files: [...imageNames, ...crossHighlight?.sheets.slice(1).map(row => row.file) ?? []],
+    ...(assignment && {materialAfter}),
     ...(scope && {cornerScope:scope}), ...(orientation && {orientation}), ...(scaling && {scaling}),
     ...(normalization && {normalization}),
     ...((pivotBefore || pivotAfter) && {pivot:{before:pivotBefore,after:pivotAfter}}),
     ...(crossHighlight && { crossHighlight }), ...(evidence && { readability: evidence }) };
+}
+
+function assignmentReview(editor,revised,report,input,kit,directory,inputs) {
+  const paths = imageNames.map(name=>path.resolve(directory,name));
+  if (paths.some(filename=>inputs.includes(filename))) throw new RangeError('Write assignment previews separately from their inputs');
+  const {object,part,uvSet,ids} = report, settings = view(input,false);
+  const before = editor.meshTopology(object,part).document, after = revised.meshTopology(object,part).document;
+  const picked = kit.KIT.meshTopology.uv.select(before,{domain:'faces',ids,uvSet});
+  const [l,t,r,b] = report.target.uvBounds;
+  const outline = [[l,t],[r,t],[r,b],[l,b],[l,t]];
+  const assignment = {...picked,assignment:report,
+    snapGuides:[...new Set(report.faces.map(row=>row.after.material))].map(material=>({material,points:outline}))};
+  const old = capture(before,settings,kit,editor,object);
+  const next = revised===editor ? old : capture(after,settings,kit,revised,object);
+  return review(before,after,old,next,assignment,settings,kit,paths,settings.readability);
 }
 
 function editSelection(UV,document,plan,selectionFile) {
@@ -385,4 +411,4 @@ function command([action, file, input, ...rest], opt, kit, openEditor) {
   if (out && action === 'edit' && value === undefined) process.exitCode = 1;
 }
 
-module.exports = { command, capture };
+module.exports = { command, capture, assignmentReview };

@@ -222,6 +222,70 @@ const MeshUV = (() => {
     return true;
   }
 
-  return Object.freeze({ area2, sameUV, validate, topology, overlaps, metrics, changedOverlaps, inspect });
+  function sampleCoverage(faces, crop, image, maxRows = 4000000) {
+    const {x,y,width,height} = crop, stride = width+1;
+    const counts = new Int32Array(stride*height), perFace = [];
+    let rows = 0, complete = true;
+    const epsilon = 1e-8;
+    for (const triangles of faces) {
+      const spans = new Map();
+      let faceComplete = complete;
+      if (complete) for (const tri of triangles) {
+        const [,t,,b] = bounds(tri);
+        for (let r=Math.max(y,Math.ceil(t-epsilon));r<=Math.min(y+height-1,Math.floor(b+epsilon));r++) {
+          if (rows>=maxRows) { complete = faceComplete = false; break; }
+          rows++;
+          const hits = [];
+          for (let i=0;i<3;i++) {
+            const [u,v] = tri[i], [a,b] = tri[(i+1)%3];
+            if (r<Math.min(v,b)-epsilon || r>Math.max(v,b)+epsilon) continue;
+            if (Math.abs(b-v)<=epsilon) hits.push(u,a);
+            else hits.push(u+(a-u)*Math.max(0,Math.min(1,(r-v)/(b-v))));
+          }
+          if (!hits.length) continue;
+          const l = Math.max(0,Math.ceil(Math.min(...hits)-epsilon)-x);
+          const rBound = Math.min(width-1,Math.floor(Math.max(...hits)+epsilon)-x);
+          if (l>rBound) continue;
+          if (!spans.has(r)) spans.set(r,[]);
+          spans.get(r).push([l,rBound]);
+        }
+        if (!complete) break;
+      }
+      let texels = 0;
+      for (const [r,ranges] of spans) {
+        ranges.sort((a,b)=>a[0]-b[0]);
+        const offset = (r-y)*stride;
+        let [left,right] = ranges[0];
+        const mark = ()=>{
+          counts[offset+left]++;
+          counts[offset+right+1]--;
+          texels += right-left+1;
+        };
+        for (const [l,b] of ranges.slice(1)) {
+          if (l<=right+1) right = Math.max(right,b);
+          else { mark(); left = l; right = b; }
+        }
+        mark();
+      }
+      perFace.push({texels,complete:faceComplete});
+    }
+    let covered = 0, shared = 0, transparent = 0, translucent = 0;
+    for (let r=0;r<height;r++) {
+      let active = 0;
+      for (let c=0;c<width;c++) {
+        active += counts[r*stride+c];
+        if (!active) continue;
+        covered++;
+        if (active>1) shared++;
+        const alpha = image.pixels[((r+y)*image.width+x+c)*4+3];
+        if (alpha===0) transparent++;
+        else if (alpha<255) translucent++;
+      }
+    }
+    return {texels:width*height,covered,shared,transparent,translucent,opaque:covered-transparent-translucent,
+      fraction:covered/(width*height),complete,scanlines:rows,perFace};
+  }
+
+  return Object.freeze({ area2, sameUV, validate, topology, overlaps, metrics, changedOverlaps, inspect, sampleCoverage });
 })();
 if (typeof module !== 'undefined') module.exports = MeshUV;
