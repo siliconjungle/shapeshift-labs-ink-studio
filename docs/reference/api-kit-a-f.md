@@ -829,6 +829,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.meshTopologyScene.prepare` | function | `(rows, tilesets = A.tilesets.prepare(), placements)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.revise` | function | `(row, patch, { projection, ...transitionOptions } = {})` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.meshTopologyScene.transferAttachments` | function | `(row, patch, settings, projection)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
+| `KIT.authoring.meshTopologyScene.uvAtlases` | function | `(scene,row,selector)` | [source](../../src/kit/p23-mesh-topology-scene.js) |
 | `KIT.authoring.physicalMaterials` | namespace |  |  |
 | `KIT.authoring.physicalMaterials.checkContactEffects` | function | `(value)` | [source](../../src/kit/p90-asset-materials.js) |
 | `KIT.authoring.physicalMaterials.checkStructural` | function | `(key,value,wet=true)` | [source](../../src/kit/p90-asset-materials.js) |

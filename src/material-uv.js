@@ -32,8 +32,10 @@ const MaterialUV = (() => {
   }
 
   const uv = (corner,set) => set ? corner.attributes?.[key(set)] : corner.uv;
+  // Authored mesh UVs span texel centers, starting in the top-left.
+  const texel = ([u,v],width,height) => [u*(width-1),v*(height-1)];
   const pinned = (corner,set) => Boolean(set ? corner.uvPins?.[set] : corner.uvPinned);
   const seam = (edge,set) => Boolean(set ? edge.uvSeams?.[set] : edge.uvSeam);
-  return Object.freeze({ channels, layout, channel, key, isKey, setsOf, bindings, resolve, flags, uv, pinned, seam });
+  return Object.freeze({ channels, layout, channel, key, isKey, setsOf, bindings, resolve, flags, uv, texel, pinned, seam });
 })();
 if (typeof module!=='undefined') module.exports=MaterialUV;

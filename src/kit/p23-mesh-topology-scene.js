@@ -55,6 +55,35 @@
     return value;
   }
 
+  function uvAtlases(scene,row,selector) {
+    const pigmentSet = MaterialUV.resolve(row.document.uvBindings,'pigment');
+    const channel = typeof selector === 'string' ? selector : selector === pigmentSet ? 'pigment' : undefined;
+    const maps = {pigment:['texture'],normal:['normal'],emission:['emission'],metallicRoughness:['roughness','metalness']};
+    if (!Object.hasOwn(maps,channel)) return;
+    const declared = index(row.materials ?? [],'Mesh materials');
+    const active = new Map((row.bakes ?? []).filter(bake=>!bake.invalidated).map(bake=>[bake.material,bake]));
+    const sources = new Map();
+    let registry;
+    return materialId=>{
+      if (!sources.has(materialId)) {
+        const material = declared.get(materialId), bake = active.get(materialId);
+        const fields = maps[channel];
+        const mapped = key=>bake?.maps[key] ?? material?.[key];
+        const texture = mapped('texture');
+        const hasMap = channel === 'pigment' ? Boolean(texture) : fields.some(key=>Array.isArray(mapped(key)));
+        if (hasMap) {
+          const tileset = texture?.tileset;
+          const image = tileset ? (registry ??= A.tilesets.prepare(scene.tilesets,scene.tilesetDefaults)).source(tileset) : texture;
+          const baked = channel === 'pigment' ? Boolean(bake?.maps.texture) : fields.some(key=>Array.isArray(bake?.maps[key]));
+          const kind = baked ? 'material-bake' : channel === 'pigment' && tileset ? 'tileset' : 'material-texture';
+          sources.set(materialId,{kind,channel,size:[image?.width ?? 1,image?.height ?? 1],
+            ...(tileset && {tileset}),...(baked && {bake:bake.id})});
+        } else sources.set(materialId,undefined);
+      }
+      return sources.get(materialId);
+    };
+  }
+
   function prepareRow(object, row, evaluation, tilesets, frame) {
     if (!TargetSelectors.name(object) || !fields(row, ['document', 'part', 'label', 'materials', 'bindings', 'bakes', 'modifiers', 'attachments', 'shapeKeys', 'pivot']) ||
         (row.part !== undefined && !TargetSelectors.name(row.part)) || (row.label !== undefined && !name(row.label)))
@@ -321,5 +350,5 @@
     return {row:updated, correspondence, report:plan.report, changes:diff(row,updated)};
   }
 
-  A.meshTopologyScene = Object.freeze({ prepare, mount, diff, revise, evaluator, applyModifiers, transferAttachments });
+  A.meshTopologyScene = Object.freeze({ prepare, mount, diff, revise, evaluator, applyModifiers, transferAttachments, uvAtlases });
 })(KIT);

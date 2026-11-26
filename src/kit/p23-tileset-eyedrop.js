@@ -78,22 +78,26 @@
     const {material} = polygon, definition = row.materials?.find(item=>item.id === material);
     const bake = row.bakes?.find(item=>item.material === material && !item.invalidated);
     const uvSet = MaterialUV.resolve(doc.uvBindings,'pigment');
-    const uv = polygon.corners.map(corner=>({corner:corner.id,uv:MaterialUV.uv(corner,uvSet)}));
+    const tileset = definition?.texture?.tileset;
+    const asset = !bake && tileset && A.tilesets.prepare(scene.tilesets,scene.tilesetDefaults).source(tileset);
+    const uv = polygon.corners.map(corner=>{
+      const uv = MaterialUV.uv(corner,uvSet);
+      return {corner:corner.id,uv,...(asset && {texel:MaterialUV.texel(uv,asset.width,asset.height)})};
+    });
     const frame = frameOf(doc,polygon);
     const {size,...worldFrame} = frame ?? {};
     const report = {format,version:1,object,...(row.part && {part:row.part}),face,material,uvSet,uv,
       revision:K.meshTopology.revision(doc),...(definition && {materialDefinition:definition}),...(frame && {worldFrame}),
+      ...(asset && {atlas:{tileset,size:[asset.width,asset.height],origin:'top-left',units:'texel-centers'}}),
       ...(brushSize && {brushSize:size ?? null,...(!frame && {sizeNotice:'face-is-not-rectangular'})})};
     const blocked = reason=>freeze({...report,canStamp:false,reason});
     if (bake) return blocked('active-material-bake');
-    const tileset = definition?.texture?.tileset;
     if (!tileset) return blocked('material-has-no-tileset');
     const binding = sourceBinding(row,face);
     const slots = A.tilesetFaces.sourceCorners(binding,polygon.corners.length);
     if (!slots) return blocked('face-is-not-a-quad');
 
-    const asset = A.tilesets.prepare(scene.tilesets,scene.tilesetDefaults).source(tileset);
-    const texels = uv.map(({uv})=>[uv[0]*(asset.width-1),uv[1]*(asset.height-1)]);
+    const texels = uv.map(({texel})=>texel);
     const recovered = recover(asset,tileset,texels,binding,slots);
     if (!recovered.paint) return blocked('pigment-uv-is-not-a-rectangular-stamp');
     const {selection,paint,uvInset} = recovered;
