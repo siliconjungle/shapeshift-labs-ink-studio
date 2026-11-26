@@ -26,14 +26,14 @@ function chooseMesh(model,selector,label) {
 
 function sceneTransform(model,index,{V},instance) {
   const asset=model.meshes[index], instances=model.nodes.filter(node=>node.mesh===index);
-  if(instance===undefined&&instances.length>1)throw new RangeError('Projection needs one scene placement for mesh '+asset.name);
+  if(instance===undefined&&instances.length>1)throw new RangeError('Scene-space baking needs one placement for mesh '+asset.name);
   const matrix=(instance??instances[0])?.world;
   if(!matrix)return;
   const [x,y,z]=[0,4,8].map(i=>matrix.slice(i,i+3));
   const origin=matrix.slice(12,15), dual=[V.cross(y,z),V.cross(z,x),V.cross(x,y)];
   const determinant=V.dot(x,dual[0]), sign=Math.sign(determinant);
   if(!Number.isFinite(determinant)||Math.abs(determinant)<=V.len(x)*V.len(y)*V.len(z)*1e-12)
-    throw new RangeError('Projection needs a nonsingular transform on '+asset.name);
+    throw new RangeError('Scene-space baking needs a nonsingular transform on '+asset.name);
   const columns=[x,y,z], apply=(a,b,c,axes)=>V.add(V.add(V.mul(axes[0],a),V.mul(axes[1],b)),V.mul(axes[2],c));
   return {
     mirrored:sign<0,

@@ -151,17 +151,20 @@ function renderOcclusion(tasks,scene,K) {
   }
   return task=>{
     const key=byTask.get(task), {tile,selection,map,settings}=task;
+    const group=groups.get(key);
     if(!cache.has(key)) {
-      const {config,requested}=groups.get(key), {mesh,faces,uvs,normals}=tile;
+      const {config,requested}=group, {mesh,faces,uvs,normals}=tile;
       const buffers=Occlusion.prepare(selection,tile,settings.size,config,requested,scene,K);
       const result=bake(mesh,faces,uvs,normals,settings.size,settings.padding,K,{registered:true,
         chartBake:{state:{faceCharts:faces.map(()=>0)},visibility:buffers}});
-      cache.set(key,{buffers,result});
-      if(cache.size>3)cache.delete(cache.keys().next().value);
+      // The output-texel budget also bounds these buffers. Keep no material raster
+      // while waiting for later maps that share this ray pass.
+      cache.set(key,{buffers,texels:result.sampledTexels,coverage:result.coverage});
     }
-    const {buffers,result}=cache.get(key);
-    return {...Occlusion.encode(map,buffers,result,settings),texels:result.sampledTexels,coverage:result.coverage,
-      occlusion:buffers.report()};
+    const {buffers,texels,coverage}=cache.get(key);
+    group.requested.pop();
+    if(!group.requested.length)cache.delete(key);
+    return {...Occlusion.encode(map,buffers,settings),texels,coverage,occlusion:buffers.report()};
   };
 }
 

@@ -79,6 +79,7 @@ function prepare(receiver,tile,size,configuration,requested,scene,K) {
   const visibility=requested.some(name=>scalars.includes(name))&&new Float32Array(size*size).fill(1);
   const bent=requested.includes('bent-normal')&&new Float32Array(size*size*3);
   const blocker=requested.includes('occlusion-direction')&&new Float32Array(size*size*3);
+  if(bent)for(let i=2;i<bent.length;i+=3)bent[i]=1;
   const cone=directions(rays,spread), attenuation=falloffs[falloff], limit=Math.max(0,bias*.1);
   let texels=0,rayCount=0,triangleTests=0,rejected=0,empty=0,blockedRays=0;
   function count() {
@@ -130,11 +131,11 @@ function prepare(receiver,tile,size,configuration,requested,scene,K) {
       emptyLobes:empty,blockedRays,sceneTriangles:scene.triangles})};
 }
 
-function encode(id,buffers,result,{size,encoding}) {
+function encode(id,buffers,{size,encoding}) {
   if(scalars.includes(id))return {...Surface.scalar(size,encoding,buffers.visibility),
     output:{kind:'ao',encoding,bitDepth:Surface.depth(encoding),domain:'unit'}};
   const isBent=id==='bent-normal', data=isBent?buffers.bent:buffers.blocker;
-  const values=(pixel,lane)=>result.owners[pixel]?data[pixel*3+lane]:Number(isBent&&lane===2);
+  const values=(pixel,lane)=>data[pixel*3+lane];
   return {...Surface.vector(size,encoding,values),output:{
     kind:isBent?'normal':'direction',space:'world',encoding,bitDepth:Surface.depth(encoding),
     domain:encoding==='exr'?'signed-unit':'unit'
