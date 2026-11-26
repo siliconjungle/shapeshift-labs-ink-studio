@@ -37,7 +37,7 @@ function fixture(t) {
     targets:[{id:'panels',mesh:0}],textureInputs:{glaze:{tiles:[
       {tile:[-1,0],file:'west.png'},{tile:1001,file:'axis.png'},{tile:1002,file:'east.png'}
     ]}},preset:{format:'ink-studio/bake-preset',version:1,label:'Triptych maps',defaults:{size:32,padding:2},
-      maps:[{id:'pigment',overrides:{textureInput:'glaze',width:17,height:13,mipmaps:1}},{id:'coverage'}]}};
+      maps:[{id:'pigment',overrides:{textureInput:'glaze',width:17,height:13,antialiasing:2,mipmaps:1}},{id:'coverage'}]}};
   save('enamel.bake.json',{...plan,refresh:{material:'seed.material.json',bindings}});
   save('edge.bake.json',{...plan,label:'Reference tile'});
   const batch={format:'ink-studio/bake-batch',version:1,label:'Tile bake',workers:3,memoryMb:600,
@@ -69,6 +69,7 @@ test('batch aliases, bounded parallelism, incremental UDIM refresh and cache int
   const report=read(cold,wide.report);
   assert.deepEqual(report.maps.map(row=>row.tileLabel),['[-1, 0]','1001','1002','[-1, 0]','1001','1002']);
   assert(report.maps.every(row=>report.uvDebug[row.uvDebug].tileLabel===row.tileLabel));
+  assert(report.maps.every(row=>row.previewFile===undefined));
   const materialPath=path.join(path.dirname(cold.file),'jobs/wide/material.material.json');
   const material=readMaterialGraph(materialPath);
   assert.deepEqual(material.resources.enamel.definition.tiles.map(tile=>tile.uv),[[-1,0],[0,0],[1,0]]);
