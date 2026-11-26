@@ -131,7 +131,7 @@ const SceneMeshes = (() => {
     return width;
   }
 
-  function create({ id, objectId = id, partId, positions: authored, uvs: uvInput, uvSets, uvBindings, normals: normalInput, cornerTints, indices, materials, faceMaterials } = {}) {
+  function create({ id, objectId = id, partId, positions: authored, uvs: uvInput, uvSets, uvBindings, normals: normalInput, cornerTints, tintBlend, indices, materials, faceMaterials } = {}) {
     if (!name(id) || !name(objectId) || partId !== undefined && !name(partId))
       throw new TypeError('An indexed scene mesh needs nonempty mesh, object and optional part IDs');
     const positions = positionsOf(authored), vertices = positions.length / 3;
@@ -139,8 +139,11 @@ const SceneMeshes = (() => {
         !array(indices) || !indices.length || indices.length % 3 || indices.length / 3 > maxTriangles ||
         !every(indices,n => Number.isSafeInteger(n) && n >= 0 && n < vertices))
       throw new RangeError('A mesh needs normalized UV pairs and valid indexed triangles');
-    if (cornerTints !== undefined && (!array(cornerTints) || cornerTints.length!==indices.length*3 || !every(cornerTints,unit)))
-      throw new RangeError('Mesh corner tints need one normalized RGB triple per triangle corner');
+    if (tintBlend!==undefined && !['multiply','replace','alpha-blend','midpoint'].includes(tintBlend))
+      throw new TypeError('Use multiply, replace, alpha-blend, or midpoint tint');
+    const tintStride = tintBlend===undefined || tintBlend==='multiply' ? 3 : 4;
+    if (cornerTints !== undefined && (!array(cornerTints) || cornerTints.length!==indices.length*tintStride || !every(cornerTints,unit)))
+      throw new RangeError('Mesh corner tints need one normalized '+(tintStride===3 ? 'RGB' : 'RGBA')+' row per triangle corner');
     let authoredNormals;
     if (normalInput !== undefined) {
       if (!array(normalInput) || normalInput.length !== positions.length || !every(normalInput, Number.isFinite))
@@ -212,10 +215,12 @@ const SceneMeshes = (() => {
     const layer = atlas.finish();
     if (cornerTints) {
       const drawTints = new Float32Array(cornerTints.length);
+      const span = tintStride*3;
       drawTriangles.forEach((face,i)=>{
-        for (let k=0;k<9;k++) drawTints[i*9+k] = cornerTints[face*9+k];
+        for (let k=0;k<span;k++) drawTints[i*span+k] = cornerTints[face*span+k];
       });
       layer.cornerTints = drawTints;
+      if (tintStride===4) layer.tintBlend=tintBlend;
     }
     if(semantic.length)layer.semanticMipmaps=semantic;
     if (blocks.length) layer.blockTextures = { revision:layer.revision, ranges:blocks,
@@ -231,7 +236,7 @@ const SceneMeshes = (() => {
     const data = { positions, rest:positions, restBounds, uvs, layouts, bindings, indices:source, drawIndices, drawTriangles, layer, regions, revision:0,
       materials:rows.map(row => row.id), faceMaterials:faceMaterials && Uint8Array.from(faceMaterials), bounds:restBounds,
       ...(authoredNormals && { authoredNormals, sourceToDraw }),
-      ...(cornerTints && {cornerTints:Float32Array.from(cornerTints)}),
+      ...(cornerTints && {cornerTints:Float32Array.from(cornerTints),tintBlend}),
       ...(scanSources && {scanSources,scanInfo:new Map()}) };
     return Object.freeze({ id, objectId, partId, vertices, triangles,
       materials:Object.freeze(tiles.map(tile=>tile.id).sort()), [state]:data });
@@ -549,7 +554,7 @@ const SceneMeshes = (() => {
         ...(roughness&&{roughness}),...(normal&&{normal})};
     }
     const edited=create({id:mesh.id,objectId:mesh.objectId,partId:mesh.partId,positions:data.rest,uvs:data.uvs,
-      indices:data.indices,faceMaterials:data.faceMaterials,materials,normals:data.authoredNormals,cornerTints:data.cornerTints});
+      indices:data.indices,faceMaterials:data.faceMaterials,materials,normals:data.authoredNormals,cornerTints:data.cornerTints,tintBlend:data.tintBlend});
     return data.positions===data.rest ? edited : pose(edited,data.positions);
   }
 

@@ -143,7 +143,7 @@
     return triangles.map(indices => indices.map(i => rows[i]));
   }
 
-  function cornerAt(triangle, { id, weights }, fresh, retained, links) {
+  function cornerAt(triangle, { id, weights }, fresh, retained, links, mode) {
     const i = weights.findIndex(n => n === 1);
     if (i >= 0) {
       const corner = triangle.loop[i];
@@ -161,15 +161,15 @@
       const values = triangle.loop.map(row => row.attributes[key]);
       return [key, Array.isArray(value) ? value.map((_, i) => weighted(values.map(data => data[i]), weights)) : weighted(values, weights)];
     }));
-    const tint = meshCornerTint.sample(triangle.loop,weights);
-    if (tint) attributes.tint=tint;
+    const tint = meshCornerTint.sample(triangle.loop,weights,mode);
+    Object.assign(attributes,tint);
     let normal;
     if (triangle.loop.some(row => row.normal)) {
       const fallback = meshTopologyShading.triangleNormal(triangle.positions);
       const sum = triangle.loop.reduce((sum, row, i) => V.mad(sum, row.normal ?? fallback, weights[i]), [0, 0, 0]);
       if (V.len(sum)) normal = meshTopologyShading.direction(sum);
     }
-    return { id: fresh('corner'), vertex: id, uv, ...((layout || tint) && { attributes }), ...(normal && { normal }) };
+    return { id: fresh('corner'), vertex: id, uv, ...((layout || tint.tint) && { attributes }), ...(normal && { normal }) };
   }
 
   function cutFaces(doc, config, pool, fresh) {
@@ -203,7 +203,7 @@
         const id = i === 0 ? face.id : fresh('face');
         if (i) faceLinks.push({ from: face.id, to: id });
         faces.push({ id, material: face.material, ...(face.smoothingGroup !== undefined && {smoothingGroup:face.smoothingGroup}),
-          corners: corners.map(corner => cornerAt(row, corner, fresh, retainedCorners, cornerLinks)) });
+          corners: corners.map(corner => cornerAt(row, corner, fresh, retainedCorners, cornerLinks, doc.tintBlend)) });
       }
     }
     const uses = edgeUses(faces);
@@ -303,7 +303,7 @@
       const ids = new Set(piece.faces.flatMap(face => face.corners.map(corner => corner.vertex)));
       const edges = [...edgeUses(piece.faces).keys()].map(key => edgesByPair.get(key));
       const document = topology.create({ id: piece.id, faces: piece.faces,
-        vertices: [...ids].map(id => points.vertices.get(id)), edges, skin:doc.skin });
+        vertices: [...ids].map(id => points.vertices.get(id)), edges, skin:doc.skin, tintBlend:doc.tintBlend });
       return { id: piece.id, document, boundary: piece.boundary, caps: piece.caps };
     });
     const report = {

@@ -12,11 +12,11 @@
   const layout = row => JSON.stringify(attrs(row).map(([name, value]) => [name, Array.isArray(value) ? value.length : 0]));
   const close = (a, b) => a === b || Array.isArray(a) && Array.isArray(b) && a.length === b.length &&
     a.every((value, i) => close(value, b[i])) || typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) < 1e-6;
-  const tint = row => {
-    const color=meshCornerTint.effective(row);
+  const tint = (row,mode='multiply') => {
+    const color=meshCornerTint.stream(row,mode);
     return [color[0],color[1],color[2],color[3] ?? 1];
   };
-  const sameSurface = (a, b) => close(a.uv,b.uv) && close(a.normal,b.normal) && close(attrs(a),attrs(b)) && close(tint(a),tint(b));
+  const sameSurface = (a,b,mode) => close(a.uv,b.uv) && close(a.normal,b.normal) && close(attrs(a),attrs(b)) && close(tint(a,mode),tint(b,mode));
   const strong = link => link.confidence === 1 && !link.evidence.method.startsWith('projected-');
 
   function catalog(doc) {
@@ -30,7 +30,7 @@
     for (const { face, corners: ids } of topology.triangulate(doc).triangleSources) {
       const rows = ids.map(id => corners.get(id)), p = rows.map(row => row.point);
       const [a, b, c] = p, u = V.sub(b, a), v = V.sub(c, a);
-      triangles.get(face).push({ face, rows, a, b, c, u, v, normal: V.norm(V.cross(u, v)), bounds: spatial.boxOf(p) });
+      triangles.get(face).push({ face, rows, mode:doc.tintBlend, a, b, c, u, v, normal: V.norm(V.cross(u, v)), bounds: spatial.boxOf(p) });
       keys.add(triKey(ids));
     }
     return { points, faces, corners, triangles, keys, edges: index(doc.edges) };
@@ -50,7 +50,7 @@
     return { result, unresolved, incomplete: Boolean(domain.projectionIncomplete) };
   }
 
-  function surface({ rows, normal }, weights) {
+  function surface({ rows, normal, mode }, weights) {
     const active = rows.filter((_, i) => weights[i] > 1e-8);
     const attributes = meshCornerTint.generic(rows[0]);
     const blend = data => Array.isArray(data[0]) ? mix(data, weights) :
@@ -59,12 +59,12 @@
     const authored = active.some(row => row.normal);
     const values = Object.fromEntries(Object.keys(attributes ?? {}).map(key=>[key,
       key === 'paletteIndex' ? active[0].attributes[key] : blend(rows.map(row => row.attributes[key]))]));
-    const sampledTint = meshCornerTint.sample(rows,weights);
-    if (sampledTint) values.tint=sampledTint;
+    const sampledTint = meshCornerTint.sample(rows,weights,mode);
+    Object.assign(values,sampledTint);
     return {
       uv: mix(rows.map(row => row.uv), weights).map(n => Math.max(0, Math.min(1, n))),
       ...(authored && { normal: V.norm(mix(rows.map(row => row.normal ?? normal), weights), normal) }),
-      ...((attributes || sampledTint) && {attributes:values})
+      ...((attributes || sampledTint.tint) && {attributes:values})
     };
   }
 
@@ -109,7 +109,7 @@
           return { reason: 'uv-seam', point, candidates: [summary(best), summary(hit)] };
         if (hit.alignment >= minNormalDot) {
           const other = surface(hit.triangle, hit.weights);
-          if (!other || !sameSurface(sample, other))
+          if (!other || !sameSurface(sample,other,best.triangle.mode))
             return { reason: 'material-discontinuity', point, candidates: [summary(best), summary(hit)] };
         }
       }
@@ -211,7 +211,7 @@
         const [first] = exact;
         let hit;
         if (authoritative && first) {
-          if (exact.some(row => !sameSurface(first, row))) {
+          if (exact.some(row => !sameSurface(first,row,source.tintBlend))) {
             problem = { reason: 'ambiguous-corner', corner: corner.id, candidates: exact.map(row => row.id) };
             break;
           }
@@ -239,9 +239,9 @@
             problem = hit;
             break;
           }
-          const expected = surface({ rows: samples, normal: triangle.normal }, barycentric), actual = hit.sample;
+          const expected = surface({rows:samples,normal:triangle.normal,mode:source.tintBlend},barycentric), actual = hit.sample;
           const uvError = expected && Math.hypot(expected.uv[0] - actual.uv[0], expected.uv[1] - actual.uv[1]);
-          if (!expected || uvError > maxUVError || !close(attrs(expected), attrs(actual)) || !close(tint(expected),tint(actual)) ||
+          if (!expected || uvError > maxUVError || !close(attrs(expected), attrs(actual)) || !close(tint(expected,source.tintBlend),tint(actual,source.tintBlend)) ||
               !close(expected.normal, actual.normal) && !(expected.normal && actual.normal &&
                 V.dot(expected.normal, actual.normal) >= .999)) {
             const reason = uvError > maxUVError ? 'uv-interpolation-error' : 'corner-channel-interpolation-error';
@@ -258,8 +258,10 @@
       }
       faces.push({ ...face, material, corners: face.corners.map(corner => {
         const { uv, normal, attributes } = matches.get(corner.id).sample;
-        return { ...corner, uv, ...(normal && { normal }),
-          ...(attributes && { attributes: { ...corner.attributes, ...attributes } }) };
+        if (!attributes) return {...corner,uv,...(normal && {normal})};
+        const combined = {...corner.attributes,...attributes};
+        if (meshCornerTint.read({attributes}) && attributes.tintCoverage===undefined) delete combined.tintCoverage;
+        return {...corner,uv,...(normal && {normal}),attributes:combined};
       }) });
       const exactCorners = [...matches.values()].filter(row => row.exact).length;
       transferred.push({ face: face.id, sourceFaces: from, material, exactCorners, projectedCorners: face.corners.length - exactCorners });

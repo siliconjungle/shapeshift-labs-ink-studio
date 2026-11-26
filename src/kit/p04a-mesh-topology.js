@@ -8,27 +8,60 @@ const meshQuadDiagonal = Object.freeze({
 const isMeshSmoothingGroup = value => typeof value === 'string' && Boolean(value.trim()) ||
   Number.isSafeInteger(value) && value >= 0;
 
-// A missing corner tint contributes neutral white when sampling a face.
+// Retained tint and the vertex streams consumed by both native renderers.
 const meshCornerTint = (() => {
   const neutral = Object.freeze([1,1,1,1]);
+  const clear = Object.freeze([0,0,0,0]);
+  const midpoint = Object.freeze([.5,.5,.5,1]);
   const unit = n=>Number.isFinite(n) && n>=0 && n<=1;
+  const clamp = n=>Math.min(1,Math.max(0,n));
   const read = ({attributes} = {})=>{
     const tint=attributes?.tint;
     return Array.isArray(tint) && [3,4].includes(tint.length) && tint.every(unit) ? tint : undefined;
   };
-  const effective = corner=>read(corner) ?? neutral;
+  const modes = Object.freeze(['multiply','replace','alpha-blend','midpoint']);
+  const coverage = (corner,tint)=>tint ? corner.attributes.tintCoverage ?? 1 : 0;
   function generic(corner) {
     if (!read(corner)) return corner.attributes;
-    const {tint,...attributes} = corner.attributes;
+    const {tint,tintCoverage,...attributes} = corner.attributes;
     return attributes;
   }
-  function sample(rows,weights) {
-    const tints=rows.map(read);
-    const size=tints.reduce((n,tint,i)=>weights[i]>0 ? Math.max(n,tint?.length ?? 0) : n,0);
-    if (!size) return;
-    return Array.from({length:size},(_,k)=>Math.min(1,Math.max(0,weights.reduce((total,n,i)=>total+n*(tints[i]?.[k] ?? 1),0))));
+  function stream(corner,mode) {
+    const tint = read(corner);
+    if (mode==='midpoint' || mode==='multiply') {
+      const blank = mode==='midpoint' ? midpoint : neutral;
+      if (!tint) return blank;
+      const weight = coverage(corner,tint);
+      const value = weight===1 ? tint : tint.map((n,k)=>k===3 ? n : blank[k]+weight*(n-blank[k]));
+      return mode==='midpoint' ? [value[0],value[1],value[2],tint[3] ?? 1] : value;
+    }
+    if (!tint) return clear;
+    const weight = coverage(corner,tint)*(mode==='alpha-blend' ? tint[3] ?? 1 : 1);
+    return [tint[0]*weight,tint[1]*weight,tint[2]*weight,weight];
   }
-  return Object.freeze({read,effective,generic,sample});
+  function sample(rows,weights,mode='multiply') {
+    const tints=rows.map(read), exact=weights.indexOf(1);
+    if (exact>=0 && weights.every((weight,i)=>i===exact || weight===0)) {
+      const tint=tints[exact], tintCoverage=rows[exact].attributes?.tintCoverage;
+      return tint ? {tint,...(tintCoverage!==undefined && {tintCoverage})} : {};
+    }
+    const size=tints.reduce((n,tint,i)=>weights[i]>0 ? Math.max(n,tint?.length ?? 0) : n,0);
+    if (!size) return {};
+    if (mode==='replace' || mode==='alpha-blend') {
+      const effective = tints.map((tint,i)=>weights[i]*coverage(rows[i],tint)*
+        (mode==='alpha-blend' ? tint?.[3] ?? 1 : 1));
+      const total = effective.reduce((a,b)=>a+b,0);
+      if (total<=0) return {};
+      const channel = k=>clamp(effective.reduce((sum,n,i)=>sum+n*(tints[i]?.[k] ?? 1),0)/total);
+      const rgb = [0,1,2].map(channel);
+      return mode==='alpha-blend' ? {tint:[...rgb,clamp(total)]} :
+        {tint:size===4 ? [...rgb,channel(3)] : rgb,...(total<1-1e-12 && {tintCoverage:clamp(total)})};
+    }
+    const colors=rows.map(row=>stream(row,mode));
+    const tint=Array.from({length:size},(_,k)=>clamp(weights.reduce((sum,n,i)=>sum+n*(colors[i][k] ?? 1),0)));
+    return {tint};
+  }
+  return Object.freeze({read,generic,stream,sample,modes,clear,midpoint,neutral});
 })();
 
 (function (K) {
@@ -196,10 +229,13 @@ const meshCornerTint = (() => {
   function build(source, keepEdges = false) {
     if (documents.has(source)) return source;
     const { format: type = format, version = 1, id, shading: authoredShading, skin: authoredSkin, vertices: inputVertices,
-      edges: inputEdges = [], faces: inputFaces, uvBindings:inputBindings, uvPivots:inputPivots } = source ?? {};
+      edges: inputEdges = [], faces: inputFaces, uvBindings:inputBindings, uvPivots:inputPivots, tintBlend:inputTintBlend } = source ?? {};
     if (type !== format || version !== 1 || !name(id))
       throw new TypeError('Use a version 1 mesh topology document with a mesh ID');
     const shading = shadingSettings(authoredShading), skin = skinSettings(authoredSkin), vertices = new Map(), uvBindings=MaterialUV.bindings(inputBindings);
+    if (inputTintBlend!==undefined && !meshCornerTint.modes.includes(inputTintBlend))
+      throw new TypeError('Use multiply, replace, alpha-blend, or midpoint tint');
+    const tintBlend = inputTintBlend;
     const uvPivots = MaterialUV.pivots(inputPivots);
     for (const [key, { position, weights }] of index(inputVertices, 'Vertices')) {
       if (!vector(position, 3, value => Number.isFinite(value) && Number.isFinite(Math.fround(value))))
@@ -234,6 +270,8 @@ const meshCornerTint = (() => {
         corners.add(cornerId);
         used.add(vertex);
         const attributes = cornerAttributes(corner.attributes, key), normal = cornerNormal(corner.normal);
+        if (attributes?.tintCoverage!==undefined && (!unit(attributes.tintCoverage) || !meshCornerTint.read({attributes})))
+          throw new RangeError('Corner tint coverage needs a normalized tint and unit weight');
         const uvPins=MaterialUV.flags(corner.uvPins);
         if (uvPins && Object.keys(uvPins).some(set=>!attributes?.[MaterialUV.key(set)]))
           throw new RangeError('Pin an authored UV layout on corner '+cornerId);
@@ -273,7 +311,7 @@ const meshCornerTint = (() => {
       throw new RangeError('A bound UV layout needs authored coordinates on every face');
     const doc = frozen({ format, version, id, vertices: frozen([...vertices.values()]),
       edges: frozen(retainedEdges.map(({ uses, ...edge }) => frozen(edge))), faces: frozen(faces),
-      ...(shading && { shading }), ...(skin && { skin }), ...(uvBindings && {uvBindings}), ...(uvPivots && {uvPivots}) });
+      ...(shading && { shading }), ...(skin && { skin }), ...(uvBindings && {uvBindings}), ...(uvPivots && {uvPivots}), ...(tintBlend && {tintBlend}) });
     documents.set(doc, { vertices, triangles, edges: retainedEdges });
     return doc;
   }
@@ -293,7 +331,7 @@ const meshCornerTint = (() => {
     return [...values.values()];
   }
 
-  function edit(source, { vertices = [], faces = [], removeVertices = [], removeFaces = [], edges = [], shading, uvBindings, skin, uvPivots } = {}) {
+  function edit(source, { vertices = [], faces = [], removeVertices = [], removeFaces = [], edges = [], shading, uvBindings, skin, uvPivots, tintBlend } = {}) {
     const doc = create(source), prior = new Map(doc.vertices.map(row => [row.id, row]));
     const updates = [...index(vertices, 'Updated vertices').values()].map(row => {
       const { id, position, weights = prior.get(row.id)?.weights } = row;
@@ -324,7 +362,7 @@ const meshCornerTint = (() => {
     }
     return build({ ...doc, edges: edgeRows, uvBindings:uvBindings ?? doc.uvBindings, shading: shading === undefined ? doc.shading : shading,
       uvPivots:uvPivots === undefined ? doc.uvPivots : uvPivots,
-      skin: skin === undefined ? doc.skin : skin,
+      skin: skin === undefined ? doc.skin : skin, tintBlend:tintBlend ?? doc.tintBlend,
       vertices: apply(doc.vertices, updates, removeVertices, 'vertices'),
       faces: nextFaces
     }, true);
@@ -371,6 +409,8 @@ const meshCornerTint = (() => {
     const uvSets=Object.fromEntries([...sets].sort((a,b)=>a-b).map(set=>[set,[]]));
     const renderVertices = new Map(), vertexSources = [], slots = new Map();
     let cornerTints;
+    const mode = doc.tintBlend ?? 'multiply', channels = mode==='multiply' ? 3 : 4;
+    const blank = mode==='multiply' ? meshCornerTint.neutral : mode==='midpoint' ? meshCornerTint.midpoint : meshCornerTint.clear;
     for (const { face, local } of triangles) {
       if (!slots.has(face.material)) {
         slots.set(face.material, materials.length);
@@ -392,15 +432,20 @@ const meshCornerTint = (() => {
           Object.values(uvSets).forEach((rows,i)=>rows.push(...(alternate[i] ?? [0,0])));
           if (directions) normals.push(...(normal || [0, 0, 0]));
         }
-        const color = meshCornerTint.effective({attributes});
-        if (!cornerTints && (color[0]!==1 || color[1]!==1 || color[2]!==1))
-          cornerTints = new Array(indices.length*3).fill(1);
-        if (cornerTints) cornerTints.push(color[0],color[1],color[2]);
+        const color = meshCornerTint.stream({attributes},mode);
+        if (!cornerTints && blank.some((value,k)=>k<(mode==='midpoint' ? 3 : channels) && value!==color[k])) {
+          cornerTints = new Array(indices.length*channels);
+          for (let i=0;i<cornerTints.length;i++) cornerTints[i]=blank[i%channels];
+        }
+        if (cornerTints) {
+          cornerTints.push(color[0],color[1],color[2]);
+          if (channels===4) cornerTints.push(mode==='midpoint' ? 1 : color[3]);
+        }
         indices.push(renderVertices.get(key));
       }
       triangleSources.push(frozen({ face: face.id, corners: frozen(corners.map(corner => corner.id)) }));
     }
-    return { positions, uvs, ...(sets.size && {uvSets}), ...(doc.uvBindings && {uvBindings:doc.uvBindings}), ...(directions && { normals }), ...(cornerTints && {cornerTints}), indices, materials, faceMaterials, triangleSources, vertexSources };
+    return { positions, uvs, ...(sets.size && {uvSets}), ...(doc.uvBindings && {uvBindings:doc.uvBindings}), ...(directions && { normals }), ...(cornerTints && {cornerTints,...(doc.tintBlend && {tintBlend:doc.tintBlend})}), indices, materials, faceMaterials, triangleSources, vertexSources };
   }
 
   function triangulate(source) {
