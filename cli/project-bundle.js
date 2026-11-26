@@ -6,7 +6,7 @@ const { write } = require('./asset-files.js');
 const { collectDependencies } = require('./project-dependencies.js');
 const Experiment = require('./experiment-schema.js');
 
-const textFile = /\.(?:json|geojson|gltf|obj|mtl|csv|tsv|txt|cube|svg)$/i;
+const textFile = /\.(?:json|geojson|gltf|obj|mtl|csv|tsv|txt|cube|ocio|svg)$/i;
 const studio = () => require('../index.js');
 const api = () => studio().load().KIT.authoring.projectBundles;
 const digest = data => createHash('sha256').update(data).digest('hex');
@@ -112,7 +112,15 @@ function packProject(scene, { out, root, revision, assetPack, paint, attachments
     const data = JSON.stringify(spec, null, 2) + '\n';
     save(entry, { encoding: 'utf8', data }, Buffer.byteLength(data));
   }
-  const { atlasPaths } = collectDependencies(bundles, entry, get, refs), atlases = {};
+  const { atlasPaths } = collectDependencies(bundles, entry, get, refs, {
+    colorFiles(owner, settings) {
+      const baseDir=path.dirname(path.join(projectRoot,owner));
+      require('./color-management.js').configure(settings,{baseDir,onFile:file=>{
+        const name=inside(projectRoot,file);
+        if (!get(name)) throw new Error('Missing project color dependency: '+name);
+      }});
+    }
+  }), atlases = {};
   for (const name of atlasPaths) {
     const source = studio().readSpriteAtlas(path.join(projectRoot, name)).snapshot();
     atlases[name] = bundles.mapAtlasImages(source, data => Buffer.from(data).toString('base64'));

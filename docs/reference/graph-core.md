@@ -155,7 +155,7 @@ A literal resource name resolves its declared image intent. A linked name uses t
 | Output | `value` | `colorImage` | — | {"layout":"Typed RGB or RGBA image"} |
 | Output | `info` | `record` | — | {"layout":"Plain named object"} |
 
-- Reads a bitmap resource without converting its native sample precision.
+- Reads a bitmap resource at native precision by default. Managed color resources are converted to float Ink linear Rec.709.
 - Frame -1 samples the sequence at graph time. Use a frame number or signed UV tile coordinates to select an authored member.
 
 Get the runnable example with `ink-studio graph describe bitmapAsset --example > example.json`.

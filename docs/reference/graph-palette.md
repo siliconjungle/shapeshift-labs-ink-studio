@@ -36,7 +36,7 @@ Origin: toolkit.
 | Output | `indices` | `raster` | — | {"layout":"Interleaved samples on a positive integer grid","channels":[1,4],"finite":true} |
 | Output | `palette` | `palette` | — | {"minItems":1,"maxItems":256,"entries":"RGB integer, #rrggbb or normalized RGB triple"} |
 
-Guides: [guide](../headless-authoring.md#resolve-an-image-to-swatches), [guide](../headless-authoring.md#apply-a-local-palette-fault)
+Guides: [guide](../color-management.md#resolve-the-palette-after-viewing), [guide](../headless-authoring.md#resolve-an-image-to-swatches), [guide](../headless-authoring.md#apply-a-local-palette-fault)
 
 Get the runnable example with `ink-studio graph describe palette.resolve --example > example.json`.
 Run it with `ink-studio graph run example.json`.

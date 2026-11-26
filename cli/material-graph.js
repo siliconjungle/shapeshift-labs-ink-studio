@@ -15,7 +15,7 @@ const Fonts = require('./font-resources.js');
 const format = 'ink-studio/material-graph';
 const version = 1;
 const projectFormat = 'ink-studio/graph-project';
-const settingsKeys = ['assetRegistry', 'exports', 'assertions', 'time', 'seed', 'base', 'inheritance', 'primaryInput', 'outputUsages'];
+const settingsKeys = ['assetRegistry', 'exports', 'assertions', 'time', 'seed', 'base', 'inheritance', 'primaryInput', 'outputUsages', 'colorManagement'];
 const record = value => value && [Object.prototype, null].includes(Object.getPrototypeOf(value));
 const isId = value => typeof value === 'string' && /^[a-z][\w.-]{0,99}$/i.test(value) &&
   !['__proto__', 'constructor', 'prototype'].includes(value);
@@ -187,6 +187,7 @@ function lower(document, { requireOutputs, instance } = {}) {
   Presets.validatePresets(document.presets);
   const { graph, resources = {}, settings = {}, controls = {}, instances = {} } = document;
   fields(settings, settingsKeys, 'material graph execution settings');
+  if (Object.hasOwn(settings, 'colorManagement')) require('./color-management.js').normalize(settings.colorManagement);
   const materialBase = Object.hasOwn(settings, 'base');
   if (materialBase) Base.resolve(settings.base, { seed: settings.seed });
   if (!materialBase && (Object.hasOwn(settings, 'inheritance') || Object.hasOwn(settings, 'primaryInput')))
@@ -282,6 +283,8 @@ function writeMaterialGraph(file, source, { baseDir = path.dirname(path.resolve(
   if (document.metadata?.thumbnail) document.metadata.thumbnail.file = relocate(document.metadata.thumbnail.file);
   if (typeof document.settings?.assetRegistry === 'string')
     document.settings.assetRegistry = relocate(document.settings.assetRegistry);
+  if (document.settings?.colorManagement)
+    document.settings.colorManagement.config = relocate(document.settings.colorManagement.config);
   for (const resource of Object.values(document.resources ?? {})) {
     const { definition } = resource;
     if (definition.format === Bitmap.format) resource.definition = Bitmap.mapMembers(definition, member => member && {

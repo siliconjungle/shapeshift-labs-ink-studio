@@ -570,6 +570,9 @@ const specifications = {
   'palette.recipe': { inputs: { definition: { anchors: { light: '#3c87be' }, roles: {
     ink: { anchor: 'light', steps: 4, lightness: [.2, .8] }
   } } } },
+  'color.paletteInput': {nodes:{linear:{op:'image.uniform',inputs:{value:[1.2,.43,.10],width:4,height:3,
+    descriptor:{intent:'color',colorSpace:'srgb-linear',precision:'float32'}}}},
+    inputs:{source:link('linear')} },
   'palette.resolve': { inputs: { policy: { palette } } },
   'color.gradient': { inputs: { ramp: palette } },
   'color.posterize': { inputs:{palette:[[30,20,50,255],[210,130,120,255]]} },

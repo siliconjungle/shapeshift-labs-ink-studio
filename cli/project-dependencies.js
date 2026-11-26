@@ -6,6 +6,7 @@ const { validateTake } = require('./take-document.js');
 const { resolveCheckpoint } = require('./checkpoint-file.js');
 const { isModel, mapModels, requireRevision } = require('./simulation-model-files.js');
 const { groupEntries, groupReference, groupDocument, requireGroupReference } = require('./graph-groups.js');
+const Bitmap = require('../src/bitmap-resources.js');
 const MaterialGraph = require('./material-graph.js');
 const Experiment = require('./experiment-schema.js');
 const Assets = require('./asset-references.js');
@@ -45,7 +46,7 @@ const digest = record => createHash('sha256').update(bytes(record)).digest('hex'
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const values = value => Object.values(value ?? {});
 
-function collectDependencies(bundles, entry, get, attachments = {}) {
+function collectDependencies(bundles, entry, get, attachments = {}, {colorFiles} = {}) {
   const { resolvePath } = bundles, visited = new Map(), atlasPaths = new Set(), activeGroups = new Set();
   const virtualRoot = path.resolve(path.sep, 'ink-project');
   const activeModels = new Set();
@@ -262,7 +263,21 @@ function collectDependencies(bundles, entry, get, attachments = {}) {
         requireFile(resolvePath(file, document.metadata.thumbnail.file));
       const bind = select(file, graph);
       graphGroups(file, graph.groups);
+      if (graph.colorManagement) {
+        requireFile(resolvePath(file,graph.colorManagement.config));
+        colorFiles?.(file,graph.colorManagement);
+      }
       for (const asset of values(graph.assets)) {
+        if (asset?.format===Bitmap.format) {
+          const {rows,missing}=Bitmap.layout(asset);
+          for (const row of rows) {
+            if (!row.file) continue;
+            const member=resolvePath(file,row.file);
+            if (missing.policy==='error') requireFile(member);
+            else get(member);
+          }
+          continue;
+        }
         const ref = asset?.file, target = assetApi().isRef(ref) ?
           bind(ref, Assets.graphKinds(asset.format)).filename : resolvePath(file, ref);
         if (asset?.format === 'json') visit(target, undefined, true);

@@ -103,18 +103,21 @@ function source(value) {
   return explicitSource(value)?value:{image:value};
 }
 function tagsFor(image,encoding,value) {
-  const {bytes,icc,srgb,gamma,chromaticities}=C.profile(value);
+  const {bytes,icc,srgb,gamma,chromaticities,whiteLuminance,ocioColorSpace,cicp,mastering,lightLevels}=C.profile(value);
   const color=image.colorSpace!=='none';
   const primaries=color&&(image.colorSpace.startsWith('display-p3')?C.p3:C.srgb);
+  const hd=whiteLuminance!==undefined || ocioColorSpace!==undefined, tagged=cicp||mastering||lightLevels;
+  if (hd && encoding!=='exr' || tagged && encoding!=='png')
+    throw new TypeError('Use OpenEXR for named linear HDR metadata and PNG for cICP or mastering metadata');
   if(encoding==='psd')return icc?{icc}:{};
   if(encoding==='exr') {
     if(bytes)throw new TypeError('Convert ICC-tagged pixels to a known linear space before OpenEXR export');
     const chroma=chromaticities??primaries;
-    return chroma?{chromaticities:chroma}:{};
+    return {...(chroma&&{chromaticities:chroma}),...(whiteLuminance!==undefined&&{whiteLuminance}),...(ocioColorSpace&&{ocioColorSpace})};
   }
   if(encoding==='tiff')return {...(icc&&{icc}),...((chromaticities||color&&!icc)&&{chromaticities:chromaticities??primaries})};
   if(!color)return value??{};
-  if(icc)return value;
+  if(icc||tagged)return value;
   if (srgb!==undefined || gamma!==undefined || chromaticities!==undefined) return value;
   if(image.colorSpace==='srgb')return {srgb:0};
   if(image.colorSpace.endsWith('linear'))return {gamma:1,chromaticities:primaries};

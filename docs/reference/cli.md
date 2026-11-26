@@ -217,6 +217,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   render or clip --multiprojection plan.json   use local projection for named mesh surfaces
   path-ink <scene> --plan look.json --out frame.png [--t 0 | --from 0 --to 2 --fps 12]
   sdf-reference <scene> --out directory [--t 0,1.2 --w 192 --h 120 --samples 32 --bounces 3]
+  color-management <plan.json> --out directory [--json]
   physical-reference <plan.json> --out directory [--quality studio --samples 32 --bounces 4 --batch 16 --denoise gentle --resume accumulation.bin]
   hybrid-cage <scene.js> --plan file.json [--out directory --w pixels --h pixels --raw]   preview a shared mesh, strand, and splat deformation
   sculpt-detail <scene> --plan file.json [--out directory --object id --t 1.2]   review and reproject sculpt relief

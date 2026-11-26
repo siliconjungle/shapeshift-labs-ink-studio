@@ -89,6 +89,7 @@ All checked-in guides, indexed by title and section headings.
 - [Cloud assets and distance transitions](../cloud-representations.md)
 - [Moving cloud shadows](../cloud-shadows.md)
 - [Coherent pixel clusters](../cluster-coherence.md)
+- [Color management](../color-management.md)
 - [Comparison views](../comparison-views.md)
 - [Competition between growth fronts](../competitive-growth.md)
 - [Complex-plane fields](../complex-plane-fields.md)
