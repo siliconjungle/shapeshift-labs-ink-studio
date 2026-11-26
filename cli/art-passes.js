@@ -29,9 +29,9 @@ function sampleFrames(world, time) {
   };
 }
 
-function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captureSurfaceMotion, captureHistory) {
+function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captureSurfaceMotion, captureHistory, captureMeshTint) {
   const selected = new Set(ArtPasses.select(request));
-  if (!selected.size && !capturePartMotion && !captureSurfaceMotion && !captureHistory) return null;
+  if (!selected.size && !capturePartMotion && !captureSurfaceMotion && !captureHistory && !captureMeshTint) return null;
   const size = w * h;
   const coverage = selected.has('coverage') ? new Float32Array(size) : null;
   const surfaceCoverage=selected.has('surfaceCoverage') ? new Float32Array(size) : null;
@@ -40,7 +40,7 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
   const scopedOwners = emissiveSlots && new Uint8Array(size);
   const scopedCoverage = emissiveSlots && new Float32Array(size);
   const emissionDepth = selected.has('emissionDepth') || emissionOwner || scopedOwners ? new Float32Array(size).fill(Infinity) : null;
-  const needsOwner = captureHistory || capturePartMotion || captureSurfaceMotion ||
+  const needsOwner = captureHistory || capturePartMotion || captureSurfaceMotion || captureMeshTint ||
     [...selected].some(channel => !['emission', 'emissionDepth', 'emissionMotion', 'coverage', 'protected'].includes(channel));
   const owner = needsOwner ? new Int32Array(size).fill(-1) : null;
   const depth = needsOwner ? new Float32Array(size).fill(Infinity) : null;
@@ -116,6 +116,19 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
     };
     const result = { w, h };
     if (selected.has('sourceSurface')) Object.assign(result,PixelSources.surfaces(size,atlasOwners,topDown));
+    if (captureMeshTint) {
+      const texture = new Uint8Array(size*4), tint = new Uint8Array(size*4);
+      for (const [p,hit] of atlasOwners ?? []) {
+        if (!hit.meshTintInspection) continue;
+        const at = p*4;
+        for (let k=0;k<3;k++) {
+          texture[at+k]=Math.round(hit.meshTintInspection.texture[k]*255);
+          tint[at+k]=Math.round(hit.meshTintInspection.tint[k]*255);
+        }
+        texture[at+3]=tint[at+3]=255;
+      }
+      result.meshTintInspection={texture:topDown(texture,4),tint:topDown(tint,4)};
+    }
     if (bindings) Object.assign(result,bindings.finish(world,topDown));
     if (geometry.ditherView) result.ditherView = geometry.ditherView;
     if (coverage) result.coverage = topDown(coverage, 1);

@@ -273,9 +273,7 @@
         throw new RangeError('Vertex tint needs normalized RGB or RGBA, a channel tolerance in [0, 1], and any or all corners');
       const matched = [];
       for (const face of g.faces.values()) {
-        const corners = face.corners.filter(({ attributes: { tint: value } = {} }) =>
-          (tuple(value, 3, unit) || tuple(value, 4, unit)) &&
-          color.every((channel, i) => Math.abs(channel - (value[i] ?? 1)) <= tolerance + (tolerance ? Number.EPSILON : 0)));
+        const corners = face.corners.filter(corner=>meshCornerTint.matches(meshCornerTint.read(corner),color,tolerance));
         if (corners.length && (match === 'any' || corners.length === face.corners.length))
           matched.push({ face: face.id, corners: order(corners.map(corner => corner.id)) });
       }

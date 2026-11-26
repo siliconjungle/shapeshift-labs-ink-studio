@@ -89,5 +89,43 @@
     return {patch,document,report:freeze(report)};
   }
 
-  K.meshTopology = Object.freeze({...T,planTint});
+  function tintRemapSettings(request) {
+    if (!fields(request,['from','to','tolerance']) || request.from===undefined &&
+        (request.to!==undefined || request.tolerance!==undefined))
+      throw new TypeError('Use a source tint, optional replacement RGB and tolerance, or an empty inspection request');
+    const {tolerance=0} = request;
+    if (!Number.isFinite(tolerance) || tolerance<0 || tolerance>1)
+      throw new RangeError('Tint remap tolerance must be in [0, 1]');
+    return {...(request.from!==undefined && {from:pigment(request.from),tolerance}),
+      ...(request.to!==undefined && {to:pigment(request.to)})};
+  }
+
+  function remapTint(source,{from,to,tolerance}) {
+    const doc=T.create(source), faces=[], matches=[];
+    let matchedCorners=0, changedCorners=0;
+    for (const face of doc.faces) {
+      const hits=[];
+      let changed=0;
+      const corners=face.corners.map(corner=>{
+        const before=meshCornerTint.read(corner);
+        if (!meshCornerTint.matches(before,from,tolerance)) return corner;
+        const different=to!==undefined && to.some((value,k)=>value!==before[k]);
+        const after=different ? [...to,...before.slice(3)] : before;
+        hits.push({id:corner.id,vertex:corner.vertex,before,...(to!==undefined && {after})});
+        if (!different) return corner;
+        changed++;
+        return {...corner,attributes:{...corner.attributes,tint:after}};
+      });
+      if (!hits.length) continue;
+      matchedCorners+=hits.length;
+      changedCorners+=changed;
+      matches.push({face:face.id,material:face.material,corners:hits,changedCorners:changed});
+      if (changed) faces.push({...face,corners});
+    }
+    const document=faces.length ? T.edit(doc,{faces}) : doc;
+    return {document,faces:matches,matchedCorners,changedCorners,
+      beforeRevision:T.revision(doc),afterRevision:T.revision(document)};
+  }
+
+  K.meshTopology = Object.freeze({...T,planTint,tintRemapSettings,remapTint});
 })(KIT);

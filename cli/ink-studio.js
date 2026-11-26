@@ -1522,6 +1522,7 @@ const CMD = {
         '  mesh-topology boolean <mesh-or-scene.json> <request.json> [--object id] [--operand mesh.json] [--view file] [--preview dir] [--out file] [--report file]   solve and compare mesh or SDF Booleans',
         '  mesh-topology bevel <mesh-or-scene.json> <request.json> [--object id] [--view file] [--preview dir] [--out file] [--report file]   preview or apply an edge bevel with native-grid protection',
         '  mesh-topology tint <mesh-or-scene.json> <request.json> [--object id] [--part id] [--selection file] [--view file --preview dir] [--expect receipt.json] [--out file]   paint, sample, erase, or set mesh tint blend behavior',
+        '  mesh-topology tint-remap <scene.json> <request.json> [--view file --preview dir] [--expect receipt.json] [--out file]   find, replace, and inspect shared tint across a scene',
         '  mesh-topology shading <mesh-or-scene.json> [request.json] [--object id] [--view file] [--preview dir] [--subdivision level] [--out file] [--report file]   inspect or edit smoothing groups, corner normals, hard edges and subdivision creases',
         '  mesh-topology shape-keys <mesh-or-scene.json> [request.json] [--object id] [--view file --preview dir] [--out file] [--report file]   edit the rest model or capture a named pose correction',
         '  mesh-topology skin <mesh-or-scene.json> [request.json] [--object id] [--view file] [--preview dir] [--out file] [--report file]   inspect, paint, mirror and preview named joint weights',
@@ -5681,6 +5682,7 @@ async function run() {
   const sceneFiles = cmd === 'snap' ? pos : cmd === 'pixel-art' ? pixelInputs :
     cmd === 'cable-route' && pos[0] === 'review' ? pos.slice(1, 2) :
     cmd === 'mesh-uv' && ['layout', 'guide', 'select', 'edit'].includes(pos[0]) && typeof opt.object === 'string' ? pos.slice(1, 2) :
+    cmd === 'mesh-topology' && pos[0] === 'tint-remap' ? pos.slice(1, 2) :
     cmd === 'mesh-topology' && pos[0] === 'modifiers' && typeof opt.object === 'string' ? pos.slice(2, 3) :
     cmd === 'mesh-topology' && (pos[0] === 'select' && typeof opt.view === 'string' ||
       ['transform', 'repair', 'cut', 'boolean', 'retopology', 'face-region', 'edge-edit', 'bevel', 'shading', 'skin', 'shape-keys', 'tint'].includes(pos[0]) && typeof opt.object === 'string') ? pos.slice(1, 2) :
