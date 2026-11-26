@@ -2110,11 +2110,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.procedural.sparseVolume` | namespace |  | [guide](../sparse-volumes.md#native-field-adapters) |
 | `KIT.procedural.sparseVolume.bake` | function | `({ grid: target, brickSize = 8, fields: requested, maxCells = 250000 } = {}, sample)` | [guide](../sparse-volumes.md#native-field-adapters), [source](../../src/kit/pcv1-sparse-volumes.js) |
+| `KIT.procedural.sparseVolume.bakeSparse` | function | `({ grid: target, brickSize = 8, fields: requested, maxCells = 250000 } = {}, indices, sample)` | [guide](../sparse-volumes.md#native-field-adapters), [source](../../src/kit/pcv1-sparse-volumes.js) |
 | `KIT.procedural.sparseVolume.combine` | function | `(left, right, options = {})` | [guide](../sparse-volumes.md#native-field-adapters), [source](../../src/kit/pcv1-sparse-volumes.js) |
 | `KIT.procedural.sparseVolume.components` | namespace |  | [guide](../sparse-volumes.md#native-field-adapters) |
 | `KIT.procedural.sparseVolume.components.density` | value | `number = 1` | [guide](../sparse-volumes.md#native-field-adapters) |
+| `KIT.procedural.sparseVolume.components.fuel` | value | `number = 1` | [guide](../sparse-volumes.md#native-field-adapters) |
 | `KIT.procedural.sparseVolume.components.signedDistance` | value | `number = 1` | [guide](../sparse-volumes.md#native-field-adapters) |
 | `KIT.procedural.sparseVolume.components.temperature` | value | `number = 1` | [guide](../sparse-volumes.md#native-field-adapters) |
+| `KIT.procedural.sparseVolume.components.vapor` | value | `number = 1` | [guide](../sparse-volumes.md#native-field-adapters) |
 | `KIT.procedural.sparseVolume.components.velocity` | value | `number = 3` | [guide](../sparse-volumes.md#native-field-adapters) |
 | `KIT.procedural.sparseVolume.create` | function | `(source)` | [guide](../sparse-volumes.md#native-field-adapters), [source](../../src/kit/pcv1-sparse-volumes.js) |
 | `KIT.procedural.sparseVolume.dense` | function | `(source, { channels, maxCells = 250000 } = {})` | [guide](../sparse-volumes.md#native-field-adapters), [source](../../src/kit/pcv1-sparse-volumes.js) |

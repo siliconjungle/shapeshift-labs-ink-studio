@@ -1333,6 +1333,11 @@ const CMD = {
         '  liquid3d compile <plan.json> [--out world.json]   lower a volume liquid and spectral ocean to a native world',
         '  liquid3d run <plan.json> [--out directory]   simulate collider-driven 3D flow, spray and foam',
         '  liquid3d surface|ocean|density|particles|secondary <world|checkpoint|recording> [--out file]   extract a native frame',
+        '  atmosphere3d compile <plan.json> [--out world.json]   lower a sparse combustion or cloud stage to a native world',
+        '  atmosphere3d bake <plan.json> --out directory   cache combustion, condensation and sparse detail frames',
+        '  atmosphere3d playback <cache.json> [--tick N|--time S --level base|detail --blend hold|linear --out volume.json]   replay cached fields',
+        '  atmosphere3d verify <cache.json> [--out report.json]   verify cache blocks, solver playback and up-resolution',
+        '  atmosphere3d refine <volume.json> <settings.json> [--out volume.json --report report.json]   up-res a native atmosphere frame',
         '    sim run|resume|fork <file> [--branch ID]   name the branch in committed events',
         '    sim run <world> --workers N [--profile]   advance eligible systems in deterministic Node worker partitions',
         '    sim run <world> --record file.json [--observations plan.json]   retain reproducible execution evidence',
@@ -3713,6 +3718,9 @@ const CMD = {
   },
   liquid3d() {
     return require('./liquid3d.js').command(pos,opt,lib());
+  },
+  atmosphere3d() {
+    return require('./atmosphere3d.js').command(pos,opt,lib());
   },
   'skinned-crowd'() {
     return require('./skinned-crowd.js').command(pos,opt,lib());
