@@ -36,7 +36,12 @@
     return { brush, field: summary, strength, ruffleDegrees, seed };
   }
 
-  function align(style, { frame, distance, forward, root, spacing, mark, observe }) {
+  function preferred(brush, support, normal, context) {
+    const read = SurfaceBrush.direction(brush, support, normal, context);
+    return brush.direction === 'field' && !read.confidence ? undefined : read.tangent;
+  }
+
+  function align(style, { frame, distance, forward, root, spacing, mark, grid, observe }) {
     const { sceneGraph: graph, deform } = K;
     const inverse = graph.inverse(frame), pullNormal = M.tr(frame.matrix);
     const probe = Math.max(.00001, Math.min(.006, spacing * .16));
@@ -45,16 +50,21 @@
         distance(x, y + probe, z) - distance(x, y - probe, z), distance(x, y, z + probe) - distance(x, y, z - probe)];
       return V.len(n) > probe * 1e-6 ? V.norm(n) : null;
     }
+    const context = { normalAt, spacing };
     return (pose, ordinal, family) => {
-      const rest = graph.point(frame, pose.point), basis = M.mul(frame.matrix, Q.toMatrix(pose.rotation));
-      const normal = root?.normal ?? normalAt(...rest) ?? V.norm(M.app(basis, axisZ));
-      const support = root?.point ?? V.mad(rest, normal, -distance(...rest));
-      const heading = V.norm(tangent(M.app(basis, axisX), normal), V.perp(normal));
-      const read = SurfaceBrush.direction(style.brush, support, normal, { normalAt, spacing });
-      const preferred = style.brush.direction === 'field' && !read.confidence ? heading : read.tangent;
-      const turn = Math.atan2(V.dot(V.cross(heading, preferred), normal), V.dot(heading, preferred));
-      const ruffle = (2 * P.data.hash01(mark + '/' + family + '/' + ordinal, style.seed) - 1) * style.ruffleDegrees;
-      const restTangent = M.app(M.rot(normal, turn * style.strength + ruffle * rad), heading);
+      const before = graph.point(frame, pose.point), basis = M.mul(frame.matrix, Q.toMatrix(pose.rotation));
+      let rest = before, normal = root?.normal ?? normalAt(...rest) ?? V.norm(M.app(basis, axisZ));
+      let support = root?.point ?? V.mad(rest, normal, -distance(...rest));
+      let heading = V.norm(tangent(M.app(basis, axisX), normal), V.perp(normal));
+      const result = grid?.(rest, support, normal, heading, context);
+      if (result) ({ point: rest, support, normal, heading } = result);
+      let restTangent = heading, ruffle = 0;
+      if (style) {
+        const wanted = preferred(style.brush, support, normal, context) ?? heading;
+        const turn = Math.atan2(V.dot(V.cross(heading, wanted), normal), V.dot(heading, wanted));
+        ruffle = (2 * P.data.hash01(mark + '/' + family + '/' + ordinal, style.seed) - 1) * style.ruffleDegrees;
+        restTangent = M.app(M.rot(normal, turn * style.strength + ruffle * rad), heading);
+      }
       let moved = rest, n = normal, axis = restTangent;
       if (forward) {
         moved = forward(rest);
@@ -65,10 +75,12 @@
         axis = V.norm(M.app(jac, restTangent));
       }
       const z = V.norm(M.app(pullNormal, n)), x = V.norm(tangent(M.app(inverse.matrix, axis), z), V.perp(z));
-      observe?.({ rest, point: moved, restNormal: normal, normal: n, restTangent, tangent: axis, ruffleDegrees: ruffle });
+      observe?.({ rest, point: moved, restNormal: normal, normal: n, restTangent, tangent: axis, ruffleDegrees: ruffle,
+        ...(result && { grid: { before, status: result.status, ...(result.coords && { coords: result.coords, target: result.target }),
+          ...(result.angle !== undefined && { angle: result.angle, targetAngle: result.targetAngle }) } }) });
       return { ...pose, point: graph.point(inverse, moved), rotation: Q.fromMatrix(M.cols(x, V.cross(z, x), z)) };
     };
   }
 
-  P.markDirection = Object.freeze({ prepare, align });
+  P.markDirection = Object.freeze({ prepare, align, preferred });
 })(KIT);

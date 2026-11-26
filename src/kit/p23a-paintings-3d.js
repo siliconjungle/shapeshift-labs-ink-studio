@@ -5,7 +5,7 @@
   const record = value => K.world.data.record(value);
   const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
   const name = value => K.world.data.id(value) && /^[a-zA-Z0-9_-]{1,40}$/.test(value);
-  const editable = ['brush', 'poses', 'step', 'blendRadius', 'path', 'pressureResponse', 'looseness', 'direction', 'mat', 'res', 'transform', 'attachment', 'enabled'];
+  const editable = ['brush', 'poses', 'step', 'blendRadius', 'path', 'pressureResponse', 'looseness', 'direction', 'grid', 'mat', 'res', 'transform', 'attachment', 'enabled'];
   const resources = ['profiles', 'flowMaps'];
 
   function resolveBrush(brush, profiles) {
@@ -66,7 +66,7 @@
             mark.res !== undefined && (!Number.isFinite(mark.res) || mark.res <= 0))
           throw new TypeError(id + ' mark ' + order + ' needs a unique ID, brush, poses and material');
         const { id: key, attachment = { kind: 'free' }, transform, enabled = true, looseness: authoredStyle,
-          direction: authoredDirection, ...stroke } = mark;
+          direction: authoredDirection, grid: authoredGrid, ...stroke } = mark;
         ids.add(key);
         const solid = 'paint.' + id + '.' + key;
         const guideFrame = graph.compose(frame, graph.transform(transform));
@@ -75,10 +75,13 @@
             (attachment.kind === 'free' ? attachment.slot !== undefined : !name(attachment.slot)) ||
             (attachment.kind === 'surface') !== (attachment.snap !== undefined))
           throw new TypeError(solid + ' needs a free, surface or part attachment');
-        let shape, style, direction;
+        let shape, style, direction, grid;
         try {
           direction = K.procedural.markDirection.prepare(authoredDirection, openedFlows);
           if (direction && attachment.kind !== 'surface') throw new TypeError('Mark direction needs a surface attachment');
+          grid = K.procedural.markGrid.prepare(authoredGrid, openedFlows);
+          if (grid && (attachment.kind !== 'surface' || grid.settings.kind !== 'direction' && attachment.snap.mode !== 'surface'))
+            throw new TypeError('A mark grid needs a surface attachment and positional grids need surface snap mode');
           style = K.procedural.paintLooseness.prepare(authoredStyle);
           if (style && (attachment.kind === 'surface') !== (style.silhouetteAllowance !== undefined))
             throw new TypeError(attachment.kind === 'surface' ? 'State a silhouette allowance for surface looseness'
@@ -103,9 +106,10 @@
               throw new RangeError(solid + ' needs a named exterior sculpt for slot ' + attachment.slot);
             part = host.part;
             restAffine = graph.compose(DIO.solidFrames.rest(host), guideFrame);
-            const map = authoredDirection?.field?.map;
+            const map = authoredDirection?.field?.map, gridMap = authoredGrid?.field?.map;
             anchors.set(solid, { host, guideFrame, snap: attachment.snap,
-              ...(direction && { direction, flowAsset: typeof map === 'string' ? flowMaps[map] : map }) });
+              ...(direction && { direction, flowAsset: typeof map === 'string' ? flowMaps[map] : map }),
+              ...(grid && { grid, gridFlow: typeof gridMap === 'string' ? flowMaps[gridMap] : gridMap }) });
           } else if (attachment.kind === 'part') {
             if (!parts.has(target)) throw new RangeError(solid + ' needs an existing sculpt rig part for slot ' + attachment.slot);
             part = target;
@@ -124,6 +128,7 @@
           ...(style && { looseness: style }),
           ...(direction && { direction: { field: direction.field, strength: direction.strength,
             ruffleDegrees: direction.ruffleDegrees, seed: direction.seed } }),
+          ...(grid && { grid: grid.settings }),
           ...(stroke.path !== undefined && { path: stroke.path }), ...(stroke.pressureResponse && { pressureResponse: stroke.pressureResponse }) });
       }
       for (const slot of Object.keys(bindings)) if (!slots.has(slot))
