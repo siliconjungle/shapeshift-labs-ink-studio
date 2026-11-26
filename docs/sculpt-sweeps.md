@@ -47,6 +47,7 @@ runs along local Z. The poses below rotate that Z axis along the path.
 | `profile` | `points`, an ordered XY polygon with 3–64 vertices, and `depth` along Z. |
 | `sphere` | `radius`. |
 | `capsule`, `cylinder` | `radius` and `length` along Y. Capsule length is the distance between the cap centers. |
+| `mark-profile` | An inline [custom mark profile](mark-profiles.md) and optional second profile to mix along the stroke. |
 
 One pose makes a dab. A sweep accepts up to 1024 poses.
 Each pose takes an XYZ `point`, a quaternion `rotation` in `[x,y,z,w]`
