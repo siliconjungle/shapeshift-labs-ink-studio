@@ -176,7 +176,7 @@
       const paint = sculptPaint(solid), carrier = addr(kind, id);
       const mark = paintingMarks.get(solid.id), anchor = anchors.get(solid.id);
       add(kind, id, [solid, partData(solid.part), spec.groups?.[solid.group], bindings.get(addr('solids', i)),
-        ...(mark ? [mark, anchor?.host, anchor?.snap] : [])], parents,
+        ...(mark ? [mark, anchor?.host, anchor?.snap, anchor?.flowAsset] : [])], parents,
         { object: solid.id ?? tag, ...(tag && { tag }), ...(solid.part !== undefined && { part: solid.part }) });
       if (solid.id) surfaces.set(solid.id, result.get(carrier));
       if (Object.keys(paint).length)
