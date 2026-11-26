@@ -28,6 +28,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createBlankTileset` | function | `(options)` | [guide](../mesh-uv.md#create-a-blank-tileset), [source](../../index.js) |
 | `node.createBounceProbeSampler` | function | `(world, { bounceProbes, sky, sun, shotLighting, time=0 } = {})` | [guide](../bounce-probes.md#use-bounce-in-a-palette-or-shot), [guide](../bounce-probes.md), [source](../../cli/bounce-probes.js) |
 | `node.createCameraAtlas` | function | `(options)` | [guide](../camera-atlas.md#capture-and-schedule-feeds), [guide](../render-outputs.md#schedule-a-miniature-renderer-as-a-camera-feed), [source](../../index.js) |
+| `node.createDisplacementPreview` | function | `(project, plan, { toolkit = require('../index.js').load(), run = {} } = {})` | [guide](../material-displacement-preview.md), [source](../../cli/material-displacement-preview.js) |
 | `node.createEffectClip` | function | `(source, {kit=require('..').load(),baseDir=process.cwd(),sourceFile,operations,adapters} = {})` | [guide](../effect-clips.md#run-headlessly-and-reuse-a-group), [source](../../cli/effect-clip.js) |
 | `node.createGraphHost` | function | `(config = {}, { kit = require('../index.js').load() } = {})` | [guide](../graph-media.md#optional-host-adapters), [source](../../cli/graph-host.js) |
 | `node.createGraphProject` | function | `(source, { kit=require('../index.js').load(), baseDir=process.cwd(), operations={}, adapters={}, sourceFile, workerPool, planAssets=false, instance, baseContext, requireOutputs=true }={})` | [guide](../editable-material-graph.md#open-edit-and-save), [guide](../headless-authoring.md#persistent-sessions), [guide](../material-base-settings.md#inherit-individual-settings), [source](../../cli/graph-project.js) |
@@ -223,6 +224,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.writeCurveBake` | function | `(directory, { atlas,coverage })` | [guide](../curve-bake.md), [source](../../cli/curve-bake.js) |
 | `node.writeCurveComparison` | function | `(world, options, directory)` | [source](../../cli/curve-compare.js) |
 | `node.writeCurveQualityReview` | function | `(world, options, directory)` | [source](../../cli/curve-quality-review.js) |
+| `node.writeDisplacementPreview` | function | `(project, filename, { directory, toolkit, run, sources = [] } = {})` | [guide](../material-displacement-preview.md), [source](../../cli/material-displacement-preview.js) |
 | `node.writeGltfAsset` | function | `(source, { out } = {})` | [source](../../cli/gltf-asset.js) |
 | `node.writeLinkedMaterialPreview` | function | `(project, planFile, { directory, toolkit, run, sources = [] } = {})` | [guide](../linked-material-preview.md), [source](../../cli/linked-material-preview.js) |
 | `node.writeMaterialGraph` | function | `(file, source, { baseDir = path.dirname(path.resolve(file)) } = {})` | [guide](../bitmap-resources.md#edit-without-rewiring), [guide](../editable-material-graph.md#open-edit-and-save), [source](../../cli/material-graph.js) |

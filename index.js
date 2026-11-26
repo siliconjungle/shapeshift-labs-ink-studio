@@ -106,6 +106,7 @@ module.exports = {
   scanFusion: require('./cli/scan-fusion.js').scanFusion,
   importAxF: require('./cli/axf-material-adapter.js').importAxF,
   ...require('./cli/linked-material-preview.js'),
+  ...require('./cli/material-displacement-preview.js'),
   exportAxF: require('./cli/axf-material-adapter.js').exportAxF,
   bakeSplatFit: require('./cli/splat-fit-asset.js').bake,
   planSplatGroups: require('./cli/splat-fit-asset.js').planSplatGroups,
