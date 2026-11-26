@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Physical reference · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--skin:#151a23;--panel:#202734;--line:#3b4657;--text:#efe8dd;--muted:#b3bfce;--gold:#ecc392;font:14px/1.4 system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;color:var(--text);background:var(--skin)}
+main{max-width:1320px;padding:22px clamp(16px,4vw,49px) 25px;margin:auto}
+header{border-bottom:1px solid var(--line);padding:0 0 15px;margin:0 0 14px;display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap}
+small{color:var(--gold);font:650 11px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.13em}
+h1{margin:4px 0 0;font:400 clamp(36px,6vw,70px)/1 Georgia,serif;letter-spacing:-.045em}
+a{color:var(--gold);text-underline-offset:3px}
+.toolbar{display:flex;align-items:end;gap:8px;flex-wrap:wrap;margin-bottom:13px}
+label{display:grid;gap:4px;color:var(--muted);font-size:12px;min-width:0;flex:1 1 120px}
+button,select{min-height:33px;color:var(--text);background:var(--panel);padding:5px 9px;border:1px solid var(--line);border-radius:3px;font:inherit}
+button{cursor:pointer;white-space:nowrap}
+select{width:100%;min-width:0}
+button:hover{background:#364358}
+button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+figure{position:relative;margin:0;background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.canvas{position:relative;width:100%;aspect-ratio:var(--ratio);background:#0b1017}
+.canvas img{position:absolute;inset:0;width:100%;height:100%;display:block}
+#layer-b{clip-path:inset(0 0 0 var(--cut))}
+.divider{position:absolute;top:0;bottom:0;left:var(--cut);width:1px;background:#fff1d8;box-shadow:0 0 0 1px #36252d;pointer-events:none}
+.badge{position:absolute;top:12px;padding:4px 8px;color:#ffecd1;background:#141723da;border:1px solid #646578;border-radius:3px;font-size:12px;pointer-events:none}
+.badge.a{left:12px}.badge.b{right:12px}
+figcaption{display:flex;align-items:center;gap:12px;padding:9px 13px;color:var(--muted)}
+figcaption input{flex:1;min-width:0;accent-color:var(--gold)}
+.stats{display:flex;flex-wrap:wrap;gap:8px 18px;color:var(--muted);font:12px ui-monospace,monospace;margin-top:11px}
+[hidden]{display:none!important}
+@media(max-width:560px){main{padding-top:15px}.badge{font-size:10px;top:7px}.badge.a{left:7px}.badge.b{right:7px}}
+</style>
+</head>
+<body>
+<main>
+<header><div><small>Ink Studio · Physical reference</small><h1 id="title"></h1></div><a href="report.json">Render report</a></header>
+<div class="toolbar">
+  <label>Left image<select id="left"></select></label>
+  <label>Right image<select id="right"></select></label>
+  <button id="swap" type="button">Swap</button>
+  <a href="raw.exr" download>Linear OpenEXR</a>
+</div>
+<figure id="compare">
+  <div class="canvas">
+    <img id="layer-a" alt=""><img id="layer-b" alt="">
+    <span class="divider"></span><span class="badge a" id="name-a"></span><span class="badge b" id="name-b"></span>
+  </div>
+  <figcaption><label for="split">Comparison split</label><input id="split" type="range" min="0" max="100" value="50" aria-label="Comparison split"><output id="position">50%</output></figcaption>
+</figure>
+<div class="stats" id="stats"></div>
+</main>
+<script>
+const report=/*PHYSICAL_REFERENCE*/;
+const element=id=>document.getElementById(id);
+element('title').textContent=report.label;
+document.title=report.label+' · Ink Studio';
+const {width,height,denoise,bounces}=report.settings;
+element('compare').style.setProperty('--ratio',width/height);
+const options=new Map([
+  ...report.progress.map(row=>[row.file,row.samples+' spp · Raw']),
+  [report.files.raw,report.totalSamples+' spp · Final raw'],
+  ...(report.files.denoised?[[report.files.denoised,report.totalSamples+' spp · '+(denoise==='gentle'?'Gentle denoise':'Strong denoise')]]:[]),
+  [report.files.variance,'Sampling error'],[report.files.albedo,'Albedo'],[report.files.normals,'Shading normals'],
+  [report.files.depth,'Camera depth']
+]);
+const left=element('left'),right=element('right'),split=element('split');
+for(const control of [left,right]) control.replaceChildren(...Array.from(options,([file,label])=>new Option(label,file)));
+left.value=report.progress[0]?.file??report.files.raw;
+right.value=report.files.denoised??report.files.raw;
+function refresh() {
+  for(const [side,control] of [['a',left],['b',right]]) {
+    const label=options.get(control.value), image=element('layer-'+side);
+    image.src=control.value;image.alt=label;
+    element('name-'+side).textContent=label;
+  }
+}
+function slice() {
+  const value=split.value+'%';
+  element('compare').style.setProperty('--cut',value);
+  element('position').value=value;
+}
+left.onchange=right.onchange=refresh;
+split.oninput=slice;
+element('swap').onclick=()=>{
+  [left.value,right.value]=[right.value,left.value];
+  refresh();
+};
+element('stats').replaceChildren(...[
+  width+' × '+height+' px',report.totalSamples+' spp',bounces+' bounce limit',report.triangles.toLocaleString()+' triangles'
+].map(line=>{const item=document.createElement('span');item.textContent=line;return item;}));
+refresh();
+slice();
+</script>
+</body>
+</html>

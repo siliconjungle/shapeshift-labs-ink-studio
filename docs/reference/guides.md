@@ -303,6 +303,7 @@ All checked-in guides, indexed by title and section headings.
 - [Phrase composer](../phrase-composer.md)
 - [Physical signals into the audio graph](../physical-audio.md)
 - [Physical quantities on ports](../physical-ports.md)
+- [Physical mesh and material reference](../physical-reference.md)
 - [Physical work and production](../physical-work.md)
 - [Pinned binaural profiles](../pinned-binaural.md)
 - [Native pixel-art authoring](../pixel-art-authoring.md)

@@ -231,6 +231,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.writeLightingRoom` | function | `(project, filename, {directory,toolkit,run,sources=[]}={})` | [guide](../material-lighting-room.md), [source](../../cli/material-lighting-room.js) |
 | `node.writeLinkedMaterialPreview` | function | `(project, planFile, { directory, toolkit, run, sources = [] } = {})` | [guide](../linked-material-preview.md), [source](../../cli/linked-material-preview.js) |
 | `node.writeMaterialGraph` | function | `(file, source, { baseDir = path.dirname(path.resolve(file)) } = {})` | [guide](../bitmap-resources.md#edit-without-rewiring), [guide](../editable-material-graph.md#open-edit-and-save), [source](../../cli/material-graph.js) |
+| `node.writePhysicalReference` | function | `(filename, { directory, resume, toolkit=require('../index.js').load(), ...overrides }={})` | [guide](../physical-reference.md), [source](../../cli/physical-reference.js) |
 | `node.writeProjectBundle` | function | `(source, { out } = {})` | [source](../../cli/project-bundle.js) |
 | `node.writeRasterAsset` | function | `(source, { out } = {})` | [source](../../cli/raster-asset.js) |
 | `node.writeSceneEmbed` | function | `(document, { out, settings } = {})` | [source](../../cli/scene-replay.js) |
