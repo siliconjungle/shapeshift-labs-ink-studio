@@ -9,6 +9,7 @@ const Plan=require('./bake-job-plan.js');
 const Meshes=require('./bake-job-mesh.js');
 const Projection=require('./bake-job-projection.js');
 const Surface=require('./bake-job-surface.js');
+const Occlusion=require('./bake-job-occlusion.js');
 const Geometry=require('./geometry-masks.js');
 const UV=require('./material-preview-geometry.js');
 const bake=require('./glb-bake.js');
@@ -30,6 +31,7 @@ function interpretation(row) {
   }
   if(row.output?.kind==='height')return {intent:'height',units:row.output.units,
     ...(row.output.range&&{heightRange:row.output.range})};
+  if(row.output?.kind==='direction')return {intent:'data',layout:'xyz'};
   if(['pigment','emission'].includes(row.map))return {intent:'color',colorSpace:'srgb'};
   return {intent:'mask'};
 }
@@ -41,6 +43,7 @@ function sameInterpretation(prior,fresh) {
     (fresh.normalSpace==='world'||(prior.normalOrientation??'opengl')===fresh.normalOrientation);
   if(intent==='height')return (prior.units??'shape-units')===fresh.units&&
     JSON.stringify(prior.heightRange??null)===JSON.stringify(fresh.heightRange??null);
+  if(intent==='data')return prior.layout===fresh.layout&&(prior.units??'unitless')===(fresh.units??'unitless');
   return intent!=='color'||!prior.colorSpace||prior.colorSpace===fresh.colorSpace;
 }
 
@@ -98,26 +101,30 @@ function mapBytes(result,id,settings) {
   return textures[id]??registeredMaps[id]??registeredMaps.masks[id];
 }
 function steps(plan,model,library,K,onInput) {
-  const images=new Map(), selections=plan.targets.map(row=>Meshes.meshFor(model,row,K,images));
+  const images=new Map(), enabled=plan.preset.maps.filter(row=>row.enabled);
+  const hasOcclusion=enabled.some(row=>Occlusion.names.includes(row.id));
+  const hasOther=enabled.some(row=>!Occlusion.names.includes(row.id));
+  const selections=plan.targets.map(row=>Meshes.meshFor(model,row,K,images,{sceneSpace:hasOcclusion&&!hasOther}));
+  const receivers=hasOcclusion&&selections.map((row,i)=>hasOther&&!plan.targets[i].projection?
+    Meshes.meshFor(model,plan.targets[i],K,images,{sceneSpace:true}):row);
   const diagnostics=plan.preset.maps.some(row=>row.enabled&&Projection.maps.includes(row.id));
   const casts=selections.map((selection,i)=>{
     const {projection}=plan.targets[i];
-    if(projection||diagnostics)return Projection.prepare(projection,selection,library,plan,K,images,onInput);
+    if(hasOther&&(projection||diagnostics))return Projection.prepare(projection,selection,library,plan,K,images,onInput);
   });
   const totalTiles=selections.reduce((n,row)=>n+row.tiles.length,0), tasks=[];
   let pixels=0;
-  for(const row of plan.preset.maps) {
-    if(!row.enabled)continue;
+  for(const row of enabled) {
     const settings=Plan.effective(plan.preset,row);
     pixels+=settings.size**2*totalTiles;
     if(pixels>12e6)throw new RangeError('Bake job exceeds twelve million output texels');
-    for(const [i,selection] of selections.entries()) {
+    for(const [i,selection] of (settings.occlusion?receivers:selections).entries()) {
       const authored=plan.targets[i];
       for(const tile of selection.tiles)tasks.push({map:row.id,settings,tile,selection,authored,cast:casts[i]});
     }
   }
   if(tasks.length>192)throw new RangeError('Bake job exceeds 192 enabled map/target/tile tasks');
-  return tasks;
+  return {tasks,receivers};
 }
 
 function renderGeometry(task,K) {
@@ -131,8 +138,38 @@ function renderGeometry(task,K) {
     ...(result.geometryMasks&&{geometry:result.geometryMasks})};
 }
 
-function renderTasks(tasks,model,K) {
+function renderOcclusion(tasks,scene,K) {
+  const byTask=new Map(), groups=new Map(), cache=new Map();
+  for(const task of tasks) {
+    const {authored,tile,map,selection,settings}=task;
+    if(!settings.occlusion)continue;
+    const config=Occlusion.resolve(map,settings.occlusion,selection,K);
+    const key=JSON.stringify([authored.id,tile.tile,settings.size,settings.padding,config]);
+    if(!groups.has(key))groups.set(key,{requested:[],config});
+    groups.get(key).requested.push(map);
+    byTask.set(task,key);
+  }
+  return task=>{
+    const key=byTask.get(task), {tile,selection,map,settings}=task;
+    const group=groups.get(key);
+    if(!cache.has(key)) {
+      const {config,requested}=group, {mesh,faces,uvs,normals}=tile;
+      const buffers=Occlusion.prepare(selection,tile,settings.size,config,requested,scene,K);
+      const result=bake(mesh,faces,uvs,normals,settings.size,settings.padding,K,{registered:true,
+        chartBake:{state:{faceCharts:faces.map(()=>0)},visibility:buffers}});
+      // The output-texel budget also bounds these buffers. Keep no material raster
+      // while waiting for later maps that share this ray pass.
+      cache.set(key,{buffers,texels:result.sampledTexels,coverage:result.coverage,remaining:requested.length});
+    }
+    const entry=cache.get(key), {buffers,texels,coverage}=entry;
+    if(--entry.remaining===0)cache.delete(key);
+    return {...Occlusion.encode(map,buffers,settings),texels,coverage,occlusion:buffers.report()};
+  };
+}
+
+function renderTasks(tasks,model,receivers,K) {
   const shared=new Map(), details=new Map(), heightTasks=new Map(), heightGroups=new Map();
+  const occlusion=receivers&&renderOcclusion(tasks,Occlusion.scene(model,receivers,K),K);
   const rasterKey=({authored,tile,settings})=>JSON.stringify([authored.id,tile.tile,settings.size,settings.padding]);
   for(const task of tasks) {
     const {map,settings,authored}=task, key=rasterKey(task);
@@ -161,6 +198,7 @@ function renderTasks(tasks,model,K) {
   const info=cache=>({texels:cache.sampledTexels,coverage:cache.coverage,...(cache.cageBake&&{projection:cache.cageBake})});
   return task=>{
     const {map,settings,authored}=task;
+    if(settings.occlusion)return occlusion(task);
     if(settings.geometry)return renderGeometry(task,K);
     if(map==='height') {
       if(!heightGroups.has(authored.id)) {
@@ -190,11 +228,11 @@ function main(request,base) {
       catalog:Meshes.catalog(model),refresh:plan.refresh?.bindings??[],projectionCatalog:library.describe()});
     return;
   }
-  const out=path.dirname(base), pending=steps(plan,model,library,K,record);
+  const out=path.dirname(base), {tasks:pending,receivers}=steps(plan,model,library,K,record);
   const report={format:'ink-studio/bake-job-report',version:1,label:plan.label,preset:plan.preset,targets:plan.targets,
     catalog:Meshes.catalog(model),maps:[],inputs:[]};
   emit({event:'planned',completed:0,total:pending.length});
-  const render=renderTasks(pending,model,K);
+  const render=renderTasks(pending,model,receivers,K);
   for(const [i,task] of pending.entries()) {
     const {map,tile,selection,authored,settings}=task;
     const detail={map,target:authored.id,tile:tile.label,total:pending.length};

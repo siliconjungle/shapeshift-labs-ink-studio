@@ -3,8 +3,11 @@
   const names={pigment:'Pigment',normal:'Normal','world-normal':'World normal',height:'Height',roughness:'Roughness',metalness:'Metalness',emission:'Emission',
     opacity:'Opacity',coverage:'Coverage',slope:'Slope',cavity:'Cavity',exposure:'Exposure',thickness:'Thickness',
     'thickness-valid':'Thickness validity','cage-hit':'Projection hits','cage-miss':'Projection misses',
-    'cage-backface':'Projection backfaces','cage-distance':'Projection distance','cage-relief':'Signed projection relief'};
+    'cage-backface':'Projection backfaces','cage-distance':'Projection distance','cage-relief':'Signed projection relief',
+    ao:'Ambient occlusion','ao-contact':'Contact AO','ao-directional':'Directional AO',
+    'bent-normal':'Bent normal','occlusion-direction':'Occlusion direction'};
   const geometry=['slope','cavity','exposure','thickness','thickness-valid'];
+  const occlusionMaps=['ao','ao-contact','ao-directional','bent-normal','occlusion-direction'];
   const encodings=[['png8','8-bit PNG'],['png16','16-bit PNG'],['exr','32-bit OpenEXR']];
   const {label,catalog,token}=bakeJob;
   function withAvailableMaps(value) {
@@ -183,6 +186,29 @@
     }
     draw();
   }
+  function occlusionControls(row,extra) {
+    const options=row.overrides, contact=row.id==='ao-contact', directional=row.id==='ao-directional';
+    const controls=node('div');controls.className='map-controls';extra.append(controls);
+    const values=[
+      ['rays','Ray count',{min:4,max:128,step:1,placeholder:contact?24:32}],
+      ['spread','Half-cone spread (°)',{min:0,max:90,step:'any',placeholder:directional?45:contact?75:90}],
+      ['range','Range (scene units)',{min:0,step:'any',placeholder:contact?'12% of bounds':'Receiver diagonal'}],
+      ['bias','Ray bias',{min:0,step:'any',placeholder:'Automatic'}]
+    ];
+    for(const [key,label,settings] of values)
+      controls.append(field(label,numeric(label,options[key],value=>put(options,key,value),settings)));
+    controls.append(field('Falloff',selected([['none','None'],['linear','Linear'],['smooth','Smooth']],
+      options.falloff??(contact?'smooth':'none'),value=>{options.falloff=value;})));
+    controls.append(field('Self-occlusion',selected([['all','Own mesh and neighbors'],['only','Own mesh only'],['exclude','Neighbors only']],
+      options.selfOcclusion??'all',value=>{options.selfOcclusion=value;})));
+    const dir=node('input');
+    dir.value=options.direction?.join(', ')??'';
+    dir.placeholder=directional?'0, 1, 0':'Surface normal';
+    dir.oninput=()=>put(options,'direction',dir.value.trim()?dir.value.split(',').map(value=>value.trim()?Number(value):NaN):undefined);
+    controls.append(field('Scene direction (XYZ)',dir));
+    const encoding=options.encoding??(row.id==='bent-normal'?'png16':row.id==='occlusion-direction'?'exr':'png8');
+    controls.append(field('Encoding',selected(encodings,encoding,value=>{options.encoding=value;})));
+  }
   function maps() {
     const list=preset.maps, rows=el('rows');rows.replaceChildren();
     for(const [i,row] of list.entries()) {
@@ -204,6 +230,7 @@
       more.setAttribute('aria-expanded','false');
       extra.append(field('Padding',numeric('Map padding',row.overrides?.padding,n=>put(row.overrides,'padding',n),{min:0,max:32,step:1})));
       if(['normal','world-normal','height'].includes(row.id))surfaceControls(row,extra);
+      if(occlusionMaps.includes(row.id))occlusionControls(row,extra);
       if(geometry.includes(row.id)) {
         const tuning={slope:[],cavity:['samples','cavityRadius','rayBias'],exposure:['samples','exposureDistance','rayBias'],
           thickness:['thicknessScale','rayBias'],'thickness-valid':['rayBias']};
@@ -303,11 +330,17 @@
       'Padding':row.settings.padding+' px','Surface coverage':(row.coverage*100).toFixed(1)+'%',
       ...(output&&{'Encoding':encodings.find(([key])=>key===output.encoding)?.[1]}),
       ...(output?.kind==='normal'&&{'Normal space':title(output.space)}),
+      ...(output?.kind==='direction'&&{'Direction space':'World XYZ'}),
       ...(output?.kind==='height'&&{'Height range':output.range?span(output.range):'Raw signed scene units',
         ...(output.measured&&{'Measured on tile':span([output.measured.min,output.measured.max])}),
         ...(output.range&&{'Clipped samples':output.clippedLow+output.clippedHigh})}),
       ...(row.settings.orientation&&{'Orientation':title(row.settings.orientation)}),
       ...(row.geometry&&{'Probe rays':row.geometry.rayCount.toLocaleString()}),
+      ...(row.occlusion&&{'Occlusion rays':row.occlusion.rayCount.toLocaleString(),
+        'Blocked rays':row.occlusion.blockedRays.toLocaleString(),
+        'Spread':row.occlusion.spread+'°','Range':number(row.occlusion.range),'Falloff':title(row.occlusion.falloff),
+        'Occluders':({all:'Own mesh and neighbors',only:'Own mesh only',exclude:'Neighbors only'})[row.occlusion.selfOcclusion],
+        ...(row.occlusion.direction&&{'Scene direction':row.occlusion.direction.map(number).join(', ')})}),
       ...(row.projection&&{'Projection':row.projection.mode==='self'?'Self-bake':row.projection.highMeshes.join(', '),
         'Hits':row.projection.hits.toLocaleString(),'Misses':row.projection.misses.toLocaleString(),
         'Backfaces':row.projection.backfaces.toLocaleString(),

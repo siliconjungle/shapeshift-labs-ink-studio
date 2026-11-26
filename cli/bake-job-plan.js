@@ -4,10 +4,11 @@ const Geometry=require('./geometry-masks.js');
 const UV=require('./material-preview-geometry.js');
 const {maps:projectionMaps}=require('./bake-job-projection.js');
 const Surface=require('./bake-job-surface.js');
+const Occlusion=require('./bake-job-occlusion.js');
 
 const format='ink-studio/bake-job', presetFormat='ink-studio/bake-preset';
 const names=Object.freeze(['pigment','normal','world-normal','height','roughness','metalness','emission','opacity','coverage',...Geometry.names,
-  ...projectionMaps]);
+  ...projectionMaps,...Occlusion.names]);
 const geometryFields=['up','samples','cavityRadius','exposureDistance','thicknessScale','rayBias'];
 const mapGeometry={slope:['up'],cavity:['samples','cavityRadius','rayBias'],
   exposure:['samples','exposureDistance','rayBias'],thickness:['thicknessScale','rayBias'],'thickness-valid':['rayBias']};
@@ -46,8 +47,10 @@ function preset(value) {
       row.enabled!==undefined&&typeof row.enabled!=='boolean')
       throw new TypeError('Use each supported bake map once and set enabled to a boolean');
     seen.add(row.id);
-    const overrides=options(row.overrides??{},['size','padding',...(mapSurface[row.id]??[]),...(mapGeometry[row.id]??[])]);
+    const overrides=options(row.overrides??{},['size','padding',...(mapSurface[row.id]??[]),...(mapGeometry[row.id]??[]),
+      ...(Occlusion.names.includes(row.id)?Occlusion.fields:[])]);
     Surface.settings(row.id,overrides);
+    Occlusion.settings(row.id,overrides);
     return {id:row.id,enabled:row.enabled??true,overrides};
   });
   if(!maps.some(row=>row.enabled))throw new RangeError('Enable at least one bake map');
@@ -171,7 +174,7 @@ function readPlan(filename,{presetFile,presetValue,targetValues,onInput=()=>{}}=
 function effective(preset,row) {
   const {size=128,padding=3,...tuning}={...preset.defaults,...row.overrides};
   if(padding*2>=size)throw new RangeError('Map padding must be less than half its size');
-  return {size,padding,...Surface.settings(row.id,tuning),
+  return {size,padding,...Surface.settings(row.id,tuning),...Occlusion.settings(row.id,tuning),
     ...(Geometry.names.includes(row.id)&&{geometry:Geometry.settings(tuning)})};
 }
 module.exports={format,presetFormat,names,preset,readPlan,effective,id};
