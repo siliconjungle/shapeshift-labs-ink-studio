@@ -7,13 +7,17 @@ const BitmapResources = (() => {
   const integer = (n, min, max) => Number.isSafeInteger(n) && n >= min && n <= max;
   const dimensions = (w, h) => integer(w, 1, 8192) && integer(h, 1, 8192) && w * h <= maxPixels;
   const filename = value => typeof value === 'string' && !!value.trim() && value.length <= 4096 && !value.includes('\0');
-  const encodings = ['png', 'pfm'];
+  const encodings = ['png', 'pfm', 'tiff', 'exr'];
   const precisions = { unorm8: Uint8Array, unorm16: Uint16Array, float32: Float32Array };
   const spaces = ['srgb', 'srgb-linear', 'display-p3', 'display-p3-linear'];
   const borders = ['clamp', 'wrap', 'mirror', 'transparent'];
   const isTile = tile => Array.isArray(tile) && tile.length === 2 && Array.from(tile).every(n => integer(n, -32768, 32767));
   const tileKey = tile => tile.join(',');
-  const encoding = member => member.encoding ?? (/\.pfm$/i.test(member.file ?? member.origin ?? '') ? 'pfm' : 'png');
+  const encoding = member => {
+    const file = member.file ?? member.origin ?? '';
+    const suffix = /\.(pfm|exr|tiff?)$/i.exec(file)?.[1]?.toLowerCase();
+    return member.encoding ?? (suffix === 'tif' ? 'tiff' : suffix ?? 'png');
+  };
   const coordinate = udim => [(udim - 1001) % 10, Math.floor((udim - 1001) / 10)];
 
   function pixels(value) {
@@ -29,15 +33,18 @@ const BitmapResources = (() => {
     }
   }
   function member(source) {
-    if (!fields(source, ['file', 'base64', 'origin', 'encoding', 'rowOrder', 'pixels']) ||
+    if (!fields(source, ['file', 'base64', 'origin', 'encoding', 'rowOrder', 'page', 'channels', 'pixels']) ||
         Object.hasOwn(source, 'file') === Object.hasOwn(source, 'base64') ||
         (Object.hasOwn(source, 'file') ? !filename(source.file) || Object.hasOwn(source, 'origin') :
           typeof source.base64 !== 'string' || !source.base64.length || source.base64.length % 4 ||
           source.base64.length > Math.ceil(maxFileBytes / 3) * 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(source.base64) ||
           source.origin !== undefined && !filename(source.origin)) ||
         !encodings.includes(encoding(source)) ||
-        source.rowOrder !== undefined && (encoding(source) !== 'pfm' || !['bottom-up', 'top-down'].includes(source.rowOrder)))
-      throw new TypeError('Bitmap member needs one linked file or embedded PNG/PFM payload');
+        source.rowOrder !== undefined && (encoding(source) !== 'pfm' || !['bottom-up', 'top-down'].includes(source.rowOrder)) ||
+        source.page !== undefined && (encoding(source) !== 'tiff' || !integer(source.page,0,63)) ||
+        source.channels !== undefined && (encoding(source) !== 'exr' || !Array.isArray(source.channels) ||
+          !integer(source.channels.length,1,4) || !Array.from(source.channels).every(name=>typeof name==='string'&&/^[!-~]{1,255}$/.test(name))))
+      throw new TypeError('Bitmap member needs one linked or embedded PNG, TIFF, OpenEXR or PFM payload with matching selection');
     if (source.pixels !== undefined) pixels(source.pixels);
     return source;
   }
@@ -156,8 +163,8 @@ const BitmapResources = (() => {
   function contract(raw, settings = {}) {
     const { width, height, precision: native, encoding: codec } = raw;
     if (!dimensions(width, height)) throw new RangeError('Bitmap exceeds the 8192-axis or 16-million-pixel budget');
-    const { intent = 'color', colorSpace = codec === 'pfm' ? 'srgb-linear' : 'srgb', units,
-      sampling = 'nearest', tiling = {}, alpha = 'straight' } = settings;
+    const { intent = 'color', colorSpace = raw.colorSpace ?? (codec === 'pfm' || codec === 'exr' ? 'srgb-linear' : 'srgb'), units,
+      sampling = 'nearest', tiling = {}, alpha = raw.alpha === 'premultiplied' ? 'premultiplied' : 'straight' } = settings;
     const color = intent === 'color';
     return { width, height, channels: color ? 4 : 1, descriptor: {
       intent, layout: color ? 'rgba' : 'r', colorSpace: color ? colorSpace : 'none',
@@ -170,15 +177,20 @@ const BitmapResources = (() => {
   function image(raw, spec, settings, edits, declare) {
     const { width, height, channels, descriptor } = spec, count = width * height;
     const Data = precisions[descriptor.precision], src = raw?.data, stride = raw?.channels ?? 0;
-    const copy = !edits?.length && src instanceof Data && channels === 4 && stride === 4;
+    const copy = !edits?.length && src instanceof Data && channels === 4 && stride === 4 && raw.alpha !== 'none';
     const data = copy ? src : new Data(count * channels);
     const sourceMax = src instanceof Uint16Array ? 65535 : src instanceof Uint8Array ? 255 : 1;
     const targetMax = Data === Uint16Array ? 65535 : Data === Uint8Array ? 255 : 1;
     if (src && !copy) {
       const lane = ['r', 'g', 'b', 'a'].indexOf(settings?.channel ?? 'r');
       function read(p, c) {
-        if (c === 3 && stride < 4) return sourceMax;
-        return src[p * stride + (stride === 1 ? 0 : c)];
+        if (c === 3) {
+          if (stride === 2 && raw.alpha !== 'none') return src[p * stride + 1];
+          if (stride === 4 && (channels === 1 || raw.alpha !== 'none')) return src[p * stride + 3];
+          return sourceMax;
+        }
+        const lane = stride >= 3 || channels === 1 && stride === 2 && raw.alpha === 'none' && c === 1 ? c : 0;
+        return src[p * stride + lane];
       }
       const ratio = targetMax / sourceMax;
       for (let p = 0; p < count; p++) {
@@ -212,7 +224,7 @@ const BitmapResources = (() => {
       const size = spec.width * spec.height * spec.channels * sampleBytes;
       if ((bytes += size) > maxResourceBytes) throw new RangeError('Bitmap resource exceeds its decoded sample budget');
       expected ??= { signature, spec };
-      entries.set(row.key, { raw, spec, row });
+      entries.set(row.key, { raw, spec, row, profile:raw.profile });
     }
     let blankSpec = expected?.spec;
     if (missing.width !== undefined) {
@@ -262,15 +274,16 @@ const BitmapResources = (() => {
       if (!found && !blank) throw new RangeError('Missing bitmap member ' + key);
       return { value: found?.value ?? blank, info: { requested: key, resolved: found?.row.key ?? null,
         status: !found ? 'blank' : found.row.key === key ? 'ready' : 'held',
+        ...(found?.profile && Object.keys(found.profile).length && { profile:found.profile }),
         ...(kind === 'sequence' && { frame: rows[index].frame }),
         ...(kind === 'tiles' && { tile: tile.slice() }) } };
     }
     const info = { kind, decodedBytes: bytes, ...blankSpec, ...(kind === 'sequence' && { first, fps, playback }),
       missing: missing.policy,
-      members: rows.map(({ key, file, origin, base64, frame, tile, udim, pixels }) => ({
+      members: rows.map(({ key, file, origin, base64, frame, tile, udim, pixels, page, channels }) => ({
         key, storage: file ? 'linked' : base64 ? 'embedded' : 'missing', available: entries.has(key),
         ...(file && { file }), ...(origin && { origin }), ...(frame !== undefined && { frame }), ...(tile && { tile }),
-        ...(udim !== undefined && { udim }), edits: pixels?.length ?? 0
+        ...(udim !== undefined && { udim }), ...(page !== undefined && {page}), ...(channels && {channels}), edits: pixels?.length ?? 0
       })) };
     return { select, info };
   }
