@@ -2,6 +2,7 @@
 
 const MeshUV = require('../src/mesh-uv.js');
 const Selections = require('../src/pixel-selections.js');
+const {placeMask} = require('../src/pixel-selection-transforms.js');
 const {checkerIndex,drawingGrid} = require('../src/pixel-paint-tools.js');
 const {bayerRank} = require('../src/pixel-look.js');
 const {digest} = require('./pixel-edit-revisions.js');
@@ -105,19 +106,50 @@ function ditherIndex({pattern,mix,seed}, K) {
 }
 
 function usesRegion(op) {
-  return ['fill','spray','dither'].includes(op.tool) || op.drawing!==undefined || op.selection!==undefined;
+  return ['fill','spray','dither','transform'].includes(op.tool) || op.drawing!==undefined || op.selection!==undefined;
+}
+
+function transform(rect, mask, active, raster, asset, op, K) {
+  const [left,top,width,height] = rect, selection = active.slice();
+  const sources = new Int32Array(mask.length).fill(-1);
+  let placedTexels = 0, clippedPixels = 0;
+  const mapped = placeMask(width,height,active,[left,top],op.transform,(x,y,from)=>{
+    const col = x-left, row = y-top, i = row*width+col;
+    if (col<0 || row<0 || col>=width || row>=height || !mask[i]) {
+      clippedPixels++;
+      return;
+    }
+    sources[i] = from;
+    selection[i] = 1;
+    placedTexels++;
+  },K.authoring.tilesets.maxEdge);
+  const selectedTexels = active.reduce((count,value)=>count+value,0);
+  const report = {mode:op.mode,settings:op.transform,rect,...mapped,selectedTexels,placedTexels,clippedPixels,
+    selectionRevision:digest([rect,active])};
+  if (!mapped || !placedTexels) return {conflict:!mapped ? 'empty-transform-selection' : 'empty-transform-placement',report};
+  const pixels = i=>{
+    const from = sources[i];
+    if (from>=0) {
+      const at = (top+Math.floor(from/width))*asset.width+left+from%width;
+      const slot = raster.index?.(at);
+      return {value:raster.read(at),...(slot!==undefined && {slot:'slot-'+slot})};
+    }
+    if (op.mode==='move' && active[i]) return {value:0,slot:null};
+  };
+  return {rect,pixels,selection,changedMask:new Uint8Array(mask.length),report};
 }
 
 function plan(row, source, hit, asset, op, K) {
   const colors = op.fill?.colors ?? op.dither?.colors ?? [op];
-  const paints = colors.map(color=>Tools.bindPaint(asset,{...color,alphaMode:op.alphaMode}));
-  if (paints.some(paint=>!paint)) return {conflict:'palette-slot-unavailable'};
+  const paints = op.tool==='transform' ? undefined : colors.map(color=>Tools.bindPaint(asset,{...color,alphaMode:op.alphaMode}));
+  if (paints?.some(paint=>!paint)) return {conflict:'palette-slot-unavailable'};
   const bounded = footprint(row,source,hit,asset,K);
   if (!bounded) return {conflict:op.fill ? 'unresolved-fill-footprint' : 'unresolved-paint-footprint'};
   const {rect,mask,at} = bounded, [left,top,width,height] = rect;
   const raster = Tools.pixels(asset);
-  const read = i=>raster.read((top+Math.floor(i/width))*asset.width+left+i%width);
   const active = clipSelection(rect,mask,op.selection,asset,raster);
+  if (op.tool==='transform') return transform(rect,mask,active,raster,asset,op,K);
+  const read = i=>raster.read((top+Math.floor(i/width))*asset.width+left+i%width);
   const selection = op.fill ? fillSelection(width,height,active,at,read,op.fill) : active;
   const candidates = op.fill || op.dither ? selection : stamp(rect,selection,source.at,asset,op,K);
   const choose = op.dither ? ditherIndex(op.dither,K) : op.fill?.pattern==='checker' ?

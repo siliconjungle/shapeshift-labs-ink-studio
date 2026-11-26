@@ -471,6 +471,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelSelectionTransforms` | namespace |  |  |
 | `KIT.pixelSelectionTransforms.capture` | function | `(width,height,{ slots,alpha,palette },mask)` | [source](../../src/pixel-selection-transforms.js) |
 | `KIT.pixelSelectionTransforms.format` | value | `string = "ink-studio/pixel-clipboard"` |  |
+| `KIT.pixelSelectionTransforms.placeMask` | function | `(width,height,mask,origin,settings,emit,maxSize=512)` | [source](../../src/pixel-selection-transforms.js) |
 | `KIT.pixelSelectionTransforms.stage` | function | `(width,height,current,raw,settings = {},{ move = false, named = false, limit = 255, captureSources = false } = {})` | [source](../../src/pixel-selection-transforms.js) |
 | `KIT.pixelSelectionTransforms.validate` | function | `(clip)` | [source](../../src/pixel-selection-transforms.js) |
 

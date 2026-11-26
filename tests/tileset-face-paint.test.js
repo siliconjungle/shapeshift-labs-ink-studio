@@ -377,7 +377,7 @@ test('fill disconnected matches with an atlas-aligned checker and trace only the
   assert.deepEqual(editor.snapshot(),scene);
 });
 
-test('limit matching fill to a nonrectangular polygon UV footprint',()=>{
+test('limit fill and transform destinations to a nonrectangular polygon UV footprint',()=>{
   const scene = fixture(), doc = scene.topologyMeshes.east.document, viewFace = doc.faces[0];
   const removed = viewFace.corners.pop().uv.map((n,i)=>Math.round(n*[width-1,height-1][i]));
   delete doc.edges;
@@ -385,6 +385,12 @@ test('limit matching fill to a nonrectangular polygon UV footprint',()=>{
   const {report} = ink.paintTilesetFace(editor,{...hit,tool:'fill',fill:{area:'matching-color',colors:[{color:'#ffab57'}]}},{apply:true});
   assert(report.canCommit,JSON.stringify(report.conflicts));
   assert(report.fill.selectedTexels>0 && report.fill.selectedTexels<15*15);
+  const pick = report.source.at, snapshot = editor.snapshot();
+  const outside = ink.paintTilesetFace(editor,{...hit,tool:'transform',mode:'copy',transform:{at:removed},
+    selection:{type:'pixels',pixels:[pick]}},{apply:true}).report;
+  assert.equal(outside.conflicts[0]?.code,'empty-transform-placement',JSON.stringify(outside));
+  assert.equal(outside.transform.clippedPixels,1);
+  assert.deepEqual(editor.snapshot(),snapshot);
   const at = (removed[1]*width+removed[0])*4;
   const bytes = Buffer.from(editor.snapshot().tilesets.enamel.data,'base64');
   assert.deepEqual([...bytes.subarray(at,at+4)],[71,105,89,255]);
@@ -569,4 +575,124 @@ test('apply alpha accumulation to both dither colors inside a selection and expo
   const updated = JSON.parse(fs.readFileSync(file('painted.json'))), bytes = Buffer.from(updated.tilesets.enamel.data,'base64');
   assert.equal(bytes[(5*width+7)*4+3],160);
   assert.equal(bytes[(7*width+10)*4+3],160);
+});
+
+test('move an atlas marquee with overlap, exact indexed aliases and one undo',()=>{
+  const scene = fixture(true), atlas = scene.tilesets.enamel, at = (x,y)=>y*width+x;
+  atlas.palette.push(0xfac482,0xfac482,0xbac8ce,0x384560,0xa2d9c6);
+  atlas.alpha = [255,180,180,0,231,255];
+  const slots = Buffer.from(atlas.data,'base64');
+  for (const [x,y,slot] of [[6,5,1],[7,5,2],[8,5,4],[6,6,3],[7,6,5],[8,6,4]]) slots[at(x,y)] = slot;
+  atlas.data = slots.toString('base64');
+  const {rgba,...hit} = stroke, editor = ink.createSceneEditor(scene);
+  const request = {...hit,tool:'transform',transform:{offset:[1,0]},
+    selection:{type:'subtract',base:{type:'rectangle',rect:[6,5,3,2]},with:{type:'pixels',pixels:[[8,6]]}}};
+  const {report,images} = ink.paintTilesetFace(editor,request);
+  assert(report.canCommit,JSON.stringify(report.conflicts));
+  assert.equal(report.transform.mode,'move');
+  assert.deepEqual(report.transform.sourceBounds,[6,5,3,2]);
+  assert.deepEqual(report.transform.bounds,[7,5,3,2]);
+  assert.equal(report.transform.selectedTexels,5);
+  assert.equal(report.transform.placedTexels,5);
+  assert.equal(report.transform.clippedPixels,0);
+  assert.equal(report.paletteAdded,0);
+  assert.deepEqual(report.uses.map(row=>row.object).sort(),['east','west']);
+  assert(report.uses.every(row=>row.changedPixels>0));
+  assert.notDeepEqual(images.before.rgb,images.after.rgb);
+  assert(images.texels);
+  assert.deepEqual(editor.snapshot(),scene);
+
+  assert.deepEqual(ink.paintTilesetFace(editor,request,{apply:true,expect:report.previewRevision}).report,report);
+  const edited = editor.snapshot(), expected = Buffer.from(slots);
+  for (const [x,y,slot] of [[6,5,3],[7,5,1],[8,5,2],[9,5,4],[7,6,3],[8,6,5]]) expected[at(x,y)] = slot;
+  assert.deepEqual(Buffer.from(edited.tilesets.enamel.data,'base64'),expected);
+  assert.deepEqual(edited.tilesets.enamel.palette,atlas.palette);
+  assert.deepEqual(edited.tilesets.enamel.alpha,atlas.alpha);
+  assert.deepEqual(edited.topologyMeshes,scene.topologyMeshes);
+  assert(editor.undo());
+  assert.deepEqual(editor.snapshot(),scene);
+  assert(editor.redo());
+  assert.deepEqual(editor.snapshot(),edited);
+});
+
+test('copy a wand selection with pixel resize and flip through the CLI to one local face',t=>{
+  const scene = fixture(true), atlas = scene.tilesets.enamel, dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-atlas-transform-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const at = (x,y)=>y*width+x;
+  atlas.palette.push(0xf4a487,0xf4a487);
+  atlas.alpha = [255,167,167];
+  const source = Buffer.from(atlas.data,'base64');
+  for (const [x,y,slot] of [[6,5,1],[7,5,2],[6,6,2],[15,8,1]]) source[at(x,y)] = slot;
+  atlas.data = source.toString('base64');
+  const {rgba,...hit} = stroke;
+  const request = {...hit,tool:'transform',mode:'copy',transform:{at:[12,10],size:[4,4],flipX:true,flipY:true},
+    sharing:'make-local-variant',variant:'copied-motif'};
+  const file = name=>path.join(dir,name);
+  const write = (name,data)=>fs.writeFileSync(file(name),JSON.stringify(data));
+  const args = ['tileset','paint','face','request.json','--scene','scene.json','--selection','wand.json'];
+  const run = extra=>JSON.parse(execFileSync(process.execPath,[cli,...args,...extra],{cwd:dir,encoding:'utf8'}));
+  write('scene.json',scene);
+  write('request.json',request);
+  write('wand.json',{type:'wand',at:[6,5]});
+  const review = run(['--preview','review']);
+  assert(review.canCommit,JSON.stringify(review.conflicts));
+  assert.equal(review.transform.selectedTexels,3);
+  assert.equal(review.transform.placedTexels,12);
+  assert.equal(review.changedTexels,12);
+  assert.deepEqual(review.transform.bounds,[12,10,4,4]);
+  assert.deepEqual(review.files,['before.png','after.png','diff.png','texels.png']);
+  assert.deepEqual(review.uses.map(use=>use.object),['east']);
+  assert.deepEqual(review.sharedPaintUses.map(use=>use.object),['west']);
+  assert.equal(review.sharedPaintUses[0].changedPixels,0);
+  assert.notDeepEqual(PNG.raster(file('review/before.png')).data,PNG.raster(file('review/after.png')).data);
+
+  write('receipt.json',review);
+  const commit = run(['--expect','receipt.json','--out','painted.json']);
+  assert.deepEqual(commit.transform,review.transform);
+  const updated = JSON.parse(fs.readFileSync(file('painted.json')));
+  assert.deepEqual(updated.tilesets.enamel,atlas);
+  assert.deepEqual(updated.tilesets['copied-motif'].alpha,atlas.alpha);
+  const expected = Buffer.from(source);
+  for (let y=10;y<14;y++) for (let x=12;x<16;x++) {
+    if (x<14 && y<12) continue;
+    expected[at(x,y)] = x>=14 && y>=12 ? 1 : 2;
+  }
+  assert.deepEqual(Buffer.from(updated.tilesets['copied-motif'].data,'base64'),expected);
+  write('request.json',{...request,transform:{...request.transform,flipY:false}});
+  const stale = spawnSync(process.execPath,[cli,...args,'--expect','receipt.json','--out','stale.json'],
+    {cwd:dir,encoding:'utf8'});
+  assert.equal(stale.status,1);
+  assert.equal(JSON.parse(stale.stdout).conflicts[0].code,'stale-preview');
+  assert(!fs.existsSync(file('stale.json')));
+});
+
+test('respect lasso boundaries and bound face edges, including wholly clipped placements',()=>{
+  const scene = fixture(), atlas = scene.tilesets.enamel, at = (x,y)=>(y*width+x)*4;
+  const raw = Buffer.from(atlas.data,'base64');
+  raw.writeUInt32BE(0xffc488ff,at(6,5));
+  raw.writeUInt32BE(0x72becfff,at(7,5));
+  raw.writeUInt32BE(0xff734bff,at(8,5));
+  raw.writeUInt32BE(0x65987e80,at(6,6));
+  atlas.data = raw.toString('base64');
+  const {rgba,...hit} = stroke, editor = ink.createSceneEditor(scene);
+  const request = {...hit,tool:'transform',mode:'copy',transform:{at:[17,10]},
+    selection:{type:'lasso',points:[[6,5],[8,5],[6,7]]}};
+  const {report} = ink.paintTilesetFace(editor,request,{apply:true});
+  assert(report.canCommit,JSON.stringify(report.conflicts));
+  assert.equal(report.transform.selectedTexels,6);
+  assert.equal(report.transform.placedTexels,3);
+  assert.equal(report.transform.clippedPixels,3);
+  const updated = Buffer.from(editor.snapshot().tilesets.enamel.data,'base64'), expected = Buffer.from(raw);
+  for (let y=10;y<13;y++) expected.writeUInt32BE(raw.readUInt32BE(at(6,y-5)),at(17,y));
+  assert.deepEqual(updated,expected);
+
+  assert(editor.undo());
+  const blocked = ink.paintTilesetFace(editor,{...request,mode:'move',transform:{at:[20,11]}},{apply:true}).report;
+  assert.equal(blocked.conflicts[0].code,'empty-transform-placement');
+  assert.equal(blocked.transform.clippedPixels,6);
+  const outside = {...request,selection:{type:'rectangle',rect:[20,5,3,2]}};
+  assert.equal(ink.paintTilesetFace(editor,outside,{apply:true}).report.conflicts[0].code,'empty-transform-selection');
+  assert.throws(()=>ink.paintTilesetFace(editor,{...request,transform:{at:[9.5,9]}}),/integer pixel/);
+  assert.throws(()=>ink.paintTilesetFace(editor,{...request,transform:{size:[2,1.5]}}),/integer pixel/);
+  assert.deepEqual(editor.snapshot(),scene);
 });
