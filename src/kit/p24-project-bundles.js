@@ -156,7 +156,9 @@
       definitions(prefabs, library, true);
     }
     definitions(spec.prefabs, entry, false);
-    const { spec: expanded } = A.scenePrefabs.expand(spec, { prefabs });
+    const customProperties = typeof spec.customProperties==='string' ?
+      contents(io.text(resolvePath(entry,spec.customProperties))) : undefined;
+    const { spec: expanded } = A.scenePrefabs.expand(spec, { prefabs,customProperties });
     for (const solid of DIO.solids(expanded)) if (!Object.hasOwn(assets, solid.asset)) mesh(solid, entry);
     const atlasPaths = new Set();
     function atlasFile(ref) {
@@ -173,7 +175,7 @@
         readAtlas?.(file);
       }
     }
-    const env = { assets, prefabs, resolveSpriteAtlas };
+    const env = { assets, prefabs, resolveSpriteAtlas, customProperties };
     const problems = validate ? DIO.check(spec, env) : [];
     if (problems.some(problem => problem.level === 'error')) {
       const error = new Error(DIO.report(problems));

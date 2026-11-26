@@ -255,3 +255,24 @@ Guides: [guide](../smart-material-masks.md)
 
 Get the runnable example with `ink-studio graph describe material.smartMask --example > example.json`.
 Run it with `ink-studio graph run example.json`.
+
+### material.validate
+
+Check material physical ranges, map conventions and delivery clipping.
+
+Origin: toolkit.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `source` | `any` | Required |  |
+| Input | `profile` | `record` | `{}` | {"layout":"Plain named object"} |
+| Output | `report` | `record` | — | {"layout":"Plain named object"} |
+| Output | `passed` | `boolean` | — |  |
+
+- Read physical ranges, normal length, map conventions and predicted delivery clipping from a packet or a named image record.
+- Use graph validate-material for actual paint and conversion clipping, interactive overlays and producer attribution.
+
+Guides: [guide](../material-validation.md#choose-a-target-and-expectations)
+
+Get the runnable example with `ink-studio graph describe material.validate --example > example.json`.
+Run it with `ink-studio graph run example.json`.

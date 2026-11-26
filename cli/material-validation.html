@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Material validation · Ink Studio</title>
+  <style>
+    :root{color-scheme:dark;--page:#151a19;--pane:#1f2825;--line:#3b4b43;--text:#eae9d9;--muted:#b6c3b7;--leaf:#accbb7;--red:#f99983;--yellow:#edca86}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--page);color:var(--text);font:14px/1.45 system-ui,sans-serif}
+    main{max-width:1220px;margin:auto;padding:32px clamp(17px,4vw,48px) 39px}
+    h1,h2,p{margin:0}
+    h1{font:500 clamp(39px,6vw,66px)/1.06 Georgia,serif;letter-spacing:-.046em}
+    header{display:flex;justify-content:space-between;align-items:end;gap:14px;margin-bottom:23px}
+    header p{margin-top:7px;color:var(--muted)}
+    a{color:var(--leaf);text-underline-offset:4px}
+    .work{display:grid;grid-template-columns:minmax(0,1fr) 318px;gap:15px}
+    figure,aside{margin:0;min-width:0;border:1px solid var(--line);border-radius:4px;background:var(--pane)}
+    figure{overflow:hidden;display:flex;flex-direction:column}
+    nav,.footer{display:flex;gap:6px;flex-wrap:wrap;padding:11px 13px;align-items:center}
+    nav{border-bottom:1px solid var(--line)}
+    button{font:inherit;font-size:12px;border:1px solid var(--line);border-radius:3px;padding:6px 8px;background:#242e29;color:var(--muted);cursor:pointer}
+    button[aria-pressed="true"]{background:#334a3c;color:var(--text);border-color:#72927a}
+    button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--yellow);outline-offset:2px}
+    .stage{flex:1;min-height:355px;display:grid;place-items:center;padding:18px;background:radial-gradient(ellipse at 48% 45%,#3a4a42,#2b352f 65%,#242e29)}
+    canvas{display:block;width:min(100%,560px);height:auto;image-rendering:pixelated;box-shadow:0 10px 28px #111a14aa;cursor:crosshair}
+    canvas[hidden]{display:none}
+    .footer{border-top:1px solid var(--line);justify-content:space-between;color:var(--muted);font:12px ui-monospace,monospace}
+    .footer label{display:flex;align-items:center;gap:7px}
+    input{accent-color:#c67060}
+    aside{padding:13px}
+    h2{font:650 14px/1.35 system-ui,sans-serif}
+    .list{display:grid;gap:6px;margin-top:9px}
+    .issue{text-align:left;display:flex;justify-content:space-between;gap:8px;align-items:center;padding:9px}
+    .issue span:last-child{font:11px ui-monospace,monospace;color:var(--yellow)}
+    .issue[data-severity="error"] span:last-child{color:var(--red)}
+    .detail{margin-top:13px;padding-top:12px;border-top:1px solid var(--line);font-size:12px}
+    .detail p{margin:6px 0;color:var(--muted)}
+    .detail ul{padding-left:17px;color:var(--muted);margin:8px 0}
+    .detail li{margin-bottom:4px}
+    .detail code{overflow-wrap:anywhere;color:var(--leaf)}
+    #hit{font:11px ui-monospace,monospace;color:var(--leaf);overflow-wrap:anywhere}
+    #samples{display:flex;gap:4px;flex-wrap:wrap}
+    #samples button{font:11px ui-monospace,monospace}
+    .nothing{color:var(--muted);font-size:13px}
+    @media(max-width:800px){.work{grid-template-columns:1fr}.stage{min-height:280px}}
+    @media(max-width:460px){header{display:block}header a{display:inline-block;margin-top:11px}.stage{min-height:220px;padding:9px}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>Material validation</h1><p id="summary"></p></div>
+    <a href="report.json" download>Download report</a>
+  </header>
+  <div class="work">
+    <figure>
+      <nav id="maps" aria-label="Material maps"></nav>
+      <div class="stage"><canvas id="image" aria-label="Material map with issue overlay" hidden></canvas><p class="nothing" id="empty">No map preview is available.</p></div>
+      <figcaption class="footer"><span id="position" role="status"></span><label><input id="overlay" type="checkbox" checked> Show issue overlay</label></figcaption>
+    </figure>
+    <aside>
+      <h2>Findings</h2><div class="list" id="findings"></div>
+      <section class="detail" id="detail" aria-label="Issue details">
+        <p id="message"></p><p id="expectation"></p><ul id="sources"></ul><p id="hit" role="status"></p><div id="samples"></div>
+      </section>
+    </aside>
+  </div>
+</main>
+<script src="review.js"></script>
+<script>
+(() => {
+  const el = id => document.getElementById(id);
+  const canvas = el('image'), ctx = canvas.getContext('2d'), mapNames = Object.keys(review.maps);
+  let channel = review.findings.find(row => review.maps[row.channel]?.preview)?.channel ?? mapNames[0];
+  let issue = review.findings.find(row => row.channel === channel) ?? review.findings[0];
+  let ticket = 0, base, mask, owners, pin;
+  const noun = (count, word) => count + ' ' + word + (count === 1 ? '' : 's');
+  el('summary').textContent = noun(review.errors, 'error') + ' · ' + noun(review.warnings, 'warning') +
+    (review.target.output ? ' · ' + review.target.output : ' · ' + review.target.node);
+
+  const label = value => ({ baseColor: 'Pigment', normal: 'Normals', height: 'Height', roughness: 'Roughness',
+    metalness: 'Metalness', emission: 'Emission', ao: 'AO', opacity: 'Opacity' })[value] ?? value;
+  const sourceLabel = source => !source ? 'Source unavailable' : source.node ?
+    source.node + (source.port ? '.' + source.port : '') + (source.layer ? ' · ' + source.label + ' [' + source.layer + ']' :
+      source.asset ? ' · ' + source.asset : '') : source.input ? 'Graph input ' + source.input : 'Graph ' + source.kind;
+  const names = { 'paint-clipping': 'Brush clipping', 'conversion-clipping': 'Conversion clipping',
+    'delivery-clipping': 'Delivery clipping', 'preview-clipping': 'Display clipping', 'physical-range': 'Physical range',
+    'normal-length': 'Normal length', 'normal-hemisphere': 'Normal direction', 'sample-encoding': 'Sample encoding',
+    convention: 'Map convention', alignment: 'Grid alignment', evaluation: 'Graph evaluation', nonfinite: 'Nonfinite value' };
+  const image = url => url ? new Promise((resolve, reject) => {
+    const value = new Image();
+    value.onload = () => resolve(value);
+    value.onerror = () => reject(new Error('Could not load ' + url));
+    value.src = location.protocol === 'file:' ? previewImages[url] : url;
+  }) : Promise.resolve(null);
+  function pixels(value) {
+    if (!value) return null;
+    const helper = document.createElement('canvas');
+    helper.width = value.naturalWidth;
+    helper.height = value.naturalHeight;
+    const context = helper.getContext('2d');
+    context.drawImage(value, 0, 0);
+    return context.getImageData(0, 0, helper.width, helper.height);
+  }
+
+  function draw() {
+    if (!base) return;
+    canvas.width = base.width;
+    canvas.height = base.height;
+    const display = new ImageData(new Uint8ClampedArray(base.data), base.width, base.height), data = display.data;
+    if (mask && el('overlay').checked) for (let i = 0; i < data.length; i += 4) if (mask.data[i]) {
+      data[i] = 245;
+      data[i + 1] = Math.round(82 + data[i + 1] * .25);
+      data[i + 2] = 58;
+      data[i + 3] = 255;
+    }
+    ctx.putImageData(display, 0, 0);
+    if (pin) {
+      ctx.strokeStyle = '#fff4bb';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(pin.x - 2, pin.y - 2, 5, 5);
+    }
+  }
+  function pick(x, y, example) {
+    if (!base || x < 0 || y < 0 || x >= base.width || y >= base.height) return;
+    pin = { x, y };
+    const i = (y * base.width + x) * 4, matches = !mask || mask.data[i] !== 0;
+    const source = example?.source ?? (owners && owners.data[i] && owners.data[i] < 255 ?
+      issue.sources[owners.data[i] - 1] : issue?.sources.length === 1 ? issue.sources[0] : null);
+    const values = example?.values.map(value => typeof value === 'number' ? Number(value.toPrecision(5)) : value).join(', ');
+    el('hit').textContent = [x + ', ' + y, matches && issue ? source ? sourceLabel(source) : 'See listed sources' : 'No selected issue',
+      values].filter(Boolean).join(' · ');
+    draw();
+  }
+
+  function refresh() {
+    const active = ++ticket, map = review.maps[channel];
+    el('maps').replaceChildren();
+    for (const name of mapNames) {
+      const button = document.createElement('button');
+      button.textContent = label(name);
+      button.setAttribute('aria-pressed', String(name === channel));
+      button.onclick = () => { channel = name; issue = review.findings.find(row => row.channel === channel); refresh(); };
+      el('maps').append(button);
+    }
+    el('findings').replaceChildren();
+    const list = channel ? review.findings.filter(row => row.channel === channel) : review.findings;
+    for (const row of list) {
+      const button = document.createElement('button'), text = document.createElement('span'), count = document.createElement('span');
+      button.className = 'issue';
+      button.dataset.severity = row.severity;
+      button.dataset.code = row.code;
+      button.setAttribute('aria-pressed', String(row === issue));
+      text.textContent = names[row.code] ?? row.code.replaceAll('-', ' ');
+      count.textContent = row.bounds ? noun(row.count, 'texel') : row.severity;
+      button.append(text, count);
+      button.onclick = () => { issue = row; refresh(); };
+      el('findings').append(button);
+    }
+    if (!list.length) {
+      const item = document.createElement('p'); item.className = 'nothing'; item.textContent = 'This map passed.'; el('findings').append(item);
+    }
+    el('message').textContent = issue?.message ?? '';
+    const details = issue?.details;
+    el('expectation').textContent = Array.isArray(details) ? details.map(({ field, expected, actual }) =>
+      field + ' · ' + (actual ?? 'unassigned') + ' → ' + expected + ' expected').join(' · ') :
+      details?.range ? 'Expected ' + details.range.map(n => n === null ? 'open' : n).join(' to ') :
+      details?.format ? 'Delivery ' + details.format.toUpperCase() + (details.bitDepth ? ' · ' + details.bitDepth + ' bit' : '') : '';
+    el('sources').replaceChildren();
+    for (const source of issue?.sources ?? []) {
+      const item = document.createElement('li'), handle = document.createElement('code');
+      handle.textContent = sourceLabel(source);
+      item.append(handle);
+      if (issue.bounds && issue.sources.length > 1) item.append(' · ' + noun(source.count, 'texel'));
+      el('sources').append(item);
+    }
+    el('samples').replaceChildren();
+    for (const sample of issue?.examples ?? []) {
+      const button = document.createElement('button');
+      button.textContent = sample.x + ', ' + sample.y;
+      button.onclick = () => pick(sample.x, sample.y, sample);
+      el('samples').append(button);
+    }
+    pin = null; base = null; mask = null; owners = null;
+    el('hit').textContent = '';
+    el('position').textContent = map?.width ? label(channel) + ' · ' + map.width + ' × ' + map.height : '';
+    el('overlay').disabled = !issue?.mask;
+    canvas.hidden = !map?.preview; el('empty').hidden = Boolean(map?.preview);
+    Promise.all([image(map?.preview), image(issue?.mask), image(issue?.sourceMask)]).then(([mapImage, maskImage, sourceImage]) => {
+      if (active !== ticket) return;
+      base = pixels(mapImage); mask = pixels(maskImage); owners = pixels(sourceImage); draw();
+    }).catch(error => { if (active === ticket) { el('empty').textContent = error.message; el('empty').hidden = false; } });
+  }
+  el('overlay').addEventListener('change', draw);
+  canvas.addEventListener('click', event => {
+    const rect = canvas.getBoundingClientRect();
+    pick(Math.floor((event.clientX - rect.left) * canvas.width / rect.width),
+      Math.floor((event.clientY - rect.top) * canvas.height / rect.height));
+  });
+  refresh();
+})();
+</script>
+</body>
+</html>

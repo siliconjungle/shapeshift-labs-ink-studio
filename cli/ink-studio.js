@@ -121,11 +121,11 @@ function dataScene(file, override, { installedPacks = false, refreshTilesets = t
     if (typeof preset !== 'string') die('--environment-preset expects a pack/preset ID or off');
     spec.environmentPreset = preset === 'off' ? false : preset;
   }
-  let assets = {}, prefabs, expanded, problems, resolveSpriteAtlas;
+  let assets = {}, prefabs, expanded, problems, resolveSpriteAtlas, customProperties;
   try {
     if (project) {
       const bindings = project.resolve(spec);
-      ({ assets, prefabs, resolveSpriteAtlas } = bindings.env);
+      ({ assets, prefabs, resolveSpriteAtlas, customProperties } = bindings.env);
       problems = bindings.problems;
     } else if (spec.prefabLibrary !== undefined) {
       if (typeof spec.prefabLibrary !== 'string' || !spec.prefabLibrary.length) throw new TypeError('Expected a prefabLibrary file path');
@@ -139,7 +139,12 @@ function dataScene(file, override, { installedPacks = false, refreshTilesets = t
       }
     }
     if (!project) {
-      expanded = K.authoring.scenePrefabs.expand(spec, { prefabs }).spec;
+      if (typeof spec.customProperties==='string' && spec.customProperties.trim()) {
+        const file = path.resolve(dir,spec.customProperties);
+        shot?.dependency(file);
+        customProperties = JSON.parse(fs.readFileSync(file,'utf8'));
+      }
+      expanded = K.authoring.scenePrefabs.expand(spec, { prefabs,customProperties }).spec;
       expanded = K.authoring.sculptGuides.expand(expanded).scene;
     }
   } catch (error) {
@@ -153,7 +158,7 @@ function dataScene(file, override, { installedPacks = false, refreshTilesets = t
       if (f) assets[s.asset] = require('../index.js').readMesh(f);
     }
   const assetPartImports = sceneAssetParts.get(path.resolve(file));
-  problems ??= K.diorama.check(spec, { assets, prefabs, assetPartImports });
+  problems ??= K.diorama.check(spec, { assets, prefabs, assetPartImports,customProperties });
   if (problems.length) console.error(K.diorama.report(problems));
   if (problems.some(p => p.level === 'error'))
     die('not built: ' + problems.filter(p => p.level === 'error').length + ' mistake(s) in ' + file);
@@ -161,7 +166,7 @@ function dataScene(file, override, { installedPacks = false, refreshTilesets = t
   if (cacheDirectory !== undefined && (typeof cacheDirectory !== 'string' || !cacheDirectory.length))
     die('--asset-cache expects a directory');
   const bakeCache = cacheDirectory && require('./bake-cache.js').open(path.resolve(cacheDirectory), require('../index.js'), K.authoring.bakeCache);
-  const env={assets,prefabs,bakeCache,resolveSpriteAtlas,assetPartImports};
+  const env={assets,prefabs,bakeCache,resolveSpriteAtlas,assetPartImports,customProperties};
   let rendering = spec;
   if (refreshTilesets && !project && source === raw && raw.format === undefined &&
       Object.values(spec.tilesetSources ?? {}).some(link=>link.refresh === 'on-load')) {
@@ -1541,6 +1546,7 @@ const CMD = {
         '  mesh-topology transform <mesh-or-scene.json> <random-receipt.json> --replay [--object id] [--out file] [--report file]   replay recorded positions on the source revision',
         '  mesh-topology health <mesh-or-scene.json> [settings.json] [--object id] [--out report.json]   locate local topology and geometry problems',
         '  mesh-topology overlaps <mesh-or-scene.json> [settings.json] [--object id] [--part id] [--out report.json | --selection-out faces.json]   review same-facing coincident polygons',
+        '  mesh-topology custom-properties <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   inspect and edit typed project, prefab and instance properties',
         '  mesh-topology scene-layer <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   organize placed prefabs, inspect bounds, and set layer origins',
         '  mesh-topology mirror-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   link or commit a mirrored visual prefab placement',
         '  mesh-topology reparent-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   change a visual prefab parent and hold world placement',
@@ -1988,6 +1994,7 @@ const CMD = {
         '  graph lighting-room <project.json> <plan.json> --out directory   review a material under HDRI and reusable camera rigs',
         '  graph displacement-preview <project.json> <plan.json> --out directory   compare flat, parallax and tessellated graph height',
         '  graph material-preview <project.json> <plan.json> --out directory   link a native material carrier to its UV maps',
+        '  graph validate-material <project.json> [--output NAME | --node PATH --port NAME] [--channel NAME] [--profile profile.json] [--out directory]',
         '  graph inspect <project.json> [--output NAME | --node PATH --port NAME | --map ID [--component r|g|b|a]] [--out directory]',
         '  graph geometry <project.json> [--inputs values.json --at seconds --seed N --capture NODE[:PORT],... --out directory]   inspect typed geometry and node work',
         '  graph evaluate <project.json> [--inputs values.json --at seconds --seed N --capture NODE[:PORT],... --out directory]   evaluate in software and record texture and port work',

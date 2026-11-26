@@ -17,6 +17,8 @@ The package keeps sample values as supplied. A signed height raster or float nor
 - `material.channel` exposes a named map as `value` and its metadata as `metadata`. A missing name is an error.
 - `material.replace` uses the names supplied in `maps` as its write list. It can add a channel or replace its raster while keeping the old metadata. To also replace metadata, supply an entry for that channel. All other channel entries and sample buffers pass through by reference.
 
+Use [material validation](material-validation.md) to inspect physical ranges, image conventions and delivery clipping before publishing.
+
 Use [whole-material layering](material-layering.md) to composite the channels together under a shared mask, UV transform and height comparison.
 
 The version 1 value serializes as `{ format: "ink-studio/material-channels", version: 1, channels }`. Each entry of `channels` contains `raster` and `metadata`. Treat shared buffers as read-only and generate a new buffer for any map you edit. A package holds 1–64 maps. Export the packet as graph JSON or deliver its aligned typed maps as [named OpenEXR channels](material-texture-formats.md). Use `material.channel` with standard graph exports for individual maps.

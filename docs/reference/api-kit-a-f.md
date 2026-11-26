@@ -776,6 +776,14 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.constructionPlane.snapTo` | function | `(scene, snap, {detachEdge = false} = {})` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.tilt` | function | `(scene, options)` | [guide](../mesh-topology.md#tilt-a-plane-from-an-existing-edge), [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.context` | function | `(doc, options)` | [guide](../../README.md#retained-authoring), [guide](../procedural.md#optional-retained-authoring), [source](../../src/kit/p24-authoring-context.js) |
+| `KIT.authoring.customProperties` | namespace |  |  |
+| `KIT.authoring.customProperties.combine` | function | `(links)` | [source](../../src/kit/p23-custom-properties.js) |
+| `KIT.authoring.customProperties.patchMap` | function | `(before, changes)` | [source](../../src/kit/p23-custom-properties.js) |
+| `KIT.authoring.customProperties.plan` | function | `(scene,env,request = {})` | [source](../../src/kit/p23-custom-properties.js) |
+| `KIT.authoring.customProperties.project` | function | `(scene, env = {})` | [source](../../src/kit/p23-custom-properties.js) |
+| `KIT.authoring.customProperties.resolve` | function | `(project, prefab, instance)` | [source](../../src/kit/p23-custom-properties.js) |
+| `KIT.authoring.customProperties.stored` | function | `(row, values)` | [source](../../src/kit/p23-custom-properties.js) |
+| `KIT.authoring.customProperties.validate` | function | `(values = {}, definitions, label)` | [source](../../src/kit/p23-custom-properties.js) |
 | `KIT.authoring.data` | namespace |  |  |
 | `KIT.authoring.data.clone` | function | `(value, path)` | [source](../../src/kit/p00-procedural.js) |
 | `KIT.authoring.data.derivedId` | function | `(owner, rule, key)` | [source](../../src/kit/p23-authoring-document.js) |
@@ -906,7 +914,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.sceneLibrary.create` | function | `(storage, { key, backups = 8, prepareSnapshot } = {})` | [guide](../procedural.md#named-scene-library), [source](../../src/kit/p88-scene-library.js) |
 | `KIT.authoring.scenePrefabs` | namespace |  |  |
 | `KIT.authoring.scenePrefabs.checkProvenance` | function | `(row, mesh = false)` | [source](../../src/kit/p23-scene-prefabs.js) |
-| `KIT.authoring.scenePrefabs.expand` | function | `(source, { prefabs: external } = {}, {only, origin} = {})` | [source](../../src/kit/p23-scene-prefabs.js) |
+| `KIT.authoring.scenePrefabs.expand` | function | `(source, env = {}, {only, origin} = {})` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.indexedTargets` | function | `(scene,before,after,mapAddress = (instance,table,name) => [instance,name])` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.origin` | function | `(transform)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.placedOrigin` | function | `(instance, frame)` | [source](../../src/kit/p23-scene-prefabs.js) |

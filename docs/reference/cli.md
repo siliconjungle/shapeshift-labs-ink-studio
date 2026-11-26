@@ -327,6 +327,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology transform <mesh-or-scene.json> <random-receipt.json> --replay [--object id] [--out file] [--report file]   replay recorded positions on the source revision
   mesh-topology health <mesh-or-scene.json> [settings.json] [--object id] [--out report.json]   locate local topology and geometry problems
   mesh-topology overlaps <mesh-or-scene.json> [settings.json] [--object id] [--part id] [--out report.json | --selection-out faces.json]   review same-facing coincident polygons
+  mesh-topology custom-properties <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   inspect and edit typed project, prefab and instance properties
   mesh-topology scene-layer <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   organize placed prefabs, inspect bounds, and set layer origins
   mesh-topology mirror-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   link or commit a mirrored visual prefab placement
   mesh-topology reparent-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   change a visual prefab parent and hold world placement
@@ -792,6 +793,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   graph lighting-room <project.json> <plan.json> --out directory   review a material under HDRI and reusable camera rigs
   graph displacement-preview <project.json> <plan.json> --out directory   compare flat, parallax and tessellated graph height
   graph material-preview <project.json> <plan.json> --out directory   link a native material carrier to its UV maps
+  graph validate-material <project.json> [--output NAME | --node PATH --port NAME] [--channel NAME] [--profile profile.json] [--out directory]
   graph inspect <project.json> [--output NAME | --node PATH --port NAME | --map ID [--component r|g|b|a]] [--out directory]
   graph geometry <project.json> [--inputs values.json --at seconds --seed N --capture NODE[:PORT],... --out directory]   inspect typed geometry and node work
   graph evaluate <project.json> [--inputs values.json --at seconds --seed N --capture NODE[:PORT],... --out directory]   evaluate in software and record texture and port work
@@ -979,6 +981,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio graph subgraph` · `--out`, `--adapters` · [source](../../cli/graph-cli.js)
 - `ink-studio graph texture-info` · `--page`, `--channels` · [source](../../cli/graph-cli.js)
 - `ink-studio graph validate` · `--inputs`, `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
+- `ink-studio graph validate-material` · `--inputs`, `--at`, `--seed`, `--out`, `--output`, `--node`, `--port`, `--channel`, `--profile`, `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph verify-pxc` · `--out`, `--json` · [source](../../cli/graph-cli.js)
 - `ink-studio music analyze` · [source](../../cli/music-composer.js)
 - `ink-studio music arrange` · [source](../../cli/music-composer.js)

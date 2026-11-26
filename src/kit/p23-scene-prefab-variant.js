@@ -9,16 +9,17 @@
     const topologyMeshes = Object.fromEntries([...link.meshes].map(([member,{row}]) => [member,row]));
     const taggedSolids = Object.fromEntries(Object.entries(solids).map(([id,solid]) =>
       [id,{...solid,prefabs:[provenance.prefab,...new Set((solid.prefabs ?? []).filter(tag => tag !== provenance.prefab))]}]));
-    const definition = {revision:1,solids:taggedSolids,topologyMeshes,provenance};
+    const definition = {revision:1,solids:taggedSolids,topologyMeshes,provenance,
+      ...(link.definition.properties && {properties:link.definition.properties})};
     for (const table of ['parts','groups','motion','effects','points'])
       if (Object.keys(resolved[table]).length) definition[table] = resolved[table];
     if (link.definition.meshFrames) definition.meshFrames = Object.fromEntries(
       Object.entries(link.definition.meshFrames).filter(([member]) => Object.hasOwn(topologyMeshes,member)));
     const sheets = A.scenePrefabs.tilesetRequirements(link.definition,topologyMeshes);
     if (sheets !== undefined) definition.usesTilesets = sheets;
-    const {transform,parent,flipX,origin} = link.instance;
+    const {transform,parent,flipX,origin,properties} = link.instance;
     return {prefabs:{...scene.prefabs,[variant]:definition},
-      instances:{...scene.instances,[instance]:{prefab:variant,...(origin && {origin}),...(flipX && {flipX}),...(parent !== undefined && {parent}),...(transform !== undefined && {transform})}}};
+      instances:{...scene.instances,[instance]:{prefab:variant,...(properties && {properties}),...(origin && {origin}),...(flipX && {flipX}),...(parent !== undefined && {parent}),...(transform !== undefined && {transform})}}};
   }
 
   function hasPlacement(frame) {
@@ -51,6 +52,7 @@
     if (conflicts.length) return;
     const instances = {...scene.instances};
     delete instances[instance];
+    if (Object.keys(link.propertyValues ?? {}).length) report.retiredProperties = link.propertyValues;
     const retiredPoints = Object.keys(link.resolved.points).sort();
     if (retiredPoints.length) report.retiredPoints = retiredPoints;
     const topologyMeshes = {...scene.topologyMeshes};
@@ -108,7 +110,7 @@
     if (!own(scene.instances,instance)) throw new RangeError('Unknown visual prefab instance '+instance);
     const entry = scene.instances[instance];
     const {spec,instances,meshPlacements} = A.scenePrefabs.expand({prefabs:scene.prefabs,tilesets:scene.tilesets,
-      prefabLibrary:scene.prefabLibrary,instances:scene.instances},env,{only:new Set([instance])});
+      prefabLibrary:scene.prefabLibrary,customProperties:scene.customProperties,instances:scene.instances},env,{only:new Set([instance])});
     const link = instances.get(instance), {prefab} = link.instance;
     if (revision !== undefined && revision !== link.revision) throw new RangeError('Stale prefab variant revision');
     const provenance = {instance,prefab,revision:link.revision,

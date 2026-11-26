@@ -603,6 +603,27 @@
       return document.pending() ? write() : document.transact('Edit scene layers',write);
     }
 
+    function planCustomProperties(request) {
+      return stagePrefabPlacement(A.customProperties.plan,request).report;
+    }
+
+    function previewCustomProperties(request, settings) {
+      return previewPrefabPlacement(A.customProperties.plan,request,settings);
+    }
+
+    function editCustomProperties(request) {
+      const {patch,report} = stagePrefabPlacement(A.customProperties.plan,request);
+      if (!patch) throw Object.assign(new RangeError('Custom property edits need review'),{report});
+      if (!report.changed) return report;
+      const write = () => document.batchSession(() => {
+        if (patch.customProperties) document.setEnvironment({customProperties:null});
+        if (patch.prefabs) document.setEnvironment({prefabs:null});
+        writePlacementPatch(patch);
+        return report;
+      });
+      return document.pending() ? write() : document.transact('Edit '+report.scope+' custom properties',write);
+    }
+
     function selectSceneLayer(layer, {mode,includeHidden} = {}) {
       const rows = A.sceneInstances.select(snapshot(),{kind:'prefab',layer,includeHidden});
       return select(rows.map(row=>'prefab:'+row.instance),{mode});
@@ -1905,7 +1926,7 @@
       buildAssemblyReview,
       planEntityPromotion, applyEntityPromotion,
       sourceDependencies: () => A.bakeCache.signature([
-        buildEnv.assets ?? {},buildEnv.prefabs ?? {},buildEnv.parameterInputs ?? {}
+        buildEnv.assets ?? {},buildEnv.prefabs ?? {},buildEnv.parameterInputs ?? {},buildEnv.customProperties ?? {}
       ]),
       tree: () => current().tree,
       node: key => current().nodes.get(key),
@@ -1932,6 +1953,7 @@
       extractPainting3d: id => A.paintings3d.extract(snapshot(), id),
       placeSculptStamp, planSculptSplit, splitSculpt, planAssemblyStretch, stretchAssembly,
       planSceneLayers, previewSceneLayers, editSceneLayers, selectSceneLayer,
+      planCustomProperties, previewCustomProperties, editCustomProperties,
       planPrefabReparent, previewPrefabReparent, reparentPrefab,
       planPrefabMirror, previewPrefabMirror, applyPrefabMirror,
       planPrefabCombination, previewPrefabCombination, combinePrefabs,

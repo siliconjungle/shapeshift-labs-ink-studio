@@ -4,7 +4,7 @@
 
   function compose(scene,env,links,origin,report) {
     const {spec,meshPlacements,instances} = A.scenePrefabs.expand({prefabs:scene.prefabs,tilesets:scene.tilesets,
-      prefabLibrary:scene.prefabLibrary,instances:scene.instances},env,{only:new Set(links.map(([id]) => id)),origin});
+      prefabLibrary:scene.prefabLibrary,customProperties:scene.customProperties,instances:scene.instances},env,{only:new Set(links.map(([id]) => id)),origin});
     const topologyMeshes = spec.topologyMeshes ?? {}, sheets = new Set();
     for (const [,link] of links)
       for (const sheet of A.scenePrefabs.tilesetRequirements(link.definition,
@@ -85,7 +85,16 @@
         if (ids.has(array.instance) && array.instance !== instance) report.conflicts.push({reason:'array-source-would-be-removed',array:name,instance:array.instance});
     }
     if (report.conflicts.length) return {report:freeze({...report,canCommit:false})};
+    const properties = A.customProperties.combine(links);
+    if (properties.differences.length) {
+      report.propertyDifferences = properties.differences;
+      if (mode==='replace') {
+        report.conflicts.push(...properties.differences);
+        return {report:freeze({...report,canCommit:false})};
+      }
+    }
     const definition = compose(scene,env,links,origin,report);
+    if (Object.keys(properties.values).length) definition.properties = properties.values;
     const objects = new Map(), parts = new Map(), place = mode === 'replace';
     for (const [id,link] of links) {
       const old = [...new Set([...link.solids,...[...link.meshes.values()].map(row => row.object)])];
