@@ -122,6 +122,51 @@
   const responseAt = ([low, high], pressure) => low + (high - low) * Math.min(1, pressure);
   const hasOpacity = pressureResponse => pressureResponse?.opacity?.some(value => value < 1) ?? false;
 
+  function blendRows(rows, radius) {
+    if (radius === 0 || rows.length < 2) return rows;
+    return rows.slice(1).map((b, i) => {
+      const a = rows[i];
+      return { bounds: expand(union(a.bounds, b.bounds), radius / 4),
+        sample: (x, y, z) => blend(a.sample(x, y, z), b.sample(x, y, z), radius) };
+    });
+  }
+
+  function field(rows) {
+    const root = tree(rows);
+    return { bounds: P.data.freeze({ min: root.bounds.min.slice(), max: root.bounds.max.slice() }),
+      sd: (x, y, z) => distance(root, x, y, z, Infinity) };
+  }
+
+  function profiledSweep(brush, guide, step, blendRadius, pressureResponse) {
+    const api = P.markProfiles, plan = api.prepareBrush(brush), opacity = hasOpacity(pressureResponse);
+    const families = api.place(plan, guide, maxPoses).map(dabs => dabs.flatMap(dab => {
+      const { pose, bounds, sd, opacityAt } = dab;
+      const scale = pressureResponse === undefined ? pose.pressure : responseAt(pressureResponse.width ?? [1, 1], pose.pressure);
+      if (scale <= 0) return [];
+      const alpha = opacity ? responseAt(pressureResponse.opacity, pose.pressure) : 1;
+      const placed = transform(bounds, { ...pose, pressure: scale });
+      return [{ bounds: placed.bounds, sample: (x, y, z) => placed.local(x, y, z, sd),
+        ...(opacityAt || alpha < 1 ? { alphaAt: opacityAt ? (x, y, z) => alpha * placed.local(x, y, z, opacityAt) / scale
+          : () => alpha } : {}) }];
+    }));
+    const stations = families.flat();
+    if (!stations.length) throw new RangeError('No profile dabs have positive width; change pressure or spacing');
+    const colorTree = stations.some(row => row.alphaAt) && tree(stations);
+    return { ...field(families.flatMap(rows => blendRows(rows, blendRadius))), guide, sampleCount: stations.length,
+      cost: Math.max(...plan.profiles.map(profile => profile.cost)),
+      step: step ?? Math.max(.0001, Math.min(.06, ...plan.profiles.map(profile => profile.spacing / 2))),
+      ...(colorTree && { opacityAt(x, y, z) {
+        let source;
+        distance(colorTree, x, y, z, Infinity, (entry, x, y, z, best) => {
+          const d = entry.sample(x, y, z);
+          if (d > best) return best;
+          source = entry;
+          return d;
+        });
+        return source?.alphaAt?.(x, y, z) ?? 1;
+      } }) };
+  }
+
   function opacitySampler(poses, response) {
     if (poses.length === 1) return () => responseAt(response, poses[0].pressure);
     const sections = poses.slice(1).map((end, i) => {
@@ -147,7 +192,6 @@
   }
 
   function prepare({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse }) {
-    const source = brushSource(brush);
     if (!Array.isArray(poses) || poses.length < 1 || poses.length > 1024 ||
         !finite(blendRadius) || blendRadius < 0 ||
         (step !== undefined && (!positive(step) || step > 1)))
@@ -158,6 +202,8 @@
         pressureResponse.opacity !== undefined && !range(pressureResponse.opacity, 1)))
       throw new TypeError('Pressure response needs [at zero, at one] ranges for width (0–4) or opacity (0–1)');
     const input = Array.from(poses, poseSource), guide = path === 'ruled' ? ruled(input) : input;
+    if (brush?.kind === 'mark-profile') return profiledSweep(brush, guide, step, blendRadius, pressureResponse);
+    const source = brushSource(brush);
     const authored = pressureResponse === undefined ? guide : guide.map(pose => ({
       ...pose, pressure: responseAt(pressureResponse.width ?? [1, 1], pose.pressure)
     }));
@@ -181,17 +227,12 @@
       }
       stations.push(b);
     }
-    const rows = stations.map(pose => transform(source.bounds, pose));
+    const rows = stations.map(pose => {
+      const { bounds, local } = transform(source.bounds, pose);
+      return { bounds, sample: (x, y, z) => local(x, y, z, source.sd) };
+    });
     // Blend neighboring stations independently so overlap never compounds with step density.
-    const entries = blendRadius > 0 && rows.length > 1 ? rows.slice(1).map((b, i) => {
-      const a = rows[i];
-      return { bounds: expand(union(a.bounds, b.bounds), blendRadius / 4),
-        sample: (x, y, z) => blend(a.local(x, y, z, source.sd), b.local(x, y, z, source.sd), blendRadius) };
-    }) : rows.map(row => ({ bounds: row.bounds, sample: (x, y, z) => row.local(x, y, z, source.sd) }));
-    const root = tree(entries);
-    return { bounds: P.data.freeze({ min: root.bounds.min.slice(), max: root.bounds.max.slice() }), cost: source.cost,
-      sampleCount: stations.length, step: spacing, guide,
-      sd: (x, y, z) => distance(root, x, y, z, Infinity),
+    return { ...field(blendRows(rows, blendRadius)), cost: source.cost, sampleCount: stations.length, step: spacing, guide,
       ...(hasOpacity(pressureResponse) && { opacityAt: opacitySampler(guide, pressureResponse.opacity) }) };
   }
 

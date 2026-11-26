@@ -45,6 +45,8 @@ Both the placement and each mark can supply `transform` with `position`, quatern
 
 Marks use native [sweep brushes and pressure poses](sculpt-sweeps.md). They render and export as ordinary 3D sweeps with addressable IDs such as `paint.detail.pinstripe`. Later marks take precedence on coincident paint surfaces in the same rest space. Geometry depth controls occlusion during rendering. Give a surface mark a little relief to keep its color visible above the receiving surface. `mat` uses the destination scene's palette roles or a native material definition. Define the same roles in a new scene when you want consistent colors. Extraction returns the portable painting and keeps bindings and placement transforms in the scene.
 
+[Custom mark profiles](mark-profiles.md) set the silhouette, coverage, spacing, grain, and relief. Name profiles in the painting to reuse them across marks.
+
 ## Dabs, pressure, and ruled strokes
 
 Use one pose for a precise dab or multiple poses for a stroke. Both use the same brush, quaternion orientation, pressure, and edit operations. Set `path: "ruled"` to lay the recorded poses along a straight line between the first and last points. Ink distributes the poses along the line by their original spacing along the stroke. A surface-bound mark rules the guide before projecting it onto the receiver.
