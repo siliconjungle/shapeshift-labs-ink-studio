@@ -1408,6 +1408,9 @@ const CMD = {
         '  sculpt-contribution list <scene.json> --solid id   list retained contributions in order',
         '  sculpt-contribution inspect <scene.json> --solid id --id contribution   compare with the contribution muted',
         '  sculpt-contribution edit <scene.json> <edit.json> --out scene.json   edit one contribution and report dependencies',
+        '  assembly-review inspect <scene.json> <review.json>   list visibility, locks and reveal scope',
+        '  assembly-review render <scene.json> <review.json> --out image.png   render an independent review',
+        '  assembly-review check <scene.json> <review.json> <candidate.json>   check a draft against frozen items',
         '  assembly-stretch plan <scene.json> <stretch.json> [--preview scene.json]   check a stretch from two picks',
         '  assembly-stretch apply <scene.json> <stretch.json> --out scene.json   carry a connected assembly through the stretch',
         '  sculpt-split plan <scene.json> <split.json>   report a complementary sculpt split',
@@ -2686,6 +2689,14 @@ const CMD = {
       if (!descriptor.openEditor) throw new TypeError('Sculpt contribution edits need a plain editable JSON scene');
       return descriptor.openEditor();
     });
+  },
+  'assembly-review'() {
+    return require('./assembly-review.js').command(pos, opt, file => {
+      const descriptor = dataScene(file, undefined, { refreshTilesets: false });
+      if (descriptor.project) return require('../index.js').createSceneEditor(JSON.parse(fs.readFileSync(file, 'utf8')));
+      if (!descriptor.openEditor) throw new TypeError('Assembly reviews need an editable JSON scene');
+      return descriptor.openEditor();
+    }, () => view({ w: num('w', 320), h: num('h', 240), t: num('t', 0) }));
   },
   'assembly-stretch'() {
     return require('./assembly-stretch.js')(pos, opt, file => {

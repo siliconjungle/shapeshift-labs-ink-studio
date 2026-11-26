@@ -84,7 +84,7 @@
     };
   }
 
-  function prepareRow(object, row, evaluation, tilesets, frame) {
+  function prepareRow(object, row, evaluation, tilesets, frame, reviewMaterial) {
     if (!TargetSelectors.name(object) || !fields(row, ['document', 'part', 'label', 'materials', 'bindings', 'bakes', 'modifiers', 'attachments', 'shapeKeys', 'pivot']) ||
         (row.part !== undefined && !TargetSelectors.name(row.part)) || (row.label !== undefined && !name(row.label)))
       throw new TypeError('An editable scene mesh needs an object ID, document, and optional named part');
@@ -119,7 +119,10 @@
       }
     }
     const mesh = topology.toSceneMesh(document, { objectId: object, partId: row.part, meshId: 'topology/' + object, frame,
-      materials: [...active.values()].map(input => material(input, tilesets)) });
+      materials: [...active.values()].map(input => {
+        const resolved = material(input, tilesets);
+        return reviewMaterial ? reviewMaterial(object, resolved) : resolved;
+      }) });
     const tilesetMaterialSources = new Map([...active].filter(([,entry])=>entry.texture?.tileset));
     const tilesetMaterials = new Map([...tilesetMaterialSources].map(([id,entry])=>[id,entry.texture.tileset]));
     const moved = document !== cage && bindings.size ?
@@ -192,12 +195,12 @@
     return plan;
   }
 
-  function prepare(rows, tilesets = A.tilesets.prepare(), placements) {
+  function prepare(rows, tilesets = A.tilesets.prepare(), placements, reviewMaterial) {
     if (rows === undefined) return [];
     if (!record(rows) || Object.keys(rows).length > 32) throw new TypeError('Scene topologyMeshes needs a map of up to 32 editable meshes');
     const evaluate = evaluator(rows, placements);
     return Object.entries(rows).map(([object, row]) => [object,
-      prepareRow(object, row, row?.modifiers === undefined ? undefined : requireComplete(evaluate(object)), tilesets, placements?.get(object))]);
+      prepareRow(object, row, row?.modifiers === undefined ? undefined : requireComplete(evaluate(object)), tilesets, placements?.get(object), reviewMaterial)]);
   }
 
   function mount(world, prepared) {
