@@ -172,8 +172,7 @@ function formatted(rig, values, pose, K, bounds) {
     ...(bounds&&{rootBounds:bounds}),angles,joints,maxBoneDrift};
 }
 
-function solve(rig, request, K) {
-  const plan=settings(request,rig,K.V);
+function solvePlan(rig, plan, K) {
   const {targets,root,damping}=plan, count=rig.parameters.length, started=start(rig,plan.initial,root);
   const limits=[...rig.parameters,...axes.map((_,i)=>({min:root.min[i],max:root.max[i]}))];
   const available=limits.flatMap(({min,max},i)=>max-min>1e-10?[i]:[]);
@@ -212,6 +211,19 @@ function solve(rig, request, K) {
     status:result.passed?'converged':'unmet-targets',targets:result.targets}};
 }
 
+function solve(rig, request, K) {
+  return solvePlan(rig,settings(request,rig,K.V),K);
+}
+
+function solveMotion(rig, targets, initial, allowance, K) {
+  const plan=settings({format:requestFormat,version:1,targets,initial},rig,K.V);
+  plan.root={
+    min:initial.root.map((n,i)=>Math.max(-10000,n-allowance[i])),
+    max:initial.root.map((n,i)=>Math.min(10000,n+allowance[i]))
+  };
+  return solvePlan(rig,plan,K);
+}
+
 function openPose(rig, source, K) {
   if (!source || source.format!==poseFormat || source.version!==1 || source.rigHash!==rig.hash)
     throw new RangeError('Character pose does not match the assembled rig revision');
@@ -222,4 +234,4 @@ function openPose(rig, source, K) {
   return formatted(rig,values,forward(rig,values,K),K);
 }
 
-module.exports={solve,openPose};
+module.exports={solve,solveMotion,openPose};
