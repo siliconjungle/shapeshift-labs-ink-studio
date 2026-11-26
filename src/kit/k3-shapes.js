@@ -379,7 +379,14 @@
       let fwd,
         inv,
         lip = 1;
-      if (spec.twist) {
+      let sampleScale = 1;
+      if (spec.stretch) {
+        const scale = spec.stretch;
+        fwd = q => q.map((value, i) => c[i] + (value - c[i]) * scale[i]);
+        inv = q => q.map((value, i) => c[i] + (value - c[i]) / scale[i]);
+        lip = 1 / Math.min(...scale);
+        sampleScale = Math.max(...scale);
+      } else if (spec.twist) {
         const k = spec.twist,
           ax = spec.axis || 'y',
           i0 = ax === 'y' ? 0 : ax === 'x' ? 1 : 0,
@@ -433,7 +440,7 @@
         fwd = spec.map.fwd;
         inv = spec.map.inv;
         lip = spec.map.lip || 1.5;
-      } else throw new Error('warp: twist, bend, taper or map');
+      } else throw new Error('warp: twist, bend, taper, stretch or map');
       // where the warped solid ends up: carry the corners of a box round the original through the map
       const lo = [1e9, 1e9, 1e9],
         hi = [-1e9, -1e9, -1e9];
@@ -458,18 +465,19 @@
           },
           sample(f) {
             const keep = p0.res;
-            p0.res = this.res;
-            p0.sample((x, y, z) => {
-              const q = fwd([x, y, z]);
-              f(q[0], q[1], q[2]);
-            });
-            p0.res = keep;
+            p0.res = this.res / sampleScale;
+            try {
+              p0.sample((x, y, z) => f(...fwd([x, y, z])));
+            } finally {
+              p0.res = keep;
+            }
           }
         };
       const mat = o.mat?.surfaceState ? o.mat : S.mapSurfaceState(
         o.mat && p0.mat.surfaceState ? { ...o.mat, surfaceState: p0.mat.surfaceState } : o.mat || p0.mat,
         inv, (normal, rest) => V.norm(K.M.app(K.M.tr(K.deform.jac(fwd, rest)), normal), normal));
-      return S.add(p, mat, Object.assign({ reach: 0.06 }, o));
+      const styled = spec.stretch && mat.rf ? { ...mat, rf: (x, y, z) => mat.rf(...inv([x, y, z])) } : mat;
+      return S.add(p, styled, Object.assign({ reach: spec.stretch ? Math.max(.06, p0.reach * sampleScale) : .06 }, o));
     };
     const gradOf = (p0, x, y, z) => {
       const e = 0.01,

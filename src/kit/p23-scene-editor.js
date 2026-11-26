@@ -219,6 +219,15 @@
         list.length ? { ...solid, modifiers: list } : patchFields(solid, { modifiers: null }));
     }
 
+    const sculptContributions = solid => A.sculptContributions.list(snapshot(), solid);
+    const inspectSculptContribution = (solid, contribution) =>
+      A.sculptContributions.inspect(snapshot(), solid, contribution, buildEnv);
+    function editSculptContribution(request) {
+      const { modifiers, report } = A.sculptContributions.plan(snapshot(), request, buildEnv);
+      setModifiers(modifiers, 'solid:' + request.solid);
+      return report;
+    }
+
     function placeSculptStamp(stamp, placement) {
       const solids = A.sculptStamps.place(snapshot(), stamp, placement);
       const write = () => document.setEnvironment({ solids });
@@ -1244,6 +1253,7 @@
       updateShape,
       setModifiers,
       updateModifier,
+      sculptContributions, inspectSculptContribution, editSculptContribution,
       placeSculptStamp,
       setPrefabInstance,
       planPrefabIsolation, previewPrefabIsolation, editIsolatedPrefab,
