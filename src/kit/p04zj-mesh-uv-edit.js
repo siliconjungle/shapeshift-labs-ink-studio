@@ -444,14 +444,16 @@
     return order(g.islands.get(id).faces.flatMap(face => g.faces.get(face).corners.map(corner => g.atWeld.get(corner.id))));
   }
 
-  function centerOf(points) {
-    const low = [Infinity,Infinity], high = [-Infinity,-Infinity];
+  function boundsOf(points) {
+    const bounds = [Infinity,Infinity,-Infinity,-Infinity];
     for (const point of points) for (const [axis,n] of point.entries()) {
-      low[axis] = Math.min(low[axis],n);
-      high[axis] = Math.max(high[axis],n);
+      bounds[axis] = Math.min(bounds[axis],n);
+      bounds[axis+2] = Math.max(bounds[axis+2],n);
     }
-    return low.map((n,i)=>(n+high[i])*.5);
+    return bounds;
   }
+
+  const centerOf = bounds=>[(bounds[0]+bounds[2])*.5,(bounds[1]+bounds[3])*.5];
 
   function setPivot(g, operation) {
     const {target} = operation, before = g.doc.uvPivots?.[g.set] ?? null;
@@ -464,12 +466,8 @@
     } else if (target?.kind === 'selection-center' && fields(target,['kind','selection'])) {
       const selected = select(g.doc,{domain:target.selection?.domain,uvSet:g.set,from:target.selection});
       if (!selected.corners.length) throw new RangeError('Choose a nonempty UV selection to center the pivot');
-      const bounds = [Infinity,Infinity,-Infinity,-Infinity];
-      for (const id of selected.corners) for (const [axis,n] of g.corners.get(id).uv.entries()) {
-        bounds[axis] = Math.min(bounds[axis],n);
-        bounds[axis+2] = Math.max(bounds[axis+2],n);
-      }
-      after = bounds.slice(0,2).map((n,i)=>(n+bounds[i+2])*.5);
+      const bounds = boundsOf(selected.corners.map(id=>g.corners.get(id).uv));
+      after = centerOf(bounds);
       anchor = {kind:target.kind,bounds,corners:selected.corners};
     } else if (target?.kind === 'pinned' || target?.kind === 'corner') {
       const {kind,corner,selection:saved} = target;
@@ -516,6 +514,30 @@
     return {ids,evidence:{pivotSource:pivot ? 'explicit' : dedicated ? 'dedicated' : 'island-center',pivots}};
   }
 
+  function selectedUVGroups(g,operation,domain,mode,scope) {
+    const ids = targets(g,domain,operation);
+    const selected = selection(g,domain,ids,undefined,operation.selection?.edgeSides);
+    if (mode==='per-face') return {ids,groups:selected.faces.map(face=>({face,corners:g.faces.get(face).corners}))};
+    const corners = scope==='together' ? cornerOverlaps(g)(selected.corners) : selected.corners;
+    return {ids,groups:[{corners:corners.map(id=>g.corners.get(id))}]};
+  }
+
+  function groupAtlas(g,corners,face,atlas,atlasFor,validSize,label) {
+    const materials = new Set(corners.map(corner=>g.faces.get(face ?? corner.face).material));
+    const sizes = atlas ? [atlas] : Array.from(materials,material=>atlasFor?.(material)?.size);
+    const size = sizes[0];
+    if (!tuple(size,2,validSize) || sizes.some(other=>!other || other[0]!==size[0] || other[1]!==size[1]))
+      throw new RangeError(label+' needs matching atlas dimensions within each group');
+    return size;
+  }
+
+  function texelPoint(uv,spans) {
+    return uv.map((n,i)=>{
+      const coordinate = n*spans[i], half = Math.round(coordinate*2)/2;
+      return half/spans[i]===n ? half : coordinate;
+    });
+  }
+
   function orientationAngle(degrees,increment) {
     const steps = increment===undefined ? undefined : Math.round(Math.abs(degrees)/increment);
     if (steps!==undefined && !Number.isSafeInteger(steps))
@@ -545,8 +567,7 @@
         (space!=='texel' || !tuple(atlas,2,n=>Number.isSafeInteger(n) && n>1)))
       throw new RangeError('UV orientation needs finite degrees, a positive angle increment, boolean flips, and optional normalized pivot or texel atlas');
 
-    const ids = targets(g,domain,operation);
-    const selected = selection(g,domain,ids,undefined,operation.selection?.edgeSides);
+    const {ids,groups} = selectedUVGroups(g,operation,domain,mode,scope);
     const angle = orientationAngle(degrees,increment), {wrapped,exact} = angle;
     // Transform pivot-relative offsets with the same top-down quarter turns used for tile paint.
     let rotate;
@@ -561,33 +582,124 @@
     const sameX = exact && rotate([1,0])[0]===1, sameY = exact && rotate([0,1])[1]===1;
     const dedicated = mode==='group' ? g.doc.uvPivots?.[g.set] : undefined;
     const shared = pivot ?? dedicated, pivots = [];
-    function apply(corners,face) {
-      const coordinates = corners.map(id=>g.corners.get(id));
-      const materials = space==='texel' && !atlas ? new Set(coordinates.map(({face})=>g.faces.get(face).material)) : [];
-      const sizes = atlas ? [atlas] : Array.from(materials,material=>atlasFor?.(material)?.size);
-      const size = sizes[0];
-      if (space==='texel' && (!tuple(size,2,n=>Number.isSafeInteger(n) && n>1) ||
-          sizes.some(other=>!other || other[0]!==size[0] || other[1]!==size[1])))
-        throw new RangeError('Texel orientation needs matching atlas dimensions of at least two texels per axis within each group');
+    for (const {corners,face} of groups) {
+      const size = space==='texel' ? groupAtlas(g,corners,face,atlas,atlasFor,
+        n=>Number.isSafeInteger(n) && n>1,'Texel orientation') : undefined;
       const spans = size ? size.map(n=>n-1) : [1,1];
-      const toWorking = uv=>uv.map((n,i)=>{
-        const coordinate = n*spans[i], half = Math.round(coordinate*2)/2;
-        return size && half/spans[i]===n ? half : coordinate;
-      });
-      const base = coordinates.map(({uv})=>toWorking(uv));
-      const center = shared ? toWorking(shared) : centerOf(base);
+      const toWorking = uv=>size ? texelPoint(uv,spans) : uv;
+      const base = corners.map(({uv})=>toWorking(uv));
+      const center = shared ? toWorking(shared) : centerOf(boundsOf(base));
       pivots.push({...(face!==undefined && {face}),uv:shared?.slice() ?? center.map((n,i)=>n/spans[i]),...(size && {atlas:size.slice()})});
-      for (const [i,{id,uv}] of coordinates.entries()) {
+      for (const [i,{id,uv}] of corners.entries()) {
         const [x,y] = rotate(base[i].map((n,axis)=>n-center[axis]));
         points.set(id,[sameX ? uv[0] : (center[0]+x)/spans[0],sameY ? uv[1] : (center[1]+y)/spans[1]]);
       }
     }
-    if (mode==='per-face') for (const face of selected.faces)
-      apply(g.faces.get(face).corners.map(row=>row.id),face);
-    else apply(scope==='together' ? cornerOverlaps(g)(selected.corners) : selected.corners);
     const pivotSource = pivot ? 'explicit' : dedicated ? 'dedicated' : mode==='per-face' ? 'face-center' : 'group-center';
     return {ids,evidence:{mode,domain,scope,space,angle,flipX,flipY,mirrored:flipX!==flipY,pivotSource,pivots,
       faces:order([...points.keys()].map(id=>g.corners.get(id).face)),edgeChanges:[]}};
+  }
+
+  function snappedUVScale(axes,requested) {
+    const result = factor=>{
+      const bounds = [];
+      for (const {low,high,pivot,span} of axes) {
+        const first = pivot+(low-pivot)*factor, last = pivot+(high-pivot)*factor;
+        const a = Math.round(first), b = Math.round(last);
+        const epsilon = 32*Number.EPSILON*Math.max(1,span);
+        if (![a,b].every(Number.isSafeInteger) || a<0 || b>span || a===b && low!==high ||
+            !Number.isInteger(pivot) && (low===pivot || high===pivot) ||
+            Math.abs(first-a)>epsilon || Math.abs(last-b)>epsilon)
+          return;
+        bounds.push([a || 0,b || 0]);
+      }
+      return {factor,bounds};
+    };
+    // A nonzero endpoint offset determines the scale once it lands on a texel.
+    let driver, offset = 0;
+    for (const axis of axes) for (const end of [axis.low,axis.high]) {
+      if (Math.abs(end-axis.pivot)>Math.abs(offset)) {
+        driver = axis;
+        offset = end-axis.pivot;
+      }
+    }
+    if (!driver) return result(requested);
+    const {pivot,span} = driver;
+    const min = offset>0 ? Math.floor(pivot)+1 : 0, max = offset>0 ? span : Math.ceil(pivot)-1;
+    if (min>max) return;
+    const target = Math.max(min,Math.min(max,pivot+offset*requested));
+    let lower = Math.floor(target), upper = lower+1;
+    while (lower>=min || upper<=max) {
+      const left = target-lower, right = upper-target;
+      const nearer = lower>=min && (upper>max || left<right || left===right && offset>0) ? lower-- : upper++;
+      const factor = (nearer-pivot)/offset;
+      const matched = factor>0 && Number.isFinite(factor) && result(factor);
+      if (matched) return matched;
+    }
+  }
+
+  function scaleUV(g,operation,points,atlasFor,conflict) {
+    const {mode='group',domain=operation.selection?.domain ?? (mode==='per-face' ? 'faces' : 'islands'),
+      scope='independent',factor,aspectLock=false,snapBounds=false,pivot,atlas} = operation;
+    if (!fields(operation,['op','ids','selection','mode','domain','scope','factor','aspectLock','snapBounds','pivot','atlas']) ||
+        !['group','per-face'].includes(mode) || !domains.includes(domain) ||
+        !['together','independent'].includes(scope) || mode==='per-face' &&
+        (!['faces','islands'].includes(domain) || pivot!==undefined || operation.scope!==undefined))
+      throw new TypeError('Scale a group of UVs or scale whole faces about their own centers');
+    const requested = typeof factor==='number' ? [factor,factor] : factor;
+    const atlasAxis = n=>Number.isSafeInteger(n) && n>=2 && n<=4096;
+    if (!tuple(requested,2,n=>Number.isFinite(n) && n>0) || typeof aspectLock!=='boolean' ||
+        typeof snapBounds!=='boolean' || pivot!==undefined && !tuple(pivot,2,unit) ||
+        atlas!==undefined && (!snapBounds || !tuple(atlas,2,atlasAxis)))
+      throw new RangeError('UV scale needs positive factors, boolean locks, and optional pivot or bounds atlas of 2 to 4096 texels per axis');
+    if (aspectLock && requested[0]!==requested[1]) throw new RangeError('Aspect lock needs one uniform scale factor');
+
+    const {ids,groups} = selectedUVGroups(g,operation,domain,mode,scope);
+    const dedicated = mode==='group' ? g.doc.uvPivots?.[g.set] : undefined;
+    const shared = pivot ?? dedicated, pivots = [], bounds = [];
+    const pivotSource = pivot ? 'explicit' : dedicated ? 'dedicated' : mode==='per-face' ? 'face-center' : 'group-center';
+    for (const {corners,face} of groups) {
+      const size = snapBounds ? groupAtlas(g,corners,face,atlas,atlasFor,atlasAxis,'UV bounds snapping') : undefined;
+      const spans = size ? size.map(n=>n-1) : [1,1];
+      const toWorking = uv=>size ? texelPoint(uv,spans) : uv;
+      const before = boundsOf(corners.map(({uv})=>toWorking(uv)));
+      const origin = shared ? toWorking(shared) : centerOf(before);
+      const anchor = shared?.slice() ?? origin.map((n,i)=>n/spans[i]);
+      const target = face===undefined ? {} : {face};
+      pivots.push({...target,uv:anchor,...(size && {atlas:size.slice()})});
+      const atScale = (n,i,s)=>n===origin[i] || s===1 ? n : origin[i]+(n-origin[i])*s;
+      const desired = before.map((n,index)=>atScale(n,index%2,requested[index%2]));
+      const row = {...target,units:size ? 'texels' : 'uv',before,
+        requested:desired.map(n=>Number.isFinite(n) ? n : null)};
+      bounds.push(row);
+      let factors = requested, after = desired;
+      if (size) {
+        const axes = spans.map((span,i)=>({span,pivot:origin[i],low:before[i],high:before[i+2]}));
+        const solved = aspectLock ? [snappedUVScale(axes,requested[0])] :
+          axes.map((axis,i)=>snappedUVScale([axis],requested[i]));
+        if (solved.some(result=>!result)) {
+          conflict('incompatible-snapped-bounds',{...target,pivot:anchor,bounds:row.requested,atlas:size.slice(),aspectLock});
+          continue;
+        }
+        factors = aspectLock ? [solved[0].factor,solved[0].factor] : solved.map(result=>result.factor);
+        const [[l,r],[t,b]] = aspectLock ? solved[0].bounds : solved.map(result=>result.bounds[0]);
+        after = [l,t,r,b];
+      }
+      row.factors = factors.slice();
+      row.applied = after.map(n=>Number.isFinite(n) ? n : null);
+      for (const {id,uv} of corners) {
+        const source = toWorking(uv);
+        points.set(id,source.map((n,i)=>{
+          if (uv[i]===anchor[i]) return uv[i];
+          if (size && n===before[i]) return after[i]/spans[i];
+          if (size && n===before[i+2]) return after[i+2]/spans[i];
+          return factors[i]===1 ? uv[i] : atScale(n,i,factors[i])/spans[i];
+        }));
+      }
+    }
+    const faces = order(groups.flatMap(({face,corners})=>face===undefined ? corners.map(row=>row.face) : [face]));
+    return {ids,evidence:{mode,domain,scope,aspectLock,snapBounds,requestedFactors:requested.slice(),
+      pivotSource,pivots,bounds,faces,edgeChanges:[]}};
   }
 
   function cornerOverlaps(g) {
@@ -930,8 +1042,8 @@
   function draft(g, operation, atlasFor) {
     if (operation?.op === 'set-pivot') return setPivot(g,operation);
     if (!operation || typeof operation !== 'object' ||
-        !['cut', 'stitch', 'pin', 'transform', 'orient', 'move-corners', 'nudge', 'snap', 'unwrap', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
-      throw new TypeError('Use a UV pivot, cut, stitch, pin, transform, orientation, nudge, snap, corner move, face remap, local solve or texel budget operation');
+        !['cut', 'stitch', 'pin', 'transform', 'orient', 'scale', 'move-corners', 'nudge', 'snap', 'unwrap', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
+      throw new TypeError('Use a UV pivot, cut, stitch, pin, transform, orientation, scale, nudge, snap, corner move, face remap, local solve or texel budget operation');
     const points = new Map(), edges = new Map(), pins = new Map(), conflicts = [];
     let count = 0;
     function conflict(code, evidence) {
@@ -940,8 +1052,8 @@
     }
     let ids, evidence;
     const local = operation.op === 'unwrap' || operation.op === 'relax';
-    const precise = ['remap-face','orient','move-corners','nudge','snap'].includes(operation.op);
-    const preserveWinding = local || ['stitch','move-corners','nudge','snap'].includes(operation.op);
+    const precise = ['remap-face','orient','scale','move-corners','nudge','snap'].includes(operation.op);
+    const preserveWinding = local || ['stitch','scale','move-corners','nudge','snap'].includes(operation.op);
     if (local) {
       ids = targets(g, 'faces', operation);
       evidence = meshUVRegions.local(g, ids, operation, points, conflict);
@@ -951,6 +1063,7 @@
     } else if (operation.op === 'remap-face') ids = remapFace(g,operation,points,conflict);
     else if (operation.op === 'transform') ({ids,evidence} = transform(g, operation, points));
     else if (operation.op === 'orient') ({ids,evidence} = orient(g,operation,points,atlasFor));
+    else if (operation.op === 'scale') ({ids,evidence} = scaleUV(g,operation,points,atlasFor,conflict));
     else if (operation.op === 'move-corners') ({ids,evidence} = moveCorners(g,operation,points));
     else if (operation.op === 'nudge') ({ids,evidence} = nudge(g,operation,points,atlasFor));
     else if (operation.op === 'snap') ({ids,evidence} = snapElements(g,operation,points,atlasFor,conflict));

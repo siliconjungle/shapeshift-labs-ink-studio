@@ -1639,6 +1639,49 @@ ink-studio mesh-uv edit signs.json orient.json --object signs --out oriented.jso
 node examples/tileset-pick/uv-orientation-demo.cjs uv-orientation-demo
 ```
 
+### Scale UVs around the pivot
+
+Use `scale` with a positive `factor`. Pass a pair for independent U
+and V factors or a scalar for a uniform request. Add `aspectLock: true`
+to require the same applied factor on both axes when snapping.
+
+```json
+{
+  "uvSet": "pigment",
+  "operations": [
+    { "op": "scale", "domain": "faces", "ids": ["plate"],
+      "factor": 1.42, "aspectLock": true, "snapBounds": true }
+  ]
+}
+```
+
+In group mode, scaling uses the explicit normalized `pivot`, the
+dedicated layout pivot, or the center of the selected UV bounds.
+Group mode accepts islands by default. Set `domain` to choose face,
+edge, or corner IDs, or pass a saved selection. Use `scope: "together"`
+to carry welded and overlapping corners. Use `mode: "per-face"` to
+scale full faces around their individual bounds centers.
+
+Set `snapBounds: true` to put all four bounds on integer source
+texel centers. Ink chooses the closest positive factor that fits the
+atlas while keeping the pivot fixed. Ties choose the smaller factor.
+The solver resolves the axes independently unless aspect lock is on.
+The preview flags a conflict when no exact snapped bounds satisfy the
+pivot and aspect constraints. Interior UVs follow the resulting scale.
+
+Scene edits use the source dimensions for the selected material layout.
+Each group needs matching dimensions from 2 to 4096 texels per axis.
+Set `atlas: [width, height]` for standalone topology or an explicit
+override. The preview outlines snapped bounds in gold and marks the
+pivot. The receipt gives the original, requested, and applied bounds
+in texels for a snapped edit and normalized UVs otherwise.
+
+```sh
+ink-studio mesh-uv edit sign.json scale.json --object panel --preview scale-review
+ink-studio mesh-uv edit sign.json scale.json --object panel --out scaled.json --report scale-receipt.json
+node examples/tileset-pick/uv-scale-demo.cjs uv-scale-demo
+```
+
 ## Bind separate material layouts
 
 A retained mesh part can use a different UV set for each material channel.
