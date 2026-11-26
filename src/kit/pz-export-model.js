@@ -4,6 +4,7 @@
     V = K.V;
   const linear = value => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
   const rgb = hex => [hex >> 16, (hex >> 8) & 255, hex & 255].map(channel => linear(channel / 255));
+  const emptySurface = message => Object.assign(new Error(message ?? 'No zero surface in the model bounds'), { code: 'EMPTY_MODEL_SURFACE' });
 
   function manifoldEdges(faces) {
     const edges = new Map();
@@ -56,18 +57,19 @@
       const depth = Math.max(2, Math.min(8, Math.ceil(Math.log2(Math.max(...counts)))));
       const dual = G.adaptiveSurface(fn, { min, max }, { maxDepth: depth, minDepth: Math.max(2, depth - 3),
         maxNodes: Math.min(520000, maxCells), tolerance: resolution * 0.24, lipschitz: 0 });
-      if (!dual.triangles.length || !manifoldEdges(dual.triangles))
-        throw new Error('Adaptive field extraction did not produce a closed surface; use regular meshing for this field');
+      const failure = 'Adaptive field extraction did not produce a closed surface; use regular meshing for this field';
+      if (!dual.triangles.length) throw emptySurface(failure);
+      if (!manifoldEdges(dual.triangles)) throw new Error(failure);
       return { points: dual.points, faces: dual.triangles, closed: true, ...options };
     }
     if (method !== 'tetrahedra') {
       const dual = G[method === 'auto' ? 'surfaceNets' : method](fn, { min, max }, { cell: resolution, maxCells });
-      if (!dual.quads.length) throw new Error('No zero surface in the model bounds');
+      if (!dual.quads.length) throw emptySurface();
       if (method !== 'auto' || manifoldEdges(dual.quads))
         return { points: dual.points, faces: dual.quads, closed: true, ...options };
     }
     const mesh = G.implicitSurface(p => fn(...p), { min, max }, { resolution, maxCells });
-    if (!mesh.positions.length) throw new Error('No zero surface in the model bounds');
+    if (!mesh.positions.length) throw emptySurface();
     const indexed = G.toKitMesh(mesh, () => [0.45, 0.45, 0.45]);
     const output = fromMesh(indexed, { closed: true, ...options });
     const keys = new Map(), welded = [], aliases = [], quantum = Math.max(...max.map((v, i) => v - min[i])) * 1e-9;
@@ -149,9 +151,13 @@
     for (const layer of paintLayers) {
       const detail = Math.min(resolution, layer.resolution), margin = detail * 2;
       const bounds = { min: layer.bounds.min.map(n => n - margin), max: layer.bounds.max.map(n => n + margin) };
-      const { attachments: nested, ...mesh } = fromSculpt(layer.sculpt, { ...options, palette, targetTriangles,
-        name: layer.name, bounds, resolution: detail, fur: false });
-      attachments.push(mesh, ...nested);
+      try {
+        const { attachments: nested, ...mesh } = fromSculpt(layer.sculpt, { ...options, palette, targetTriangles,
+          name: layer.name, bounds, resolution: detail, fur: false });
+        attachments.push(mesh, ...nested);
+      } catch (error) {
+        if (!layer.clipped || error.code !== 'EMPTY_MODEL_SURFACE') throw error;
+      }
     }
     if (!field) {
       const [root, ...rest] = attachments;

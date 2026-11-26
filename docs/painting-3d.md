@@ -47,6 +47,8 @@ Marks use native [sweep brushes and pressure poses](sculpt-sweeps.md). They rend
 
 [Custom mark profiles](mark-profiles.md) set the silhouette, coverage, spacing, grain, and relief. Name profiles in the painting to reuse them across marks.
 
+[Paint looseness](paint-looseness.md) adjusts dab size, spacing, displacement, and outline variation in a selected interior, with an explicit silhouette allowance for surface-bound marks.
+
 ## Dabs, pressure, and ruled strokes
 
 Use one pose for a precise dab or multiple poses for a stroke. Both use the same brush, quaternion orientation, pressure, and edit operations. Set `path: "ruled"` to lay the recorded poses along a straight line between the first and last points. Ink distributes the poses along the line by their original spacing along the stroke. A surface-bound mark rules the guide before projecting it onto the receiver.

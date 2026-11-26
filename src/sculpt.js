@@ -194,6 +194,29 @@ function makeSculpt(B, rest) {
     const under = appearance?.tint;
     return { ...appearance, ...(surface && { surface }), spray, tint: under ? rgb => spray(under(rgb)) : spray };
   }
+  const pigmentLayers = new WeakMap();
+  S.addSurfacePigment = (entity, id, sample) => {
+    for (const solid of pos) {
+      if (solid.renderTarget?.entity !== entity) continue;
+      let stack = pigmentLayers.get(solid);
+      if (!stack) {
+        stack = [];
+        pigmentLayers.set(solid, stack);
+        const base = solid.mat.sdfSpray;
+        solid.mat = { ...solid.mat, sdfSpray: { locate(point, normal, onHit) {
+          const tints = [], under = base?.locate(point, normal, onHit);
+          if (under) tints.push(under);
+          // Painting marks are built in reverse order, with the uppermost mark first.
+          for (let i = stack.length - 1; i >= 0; i--) {
+            const layer = stack[i], tint = layer.sample(point, normal, weight => onHit?.(layer.id, weight));
+            if (tint) tints.push(tint);
+          }
+          if (tints.length) return rgb => tints.reduce((color, tint) => tint(color), rgb);
+        } } };
+      }
+      stack.push({ id, sample });
+    }
+  };
   S.materialAt = (material, point, normal) => {
     if (!material) return material;
     const cap = material.cutSurface?.locate(point,normal);
@@ -1771,7 +1794,8 @@ function makeSculpt(B, rest) {
       if (solid.paintOverlay) {
         const layer = makeSculpt(B, { positive: [solid] });
         layer.ready();
-        paintLayers.push({ sculpt: layer, name: solid.renderTarget?.entity, resolution: solid.res, bounds: solid.geometryBounds });
+        paintLayers.push({ sculpt: layer, name: solid.renderTarget?.entity, resolution: solid.res, bounds: solid.geometryBounds,
+          clipped: solid.clippedPaint });
       } else if (solid.analytic && (solid.model === 'separate' || solid.model?.separate)) parts.push(solid);
     }
     if (!positive.length && !parts.length && !paintLayers.length) throw new Error('Model export needs an unbaked sculpt');

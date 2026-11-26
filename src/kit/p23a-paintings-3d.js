@@ -5,7 +5,7 @@
   const record = value => K.world.data.record(value);
   const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
   const name = value => K.world.data.id(value) && /^[a-zA-Z0-9_-]{1,40}$/.test(value);
-  const editable = ['brush', 'poses', 'step', 'blendRadius', 'path', 'pressureResponse', 'mat', 'res', 'transform', 'attachment', 'enabled'];
+  const editable = ['brush', 'poses', 'step', 'blendRadius', 'path', 'pressureResponse', 'looseness', 'mat', 'res', 'transform', 'attachment', 'enabled'];
 
   function resolveBrush(brush, profiles) {
     if (brush?.kind !== 'mark-profile') return brush;
@@ -19,8 +19,8 @@
   }
 
   function expand(source) {
-    const anchors = new Map(), layers = new Set(), reports = [];
-    if (source?.paintings3d === undefined) return { spec: source, anchors, layers, reports };
+    const anchors = new Map(), layers = new Set(), looseness = new Map(), reports = [];
+    if (source?.paintings3d === undefined) return { spec: source, anchors, layers, looseness, reports };
     const { paintings3d, ...scene } = source;
     if (!Array.isArray(paintings3d) || paintings3d.length > 64 ||
         scene.solids !== undefined && !Array.isArray(scene.solids) || scene.brushRegion != null)
@@ -56,7 +56,7 @@
             mark.enabled !== undefined && typeof mark.enabled !== 'boolean' ||
             mark.res !== undefined && (!Number.isFinite(mark.res) || mark.res <= 0))
           throw new TypeError(id + ' mark ' + order + ' needs a unique ID, brush, poses and material');
-        const { id: key, attachment = { kind: 'free' }, transform, enabled = true, ...stroke } = mark;
+        const { id: key, attachment = { kind: 'free' }, transform, enabled = true, looseness: authoredStyle, ...stroke } = mark;
         ids.add(key);
         const solid = 'paint.' + id + '.' + key;
         const guideFrame = graph.compose(frame, graph.transform(transform));
@@ -65,10 +65,14 @@
             (attachment.kind === 'free' ? attachment.slot !== undefined : !name(attachment.slot)) ||
             (attachment.kind === 'surface') !== (attachment.snap !== undefined))
           throw new TypeError(solid + ' needs a free, surface or part attachment');
-        let shape;
+        let shape, style;
         try {
+          style = K.procedural.paintLooseness.prepare(authoredStyle);
+          if (style && (attachment.kind === 'surface') !== (style.silhouetteAllowance !== undefined))
+            throw new TypeError(attachment.kind === 'surface' ? 'State a silhouette allowance for surface looseness'
+              : 'A silhouette allowance needs a surface receiver');
           shape = { kind: 'sweep', id: solid, ...stroke, brush: resolveBrush(stroke.brush, profiles) };
-          K.procedural.shapeSweeps.prepare(shape);
+          K.procedural.shapeSweeps.prepare({ ...shape, looseness: authoredStyle });
           if (attachment.kind === 'surface') K.procedural.sweepSnap.check(attachment.snap, shape);
         } catch (error) {
           throw new RangeError(solid + ' ' + error.message, { cause: error });
@@ -93,6 +97,7 @@
             part = target;
           }
           layers.add(solid);
+          if (style) looseness.set(solid, style);
           marks.push({ ...shape, restAffine, ...(part && { part }) });
           if (marks.length > 4096) throw new RangeError('A scene can render up to 4096 painting marks');
         }
@@ -102,13 +107,14 @@
           brush: brush.kind, material: stroke.mat, poses: stroke.poses.length,
           ...(typeof brush.profile === 'string' && { profile: brush.profile }),
           ...(brush.mix && { mix: { range: brush.mix.range, ...(typeof brush.mix.profile === 'string' && { profile: brush.mix.profile }) } }),
+          ...(style && { looseness: style }),
           ...(stroke.path !== undefined && { path: stroke.path }), ...(stroke.pressureResponse && { pressureResponse: stroke.pressureResponse }) });
       }
       for (const slot of Object.keys(bindings)) if (!slots.has(slot))
         throw new RangeError(id + ' has no attachment slot ' + slot);
     }
     // Field ownership breaks a tie in insertion order, so later marks are built first.
-    return { spec: { ...scene, solids: [...solids, ...marks.reverse()] }, anchors, layers, reports };
+    return { spec: { ...scene, solids: [...solids, ...marks.reverse()] }, anchors, layers, looseness, reports };
   }
 
   function editMarks(painting, edits) {

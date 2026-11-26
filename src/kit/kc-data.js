@@ -1752,7 +1752,7 @@
       e.problems = problems;
       throw e;
     }
-    const review = env.assemblyReview, { dataInputs, anchors, layers, reports } = resolved;
+    const review = env.assemblyReview, { dataInputs, anchors, layers, looseness, reports } = resolved;
     let { spec } = resolved;
     const { timeline, cameraRig, dataMarks, decals } = presentation, dynamics = boundRuntime(source, env, resolved);
     if (review) spec = review.scene(spec);
@@ -1981,20 +1981,29 @@
     }
     const made = {},
       make = (s, held) => {
-        const anchor = anchors.get(s.id);
+        const anchor = anchors.get(s.id), style = looseness.get(s.id);
+        let guard;
         if (anchor) {
           try {
             const carrier = carriers.get(anchor.host.id) ?? makeSolid(anchor.host, true);
+            const psd = S.psd, distance = (x, y, z) => psd(carrier, x, y, z), allowance = style?.silhouetteAllowance;
+            const pigmentOnly = allowance === 0;
             const { poses, contacts } = K.procedural.sweepSnap.resolve({ ...s, restAffine: anchor.guideFrame },
-              anchor.snap, (x, y, z) => S.psd(carrier, x, y, z));
+              pigmentOnly ? { ...anchor.snap, offset: 0 } : anchor.snap, distance);
             s = { ...s, poses, path: 'free' };
             paintContacts.set(s.id, contacts.length);
+            if (allowance !== undefined) {
+              const frame = affineSolidSpace(anchor.guideFrame);
+              const direction = anchor.snap.direction && affineSolidSpace(DIO.solidFrames.rest(anchor.host)).pushNormal(anchor.snap.direction);
+              guard = { entity: anchor.host.id, pigmentOnly, direction, minFacing: anchor.snap.minFacing ?? .25,
+                signed: (x, y, z) => (distance(...frame.point([x, y, z])) - allowance) / frame.boundScale };
+            }
           } catch (error) {
             throw new RangeError(s.id + ' on ' + anchor.host.id + ' — ' + error.message, { cause: error });
           }
         }
         const rigid = uniformSolidSpace(s, B.frame), rest = affineSolidSpace(s.restAffine);
-        const recipe = () => makeSolid(s, held);
+        const recipe = () => makeSolid(s, held, style, guard);
         const trackModifierSpace = Boolean(s.id && (env.retainRenderSdf || env.retainPartRenderSdf));
         const placed = () => rigid ? S.transformSolids(rigid, recipe, trackModifierSpace) : recipe();
         const p = rest ? S.transformSolids(rest, placed, trackModifierSpace) : placed();
@@ -2002,7 +2011,7 @@
         if (s.id) made[s.id] = p;
         return p;
       },
-      makeSolid = (s, held) => {
+      makeSolid = (s, held, style, guard) => {
         const modifiers = activeModifiers(s);
         const request = modelOptions?.[brushField];
         const audit = typeof request === 'object' ? request : null;
@@ -2055,11 +2064,31 @@
           p = S.lathe(s.at, s.h, Array.isArray(s.r) && Array.isArray(s.r[0]) ? t => K.kf(t, s.r.flat()) : s.r, m, baseOptions);
         else if (k === 'torus') p = S.torus(s.at, s.R, s.r, m, baseOptions);
         else if (k === 'sweep') {
-          const form = K.procedural.shapeSweeps.prepare(s);
-          const paintOverlay = form.opacityAt && !held && !s.hold && !s.carve && !s.ghost && !s.group && !modifiers.length;
+          const form = K.procedural.shapeSweeps.prepare(style ? { ...s, looseness: style } : s);
+          const paintOverlay = (style || form.opacityAt) && !held && !s.hold && !s.carve && !s.ghost && !s.group && !modifiers.length;
           const material = form.opacityAt ? { ...m, opacityAt: form.opacityAt } : m;
-          p = S.implicitForm(form, material, paintOverlay ? { ...baseOptions, whole: true, paintOverlay } : baseOptions);
+          if (guard?.pigmentOnly) {
+            const { inverse } = affineSolidSpace(s.restAffine);
+            const color = B.P[m.r[Math.floor(m.r.length / 2)]].map(n => n / 255);
+            S.addSurfacePigment(guard.entity, s.id, (point, normal, onHit) => {
+              if (guard.direction && V.dot(normal, guard.direction) < guard.minFacing) return;
+              const local = inverse(point);
+              if (local.some((n, i) => n < form.bounds.min[i] - 1e-6 || n > form.bounds.max[i] + 1e-6)) return;
+              if (form.sd(...local) > 1e-6) return;
+              const weight = form.opacityAt?.(...local) ?? 1;
+              if (!weight) return;
+              onHit(weight);
+              return rgb => {
+                const light = .35 + .85 * (.2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2]);
+                return color.map((value, i) => K.clamp(value * light * weight + rgb[i] * (1 - weight), 0, 1));
+              };
+            });
+          }
+          const clipped = guard ? { ...form, sd: (x, y, z) => Math.max(form.sd(x, y, z), guard.signed(x, y, z)) } : form;
+          p = S.implicitForm(clipped, material, paintOverlay ?
+            { ...baseOptions, whole: true, paintOverlay, ...(guard?.pigmentOnly && { hold: true }) } : baseOptions);
           if (paintOverlay) p.geometryBounds = form.bounds;
+          if (guard && !guard.pigmentOnly) p.clippedPaint = true;
         }
         else if (k === 'tube')
           p = S.tube(s.pts, Array.isArray(s.r) ? s.r[0] : s.r, Array.isArray(s.r) ? s.r[1] : s.r, m, baseOptions);
@@ -2294,7 +2323,7 @@
       return { meshes, joints, animations };
     }
     const moving = spec.solids.filter(s => s.part), authoredBounds = new Map();
-    const staticBake = cache && !anchors.size && !moving.length && !effects.length && !spec.tap && !marks &&
+    const staticBake = cache && !anchors.size && !looseness.size && !moving.length && !effects.length && !spec.tap && !marks &&
       !presentation.breakables && !S.keepRenderSdf && !st0.finish.paint && !globalThis.INK_DECAL_NEXT &&
       !globalThis.INK_RETAIN_RENDER_SDF && !globalThis.INK_RETAIN_REFERENCE_SDF && !globalThis.INK_RAMPS;
     const bakeKey = staticBake ? cacheAPI.sceneKey(spec, st0,
