@@ -228,6 +228,27 @@
       return report;
     }
 
+    function assemblyStretchProposal(request) {
+      const scene = snapshot(), plan = A.assemblyStretch.plan(scene, request, buildEnv);
+      const proposed = { ...scene, ...plan.patch };
+      validate(proposed);
+      return { ...plan, proposed };
+    }
+
+    function planAssemblyStretch(request) {
+      const { proposed, report } = assemblyStretchProposal(request);
+      return freeze({ scene: proposed, report });
+    }
+
+    function stretchAssembly(request) {
+      const { patch, report } = assemblyStretchProposal(request);
+      if (!report.canCommit) throw Object.assign(new RangeError('Assembly stretch needs review'), { report });
+      const write = () => document.setEnvironment(patch);
+      if (document.pending()) write();
+      else document.transact('Stretch assembly', write);
+      return report;
+    }
+
     const planSculptSplit = request => A.sculptSplit.plan(snapshot(), request, buildEnv).report;
     function splitSculpt(request) {
       const { patch, report } = A.sculptSplit.plan(snapshot(), request, buildEnv);
@@ -1319,7 +1340,7 @@
       setModifiers,
       updateModifier,
       sculptContributions, inspectSculptContribution, editSculptContribution,
-      placeSculptStamp, planSculptSplit, splitSculpt,
+      placeSculptStamp, planSculptSplit, splitSculpt, planAssemblyStretch, stretchAssembly,
       setPrefabInstance,
       planPrefabIsolation, previewPrefabIsolation, editIsolatedPrefab,
       planPrefabRefresh, refreshPrefabs,
