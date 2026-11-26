@@ -210,17 +210,23 @@
     };
   }
 
-  function prepare({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse, looseness }, settings = {}) {
-    if (!Array.isArray(poses) || poses.length < 1 || poses.length > 1024 ||
-        !finite(blendRadius) || blendRadius < 0 ||
-        (step !== undefined && (!positive(step) || step > 1)))
-      throw new RangeError('A sweep needs 1–1024 poses, a nonnegative blend radius and an optional step from .0001 to 1');
+  function guidePoses(poses, path = 'free') {
+    if (!Array.isArray(poses) || poses.length < 1 || poses.length > 1024)
+      throw new RangeError('A sweep needs 1–1024 poses');
     if (!['free', 'ruled'].includes(path)) throw new TypeError('A sweep path must be free or ruled');
+    const input = Array.from(poses, poseSource);
+    return path === 'ruled' ? ruled(input) : input;
+  }
+
+  function prepare({ brush, poses, step, blendRadius = 0, path = 'free', pressureResponse, looseness }, settings = {}) {
+    if (!finite(blendRadius) || blendRadius < 0 ||
+        (step !== undefined && (!positive(step) || step > 1)))
+      throw new RangeError('A sweep needs a nonnegative blend radius and an optional step from .0001 to 1');
     if (pressureResponse !== undefined && (!fields(pressureResponse, ['width', 'opacity']) ||
         pressureResponse.width !== undefined && !range(pressureResponse.width, 4) ||
         pressureResponse.opacity !== undefined && !range(pressureResponse.opacity, 1)))
       throw new TypeError('Pressure response needs [at zero, at one] ranges for width (0–4) or opacity (0–1)');
-    const input = Array.from(poses, poseSource), guide = path === 'ruled' ? ruled(input) : input;
+    const guide = guidePoses(poses, path);
     if (brush?.kind === 'mark-profile' || looseness !== undefined || settings.orient || settings.band)
       return stampedSweep(brush, guide, step, blendRadius, pressureResponse, P.paintLooseness.prepare(looseness), settings);
     const source = brushSource(brush);
@@ -256,5 +262,5 @@
       ...(hasOpacity(pressureResponse) && { opacityAt: opacitySampler(guide, pressureResponse.opacity) }) };
   }
 
-  P.shapeSweeps = Object.freeze({ prepare });
+  P.shapeSweeps = Object.freeze({ prepare, guidePoses });
 })(KIT);
