@@ -1,3 +1,4 @@
+import { textureAddressAxisGLSL } from './texture-address.mjs';
 import { layerSamplingGLSL, depthLayerSamplingGLSL, createCompositeDepth, captureFrameCamera } from './frame-composite.mjs';
 import { createRenderEffects } from './render-effects.mjs';
 import { inspectionDepth } from './inspection.mjs';
@@ -114,14 +115,7 @@ vec4 projectedLayerAt(vec2 pixel) {
   return projectedCellAt(pixel, cell) == 3 ? projectedTexel(cell) : vec4(0.0);
 }
 
-int addressAxis(int n, int size, int edge) {
-  if (edge == 0) return clamp(n, 0, size - 1);
-  if (edge == 1) return n >= 0 && n < size ? n : -1;
-  int span = edge == 3 ? size * 2 : size;
-  int at = n - (n / span) * span;
-  if (at < 0) at += span;
-  return at < size ? at : span - 1 - at;
-}
+${textureAddressAxisGLSL}
 
 vec4 addressedColor(ivec2 site, ivec2 size) {
   int x = addressAxis(site.x, size.x, u_addressEdges.x);

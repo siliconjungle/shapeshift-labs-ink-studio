@@ -611,9 +611,41 @@ const SceneMeshes = (() => {
     return meshes.length ? {meshes:meshes.map(read), tolerance} : null;
   }
 
-  function pigmentAt(layer,region,uv) {
-    const x=region.x+Math.floor(.5+(region.width-1)*uv[0]);
-    const y=region.y+Math.floor(.5+(region.height-1)*uv[1]);
+  function bindTileWraps(mesh, byFace) {
+    const data=read(mesh), {layer,drawTriangles}=data;
+    const ranges=[], byTriangle=new Map();
+    for (const {first,end,region} of layer.surfaceCharts) {
+      let previous, mapping;
+      for (let vertex=first;vertex<end;vertex+=3) {
+        const face=layer.featureFaces[vertex/3], candidate=byFace.get(face), rect=candidate?.rect;
+        const wrap=rect && rect.x+rect.width<=region.width && rect.y+rect.height<=region.height && candidate;
+        if (wrap && wrap!==previous) {
+          const {rule}=wrap;
+          mapping=Sprite.tileWrapRegion({...rect,x:rect.x+region.x,y:rect.y+region.y},rule);
+        }
+        if (wrap) {
+          const prior=ranges.at(-1);
+          if (wrap===previous && prior.end===vertex) prior.end+=3;
+          else ranges.push({first:vertex,end:vertex+3,mapping});
+          byTriangle.set(drawTriangles[vertex/3],mapping);
+        }
+        previous=wrap;
+      }
+    }
+    if (ranges.length) {
+      layer.tileWraps=ranges;
+      data.tileWraps=byTriangle;
+    }
+  }
+
+  function pigmentAt(layer,region,uv,wrap) {
+    const s=region.x+.5+(region.width-1)*uv[0], t=region.y+.5+(region.height-1)*uv[1];
+    if (wrap) {
+      const [u,v]=Sprite.tileWrapPoint(wrap,s,t).map((value,k)=>
+        Sprite.tileWrapIndex(Math.floor(value),wrap.start[k],wrap.size[k],wrap.modes[k]));
+      return (v*layer.width+u)*4;
+    }
+    const x=Math.floor(s), y=Math.floor(t);
     return (y*layer.width+x)*4;
   }
 
@@ -623,13 +655,13 @@ const SceneMeshes = (() => {
   }
 
   function trianglePigment(mesh,triangle) {
-    const {uvs,indices,regions,layer,materials,faceMaterials}=read(mesh);
+    const {uvs,indices,regions,layer,materials,faceMaterials,tileWraps}=read(mesh);
     if (!Number.isSafeInteger(triangle) || triangle<0 || triangle>=mesh.triangles)
       throw new RangeError('Expected a triangle on the mesh');
     const slot=faceMaterials?.[triangle] ?? 0;
     const corners=indices.subarray(triangle*3,triangle*3+3);
     const uv=[0,1].map(axis=>(uvs[corners[0]*2+axis]+uvs[corners[1]*2+axis]+uvs[corners[2]*2+axis])/3);
-    const at=pigmentAt(layer,regions[slot],uv), pixels=layer.pixels;
+    const at=pigmentAt(layer,regions[slot],uv,tileWraps?.get(triangle)), pixels=layer.pixels;
     return {color:pixels[at]*65536+pixels[at+1]*256+pixels[at+2],material:materials[slot]};
   }
 
@@ -658,7 +690,7 @@ const SceneMeshes = (() => {
         data[a*size+k]*u + data[b*size+k]*v + data[c*size+k]*w);
       const uv = interpolate(uvs,2).map(n => Math.max(0,Math.min(1,n)));
       const region = regions[slot];
-      const at=pigmentAt(layer,region,uv);
+      const at=pigmentAt(layer,region,uv,data.tileWraps?.get(triangle));
       const alpha=layer.pixels[at+3]/255;
       if (settings?.alphaMode==='blend' ? alpha===0 :
           settings?.alphaMode!=='opaque' && alpha<(settings?.alphaCutoff ?? .5)) continue;
@@ -791,7 +823,7 @@ const SceneMeshes = (() => {
   }
 
   return Object.freeze({create,fromObjectTexels,updateObjectTexels,objectTexelFrame,scanFrame:Mips.scanFrame,scanMaterial,paintMeshes,pose,withPose,geometry,inspectUV,channelUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
-    simulationFrame:(...args)=>simulationAPI().frame(...args),depthProxy,proxyPlan,sourceTriangle,trianglePigment,intersect,rayQuery,projector,sampleProjection,clipUV,
+    simulationFrame:(...args)=>simulationAPI().frame(...args),depthProxy,proxyPlan,sourceTriangle,trianglePigment,bindTileWraps,intersect,rayQuery,projector,sampleProjection,clipUV,
     valid:mesh=>Boolean(mesh?.[state]),bounds:mesh=>{const {min,max}=read(mesh).bounds;return {min:min.slice(),max:max.slice()};},
     revision:mesh=>read(mesh).revision});
 })();

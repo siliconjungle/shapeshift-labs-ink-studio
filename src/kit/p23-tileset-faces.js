@@ -364,6 +364,57 @@
     return conflicts.length ? {report} : {report,row:append(brush,[placement])};
   }
 
-  A.tilesetFaces = Object.freeze({plan,prepare,stamp,polygonStamp,append,cornersFor,cropSource,sourceBindings,sourceCorners,
+  function activeWraps(bindings, faces, materials, tilesets) {
+    const wrapped = bindings.filter(binding=>isSourceBinding(binding) && !binding.review && !binding.data.review && binding.data.wrap!==undefined);
+    if (!wrapped.length) return;
+    const polygons=new Map(faces.map(face=>[face.id,face])), result=new Map();
+    for (const binding of wrapped) {
+      const {selection,atlasSize,wrap}=binding.data, rule=SpriteSurface.tileWrap(wrap);
+      const polygon=polygons.get(binding.element), id=materials.get(polygon?.material)?.texture?.tileset;
+      if (!id || id!==selection?.tileset) continue;
+      const asset=tilesets.source(id);
+      if (asset.width!==atlasSize?.[0] || asset.height!==atlasSize?.[1]) continue;
+      const rect=TilesetSelection.pick(id,asset,selection);
+      if (result.has(binding.element)) throw new RangeError('A face needs one retained tileset wrap binding');
+      result.set(binding.element,{rect,rule});
+    }
+    return result;
+  }
+
+  function planWrap(scene, request) {
+    const {object,part,face,wrap} = request ?? {};
+    if (!request || Object.getPrototypeOf(request)!==Object.prototype ||
+        Object.keys(request).some(key=>!['object','part','face','wrap'].includes(key)) ||
+        ![object,face].every(name) || part!==undefined && !name(part) || wrap===undefined)
+      throw new TypeError('Choose a placed tile face and supply wrap settings or null to clear them');
+    const rule=wrap===null ? null : SpriteSurface.tileWrap(wrap);
+    const info={format:'ink-studio/tileset-face-wrap',version:1,mode:'wrap',id:face,object,face};
+    const blocked=reason=>({report:freeze({...info,canCommit:false,conflicts:[{reason}]})});
+    const row=Object.hasOwn(scene.topologyMeshes ?? {},object) && scene.topologyMeshes[object];
+    const polygon=row?.document.faces.find(item=>item.id===face);
+    if (!polygon || part!==undefined && row.part!==part) return blocked('face-not-authored');
+    const candidates=(row.bindings ?? []).filter(binding=>isSourceBinding(binding) && binding.element===face &&
+      !binding.review && (!binding.data.review || !rule));
+    if (candidates.length!==1) return blocked('missing-or-ambiguous-tile-source');
+    const binding=candidates[0], {selection,atlasSize,wrap:prior}=binding.data;
+    const bake=row.bakes?.find(item=>item.material===polygon.material && !item.invalidated && item.maps.texture!==undefined);
+    const id=(bake?.maps.texture ?? row.materials?.find(item=>item.id===polygon.material)?.texture)?.tileset;
+    if (rule && (!id || id!==selection?.tileset)) return blocked('source-material-changed');
+    if (rule) {
+      const asset=A.tilesets.prepare(scene.tilesets,scene.tilesetDefaults).source(id);
+      if (asset.width!==atlasSize?.[0] || asset.height!==atlasSize?.[1]) return blocked('source-atlas-size-changed');
+      TilesetSelection.pick(id,asset,selection);
+    }
+    const counts=topology.inspect(row.document), triangles=polygon.corners.length-2;
+    const report=freeze({...info,binding:binding.id,selection,before:prior ?? null,after:rule,
+      faceTriangles:triangles,meshFaces:counts.faces,meshTriangles:counts.triangles,
+      geometryRevision:topology.revision(row.document),canCommit:true,conflicts:[]});
+    if (sameMaterial(prior??null,rule)) return {report};
+    const {wrap:oldWrap,...data}=binding.data;
+    const revised={...binding,data:{...data,...(rule && {wrap:rule})}};
+    return {row:{...row,bindings:row.bindings.map(item=>item===binding ? revised : item)},report};
+  }
+
+  A.tilesetFaces = Object.freeze({planWrap,activeWraps,plan,prepare,stamp,polygonStamp,append,cornersFor,cropSource,sourceBindings,sourceCorners,
     splitSources,joinSources,previewMerges,isSourceBinding,sameMaterial,extrusionBrush,extrusionUpdates});
 })(KIT);

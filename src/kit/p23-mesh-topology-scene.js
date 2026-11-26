@@ -125,15 +125,16 @@
         active.set(bake.material, { ...base, ...bake.maps, sampling: bake.maps.mipmaps ? undefined : sampling });
       }
     }
-    const mesh = topology.toSceneMesh(document, { objectId: object, partId: row.part, meshId: 'topology/' + object, frame,
+    const moved = document !== cage && bindings.size ?
+      remapBindings([...bindings.values()], topology.correspond(cage, document, { lineage: evaluation.lineage })) : [...bindings.values()];
+    const tileWraps=A.tilesetFaces.activeWraps(moved,document.faces,active,tilesets);
+    const mesh = topology.toSceneMesh(document, { objectId: object, partId: row.part, meshId: 'topology/' + object, frame,tileWraps,
       materials: [...active.values()].map(input => {
         const resolved = material(input, tilesets);
         return reviewMaterial ? reviewMaterial(object, resolved) : resolved;
       }) });
     const tilesetMaterialSources = new Map([...active].filter(([,entry])=>entry.texture?.tileset));
     const tilesetMaterials = new Map([...tilesetMaterialSources].map(([id,entry])=>[id,entry.texture.tileset]));
-    const moved = document !== cage && bindings.size ?
-      remapBindings([...bindings.values()], topology.correspond(cage, document, { lineage: evaluation.lineage })) : [...bindings.values()];
     const visible = bindings.size && (frame || document !== cage) ? elements(document, frame) : records;
     const resolvedBindings = Object.fromEntries(moved.filter(binding => !binding.review)
       .map(binding => [binding.id, { ...binding, geometry: visible[binding.domain].get(binding.element) }]));
