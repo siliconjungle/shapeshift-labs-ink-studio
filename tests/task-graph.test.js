@@ -37,9 +37,19 @@ test('native tasks resume verified artifacts, rerun stale descendants, and block
     assert.equal(result.status,exit,result.stderr);
     return JSON.parse(fs.readFileSync(path.join(root,'out/report.json'))).tasks;
   }
-  assert.equal(run('plan').status,0);
-  assert.deepEqual(execute(0).map(row=>row.status),['completed','completed','completed']);
+  const planned = run('plan');
+  assert.equal(planned.status,0,planned.stderr);
+  assert.deepEqual(JSON.parse(planned.stdout), [
+    {id:'study',dependencies:[]}, {id:'render',dependencies:[]}, {id:'pin',dependencies:['study']}
+  ]);
+  const first = execute(0);
+  assert.deepEqual(first.map(row=>row.status),['completed','completed','completed']);
+  assert.equal(run('run','--out','out').status,1);
   assert.deepEqual(execute(0,'--resume').map(row=>row.status),['reused','reused','reused']);
+  fs.unlinkSync(path.join(root,'out/report.json'));
+  fs.writeFileSync(path.join(root,'out/tasks/study',first[0].key,'receipt.json'),'null');
+  fs.writeFileSync(first[1].outputs.frame,'damaged');
+  assert.deepEqual(execute(0,'--resume').map(row=>row.status),['completed','completed','reused']);
   write('sweep.json',sweep(.42));
   assert.deepEqual(execute(0,'--resume').map(row=>row.status),['completed','reused','completed']);
   write('sweep.json','{}');
@@ -48,4 +58,30 @@ test('native tasks resume verified artifacts, rerun stale descendants, and block
   graph.tasks.study.inputs.plan = {task:'pin',artifact:'pin'};
   write('plan.json',graph);
   assert.match(run('plan').stderr,/dependency cycle/);
+});
+
+test('native tasks hand off simulation recordings and portable scene geometry', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ink-task-pipeline-'));
+  t.after(() => fs.rmSync(root, { recursive:true, force:true }));
+  const example = file => path.resolve(__dirname,'../examples',file);
+  fs.copyFileSync(example('world-crossing.json'),path.join(root,'world.json'));
+  fs.copyFileSync(example('scene.json'),path.join(root,'scene.json'));
+  const graph = {format:'ink-studio/task-graph',version:1,tasks:{
+    simulate:{command:'sim',inputs:{world:'world.json'},outputs:{record:'run.json',summary:'summary.json'},
+      args:['run',{input:'world'},'--ticks','3','--record',{output:'record'},'--out',{output:'summary'}]},
+    verify:{command:'sim',inputs:{record:{task:'simulate',artifact:'record'}},outputs:{report:'verification.json'},
+      args:['verify',{input:'record'},'--out',{output:'report'}]},
+    pack:{command:'project',inputs:{scene:'scene.json'},outputs:{project:'project.json'},
+      args:['pack',{input:'scene'},'--out',{output:'project'}]},
+    render:{command:'render',inputs:{project:{task:'pack',artifact:'project'}},outputs:{frame:'frame.png'},
+      args:[{input:'project'},'--w','72','--h','48','--out',{output:'frame'}]}
+  }};
+  fs.writeFileSync(path.join(root,'plan.json'),JSON.stringify(graph));
+  const result = spawnSync(process.execPath,[cli,'tasks','run','plan.json','--out','out'],{cwd:root,encoding:'utf8'});
+  const report = JSON.parse(fs.readFileSync(path.join(root,'out/report.json')));
+  assert.equal(result.status,0,JSON.stringify(report.tasks.filter(row=>row.status==='failed')));
+  const byId = Object.fromEntries(report.tasks.map(row=>[row.id,row]));
+  assert.deepEqual(byId.simulate.artifacts.record,byId.verify.inputs.record);
+  assert.deepEqual(byId.pack.artifacts.project,byId.render.inputs.project);
+  assert.equal(fs.readFileSync(byId.render.outputs.frame).subarray(1,4).toString(),'PNG');
 });

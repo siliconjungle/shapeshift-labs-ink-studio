@@ -5,10 +5,13 @@ const { createHash } = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const { isDeepStrictEqual } = require('node:util');
 const { fingerprint, engineFingerprint } = require('./graph-artifact-cache.js');
+const { claim } = require('./graph-batch.js');
 const Assets = require('./asset-files.js');
 
 const planFormat = 'ink-studio/task-graph', runFormat = 'ink-studio/task-run';
-const operations = new Set(['render', 'clip', 'sweep', 'sim', 'graph', 'shot', 'export-scene', 'export-glb']);
+const operations = new Set([
+  'shape', 'mesh-topology', 'sim', 'graph', 'render', 'clip', 'sweep', 'shot', 'project', 'export-scene', 'export-glb'
+]);
 const name = value => typeof value === 'string' && /^[a-z][a-z0-9_-]{0,79}$/.test(value);
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
@@ -81,37 +84,45 @@ function fileDigest(file, buffer) {
   return { kind: 'file', bytes: info.size, sha256: hash.digest('hex') };
 }
 
-function existing(directory, key, outputs, buffer) {
+function digests(paths, buffer) {
+  return Object.fromEntries(Object.entries(paths).map(([name, file]) => [name, fileDigest(file, buffer)]));
+}
+
+function existing(directory, key, task, inputs, buffer) {
   try {
     const receipt = read(path.join(directory, 'receipt.json'));
-    if (receipt.key === key && isDeepStrictEqual(receipt.artifacts,
-      Object.fromEntries(Object.entries(outputs).map(([name, file]) =>
-        [name, fileDigest(path.join(directory, 'artifacts', file), buffer)])))) return receipt;
+    if (receipt?.key !== key || !task.acceptExit.includes(receipt.exit) || !isDeepStrictEqual(receipt.inputs, inputs)) return;
+    const paths = Object.fromEntries(Object.entries(task.outputs).map(([name, file]) =>
+      [name, path.join(directory, 'artifacts', file)]));
+    if (isDeepStrictEqual(receipt.artifacts, digests(paths, buffer)))
+      return { key, exit: receipt.exit, inputs, artifacts: receipt.artifacts };
   } catch (error) {
-    if (error.code !== 'ENOENT' && !(error instanceof SyntaxError) && !(error instanceof TypeError)) throw error;
+    if (!['ENOENT', 'ENOTDIR', 'EISDIR'].includes(error.code) &&
+        !(error instanceof SyntaxError) && !(error instanceof TypeError)) throw error;
   }
 }
 
 function run(plan, directory, { resume, kit, entry }) {
   const marker = path.join(directory, 'task-run.json');
-  if (fs.existsSync(directory) && fs.readdirSync(directory).length)
-    check(resume && fs.existsSync(marker) && read(marker).format === runFormat,
-      'Use a new task directory or resume an existing task run');
-  fs.mkdirSync(directory, { recursive: true });
-  const release = require('./graph-batch.js').claim(directory, 'task graph');
+  const release = claim(directory, 'task graph');
   try {
-    return execute(plan, directory, { resume, kit, entry, marker });
+    if (fs.readdirSync(directory).some(name => name !== '.ink-batch')) {
+      const saved = resume && fs.existsSync(marker) && read(marker);
+      check(saved?.format === runFormat && saved.version === 1, 'Use a new task directory or resume an existing task run');
+    } else {
+      Assets.json(marker, { format: runFormat, version: 1 });
+    }
+    return execute(plan, directory, { resume, kit, entry });
   } finally {
     release();
   }
 }
 
-function execute(plan, directory, { resume, kit, entry, marker }) {
+function execute(plan, directory, { resume, kit, entry }) {
   const engine = engineFingerprint(kit, { allowCustom: true });
   const results = new Map(), buffer = Buffer.allocUnsafe(64 * 1024);
   const runs = path.join(directory, 'tasks');
   fs.mkdirSync(runs, { recursive: true });
-  if (!fs.existsSync(marker)) Assets.json(marker, { format: runFormat, version: 1 });
   for (const id of plan.order) {
     const task = plan.tasks.get(id);
     const blocked = task.dependencies.filter(dep => !['completed', 'reused'].includes(results.get(dep).status));
@@ -121,14 +132,17 @@ function execute(plan, directory, { resume, kit, entry, marker }) {
     }
     const parent = path.join(runs, id);
     fs.mkdirSync(parent, { recursive: true });
+    let log;
     try {
       const inputs = Object.fromEntries(Object.entries(task.inputs).map(([name, spec]) =>
         [name, typeof spec === 'string' ? path.join(plan.root, spec) : results.get(spec.task).outputs[spec.artifact]]));
-      const inputDigests = Object.fromEntries(Object.entries(inputs).map(([name, file]) => [name, fileDigest(file, buffer)]));
-      const key = fingerprint([engine, plan.root, task, inputDigests]), destination = path.join(parent, key);
+      const inputDigests = digests(inputs, buffer);
+      const inputNames = Object.values(task.inputs).map(spec =>
+        typeof spec === 'string' ? spec : plan.tasks.get(spec.task).outputs[spec.artifact]);
+      const key = fingerprint([engine, plan.root, task, inputNames, inputDigests]), destination = path.join(parent, key);
       const outputs = Object.fromEntries(Object.entries(task.outputs).map(([name, file]) =>
         [name, path.join(destination, 'artifacts', file)]));
-      const prior = resume && existing(destination, key, task.outputs, buffer);
+      const prior = resume && existing(destination, key, task, inputDigests, buffer);
       if (prior) {
         results.set(id, { id, status: 'reused', ...prior, outputs });
         continue;
@@ -144,13 +158,16 @@ function execute(plan, directory, { resume, kit, entry, marker }) {
         const child = spawnSync(process.execPath, [entry, task.command, ...args], {
           cwd: plan.root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024
         });
-        Assets.write(path.join(parent, 'last.log'), (child.stdout ?? '') + (child.stderr ?? ''));
+        const logFile = path.join(parent, 'last.log');
+        Assets.write(logFile, (child.stdout ?? '') + (child.stderr ?? ''));
+        log = path.relative(directory, logFile);
         if (child.error) throw child.error;
         check(task.acceptExit.includes(child.status),
           'Native command exited with ' + (child.status ?? child.signal));
-        const receipt = { key, exit: child.status, inputs: inputDigests, artifacts:
-          Object.fromEntries(Object.entries(task.outputs).map(([name, file]) =>
-            [name, fileDigest(path.join(artifacts, file), buffer)])) };
+        check(isDeepStrictEqual(inputDigests, digests(inputs, buffer)), 'Declared inputs changed during execution');
+        const staged = Object.fromEntries(Object.entries(task.outputs).map(([name, file]) =>
+          [name, path.join(artifacts, file)]));
+        const receipt = { key, exit: child.status, inputs: inputDigests, artifacts: digests(staged, buffer) };
         Assets.json(path.join(scratch, 'receipt.json'), receipt);
         if (fs.existsSync(destination)) fs.rmSync(destination, { recursive: true });
         fs.renameSync(scratch, destination);
@@ -159,7 +176,7 @@ function execute(plan, directory, { resume, kit, entry, marker }) {
         fs.rmSync(scratch, { recursive: true, force: true });
       }
     } catch (error) {
-      results.set(id, { id, status: 'failed', error: error.message, log: path.relative(directory, path.join(parent, 'last.log')) });
+      results.set(id, { id, status: 'failed', error: error.message, ...(log && { log }) });
     }
   }
   const rows = [...results.values()];

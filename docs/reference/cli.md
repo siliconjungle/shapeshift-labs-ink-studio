@@ -422,6 +422,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art session export <directory> --artifact preset --preset preset.json --out directory
   lint <id ...> [--map]              pixel-art lint: orphans, doubles, jaggies, banding, pillow shading, noise, colours
   review <id> [--ref pic --px 2]     a sheet of fixed shots (four sides, top, low, far, near, close), beside the last one
+  tasks plan <plan.json>   validate native artifact tasks and show dependency order
+  tasks run <plan.json> --out directory [--resume]   execute and cache native artifact tasks
   sweep <scene> <plan.json> --out directory   render still and clip contact sheets across settings and seeds
   sweep pin <report-or-directory> <run-id|sample-id|tile> --out pin.json   save one exact case
   sweep compare <report> <left> <right> --out directory   export matched view differences
