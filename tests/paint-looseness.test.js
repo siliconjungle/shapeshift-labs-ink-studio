@@ -55,6 +55,19 @@ test('an interior mask keeps neutral stations at the outer edge', () => {
   near(rows[inner + 1].pose.point[0] - rows[inner].pose.point[0], .2);
 });
 
+test('a looseness eraser restores local size and spacing and rejoins unaffected stations', () => {
+  const poses = prepare({brush,poses:[at(0),at(2)]}).guide;
+  const settings = kit.prepare({size:2,spacing:2,displacement:.1,seed:12});
+  const mask = K.procedural.channelEraser.surface([{id:'wear',points:[[.7,0,0],[1.3,0,0]],radius:.2,channels:['looseness']}]);
+  const before = kit.dabs(poses,.1,settings);
+  const after = kit.dabs(poses,.1,settings,4096,point=>mask.remaining('looseness',point));
+  const untouched = rows=>rows.filter(row=>row.pose.point[0]>=1.6-1e-8);
+  assert.deepEqual(untouched(after),untouched(before));
+  const inner = after.filter(row=>row.pose.point[0]>.7 && row.pose.point[0]<1.3);
+  assert(inner.length>=5 && inner.every(row=>row.amount===0));
+  near(inner[1].pose.point[0]-inner[0].pose.point[0],.1);
+});
+
 test('the allowance clips paint against the transformed receiver while the carrier field stays unchanged', () => {
   const transformed = { ...scene, solids: [{ ...plate, transform: { translation: [.3, 0, .2], scale: 1.5 } }] };
   const editor = ink.createSceneEditor(transformed), edit = { ...mark, poses: [at(.9, 0, .42), at(.98, 0, .42)],

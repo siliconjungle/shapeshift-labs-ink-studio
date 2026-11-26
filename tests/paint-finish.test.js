@@ -105,3 +105,40 @@ test('spill samples follow posed rows and survive row remapping', () => {
   close(a.intensity,b.intensity);
   assert.deepEqual(Finish.spillLights([compact],{...posed(0),alpha:[]},normal),[]);
 });
+
+test('a local finish eraser exposes earlier coating and preserves tint, roughness and glow', () => {
+  const under = { coating: { weight: .3, roughness: .54 } };
+  const finish = { tint: { color: '#9ddaff' }, roughness: .17, coating: { weight: .9 },
+    emission: { color:'#ffbd75', spill:{intensity:8,radius:1.8} } };
+  const editor = make(under);
+  const { id, ...top } = mark;
+  editor.applyPainting3d({ id:'glaze', edits:[{op:'add',id:'top',mark:{...top,finish}}] }, {update:true});
+  const original = editor.snapshot(), originalWorld = editor.build();
+  const probe = y => {
+    const point = [-.34,y,.18], field = K.diorama.brushField(editor.snapshot());
+    return field.materialAt(field.surfaceAt(...point).material,point,[0,0,1]).paintFinishSample;
+  };
+  const erase = (id, patch) => editor.applyPainting3d({id:'glaze',edits:[{op:'set-eraser',id:'top',eraser:id,patch}]},{update:true});
+  const before = probe(0), outside = probe(.26);
+  erase('patch',{points:[[-.34,0,.18]],radius:.17,feather:.3,strength:.5,channels:['coating']});
+  close(Finish.coat(probe(0),0,.5)[0],.6);
+  erase('patch',{strength:1});
+  const after = probe(0);
+  assert.deepEqual(Finish.coat(after,0,.5),[.3,.54]);
+  assert.deepEqual(Finish.gradeLinear(after,[.3,.5,.7]),Finish.gradeLinear(before,[.3,.5,.7]));
+  assert.deepEqual(Finish.emission(after),Finish.emission(before));
+  assert.equal(Finish.roughness(after,.6),Finish.roughness(before,.6));
+  assert.deepEqual(probe(.26),outside);
+  assert.deepEqual(editor.extractPainting3d('glaze').marks[1].poses,mark.poses);
+  const masked = editor.snapshot();
+  assert.throws(()=>erase('patch',{strength:2}),/strength and feather/);
+  assert.deepEqual(editor.snapshot(),masked);
+  erase('patch',{enabled:false});
+  assert.deepEqual(editor.build().renderMetadata.paintFinish,originalWorld.renderMetadata.paintFinish);
+  erase('patch',null);
+  assert.deepEqual(editor.snapshot(),original);
+  erase('light-only',{points:[[-.34,0,.18]],radius:1,channels:['spill']});
+  assert.deepEqual(Finish.emission(probe(0)),Finish.emission(before));
+  const world = editor.build(), {rows} = world.renderMetadata.paintSpills[0];
+  assert(rows.every((value,i)=>i%2===0 || value===0));
+});

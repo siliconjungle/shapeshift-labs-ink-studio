@@ -221,7 +221,7 @@ function makeSculpt(B, rest) {
     }
   };
   const finishLayers = new WeakMap();
-  S.addPaintFinish = (entity, id, plan, coverage) => {
+  S.addPaintFinish = (entity, id, plan, coverage, mask) => {
     for (const solid of pos) {
       if (solid.renderTarget?.entity !== entity) continue;
       let stack = finishLayers.get(solid);
@@ -233,13 +233,15 @@ function makeSculpt(B, rest) {
           for (let i = stack.length - 1; i >= 0; i--) {
             const layer = stack[i], weight = layer.coverage(point, normal) * layer.plan.opacity;
             if (!weight) continue;
-            row = PaintFinish.add(row, layer.plan, weight);
-            if (layer.plan.spill) spillAt?.(layer.id, layer.plan.spill, weight);
+            const remaining = layer.mask ? channel => layer.mask(channel, point) : undefined;
+            row = PaintFinish.add(row, layer.plan, weight, remaining);
+            if (layer.plan.spill) spillAt?.(layer.id, layer.plan.spill,
+              weight * (remaining?.('emission') ?? 1) * (remaining?.('spill') ?? 1));
           }
           return row?.[0] ? row : undefined;
         } };
       }
-      stack.push({ id, plan, coverage });
+      stack.push({ id, plan, coverage, mask });
     }
   };
   const reliefLayers = new WeakMap();
@@ -2096,7 +2098,7 @@ function makeSculpt(B, rest) {
       .map((n,i)=>Math.min(255,Math.round(n+255*(glowRGB?.[i]??0)))),shade);
     else shade();
     const end = B.count();
-    if (finish && end > first) B.describePaintFinish?.(first, end, finish, spills);
+    if ((finish || spills?.length) && end > first) B.describePaintFinish?.(first, end, finish, spills);
     if (material.paintedNormal || glowRGB?.some(Boolean) || material.inkControls)
       B.describePaintedShading?.(first,end,material.paintedNormal,glowRGB,material.inkControls);
     const referenceRows = referenceSdf?.rows.get(owner);

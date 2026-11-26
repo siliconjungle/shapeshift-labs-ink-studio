@@ -44,12 +44,13 @@
   function align(plan, { chart, distance, reach, minFacing }) {
     const { settings, brush } = plan;
     const { kind, strength, turnStrength, heading: axis, spacing, phase, stagger, angleStep, angleOffset } = settings;
-    if (kind === 'direction') return (point, support, normal, heading, context) => {
+    if (kind === 'direction') return (point, support, normal, heading, context, remaining = 1) => {
+      if (!remaining) return { point, support, normal, heading, status: 'erased' };
       const preferred = P.markDirection.preferred(brush, support, normal, context);
       if (!preferred) return { point, support, normal, heading, status: 'no-direction' };
       const angle = signedTurn(preferred, heading, normal) / rad;
       const target = lattice(angle, angleOffset, angleStep);
-      const shift = ((target - angle + 540) % 360 - 180) * strength;
+      const shift = ((target - angle + 540) % 360 - 180) * strength * remaining;
       return { point, support, normal, heading: M.app(M.rot(normal, shift * rad), heading),
         status: 'aligned', angle, targetAngle: target };
     };
@@ -62,14 +63,15 @@
     const context = surface.context({});
     const project = (point, outward) => surface.read(surface.anchor({ point,
       normal: V.dot(chart.axis, outward) < 0 ? V.mul(chart.axis, -1) : chart.axis }), context);
-    return (point, support, normal, heading) => {
+    return (point, support, normal, heading, _context, remaining = 1) => {
       const unchanged = { point, support, normal, heading };
+      if (!remaining) return { ...unchanged, status: 'erased' };
       const coords = chart.read(support, normal);
       if (!coords) return { ...unchanged, status: 'outside-chart' };
       const row = Math.floor((coords[1] - phase[1]) / spacing[1] + .5);
       const xPhase = phase[0] + (row % 2 ? stagger * spacing[0] : 0);
       const target = [lattice(coords[0], xPhase, spacing[0]), phase[1] + row * spacing[1]];
-      const moved = coords.map((value, i) => value + (target[i] - value) * strength);
+      const moved = coords.map((value, i) => value + (target[i] - value) * strength * remaining);
       if (kind === 'uv' && moved.some(n => !range(n, -1e-6, 1 + 1e-6)))
         return { ...unchanged, status: 'outside-grid', coords, target };
       if (Math.hypot(moved[0] - coords[0], moved[1] - coords[1]) > 1e-9) {
@@ -84,7 +86,8 @@
       }
       if (axis !== 'keep') {
         const wanted = tangent(chart[axis], normal);
-        if (V.len(wanted) > 1e-8) heading = M.app(M.rot(normal, signedTurn(heading, wanted, normal) * turnStrength), heading);
+        if (V.len(wanted) > 1e-8)
+          heading = M.app(M.rot(normal, signedTurn(heading, wanted, normal) * turnStrength * remaining), heading);
       }
       return { point, support, normal, heading, status: 'aligned', coords, target };
     };
