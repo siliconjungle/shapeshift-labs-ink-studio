@@ -354,6 +354,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology overlaps <mesh-or-scene.json> [settings.json] [--object id] [--part id] [--out report.json | --selection-out faces.json]   review same-facing coincident polygons
   mesh-topology custom-properties <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   inspect and edit typed project, prefab and instance properties
   mesh-topology scene-layer <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   organize placed prefabs, inspect bounds, and set layer origins
+  mesh-topology construction-light <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   place and aim a light on construction anchors
   mesh-topology billboard-prefab <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   make selected prefab modules face the camera
   mesh-topology mirror-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   link or commit a mirrored visual prefab placement
   mesh-topology reparent-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   change a visual prefab parent and hold world placement
@@ -855,6 +856,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   take approve-video <plan.json> --out directory   check decoded video for palette, accent and flicker damage
   take review-flashes <plan.json> --out directory   trace composited and decoded flashes and verify a reduced-flicker preview
   take check-sync <recipe.json> [--out report.json] [--fail-on-flags]   compare visible contact and rendered attack
+  scene-record capture <scene.json> <plan.json> [--input changes.ndjson] --out take.json   capture timed scene manipulation
+  scene-record apply <scene.json> <take.json> --out scene.json   overdub a take or punch selected timeline channels
   timeline <scene> [--at seconds] [--from seconds --to seconds] [--out report.json]  sample tracks and export cues
   authored-contacts <id> [--at seconds] [--out report.json]  inspect contact ranges and socket transfer timing
   motion-fx <id> [--at seconds] [--out report.json]  inspect keyed FX layers and sampled effect output

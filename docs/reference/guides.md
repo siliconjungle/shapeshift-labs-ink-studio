@@ -426,6 +426,7 @@ All checked-in guides, indexed by title and section headings.
 - [Indoor and outdoor exposure](../scene-exposure.md)
 - [Scene optics](../scene-optics.md)
 - [Scene publishing](../scene-publishing.md)
+- [Record scene manipulation](../scene-recording.md)
 - [Static 3D scene resources](../scene-resources.md)
 - [Unified scene timeline](../scene-timeline.md)
 - [Halftone and layered screen printing](../screen-print.md)

@@ -143,3 +143,5 @@ Diorama builds, simulation runs, and visual snapshots expose the compiled progra
 - `markers`, `events`, and `audio` expose the flattened schedule. `ink-studio timeline <scene> --at <seconds>` exports a sampled frame and cue report. Use `--from` and `--to` to limit the cue interval, and `--out` to write JSON.
 
 [Simulation scrubbing and takes](simulation-scrubbing.md) describes recording simulated poses and field values into timeline tracks.
+
+[Scene recording](scene-recording.md) captures live headless manipulation with count-in, overdub, and punch-in.
