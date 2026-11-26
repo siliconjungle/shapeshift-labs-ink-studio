@@ -55,7 +55,7 @@ test('WebGPU keeps a multi-tile Gaussian order deterministic after offscreen cul
   const response = JSON.parse(event.data);
   assert.equal(response.error, undefined, JSON.stringify(response.error));
   assert.equal(response.result.exceptionDetails, undefined, JSON.stringify(response.result.exceptionDetails));
-  const { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, local, trimmed, validation } = response.result.result.value;
+  const { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, local, trimmed, resident, validation } = response.result.result.value;
   assert.equal(validation, null);
   assert.equal(first.profile.visible, 692);
   assert.equal(first.profile.sortCapacity, 1024);
@@ -79,6 +79,15 @@ test('WebGPU keeps a multi-tile Gaussian order deterministic after offscreen cul
   assert.deepEqual(alternate.pixel, first.pixel);
   assert.deepEqual(split.pixel, first.pixel);
   assert.equal(split.profile.visible, first.profile.visible);
+  assert.equal(resident.rejectedOverflow, true);
+  assert.equal(resident.bytesWritten, 64);
+  assert.equal(resident.initial.profile.visible, 2);
+  assert.equal(resident.shrunk.profile.visible, 1);
+  assert(resident.shrunk.pixel[0] > 245);
+  assert.equal(resident.empty.profile.input, 0);
+  assert.deepEqual(resident.empty.pixel, [10, 20, 30, 255]);
+  assert.deepEqual(resident.restored.pixel, resident.initial.pixel);
+  assert.deepEqual(resident.restored.profile.input, resident.initial.profile.input);
   assert(filtered.pixel[0] > 12 && filtered.pixel[0] < 100, String(filtered.pixel));
   assert.equal(filtered.profile.gaussianFilter.footprint, 'compensated');
   assert(exact.pixel[0] > projected.pixel[0] + 8, JSON.stringify({ exact, projected }));
@@ -143,6 +152,18 @@ async function fixture({ createGaussianSplatRenderer, decodeGaussianPly, gaussia
   const split = await capture(cameraTarget, false, 32, [rear, front]);
   front.dispose();
   rear.dispose();
+  const colors = world([row(0, 2, red), row(0, 2, blue)]).data;
+  const active = renderer.uploadChunk(colors, { order: 5, capacity: 512 });
+  const resident = { initial: await capture(cameraTarget, false, 32, [active]) };
+  resident.bytesWritten = renderer.updateChunk(active, colors.subarray(0, 16));
+  resident.shrunk = await capture(cameraTarget, false, 32, [active]);
+  renderer.updateChunk(active, colors.subarray(0, 0));
+  resident.empty = await capture(cameraTarget, false, 32, [active]);
+  renderer.updateChunk(active, colors);
+  resident.restored = await capture(cameraTarget, false, 32, [active]);
+  try { renderer.updateChunk(active, new Float32Array(513 * 16)); }
+  catch (error) { resident.rejectedOverflow = error instanceof TypeError; }
+  active.dispose();
   // The broad red Gaussian has its center just outside this frame.
   renderer.setWorld(world([row(0, 0, red, 8, 1)]));
   const edge = await capture([-1.6, 0, 0], false, 64);
@@ -202,5 +223,5 @@ async function fixture({ createGaussianSplatRenderer, decodeGaussianPly, gaussia
   renderer.dispose();
   readback.destroy();
   image.destroy();
-  return { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, local, trimmed, validation: error ? error.message : null };
+  return { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, local, trimmed, resident, validation: error ? error.message : null };
 }

@@ -135,30 +135,44 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     }
   }
 
-  function uploadChunk(data, { order = 0, footprints = false } = {}) {
+  function uploadChunk(data, { order = 0, footprints = false, capacity = data?.length / 16 } = {}) {
     assertOpen();
     const count = data?.length / 16;
     if (!(data instanceof Float32Array) || !Number.isInteger(count) || count < 1 ||
-        !Number.isInteger(order) || order < 0 || order > 0xffffffff || typeof footprints !== 'boolean')
+        !Number.isInteger(order) || order < 0 || order > 0xffffffff || typeof footprints !== 'boolean' ||
+        !Number.isInteger(capacity) || capacity < count)
       throw new TypeError('Supply packed Gaussian records and an unsigned chunk order');
-    if (count > maxSplats)
+    if (capacity > maxSplats)
       throw new RangeError('Gaussian cloud exceeds this WebGPU device limit of ' + maxSplats + ' splats');
-    const bytes = gaussianChunkBytes(count);
-    const points = buffer('Gaussian imported chunk', bytes, usage.STORAGE | usage.COPY_DST);
+    const bytes = gaussianChunkBytes(capacity);
+    const points = buffer('Gaussian resident chunk', bytes, usage.STORAGE | usage.COPY_DST);
     try {
       const began = performance.now();
-      queue.writeBuffer(points, 0, Uint32Array.of(order, Number(footprints), 0, 0));
+      queue.writeBuffer(points, 0, Uint32Array.of(order, Number(footprints), count, 0));
       queue.writeBuffer(points, gaussianChunkBytes(0), data);
       const cpuMs = performance.now() - began;
-      const handle = Object.freeze({ count, order, bytes, cpuMs, dispose() {
+      const slot = { points, footprints, capacity, count };
+      const handle = Object.freeze({ get count() { return slot.count; }, order, bytes, cpuMs, dispose() {
         if (chunks.delete(handle)) points.destroy();
       } });
-      chunks.set(handle, { points, footprints });
+      chunks.set(handle, slot);
       return handle;
     } catch (error) {
       points.destroy();
       throw error;
     }
+  }
+
+  function updateChunk(handle, data) {
+    assertOpen();
+    const slot = chunks.get(handle);
+    const count = data?.length / 16;
+    if (!slot || !(data instanceof Float32Array) || !Number.isInteger(count) || count > slot.capacity)
+      throw new TypeError('Supply packed Gaussian records that fit the resident allocation');
+    if (count) queue.writeBuffer(slot.points, gaussianChunkBytes(0), data);
+    if (count !== slot.count) queue.writeBuffer(slot.points, 8, Uint32Array.of(count));
+    slot.count = count;
+    return data.byteLength;
   }
 
   function setWorld(world) {
@@ -301,6 +315,7 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     const visibility = encoder.beginComputePass({ label: 'Project and cull', ...timestamps(frame.profile, 0) });
     visibility.setPipeline(project);
     for (const handle of handles) {
+      if (!handle.count) continue;
       const chunk = chunks.get(handle);
       chunk.projection ??= group(project, camera, chunk.points, workspace.ellipses, workspace.keys, draw);
       visibility.setBindGroup(0, chunk.projection);
@@ -391,5 +406,5 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     query?.destroy();
     resolved?.destroy();
   }
-  return Object.freeze({ setWorld, render, uploadChunk, createFootprintAtlas, renderChunks, dispose, format, maxSplats, timestamps: timed });
+  return Object.freeze({ setWorld, render, uploadChunk, updateChunk, createFootprintAtlas, renderChunks, dispose, format, maxSplats, timestamps: timed });
 }
