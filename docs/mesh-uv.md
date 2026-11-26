@@ -1736,6 +1736,42 @@ ink-studio mesh-topology tint station.json blend.json --object panel --expect re
 Run `node examples/tileset-pick/mesh-tint-blend-demo.cjs mesh-tint-blend-demo`
 for replacement, an alpha mix, and dark-to-light midpoint tint on the native grid.
 
+### Remap a shared scene tint
+
+Use `mesh-topology tint-remap` to find an authored RGB tint across
+editable scene meshes and placed prefab members. Include `to` to plan a
+replacement. Colors accept hex or normalized RGB. The default match is
+exact. Set `tolerance` from 0 to 1 to allow that difference per channel.
+
+~~~json
+{ "from": "#dd9e63", "to": "#37a4f0", "tolerance": 0.005 }
+~~~
+
+~~~sh
+ink-studio mesh-topology tint-remap station.json recolor.json --preview remap-review > review.json
+ink-studio mesh-topology tint-remap station.json recolor.json --expect review.json --out station-recolored.json
+~~~
+
+The receipt lists affected authored face, material, and corner IDs by
+scene object, including off-camera placements. Replacement preserves
+corner opacity, interpolation coverage, and the mesh's blend mode.
+Placed prefab edits become scene instance overrides. One scene undo
+restores the remap across all affected objects.
+
+A remap preview includes native before, after, and diff PNGs plus
+`texture-only.png`, `tint-before.png`, and `tint-after.png`. Omit `to`
+to find matches without editing, or use `{}` to export standalone
+`texture-only.png` and `tint-only.png` views. Texture-only shows the
+sampled pigment before tint or lighting. Tint-only shows interpolated
+corner RGB, with replace and alpha blends displayed over gray. Both
+inspection views use the same visible retained mesh pixels and cutout
+coverage.
+
+In Node, use the scene editor's `planMeshTintRemap` and
+`editMeshTintRemap`. Run
+`node examples/tileset-pick/scene-tint-remap-demo.cjs scene-tint-remap-demo`
+for a shared tint on two prefab signs.
+
 ### Inset brush UVs on each edge
 
 Use inward distances measured in source texels. The top, bottom, left, and

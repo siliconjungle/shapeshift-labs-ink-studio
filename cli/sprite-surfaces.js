@@ -24,7 +24,7 @@ function triangleAxes([a,b,c]) {
   return [right,cross(normal,right),normal];
 }
 
-function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,sourceBinding=false,captureRestNormal=false,trackMesh,allow,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection,pbr,paintIndex}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,sourceBinding=false,captureRestNormal=false,trackMesh,allow,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection,pbr,paintIndex,captureMeshTint}) {
   if(!atlas)return [];
   const depth=depthOnly && new Float32Array(W*H).fill(Infinity);
   const fragments=depthOnly ? null : new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
@@ -232,8 +232,8 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
           const weights3=trackWeights && identity.map((_,k)=>row.reduce((s,v,i)=>s+v.weights[k]*w[i]/sum,0));
           const pigment = material?.color ?? [ink>>>16,(ink>>>8)&255,ink&255].map(n=>n/255);
           let tinted = pigment;
+          const channel = tint && (k=>clampTint(weights3[0]*tint[k]+weights3[1]*tint[tintStride+k]+weights3[2]*tint[2*tintStride+k]));
           if (tint) {
-            const channel = k=>clampTint(weights3[0]*tint[k]+weights3[1]*tint[tintStride+k]+weights3[2]*tint[2*tintStride+k]);
             if (tintBlend==='midpoint') tinted=pigment.map((base,k)=>{
               const shift=2*channel(k)-1;
               return base+shift*(shift<0 ? base : 1-base);
@@ -244,6 +244,14 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             } else tinted=pigment.map((base,k)=>base*channel(k));
           }
           if (tint && material) material.color=tinted;
+          let meshTintInspection;
+          if (captureMeshTint && layer.featureFaces) {
+            // Tint-only displays the interpolated paint. Premultiplied modes use gray as the substrate.
+            const gray = tintBlend ? .5 : 1;
+            const remain = tint && tintBlend && tintBlend!=='midpoint' ? .5*(1-channel(3)) : 0;
+            const color = tint ? [0,1,2].map(k=>clampTint(channel(k)+remain)) : [gray,gray,gray];
+            meshTintInspection={texture:pigment,tint:color};
+          }
           let base = normal, mapped;
           if (authored) {
             const mixed = unit(normal.map((_, k) => weights3.reduce((sum, weight, i) => sum + authored[i * 3 + k] * weight, 0)));
@@ -317,7 +325,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             ...(local && {localProjection:true}),
             ...(lightingTarget&&{lightingTarget}),
             ...(fogObject!==undefined&&{fogObject}),
-            ...(paint && {paint}),
+            ...(paint && {paint}),...(meshTintInspection && {meshTintInspection}),
             ...(source && {source:{ ...source,coordinate:weights3,
               restNormal:restNormal && (dot(face,normal) < 0 ?
                 restNormal.map(n=>-n) : restNormal) }}),

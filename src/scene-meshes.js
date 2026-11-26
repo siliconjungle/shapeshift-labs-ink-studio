@@ -220,8 +220,8 @@ const SceneMeshes = (() => {
         for (let k=0;k<span;k++) drawTints[i*span+k] = cornerTints[face*span+k];
       });
       layer.cornerTints = drawTints;
-      if (tintStride===4) layer.tintBlend=tintBlend;
     }
+    if (tintStride===4) layer.tintBlend=tintBlend;
     if(semantic.length)layer.semanticMipmaps=semantic;
     if (blocks.length) layer.blockTextures = { revision:layer.revision, ranges:blocks,
       complete:blocks.reduce((sum,row)=>sum+row.end-row.first,0)===source.length };
@@ -236,7 +236,7 @@ const SceneMeshes = (() => {
     const data = { positions, rest:positions, restBounds, uvs, layouts, bindings, indices:source, drawIndices, drawTriangles, layer, regions, revision:0,
       materials:rows.map(row => row.id), faceMaterials:faceMaterials && Uint8Array.from(faceMaterials), bounds:restBounds,
       ...(authoredNormals && { authoredNormals, sourceToDraw }),
-      ...(cornerTints && {cornerTints:Float32Array.from(cornerTints),tintBlend}),
+      ...(cornerTints && {cornerTints:Float32Array.from(cornerTints)}),tintBlend,
       ...(scanSources && {scanSources,scanInfo:new Map()}) };
     return Object.freeze({ id, objectId, partId, vertices, triangles,
       materials:Object.freeze(tiles.map(tile=>tile.id).sort()), [state]:data });

@@ -817,6 +817,7 @@ function renderFrame(world, o, preparedPalettes) {
     if (o.captureScenePalette) frame.scenePalette = legacyLook && !tone ? basePalette : null;
     if (!o.captureMotion && !o.capturePartMotion && !o.captureStrandMotion && !o.captureSurfaceMotion) delete frame.motionReference;
     if (capturePaintFinish && passes?.paintFinish) frame.paintFinish = passes.paintFinish;
+    if (o.captureMeshTint===true && passes?.meshTintInspection) frame.meshTintInspection=passes.meshTintInspection;
     if (requestedPasses.length) frame.passes = ArtPasses.subset(requestedPasses.includes('inkMask') ?
       { w:frame.w, h:frame.h, ...passes, inkMask:frame.inkMask ?? new Uint8Array(frame.w*frame.h) } : passes,
       requestedPasses);
@@ -901,6 +902,7 @@ function renderFrame(world, o, preparedPalettes) {
   const pixelSelection = o.pixelSelection && !o.reflectionPlane && !probeView ? PixelSelectionScope.create(world,W,H,o.pixelSelection) : null;
   const isolate = pixelSelection?.filter;
   const captureSourceSurface = passSelection.has('sourceSurface') && !o.reflectionPlane && !probeView;
+  const captureMeshTint = o.captureMeshTint===true && !o.reflectionPlane && !probeView;
   const captureTexturedSurface=!!pixelSelection||captureSourceSurface||Boolean(deepPlan)||captureSurfaceMotion||temporal||filterSettings?.varied||['objectId','materialId','objectPosition','surfaceUV','surfaceUVValid',
     'surfaceKind','partId'].some(channel=>passSelection.has(channel));
   const captureStrandMotion = partView && (!!o.captureStrandMotion || ArtPasses.needsStrandMotion(requestedPasses));
@@ -1166,7 +1168,7 @@ function renderFrame(world, o, preparedPalettes) {
     previous:o.motionFrom?.strandMotion ?? o.strandMotionHistory?.previous()
   });
   const art = createArtPasses([...passSelection].filter(name => name !== 'target' && name !== 'mask' && name !== 'paletteOwner' && name !== 'inkShadow' &&
-    !ArtPasses.environment.includes(name) && !ArtPasses.strands.includes(name) && !ArtPasses.proxies.includes(name)), W, H, trackGlow && emissive?.slots, partCapture, surfaceCapture, temporal);
+    !ArtPasses.environment.includes(name) && !ArtPasses.strands.includes(name) && !ArtPasses.proxies.includes(name)), W, H, trackGlow && emissive?.slots, partCapture, surfaceCapture, temporal, captureMeshTint);
   const environmentPasses = createEnvironmentPasses(passSelection, W, H, world);
   const skyPass = environmentPasses?.passes.sky, fogPass = environmentPasses?.passes.fogTransmittance;
   const reflectPass = environmentPasses?.passes.reflections;
@@ -1226,7 +1228,7 @@ function renderFrame(world, o, preparedPalettes) {
   const trackMeshes = isolate && o.trackPixelSources ? new Map() : null;
   const trackFields = trackMeshes && new Map();
   const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { V, W, H, focal, ortho, near,simulationLayers,
-      pbr,paintIndex:fragmentTrace?.pixel,
+      pbr,paintIndex:fragmentTrace?.pixel,captureMeshTint,
       far:camera.clipFar, clip: geometryClip,multiprojection:localProjection,
       captureRestNormal:passSelection.has('sourceRestNormal'),trackMesh:trackMeshes && ((source,triangle,project)=>trackMeshes.set(PixelSourceTracking.meshKey(source,triangle),project)),
       paletteSampling: o.paletteSampling, semanticMipmaps:o.semanticMipmaps, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1,

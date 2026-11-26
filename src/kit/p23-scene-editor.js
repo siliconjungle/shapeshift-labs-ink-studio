@@ -1241,17 +1241,21 @@
       return K.meshTopology.planTint(meshTopology(object,part).document,request);
     }
 
-    function editMeshTint(object, request, {part} = {}) {
-      const before = meshTopology(object,part);
-      const {document:painted,report} = K.meshTopology.planTint(before.document,request);
-      const {beforeRevision,afterRevision} = report;
-      if (beforeRevision===afterRevision) return report;
+    function tintedMeshRow(before, painted, {beforeRevision,afterRevision}) {
       const next = {...before,document:painted};
       // Tint changes the authoring revision while keeping geometry and valid source bindings intact.
       if (before.attachments?.revision===beforeRevision)
         next.attachments = {...before.attachments,revision:afterRevision};
       if (before.shapeKeys?.restRevision===beforeRevision)
         next.shapeKeys = {...before.shapeKeys,restRevision:afterRevision};
+      return next;
+    }
+
+    function editMeshTint(object, request, {part} = {}) {
+      const before = meshTopology(object,part);
+      const {document:painted,report} = K.meshTopology.planTint(before.document,request);
+      if (report.beforeRevision===report.afterRevision) return report;
+      const next = tintedMeshRow(before,painted,report);
       function write() {
         const topologyMeshes = {...snapshot().topologyMeshes,[object]:next};
         validate({...snapshot(),topologyMeshes});
@@ -1259,6 +1263,56 @@
         return report;
       }
       return document.pending() ? write() : document.transact('Paint mesh tint on '+object,write);
+    }
+
+    function stageMeshTintRemap(request) {
+      const T=K.meshTopology, settings=T.tintRemapSettings(request), scene=snapshot();
+      const report={format:'ink-studio/mesh-tint-remap',version:1,scene:scene.id,...settings,
+        meshes:[],matchedFaces:0,changedFaces:0,matchedCorners:0,changedCorners:0};
+      if (settings.from===undefined) return {report:freeze(report)};
+      const {spec,instances}=A.scenePrefabs.expand(scene,buildEnv), owners=new Map();
+      for (const [instance,link] of instances) for (const [member,mesh] of link.meshes)
+        owners.set(mesh.object,{...mesh,instance,member,revision:link.revision});
+      const direct=Object.create(null), overrides=Object.create(null);
+      for (const object of Object.keys(spec.topologyMeshes ?? {}).sort()) {
+        const owner=owners.get(object), expanded=spec.topologyMeshes[object], row=owner?.row ?? expanded;
+        const {document:painted,...effect}=T.remapTint(row.document,settings);
+        if (!effect.matchedCorners) continue;
+        report.meshes.push({object,...(expanded.part!==undefined && {part:expanded.part}),
+          ...(owner && {instance:owner.instance,member:owner.member}),...effect});
+        report.matchedFaces+=effect.faces.length;
+        report.changedFaces+=effect.faces.filter(face=>face.changedCorners).length;
+        report.matchedCorners+=effect.matchedCorners;
+        report.changedCorners+=effect.changedCorners;
+        if (!effect.changedCorners) continue;
+        const mesh=tintedMeshRow(row,painted,effect);
+        if (owner) {
+          const instance=overrides[owner.instance] ?? scene.instances[owner.instance];
+          overrides[owner.instance]={...instance,meshOverrides:{...instance.meshOverrides,
+            [owner.member]:{revision:owner.revision,base:owner.base,mesh}}};
+        } else direct[object]=mesh;
+      }
+      if (!report.changedCorners) return {report:freeze(report)};
+      const patch={...(Object.keys(direct).length && {topologyMeshes:{...scene.topologyMeshes,...direct}}),
+        ...(Object.keys(overrides).length && {instances:{...scene.instances,...overrides}})};
+      const candidate={...scene,...patch};
+      validate(candidate);
+      requireReviewEdit(scene,candidate);
+      return {patch,report:freeze(report)};
+    }
+
+    function planMeshTintRemap(request) {
+      return stageMeshTintRemap(request).report;
+    }
+
+    function editMeshTintRemap(request) {
+      const {patch,report}=stageMeshTintRemap(request);
+      if (!patch) return report;
+      function write() {
+        document.setEnvironment(patch);
+        return report;
+      }
+      return document.pending() ? write() : document.transact('Remap scene mesh tint',write);
     }
 
     function planMeshSkin(object, request, { part } = {}) {
@@ -1524,6 +1578,8 @@
       editMeshShading,
       planMeshTint,
       editMeshTint,
+      planMeshTintRemap,
+      editMeshTintRemap,
       planMeshSkin,
       editMeshSkin,
       planMeshShapeKeys,

@@ -19,6 +19,8 @@ const meshCornerTint = (() => {
     const tint=attributes?.tint;
     return Array.isArray(tint) && [3,4].includes(tint.length) && tint.every(unit) ? tint : undefined;
   };
+  const matches = (tint,color,tolerance)=>tint!==undefined && color.every((value,k)=>
+    Math.abs(value-(tint[k] ?? 1))<=tolerance+(tolerance ? Number.EPSILON : 0));
   const modes = Object.freeze(['multiply','replace','alpha-blend','midpoint']);
   const coverage = (corner,tint)=>tint ? corner.attributes.tintCoverage ?? 1 : 0;
   function generic(corner) {
@@ -61,7 +63,7 @@ const meshCornerTint = (() => {
     const tint=Array.from({length:size},(_,k)=>clamp(weights.reduce((sum,n,i)=>sum+n*(colors[i][k] ?? 1),0)));
     return {tint};
   }
-  return Object.freeze({read,generic,stream,sample,modes,clear,midpoint,neutral});
+  return Object.freeze({read,generic,stream,sample,matches,modes,clear,midpoint,neutral});
 })();
 
 (function (K) {
@@ -445,7 +447,7 @@ const meshCornerTint = (() => {
       }
       triangleSources.push(frozen({ face: face.id, corners: frozen(corners.map(corner => corner.id)) }));
     }
-    return { positions, uvs, ...(sets.size && {uvSets}), ...(doc.uvBindings && {uvBindings:doc.uvBindings}), ...(directions && { normals }), ...(cornerTints && {cornerTints,...(doc.tintBlend && {tintBlend:doc.tintBlend})}), indices, materials, faceMaterials, triangleSources, vertexSources };
+    return { positions, uvs, ...(sets.size && {uvSets}), ...(doc.uvBindings && {uvBindings:doc.uvBindings}), ...(directions && { normals }), ...(cornerTints && {cornerTints}), ...(doc.tintBlend && {tintBlend:doc.tintBlend}), indices, materials, faceMaterials, triangleSources, vertexSources };
   }
 
   function triangulate(source) {
