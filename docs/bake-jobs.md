@@ -97,3 +97,7 @@ See [position and ID bakes](bake-position-id.md) for object, world, and normaliz
 ## Transfer opacity and other textures
 
 See [opacity and texture transfer](bake-texture-transfer.md) to move color and scalar maps between UV layouts, choose input alpha association and coverage policy, and preserve source and output precision.
+
+## Inspect and export UV diagnostics
+
+See [UV debug outputs](bake-uv-debug.md) for aligned chart outlines, footprint exports, ownership overlays, and tile navigation in the bake viewer.

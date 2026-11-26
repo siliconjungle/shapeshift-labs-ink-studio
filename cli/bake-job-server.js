@@ -5,7 +5,7 @@ const {randomBytes}=require('node:crypto');
 const {inspectBakeJob,runBakeJob,latestBakeJob}=require('./bake-jobs.js');
 
 const type={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8',
-  '.json':'application/json; charset=utf-8','.png':'image/png','.exr':'image/x-exr'};
+  '.json':'application/json; charset=utf-8','.png':'image/png','.svg':'image/svg+xml; charset=utf-8','.exr':'image/x-exr'};
 const reference=/^\/revisions\/bake-[A-Za-z0-9]{6}\/(?:[\w.-]+\/)*[\w.-]+$/;
 const response=(res,code,value,mime)=>{res.writeHead(code,{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
   'Content-Type':mime??type['.json']});res.end(mime?value:JSON.stringify(value));};

@@ -8,7 +8,7 @@
     'bent-normal':'Bent normal','occlusion-direction':'Occlusion direction',
     curvature:'Signed curvature','curvature-convex':'Convex curvature','curvature-concave':'Concave curvature',
     'position-object':'Object position','position-world':'World position','position-normalized':'Normalized position',
-    'vertex-id':'Vertex ID','material-id':'Material ID','part-id':'Part ID','texture-transfer':'Texture channel'};
+    'vertex-id':'Vertex ID','material-id':'Material ID','part-id':'Part ID','texture-transfer':'Texture channel','uv-outline':'UV outlines'};
   const geometry=['slope','cavity','exposure','thickness','thickness-valid'];
   const occlusionMaps=['ao','ao-contact','ao-directional','bent-normal','occlusion-direction'];
   const curvatureMaps=['curvature','curvature-convex','curvature-concave'];
@@ -458,12 +458,60 @@
     box.replaceChildren();
     for(const [key,value] of Object.entries(fields))box.append(node('dt',key),node('dd',String(value)));
   }
+  function uvOverlays(row,debug) {
+    el('map-frame').hidden=!row;
+    el('uv-controls').hidden=!row;
+    el('uv-downloads').hidden=!debug;
+    el('uv-border').hidden=!row||!el('show-uv-bounds').checked;
+    const ownership=el('show-uv-ownership'), outlines=el('show-uv-outlines');
+    ownership.disabled=outlines.disabled=!debug;
+    el('uv-ownership').hidden=!debug||!ownership.checked;
+    el('uv-outlines').hidden=!debug||!outlines.checked;
+    el('uv-legend').hidden=!debug||!ownership.checked;
+    const tiles=el('uv-tiles');
+    tiles.replaceChildren();
+    const related=row?report.maps.flatMap((other,index)=>other.map===row.map&&other.target===row.target?[[other,index]]:[]):[];
+    tiles.hidden=related.length<2;
+    if(related.length>1)for(const [other,index] of related) {
+      const item=button('Tile '+other.tileLabel,()=>{el('result').value=String(index);showMap();});
+      item.setAttribute('aria-pressed',String(other===row));
+      tiles.append(item);
+    }
+    if(row) {
+      const [u,v]=row.tile;
+      el('uv-tile-name').textContent='Tile '+row.tileLabel;
+      el('uv-tile-axes').textContent='U '+u+' to '+(u+1)+' · V '+v+' to '+(v+1);
+    }
+    if(!debug)return;
+    const {files}=debug;
+    for(const [id,file] of [['uv-ownership',files.ownership],['uv-outlines',files.outline]]) {
+      const image=el(id), src=base+file;
+      if(image.getAttribute('src')!==src)image.src=src;
+    }
+    for(const [id,file] of [['uv-outline-png',files.outline],['uv-outline-svg',files.outlineSvg],
+      ['uv-coverage-png',files.coverage],['uv-coverage-svg',files.coverageSvg],['uv-ownership-png',files.ownership]])
+      el(id).href=base+file;
+    const swatches=el('uv-swatches');
+    swatches.replaceChildren();
+    if(ownership.checked) {
+      function swatch(color,text) {
+        const item=node('li'), chip=node('span');
+        chip.style.backgroundColor=color;
+        item.append(chip,node('span',text));swatches.append(item);
+      }
+      for(const {id,color,texels,gutter} of debug.palette)
+        swatch(color,'Chart '+id+' · '+texels.toLocaleString()+' surface · '+gutter.toLocaleString()+' gutter');
+      if(debug.overlaps)swatch('#ff4d75','Overlapping interiors · '+debug.overlaps.toLocaleString()+' texels');
+    }
+  }
   function showMap() {
     const row=report?.maps[+el('result').value];
     el('image').hidden=!row;el('empty').hidden=!!row;el('download-map').hidden=!row;
     el('download-validity').hidden=!row?.validityFile;
     const legend=el('id-legend');
     legend.hidden=true;el('id-swatches').replaceChildren();
+    const debug=report?.uvDebug?.[row?.uvDebug];
+    uvOverlays(row,debug);
     if(!row)return;
     el('image').src=base+(row.previewFile??row.file);
     el('image').alt=(names[row.map]??row.map)+' on '+row.target+' tile '+row.tileLabel;
@@ -487,6 +535,8 @@
       .map(([key,n])=>reasons[key]+' '+n.toLocaleString()).join(' · ');
     properties(el('details'),{'UV set':row.uvSet,'Grid':row.settings.size+' × '+row.settings.size,
       'Padding':row.settings.padding+' px','Surface coverage':(row.coverage*100).toFixed(1)+'%',
+      ...(debug&&{'UV charts':debug.charts,'Gutter texels':debug.gutters.toLocaleString(),
+        'Overlap texels':debug.overlaps.toLocaleString()}),
       ...(output&&{'Encoding':encodings.find(([key])=>key===output.encoding)?.[1]}),
       ...(output?.kind==='normal'&&{'Normal space':title(output.space)}),
       ...(output?.kind==='direction'&&{'Direction space':'World XYZ'}),
@@ -570,6 +620,7 @@
     } catch(error) {notify(error.message);}
   }
   el('result').onchange=showMap;
+  for(const id of ['show-uv-outlines','show-uv-ownership','show-uv-bounds'])el(id).onchange=showMap;
   fillDefaults();maps();targetControls();results();
   status(report?{event:'completed',completed:report.maps.length,total:report.maps.length}:{event:'idle'},false);
   if(token) {

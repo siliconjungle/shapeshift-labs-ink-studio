@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Azimuth Gate · Ink Studio</title>
+<style>
+:root{color-scheme:dark;font:15px/1.4 system-ui,sans-serif;background:#142128;color:#f4e6cb;--line:#476068;--muted:#b5c8c8;--accent:#ffd7a2}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at 42% 0,#29404b 0%,#142128 70%)}
+main{max-width:1160px;margin:auto;padding:clamp(18px,3.8vw,46px) clamp(12px,4vw,47px) 24px}
+header{display:flex;align-items:end;justify-content:space-between;flex-wrap:wrap;gap:12px;padding-bottom:17px;border-bottom:1px solid var(--line)}
+h1{font:400 clamp(48px,7vw,88px)/.96 Georgia,serif;letter-spacing:-.066em;margin:0}
+p{margin:6px 0 0;color:var(--muted)}
+a{color:var(--accent);text-underline-offset:3px}
+header a,footer{font-size:13px}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px 15px;padding:11px 0;color:var(--muted)}
+label{display:inline-flex;align-items:center;gap:6px;font-size:13px}
+select{color:#f4e6cb;background:#233840;border:1px solid var(--line);font:inherit;padding:4px 7px;border-radius:2px}
+input{accent-color:var(--accent)}
+a:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+article{border:1px solid var(--line);background:#182931;padding:8px;min-width:0}
+figure{position:relative;isolation:isolate;margin:0;aspect-ratio:1;background:linear-gradient(135deg,#223740,#16252e)}
+figure img{position:absolute;width:100%;height:100%;inset:0;image-rendering:pixelated}
+article[data-mode="atlas"] .ownership{opacity:.47}
+.border{position:absolute;inset:1px;border:1px dashed #ffc985b5;pointer-events:none}
+.badge{position:absolute;top:4px;left:4px;padding:4px 7px;background:#192c36;color:#ffe0ac;font:12px ui-monospace,monospace}
+.bounds{top:auto;left:auto;bottom:4px;right:4px;font-size:11px}
+footer{display:flex;justify-content:space-between;align-items:baseline;gap:5px 10px;margin:8px 2px 2px;flex-wrap:wrap;color:var(--muted)}
+.exports{display:flex;gap:4px 10px;flex-wrap:wrap}
+.stamp{font-size:12px;color:var(--muted);margin:5px 2px}
+.legend{display:flex;flex-wrap:wrap;gap:5px 14px;margin-top:12px;border-top:1px solid var(--line);padding-top:9px;font-size:13px;color:var(--muted)}
+.legend span{display:flex;gap:5px;align-items:center}
+.legend i{width:11px;height:11px;border:1px solid #fff4;background:var(--chip)}
+[hidden]{display:none!important}
+@media(max-width:620px){.grid{grid-template-columns:1fr;gap:9px}}
+</style>
+<script defer src="data.js"></script>
+</head>
+<body><main>
+<header><div><h1>Azimuth Gate</h1><p>Trace one chart across two UV tiles.</p></div>
+<a id="review">Open bake viewer</a></header>
+<div class="controls">
+<label>Layout <select id="mode"><option value="atlas">Panoramic atlas</option><option value="conflict">Overlap check</option></select></label>
+<label><input type="checkbox" id="outlines" checked> Chart outlines</label>
+<label><input type="checkbox" id="ownership" checked> Chart ownership</label>
+<label><input type="checkbox" id="bounds" checked> Tile bounds</label>
+</div>
+<div class="grid" id="tiles"></div>
+<div class="legend" id="legend"></div>
+<template id="tile"><article>
+  <figure><img class="pigment"><img class="ownership" alt=""><img class="outlines" alt="">
+    <div class="border"><span class="badge"></span><span class="badge bounds"></span></div>
+  </figure>
+  <footer><span class="count"></span><div class="exports">
+  <a class="outline-svg" download>Outlines SVG</a><a class="outline-png" download>PNG</a>
+  <a class="coverage-svg" download>Coverage SVG</a><a class="coverage-png" download>PNG</a></div></footer>
+</article></template>
+<script>
+window.addEventListener('DOMContentLoaded',()=>{
+  const get=id=>document.getElementById(id);
+  const mode=get('mode'), holder=get('tiles'), legend=get('legend');
+  const controls=Object.fromEntries(['ownership','outlines','bounds'].map(id=>[id,get(id)]));
+  function toggle() {
+    for(const [name,selector] of [['ownership','.ownership'],['outlines','.outlines'],['bounds','.border']])
+      for(const element of holder.querySelectorAll(selector))element.hidden=!controls[name].checked;
+    legend.hidden=!controls.ownership.checked;
+  }
+  function render() {
+    const data=demo[mode.value], colors=new Map();
+    get('review').href=data.review;
+    holder.replaceChildren();
+    for(const row of data.tiles) {
+      const card=get('tile').content.firstElementChild.cloneNode(true), select=key=>card.querySelector(key);
+      card.dataset.mode=mode.value;
+      const main=select('.pigment');
+      main.hidden=!row.pigment;
+      if(row.pigment)main.src=row.pigment;
+      main.alt='Baked pigment on tile '+row.tileLabel;
+      select('.ownership').src=row.files.ownership;
+      select('.outlines').src=row.files.outline;
+      select('.badge').textContent='Tile '+row.tileLabel;
+      const [u,v]=row.tile;
+      select('.bounds').textContent='U '+u+' to '+(u+1)+' · V '+v+' to '+(v+1);
+      const number=n=>n.toLocaleString();
+      select('.count').textContent=row.overlaps?number(row.overlaps)+' overlap texels':
+        row.charts+' charts · '+number(row.gutters)+' gutter texels';
+      for(const [selector,file] of [['outline-svg','outlineSvg'],['outline-png','outline'],['coverage-svg','coverageSvg'],['coverage-png','coverage']])
+        select('.'+selector).href=row.files[file];
+      holder.append(card);
+      for(const chart of row.palette)colors.set(chart.id,{color:chart.color,label:'Chart '+chart.id});
+      if(row.overlaps)colors.set('overlap',{color:'#ff4d75',label:'Overlap'});
+    }
+    const chips=[...colors.values()].map(({color,label})=>{
+      const chip=document.createElement('i'), row=document.createElement('span');
+      chip.style.setProperty('--chip',color);row.append(chip,label);
+      return row;
+    });
+    legend.replaceChildren(...chips);
+    toggle();
+  }
+  mode.addEventListener('change',render);
+  for(const control of Object.values(controls))control.addEventListener('change',toggle);
+  render();
+});
+</script>
+</main></body></html>
