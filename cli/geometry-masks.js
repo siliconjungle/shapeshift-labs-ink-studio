@@ -113,7 +113,7 @@ function prepare(points, faces, normals, options, { V,procedural:{spatial} }, se
     },tolerance);
   }
   const precision=Math.max(...box.min.map(Math.abs),...box.max.map(Math.abs))*Number.EPSILON*32;
-  const thicknessPass=interiors&&Thickness.prepare(rows,trace,{diagonal,rayBias,precision},measures.thickness,measures.raw,V);
+  const thicknessPass=interiors?Thickness.prepare(rows,trace,{diagonal,rayBias,precision},measures.thickness,measures.raw,V):null;
 
   function forFace(face, layers) {
     const { normal } = rows[face], tangent = V.perp(normal), bitangent = V.cross(normal,tangent);

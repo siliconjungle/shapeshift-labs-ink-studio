@@ -5,9 +5,11 @@
     'thickness-valid':'Thickness validity','cage-hit':'Projection hits','cage-miss':'Projection misses',
     'cage-backface':'Projection backfaces','cage-distance':'Projection distance','cage-relief':'Signed projection relief',
     ao:'Ambient occlusion','ao-contact':'Contact AO','ao-directional':'Directional AO',
-    'bent-normal':'Bent normal','occlusion-direction':'Occlusion direction'};
+    'bent-normal':'Bent normal','occlusion-direction':'Occlusion direction',
+    curvature:'Signed curvature','curvature-convex':'Convex curvature','curvature-concave':'Concave curvature'};
   const geometry=['slope','cavity','exposure','thickness','thickness-valid'];
   const occlusionMaps=['ao','ao-contact','ao-directional','bent-normal','occlusion-direction'];
+  const curvatureMaps=['curvature','curvature-convex','curvature-concave'];
   const encodings=[['png8','8-bit PNG'],['png16','16-bit PNG'],['exr','32-bit OpenEXR']];
   const {label,catalog,token}=bakeJob;
   function withAvailableMaps(value) {
@@ -235,6 +237,44 @@
     }
     draw();
   }
+  function curvatureControls(row,extra) {
+    const inputs=bakeJob.normalInputs??[], options=row.overrides, controls=node('div');
+    controls.className='map-controls';
+    extra.append(controls);
+    function draw() {
+      const source=options.curvatureSource??'mesh', normal=source==='normal';
+      const encoding=options.encoding??'png16', normalMode=options.normalization??(encoding==='exr'?'none':'auto');
+      const sources=[['mesh','Mesh geometry'],['normal','Normal input']];
+      controls.replaceChildren(field('Curvature source',selected(inputs.length||normal?sources:sources.slice(0,1),source,value=>{
+        options.curvatureSource=value;delete options.curvatureScale;delete options.edgePolicy;
+        if(value==='normal')options.normalInput=inputs[0];else delete options.normalInput;
+        draw();
+      })));
+      if(normal)controls.append(field('Normal input',selected(inputs.map(id=>[id,id]),options.normalInput,
+        value=>{options.normalInput=value;})));
+      const scaleLabel=normal?'Sample stride (texels)':'Smoothing length (mesh units)';
+      controls.append(field(scaleLabel,numeric(scaleLabel,options.curvatureScale,
+        value=>put(options,'curvatureScale',value),normal?{min:1,max:32,step:1,placeholder:1}:{min:0,step:'any',placeholder:0})));
+      const policies=normal?[['one-sided','One-sided at chart edges'],['strict','Full stencil only']]:
+        [['surface','Weld the physical surface'],['chart','Keep UV chart boundaries']];
+      controls.append(field('Edge policy',selected(policies,options.edgePolicy??policies[0][0],value=>{options.edgePolicy=value;})));
+      controls.append(field('Encoding',selected(encodings,encoding,value=>{
+        options.encoding=value;
+        if(value!=='exr'&&options.normalization==='none')delete options.normalization;
+        draw();
+      })));
+      const modes=[['auto','Fit target magnitude'],['manual','Manual magnitude']];
+      if(encoding==='exr')modes.push(['none','Raw inverse units']);
+      controls.append(field('Curvature normalization',selected(modes,normalMode,value=>{
+        options.normalization=value;
+        if(value==='manual')options.curvatureRange??=1;else delete options.curvatureRange;
+        draw();
+      })));
+      if(normalMode==='manual')controls.append(field('Magnitude limit',numeric('Curvature magnitude limit',options.curvatureRange,
+        value=>put(options,'curvatureRange',value),{min:0,step:'any'})));
+    }
+    draw();
+  }
   function maps() {
     const list=preset.maps, rows=el('rows');rows.replaceChildren();
     for(const [i,row] of list.entries()) {
@@ -258,6 +298,7 @@
       if(['normal','world-normal','height'].includes(row.id))surfaceControls(row,extra);
       if(occlusionMaps.includes(row.id))occlusionControls(row,extra);
       if(['thickness','thickness-valid'].includes(row.id))thicknessControls(row,extra);
+      if(curvatureMaps.includes(row.id))curvatureControls(row,extra);
       if(geometry.includes(row.id)) {
         const tuning={slope:[],cavity:['samples','cavityRadius','rayBias'],exposure:['samples','exposureDistance','rayBias'],
           thickness:['thicknessScale','rayBias'],'thickness-valid':['rayBias']};
@@ -392,6 +433,10 @@
         'Spread':row.occlusion.spread+'°','Range':number(row.occlusion.range),'Falloff':title(row.occlusion.falloff),
         'Occluders':({all:'Own mesh and neighbors',only:'Own mesh only',exclude:'Neighbors only'})[row.occlusion.selfOcclusion],
         ...(row.occlusion.direction&&{'Scene direction':row.occlusion.direction.map(number).join(', ')})}),
+      ...(row.curvature&&{'Source':row.curvature.normalInput??'Mesh geometry','Edge policy':title(row.curvature.edgePolicy),
+        'Measured samples':row.curvature.measured.toLocaleString(),'Unknown samples':row.curvature.unknown.toLocaleString(),
+        'Encoding range':output.range?span(output.range):'Raw inverse units','Clipped samples':output.clipped,
+        ...(row.curvature.measured&&{'Signed extrema':span([row.curvature.signedMin,row.curvature.signedMax])})}),
       ...(row.projection&&{'Projection':row.projection.mode==='self'?'Self-bake':row.projection.highMeshes.join(', '),
         'Hits':row.projection.hits.toLocaleString(),'Misses':row.projection.misses.toLocaleString(),
         'Backfaces':row.projection.backfaces.toLocaleString(),
