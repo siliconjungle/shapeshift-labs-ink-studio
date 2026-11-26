@@ -591,7 +591,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.areaLights.occludes` | function | `(sources, origin, direction, stop)` | [guide](../area-lights.md), [source](../../src/area-lights.js) |
 | `KIT.areaLights.prepare` | function | `(value, { time = 0 } = {})` | [guide](../area-lights.md), [source](../../src/area-lights.js) |
 | `KIT.areaLights.shadowField` | function | `(sources, { resolution = 48 } = {})` | [guide](../area-lights.md), [source](../../src/area-lights.js) |
-| `KIT.areaLights.staticSources` | function | `(world, data = world.data, alpha, derived=[])` | [guide](../area-lights.md), [source](../../src/area-lights.js) |
+| `KIT.areaLights.staticSources` | function | `(world, data = world.data, alpha, derived=[], shadowSettings)` | [guide](../area-lights.md), [source](../../src/area-lights.js) |
 | `KIT.areaLights.transmission` | function | `(light, point, out = [1, 1, 1])` | [guide](../area-lights.md), [source](../../src/area-lights.js) |
 
 ## KIT.art

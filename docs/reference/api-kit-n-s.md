@@ -165,7 +165,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pbr.restTransform` | function | `(world, i, frame)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
 | `KIT.pbr.shade` | function | `(plan, id, sample)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
 | `KIT.pbr.shadows` | namespace |  |  |
+| `KIT.pbr.shadows.bounds` | function | `(value)` | [source](../../src/directional-shadow-map.js) |
 | `KIT.pbr.shadows.curveLayers` | value | `number = 4` |  |
+| `KIT.pbr.shadows.inspect` | function | `(frame)` | [source](../../src/directional-shadow-map.js) |
 | `KIT.pbr.shadows.pack` | function | `(shadows, offset)` | [source](../../src/pbr-shadows.js) |
 | `KIT.pbr.shadows.prepare` | function | `(plan, world, frames, {layers=[],surfaceOptions,shadowArt,footprint=0,enabled=true,curveMode}={})` | [source](../../src/pbr-shadows.js) |
 | `KIT.pbr.splatBindings` | function | `(world, plan)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
@@ -1415,9 +1417,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.shadowArt.allows` | function | `(mask, subject)` | [source](../../src/shadow-art.js) |
 | `KIT.shadowArt.bind` | function | `(art, world, mode)` | [source](../../src/shadow-art.js) |
 | `KIT.shadowArt.frame` | function | `(world, footprint)` | [source](../../src/shadow-art.js) |
+| `KIT.shadowArt.objectAllows` | function | `(art, mode, target)` | [source](../../src/shadow-art.js) |
+| `KIT.shadowArt.participates` | function | `(art, mode, target)` | [source](../../src/shadow-art.js) |
 | `KIT.shadowArt.prepare` | function | `(raw)` | [source](../../src/shadow-art.js) |
 | `KIT.shadowArt.small` | function | `(art, footprint)` | [source](../../src/shadow-art.js) |
 | `KIT.shadowArt.stride` | value | `number = 6` |  |
+| `KIT.shadowArt.surfaceTarget` | function | `(chart, fallback)` | [source](../../src/shadow-art.js) |
 | `KIT.shadowArt.transfer` | function | `(art, visibility, small = false)` | [source](../../src/shadow-art.js) |
 
 ## KIT.shadowCutouts
@@ -1478,7 +1483,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.shotLighting` | namespace |  |  |
-| `KIT.shotLighting.bind` | function | `(rig, world, data, alpha, art=Channels.bind(rig?.art,world))` | [guide](../shot-lighting.md), [source](../../src/shot-lighting.js) |
+| `KIT.shotLighting.bind` | function | `(rig, world, data, alpha, art=Channels.bind(rig?.art,world), shadowSettings=Shadow.prepare(world.look?.shadowArt))` | [guide](../shot-lighting.md), [source](../../src/shot-lighting.js) |
 | `KIT.shotLighting.frame` | function | `(authored, override, time)` | [guide](../shot-lighting.md), [source](../../src/shot-lighting.js) |
 | `KIT.shotLighting.needsCasters` | function | `(definition)` | [guide](../shot-lighting.md), [source](../../src/shot-lighting.js) |
 | `KIT.shotLighting.prepare` | function | `(definition, { time = 0 } = {})` | [guide](../shot-lighting.md), [source](../../src/shot-lighting.js) |

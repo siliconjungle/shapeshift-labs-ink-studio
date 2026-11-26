@@ -354,6 +354,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology overlaps <mesh-or-scene.json> [settings.json] [--object id] [--part id] [--out report.json | --selection-out faces.json]   review same-facing coincident polygons
   mesh-topology custom-properties <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   inspect and edit typed project, prefab and instance properties
   mesh-topology scene-layer <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   organize placed prefabs, inspect bounds, and set layer origins
+  mesh-topology shadow-controls <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   set object and light shadows
   mesh-topology construction-light <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   place and aim a light on construction anchors
   mesh-topology billboard-prefab <scene.json> <request.json> [--selection instances.json] [--preview directory] [--view settings.json] [--out scene.json]   make selected prefab modules face the camera
   mesh-topology mirror-prefab <scene.json> <request.json> [--preview directory] [--view settings.json] [--out scene.json]   link or commit a mirrored visual prefab placement
@@ -925,7 +926,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
                               against the pixel-art references (--map: where the stray pixels and drawn edges are)
 
 any command that plays a diorama takes --poke 2:x,y,z (tap it at 2 seconds, toward that point; several with ;)
-sun options: --live-sun on|off --sun-direction x,y,z --sun-ambient n --sun-intensity n --shadow-map-size n --shadow-bias n --sun-shadows off --shadow-strand-spans n --shadow-strand-layers n
+sun options: --live-sun on|off --sun-direction x,y,z --sun-ambient n --sun-intensity n --shadow-map-size n --shadow-bias n --shadow-bounds minU,minV,maxU,maxV --sun-shadows off --shadow-strand-spans n --shadow-strand-layers n
 shadow art: --shadow-art file.json|off for baked JSON scenes and live sun
 color clusters: --color-clusters file.json|off for material-specific cluster size, grain and protection
 pass quality: --pass-quality file.json|off for background, particles and secondary reflections
