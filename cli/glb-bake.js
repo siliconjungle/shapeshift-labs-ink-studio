@@ -28,7 +28,7 @@ function opaquePigment(texture) {
 }
 
 function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = false, projection, chartBake, sourceFaces, pigmentUVs, samples } = {}) {
-  const count = size * size, covered = new Uint8Array(count);
+  const {width,height:rows}=Grid.dimensions(size), count = width * rows, covered = new Uint8Array(count);
   const tangentNormals = samples?.tangent && new Float32Array(count * 3);
   const worldNormals = samples?.world && new Float32Array(count * 3);
   const height = samples?.height && new Float32Array(count), heightValid = height && new Uint8Array(count);
@@ -233,7 +233,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
     if(alpha)alpha[j]=alpha[i];
   };
   Grid.gutters(covered,size,padding,i=>!previous||footprint[i]&&dirty.has(owners[i]-1),copy);
-  const textures = Object.fromEntries(Object.entries(pixels).map(([key, data]) => [key, png.encode(size, size, data)]));
+  const textures = Object.fromEntries(Object.entries(pixels).map(([key, data]) => [key, png.encode(width, rows, data)]));
   const translucent = alpha && alpha.some((value,i)=>covered[i]&&value<255);
   if (alpha) {
     const rgba = new Uint8Array(count*4);
@@ -241,13 +241,13 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
       rgba.set(pixels.base.subarray(i*3,i*3+3),i*4);
       rgba[i*4+3]=alpha[i];
     }
-    textures.base=png.encode(size,size,rgba,4);
+    textures.base=png.encode(width,rows,rgba,4);
   }
   const registeredMaps = registered && {
-    roughness:png.encodeGray(size,size,Uint8Array.from(covered,(_n,i)=>pixels.surface[i*3+1])),
-    coverage:png.encodeGray(size,size,footprint),
-    ...(alpha&&{opacity:png.encodeGray(size,size,alpha)}),
-    masks:Object.fromEntries(Array.from(masks,([name,data])=>[name,png.encodeGray(size,size,data)]))
+    roughness:png.encodeGray(width,rows,Uint8Array.from(covered,(_n,i)=>pixels.surface[i*3+1])),
+    coverage:png.encodeGray(width,rows,footprint),
+    ...(alpha&&{opacity:png.encodeGray(width,rows,alpha)}),
+    masks:Object.fromEntries(Array.from(masks,([name,data])=>[name,png.encodeGray(width,rows,data)]))
   };
   const coverage = previous ? footprint.reduce((n,value)=>n+Number(value!==0),0)/count : used/count;
   const raster = registered && {pixels,opacity:alpha,footprint,masks,owners,

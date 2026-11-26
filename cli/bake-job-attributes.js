@@ -1,3 +1,4 @@
+const Grid=require('./uv-bake-grid.js');
 const PNG = require('./png.js');
 const EXR = require('./texture-exr.js');
 const Meshes = require('./bake-job-mesh.js');
@@ -115,16 +116,17 @@ function normalize(value, { min, max }, c) {
 }
 
 function positionData(scope, size, limits, placement) {
-  return { scope, limits, placement, planes: Object.fromEntries(axes.map(axis => [axis, new Float32Array(size * size)])) };
+  return { scope, limits, placement, planes: Object.fromEntries(axes.map(axis => [axis, new Float32Array(Grid.count(size))])) };
 }
 
 function makePreview(size, owners, sample) {
-  const pixels = new Uint8Array(size * size * 4);
+  const pixels = new Uint8Array(Grid.count(size) * 4);
   for (let i = 0; i < owners.length; i++) if (owners[i]) {
     pixels.set(sample(i), i * 4);
     pixels[i * 4 + 3] = 255;
   }
-  return PNG.encode(size, size, pixels, 4, { srgb: true });
+  const {width,height}=Grid.dimensions(size);
+  return PNG.encode(width,height,pixels,4,{srgb:true});
 }
 
 function pack(size, map, data, legend, { owners, sampledTexels, coverage }) {
@@ -136,12 +138,12 @@ function pack(size, map, data, legend, { owners, sampledTexels, coverage }) {
     const output = { kind: 'position', space: scope, encoding: 'exr', bitDepth: 32,
       units: scope === 'normalized' ? 'unitless' : 'shape-units', bounds: limits,
       ...(placement && { node: placement.node }) };
-    return { bytes: EXR.write({ width: size, height: size, planes }), preview: makePreview(size, owners, sample),
+    return { bytes: EXR.write({ ...Grid.dimensions(size), planes }), preview: makePreview(size, owners, sample),
       output, texels: sampledTexels, coverage };
   }
   const palette = [...legend.palette.values()].sort((a, b) => a.id - b.id).map(row => ({ ...row, color: hex(row.id) }));
   return {
-    bytes: EXR.write({ width: size, height: size, planes: { Y: data } }),
+    bytes: EXR.write({ ...Grid.dimensions(size), planes: { Y: data } }),
     preview: makePreview(size, owners, i => color(data[i])),
     output: { kind: 'id', identity: identity[map], encoding: 'exr', bitDepth: 32, units: 'id', background: 0,
       paletteMode: 'rgb24-multiply-9e3759', distinct: legend.seen.size, palette },
@@ -150,7 +152,7 @@ function pack(size, map, data, legend, { owners, sampledTexels, coverage }) {
 }
 
 function rasterize(group, model, table, positionBounds, K) {
-  const { selection, tile, settings: { size, padding } } = group.tasks[0];
+  const { selection, tile, settings } = group.tasks[0], size=Grid.rasterGrid(settings), {padding}=settings;
   const sourceMesh = model.meshes[selection.index], data = new Map(), ids = new Map();
   const requested = new Set(group.tasks.map(task => task.map));
   for (const map of requested) {
@@ -159,7 +161,7 @@ function rasterize(group, model, table, positionBounds, K) {
       const { limits, placement } = positionBounds.get(group.tasks[0].authored.id).get(scope);
       data.set(map, positionData(scope, size, limits, placement));
     } else {
-      data.set(map, new Float32Array(size * size));
+      data.set(map, new Float32Array(Grid.count(size)));
       ids.set(map, { seen: new Set(), palette: new Map() });
     }
   }
@@ -234,7 +236,7 @@ function render(tasks, model, K) {
         spaces.set(scope, { limits, placement });
       }
     }
-    const key = JSON.stringify([authored.id, tile.tile, settings.size, settings.padding]);
+    const key = JSON.stringify([authored.id, tile.tile, Grid.rasterGrid(settings), settings.padding]);
     if (!groups.has(key)) groups.set(key, { tasks: [] });
     const group = groups.get(key);
     group.tasks.push(task);
@@ -245,7 +247,7 @@ function render(tasks, model, K) {
     const group = byTask.get(task);
     group.raster ??= rasterize(group, model, table, positionBounds, K);
     const { raster, data, ids } = group.raster, legend = ids.get(task.map);
-    const output = pack(task.settings.size, task.map, data.get(task.map), legend, raster);
+    const output = pack(Grid.rasterGrid(task.settings), task.map, data.get(task.map), legend, raster);
     data.delete(task.map);
     ids.delete(task.map);
     if (!data.size) delete group.raster;

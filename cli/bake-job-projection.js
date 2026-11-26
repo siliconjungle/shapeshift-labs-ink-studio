@@ -1,3 +1,4 @@
+const Grid=require('./uv-bake-grid.js');
 const fs = require('node:fs');
 const path = require('node:path');
 const Meshes = require('./bake-job-mesh.js');
@@ -155,6 +156,7 @@ function prepare(options, receiver, library, plan, K, images, onInput) {
     return weights.reduce((sum, weight, i) => V.mad(sum, corners[i], weight), [0, 0, 0]);
   }
   return (tile, size) => {
+    const {width,height}=Grid.dimensions(size);
     const skew = options.skew && readSkew(plan.skewMaps.get(options.skew), tile, textures, onInput);
     function buildRay(point, smooth, geometric, face, pixel) {
       const row = receiver.metadata[face];
@@ -166,7 +168,7 @@ function prepare(options, receiver, library, plan, K, images, onInput) {
       if (normals) {
         const average = V.norm(fromCorners(normals[face], row.weights(point)), geometric);
         if (skew) {
-          const value = skew((pixel[0] + .5) / size, (pixel[1] + .5) / size);
+          const value = skew((pixel[0] + .5) / width, (pixel[1] + .5) / height);
           return { axis: V.norm(V.lerp(average, smooth, options.invertSkew ? 1 - value : value), geometric) };
         }
         return { axis: average };

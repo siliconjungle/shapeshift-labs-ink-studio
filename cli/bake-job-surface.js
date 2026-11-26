@@ -1,6 +1,7 @@
 const PNG = require('./png.js');
 const TexturePNG = require('./texture-png.js');
 const EXR = require('./texture-exr.js');
+const Grid = require('./uv-bake-grid.js');
 
 const normalMaps = ['normal','world-normal'];
 const encodings = ['png8','png16','exr'];
@@ -32,13 +33,14 @@ function settings(id, options) {
 }
 
 function writePng(data, size, channels, encoding) {
-  if (encoding === 'png8') return channels === 1 ? PNG.encodeGray(size,size,data) : PNG.encode(size,size,data);
-  return TexturePNG.write({width:size,height:size,channels,data,alpha:'none'});
+  const {width,height}=Grid.dimensions(size);
+  if (encoding === 'png8') return channels === 1 ? PNG.encodeGray(width,height,data) : PNG.encode(width,height,data);
+  return TexturePNG.write({width,height,channels,data,alpha:'none'});
 }
-const writeExr = (size,planes) => EXR.write({ width:size, height:size, planes });
+const writeExr = (size,planes) => EXR.write({ ...Grid.dimensions(size), planes });
 
 function vector(size,encoding,values) {
-  const count=size*size;
+  const count=Grid.count(size);
   function unsigned(encoding) {
     const Data=encoding==='png16'?Uint16Array:Uint8Array, max=maxCode(encoding);
     return Data.from({length:count*3},(_,i)=>Math.round(clamp(.5+.5*values(Math.floor(i/3),i%3))*max));
@@ -56,7 +58,8 @@ function scalar(size,encoding,data,display=data) {
   return encoding==='exr'?{bytes:writeExr(size,{Y:data}),preview:unsigned('png8',display)}:{bytes:unsigned(encoding,data)};
 }
 
-function normal(result, {size,space,orientation,encoding}) {
+function normal(result, settings) {
+  const size=Grid.rasterGrid(settings), {space,orientation,encoding}=settings;
   const {raster,textures}=result;
   const layout={kind:'normal',space,encoding,domain:encoding === 'exr'?'signed-unit':'unit',
     bitDepth:depth(encoding),...(orientation&&{orientation})};
@@ -64,7 +67,8 @@ function normal(result, {size,space,orientation,encoding}) {
     if (orientation !== 'directx') return {bytes:textures.normal,output:layout};
     const data=raster.pixels.normal.slice();
     for (let i=0;i<data.length;i+=3) if(data[i]||data[i+1]||data[i+2]) data[i+1]=255-data[i+1];
-    return {bytes:PNG.encode(size,size,data),output:layout};
+    const {width,height}=Grid.dimensions(size);
+    return {bytes:PNG.encode(width,height,data),output:layout};
   }
   const vectors=raster.samples[space];
   const flip=orientation === 'directx' ? -1 : 1;
@@ -92,7 +96,8 @@ function heightScale(rows, { normalization, range }) {
     measured:samples?{min,max,samples}:null};
 }
 
-function height(row, scale, { size, encoding, normalization }) {
+function height(row, scale, settings) {
+  const size=Grid.rasterGrid(settings), {encoding,normalization}=settings;
   const {data,valid,measured}=row, {range,displayRange}=scale;
   const [low,high]=displayRange, factor=1/(high-low), unit=n=>clamp((n-low)*factor);
   function unsigned(encoding) {
