@@ -80,6 +80,6 @@ function topology(selection,edgePolicy,{V}) {
       },stats
     };
   }
-  return {faceCharts,mesh,stats};
+  return {faceCharts,manifold,mesh,stats};
 }
 module.exports={topology};
