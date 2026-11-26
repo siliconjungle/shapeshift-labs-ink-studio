@@ -28,6 +28,7 @@ All checked-in guides, indexed by title and section headings.
 - [Shaped area lights](../area-lights.md)
 - [Art direction](../art-direction.md)
 - [Art-pixel render passes](../art-passes.md)
+- [Headless assembly review](../assembly-review.md)
 - [Stretch an assembly from a handle](../assembly-stretch.md)
 - [Round-trip asset interchange](../asset-interchange.md)
 - [Arrange atmosphere around a performed score](../atmosphere-arranger.md)

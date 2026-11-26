@@ -198,6 +198,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   sculpt-contribution list <scene.json> --solid id   list retained contributions in order
   sculpt-contribution inspect <scene.json> --solid id --id contribution   compare with the contribution muted
   sculpt-contribution edit <scene.json> <edit.json> --out scene.json   edit one contribution and report dependencies
+  assembly-review inspect <scene.json> <review.json>   list visibility, locks and reveal scope
+  assembly-review render <scene.json> <review.json> --out image.png   render an independent review
+  assembly-review check <scene.json> <review.json> <candidate.json>   check a draft against frozen items
   assembly-stretch plan <scene.json> <stretch.json> [--preview scene.json]   check a stretch from two picks
   assembly-stretch apply <scene.json> <stretch.json> --out scene.json   carry a connected assembly through the stretch
   sculpt-split plan <scene.json> <split.json>   report a complementary sculpt split
@@ -348,7 +351,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   tileset reskin --scene <scene.json> --object <mesh-id> --face <face-id> --mode crop|tileset|relative (--selection <pick.json> | --id <tileset-id>) [--part ID] [--column N --row N] [--out <new-scene.json>]   change the paint on an existing mesh face
   tileset paint open <request.json> --scene <scene.json> [--selection <pick.json>] --out directory   open a crop or sheet in the native pixel editor with optional reference overlays
   tileset paint write <binding.json> <edited.json> --scene <scene.json> [--out <new-scene.json>]   preview or write edited pixels back to their registered tileset
-  tileset paint face <request.json> --scene <scene.json> [--selection mask.json] [--preview directory] [--expect receipt.json] [--out <new-scene.json>]   paint or sample a bound tile on a visible face
+  tileset paint face <request.json> --scene <scene.json> [--selection mask.json] [--preview directory] [--expect receipt.json] [--out <new-scene.json>]   paint, sample, or transform atlas pixels on a visible face
   tileset gutters <request.json> --scene <scene.json> [--out <new-scene.json>]   copy exterior gutter pixels for tile rectangles or UV islands without moving UVs
   tileset bleed-review <request.json> --scene <scene.json> --out directory   compare an inset and painted gutters over matched native camera samples
   tileset assign <request.json> --scene <scene.json> [--preview dir] [--view view.json] [--out <new-scene.json>]   fit selected UVs to a tile or sheet, or preserve texel scale with an optional clamp

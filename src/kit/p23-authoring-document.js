@@ -596,8 +596,9 @@
       finishScheduled();
       if (transaction) throw new Error('Finish the active transaction before ' + type);
       if (!from.length) return false;
-      const entry = from.pop(),
-        before = state;
+      const entry = from.at(-1), before = state;
+      options.beforeTravel?.(immutable(before), immutable(entry[key]));
+      from.pop();
       state = checkpoint(entry[key]);
       invalidateStyles();
       to.push(entry);

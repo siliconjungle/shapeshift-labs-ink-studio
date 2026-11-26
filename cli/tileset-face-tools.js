@@ -51,7 +51,7 @@ function ditherOptions(input) {
   return {pattern,mix,seed,colors:paintColors(colors)};
 }
 
-function operation({tool='pencil',rgba,color,alpha,slot,sample,channel,fill,spray,dither,drawing,selection,alphaMode,strength}) {
+function operation({tool='pencil',rgba,color,alpha,slot,sample,channel,fill,spray,dither,drawing,selection,alphaMode,strength,mode,transform}) {
   const write = rgba!==undefined || color!==undefined || alpha!==undefined || slot!==undefined;
   if (alphaMode!==undefined && (!['pencil','spray','fill','dither'].includes(tool) ||
       !['replace','accumulate'].includes(alphaMode)))
@@ -68,6 +68,15 @@ function operation({tool='pencil',rgba,color,alpha,slot,sample,channel,fill,spra
     ...(alphaMode!==undefined && {alphaMode}),...(strength!==undefined && {strength})};
   if (fill!==undefined && tool!=='fill' || spray!==undefined && tool!=='spray' || dither!==undefined && tool!=='dither')
     throw new TypeError('Pattern settings must match the selected tool');
+  if (tool==='transform') {
+    const selectedMode = mode===undefined ? 'move' : mode;
+    if (write || sample!==undefined || channel!==undefined || selection===undefined ||
+        !['move','copy'].includes(selectedMode) || !record(transform))
+      throw new TypeError('A bound transform needs an atlas selection, transform settings, and optional move or copy mode');
+    return {tool,mode:selectedMode,transform,selection};
+  }
+  if (mode!==undefined || transform!==undefined)
+    throw new TypeError('Use mode and transform with the transform tool');
   if (tool==='fill' || tool==='dither') {
     if (write || sample!==undefined || channel!==undefined)
       throw new TypeError('Put pattern colors in the fill or dither object');

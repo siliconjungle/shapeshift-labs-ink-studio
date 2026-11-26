@@ -19,7 +19,7 @@ const key = (object,face)=>JSON.stringify([object,face]);
 function settings(request) {
   const {at,object,face,view={}} = request ?? {};
   if (!fields(request,['at','rgba','object','face','view','sharing','variant','tool','color','alpha','slot','sample','channel',
-    'fill','spray','dither','drawing','selection','alphaMode','strength']) || !fields(view,viewKeys) ||
+    'fill','spray','dither','drawing','selection','alphaMode','strength','mode','transform']) || !fields(view,viewKeys) ||
       object!==undefined && !name(object) || face!==undefined && !name(face) ||
       view.cameraShot!==undefined && !name(view.cameraShot) ||
       view.cameraTime!==undefined && (!Number.isFinite(view.cameraTime) || view.cameraTime<0) ||
@@ -179,13 +179,15 @@ function paint(editor, request, {apply=false,expect} = {}, kit = require('..').l
     return {report:{...head,source,sample:picked,sampled:true,canCommit:false,conflicts:[]}};
   }
   const area = Region.usesRegion(op) ? Region.plan(row,source,sample,asset,op,K) : null;
-  if (area?.conflict) return blocked(area.conflict,{source,fill:op.fill});
+  if (area?.conflict) return blocked(area.conflict,{source,fill:op.fill,
+    ...(tool==='transform' && {transform:area.report})});
   const write = area ? null : Tools.pencilOrEraser(asset,source.at,op);
   if (!area && !write) return blocked('palette-slot-unavailable',{source,slot:op.slot});
   const region = area ?? {rect:[...source.at,1,1],pixels:[write.pixel]};
   const planned = planChange(editor,source,asset,region,variant);
   if (!planned.detail) return blocked('indexed-palette-full',{source});
-  const detail = {...head,source,...(area ? {[op.fill ? 'fill' : 'stroke']:area.report} : {rgba:write.rgba}),
+  const evidence = tool==='transform' ? 'transform' : op.fill ? 'fill' : 'stroke';
+  const detail = {...head,source,...(area ? {[evidence]:area.report} : {rgba:write.rgba}),
     ...(op.slot!==undefined && {slot:op.slot}),...planned.detail};
   if (!detail.canCommit) return {report:detail};
   let after = before;

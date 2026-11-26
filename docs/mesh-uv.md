@@ -1567,6 +1567,60 @@ and affected dependencies. Run the
 [paint canvas demo](../examples/tileset-pick/tileset-paint-demo.cjs)
 to replay a crop edit followed by a full-sheet edit.
 
+### Transform a bound atlas selection
+
+Use the same visible-face request with `"tool": "transform"`. Supply a
+native selection query, such as a rectangle, lasso, or wand, or pass a
+saved atlas selection with `--selection`.
+
+```json
+{
+  "tool": "transform",
+  "object": "east.panel",
+  "face": "sign",
+  "at": [125, 48],
+  "view": {
+    "w": 206,
+    "h": 100,
+    "camera": { "yaw": 0, "pitch": 0, "dist": 4.5, "target": [0, 0.5, 0], "ortho": true, "zoom": 1.6 }
+  },
+  "selection": { "type": "wand", "at": [6, 10] },
+  "mode": "copy",
+  "transform": { "at": [12, 10], "size": [8, 8], "flipX": true }
+}
+```
+
+The outer `at` is a pick on the native view. Selection coordinates and
+the transform's `at` are in the source atlas. Use `offset` in place of
+the transform's `at` to shift the selection from its current position.
+`size` sets the new integer width and height of the selection bounds.
+Resizing uses nearest-neighbor sampling. `flipX` and `flipY` reflect the
+selected pixels. Selected texels carry their original RGBA values or
+exact palette slots, including alpha.
+
+The default `move` clears vacated source texels. `copy` keeps the source
+in place where the destination does not overlap it. Ink reads the
+original source before writing, so overlapping moves and copies sample
+the same source pixels. Both read and write within the picked face's
+pigment footprint. The receipt counts clipped destination texels. A move
+with partial clipping still clears vacated source texels. An empty
+selection or wholly clipped placement leaves the scene untouched.
+
+The preview includes matched native before and after frames, their diff,
+and an atlas map of the source and destination cells with changes in gold.
+The receipt includes both bounds and other face uses of the changed
+texels. Use `--expect` to commit the reviewed edit as one scene transaction.
+Use `make-local-variant` with a new `variant` ID to limit the edit to
+the picked face.
+
+```sh
+ink-studio tileset paint face transform.json --scene station.json --preview transform-review > review.json
+ink-studio tileset paint face transform.json --scene station.json --expect review.json --out station-painted.json
+```
+
+Run `node examples/tileset-pick/bound-tile-transform-demo.cjs bound-tile-transform-demo`
+for a marquee move and a local resized and flipped copy.
+
 ### Inset brush UVs on each edge
 
 Use inward distances measured in source texels. The top, bottom, left, and
