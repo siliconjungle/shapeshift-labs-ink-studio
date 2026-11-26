@@ -536,23 +536,69 @@
     return order(queue);
   }
 
-  function moveCorners(g,operation,points) {
-    const {scope,translate=[0,0]} = operation;
-    if (!fields(operation,['op','ids','selection','scope','translate']) ||
-        !['together','independent'].includes(scope) || !tuple(translate,2))
-      throw new TypeError('Move UV corners with together or independent scope and an optional finite UV translation');
-    const ids = targets(g,'corners',operation), coincident = overlappingCorners(g,ids);
+  function moveCornerScope(g,ids,scope,points,translation) {
+    const coincident = overlappingCorners(g,ids);
     const active = new Set(scope === 'together' ? coincident : ids), moving = [], held = [];
     for (const id of coincident) {
       const {face,vertex,uv,uvPinned} = g.corners.get(id);
       const row = {id,face,vertex,material:g.faces.get(face).material,uv:uv.slice(),pinned:Boolean(uvPinned)};
       if (active.has(id)) {
+        const translate = translation(row.material);
         const next = uv.map((n,i)=>n+translate[i]);
         points.set(id,next);
         moving.push({...row,proposed:next.map(n=>Number.isFinite(n) ? n : null)});
       } else held.push(row);
     }
-    return {ids,evidence:{scope,translate:translate.slice(),moving,held,edgeChanges:[]}};
+    return {moving,held,edgeChanges:[]};
+  }
+
+  function moveCorners(g,operation,points) {
+    const {scope,translate=[0,0]} = operation;
+    if (!fields(operation,['op','ids','selection','scope','translate']) ||
+        !['together','independent'].includes(scope) || !tuple(translate,2))
+      throw new TypeError('Move UV corners with together or independent scope and an optional finite UV translation');
+    const ids = targets(g,'corners',operation);
+    return {ids,evidence:{scope,translate:translate.slice(),...moveCornerScope(g,ids,scope,points,()=>translate)}};
+  }
+
+  function nudge(g,operation,points,atlasFor) {
+    const {steps,increment='pixel',atlas,tileSize,scope,domain=operation.selection?.domain ?? 'islands'} = operation;
+    const perAxis = increment==='pixel' ? [1,1] : typeof increment==='number' ? [increment,increment] : increment;
+    if (!fields(operation,['op','ids','selection','domain','scope','steps','increment','atlas','tileSize']) ||
+        !domains.includes(domain) || !tuple(steps,2,Number.isSafeInteger) ||
+        (domain!=='islands' ? !['together','independent'].includes(scope) : scope!==undefined) ||
+        increment!=='tile' && (!tuple(perAxis,2,n=>Number.isFinite(n) && n>0) || tileSize!==undefined) ||
+        atlas!==undefined && !tuple(atlas,2,n=>Number.isSafeInteger(n) && n>0))
+      throw new TypeError('Nudge UV islands or scoped corners, edges, or faces with integer steps, a positive pixel increment or tile, and optional atlas dimensions');
+    const explicitGrid = tileSize===undefined ? undefined : TilesetSelection.tileSize(tileSize);
+    const ids = targets(g,domain,operation), resolved = new Map();
+    function translation(material) {
+      if (resolved.has(material)) return resolved.get(material).uv;
+      const source = atlasFor?.(material), size = atlas ?? source?.size;
+      if (!tuple(size,2,n=>Number.isSafeInteger(n) && n>0))
+        throw new RangeError('UV nudge needs source atlas dimensions for material '+material);
+      const grid = increment==='tile' ? explicitGrid ?? source?.grid?.tileSize : undefined;
+      if (increment==='tile' && !grid) throw new RangeError('Tile nudge needs a declared tile grid for material '+material);
+      if (grid && !TilesetSelection.gridFits({width:size[0],height:size[1]},grid))
+        throw new RangeError('Tile nudge grid must fit the source atlas for material '+material);
+      const pixels = grid ? [grid.width+(grid.paddingX ?? 0),grid.height+(grid.paddingY ?? 0)] : perAxis.slice();
+      const texels = steps.map((n,i)=>n*pixels[i]);
+      const uv = texels.map((n,i)=>n===0 ? 0 : n/(size[i]-1));
+      if (!uv.every(Number.isFinite)) throw new RangeError('UV nudge exceeds finite precision or moves along a one-texel axis for material '+material);
+      resolved.set(material,{material,atlas:size.slice(),atlasSource:atlas ? 'explicit' : source.kind,pixels,texels,uv,
+        ...(!atlas && source.tileset && {tileset:source.tileset}),
+        ...(grid && {grid,gridSource:explicitGrid ? 'explicit' : source.grid.source})});
+      return uv;
+    }
+    const selected = selection(g,domain,ids,undefined,operation.selection?.edgeSides);
+    let corners;
+    if (domain!=='islands') corners = moveCornerScope(g,selected.corners,scope,points,translation);
+    else for (const id of selected.corners) {
+      const {face,uv} = g.corners.get(id), shift = translation(g.faces.get(face).material);
+      points.set(id,uv.map((n,i)=>n+shift[i]));
+    }
+    return {ids,evidence:{domain,steps:steps.slice(),increment:Array.isArray(increment) ? increment.slice() : increment,
+      materials:[...resolved.values()],...(corners && {scope,...corners})}};
   }
 
   function align(g, edges, keep, points, conflict) {
@@ -649,11 +695,11 @@
     return [id];
   }
 
-  function draft(g, operation) {
+  function draft(g, operation, atlasFor) {
     if (operation?.op === 'set-pivot') return setPivot(g,operation);
     if (!operation || typeof operation !== 'object' ||
-        !['cut', 'stitch', 'pin', 'transform', 'move-corners', 'unwrap', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
-      throw new TypeError('Use a UV pivot, cut, stitch, pin, transform, corner move, face remap, local solve or texel budget operation');
+        !['cut', 'stitch', 'pin', 'transform', 'move-corners', 'nudge', 'unwrap', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
+      throw new TypeError('Use a UV pivot, cut, stitch, pin, transform, nudge, corner move, face remap, local solve or texel budget operation');
     const points = new Map(), edges = new Map(), pins = new Map(), conflicts = [];
     let count = 0;
     function conflict(code, evidence) {
@@ -662,6 +708,8 @@
     }
     let ids, evidence;
     const local = operation.op === 'unwrap' || operation.op === 'relax';
+    const precise = ['remap-face','move-corners','nudge'].includes(operation.op);
+    const preserveWinding = local || ['stitch','move-corners','nudge'].includes(operation.op);
     if (local) {
       ids = targets(g, 'faces', operation);
       evidence = meshUVRegions.local(g, ids, operation, points, conflict);
@@ -671,6 +719,7 @@
     } else if (operation.op === 'remap-face') ids = remapFace(g,operation,points,conflict);
     else if (operation.op === 'transform') ({ids,evidence} = transform(g, operation, points));
     else if (operation.op === 'move-corners') ({ids,evidence} = moveCorners(g,operation,points));
+    else if (operation.op === 'nudge') ({ids,evidence} = nudge(g,operation,points,atlasFor));
     else if (operation.op === 'stitch') ids = stitch(g, operation, points, edges, conflict);
     else if (operation.op === 'cut') {
       if (!fields(operation, ['op', 'ids', 'selection'])) throw new TypeError('Unknown UV cut setting');
@@ -684,8 +733,7 @@
     }
     for (const [id, uv] of points) {
       const corner = g.corners.get(id);
-      const exact = operation.op === 'remap-face' || operation.op === 'move-corners';
-      const unchanged = exact ? uv.every((n,i)=>n === corner.uv[i]) : sameUV(uv,corner.uv);
+      const unchanged = precise ? uv.every((n,i)=>n === corner.uv[i]) : sameUV(uv,corner.uv);
       if (unchanged) { points.delete(id); continue; }
       if (corner.uvPinned) conflict('pinned-corner', { corner: id, uv: corner.uv, proposed: uv });
       else if (!uv.every(n => Number.isFinite(n) && n >= -1e-10 && n <= 1 + 1e-10))
@@ -698,7 +746,7 @@
       const after = area2(...corners.map(id => points.get(id) ?? g.corners.get(id).uv));
       if (Math.abs(before) > 1e-12 && Math.abs(after) <= 1e-12)
         conflict('collapsed-uv-triangle', { face, corners });
-      else if ((operation.op === 'stitch' || operation.op === 'move-corners' || local) && before * after < 0)
+      else if (preserveWinding && before * after < 0)
         conflict('flipped-uv-triangle', { face, corners });
     }
     if (!count && local && points.size) meshUVRegions.checkOverlaps(g, points, conflict);
@@ -719,7 +767,7 @@
     const seams = [...edges].map(([id, uvSeam]) => g.set ?
       {id,uvSeams:{...original.get(id).uvSeams,[g.set]:uvSeam}} : {id,uvSeam});
     const document = topology.edit(g.doc, { faces, edges: seams });
-    if (operation.op === 'move-corners') {
+    if (operation.op==='move-corners' || operation.op==='nudge' && evidence.scope!==undefined) {
       const next = graph(document,g.set);
       evidence.edgeChanges = [...g.edges.values()].flatMap(({id,kind})=>{
         const after = next.edges.get(id).kind;
@@ -729,7 +777,7 @@
     return { document, report };
   }
 
-  function plan(source, request) {
+  function plan(source, request, {atlasFor} = {}) {
     if (!fields(request, ['revision', 'operations', 'protect','uvSet','bindings']) ||
         !Array.isArray(request.operations ?? []) || (request.operations?.length ?? 0)>32 ||
         (!request.operations?.length && request.bindings===undefined))
@@ -745,7 +793,7 @@
       if (local && request.protect !== undefined && operation.protect !== undefined)
         throw new TypeError('Choose transaction-wide or per-operation UV protection');
       const next = draft(graph(document,base.set), local && request.protect !== undefined ?
-        { ...operation, protect: request.protect } : operation);
+        { ...operation, protect: request.protect } : operation,atlasFor);
       operations.push(next.report);
       if (next.report.conflictCount) break;
       document = next.document;
