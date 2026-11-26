@@ -44,9 +44,9 @@
       (node.clips ?? []).map(({id,sequence})=>({id,sequence,owner,reachable:owner === null || reachable.has(owner)})));
   }
 
-  function inventory(scene, ids, external) {
+  function inventory(scene, ids, external, customProperties) {
     const result = new Map(ids.map(id=>[id,{faces:[],materials:[],clips:[],prefabs:[]}]));
-    const expanded = Object.keys(scene.instances ?? {}).length && A.scenePrefabs.expand(scene,{prefabs:external});
+    const expanded = Object.keys(scene.instances ?? {}).length && A.scenePrefabs.expand(scene,{prefabs:external,customProperties});
     const meshes = expanded ? expanded.spec.topologyMeshes : scene.topologyMeshes;
     const evaluate = meshes && A.meshTopologyScene.evaluator(meshes,expanded?.meshPlacements);
     for (const [object,mesh] of ordered(meshes)) {
@@ -89,16 +89,30 @@
     }
     const clips = clipDefinitions(scene.timeline);
     for (const deps of result.values()) {
-      if (deps.faces.some(face=>face.active) || deps.prefabs.some(prefab=>prefab.used)) deps.clips = clips;
+      if (deps.faces.some(face=>face.active) || deps.prefabs.some(prefab=>prefab.used)) deps.clips = [...clips];
     }
+    function addClips(owner, row, prefab) {
+      const rule = row.directionalUV, deps = result.get(rule?.tileset);
+      if (!deps) return;
+      for (const [direction,id] of Object.entries(rule.directions ?? {})) {
+        const frames = rule.clips?.[id]?.frames;
+        if (Array.isArray(frames))
+          deps.clips.push({kind:'directional-uv',id,direction,owner,...(prefab && {prefab}),
+            faces:rule.faces,frames:frames.flatMap(frame=>frame?.rect ? [frame.rect] : [])});
+      }
+    }
+    for (const [object,row] of ordered(meshes)) addClips(object,row);
+    for (const library of [scene.prefabs,external])
+      for (const [prefab, definition] of ordered(library)) for (const [member,row] of ordered(definition.topologyMeshes))
+        addClips(member,row,prefab);
     return result;
   }
 
-  function dependencies(scene, id, external) {
+  function dependencies(scene, id, external, customProperties) {
     const tilesets = A.tilesets.prepare(scene.tilesets,scene.tilesetDefaults);
     const ids = id === undefined ? Object.keys(scene.tilesets ?? {}).sort() : [id];
     const assets = ids.map(key=>descriptor(key,tilesets.source(key),tilesets.grid(key).tileSize));
-    const refs = inventory(scene,ids,external), links = A.tilesetSources.prepare(scene);
+    const refs = inventory(scene,ids,external,customProperties), links = A.tilesetSources.prepare(scene);
     return freeze({format:'ink-studio/tileset-dependencies',version:1,
       sheets:assets.map(asset=>({...asset,...refs.get(asset.id),...(links[asset.id] && {source:links[asset.id]})}))});
   }
@@ -145,8 +159,10 @@
         {...row,maps:{...row.maps,texture:texture(row.maps.texture)}} : row);
       const {bindings,changes} = A.tilesetFaces.sourceBindings(mesh,from,source=>
         ({...source,selection:{...source.selection,tileset:to}}));
-      if (materials?.some((item,i)=>item !== mesh.materials[i]) || bakes?.some((item,i)=>item !== mesh.bakes[i]) || changes.length)
-        return {...mesh,...(materials && {materials}),...(bakes && {bakes}),...(changes.length && {bindings})};
+      const uv = mesh.directionalUV?.tileset === from && { ...mesh.directionalUV,tileset:to };
+      if (uv || materials?.some((item,i)=>item !== mesh.materials[i]) || bakes?.some((item,i)=>item !== mesh.bakes[i]) || changes.length)
+        return {...mesh,...(materials && {materials}),...(bakes && {bakes}),...(changes.length && {bindings}),
+          ...(uv && {directionalUV:uv})};
       return mesh;
     }
     function redirectRows(rows, update) {
@@ -194,7 +210,7 @@
   const schemas = {clone:['id','newId'],replace:['id','asset'],palette:['id','asset'],material:['id','settings'],combine:['ids','newId','axis'],
     deduplicate:['id','keepId'],remove:['id']};
 
-  function plan(scene, request, external) {
+  function plan(scene, request, external, customProperties) {
     if (!request || Object.getPrototypeOf(request) !== Object.prototype ||
         !Object.hasOwn(schemas,request.type) || Object.keys(request).some(key=>key !== 'type' && !schemas[request.type].includes(key)))
       throw new TypeError('Choose a tileset clone, replace, palette, material, combine, deduplicate or remove request');
@@ -206,7 +222,7 @@
       throw new TypeError('Choose distinct source tileset IDs');
     const tilesets = API.prepare(scene.tilesets,scene.tilesetDefaults);
     const sources = ids.map(key=>tilesets.source(key));
-    const refs = inventory(scene,ids,external);
+    const refs = inventory(scene,ids,external,customProperties);
     const blockers = [], links = A.tilesetSources.prepare(scene);
     let extra = {}, detail = {};
     if (type === 'clone' || type === 'combine') {
@@ -249,7 +265,8 @@
     } else {
       const {materials,prefabs} = refs.get(id);
       if (type === 'remove') {
-        if (materials.length || prefabs.length) blockers.push({reason:'tileset-in-use',id});
+        if (materials.length || prefabs.length || refs.get(id).clips.some(row=>row.kind==='directional-uv'))
+          blockers.push({reason:'tileset-in-use',id});
       } else {
         const [from,to] = sources, sameGrid = JSON.stringify(tilesets.grid(id).tileSize) === JSON.stringify(tilesets.grid(keepId).tileSize);
         if (!sameGrid || !sameImage(from,to) || !sameMetadata(from,to) || !sameMaterial(from,to))

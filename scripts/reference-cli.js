@@ -60,7 +60,7 @@ function runtimeSubcommands(cliDirectory, commands) {
     add('pixel-art session', file, withoutFlags(sessionActions));
     add('pixel-art palette', file, withoutFlags(paletteActions));
     add('pixel-art stack', file, withoutFlags(stackActions));
-    add('pixel-art directions', 'pixel-directional-views.js', withoutFlags(['open','review','export']));
+    add('pixel-art directions', 'pixel-directional-views.js', withoutFlags(['open','review','export','uv-clips']));
     add('pixel-art slices', file, withoutFlags(['inspect','export']));
     add('pixel-art tilemap', file, withoutFlags(['inspect','draw','neighbors']));
   }

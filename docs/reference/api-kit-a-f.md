@@ -800,6 +800,11 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.deliveryHelpers` | namespace |  |  |
 | `KIT.authoring.deliveryHelpers.collect` | function | `(spec, { instances, meshPlacements }, hidden)` | [source](../../src/kit/p23-delivery-helpers.js) |
 | `KIT.authoring.deliveryHelpers.read` | function | `(row, points = {})` | [source](../../src/kit/p23-delivery-helpers.js) |
+| `KIT.authoring.directionalUV` | namespace |  |  |
+| `KIT.authoring.directionalUV.bind` | function | `(world, instances, sourceInstances)` | [source](../../src/kit/p23-directional-uv.js) |
+| `KIT.authoring.directionalUV.compass` | value | `array` |  |
+| `KIT.authoring.directionalUV.fromAtlas` | function | `(atlas, request)` | [source](../../src/kit/p23-directional-uv.js) |
+| `KIT.authoring.directionalUV.prepare` | function | `(rule, document, materials, tilesets, tileWraps, makeMesh)` | [source](../../src/kit/p23-directional-uv.js) |
 | `KIT.authoring.document` | function | `(initial, options)` | [guide](../../README.md#retained-authoring), [guide](../procedural.md#optional-retained-authoring), [guide](../procedural.md#named-scene-library), [source](../../src/kit/p23-authoring-document.js) |
 | `KIT.authoring.environmentProfiles` | namespace |  |  |
 | `KIT.authoring.environmentProfiles.create` | function | `({ key, profiles, defaultId, defaults = {}, validate = () => {} })` | [guide](../procedural.md#retained-environment-profiles), [source](../../src/kit/p93-environment-profiles.js) |
@@ -1027,8 +1032,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetReskin.planAssignment` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-reskin.js) |
 | `KIT.authoring.tilesetReskin.variant` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-reskin.js) |
 | `KIT.authoring.tilesetRevisions` | namespace |  |  |
-| `KIT.authoring.tilesetRevisions.dependencies` | function | `(scene, id, external)` | [source](../../src/kit/p23-tileset-revisions.js) |
-| `KIT.authoring.tilesetRevisions.plan` | function | `(scene, request, external)` | [source](../../src/kit/p23-tileset-revisions.js) |
+| `KIT.authoring.tilesetRevisions.dependencies` | function | `(scene, id, external, customProperties)` | [source](../../src/kit/p23-tileset-revisions.js) |
+| `KIT.authoring.tilesetRevisions.plan` | function | `(scene, request, external, customProperties)` | [source](../../src/kit/p23-tileset-revisions.js) |
 | `KIT.authoring.tilesetSources` | namespace |  |  |
 | `KIT.authoring.tilesetSources.prepare` | function | `(scene)` | [source](../../src/kit/p23-tileset-sources.js) |
 | `KIT.authoring.tilesetStrokes` | namespace |  |  |

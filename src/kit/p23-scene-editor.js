@@ -1046,6 +1046,16 @@
     function stageTilesetCanvas(id,operation) {
       const before = snapshot(), {asset,meshes,report} = A.tilesetCanvas.plan(before,id,operation);
       if (!asset) return {report};
+      const areas = operation.type==='swap' ? Object.values(report.regions) : [];
+      const sizeChanged = report.before && report.before.some((n,i)=>n!==report.size[i]);
+      if (areas.length || sizeChanged) {
+        const intersects = (a,b)=>a.x<b.x+b.width && b.x<a.x+a.width && a.y<b.y+b.height && b.y<a.y+a.height;
+        const clips = A.tilesetRevisions.dependencies(before,id,buildEnv.prefabs,buildEnv.customProperties).sheets[0].clips;
+        const blockers = clips.filter(clip=>clip.kind==='directional-uv' &&
+          (sizeChanged || clip.frames.some(frame=>areas.some(area=>intersects(area,frame)))))
+          .map(({ id,owner,direction })=>({reason:'review-directional-uv-rectangles',id,owner,direction}));
+        if (blockers.length) return {report:freeze({...report,canCommit:false,blockers})};
+      }
       const patch = {tilesets:{[id]:asset},...(Object.keys(meshes).length && {topologyMeshes:meshes})};
       const candidate = {...before,tilesets:{...before.tilesets,[id]:asset},
         ...(patch.topologyMeshes && {topologyMeshes:{...before.topologyMeshes,...meshes}})};
@@ -1072,11 +1082,11 @@
     }
 
     function tilesetDependencies(id) {
-      return A.tilesetRevisions.dependencies(snapshot(),id,buildEnv.prefabs);
+      return A.tilesetRevisions.dependencies(snapshot(),id,buildEnv.prefabs,buildEnv.customProperties);
     }
 
     function stageTilesetRevision(request, links) {
-      const before = snapshot(), {patch,report} = A.tilesetRevisions.plan(before,request,buildEnv.prefabs);
+      const before = snapshot(), {patch,report} = A.tilesetRevisions.plan(before,request,buildEnv.prefabs,buildEnv.customProperties);
       if (!patch) return {report};
       if (links) patch.tilesetSources = {...before.tilesetSources,...links};
       const problems = DIO.check({...before,...patch},buildEnv).filter(problem=>problem.level === 'error');

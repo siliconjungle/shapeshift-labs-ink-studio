@@ -77,10 +77,10 @@ const prefabEditIsolation = (function (K) {
       return mesh && { document: mesh.document, frame: meshPlacements.get(object) };
     };
     for (const [index, edit] of edits.entries()) {
-      const kinds = ['patch', 'transform', 'reskin', 'pivot', 'variant'];
+      const kinds = ['patch', 'transform', 'reskin', 'pivot', 'variant', 'directionalUV'];
       if (!fields(edit, ['member', ...kinds]) || !K.world.data.id(edit.member) ||
           kinds.filter(key => Object.hasOwn(edit, key)).length !== 1)
-        throw new TypeError('Each isolated edit needs a mesh member and one patch, transform, reskin, pivot, or variant');
+        throw new TypeError('Each isolated edit needs a mesh member and one patch, transform, reskin, pivot, variant, or directional UV edit');
       const { member } = edit, kind = kinds.find(key => Object.hasOwn(edit, key));
       const target = scope.get(member);
       if (!target) {
@@ -93,6 +93,19 @@ const prefabEditIsolation = (function (K) {
       const pickActive = () => T.select(doc, { domain: 'faces',
         ...(!wholeMember && { ids: doc.faces.filter(face => target.active.has(face.id)).map(face => face.id) }) });
       if (kind === 'patch') ({ row: next, ...changes } = revise(row, edit.patch));
+      if (kind === 'directionalUV') {
+        const rule = edit.directionalUV, faces = rule === null ? row.directionalUV?.faces ?? [] : rule?.faces;
+        if (!Array.isArray(faces)) throw new TypeError('A directional UV edit needs named faces or null');
+        const outside = [...new Set([...faces,...(row.directionalUV?.faces ?? [])])].filter(face=>!target.active.has(face));
+        if (!wholeMember && outside.length) {
+          report.conflicts.push({index,member,reason:'outside-active-faces',faces:outside});
+          break;
+        }
+        next = { ...row };
+        if (rule === null) delete next.directionalUV;
+        else next.directionalUV = rule;
+        evidence = { before:row.directionalUV ?? null, after:rule };
+      }
       if (kind === 'pivot') {
         const raw = edit.pivot;
         if (!record(raw) || Object.hasOwn(raw, 'frame')) throw new TypeError('An isolated pivot uses the prefab placement frame');

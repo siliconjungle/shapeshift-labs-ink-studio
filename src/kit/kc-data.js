@@ -1859,6 +1859,7 @@
       }
       K.authoring.meshTopologyScene.mount(world, hidden ?
         presentation.topologyMeshes?.filter(([id]) => !hidden.meshes.has(id)) : presentation.topologyMeshes);
+      K.authoring.directionalUV.bind(world,resolved.instances,source.instances);
       if (presentation.hybridOwnership) world.hybridOwnership = presentation.hybridOwnership;
     }
     function bindBreakables(world) {
