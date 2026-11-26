@@ -354,6 +354,7 @@ All checked-in guides, indexed by title and section headings.
 - [Procedural primitives](../procedural.md)
 - [Production audio benchmark](../production-benchmark.md)
 - [Production mix tools](../production-mix-tools.md)
+- [Progressive fracture](../progressive-fracture.md)
 - [Portable project bundles](../project-bundles.md)
 - [Projected splat effects](../projected-effects.md)
 - [Projected routes](../projected-routes.md)

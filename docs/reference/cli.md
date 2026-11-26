@@ -110,6 +110,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   solver-network inspect <network.json> [--out report.json]   inspect reusable stages, typed ports and execution order
   solver-network compile <network.json> [--out model.json]   lower authored stages to a native simulation model
   solver-network run <run.json> [--out directory]   checkpoint frame branches and capture fields, particles and contacts
+  fracture prepare <plan.json> [--out preparation.json]   fit feature-guided cells, hierarchy and seam constraints
+  fracture compile <plan.json> [--out world.json]   compile a portable native failure scene
+  fracture run <plan.json> [--out directory]   replay progressive failure and save native handoffs and checkpoints
     sim run|resume|fork <file> [--branch ID]   name the branch in committed events
     sim run <world> --workers N [--profile]   advance eligible systems in deterministic Node worker partitions
     sim run <world> --record file.json [--observations plan.json]   retain reproducible execution evidence

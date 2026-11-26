@@ -1034,6 +1034,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.fracture` | namespace |  |  |
 | `KIT.procedural.fracture.crack` | function | `({ width, height, starts, stress, toughness = 0.16, mask, gain = 0.3, retention = 0.9, alignment = 0.25, steer = 0.65, roughness = 0.12, branching = 0.16, branchThreshold = 0.58, branchEnergy = 0.64, maxBranches = 18, seed = 0, maxNodes = 3000, maxChecks = 70000 } = {})` | [source](../../src/kit/p62-crack-propagation.js) |
 | `KIT.procedural.fracture.power` | function | `({ host, bounds: rawBounds = host?.bounds, seeds, stretch = [1, 1, 1], rotation = [0, 0, 0], gap = 0, cell, bond, maxWork = 30000000 } = {})` | [source](../../src/kit/p61-power-fracture.js) |
+| `KIT.procedural.fracture.prepare` | function | `(raw)` | [source](../../src/kit/p62a-fracture-preparation.js) |
 | `KIT.procedural.fracture.separate` | function | `(graph, { loads = {}, previous } = {})` | [source](../../src/kit/p61-power-fracture.js) |
 
 ## KIT.procedural.frameBanks
