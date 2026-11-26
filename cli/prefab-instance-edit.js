@@ -10,6 +10,7 @@ const name = value => typeof value === 'string' && value.trim();
 const commands = {
   'custom-properties': ['planCustomProperties','previewCustomProperties','editCustomProperties'],
   'scene-layer': ['planSceneLayers','previewSceneLayers','editSceneLayers'],
+  'billboard-prefab': ['planPrefabBillboards','previewPrefabBillboards','editPrefabBillboards'],
   'mirror-prefab': ['planPrefabMirror','previewPrefabMirror','applyPrefabMirror'],
   'reparent-prefab': ['planPrefabReparent','previewPrefabReparent','reparentPrefab'],
   'combine-prefab': ['planPrefabCombination','previewPrefabCombination','combinePrefabs'],
@@ -19,7 +20,7 @@ const commands = {
 };
 
 function command(action,file,input,rest,opt,kit,openEditor) {
-  const {out,preview,view,selection} = opt, acceptsSelection = ['combine-prefab','replace-prefab','scene-layer'].includes(action);
+  const {out,preview,view,selection} = opt, acceptsSelection = ['billboard-prefab','combine-prefab','replace-prefab','scene-layer'].includes(action);
   const [plan,review,apply] = commands[action];
   if (rest.length || ![file,input,...Object.values(opt)].every(name) ||
       Object.keys(opt).some(key => !['out','preview','view',...(acceptsSelection ? ['selection'] : [])].includes(key)) ||
