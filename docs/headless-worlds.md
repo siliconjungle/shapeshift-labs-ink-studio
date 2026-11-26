@@ -1472,6 +1472,7 @@ are visible during checkpoint and replay review.
 | `material-failure` | [Feature-guided fracture](progressive-fracture.md) with yielding seams, progressive damage, native collision handoff, and replayable piece lineage. |
 | `material-lab` | [Nonlinear solids and grains](material-lab.md) share material-pair contact, measured impulses, native checkpoints, and per-tick work budgets. |
 | `liquid-3d` | [Volume liquid and spectral seas](liquid-3d.md) with pressure projection, moving colliders, indexed surfaces, spray and foam. |
+| `sparse-atmosphere` | [Sparse combustion and clouds](sparse-atmosphere.md) with bounded pressure and transport, fuel, heat, condensation and verified native caches. |
 | `deformables` | Checkpointed XPBD cloth and rope with scene attachments, terrain and solid contact, loads, tears, support queries and rain collection. |
 | `routed-links` | Socket-to-socket cables, hoses and belt loops with guide points, slack, tension, break limits, typed signals, torque transmission and conservative transfers. |
 | `navigation` | Bounded walking, swimming or flying route traces. Ground search can take depth, clearance and wear into account. Hosts can also expose the volumetric traversal graph. |
