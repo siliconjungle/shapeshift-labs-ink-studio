@@ -106,6 +106,9 @@ Use a [retained sculpt sweep](sculpt-sweeps.md) as a standalone solid or
 as a join modifier's shaped operand. It preserves the authored poses,
 pressure, and blend radius in the saved scene.
 
+Use `placeSculptStamp(recipe, placement)` to add solids and cut their opening
+in one revision. [Compound sculpt stamps](sculpt-stamps.md)
+
 ## Brushes and local rebuilds
 
 Use `paintShadowBand(stroke, { pbrMaterial })` to append a stroke to a [named PBR diffuse ramp](pbr-materials.md#paint-a-pbr-shadow-band).
