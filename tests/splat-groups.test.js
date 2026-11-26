@@ -147,3 +147,25 @@ test('pixel transactions preview group diffs, invalidate prior footprint hits, a
   assert.deepEqual(editor.renderOptions(world.id).splatFit,asset);
   assert.deepEqual(editor.apply(patch('clear',{groups:[]}),context).groups,[]);
 });
+
+test('explicit orientation transports scan color before the shared group deformation', async () => {
+  const world = await fixture(), { Q } = ink.load().KIT;
+  const turn = M.rot([0,1,0], -.83), groupTurn = M.rot([0,0,1], .31), handles = [];
+  for (const x of [0,1]) for (const y of [0,1]) for (const z of [0,1]) {
+    const at = [x,y,z], p = at.map(n => 4*n - 2);
+    handles.push({ at, offset: V.sub(M.app(groupTurn,p),p) });
+  }
+  const base = { format: Fit.format, version: 2, target, edits: [],
+    attributes: [['lower', { orientation: Q.fromMatrix(turn) }]] };
+  const group = { id: 'outer-turn', members: ['lower'], pivot: [0,0,0],
+    modifiers: [{ type: 'lattice', bounds: { min: [-2,-2,-2], max: [2,2,2] }, size: [2,2,2], handles }] };
+  const authored = ink.bakeSplatFit(world, base), layered = ink.bakeSplatFit(world, {...base, groups:[group]});
+  const { gaussianSplatColors } = await import('../src/gaussian-splats.mjs');
+  const back = [.1,.32,.94], source = gaussianSplatColors(world,1,{ ortho:true, back });
+  for (const [output, matrix] of [[authored,turn],[layered,M.mul(groupTurn,turn)]]) {
+    const view = gaussianSplatColors(output,1,{ ortho:true, back: M.app(matrix,back) });
+    assert.deepEqual(view.base,source.base);
+    view.rgb.forEach((n,k) => assert(Math.abs(n-source.rgb[k]) <= 1));
+    assert.notDeepEqual(output.gaussianHarmonics.sh,world.gaussianHarmonics.sh);
+  }
+});

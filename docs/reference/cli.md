@@ -212,6 +212,10 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   cloud-materials render <material.json> <view.json> --out image.png   relight, restore capture or inspect channels
   cloud-materials inspect <material.json> [--row N]   report recovery and override evidence
   splat-groups <scene> --plan groups.json --out fit.json [--base fit.json --report report.json]
+  splat-attributes inspect <scene> --out attributes.json   capture stable typed splat attributes
+  splat-attributes plan <scene> <plan.json> --out directory   select, clean, transfer and deform splats
+  splat-attributes export <scene> <plan directory> --out cloud.inksplats   export a materialized native cloud
+  splat-attributes verify <scene> <plan directory> <cloud.inksplats> --views views.json --out directory   check render and export parity
   splat-redistribute <scene> --plan operations.json --out fit.json --report review.json [--base fit.json]
   render/clip --shot-corrections file.json|off   load or bypass native shot corrections
   render or clip --multiprojection plan.json   use local projection for named mesh surfaces
