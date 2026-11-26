@@ -38,7 +38,7 @@ vec4 relightAt(int row) { return texelFetch(u_relight, ivec2(row & 511, row >> 9
 export function splatShaderSources(ascii, sampleCoverage, {
   water = false, airPockets = false, layered = false, atlas = false, portal = false, instances = false,
   contributions = false, masked = false, textured = false, layeredGlass = false, coverageRules, materialStyles = false,
-  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, marks=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false, coverageVote = false, coverageFilter = false, gaussianMaterials = false, surfaceOrder = false, depthMeshProxy = false, gaussianFilter = false, pbr
+  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, marks=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false, coverageVote = false, coverageFilter = false, gaussianMaterials = false, surfaceOrder = false, depthMeshProxy = false, gaussianFilter = false, pbr, sharedContours = false
 } = {}) {
   if (footprints && typeof footprintGLSL !== 'string') throw new Error('Footprint shaders need SplatFootprints.glsl');
   const coverageStride = coverageRules?.coverageStride ?? 4;
@@ -50,6 +50,12 @@ export function splatShaderSources(ascii, sampleCoverage, {
     if(!footprintPlane||v_coverage==${softMode}||v_color.a<1.0||g<0.5${optical?'||hasOptical':''})discard;
     o=vec4(0.0);od=vec4(0.0);oa=vec4(0.0);return;
   }` : '';
+  const hitColor = `
+  if (stat) { for (int i = 0; i < 4; i++) { vec4 h4 = u_hitf[i]; if (h4.w > 0.0 && distance(pos, h4.xyz) < h4.w) color = vec3(1.0, 0.97, 0.88); } }
+  else { float ai = float(a_index); for (int i = 0; i < 8; i++) { vec3 f3 = u_fl[i]; if (f3.z > 0.0 && ai >= f3.x && ai < f3.y) color = vec3(1.0, 0.97, 0.88); } }`;
+  const textMask = `
+  v_as = (flags & 128) != 0 ? 1.0 : 0.0; v_ast = v_as > 0.5 ? float(((kraw >> 12) & 1) | (((kraw >> 14) & 1) << 1)) : 0.0;
+  for (int i = 0; i < 4; i++) { if (i >= u_azn) break; vec4 z4 = u_az[i]; float zm = clamp(0.5 + (z4.w - distance(pos, z4.xyz)) / (2.0 * u_asoft), 0.0, 1.0); if (zm > v_as) { v_as = zm; v_ast = u_azst; } }`;
   const SPLAT_VS = `#version 300 es
 precision highp float; precision highp int;
 uniform highp sampler2D u_data;
@@ -122,7 +128,57 @@ ${materialStyles ? 'uniform highp sampler2D u_materialStyles; uniform bool u_mat
 ${engraving ? engravingVertexUniforms : ''}
 ${marks ? markVertexUniforms : ''}
 uniform bool u_preserveSceneY;
+${sharedContours ? `
+uniform int u_contourStage;
+layout(location=2) in vec4 a_highBounds;
+layout(location=3) in vec4 a_highConic;
+layout(location=4) in vec4 a_nativeBounds;
+layout(location=5) in vec4 a_nativeConic;
+layout(location=6) in vec4 a_contourColor;
+layout(location=7) in vec4 a_contourDepth;
+layout(location=8) in vec4 a_contourStyle;
+out vec4 highBounds, highConic, nativeBounds, nativeConic, contourColor, contourDepth, contourStyle;
+
+void projectGrid(vec2 ndc, vec3 screenCov, bool continuous, bool snap, vec2 viewport,
+    float gridScale, out vec4 bounds, out vec4 conic) {
+  bounds = conic = vec4(0.0);
+  float variance = continuous ? ${variance} * gridScale * gridScale : u_dilate;
+  float A = screenCov.x + variance, B = screenCov.y, C = screenCov.z + variance;
+  float det = A * C - B * B;
+  if (det <= 0.0) return;
+  vec2 ext = min(3.0 * sqrt(vec2(A, C)), vec2(2048.0));
+  if (snap) { vec2 px = floor((ndc * 0.5 + 0.5) * viewport) + 0.5; ndc = px / viewport * 2.0 - 1.0; }
+  if (any(greaterThan(abs(ndc) - ext * 2.0 / viewport, vec2(1.0)))) return;
+  bounds = vec4(ndc, ext);
+  conic = vec4(vec3(C, -B, A) / det, 1.0);
+}
+` : ''}
 void main(){
+  ${sharedContours ? `
+  if (u_contourStage >= 2) {
+    vec4 bounds = u_contourStage == 2 ? a_highBounds : a_nativeBounds;
+    vec4 conic = u_contourStage == 2 ? a_highConic : a_nativeConic;
+    if (conic.w == 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+    v_conic = conic.xyz;
+    v_d = a_corner * bounds.zw;
+    v_color = a_contourColor;
+    v_depth = a_contourDepth.x;
+    v_lit = a_contourDepth.y;
+    v_gl = a_contourDepth.z;
+    v_paint = int(a_contourDepth.w);
+    v_ix = a_contourStyle.x;
+    v_coverage = int(a_contourStyle.y);
+    v_as = a_contourStyle.z;
+    v_ast = a_contourStyle.w;
+    v_ownerDepth = 0.0;
+    v_fm = v_ft = vec4(0.0);
+    v_fk = -1.0;
+    ${stableDetail ? 'v_detailGeometry = v_detailTexture = 1.0;' : ''}
+    gl_Position = vec4(bounds.xy + a_corner * (bounds.zw * 2.0 / u_viewport), 0.0, 1.0);
+    return;
+  }
+  highConic = nativeConic = vec4(0.0);
+  ` : ''}
   int record = a_index;
   ${instances ? `ivec2 inst = ivec2((a_instance & 15) * 16, a_instance >> 4);
   vec4 meta;
@@ -380,6 +436,20 @@ ${environment ? '  v_envAxial = -cam.z;' : ''}
   ${engraving ? engravingVertex : ''}
   ${marks ? markVertex : ''}
   mat3 c2 = T * cov * transpose(T);
+  ${sharedContours ? `
+  if (u_contourStage == 1) {
+    vec2 center = clip.xy / clip.w;
+    vec3 screenCov = vec3(c2[0][0], c2[0][1], c2[1][1]);
+    projectGrid(center, screenCov, continuous, false, u_viewport, 2.0, highBounds, highConic);
+    projectGrid(center, screenCov * 0.25, continuous, snap, u_viewport * 0.5, 1.0, nativeBounds, nativeConic);
+    ${hitColor}
+    ${textMask}
+    contourColor = vec4(min(color, 1.0), alpha);
+    contourDepth = vec4(v_depth, v_lit, float((flags & 16) != 0), float(v_paint));
+    contourStyle = vec4(v_ix, float(v_coverage), v_as, v_ast);
+    gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
+    return;
+  }` : ''}
   float variance = continuous ? ${variance} * u_materialGridScale * u_materialGridScale : u_dilate;
   ${gaussianFilter ? `
   if (filtered) {
@@ -479,8 +549,7 @@ ${environment ? '  v_envAxial = -cam.z;' : ''}
   vec2 extN = ext * 2.0 / u_viewport;
   if (any(greaterThan(abs(ndc) - extN, vec2(1.0)))) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
   v_d = a_corner * ext;
-  if (stat) { for (int i = 0; i < 4; i++) { vec4 h4 = u_hitf[i]; if (h4.w > 0.0 && distance(pos, h4.xyz) < h4.w) color = vec3(1.0, 0.97, 0.88); } }
-  else { float ai = float(a_index); for (int i = 0; i < 8; i++) { vec3 f3 = u_fl[i]; if (f3.z > 0.0 && ai >= f3.x && ai < f3.y) color = vec3(1.0, 0.97, 0.88); } }
+  ${hitColor}
   if (${instances ? 'a_instance == 0 && ' : ''}u_fineOn > 0.5 && plain && color == colorF) {   // (a dab that has been recoloured since it was baked, by anything, is drawn plain)
     ivec2 fq = ivec2((a_index & 511) * 3, row); vec4 f1 = texelFetch(u_fine, fq + ivec2(1, 0), 0), f2 = texelFetch(u_fine, fq + ivec2(2, 0), 0);
     if (f2.w > 0.5 && f1.w == t1.w) { vec3 pu = T * (FM * f1.xyz) * sc, pw = T * (FM * f2.xyz) * sc; float dt = pu.x * pw.y - pw.x * pu.y;
@@ -498,8 +567,7 @@ ${environment ? '  v_envAxial = -cam.z;' : ''}
     alpha >= 1.0 && v_depth >= 0.0, fogk);` : ''}
   v_color = vec4(min(color, 1.0), alpha);
   v_gl = (flags & 16) != 0 ? 1.0 : 0.0;   // glass
-  v_as = (flags & 128) != 0 ? 1.0 : 0.0; v_ast = v_as > 0.5 ? float(((kraw >> 12) & 1) | (((kraw >> 14) & 1) << 1)) : 0.0;   // text (K.ascii): the dab asks for it (and maybe for a set of its own), or it lies inside a zone (0.5 on the zone's surface)
-  for (int i = 0; i < 4; i++) { if (i >= u_azn) break; vec4 z4 = u_az[i]; float zm = clamp(0.5 + (z4.w - distance(pos, z4.xyz)) / (2.0 * u_asoft), 0.0, 1.0); if (zm > v_as) { v_as = zm; v_ast = u_azst; } }
+  ${textMask}
 
 ${ascii ? ascii.vsMain : ''}  gl_Position = vec4(ndc + a_corner * extN, u_geometryDepth ? clip.z/clip.w : 0.0, 1.0);
 }`;

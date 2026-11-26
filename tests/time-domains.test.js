@@ -9,6 +9,25 @@ function stage() {
   B.iso(0, 0, 0, 0.1, B.P[1], 3);
   return K.stage(B.finish());
 }
+test('render pose interpolation blends geometry while retaining the latest splat attributes', () => {
+  const previous = Float32Array.from([
+    0, 1, 2, .5, 1, 0, 0, 31, 2, 0, 3, 7, 11, 12, 13, 14,
+    0, -50, 0, 1, 1, 0, 0, 31, 2, 0, 3, 7, 11, 12, 13, 14,
+    0, 1, 0, 0, 1, 0, 0, 31, 2, 0, 3, 7, 11, 12, 13, 14
+  ]);
+  const current = Float32Array.from([
+    2, 3, 4, 1, 3, 0, 0, 63, 4, 0, 5, 7, 15, 16, 17, 18,
+    4, 1, 0, 1, 3, 0, 0, 63, 4, 0, 5, 7, 15, 16, 17, 18,
+    4, 1, 0, 1, 3, 0, 0, 63, 4, 0, 5, 7, 15, 16, 17, 18
+  ]);
+  const stable = K.splatFrames.interpolatePose;
+  const out = new Float32Array(current.length), visible = (data, offset) => data[offset + 1] >= -30;
+  assert.equal(stable(previous, current, .5, { out, visible }), out);
+  assert.deepEqual([...out.subarray(0,16)], [1, 2, 3, 1, 2, 0, 0, 63, 3, 0, 4, 7, 15, 16, 17, 18]);
+  assert.deepEqual(out.subarray(16), current.subarray(16));
+  assert.deepEqual(stable(previous, current, 1), current);
+  assert.throws(() => stable(previous, current, .5, { out: previous }), /previous tick/);
+});
 test('independent clocks freeze a character without freezing camera, interface or simulation', () => {
   const c = T.create({ domains: { hero: { parent: 'animation', fps: 12 } } });
   for (let i = 0; i < 30; i++) c.advance(1 / 60);

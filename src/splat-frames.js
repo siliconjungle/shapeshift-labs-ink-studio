@@ -2,6 +2,31 @@
 const SplatFrames = (() => {
   let surface;
   try { surface = SurfaceLook; } catch { surface = require('./surface-look.js'); }
+  const poseFields = [0, 1, 2, 4, 5, 6, 8, 9, 10];
+
+  function interpolatePose(previous, current, alpha, { out = new Float32Array(current?.length ?? 0), visible } = {}) {
+    if (!(previous instanceof Float32Array) || !(current instanceof Float32Array) ||
+        !(out instanceof Float32Array) || current.length % 16 || previous.length !== current.length ||
+        out.length !== current.length || !Number.isFinite(alpha) || alpha < 0 || alpha > 1 ||
+        visible !== undefined && typeof visible !== 'function')
+      throw new TypeError('Splat pose interpolation needs matching packed rows and an alpha from zero to one');
+    if (out.buffer === previous.buffer && out.byteOffset < previous.byteOffset + previous.byteLength &&
+        previous.byteOffset < out.byteOffset + out.byteLength)
+      throw new RangeError('The interpolated pose must not overwrite the previous tick');
+    out.set(current);
+    if (alpha === 1) return out;
+    for (let offset = 0; offset < current.length; offset += 16) {
+      if (previous[offset + 3] <= 0 || out[offset + 3] <= 0 || previous[offset + 11] !== out[offset + 11])
+        continue;
+      if (visible && (!visible(previous, offset) || !visible(out, offset))) continue;
+      for (const field of poseFields) {
+        const i = offset + field;
+        out[i] = previous[i] + (out[i] - previous[i]) * alpha;
+      }
+    }
+    return out;
+  }
+
   function covariance(data, q, basis, M, transpose = M.tr(basis)) {
     const [xx, xy, xz, yy, yz, zz] = [4, 5, 6, 8, 9, 10].map(k => data[q + k]);
     return M.mul(M.mul(basis, [xx, xy, xz, xy, yy, yz, xz, yz, zz]), transpose);
@@ -155,6 +180,6 @@ const SplatFrames = (() => {
     }
     return sample;
   }
-  return Object.freeze({ create, covariance });
+  return Object.freeze({ create, covariance, interpolatePose });
 })();
 if (typeof module !== 'undefined') module.exports = SplatFrames;

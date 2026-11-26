@@ -72,3 +72,45 @@ test('the GPU pipeline chooses the full shader as soon as a visual feature turns
   assert.equal(calls.filter(call => call === 'delete buffer').length, 2);
   assert.throws(() => pipeline.draw(), /disposed/);
 });
+
+test('texture tables batch adjacent dirty rows and zero-pad the final row', async () => {
+  const { createTargets } = await import('../src/webgl/targets.mjs');
+  const calls = [];
+  const gl = {
+    activeTexture() {}, bindTexture() {}, texImage2D() {},
+    texSubImage2D(...args) {
+      const [, , , row, width, height, , , values, offset = 0] = args;
+      calls.push([row, height, [...values.subarray(offset, offset + width * height * 4)]]);
+    }
+  };
+  const { table } = createTargets(gl, { texture: () => ({}) });
+  const texture = table(1, 0, 8);
+  const values = Float32Array.from({ length: 24 }, (_, i) => i + 1);
+  texture.upload(values, 22);
+  calls.length = 0;
+  const dirty = [5, 2, 4, 0, 3, 2];
+  texture.upload(values, 22, dirty);
+  assert.deepEqual(dirty, [5, 2, 4, 0, 3, 2]);
+  assert.deepEqual(calls, [[0, 1, [1, 2, 3, 4]], [2, 3, [...values.slice(8, 20)]], [5, 1, [21, 22, 0, 0]]]);
+  calls.length = 0;
+  texture.upload(values, 22, []);
+  assert.deepEqual(calls, []);
+});
+
+test('zero-opacity splats do not change the depth buckets or draw order', async () => {
+  const { createDepthSorter } = await import('../src/webgl/view.mjs');
+  const sort = createDepthSorter();
+  const view = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+  const data = new Float32Array(4 * 16);
+  data.set([0, 0, 2, .5], 0);
+  data.set([0, 0, 1000000, 0], 16);
+  data.set([0, 0, 1, .5], 32);
+  data.set([0, 0, 0, 0], 48);
+  const world = { count: 4, data };
+  const all = [...sort(world, view, 0)];
+  const compact = sort(world, view, 0, undefined, undefined, undefined, undefined, undefined, undefined, data);
+  assert.deepEqual([...compact], all.filter(i => data[i * 16 + 3] > 0));
+  assert.deepEqual([...compact], [0, 2]);
+  data[3] = data[35] = 0;
+  assert.equal(sort(world, view, 0, undefined, undefined, undefined, undefined, undefined, undefined, data).length, 0);
+});

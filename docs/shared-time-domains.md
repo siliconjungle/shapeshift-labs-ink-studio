@@ -71,6 +71,17 @@ Clock `maxSteps` bounds scheduled work on each advance. Default `backlog:'retain
 [Gesture scores](gesture-scores.md) sample authored controls on an
 integer clock and can follow a take or a native simulation host.
 
+## Interpolate a packed splat pose
+
+Use `KIT.splatFrames.interpolatePose(previous, current, alpha, { out })` between
+fixed ticks for actors whose splat rows retain the same order and identity.
+Pass the previous and current packed `Float32Array` rows, and use a fraction
+from zero to one for the render time within a tick. The helper blends positions
+and covariance and copies the latest opacity, palette colors, and motion flags.
+Rows with zero opacity in either tick or changing motion flags use the current
+pose. A host can also supply `visible(data, offset)` for its own visibility rules.
+Use the current pose immediately after a discontinuity such as a teleport.
+
 ## Freeze and slow cues
 
 ```js

@@ -17,7 +17,7 @@ export function createResources(gl) {
     return value;
   }
 
-  function program(vertex, fragment) {
+  function program(vertex, fragment, feedback) {
     const p = gl.createProgram();
     if (!p) throw new Error('Could not allocate WebGL program');
     const shaders = [];
@@ -32,6 +32,7 @@ export function createResources(gl) {
           throw new Error('Ink Studio shader compilation failed: ' + gl.getShaderInfoLog(shader));
         gl.attachShader(p, shader);
       }
+      if (feedback) gl.transformFeedbackVaryings(p, feedback, gl.INTERLEAVED_ATTRIBS);
       gl.linkProgram(p);
       if (!gl.getProgramParameter(p, gl.LINK_STATUS))
         throw new Error('Ink Studio program linking failed: ' + gl.getProgramInfoLog(p));

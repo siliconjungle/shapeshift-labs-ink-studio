@@ -14,7 +14,7 @@ export function createSplatPipeline(gl, { ascii, specialize = true, sampleCovera
     const { vertex, fragment } = splatShaderSources(ascii, sampleCoverage, { coverageRules, stableDetail, airflow });
     const full = resources.program(vertex, fragment);
     const variants = new Map();
-    let plain, plainUnavailable = false, subset;
+    let plain, plainUnavailable = false, subset, shared, projection;
     let disposed = false;
     let orderCapacity = 0, orderCount = 0, hasReferences = false;
     const vao = resources.allocate('VertexArray');
@@ -36,6 +36,35 @@ export function createSplatPipeline(gl, { ascii, specialize = true, sampleCovera
     function check() {
       if (disposed) throw new Error('The Ink Studio splat pipeline has been disposed');
     }
+    const feedback = ['highBounds', 'highConic', 'nativeBounds', 'nativeConic', 'contourColor', 'contourDepth', 'contourStyle'];
+    const packetBytes = feedback.length * 16;
+
+    function createContourProjection() {
+      const transform = resources.allocate('TransformFeedback');
+      const buffer = resources.allocate('Buffer');
+      const source = resources.allocate('VertexArray');
+      const raster = resources.allocate('VertexArray');
+      gl.bindVertexArray(source);
+      gl.bindBuffer(gl.ARRAY_BUFFER, orderBuffer);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribIPointer(1, 1, gl.INT, 0, 0);
+      gl.bindVertexArray(raster);
+      gl.bindBuffer(gl.ARRAY_BUFFER, cornerBuffer);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, orderBuffer);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribIPointer(1, 1, gl.INT, 0, 0);
+      gl.vertexAttribDivisor(1, 1);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      for (let i = 0; i < feedback.length; i++) {
+        gl.enableVertexAttribArray(i + 2);
+        gl.vertexAttribPointer(i + 2, 4, gl.FLOAT, false, packetBytes, i * 16);
+        gl.vertexAttribDivisor(i + 2, 1);
+      }
+      return { transform, buffer, source, raster, capacity: 0 };
+    }
+
     return {
       // Hosts may supply their own VAO or draw order. All three flags must
       // explicitly be false before the shader can omit their work.
@@ -64,6 +93,19 @@ export function createSplatPipeline(gl, { ascii, specialize = true, sampleCovera
             variants.set(key, resources.program(shader.vertex, shader.fragment));
           }
           return variants.get(key);
+        }
+        if (features?.sharedContours && !ascii) {
+          if (shared === undefined) {
+            try {
+              const shader = splatShaderSources(undefined, sampleCoverage, { coverageRules, stableDetail, airflow, sharedContours: true });
+              shared = resources.program(shader.vertex, shader.fragment, feedback);
+              shared.sharedContours = true;
+            } catch (error) {
+              if (gl.isContextLost()) throw error;
+              shared = null;
+            }
+          }
+          if (shared) return shared;
         }
         if (!specialize || plainUnavailable || features?.lamps !== false ||
             features.fine !== false || features.textZones !== false) return full;
@@ -110,6 +152,35 @@ export function createSplatPipeline(gl, { ascii, specialize = true, sampleCovera
         gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count);
       },
       get count() { return orderCount; },
+      projectContours() {
+        check();
+        if (hasReferences) throw new Error('Shared contour projection requires direct splat indices');
+        if (!orderCount) return;
+        projection ??= createContourProjection();
+        if (projection.capacity < orderCount) {
+          projection.capacity = orderCount;
+          gl.bindBuffer(gl.ARRAY_BUFFER, projection.buffer);
+          gl.bufferData(gl.ARRAY_BUFFER, orderCount * packetBytes, gl.DYNAMIC_COPY);
+          gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        }
+        gl.bindVertexArray(projection.source);
+        gl.enable(gl.RASTERIZER_DISCARD);
+        gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, projection.transform);
+        gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, projection.buffer);
+        gl.beginTransformFeedback(gl.POINTS);
+        gl.drawArrays(gl.POINTS, 0, orderCount);
+        gl.endTransformFeedback();
+        gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
+        gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
+        gl.disable(gl.RASTERIZER_DISCARD);
+      },
+      drawProjectedContours() {
+        check();
+        if (!orderCount) return;
+        if (!projection) throw new Error('Project the splats before drawing shared contours');
+        gl.bindVertexArray(projection.raster);
+        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, orderCount);
+      },
       drawSubset(indices) {
         check();
         if (!(indices instanceof Int32Array)) throw new TypeError('Subset order must be an Int32Array');

@@ -164,6 +164,40 @@ sorting, and the raster pass including fragment shading and blending. Devices
 without timestamps return `gpuMs: null` with the same counts and upload data.
 Call `dispose()` when the renderer is no longer needed.
 
+### Share projection for Colored Contours
+
+Create the renderer with `{ contours: true }`. Supply a double-resolution
+color texture as the target and set `depth`, `nativeColor`, and `nativeDepth`
+on the frame. Both color textures use the renderer format. Both depth textures
+use `rgba8unorm`. Set `RENDER_ATTACHMENT | TEXTURE_BINDING` on all four
+textures when passing them to the palette resolve. The renderer projects and
+sorts once, then draws each grid with its own coverage and snapping. Profiling
+reports `highRaster` and `nativeRaster` as well as the full raster interval.
+
+```js
+const renderer = await createGaussianSplatRenderer(device, { contours: true });
+const resolve = await createGaussianContourResolve(device);
+renderer.setWorld(world);
+renderer.render(high, { depth, nativeColor: native, nativeDepth });
+resolve.resolve(output, { high, depth, native, nativeDepth }, { colors: world.pal });
+```
+
+Import both factories from `webgpu.mjs`. The resolve accepts packed
+`0xRRGGBB` palette colors and optional `grade` RGB triples in the range 0–1.
+Use `dither` to set ordered dithering and `ao` and `reach` for the native depth
+occlusion pass. The contour path uses affine projection and center-depth order.
+
+A host can change appearance, position, covariance, or visibility before
+projection through `pointAdapter`. Supply WGSL defining
+`fn adaptPoint(point: Point, order: u32) -> Point`. The point contains four
+`vec4f` fields named `position`, `covariance0`, `covariance1`, and `extra`.
+`position.w` holds opacity and `covariance0.w` holds packed pigment with red
+in the low byte. Set opacity to zero to cull a point. For optional frame uniforms,
+set `bytes` and provide `uniforms(frame)` returning a typed view of that length
+for group 0 binding 5. For optional sampled textures, provide `textureViews`
+in binding order starting at group 0 binding 6. The host owns those textures
+and can update their contents without re-uploading the splats.
+
 ### Filter Gaussian footprints on the art grid
 
 Set `gaussianFilter` on the frame or in `world.look` for headless, WebGL,
@@ -290,6 +324,13 @@ report lists reusable projection and sort workspace separately as
 `workBytes`. The visible splat ceiling applies before GPU culling, so
 the profiled GPU visible count is at or below that ceiling. The optional
 footprint atlas is reported separately as `stream.footprintBytes`.
+
+Set `uploadBytesPerFrame` to spread uploads from completed loads across
+renders. One oversized chunk can upload alone so it always makes progress.
+Keep rendering while waiting for `ready()` with this option enabled.
+Set `decodedCacheBytes` to retain decoded chunks by revision after GPU
+eviction, so returning to an area can skip fetching and decoding those chunks.
+The stream reports queued uploads and cache usage when enabled.
 
 Refresh a running stream with the newly published manifest. The next
 render uses its revisions to reload changed visible chunks while retaining
