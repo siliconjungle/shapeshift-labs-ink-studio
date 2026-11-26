@@ -6,6 +6,9 @@ through the same whole-body solver used for individual poses. A
 sampled pose works with the existing rig inspection, binding, and
 preview commands.
 
+Use [headless channel routing](channel-routing.md) to compare these
+controls with WAV and simulation samples on one clock.
+
 ```sh
 ink-studio character-motion catalog rig.json motion.json
 ink-studio character-motion sample rig.json motion.json signal --at 0.82 --out pose.json --require-solved

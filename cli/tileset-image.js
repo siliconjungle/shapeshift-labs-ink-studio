@@ -419,7 +419,8 @@ function assignCommand([file,...rest], options, toolkit, openEditor) {
   process.stdout.write(JSON.stringify({...report,...(review && {preview:review})},null,2)+'\n');
 }
 
-const faceEdits = {
+const tilesetEdits = {
+  'stamp-prefab':['planPrefabStamp','stampPrefab'],
   stroke:['planTilesetStroke','applyTilesetStroke'],
   rectangle:['planTilesetRectangle','applyTilesetRectangle'],
   'brush-run':['planTilesetBrushRun','applyTilesetBrushRun'],
@@ -428,13 +429,13 @@ const faceEdits = {
   primitive:['planTilesetPrimitive','applyTilesetPrimitive']
 };
 
-function faceEditCommand(action, [file,...rest], options, projectTexelsPerUnit, openEditor) {
+function tilesetEditCommand(action, [file,...rest], options, projectTexelsPerUnit, openEditor) {
   const {scene,out,selection,collection,'brush-file':brush,'vertices-file':vertices} = options;
   const extras = {'brush-run':['brush-file'],face:['selection','vertices-file'],block:['selection'],primitive:['selection'],
     stroke:['collection'],rectangle:['collection']};
   const name = value=>typeof value === 'string' && value.trim();
   if (rest.length || ![file,scene].every(name) || out !== undefined && !name(out) ||
-      Object.keys(options).some(key=>!['scene','out',...extras[action]].includes(key)) ||
+      Object.keys(options).some(key=>!['scene','out',...(extras[action] ?? [])].includes(key)) ||
       [brush,selection,collection,vertices].some(value=>value !== undefined && !name(value)))
     throw new TypeError('Use tileset '+action+' <request.json> --scene <scene.json> [--out <new-scene.json>]');
   const input = path.resolve(scene), output = out && sceneOutput(input,out,file);
@@ -472,7 +473,7 @@ function faceEditCommand(action, [file,...rest], options, projectTexelsPerUnit, 
         materialDefinition:request.materialDefinition ?? (slot === material ? materialDefinition : undefined)});
     } else request.selection = picked;
   }
-  return publishFaceEdit(openEditor(input),request,{projectTexelsPerUnit},output,...faceEdits[action]);
+  return publishFaceEdit(openEditor(input),request,{projectTexelsPerUnit},output,...tilesetEdits[action]);
 }
 
 function publishFaceEdit(editor, request, settings, output, plan, apply) {
@@ -531,7 +532,7 @@ function command([action, ...args], options, toolkit, projectTexelsPerUnit, open
   if (action === 'bleed-review') return require('./tileset-bleed-review.js').command(args,options,toolkit,openEditor);
   if (action === 'assign') return assignCommand(args,options,toolkit,openEditor);
   if (action === 'eyedrop') return eyedropCommand(args,options,openEditor);
-  if (Object.hasOwn(faceEdits,action)) return faceEditCommand(action,args,options,projectTexelsPerUnit,openEditor);
+  if (Object.hasOwn(tilesetEdits,action)) return tilesetEditCommand(action,args,options,projectTexelsPerUnit,openEditor);
   if (action === 'stamp' || action === 'place' || action === 'grow') return stampCommand(action,args,options,toolkit,projectTexelsPerUnit,openEditor);
   if (['resize','resample','swap'].includes(action))
     return require('./tileset-canvas.js').command(action,args,options,openEditor);

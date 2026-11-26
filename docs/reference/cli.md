@@ -366,6 +366,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   tileset select-atlas <pick.json> --scene <scene.json> --object <mesh-id> [--part <part-id>] [--mode match|inside|touch] [--out <selection.json>]   select faces by pigment UV coverage of a tileset rectangle
   tileset eyedrop --scene <scene.json> --object <mesh-id> --face <face-id> [--part ID] [--brush-size] [--out <pick.json>]   recover a reusable painted face pick for stamp --selection
   tileset reskin --scene <scene.json> --object <mesh-id> --face <face-id> --mode crop|tileset|relative (--selection <pick.json> | --id <tileset-id>) [--part ID] [--column N --row N] [--out <new-scene.json>]   change the paint on an existing mesh face
+  tileset stamp-prefab <request.json> --scene <scene.json> [--out <new-scene.json>]   stamp linked prefab placements on the construction plane
   tileset promote-prefab <request.json> --scene <scene.json> [--selection faces.json] [--out new-scene.json]   promote selected tile faces into a linked visual prefab
   tileset coverage-review <review.json> --scene <scene.json> --out <directory>   inspect opaque, cutout, and blended coverage across native camera samples
   tileset decal <decal.json> --scene <scene.json> [--image art.png] [--view view.json --preview dir] [--expect receipt.json] [--out <new-scene.json>]   place a decal on a named mesh face and review depth conflicts
@@ -532,6 +533,12 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   character-motion sample <rig.json> <motion.json> <clip> [--at seconds --out pose.json --free --require-solved]   mix clips and solve contacts
   character-motion edit <rig.json> <motion.json> <edits.json> --out motion.json   edit curve keys or key saved rig controls
   character-motion retarget <rig.json> <motion.json> <clip> <target-rig.json> <plan.json> --out motion.json [--report report.json --require-solved]   bake editable controls with transferred contacts
+  channels discover <plan.json> [--out index.json]   discover animation, audio and simulation channels
+  channels filter <plan.json> <stage> [--out trace.json]   filter a named channel
+  channels blend <plan.json> <stage> [--out trace.json]   combine aligned channels
+  channels resample <plan.json> <stage> [--out trace.json]   change a channel clock
+  channels route <plan.json> [--out controls.json]   publish named frame controls
+  channels run <plan.json> [--out report.json]   publish comparable traces, routes and source clocks
   motion-review <id> [--finding kind-or-id] [--out report.json]  inspect motion findings and focused playback ranges
   clip-sequence <id> [--handoff 0] [--out report.json]  inspect clip instances, retimed cues, and handoffs
   animation-graph <graph.json> [--at seconds] [--inputs file.json] [--out report.json]  inspect poses and event responses
@@ -751,6 +758,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   graph clip <project.json> --output NAME --from FRAME --to FRAME --out directory
     [--fps N|N/D --warmup FRAMES --cuts FRAME,FRAME --format frames|apng|both|sample --clock file.json --render-options file.json]
     --format sample [--capture-options file.json]   retain a reusable visual span with aligned planes
+    --controls routes.json [--controls-input NAME]   replay named controls at the exact frame rate
   graph batch <project.json> <cases-or-sweep.json> [--out directory]   run named cases or a Cartesian sweep
     --resume --out directory   keep verified cases and retry failures
     --progress ndjson   stream case and batch records
@@ -894,7 +902,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio effect-recipe search` · `--input`, `--renderer`, `--json` · [source](../../cli/effect-recipes.js)
 - `ink-studio graph batch` · `--inputs`, `--at`, `--seed`, `--out`, `--json`, `--resume`, `--progress`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph capture` · `--out`, `--adapters`, `--json` · [source](../../cli/graph-cli.js)
-- `ink-studio graph clip` · `--inputs`, `--seed`, `--out`, `--output`, `--from`, `--to`, `--fps`, `--warmup`, `--cuts`, `--clock`, `--format`, `--render-options`, `--capture-options`, `--json`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
+- `ink-studio graph clip` · `--inputs`, `--seed`, `--out`, `--output`, `--from`, `--to`, `--fps`, `--warmup`, `--cuts`, `--clock`, `--format`, `--render-options`, `--capture-options`, `--controls`, `--controls-input`, `--json`, `--workers`, `--cache`, `--cache-bytes`, `--cache-entries`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph dependencies` · `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph describe` · `--json`, `--example` · [source](../../cli/graph-cli.js)
 - `ink-studio graph diff` · `--adapters`, `--json` · [source](../../cli/graph-cli.js)
