@@ -105,3 +105,7 @@ See [UV debug outputs](bake-uv-debug.md) for aligned chart outlines, footprint e
 ## Control each map's delivery
 
 See [bake output controls](bake-output-controls.md) for independent width and height, precision and format, chart-aware antialiasing, gutter treatment, and mip chains.
+
+## Batch and update UDIM tiles
+
+See [UDIM and batch baking](udim-batch-bake.md) for named tile sets, delivery aliases, incremental cache reuse, parallel workers, and memory reservations.

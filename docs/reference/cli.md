@@ -345,6 +345,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   scene-resource inspect|validate <scene> [--python path --blender path]
   scene-resource convert <scene> --out <file> [--materialx look.mtlx --python path --blender path]
   bake-job inspect|run|serve|preset <job.json> [--out directory --preset preset.json --port 0]
+  bake-job batch <batch.json> --out directory   bake and cache a budgeted tiled batch
     --manifest <revision.json>   attach an Ink asset revision to tagged glTF data
   hybrid-ownership inspect <scene.json> [--out file.json]   list authored channels and derived outputs
   hybrid-ownership route <scene.json> <object> <part> <channel>   resolve the authored edit destination
