@@ -2,7 +2,7 @@
 (function (K) {
   const A = K.authoring;
 
-  function select(scene, {kind,ids} = {}) {
+  function select(scene, {kind,ids,layer,includeHidden} = {}) {
     let placements;
     const sources = [
       ['prefab',scene.instances ?? {},(_,id) => {
@@ -15,16 +15,24 @@
       throw new TypeError('Choose prefab or asset-part instances');
     if (ids !== undefined && (!Array.isArray(ids) || !Array.from(ids).every(TargetSelectors.name)))
       throw new TypeError('Instance IDs need an array of names');
-    const enabled = sources.filter(([type])=>kind === undefined || kind === type);
+    if (includeHidden !== undefined && typeof includeHidden !== 'boolean')
+      throw new TypeError('Include hidden must be a boolean');
+    if (layer !== undefined && kind === 'asset-part')
+      throw new TypeError('Scene layers select visual prefab placements');
+    const layout = layer !== undefined || includeHidden === false ? A.sceneLayers.prepare(scene) : undefined;
+    const scope = layer === undefined ? null : new Set(layout.branch(layer,{includeHidden}));
+    const enabled = sources.filter(([type])=>scope ? type === 'prefab' : kind === undefined || kind === type);
     function target([instanceKind,rows,origin], instance) {
       return {instance,instanceKind,target:origin(rows[instance].transform,instance)};
     }
-    if (ids === undefined) return enabled.flatMap(source=>Object.keys(source[1]).sort().map(id=>target(source,id)));
-    return [...new Set(ids)].sort().map(instance=>{
+    const allowed = ([type],id) => type !== 'prefab' || (scope ? scope.has(id) : includeHidden !== false || layout.isVisible(id));
+    if (ids === undefined) return enabled.flatMap(source=>Object.keys(source[1]).sort()
+      .filter(id=>allowed(source,id)).map(id=>target(source,id)));
+    return [...new Set(ids)].sort().flatMap(instance=>{
       const matches = enabled.filter(([,rows])=>Object.hasOwn(rows,instance));
       if (!matches.length) throw new RangeError('Unknown scene instance '+instance);
       if (matches.length>1) throw new RangeError('Instance '+instance+' is ambiguous. Choose prefab or asset-part');
-      return target(matches[0],instance);
+      return allowed(matches[0],instance) ? [target(matches[0],instance)] : [];
     });
   }
 

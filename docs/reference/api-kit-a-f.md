@@ -891,7 +891,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.sceneInstances.anchor` | function | `(scene, env, { instance, instanceKind, anchor })` | [source](../../src/kit/p23-scene-instances.js) |
 | `KIT.authoring.sceneInstances.assetSocket` | function | `(scene, env, instance, binding)` | [source](../../src/kit/p23-scene-instances.js) |
 | `KIT.authoring.sceneInstances.prefabSelection` | function | `(scene, request)` | [source](../../src/kit/p23-scene-instances.js) |
-| `KIT.authoring.sceneInstances.select` | function | `(scene, {kind,ids} = {})` | [source](../../src/kit/p23-scene-instances.js) |
+| `KIT.authoring.sceneInstances.select` | function | `(scene, {kind,ids,layer,includeHidden} = {})` | [source](../../src/kit/p23-scene-instances.js) |
+| `KIT.authoring.sceneLayers` | namespace |  |  |
+| `KIT.authoring.sceneLayers.plan` | function | `(scene, env, request = {})` | [source](../../src/kit/p23-scene-layers.js) |
+| `KIT.authoring.sceneLayers.prepare` | function | `(scene)` | [source](../../src/kit/p23-scene-layers.js) |
+| `KIT.authoring.sceneLayers.reconcile` | function | `(scene, instances, source)` | [source](../../src/kit/p23-scene-layers.js) |
+| `KIT.authoring.sceneLayers.visibility` | function | `(source, links)` | [source](../../src/kit/p23-scene-layers.js) |
+| `KIT.authoring.sceneLayers.visibleBreakables` | function | `(spec, authored)` | [source](../../src/kit/p23-scene-layers.js) |
 | `KIT.authoring.sceneLibrary` | namespace |  |  |
 | `KIT.authoring.sceneLibrary.create` | function | `(storage, { key, backups = 8, prepareSnapshot } = {})` | [guide](../procedural.md#named-scene-library), [source](../../src/kit/p88-scene-library.js) |
 | `KIT.authoring.scenePrefabs` | namespace |  |  |

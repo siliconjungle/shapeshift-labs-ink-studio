@@ -298,7 +298,7 @@
         const name = local => key + '.' + local;
         const frame = framesByInstance.get(key);
         const placement = offset && frame ? compose(offset,frame) : offset ?? frame;
-        const ids = [], meshes = new Map();
+        const ids = [], meshes = new Map(), effectIndices = [];
         for (const [local, solid] of Object.entries(resolved.solids)) {
           check(record(solid), 'Expected a solid at ' + local);
           const next = scopedSolid(solid, name, tasks, { primary: true, key: local, placement, prefab: instance.prefab });
@@ -351,9 +351,10 @@
               next.box = [Math.min, Math.max].map(fn => [0, 1, 2].map(i => fn(...corners.map(point => point[i]))));
             }
           }
+          effectIndices.push(spec.effects.length);
           spec.effects.push(next);
         }
-        links.set(key, { instance, definition, resolved, revision: definition.revision, solids: ids, meshes, placement, frame: placement?.mesh, ...(raw.mirror && {mirror:raw.mirror}) });
+        links.set(key, { instance, definition, resolved, revision: definition.revision, solids: ids, meshes, effectIndices, placement, frame: placement?.mesh, ...(raw.mirror && {mirror:raw.mirror}) });
       } catch (error) {
         throw placementError(key,null,error.message);
       }
