@@ -427,19 +427,26 @@ function makeSculpt(B, rest) {
       max: center.map((v, i) => v + extent[i])
     };
   }
-  if (measureBounds) S.geometryBounds = () => {
-    const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
-    for (const p of pos) {
-      if (!Number.isFinite(p.br) || p.br > 1e8) throw Error('Geometry measurement needs finite solids');
-      const bounds = p.geometryBounds, blend = Math.max(0, p.k);
+  if (measureBounds) {
+    S.geometryBound = p => {
+      if (!Number.isFinite(p.br) || p.br >= 1e8) return null;
+      const bounds = p.geometryBounds, blend = Math.max(0, p.k ?? 0);
       const margin = blend + (bounds ? Math.max(0, p.bump?.[0] || 0) : p.br);
-      for (let i = 0; i < 3; i++) {
-        min[i] = Math.min(min[i], (bounds ? bounds.min[i] : p.bc[i]) - margin);
-        max[i] = Math.max(max[i], (bounds ? bounds.max[i] : p.bc[i]) + margin);
+      return { min:(bounds?.min ?? p.bc).map(n => n-margin), max:(bounds?.max ?? p.bc).map(n => n+margin) };
+    };
+    S.geometryBounds = () => {
+      const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+      for (const p of pos) {
+        const bounds = S.geometryBound(p);
+        if (!bounds) throw Error('Geometry measurement needs finite solids');
+        for (let i = 0; i < 3; i++) {
+          min[i] = Math.min(min[i],bounds.min[i]);
+          max[i] = Math.max(max[i],bounds.max[i]);
+        }
       }
-    }
-    return pos.length ? { min, max } : null;
-  };
+      return pos.length ? { min, max } : null;
+    };
+  }
   // a solid defined in its own space: centred on c, optionally turned by the frame o.ax
   function local(c, br, sd0, sm0, mat, o) {
     const ax = o && o.ax,

@@ -813,3 +813,55 @@ In the SDK, use `planSceneLayers`, `previewSceneLayers`,
 `editSceneLayers`, and `selectSceneLayer`. Run
 `node examples/tileset-pick/scene-layers-demo.cjs station-layers`
 to hide a wing, move a saved selection, and stamp into an insertion layer.
+
+### Inspect layer bounds and set module origins
+
+Add a `layer` to an `inspect` request to measure that branch. The
+receipt lists each module's local and world origin, member bounds,
+and the combined bounds. It includes hidden descendants by default.
+Use `includeHidden: false` for the visible population, or `layer: null`
+for unlayered placements.
+
+```json
+{"action":"inspect","layer":"station"}
+```
+
+The measurement uses world-space rest geometry. It samples the
+evaluated native mesh vertices and conservative solid envelopes.
+Unbounded members are listed separately and prevent a geometric
+center from being used. The receipt also includes a separate box
+and center for the authored module origins.
+
+```json
+{"action":"center","layer":"station","basis":"bounds"}
+```
+
+Centering moves the construction frame's origin and keeps its axes,
+grid and rounding. Use `basis: "origins"` to center on the origin box
+instead. An edge-anchored origin can slide along its edge. Use
+`detachEdge: true` to move it elsewhere.
+
+```json
+{"action":"set-origins","layer":"station","target":{"kind":"module-center"}}
+```
+
+Set each module origin to its own bounds center with `module-center`,
+or give every module a common target with `layer-center`, `plane`,
+`{"kind":"point","position":[0,1,0]}`, or a named object point selector.
+Origins are local to their prefab recipes. The edit preserves
+geometry, child placement and socket positions. Instance selection
+and live prefab pivot frames use the new origin. A live mirror's
+origin follows its source. Commit a mirror before assigning its
+origin directly.
+
+```sh
+ink-studio mesh-topology scene-layer station.json inspect.json
+ink-studio mesh-topology scene-layer station.json center.json --out centered.json
+ink-studio mesh-topology scene-layer centered.json origins.json --preview review --view view.json --out authored.json
+```
+
+The origin receipt lists before and after positions and any dependent
+mirror origins. One undo restores the entire batch. Run
+`node examples/tileset-pick/scene-layer-frames-demo.cjs station-frames`
+to inspect a layered station, center its construction frame, and
+review the changed origins over matched native-grid renders.

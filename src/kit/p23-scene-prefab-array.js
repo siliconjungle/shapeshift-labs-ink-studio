@@ -56,7 +56,7 @@
     if (!template) throw new RangeError('Unknown scene instance '+instance);
     if (template.mirror) throw new RangeError('Commit the live mirror before using it as an array source');
     const frames = A.scenePrefabs.placements(scene.instances), frame = frames.get(instance);
-    const source = {instance,instanceKind:'prefab',target:frame?.mesh.position ?? [0,0,0]};
+    const source = {instance,instanceKind:'prefab',target:A.scenePrefabs.placedOrigin(template,frame)};
     const axes = space === 'plane' ? A.constructionPlane.forScene(scene).axes : space === 'local' ?
       unit.map(axis => frame?.direction(axis) ?? axis) : unit;
     const parentFrame = template.parent === undefined ? undefined :
@@ -151,7 +151,7 @@
         const after = A.scenePrefabs.expand({...scene,...patch},env);
         report.conflicts.push(...A.scenePrefabs.indexedTargets(scene,before,after));
         for (const row of report.cells) if (row.status !== 'missing')
-          row.at = after.instances.get(row.instance).frame?.position ?? [0,0,0];
+          row.at = after.instances.get(row.instance).origin;
         const objects = link => link ? [...link.solids,...[...link.meshes.values()].map(row => row.object)] : [];
         report.instances = [...report.cells,...report.retired].map(({instance}) => ({instance,
           objects:[...new Set([...objects(before.instances.get(instance)),...objects(after.instances.get(instance))])]}));

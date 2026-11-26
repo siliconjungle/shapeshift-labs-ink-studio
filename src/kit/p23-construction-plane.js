@@ -203,9 +203,12 @@
     return {...evidence,target:mean(centers)};
   }
 
-  function snapOrigin(scene, request, {detachEdge = false} = {}, env) {
+  function snapOrigin(scene, request, options, env) {
+    return snapTo(scene,originTarget(scene,request,env),options);
+  }
+
+  function snapTo(scene, snap, {detachEdge = false} = {}) {
     if (typeof detachEdge !== 'boolean') throw new TypeError('Detach edge must be a boolean');
-    const snap = originTarget(scene,request,env);
     let frame;
     try {
       frame = forScene(scene);
@@ -279,5 +282,5 @@
     return {point:point(frame,gridAt),gridAt};
   }
 
-  A.constructionPlane = Object.freeze({resolve,pick,forScene,tilt,originTarget,snapOrigin,gridPreset,quantize,point,project});
+  A.constructionPlane = Object.freeze({resolve,pick,forScene,tilt,originTarget,snapOrigin,snapTo,gridPreset,quantize,point,project});
 })(KIT);
