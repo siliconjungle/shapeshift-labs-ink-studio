@@ -106,6 +106,24 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.openPbr.inputs.emission_luminance.min` | value | `number = 0` |  |
 | `KIT.procedural.openPbr.inputs.emission_luminance.type` | value | `string = "float"` |  |
 | `KIT.procedural.openPbr.inputs.emission_luminance.units` | value | `string = "nits"` |  |
+| `KIT.procedural.openPbr.inputs.fuzz_color` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.fuzz_color.default` | value | `array` |  |
+| `KIT.procedural.openPbr.inputs.fuzz_color.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.fuzz_color.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.fuzz_color.type` | value | `string = "color3"` |  |
+| `KIT.procedural.openPbr.inputs.fuzz_color.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.fuzz_roughness` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.fuzz_roughness.default` | value | `number = 0.5` |  |
+| `KIT.procedural.openPbr.inputs.fuzz_roughness.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.fuzz_roughness.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.fuzz_roughness.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.fuzz_roughness.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.fuzz_weight` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.fuzz_weight.default` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.fuzz_weight.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.fuzz_weight.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.fuzz_weight.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.fuzz_weight.units` | value | `string = "unitless"` |  |
 | `KIT.procedural.openPbr.inputs.geometry_coat_normal` | namespace |  |  |
 | `KIT.procedural.openPbr.inputs.geometry_coat_normal.default` | value | `null` |  |
 | `KIT.procedural.openPbr.inputs.geometry_coat_normal.max` | value | `number = null` |  |
@@ -154,9 +172,99 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.openPbr.inputs.specular_weight.min` | value | `number = 0` |  |
 | `KIT.procedural.openPbr.inputs.specular_weight.type` | value | `string = "float"` |  |
 | `KIT.procedural.openPbr.inputs.specular_weight.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_color` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.subsurface_color.default` | value | `array` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_color.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_color.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_color.type` | value | `string = "color3"` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_color.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_radius` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.subsurface_radius.default` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_radius.max` | value | `number = null` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_radius.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_radius.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_radius.units` | value | `string = "cm"` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_radius_scale` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.subsurface_radius_scale.default` | value | `array` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_radius_scale.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_radius_scale.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_radius_scale.type` | value | `string = "color3"` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_radius_scale.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_scatter_anisotropy` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.subsurface_scatter_anisotropy.default` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_scatter_anisotropy.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_scatter_anisotropy.min` | value | `number = -1` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_scatter_anisotropy.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_scatter_anisotropy.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_weight` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.subsurface_weight.default` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_weight.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_weight.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_weight.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.subsurface_weight.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.thin_film_ior` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.thin_film_ior.default` | value | `number = 1.4` |  |
+| `KIT.procedural.openPbr.inputs.thin_film_ior.max` | value | `number = null` |  |
+| `KIT.procedural.openPbr.inputs.thin_film_ior.min` | value | `number = 5e-324` |  |
+| `KIT.procedural.openPbr.inputs.thin_film_ior.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.thin_film_ior.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.thin_film_thickness` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.thin_film_thickness.default` | value | `number = 0.5` |  |
+| `KIT.procedural.openPbr.inputs.thin_film_thickness.max` | value | `number = null` |  |
+| `KIT.procedural.openPbr.inputs.thin_film_thickness.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.thin_film_thickness.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.thin_film_thickness.units` | value | `string = "um"` |  |
+| `KIT.procedural.openPbr.inputs.thin_film_weight` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.thin_film_weight.default` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.thin_film_weight.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.thin_film_weight.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.thin_film_weight.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.thin_film_weight.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.transmission_color` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.transmission_color.default` | value | `array` |  |
+| `KIT.procedural.openPbr.inputs.transmission_color.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.transmission_color.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.transmission_color.type` | value | `string = "color3"` |  |
+| `KIT.procedural.openPbr.inputs.transmission_color.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.transmission_depth` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.transmission_depth.default` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.transmission_depth.max` | value | `number = null` |  |
+| `KIT.procedural.openPbr.inputs.transmission_depth.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.transmission_depth.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.transmission_depth.units` | value | `string = "cm"` |  |
+| `KIT.procedural.openPbr.inputs.transmission_dispersion_abbe_number` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.transmission_dispersion_abbe_number.default` | value | `number = 20` |  |
+| `KIT.procedural.openPbr.inputs.transmission_dispersion_abbe_number.max` | value | `number = null` |  |
+| `KIT.procedural.openPbr.inputs.transmission_dispersion_abbe_number.min` | value | `number = 5e-324` |  |
+| `KIT.procedural.openPbr.inputs.transmission_dispersion_abbe_number.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.transmission_dispersion_abbe_number.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.transmission_dispersion_scale` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.transmission_dispersion_scale.default` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.transmission_dispersion_scale.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.transmission_dispersion_scale.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.transmission_dispersion_scale.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.transmission_dispersion_scale.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.transmission_scatter` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.transmission_scatter.default` | value | `array` |  |
+| `KIT.procedural.openPbr.inputs.transmission_scatter.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.transmission_scatter.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.transmission_scatter.type` | value | `string = "color3"` |  |
+| `KIT.procedural.openPbr.inputs.transmission_scatter.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.transmission_scatter_anisotropy` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.transmission_scatter_anisotropy.default` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.transmission_scatter_anisotropy.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.transmission_scatter_anisotropy.min` | value | `number = -1` |  |
+| `KIT.procedural.openPbr.inputs.transmission_scatter_anisotropy.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.transmission_scatter_anisotropy.units` | value | `string = "unitless"` |  |
+| `KIT.procedural.openPbr.inputs.transmission_weight` | namespace |  |  |
+| `KIT.procedural.openPbr.inputs.transmission_weight.default` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.transmission_weight.max` | value | `number = 1` |  |
+| `KIT.procedural.openPbr.inputs.transmission_weight.min` | value | `number = 0` |  |
+| `KIT.procedural.openPbr.inputs.transmission_weight.type` | value | `string = "float"` |  |
+| `KIT.procedural.openPbr.inputs.transmission_weight.units` | value | `string = "unitless"` |  |
 | `KIT.procedural.openPbr.operations` | namespace |  |  |
 | `KIT.procedural.openPbr.operations["material.openPbr"]` | namespace |  |  |
-| `KIT.procedural.openPbr.operations["material.openPbr"].description` | value | `string = "Author OpenPBR Surface core values and typed texture bindings using standard input names."` |  |
+| `KIT.procedural.openPbr.operations["material.openPbr"].description` | value | `string = "Author OpenPBR Surface values and typed texture bindings using standard input names."` |  |
 | `KIT.procedural.openPbr.operations["material.openPbr"].inputs` | namespace |  |  |
 | `KIT.procedural.openPbr.operations["material.openPbr"].inputs.maps` | namespace |  |  |
 | `KIT.procedural.openPbr.operations["material.openPbr"].inputs.maps.default` | namespace |  |  |
@@ -164,7 +272,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.openPbr.operations["material.openPbr"].inputs.maps.type` | value | `string = "record"` |  |
 | `KIT.procedural.openPbr.operations["material.openPbr"].inputs.parameters` | namespace |  |  |
 | `KIT.procedural.openPbr.operations["material.openPbr"].inputs.parameters.default` | alias | `Alias of KIT.procedural.openPbr.operations["material.openPbr"].inputs.maps.default` |  |
-| `KIT.procedural.openPbr.operations["material.openPbr"].inputs.parameters.description` | value | `string = "Uniform OpenPBR inputs in linear sRGB; emission luminance is in nits."` |  |
+| `KIT.procedural.openPbr.operations["material.openPbr"].inputs.parameters.description` | value | `string = "Uniform OpenPBR inputs in linear sRGB, with nits for emission, centimeters for depth and radius, and micrometers for film thickness."` |  |
 | `KIT.procedural.openPbr.operations["material.openPbr"].inputs.parameters.type` | value | `string = "record"` |  |
 | `KIT.procedural.openPbr.operations["material.openPbr"].outputs` | namespace |  |  |
 | `KIT.procedural.openPbr.operations["material.openPbr"].outputs.report` | value | `string = "record"` |  |
@@ -237,6 +345,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.paintRelief` | namespace |  |  |
 | `KIT.procedural.paintRelief.gradient` | function | `(relief, form, space, accepts, remaining)` | [source](../../src/kit/p26g-paint-relief.js) |
 | `KIT.procedural.paintRelief.prepare` | function | `(raw)` | [source](../../src/kit/p26g-paint-relief.js) |
+
+## KIT.procedural.paintThrob
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.paintThrob` | namespace |  |  |
+| `KIT.procedural.paintThrob.bake` | function | `(raw,readAudio)` | [source](../../src/kit/p26m-paint-throb.js) |
+| `KIT.procedural.paintThrob.format` | value | `string = "ink-studio/paint-throb"` |  |
+| `KIT.procedural.paintThrob.prepare` | function | `(raw, timeline)` | [source](../../src/kit/p26m-paint-throb.js) |
+| `KIT.procedural.paintThrob.scene` | function | `(source,time=0)` | [source](../../src/kit/p26m-paint-throb.js) |
 
 ## KIT.procedural.paintWave
 

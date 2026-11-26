@@ -98,10 +98,11 @@
     return frame ? frame.point(local) : local.slice();
   }
 
-  function placements(instances = {}) {
+  function placements(instances = {}, { camera } = {}) {
     const {check,id,own,record} = K.world.data;
     check(record(instances),'Expected an instance map');
-    const locals = new Map(), world = new Map();
+    if (camera !== undefined) camera = CameraLens.pose(camera);
+    const locals = new Map(), world = new Map(), billboards = new Map();
     for (const [key,entry] of Object.entries(instances)) {
       check(id(key) && record(entry),'Invalid visual prefab instance '+key);
       if (entry.parent !== undefined && (!id(entry.parent) || !own(instances,entry.parent)))
@@ -119,6 +120,10 @@
           throw placementError(key,'mirror',error.message);
         }
         continue;
+      }
+      if (entry.billboard !== undefined) {
+        try { billboards.set(key, A.prefabBillboards.read(entry.billboard)); }
+        catch (error) { throw placementError(key,'billboard',error.message); }
       }
       try {
         check(entry.flipX === undefined || entry.flipX === true,'An independent reflected placement uses flipX: true');
@@ -141,6 +146,8 @@
       for (const name of [...chain].reverse()) {
         const local = locals.get(name);
         frame = frame && local ? (instances[name].mirror ? compose(local,frame) : compose(frame,local)) : local ?? frame;
+        if (camera && billboards.has(name))
+          frame = A.prefabBillboards.orient(frame ?? authored(), instances[name], billboards.get(name), camera);
         if (frame && (!Number.isFinite(frame.scale) || frame.scale <= 0 || !frame.mesh.position.every(Number.isFinite)))
           throw placementError(name,'transform','World transform exceeds numeric precision');
         world.set(name,frame ?? null);
@@ -266,7 +273,7 @@
     }
     const spec = { ...rest, solids: [...(rest.solids ?? [])], parts: { ...rest.parts }, groups: { ...rest.groups },
       motion: [...(rest.motion ?? [])], effects: [...(rest.effects ?? [])] };
-    const links = new Map(), meshPlacements = new Map(), framesByInstance = placements(instances);
+    const links = new Map(), meshPlacements = new Map(), framesByInstance = env.billboardFrames ?? placements(instances);
     const offset = origin?.some(Boolean) ? authored({translation:V.mul(origin,-1)}) : null;
     for (const [key, raw] of Object.entries(instances)) {
       if (only && !only.has(key)) continue;
@@ -275,7 +282,7 @@
         const instance = seed ? {prefab:seed.prefab,overrides:seed.overrides,meshOverrides:seed.meshOverrides,
           ...(seed.origin && {origin:seed.origin}),...(seed.properties && {properties:seed.properties})} : raw;
         check(id(key) && record(instance) &&
-          Object.keys(instance).every(field => ['prefab', 'parent', 'transform', 'overrides', 'meshOverrides','flipX','origin','properties'].includes(field)) &&
+          Object.keys(instance).every(field => ['prefab', 'parent', 'transform', 'overrides', 'meshOverrides','flipX','origin','properties','billboard'].includes(field)) &&
           available.has(instance.prefab), 'Unknown visual prefab or invalid instance');
         const {definition,frames} = available.get(instance.prefab);
         A.customProperties.validate(instance.properties,properties.definitions,'Instance '+key);

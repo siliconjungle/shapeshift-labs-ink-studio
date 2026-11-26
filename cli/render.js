@@ -434,6 +434,16 @@ function renderFrame(world, o, preparedPalettes) {
   const hasFocus = focusBands.some(band => band.radius > 0);
   const cw = o.w ?? o.width ?? 900, ch = o.h ?? o.height ?? 620;
   const camera = CameraLens.frame(world, o, cw, ch, { orbit: viewStaging?.orbit, impulse: CameraImpulses.frame, probe: !!o[probeCamera] });
+  if (world.prefabBillboards && !o.reflectionPlane && !o[probeCamera]) {
+    const posed = world.prefabBillboards.sample(CameraLens.listenerPose(camera.pose, camera.setback));
+    if (posed) {
+      const { pose } = require('./diarama-pose.js');
+      posed.look = world.look;
+      if (posed.anim?.stateful) posed.anim.update(0, 0);
+      pose(posed, sceneTime, { artDirection:o.artDirection, kit:require('../index.js').load() });
+      world = { ...posed, timeDomains:world.timeDomains };
+    }
+  }
   if (world.anim?.bones) {
     const {viewPoses}=require('../index.js').load().KIT;
     if (viewPoses.forWorld(world)?.active) {

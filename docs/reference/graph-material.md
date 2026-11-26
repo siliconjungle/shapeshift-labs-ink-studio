@@ -140,22 +140,23 @@ Run it with `ink-studio graph run example.json`.
 
 ### material.openPbr
 
-Author OpenPBR Surface core values and typed texture bindings using standard input names.
+Author OpenPBR Surface values and typed texture bindings using standard input names.
 
 Origin: toolkit.
 
 | Direction | Port | Type | Default | Details |
 | --- | --- | --- | --- | --- |
-| Input | `parameters` | `record` | `{}` | Uniform OpenPBR inputs in linear sRGB; emission luminance is in nits. · {"layout":"Plain named object"} |
+| Input | `parameters` | `record` | `{}` | Uniform OpenPBR inputs in linear sRGB, with nits for emission, centimeters for depth and radius, and micrometers for film thickness. · {"layout":"Plain named object"} |
 | Input | `maps` | `record` | `{}` | Typed image bindings by standard input name. A map overrides the uniform value. · {"layout":"Plain named object"} |
 | Output | `value` | `record` | — | {"layout":"Plain named object"} |
 | Output | `report` | `record` | — | {"layout":"Plain named object"} |
 
 - Use standard OpenPBR names for uniform controls and typed images. Bound images replace the matching uniform at the sampled UV.
 - Color uses explicit linear sRGB. Bind emissive luminance as scalar nits, and keep base and coat geometry maps independent.
+- Use centimeters for transmission depth and subsurface radius and micrometers for thin-film thickness.
 - Publish value for the physical reference renderer and report for defaults, authored values, units and map contracts.
 
-Guides: [guide](../openpbr-core.md), [guide](../physical-reference.md#scene-inputs-and-supported-transport)
+Guides: [guide](../openpbr-advanced.md), [guide](../openpbr-core.md), [guide](../physical-reference.md#scene-inputs-and-supported-transport)
 
 Get the runnable example with `ink-studio graph describe material.openPbr --example > example.json`.
 Run it with `ink-studio graph run example.json`.
