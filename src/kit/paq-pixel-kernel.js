@@ -1,18 +1,55 @@
-/* One typed texel program lowered to CPU evaluators and WGSL. */
-const PixelProcessorKernel=(function (P) {
+/* Shared typed expression and control compiler for pixel and uniform processors. */
+const ProcessorKernel=(function (P) {
   const record=P.graphTypes.validator('record'), own=Object.hasOwn;
   const names=/^[a-z][a-z0-9_.-]{0,63}$/i;
   const id=value=>typeof value==='string'&&names.test(value)&&!['constructor','prototype','__proto__'].includes(value);
   const fields=(value,keys)=>record(value)&&Object.keys(value).every(key=>keys.includes(key));
   const types=Object.freeze({f32:1,i32:1,bool:1,vec2:2,vec3:3,vec4:4});
+  const socketTypes=Object.freeze({f32:'number',i32:'integer',bool:'boolean',vec2:'vec2',vec3:'vec3',vec4:'vec4'});
   const vectorType=channels=>channels===1?'f32':'vec'+channels;
   const gpuType=type=>types[type]>1?type+'f':type;
   const i32=value=>Number.isInteger(value)&&value>=-2147483648&&value<=2147483647;
   const f32=value=>{
     const rounded=Math.fround(value);
-    if(!Number.isFinite(rounded))throw new RangeError('Pixel Processor arithmetic needs finite f32 values');
+    if(!Number.isFinite(rounded))throw new RangeError('Processor arithmetic needs finite f32 values');
     return rounded;
   };
+  function entries(value,max,reserved,label,required=false) {
+    if(!record(value))throw new TypeError(label+' needs named entries');
+    const list=Object.entries(value);
+    if(list.length>max||required&&!list.length||list.some(([key])=>!id(key)||reserved.includes(key)))
+      throw new RangeError('Invalid '+label+' names or count');
+    return list;
+  }
+
+  function paramValue(type,value,label) {
+    const check=P.graphTypes.validator(socketTypes[type]);
+    if(!check(value)||type==='i32'&&!i32(value))throw new TypeError(label+' needs '+type);
+    if(type==='f32')return f32(value);
+    return types[type]===1?value:Object.freeze(value.map(f32));
+  }
+
+  function parameters(spec,reserved,label) {
+    return new Map(entries(spec,32,reserved,label+' parameters').map(([name,row],index)=>{
+      if(!fields(row,['type','default'])||!own(types,row.type))
+        throw new TypeError(label+' invalid parameter '+name);
+      const {type}=row, preset=own(row,'default')?paramValue(type,row.default,label+' parameter '+name+' default'):undefined;
+      return [name,{type,index,preset,code:'pp_arg'+index}];
+    }));
+  }
+
+  function parameterSockets(rows) {
+    return Object.fromEntries([...rows].map(([name,{type,preset}])=>[
+      name,Object.freeze({type:socketTypes[type],...(preset!==undefined&&{default:preset})})
+    ]));
+  }
+
+  function resolveParameters(parameters,supplied,label) {
+    if(!fields(supplied,[...parameters.keys()]))throw new TypeError(label+' needs declared parameter bindings');
+    return [...parameters].map(([name,{type,preset}])=>
+      paramValue(type,own(supplied,name)?supplied[name]:preset,label+' parameter '+name));
+  }
+
   const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
   const toI32=value=>Math.trunc(clamp(value,-2147483648,2147483520))|0;
   const bits=new Uint32Array(1), floatBits=new Float32Array(bits.buffer);
@@ -141,15 +178,16 @@ fn pp_sqrt(a: f32) -> f32 { return sqrt(max(0.0f, a)); }
 fn pp_int(a: f32) -> i32 { return i32(clamp(a,-2147483648.0f,2147483520.0f)); }
 `;
 
-  function compileKernel(program,resources,parameters,outputs,stride) {
+  function compileProgram(program,resources,parameters,outputs,uniform) {
+    const label=uniform?'Value Processor':'Pixel Processor';
     let serial=0, nodes=0, scratch=0;
     const systemReads=new Set();
     function visit(path,depth) {
-      if(++nodes>maxNodes||depth>maxDepth)throw new RangeError('Pixel Processor program exceeds its syntax budget at '+path);
+      if(++nodes>maxNodes||depth>maxDepth)throw new RangeError(label+' program exceeds its syntax budget at '+path);
     }
     function expression(value,scope,path,depth) {
       visit(path,depth);
-      const invalid=message=>{throw new TypeError('Pixel Processor '+path+' '+message);};
+      const invalid=message=>{throw new TypeError(label+' '+path+' '+message);};
       if(typeof value==='number'){
         const rounded=f32(value);
         return expr('f32',f32Code(rounded),()=>rounded);
@@ -159,6 +197,7 @@ fn pp_int(a: f32) -> i32 { return i32(clamp(a,-2147483648.0f,2147483520.0f)); }
         return invalid('needs a typed expression');
       const [op,...operands]=value;
       if(own(system,op)&&operands.length===0){
+        if(uniform&&op!=='time'&&op!=='seed')return invalid('needs a uniform system value');
         systemReads.add(op);
         return expr(...system[op]);
       }
@@ -169,6 +208,7 @@ fn pp_int(a: f32) -> i32 { return i32(clamp(a,-2147483648.0f,2147483520.0f)); }
         return expr(row.type,row.code,op==='get'?c=>c.locals[row.slot]:c=>c.params[row.index]);
       }
       if(op==='load'||op==='sample'){
+        if(uniform)return invalid('needs a uniform value expression');
         const [key,...coords]=operands, resource=resources.get(key);
         const args=coords.map((a,i)=>expression(a,scope,path+'['+(i+2)+']',depth+1));
         if(!resource||!(op==='load'?typed(args,'i32','i32'):typed(args,'vec2')))
@@ -237,11 +277,11 @@ fn pp_int(a: f32) -> i32 { return i32(clamp(a,-2147483648.0f,2147483520.0f)); }
 
     function block(statements,parent,path,depth) {
       if(!Array.isArray(statements)||statements.length>128||depth>maxDepth)
-        throw new RangeError('Pixel Processor '+path+' needs a bounded statement list');
+        throw new RangeError(label+' '+path+' needs a bounded statement list');
       const locals=new Map(parent), declared=new Set(), code=[], runs=[];
       let cost=0;
       function addLocal(name,type,mutable) {
-        if(!id(name)||declared.has(name))throw new TypeError('Pixel Processor duplicate or invalid variable '+String(name));
+        if(!id(name)||declared.has(name))throw new TypeError(label+' duplicate or invalid variable '+String(name));
         const slot=serial++, row={type,slot,code:'pp_l'+slot,mutable};
         declared.add(name); locals.set(name,row);
         return row;
@@ -252,7 +292,7 @@ fn pp_int(a: f32) -> i32 { return i32(clamp(a,-2147483648.0f,2147483520.0f)); }
         const read=(value,key)=>expression(value,locals,at+'.'+key,depth+1);
         if(fields(stmt,['let','type','value'])&&own(stmt,'let')){
           const value=read(stmt.value,'value');
-          if(stmt.type!==undefined&&stmt.type!==value.type)throw new TypeError('Pixel Processor '+at+' initializer type mismatch');
+          if(stmt.type!==undefined&&stmt.type!==value.type)throw new TypeError(label+' '+at+' initializer type mismatch');
           const row=addLocal(stmt.let,value.type,true);
           runs.push(c=>{c.locals[row.slot]=value.run(c);});
           code.push('var '+row.code+': '+gpuType(row.type)+' = '+value.code+';');
@@ -260,13 +300,13 @@ fn pp_int(a: f32) -> i32 { return i32(clamp(a,-2147483648.0f,2147483520.0f)); }
         }else if(fields(stmt,['set','value'])&&own(stmt,'set')){
           const row=locals.get(stmt.set), value=read(stmt.value,'value');
           if(!row?.mutable||row.type!==value.type)
-            throw new TypeError('Pixel Processor '+at+' assignment needs a mutable local of type '+value.type);
+            throw new TypeError(label+' '+at+' assignment needs a mutable local of type '+value.type);
           runs.push(c=>{c.locals[row.slot]=value.run(c);});
           code.push(row.code+' = '+value.code+';');
           cost+=value.cost+1;
         }else if(fields(stmt,['if','then','else'])&&own(stmt,'if')){
           const test=read(stmt.if,'if');
-          if(test.type!=='bool')throw new TypeError('Pixel Processor '+at+' condition needs bool');
+          if(test.type!=='bool')throw new TypeError(label+' '+at+' condition needs bool');
           const yes=block(stmt.then,locals,at+'.then',depth+1), no=block(stmt.else??[],locals,at+'.else',depth+1);
           runs.push(c=>(test.run(c)?yes:no).run(c));
           code.push('if ('+test.code+') {\n'+indent(yes.code)+'\n} else {\n'+indent(no.code)+'\n}');
@@ -274,7 +314,7 @@ fn pp_int(a: f32) -> i32 { return i32(clamp(a,-2147483648.0f,2147483520.0f)); }
         }else if(fields(stmt,['for','count','limit','body'])&&own(stmt,'for')){
           const count=read(stmt.count,'count'), {limit}=stmt;
           if(!id(stmt.for)||count.type!=='i32'||!Number.isSafeInteger(limit)||limit<1||limit>maxLoop)
-            throw new TypeError('Pixel Processor '+at+' needs an i32 count and a literal loop limit from 1 to '+maxLoop);
+            throw new TypeError(label+' '+at+' needs an i32 count and a literal loop limit from 1 to '+maxLoop);
           const slot=serial++, index='pp_l'+slot, stop='pp_stop'+scratch++, max=i32Code(limit);
           const body=block(stmt.body,new Map([...locals,[stmt.for,{type:'i32',slot,code:index}]]),at+'.body',depth+1);
           runs.push(c=>{
@@ -284,23 +324,29 @@ fn pp_int(a: f32) -> i32 { return i32(clamp(a,-2147483648.0f,2147483520.0f)); }
           code.push('let '+stop+' = clamp('+count.code+', 0i, '+max+');\nfor (var '+index+' = 0i; '+index+' < '+stop+
             '; '+index+' = '+index+' + 1i) {\n'+indent(body.code)+'\n}');
           cost+=count.cost+1+limit*(body.cost+1);
-        }else throw new TypeError('Pixel Processor '+at+' needs let, set, if, or for');
-        if(cost>maxWork)throw new RangeError('Pixel Processor exceeds its per-texel work budget at '+at);
+        }else throw new TypeError(label+' '+at+' needs let, set, if, or for');
+        if(cost>maxWork)throw new RangeError(label+' exceeds its '+(uniform?'uniform':'per-texel')+' work budget at '+at);
       }
       return {locals,code:code.join('\n'),cost,run(c){for(const run of runs)run(c);}};
     }
 
-    const body=block(program.body,new Map(),'body',0), writers=[];
+    if(!fields(program.result,[...outputs.keys()])||Object.keys(program.result).length!==outputs.size)
+      throw new TypeError(label+' result must write every declared output exactly once');
+    const body=block(program.body??[],new Map(),'body',0), writers=[];
     let work=body.cost;
     for(const [name,row] of outputs){
       const value=expression(program.result[name],body.locals,'result.'+name,0);
-      if(value.type!==vectorType(row.descriptor.layout.length))throw new TypeError('Pixel Processor result '+name+
-        ' needs '+vectorType(row.descriptor.layout.length)+', received '+value.type);
-      writers.push({...row,value});
-      work+=value.cost+row.descriptor.layout.length;
+      const type=uniform?row.type:vectorType(row.descriptor.layout.length);
+      if(value.type!==type)throw new TypeError(label+' result '+name+' needs '+type+', received '+value.type);
+      writers.push({name,...row,value});
+      work+=value.cost+types[type];
     }
-    if(work>maxWork)throw new RangeError('Pixel Processor exceeds its per-texel work budget');
+    if(work>maxWork)throw new RangeError(label+' exceeds its '+(uniform?'uniform':'per-texel')+' work budget');
+    return {body,writers,work,syntaxNodes:nodes,systemReads,localCount:serial};
+  }
 
+  function compilePixel(program,resources,parameters,outputs,stride) {
+    const {body,writers,work,syntaxNodes,systemReads,localCount}=compileProgram(program,resources,parameters,outputs,false);
     const stores=writers.flatMap(({offset,value,descriptor:{layout}},i)=>{
       const name='pp_r'+i, chans=layout.length;
       return ['let '+name+' = '+value.code+';',...Array.from({length:chans},(_,c)=>
@@ -324,7 +370,7 @@ fn main(@builtin(global_invocation_id) invocation: vec3u) {
         const at=binding.meta;
         return sampleReader(binding,meta[at+1],meta[at+2],meta[at],inputs);
       });
-      const c={width,height,time,seed,readers,params,locals:new Array(serial),x:0,y:0};
+      const c={width,height,time,seed,readers,params,locals:new Array(localCount),x:0,y:0};
       try{
         for(let y=0,at=0;y<height;y++)for(let x=0;x<width;x++,at+=stride){
           c.x=x;c.y=y;
@@ -339,8 +385,18 @@ fn main(@builtin(global_invocation_id) invocation: vec3u) {
         throw new RangeError('Pixel Processor texel '+c.x+', '+c.y+' · '+error.message,{cause:error});
       }
     }
-    return {wgsl,work,run,syntaxNodes:nodes,systemReads};
+    return {wgsl,work,run,syntaxNodes,systemReads};
   }
 
-  return Object.freeze({compile:compileKernel,id,fields,types,i32,f32,gpuType,clamp});
+  function compileUniform(program,parameters,outputs) {
+    const {body,writers,work,syntaxNodes,systemReads,localCount}=compileProgram(program,new Map(),parameters,outputs,true);
+    return {work,syntaxNodes,systemReads,run({params,time,seed}) {
+      const context={params,time,seed,locals:new Array(localCount)};
+      body.run(context);
+      return Object.fromEntries(writers.map(({name,value})=>[name,value.run(context)]));
+    }};
+  }
+
+  return Object.freeze({compilePixel,compileUniform,parameters,parameterSockets,resolveParameters,
+    entries,fields,types,socketTypes,i32,f32,gpuType,clamp});
 })(KIT.procedural);

@@ -307,6 +307,10 @@
 
   const operations = Object.freeze({
     ...P.graphControl.operations,
+    'fn.valueProcessor': {
+      description:'Evaluate a uniform typed program once and expose its named non-image results.',
+      specialize(node) { return P.valueProcessor.specialize(node); }
+    },
     'fn.math': math, 'fn.toInteger': integer, 'fn.cast': cast, 'fn.compare': compare, 'fn.logic': logic,
     'fn.select': select, 'fn.vector': vector, 'fn.color': color, 'fn.text': text,
     'fn.sampleColor': sampleTexture('colorImage','sampleColor','srgb-linear',

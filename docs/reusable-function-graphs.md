@@ -68,3 +68,5 @@ ink-studio graph inspect /tmp/ink-kiln-formula/kiln-formula.material.json --node
 Open the generated `index.html` to compare two calls to the same glaze function. Change the heat, oxygen, firing passes, or finish for one tile. Move the shared firing knee to change how both calls respond. The demo links to the editable material and the published function group.
 
 See [Variables and execution control](function-control.md) for local scopes, lazy branches, ordered stages, bounded loops, and system values.
+
+Use [Value Processor](value-processor.md) to expose several typed results from one uniform program.

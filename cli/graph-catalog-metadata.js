@@ -82,6 +82,7 @@ const texturePointPorts = {
 };
 const systemVariableNames = oneOf('position','size','time','seed','context');
 const ports = {
+  'fn.valueProcessor': {program:{constraints:{format:'ink-studio/value-processor',version:1,precision:'f32',literal:true}}},
   'image.pixelProcessor':{width:dimension,height:dimension,program:{constraints:{
     format:'ink-studio/pixel-processor',version:1,precision:'f32',literal:true
   }}},
@@ -744,6 +745,7 @@ const simulationClock = { dt: property('number', { ...seconds, ...limit(.001, .1
   maxTicks: property('number', limit(1, 12000, true), 2400) };
 
 const specialization = {
+  'fn.valueProcessor': {field:'program',description:'A literal program defines typed uniform inputs and named value outputs.'},
   'fn.scope': {field:'variables',description:'Literal variable names and types become initialization sockets.'},
   'fn.get': {field:'type',description:'Declare the type of the binding to read. The name is also literal.'},
   'fn.set': {field:'type',description:'Declare the type of the value to write. The name is also literal.'},
@@ -777,6 +779,9 @@ const specialization = {
   'anim.retime': { field: 'group', description: 'Uses the group’s inputs and outputs and adds a timing record. The group cannot declare timing.' }
 };
 const notes = {
+  'fn.valueProcessor': ['A single uniform evaluation returns up to 16 named values.',
+    'Use an i32 pixelCount port for derived dimensions, a unitScalar for a normalized score, or vec2 for a range.',
+    'Shares the expressions, local scopes, and bounded control flow of the Pixel Processor. Time and seed are uniform.'],
   'image.pixelProcessor': ['Each texel runs independently. A loop counts up from zero and clamps its runtime count to the authored limit of 1 through 64.',
     'f32 compute preserves named image contracts. Native output storage supports UNORM8, UNORM16, and float32.',
     'The WebGPU module compares raw values within editable absolute and relative tolerances and separately reports changed stored samples.'],

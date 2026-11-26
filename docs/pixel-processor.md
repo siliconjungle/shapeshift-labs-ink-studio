@@ -117,3 +117,5 @@ Change Search radius to grow the area the oxidation program reads around each te
 ink-studio graph run /tmp/ink-copperwake/copperwake.material.json --out /tmp/ink-copperwake-replay
 ink-studio graph describe image.pixelProcessor --example
 ```
+
+Use [Value Processor](value-processor.md) for uniform formulas with named value outputs.

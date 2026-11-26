@@ -1,11 +1,10 @@
 /* Portable Pixel Processor documents, typed image bindings, and backend comparison. */
 (function (P) {
-  const K=PixelProcessorKernel, G=P.graphImages, {fields,id,types,i32,f32,clamp}=K, own=Object.hasOwn;
+  const K=ProcessorKernel, G=P.graphImages, {fields,types,i32,f32,clamp}=K, own=Object.hasOwn;
   const {literal}=GraphControlReferences, record=P.graphTypes.validator('record');
   const format='ink-studio/pixel-processor', version=1;
   const storage={unorm8:[Uint8Array,255],unorm16:[Uint16Array,65535],float32:[Float32Array,0]};
   const semanticKeys=['intent','layout','precision','units','colorSpace','alpha','normalSpace','normalOrientation'];
-  const socketTypes={f32:'number',i32:'integer',bool:'boolean',vec2:'vec2',vec3:'vec3',vec4:'vec4'};
   const maxSamples=16777216, maxDispatchWork=100000000;
   const maxExtent=8192;
   const reserved=['program','width','height','time','seed'];
@@ -18,21 +17,6 @@
       throw new TypeError('Pixel Processor '+label+' needs a descriptor with intent, layout, precision and color space for color');
     const channels=spec.layout.length, data=Array(channels).fill(0);
     return G.declare({width:1,height:1,channels,data},spec).descriptor;
-  }
-
-  function paramValue(type,value,label) {
-    const check=P.graphTypes.validator(socketTypes[type]);
-    if(!check(value)||type==='i32'&&!i32(value))throw new TypeError('Pixel Processor '+label+' needs '+type);
-    if(type==='f32')return f32(value);
-    return types[type]===1?value:Object.freeze(value.map(f32));
-  }
-
-  function entries(value,max,label,required=false) {
-    if(!record(value))throw new TypeError('Pixel Processor '+label+' needs named entries');
-    const list=Object.entries(value);
-    if(list.length>max||required&&!list.length||list.some(([key])=>!id(key)||reserved.includes(key)))
-      throw new RangeError('Pixel Processor invalid '+label+' names or count');
-    return list;
   }
 
   function parameterCode(type,at) {
@@ -48,34 +32,28 @@
         program.format!==format||program.version!==version||program.precision!=='f32')
       throw new TypeError('Expected Ink Studio Pixel Processor version 1 with explicit f32 precision');
     let words=4, stride=0;
-    const resources=new Map(entries(program.resources??{},8,'resources').map(([name,spec],index)=>{
+    const resources=new Map(K.entries(program.resources??{},8,reserved,'Pixel Processor resources').map(([name,spec],index)=>{
       const descriptor=imageContract(spec,'resource '+name), meta=words;
       words+=3;
       return [name,{descriptor,index,meta}];
     }));
-    const parameters=new Map(entries(program.parameters??{},32,'parameters').map(([name,spec],index)=>{
-      if(resources.has(name)||!fields(spec,['type','default'])||!own(types,spec.type))
-        throw new TypeError('Pixel Processor invalid parameter '+name);
-      const {type}=spec, at=words;
-      words+=types[type];
-      const preset=own(spec,'default')?paramValue(type,spec.default,'parameter '+name+' default'):undefined;
-      return [name,{type,index,at,code:parameterCode(type,at),preset}];
-    }));
-    const outputs=new Map(entries(program.outputs,4,'outputs',true).map(([name,spec])=>{
+    const parameters=K.parameters(program.parameters??{},[...reserved,...resources.keys()],'Pixel Processor');
+    for(const row of parameters.values()){
+      row.at=words;
+      row.code=parameterCode(row.type,words);
+      words+=types[row.type];
+    }
+    const outputs=new Map(K.entries(program.outputs,4,reserved,'Pixel Processor outputs',true).map(([name,spec])=>{
       if(!fields(spec,['descriptor','outOfRange'])||spec.outOfRange!==undefined&&!['error','clamp'].includes(spec.outOfRange))
         throw new TypeError('Pixel Processor invalid output '+name);
       const descriptor=imageContract(spec.descriptor,'output '+name), offset=stride;
       stride+=descriptor.layout.length;
       return [name,{descriptor,offset,outOfRange:spec.outOfRange??'error'}];
     }));
-    if(!fields(program.result,[...outputs.keys()])||Object.keys(program.result).length!==outputs.size)
-      throw new TypeError('Pixel Processor result must write every declared output exactly once');
-    const kernel=K.compile({...program,body:program.body??[]},resources,parameters,outputs,stride);
+    const kernel=K.compilePixel(program,resources,parameters,outputs,stride);
     const sockets=Object.freeze({
       ...Object.fromEntries([...resources].map(([name,{descriptor}])=>[name,Object.freeze({type:imageType(descriptor)})])),
-      ...Object.fromEntries([...parameters].map(([name,{type,preset}])=>[
-        name,Object.freeze({type:socketTypes[type],...(preset!==undefined&&{default:preset})})
-      ]))
+      ...K.parameterSockets(parameters)
     });
     const ports=Object.freeze(Object.fromEntries([...outputs].map(([name,{descriptor}])=>[name,imageType(descriptor)])));
     const report=Object.freeze({precision:'f32',workPerTexel:kernel.work,syntaxNodes:kernel.syntaxNodes,
@@ -91,16 +69,14 @@
       const pixels=width*height, count=pixels*stride;
       if(count>maxSamples||pixels*kernel.work>maxDispatchWork)
         throw new RangeError('Pixel Processor extent exceeds its sample or dispatch work budget');
-      if(!fields(images,[...resources.keys()])||!fields(uniforms,[...parameters.keys()])||
+      if(!fields(images,[...resources.keys()])||
           !Number.isFinite(time)||!i32(seed))
         throw new TypeError('Pixel Processor needs declared bindings, finite time, and an i32 seed');
       const meta=new Uint32Array(words), floats=new Float32Array(meta.buffer);
       meta[0]=width;meta[1]=height;floats[2]=f32(time);meta[3]=seed;
-      const params=new Array(parameters.size);
-      for(const [name,row] of parameters){
-        const {at,type,index,preset}=row;
-        const value=paramValue(type,own(uniforms,name)?uniforms[name]:preset,'parameter '+name);
-        params[index]=value;
+      const params=K.resolveParameters(parameters,uniforms,'Pixel Processor');
+      for(const {at,type,index} of parameters.values()){
+        const value=params[index];
         if(type==='i32'||type==='bool')meta[at]=Number(value);
         else if(type==='f32')floats[at]=value;
         else floats.set(value,at);

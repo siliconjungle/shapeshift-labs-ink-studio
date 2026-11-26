@@ -362,6 +362,29 @@ Guides: [guide](../reusable-function-graphs.md#define-a-function), [guide](../re
 Get the runnable example with `ink-studio graph describe fn.toInteger --example > example.json`.
 Run it with `ink-studio graph run example.json`.
 
+### fn.valueProcessor
+
+Evaluate a uniform typed program once and expose its named non-image results.
+
+Origin: toolkit.
+A literal program defines typed uniform inputs and named value outputs.
+
+| Direction | Port | Type | Default | Details |
+| --- | --- | --- | --- | --- |
+| Input | `program` | `record` | Required | {"layout":"Plain named object","format":"ink-studio/value-processor","version":1,"precision":"f32","literal":true} |
+| Input | `requested` | `integer` | `139` | {"integer":true,"safe":true,"signed":true} |
+| Output | `value` | `pixelCount` | — | pixels · {"integer":true,"min":1} |
+| Output | `size` | `vec2` | — | {"dimensions":2,"finite":true} |
+
+- A single uniform evaluation returns up to 16 named values.
+- Use an i32 pixelCount port for derived dimensions, a unitScalar for a normalized score, or vec2 for a range.
+- Shares the expressions, local scopes, and bounded control flow of the Pixel Processor. Time and seed are uniform.
+
+Guides: [guide](../value-processor.md)
+
+Get the runnable example with `ink-studio graph describe fn.valueProcessor --example > example.json`.
+Run it with `ink-studio graph run example.json`.
+
 ### fn.vector
 
 Construct, swizzle, and operate on a declared two-, three-, or four-component vector.

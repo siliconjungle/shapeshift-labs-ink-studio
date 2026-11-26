@@ -203,7 +203,14 @@ const processorExample={format:'ink-studio/pixel-processor',version:1,precision:
   outputs:{value:{descriptor:processorData}},
   body:[{let:'sample',value:['load','grain',['x'],['y']]}],
   result:{value:['mul',['get','sample'],['param','gain']]}};
+const valueExample={format:'ink-studio/value-processor',version:1,precision:'f32',
+  parameters:{requested:{type:'i32',default:139}},
+  outputs:{value:{type:'i32',port:'pixelCount'},size:'vec2'},
+  body:[{let:'columns',value:['div',['param','requested'],['i32',8]]}],
+  result:{value:['mul',['get','columns'],['i32',8]],
+    size:['vec2',['toF32',['mul',['get','columns'],['i32',8]]],96]}};
 const dynamic = {
+  'fn.valueProcessor': {inputs:{program:valueExample}},
   'image.pixelProcessor': {nodes:{grain:{op:'image.uniform',inputs:{width:3,height:2,value:.375,descriptor:processorData}}},
     inputs:{width:3,height:2,program:processorExample,grain:link('grain')}},
   'fn.scope': {inputs:counterScope.inputs},
