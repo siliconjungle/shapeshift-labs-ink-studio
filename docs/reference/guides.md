@@ -44,6 +44,7 @@ All checked-in guides, indexed by title and section headings.
 - [Warp and repitch a recording](../audio-warp.md)
 - [Drive picture from an audiovisual take](../audiovisual-takes.md)
 - [Authored contacts and prop handoffs](../authored-contacts.md)
+- [Bake jobs and presets](../bake-jobs.md)
 - [Batch spatial queries and occupancy](../batch-spatial-queries.md)
 - [Capture beat-level live performance](../beat-performance-captures.md)
 - [Bitmap resources](../bitmap-resources.md)

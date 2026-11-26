@@ -409,3 +409,7 @@ Open `morrow-review/comparison.png` to compare the relay at 1×. The demo
 clips and moves the brass service plate, transfers its approved lettering,
 and reuses the other charts. The revised material manifest includes its
 chart and mip receipts.
+
+## Schedule selected maps
+
+Use [bake jobs and presets](bake-jobs.md) to select mesh primitives, slots, UV sets and tiles, then run ordered maps with individual settings and refresh graph resources when the bake completes.
