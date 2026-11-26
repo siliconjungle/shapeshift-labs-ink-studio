@@ -57,7 +57,8 @@ const TypedImageSpatialGeometry = (() => {
     const dd = sin * fx * a + cos * fy * d, ee = sin * fx * b + cos * fy * e;
     const tx = cos * fx * c - sin * fy * f + px + offset[0] - aa * px - bb * py;
     const ty = sin * fx * c + cos * fy * f + py + offset[1] - dd * px - ee * py;
-    return { map: matrixMap(inverse([aa, bb * sy / sx, tx / sx, dd * sx / sy, ee, ty / sy, 0, 0, 1])) };
+    const forward = [aa, bb * sy / sx, tx / sx, dd * sx / sy, ee, ty / sy, 0, 0, 1];
+    return { map: matrixMap(inverse(forward)), linear: [forward[0], forward[1], forward[3], forward[4]] };
   }
 
   function crop(grid, options) {

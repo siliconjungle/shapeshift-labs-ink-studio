@@ -199,6 +199,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.materialChannels` | namespace |  |  |
 | `KIT.procedural.materialChannels.channel` | function | `(source, name)` | [guide](../material-graph-ports.md#read-and-edit-maps), [source](../../src/kit/paq-material-channels.js) |
 | `KIT.procedural.materialChannels.format` | value | `string = "ink-studio/material-channels"` |  |
+| `KIT.procedural.materialChannels.layer` | function | `(base, source, options = empty, mask = null)` | [guide](../material-layering.md#inputs-and-controls), [source](../../src/kit/paq-material-channels.js) |
 | `KIT.procedural.materialChannels.operations` | namespace |  |  |
 | `KIT.procedural.materialChannels.operations["material.channel"]` | namespace |  |  |
 | `KIT.procedural.materialChannels.operations["material.channel"].description` | value | `string = "Read a named raster and its metadata from a material port."` |  |
@@ -218,6 +219,22 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.materialChannels.operations["material.image"].outputs.metadata` | value | `string = "record"` |  |
 | `KIT.procedural.materialChannels.operations["material.image"].outputs.value` | value | `string = "typedImage"` |  |
 | `KIT.procedural.materialChannels.operations["material.image"].run` | function | `({ source, name })` | [source](../../src/kit/paq-material-channels.js) |
+| `KIT.procedural.materialChannels.operations["material.layer"]` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.layer"].description` | value | `string = "Layer typed material maps with shared UV placement, coverage and height dominance, and per-channel blend rules."` |  |
+| `KIT.procedural.materialChannels.operations["material.layer"].inputs` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.layer"].inputs.base` | value | `string = "materialChannels"` |  |
+| `KIT.procedural.materialChannels.operations["material.layer"].inputs.layer` | value | `string = "materialChannels"` |  |
+| `KIT.procedural.materialChannels.operations["material.layer"].inputs.mask` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.layer"].inputs.mask.default` | value | `null` |  |
+| `KIT.procedural.materialChannels.operations["material.layer"].inputs.mask.description` | value | `string = "Normalized grayscale coverage in layer or base UV space."` |  |
+| `KIT.procedural.materialChannels.operations["material.layer"].inputs.mask.type` | value | `string = "any"` |  |
+| `KIT.procedural.materialChannels.operations["material.layer"].inputs.options` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.layer"].inputs.options.default` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.layer"].inputs.options.description` | value | `string = "Opacity, channel rules, UV transform, mask space and height dominance."` |  |
+| `KIT.procedural.materialChannels.operations["material.layer"].inputs.options.type` | value | `string = "record"` |  |
+| `KIT.procedural.materialChannels.operations["material.layer"].outputs` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.layer"].outputs.value` | value | `string = "materialChannels"` |  |
+| `KIT.procedural.materialChannels.operations["material.layer"].run` | function | `({ base, layer: source, options, mask })` | [source](../../src/kit/paq-material-channels.js) |
 | `KIT.procedural.materialChannels.operations["material.pack"]` | namespace |  |  |
 | `KIT.procedural.materialChannels.operations["material.pack"].description` | value | `string = "Bundle named material rasters into one typed port, with independent map sizes and metadata."` |  |
 | `KIT.procedural.materialChannels.operations["material.pack"].inputs` | namespace |  |  |
@@ -225,11 +242,10 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.materialChannels.operations["material.pack"].inputs.maps.description` | value | `string = "Channel names mapped to raster values."` |  |
 | `KIT.procedural.materialChannels.operations["material.pack"].inputs.maps.type` | value | `string = "record"` |  |
 | `KIT.procedural.materialChannels.operations["material.pack"].inputs.metadata` | namespace |  |  |
-| `KIT.procedural.materialChannels.operations["material.pack"].inputs.metadata.default` | namespace |  |  |
+| `KIT.procedural.materialChannels.operations["material.pack"].inputs.metadata.default` | alias | `Alias of KIT.procedural.materialChannels.operations["material.layer"].inputs.options.default` |  |
 | `KIT.procedural.materialChannels.operations["material.pack"].inputs.metadata.description` | value | `string = "Optional JSON metadata keyed by supplied channel."` |  |
 | `KIT.procedural.materialChannels.operations["material.pack"].inputs.metadata.type` | value | `string = "record"` |  |
-| `KIT.procedural.materialChannels.operations["material.pack"].outputs` | namespace |  |  |
-| `KIT.procedural.materialChannels.operations["material.pack"].outputs.value` | value | `string = "materialChannels"` |  |
+| `KIT.procedural.materialChannels.operations["material.pack"].outputs` | alias | `Alias of KIT.procedural.materialChannels.operations["material.layer"].outputs` |  |
 | `KIT.procedural.materialChannels.operations["material.pack"].run` | function | `({ maps, metadata })` | [source](../../src/kit/paq-material-channels.js) |
 | `KIT.procedural.materialChannels.operations["material.replace"]` | namespace |  |  |
 | `KIT.procedural.materialChannels.operations["material.replace"].description` | value | `string = "Replace or add only the supplied material maps. Pass all other channels through."` |  |
@@ -237,7 +253,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.materialChannels.operations["material.replace"].inputs.maps` | alias | `Alias of KIT.procedural.materialChannels.operations["material.pack"].inputs.maps` |  |
 | `KIT.procedural.materialChannels.operations["material.replace"].inputs.metadata` | alias | `Alias of KIT.procedural.materialChannels.operations["material.pack"].inputs.metadata` |  |
 | `KIT.procedural.materialChannels.operations["material.replace"].inputs.source` | value | `string = "materialChannels"` |  |
-| `KIT.procedural.materialChannels.operations["material.replace"].outputs` | alias | `Alias of KIT.procedural.materialChannels.operations["material.pack"].outputs` |  |
+| `KIT.procedural.materialChannels.operations["material.replace"].outputs` | alias | `Alias of KIT.procedural.materialChannels.operations["material.layer"].outputs` |  |
 | `KIT.procedural.materialChannels.operations["material.replace"].run` | function | `({ source, maps, metadata })` | [source](../../src/kit/paq-material-channels.js) |
 | `KIT.procedural.materialChannels.pack` | function | `(maps, metadata = empty)` | [guide](../material-graph-ports.md#read-and-edit-maps), [source](../../src/kit/paq-material-channels.js) |
 | `KIT.procedural.materialChannels.replace` | function | `(source, maps, metadata = empty)` | [guide](../material-graph-ports.md#read-and-edit-maps), [source](../../src/kit/paq-material-channels.js) |

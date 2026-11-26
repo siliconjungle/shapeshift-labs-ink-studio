@@ -354,6 +354,14 @@ const scatterMaterial={
   border:property('string|record'),seed:tileLayout.seed
 };
 const options = {
+  'material.layer': {
+    opacity: property('number', { min: 0, max: 1 }, 1),
+    defaultMode: property('string', oneOf('blend', 'keep'), 'blend'),
+    channels: property('record'),
+    transform: property('record'),
+    maskSpace: property('string', oneOf('layer', 'base'), 'layer'),
+    height: property('record')
+  },
   'image.scatterMask': scatterSelection,
   'image.scatterColor': {...scatterMaterial,value:property('string|srgb',{},'#ffffff')},
   'image.scatterGrayscale': {...scatterMaterial,value:property('number',limit(0,1),1)},
@@ -804,6 +812,9 @@ const notes = {
   'vector.path': ['Returns one sampled contour and all sampled contours separately. Sampling is independent of the retained SVG path data.'],
   'vector.fillMask': ['Bake one selected shape using its inherited winding rule and the chosen viewport.',
     'The mask describes geometric fill coverage. Use SVG export for stroke, gradient and clip styling.'],
+  'material.layer': ['Match UV sets and use typed images for blended maps. Existing maps keep their grids and encodings.',
+    'A single transform places the layer. Tangent normals and UV flow vectors follow it.',
+    'Height dominance compares equal-unit relief and gates every active map. Use material.replace to edit individual maps before layering.'],
   'material.paint': ['A session affects only the channels it paints or explicitly converts.',
     'Blend color in linear light. Preserve native float height and flow samples and allow HDR color in a floating linear canvas.',
     'Paint in texel, top-left UV, world or rest space. Named masks, chart projections, and native flow maps can come from upstream nodes.'],
