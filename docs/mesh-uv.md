@@ -1682,6 +1682,49 @@ ink-studio mesh-uv edit sign.json scale.json --object panel --out scaled.json --
 node examples/tileset-pick/uv-scale-demo.cjs uv-scale-demo
 ```
 
+### Normalize the grain on selected faces
+
+Use `normalize-orientation` with face IDs or a saved face selection.
+Use `domain: "islands"` or a saved island selection to include every
+face in those charts. The operation compares the signed direction of
+increasing U in model space. Set `axis: "v"` to compare increasing V.
+
+```json
+{
+  "uvSet": "pigment",
+  "operations": [
+    { "op": "normalize-orientation", "ids": ["board-2", "board-3"],
+      "reference": { "face": "board-1" }, "maxError": 5 }
+  ]
+}
+```
+
+Give `reference` a face or an edge ID. A face supplies its painted
+direction and handedness. Set `matchHandedness: false` to retain the
+target faces' existing mirror parity. An edge supplies the direction
+from its first retained vertex to its second. Set `from` to the desired
+start vertex ID to control the sign. You can also pass a saved
+single-face or single-edge `selection` as the reference.
+
+Ink projects the reference direction onto each target's plane. The
+default `method: "quarter-turn"` picks the closest directional match
+and keeps each face's original atlas rectangle. A selected reference
+face stays in place. Use `method: "continuous"` to align oblique grain
+by rotating normalized UVs about each face's center. Continuous
+alignment can change the footprint on the atlas.
+
+The receipt records each face's turn, mirror, and before/after angular
+error. Use `maxError` in degrees to block loose matches. It defaults
+to 45 degrees. The same preview marks the reference in gold. A
+perpendicular reference, degenerate UV layout, moved pin, or
+out-of-atlas result blocks the transaction.
+
+```sh
+ink-studio mesh-uv edit boards.json normalize.json --object siding --preview grain-review
+ink-studio mesh-uv edit boards.json normalize.json --object siding --out aligned.json --report grain-receipt.json
+node examples/tileset-pick/uv-normalization-demo.cjs uv-normalization-demo
+```
+
 ## Bind separate material layouts
 
 A retained mesh part can use a different UV set for each material channel.
