@@ -24,8 +24,10 @@
 
   function inventory(scene, ids, external) {
     const result = new Map(ids.map(id=>[id,{faces:[],materials:[],clips:[],prefabs:[]}]));
-    const evaluate = scene.topologyMeshes && A.meshTopologyScene.evaluator(scene.topologyMeshes);
-    for (const [object,mesh] of ordered(scene.topologyMeshes)) {
+    const expanded = Object.keys(scene.instances ?? {}).length && A.scenePrefabs.expand(scene,{prefabs:external});
+    const meshes = expanded ? expanded.spec.topologyMeshes : scene.topologyMeshes;
+    const evaluate = meshes && A.meshTopologyScene.evaluator(meshes,expanded?.meshPlacements);
+    for (const [object,mesh] of ordered(meshes)) {
       const materials = (mesh.materials ?? []).map(row=>({material:row.id,tileset:row.texture?.tileset}));
       const bakes = (mesh.bakes ?? []).map(row=>({material:row.material,tileset:row.maps.texture?.tileset,
         bake:row.id,invalidated:Boolean(row.invalidated)}));
@@ -112,23 +114,41 @@
   }
 
   function redirect(scene, from, to) {
-    const meshes = {}, prefabs = {};
     const texture = source=>source?.tileset === from ? {...source,tileset:to} : source;
-    for (const [object,mesh] of ordered(scene.topologyMeshes)) {
+    function redirectMesh(mesh) {
       const materials = mesh.materials?.map(row=>row.texture?.tileset === from ? {...row,texture:texture(row.texture)} : row);
       const bakes = mesh.bakes?.map(row=>row.maps.texture?.tileset === from ?
         {...row,maps:{...row.maps,texture:texture(row.maps.texture)}} : row);
       const {bindings,changes} = A.tilesetFaces.sourceBindings(mesh,from,source=>
         ({...source,selection:{...source.selection,tileset:to}}));
       if (materials?.some((item,i)=>item !== mesh.materials[i]) || bakes?.some((item,i)=>item !== mesh.bakes[i]) || changes.length)
-        meshes[object] = {...mesh,...(materials && {materials}),...(bakes && {bakes}),...(changes.length && {bindings})};
+        return {...mesh,...(materials && {materials}),...(bakes && {bakes}),...(changes.length && {bindings})};
+      return mesh;
     }
-    for (const [id,prefab] of ordered(scene.prefabs)) {
-      if (prefab.usesTilesets?.includes(from))
-        prefabs[id] = {...prefab,usesTilesets:[...new Set(prefab.usesTilesets.map(sheet=>sheet === from ? to : sheet))]};
+    function redirectRows(rows, update) {
+      const changes = ordered(rows).flatMap(([key,row])=>{
+        const next = update(row);
+        return next===row ? [] : [[key,next]];
+      });
+      return changes.length ? {...rows,...Object.fromEntries(changes)} : rows;
     }
-    return {...(Object.keys(meshes).length && {topologyMeshes:{...scene.topologyMeshes,...meshes}}),
-      ...(Object.keys(prefabs).length && {prefabs:{...scene.prefabs,...prefabs}})};
+    const topologyMeshes = redirectRows(scene.topologyMeshes,redirectMesh);
+    const prefabs = redirectRows(scene.prefabs,prefab=>{
+      const meshes = redirectRows(prefab.topologyMeshes,redirectMesh);
+      const uses = prefab.usesTilesets?.includes(from) ?
+        [...new Set(prefab.usesTilesets.map(sheet=>sheet===from ? to : sheet))] : prefab.usesTilesets;
+      return meshes===prefab.topologyMeshes && uses===prefab.usesTilesets ? prefab : {...prefab,
+        ...(meshes && {topologyMeshes:meshes}),...(uses && {usesTilesets:uses})};
+    });
+    const instances = redirectRows(scene.instances,instance=>{
+      const meshOverrides = redirectRows(instance.meshOverrides,entry=>{
+        const mesh = redirectMesh(entry.mesh);
+        return mesh===entry.mesh ? entry : {...entry,mesh};
+      });
+      return meshOverrides===instance.meshOverrides ? instance : {...instance,meshOverrides};
+    });
+    return {...(topologyMeshes!==scene.topologyMeshes && {topologyMeshes}),
+      ...(prefabs!==scene.prefabs && {prefabs}),...(instances!==scene.instances && {instances})};
   }
 
   function invalidateBakes(scene, id) {
