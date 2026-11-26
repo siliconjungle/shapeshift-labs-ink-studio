@@ -750,6 +750,56 @@ placements match. Scene authoring and GLB delivery use the authored
 rest placements. Use `KIT.authoring.scenePrefabs.placements(instances,
 { camera })` to inspect the resolved placements from a camera pose.
 
+### Choose directional UV clips for a module
+
+Paint and approve the views with the [directional pixel tools](pixel-art-authoring.md#edit-a-set-of-directional-views).
+Export the atlas, register its color PNG as a tileset, and compile its
+view rectangles into timed mesh UV clips.
+
+```json
+{
+  "tileset": "signal-views",
+  "faces": ["indicator"],
+  "directions": ["n", "ne", "e", "s", "w"],
+  "default": "n",
+  "facing": "direction"
+}
+```
+
+```sh
+ink-studio pixel-art directions uv-clips atlas.json --settings views.json --out uv-clips.json
+ink-studio mesh-topology edit-prefab signal.json edit.json --preview review --view camera.json --out directional.json
+ink-studio render directional.json --yaw 1.57 --t .18 --px 1 --directional-uv-report facing.json --out east.png
+```
+
+Put the contents of `uv-clips.json` in the mesh member's `directionalUV`
+field. With `edit-prefab`, use an edit record with `member` and
+`directionalUV`. Use `isolate-prefab` for a local placement edit or
+supply the field on a standalone retained mesh. Pass `null` in an edit to
+clear the binding. Start with the selected faces sampling the default
+clip's first rectangle on the registered sheet.
+
+The settings declare which of `n`, `ne`, `e`, `se`, `s`, `sw`, `w`,
+and `nw` to use. Local +Z is north and +X is east. An imported clip
+retains its exact authored yaw. Each shot chooses the nearest enabled
+heading in the prefab's authored frame, including when the geometry
+billboards. `direction` uses the camera axis and `position` aims from
+each module origin to the camera eye. The default handles a vertical
+view and defines the original UV crop.
+
+Optionally set `clip` to a named playback range from the base atlas or
+`pitch` to choose an authored elevation ring. The closest ring to level
+is the default. Each selected angle needs a view for every included
+pose. Renders sample the selected clip on the existing animation clock,
+so turning the camera preserves elapsed time across the handoff.
+
+The rule stores the sheet dimensions and integer frame rectangles.
+It remaps the selected faces' pigment UVs and preserves geometry, IDs,
+and their corner orientation. Use a separate UV set for material
+channels that sample a fixed layout. Tileset dependency reports list
+the direction and rectangles of each clip. A resize or atlas swap
+that affects those rectangles requires updating their registration.
+
 ### Name object points for placement and alignment
 
 Store named points on a retained mesh or on a visual prefab definition.

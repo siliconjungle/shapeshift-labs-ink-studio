@@ -9,6 +9,19 @@ const PixelDirectionalViews = (() => {
   const heading = yaw=>((yaw%tau)+tau)%tau;
   const bearing = (a,b)=>Math.min(Math.abs(a-b),tau-Math.abs(a-b));
 
+  function nearest(views,yaw) {
+    const target = heading(yaw);
+    let best, distance = Infinity;
+    for (const view of views) {
+      const offset = bearing(heading(view.yaw),target);
+      if (offset < distance - 1e-12) {
+        best = view;
+        distance = offset;
+      }
+    }
+    return best;
+  }
+
   function prepare(source,frames,swatches) {
     if (source === undefined) return;
     if (!records(source,['version','views','partAnchors','approvedSwatches','viewBlend']) || source.version !== 1 ||
@@ -91,7 +104,7 @@ const PixelDirectionalViews = (() => {
     return result;
   }
 
-  return Object.freeze({ prepare,remap,adjacent });
+  return Object.freeze({ prepare,remap,adjacent,nearest });
 })();
 if (typeof module !== 'undefined') module.exports = PixelDirectionalViews;
 else globalThis[Symbol.for('ink-studio.pixel-directional-views')] = PixelDirectionalViews;

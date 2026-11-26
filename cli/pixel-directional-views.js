@@ -219,6 +219,19 @@ function atlasSource(design,data,base) {
 }
 
 function command([action,input,...rest],opt,{ compileFrames,documentFromDeck }) {
+  if (action === 'uv-clips') {
+    if (!isPath(input) || rest.length || !['settings','out'].every(key=>isPath(opt[key])) ||
+        Object.keys(opt).some(key=>!['settings','out'].includes(key)) ||
+        path.extname(opt.out).toLowerCase()!=='.json')
+      throw new TypeError('Use pixel-art directions uv-clips <atlas> --settings bindings.json --out clips.json');
+    const resolved = path.resolve(input), out = path.resolve(opt.out);
+    const manifest = fs.statSync(resolved).isDirectory() ? path.join(resolved,'atlas.json') : resolved;
+    if ([manifest,path.resolve(opt.settings)].includes(out))
+      throw new RangeError('Write the directional clip rules to a separate path');
+    const api = require('../index.js').load().KIT.authoring.directionalUV;
+    files.json(out,api.fromAtlas(readSpriteAtlas(manifest),read(opt.settings)));
+    return;
+  }
   const options = { open:['out'],review:['anchor','out','review'],export:['out','base'] };
   if (!Object.hasOwn(options,action) || !isPath(input) || rest.length ||
       Object.entries(opt).some(([key,value])=>!options[action].includes(key) || !isPath(value)) ||

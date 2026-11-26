@@ -92,7 +92,7 @@
   }
 
   function prepareRow(object, row, evaluation, tilesets, frame, reviewMaterial) {
-    if (!TargetSelectors.name(object) || !fields(row, ['document', 'part', 'label', 'materials', 'bindings', 'bakes', 'modifiers', 'attachments', 'shapeKeys', 'pivot', 'points', 'deliveryHelper', 'provenance']) ||
+    if (!TargetSelectors.name(object) || !fields(row, ['document', 'part', 'label', 'materials', 'bindings', 'bakes', 'modifiers', 'attachments', 'shapeKeys', 'pivot', 'points', 'directionalUV', 'deliveryHelper', 'provenance']) ||
         (row.part !== undefined && !TargetSelectors.name(row.part)) || (row.label !== undefined && !name(row.label)))
       throw new TypeError('An editable scene mesh needs an object ID, document, and optional named part');
     if (row.pivot !== undefined && !meshPivot.xyz(row.pivot))
@@ -131,11 +131,14 @@
     const moved = document !== cage && bindings.size ?
       remapBindings([...bindings.values()], topology.correspond(cage, document, { lineage: evaluation.lineage })) : [...bindings.values()];
     const tileWraps=A.tilesetFaces.activeWraps(moved,document.faces,active,tilesets);
-    const mesh = topology.toSceneMesh(document, { objectId: object, partId: row.part, meshId: 'topology/' + object, frame,tileWraps,
-      materials: [...active.values()].map(input => {
-        const resolved = material(input, tilesets);
-        return reviewMaterial ? reviewMaterial(object, resolved) : resolved;
-      }) });
+    const renderMaterials = [...active.values()].map(input => {
+      const resolved = material(input, tilesets);
+      return reviewMaterial ? reviewMaterial(object, resolved) : resolved;
+    });
+    const makeMesh = source => topology.toSceneMesh(source,{ objectId:object,partId:row.part,meshId:'topology/'+object,
+      frame,tileWraps,materials:renderMaterials });
+    const mesh = makeMesh(document);
+    const directionalUV = A.directionalUV.prepare(row.directionalUV,document,active,tilesets,tileWraps,makeMesh);
     const tilesetMaterialSources = new Map([...active].filter(([,entry])=>entry.texture?.tileset));
     const tilesetMaterials = new Map([...tilesetMaterialSources].map(([id,entry])=>[id,entry.texture.tileset]));
     const visible = bindings.size && (frame || document !== cage) ? elements(document, frame) : records;
@@ -150,7 +153,7 @@
     const attachmentStatus=manifest && (attachmentBinding ? 'ready' : 'needs-transfer');
     const shapeKeyStatus=row.shapeKeys!==undefined && K.meshTopology.shapeKeys.status(document,row.shapeKeys);
     const shapeKeys=shapeKeyStatus==='ready' && K.meshTopology.shapeKeys.bind(mesh,row.shapeKeys,frame);
-    return { mesh, document, ...(row.points && {points}), bindings: moved, resolvedBindings, bakes: [...bakes.values()],
+    return { mesh, document, ...(directionalUV && {directionalUV,pivot:row.pivot}), ...(row.points && {points}), bindings: moved, resolvedBindings, bakes: [...bakes.values()],
       ...(tilesetMaterials.size && {tilesetMaterials,tilesetMaterialSources}), ...(skin && {skin}),
       ...(shapeKeyStatus && {shapeKeyStatus}), ...(shapeKeys && {shapeKeys}),
       ...(attachmentStatus && {attachmentStatus}), ...(attachmentBinding && {attachments:attachmentBinding}),

@@ -89,8 +89,22 @@
     }
     const clips = clipDefinitions(scene.timeline);
     for (const deps of result.values()) {
-      if (deps.faces.some(face=>face.active) || deps.prefabs.some(prefab=>prefab.used)) deps.clips = clips;
+      if (deps.faces.some(face=>face.active) || deps.prefabs.some(prefab=>prefab.used)) deps.clips = [...clips];
     }
+    function addClips(owner, row, prefab) {
+      const rule = row.directionalUV, deps = result.get(rule?.tileset);
+      if (!deps) return;
+      for (const [direction,id] of Object.entries(rule.directions ?? {})) {
+        const frames = rule.clips?.[id]?.frames;
+        if (Array.isArray(frames))
+          deps.clips.push({kind:'directional-uv',id,direction,owner,...(prefab && {prefab}),
+            faces:rule.faces,frames:frames.flatMap(frame=>frame?.rect ? [frame.rect] : [])});
+      }
+    }
+    for (const [object,row] of ordered(meshes)) addClips(object,row);
+    for (const library of [scene.prefabs,external])
+      for (const [prefab, definition] of ordered(library)) for (const [member,row] of ordered(definition.topologyMeshes))
+        addClips(member,row,prefab);
     return result;
   }
 
@@ -145,8 +159,10 @@
         {...row,maps:{...row.maps,texture:texture(row.maps.texture)}} : row);
       const {bindings,changes} = A.tilesetFaces.sourceBindings(mesh,from,source=>
         ({...source,selection:{...source.selection,tileset:to}}));
-      if (materials?.some((item,i)=>item !== mesh.materials[i]) || bakes?.some((item,i)=>item !== mesh.bakes[i]) || changes.length)
-        return {...mesh,...(materials && {materials}),...(bakes && {bakes}),...(changes.length && {bindings})};
+      const uv = mesh.directionalUV?.tileset === from && { ...mesh.directionalUV,tileset:to };
+      if (uv || materials?.some((item,i)=>item !== mesh.materials[i]) || bakes?.some((item,i)=>item !== mesh.bakes[i]) || changes.length)
+        return {...mesh,...(materials && {materials}),...(bakes && {bakes}),...(changes.length && {bindings}),
+          ...(uv && {directionalUV:uv})};
       return mesh;
     }
     function redirectRows(rows, update) {
@@ -249,7 +265,8 @@
     } else {
       const {materials,prefabs} = refs.get(id);
       if (type === 'remove') {
-        if (materials.length || prefabs.length) blockers.push({reason:'tileset-in-use',id});
+        if (materials.length || prefabs.length || refs.get(id).clips.some(row=>row.kind==='directional-uv'))
+          blockers.push({reason:'tileset-in-use',id});
       } else {
         const [from,to] = sources, sameGrid = JSON.stringify(tilesets.grid(id).tileSize) === JSON.stringify(tilesets.grid(keepId).tileSize);
         if (!sameGrid || !sameImage(from,to) || !sameMetadata(from,to) || !sameMaterial(from,to))
