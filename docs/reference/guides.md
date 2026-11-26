@@ -84,6 +84,7 @@ All checked-in guides, indexed by title and section headings.
 - [CLAP instruments and DAW handoff](../clap-instruments-and-handoff.md)
 - [Clip sequencing and retiming](../clip-sequence.md)
 - [Cloth Review](../cloth-review.md)
+- [Recover editable materials from a Gaussian capture](../cloud-material-recovery.md)
 - [Cloud recipes](../cloud-recipes.md)
 - [Cloud assets and distance transitions](../cloud-representations.md)
 - [Moving cloud shadows](../cloud-shadows.md)

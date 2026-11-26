@@ -1164,6 +1164,8 @@ Build [WebGPU texture and geometry graphs](docs/webgpu-graphs.md) with reusable 
 
 [Gaussian training](docs/gaussian-training.md) fits a cloud from registered masked images or native synthetic captures, then exports a Gaussian PLY and reports accuracy at held-out cameras.
 
+[Cloud material recovery](docs/cloud-material-recovery.md) estimates illumination, pigment, normals, and roughness from a captured cloud and records uncertainty alongside editable channels.
+
 ```sh
 npx ink-studio render scan.spz --raw --out preview.png
 ```
