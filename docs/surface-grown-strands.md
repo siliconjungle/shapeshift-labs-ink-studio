@@ -6,6 +6,8 @@ and native curve rows across poses, edits, and undo. Pass the usual
 [curve appearance settings](curve-splats.md) for width, taper, light,
 material, shadow, and selection.
 
+Use the [headless wardrobe pipeline](wardrobe.md) to mount seeded clumps on a baked garment or rig.
+
 ## Grow from UVs
 
 ```js
