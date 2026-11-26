@@ -3228,7 +3228,7 @@ const CMD = {
       plan = sweeps.read(pos[1]);
     }
     const result = sweeps.runScene({ kit: lib().KIT, source, plan, directory, anchor, loadScene: scene,
-      renderCase(id, { seed, controls }, settings) {
+      renderCase(id, { seed, controls }, settings, approval) {
         const { width: w, height: h, pixelSize: px, at, times, views } = settings;
         const assemble = () => build(id, seed, { controls });
         const lanes = views?.map(({ camera }) => {
@@ -3247,7 +3247,16 @@ const CMD = {
           pose(world, t);
           return options.map(settings => R.render(world, { ...settings, t, resetRenderHistory }));
         };
-        if (times.length) {
+        let approvals;
+        if (approval) {
+          const { approveShot } = require('./shot-approval.js');
+          const options = samplers(false);
+          approvals = approval.map((plan, i) => approveShot(assemble(), {
+            plan, view: options[i], pose, kit: lib(), capture(image, sample) {
+              frames[i].set(times[sample.frame] ?? at, R.upscale(image, px));
+            }
+          }));
+        } else if (times.length) {
           const world = assemble(), options = samplers(true);
           const replay = feedbackReplay(world, times[0], options[0]);
           const sample = (t, reset) => draw(world, options, t, reset);
@@ -3257,10 +3266,11 @@ const CMD = {
           const world = assemble();
           keep(at, draw(world, samplers(false), at));
         }
-        return views ? frames : frames[0];
+        return { frames: views ? frames : frames[0], approvals };
       }
     });
     console.log('wrote', result.report, '(' + result.cases + ' cases)');
+    if (result.passed === false) process.exitCode = 2;
   },
   variants() {
     const seeds = list('seeds', [3, 7, 12, 19, 22, 27]), group = opt.group || 'silhouette';

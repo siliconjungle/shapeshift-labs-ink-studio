@@ -1,0 +1,91 @@
+{
+  "seeds": [
+    186
+  ],
+  "parameters": {
+    "overlap": {
+      "values": [
+        0.58,
+        1,
+        1.38
+      ]
+    },
+    "jaw": {
+      "values": [
+        0.75,
+        1,
+        1.38
+      ]
+    }
+  },
+  "visual": {
+    "title": "Moss Bear / candidate approval",
+    "width": 192,
+    "height": 104,
+    "pixelSize": 2,
+    "views": [
+      {
+        "id": "front-quarter",
+        "camera": {
+          "target": [
+            0,
+            0.94,
+            0.2
+          ],
+          "yaw": 0.59,
+          "pitch": 0.27,
+          "dist": 4.85,
+          "ortho": true,
+          "fov": 0.56
+        }
+      },
+      {
+        "id": "profile",
+        "camera": {
+          "target": [
+            0,
+            0.94,
+            0.2
+          ],
+          "yaw": 1.5707963267948966,
+          "pitch": 0.12,
+          "dist": 4.85,
+          "ortho": true,
+          "fov": 0.56
+        }
+      },
+      {
+        "id": "rear-quarter",
+        "camera": {
+          "target": [
+            0,
+            0.94,
+            0.2
+          ],
+          "yaw": 2.58,
+          "pitch": 0.36,
+          "dist": 4.85,
+          "ortho": true,
+          "fov": 0.56
+        }
+      }
+    ]
+  },
+  "approval": {
+    "checks": {
+      "motion": false,
+      "transition": false,
+      "performance": {
+        "splatRows": 9000
+      }
+    },
+    "views": {
+      "profile": {
+        "performance": {
+          "splatRows": 9000,
+          "fragments": 39000
+        }
+      }
+    }
+  }
+}

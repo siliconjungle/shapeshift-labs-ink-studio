@@ -65,6 +65,30 @@ history. A poster outside the clip samples starts from a fresh scene.
 The existing sheet budget applies across all views. Plans without
 `views` retain the original layout and filenames.
 
+### Approve every candidate and view
+
+Set `approval.checks` to [shot approval](shot-approval.md) checks. An
+optional `approval.views` map supplies overrides keyed by the fixed
+camera ID. An override replaces the named category or setting from
+`checks`. Without named cameras, the view ID is `default`.
+
+Approval takes its dimensions, start, frame count, and cadence from the
+visual plan. A still-only plan checks the poster. A clip plan checks its
+visible frames, and the contact sheet and clips use those approved
+render samples. An off-schedule poster is a separate preview. Each
+approval lane starts with fresh scene state and independent history.
+Use the shot plan's `warmup` and `cuts` to initialize temporal checks.
+
+```sh
+ink-studio sweep examples/moss-bear-sweep.js examples/moss-bear-approval.plan.json --out bear-approval
+```
+
+Find the result and approval report path for every view in
+`report.json`. A failed check writes the first failing frame and its
+available previous and marked images. Every candidate is published
+before the command returns exit code 2 for a failed check. A render or
+configuration error returns exit code 1.
+
 ## Sweep runtime worlds
 
 Add a `visual` object to the existing [observation sweep plan](headless-worlds.md#scheduled-observations-and-parameter-sweeps).

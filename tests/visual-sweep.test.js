@@ -155,3 +155,38 @@ test('a fixed-view sweep reuses each candidate pose, and pins every camera lane'
   assert.match(run('sweep',scene,invalid,'--out',f.out('duplicate')).stderr,/distinct IDs/);
   assert.ok(!fs.existsSync(f.out('duplicate')));
 });
+
+test('sweep approval preserves failing camera evidence and exits after publishing all candidates', t => {
+  const f = fixtures(t);
+  const scene = f.write('approval.js', `module.exports = ({makeBuilder}) => ({
+    id:'approval', seed:7, build(seed, { controls } = {}) {
+      const B = makeBuilder(seed,[0x172337, 0x8096c6]);
+      B.iso(0,0,0,controls.radius,B.P[1],2.7);
+      return B.finish({dither:0, cam:{target:[0,0,0],dist:4,yaw:0,pitch:0,sway:0}});
+    }
+  });`);
+  const camera = { target:[0,0,0], yaw:0, pitch:0, dist:4, fov:.55, ortho:true };
+  const plan = f.write('approval.json', {
+    parameters:{radius:{values:[.30,.50]}},
+    visual:{width:96,height:64,pixelSize:1,views:[
+      {id:'front',camera},{id:'side',camera:{...camera,yaw:Math.PI/2}}
+    ]},
+    approval:{
+      checks:{motion:false,transition:false,performance:{fragments:100000}},
+      views:{side:{performance:{fragments:0}}}
+    }
+  });
+  const runResult = run('sweep',scene,plan,'--out',f.out('approval'));
+  assert.equal(runResult.status, 2, runResult.stderr);
+  const review = f.report('approval');
+  assert.equal(review.passed, false);
+  assert.equal(review.tiles.length, 2);
+  for (const tile of review.tiles) {
+    assert.deepEqual(tile.approval.map(row => [row.view,row.passed]), [['front',true],['side',false]]);
+    const failed = tile.approval[1];
+    const report = JSON.parse(f.bytes('approval',failed.report));
+    assert.equal(report.firstFailure.check, 'fragments');
+    assert.ok(report.firstFailure.evidence.value > 0);
+    assert.deepEqual(f.bytes('approval',failed.evidence.image),f.bytes('approval',tile.views[1].image));
+  }
+});

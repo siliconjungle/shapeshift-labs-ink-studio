@@ -74,6 +74,20 @@ function visual(raw, { kit, mode, start = 0 }) {
   return { width, height, pixelSize, columns: views?.length ?? columns, title, at, clip, fps, times, ordered, views };
 }
 
+function approvalPlans(raw, settings) {
+  if (raw === undefined) return;
+  const keys = ['warmup', 'subjects', 'thresholds', 'matte', 'palette', 'silhouette',
+    'cuts', 'motion', 'transition', 'performance'];
+  const views = settings.views ?? [{ id: 'default' }];
+  const overrides = raw?.views ?? {};
+  check(fields(raw, ['checks', 'views']) && fields(raw.checks ?? {}, keys) &&
+    fields(overrides, views.map(view => view.id)) && Object.values(overrides).every(row => fields(row, keys)),
+    'Sweep approval needs shot checks and overrides for named views');
+  const { width, height, pixelSize, times, fps, at } = settings;
+  return views.map(({ id }) => ({ ...raw.checks, ...overrides[id], width, height, pixelSize,
+    from: times[0] ?? at, fps: fps ?? 12, frames: times.length || 1 }));
+}
+
 function sizeOf(visual, count) {
   const columns = Math.min(visual.columns, count), tileWidth = Math.max(168, visual.width) + 18;
   const tileHeight = visual.height + 56, width = 18 + columns * tileWidth;
@@ -107,7 +121,11 @@ function sheet(kit, visual, tiles, title, anchor, cases) {
     const x = 9 + (i % columns) * tileWidth, y = 53 + Math.floor(i / columns) * tileHeight;
     const middle = x + tileWidth / 2, left = Math.floor(middle - visual.width / 2), top = y + 25;
     const pinned = anchor && tile.seed === anchor.seed && tile.case === anchor.case && equal(tile.parameters, anchor.parameters);
-    rect(x + 4, y + 2, tileWidth - 8, tileHeight - 9, pinned ? '#385149' : '#263442');
+    const failed = tile.approvalPassed === false;
+    const border = failed ? '#94483e' : pinned || tile.approvalPassed ? '#385149' : '#263442';
+    rect(x + 4, y + 2, tileWidth - 8, tileHeight - 9, border);
+    if (tile.approvalPassed !== undefined)
+      text(failed ? 'X' : '+', x + 16, y + 15, 9, failed ? '#f4aa95' : '#b8f2ca');
     rect(x + 6, y + 4, tileWidth - 12, tileHeight - 13, '#121e2b');
     const number = String(tile.number ?? i + 1).padStart(2, '0');
     const heading = [number, tile.view ?? 'seed ' + tile.seed, pinned ? 'PIN' : null].filter(Boolean).join('  /  ');
@@ -150,7 +168,8 @@ function publish(directory, write) {
 function finish({ kit, directory, recipe, visual, tiles, numeric, name, anchor }) {
   const { ordered, times, fps, at, width, height } = visual;
   const lanes = visual.views ? tiles.flatMap((tile, i) => visual.views.map((view, j) =>
-    ({ ...tile, number: i + 1, view: view.id, frames: tile.frames[j] }))) : tiles;
+    ({ ...tile, number: i + 1, view: view.id, frames: tile.frames[j], approvalPassed: tile.approvals?.[j].report.passed }))) :
+    tiles.map(tile => ({ ...tile, approvalPassed: tile.approvals?.[0].report.passed }));
   for (const tile of lanes)
     check(ordered.every(time => {
       const frame = tile.frames?.get(time);
@@ -158,15 +177,23 @@ function finish({ kit, directory, recipe, visual, tiles, numeric, name, anchor }
     }), 'Sweep renderer did not produce a matching tile at every sample');
   const draw = sheet(kit, visual, lanes, visual.title || name, anchor, tiles.length);
   const sheetFiles = { image: 'sheet.png', ...(fps && { clip: 'sheet.apng' }) };
+  const checked = tiles.some(tile => tile.approvals);
+  const passed = !checked || tiles.every(tile => tile.approvals.every(row => row.report.passed));
   const result = {
-    format, version: 1, recipe, ...(anchor && { anchor }), sheet: sheetFiles,
+    format, version: 1, recipe, ...(checked && { passed }), ...(anchor && { anchor }), sheet: sheetFiles,
     samples: { units: recipe.mode === 'sim' ? 'ticks' : 'seconds', poster: at, ...(fps && { frames: times, fps }) },
-    tiles: tiles.map(({ frames, ...tile }, i) => {
+    tiles: tiles.map(({ frames, approvals, ...tile }, i) => {
       const file = 'cases/' + String(i + 1).padStart(3, '0');
       const views = visual.views?.map(view => ({ ...view, image: file + '-' + view.id + '.png',
         ...(fps && { clip: file + '-' + view.id + '.apng' }) }));
+      const approval = approvals?.map(({ report, evidence }, j) => {
+        const view = views?.[j].id ?? 'default', prefix = file + '-' + view + '-approval';
+        const artifacts = report.passed || !evidence ? undefined : Object.fromEntries(
+          ['image', 'previous', 'marked'].filter(key => evidence[key]).map(key => [key, prefix + '-' + key + '.png']));
+        return { view, passed: report.passed, report: prefix + '.json', ...(artifacts && { evidence: artifacts }) };
+      });
       return { ...tile, tile: i + 1, image: views?.[0].image ?? file + '.png',
-        ...(fps && { clip: views?.[0].clip ?? file + '.apng' }), ...(views && { views }) };
+        ...(fps && { clip: views?.[0].clip ?? file + '.apng' }), ...(views && { views }), ...(approval && { approval }) };
     })
   };
   publish(directory, temp => {
@@ -177,17 +204,26 @@ function finish({ kit, directory, recipe, visual, tiles, numeric, name, anchor }
     }
     still(sheetFiles.image, draw(at));
     if (fps) clip(sheetFiles.clip, draw);
-    result.tiles.forEach(({ image, clip: movie, views }, i) => {
+    result.tiles.forEach(({ image, clip: movie, views, approval }, i) => {
       (views ?? [{ image, clip: movie }]).forEach(({ image, clip: movie }, j) => {
         const frames = views ? tiles[i].frames[j] : tiles[i].frames;
         still(image, frames.get(at));
         if (movie) clip(movie, time => frames.get(time));
       });
+      approval?.forEach((item, j) => {
+        const { report, evidence } = tiles[i].approvals[j];
+        Assets.json(path.join(temp, item.report), { ...report, ...(item.evidence && { evidence: item.evidence }) });
+        for (const [key, output] of Object.entries(item.evidence ?? {})) {
+          const { w, h, rgb, alpha } = evidence[key];
+          PNG.write(path.join(temp, output), w, h, rgb, alpha);
+        }
+      });
     });
     Assets.json(path.join(temp, 'report.json'), numeric ? { ...numeric, visual: result } : result);
   });
   return { directory, cases: tiles.length, poster: path.join(directory, sheetFiles.image),
-    ...(fps && { clip: path.join(directory, sheetFiles.clip) }), report: path.join(directory, 'report.json') };
+    ...(fps && { clip: path.join(directory, sheetFiles.clip) }), ...(checked && { passed }),
+    report: path.join(directory, 'report.json') };
 }
 
 function canonicalVisual(plan, settings) {
@@ -195,10 +231,11 @@ function canonicalVisual(plan, settings) {
   return { ...plan, visual: { ...plan.visual, width, height, columns, pixelSize, at, ...(settings.views && { views: settings.views }) } };
 }
 function runScene({ kit, source, plan, directory, loadScene, renderCase, anchor }) {
-  check(fields(plan, ['controls', 'visual', 'seeds', 'parameters', 'cases']) && record(plan.controls ?? {}),
-    'Scene sweep plans use controls, seeds, parameters, cases and visual settings');
+  check(fields(plan, ['controls', 'visual', 'seeds', 'parameters', 'cases', 'approval']) && record(plan.controls ?? {}),
+    'Scene sweep plans use controls, seeds, parameters, cases, approval and visual settings');
   checkDirectory(directory);
   const settings = visual(plan.visual, { kit, mode: 'scene' });
+  const approval = approvalPlans(plan.approval, settings);
   const { seeds, groups, runCount } = kit.world.observations.matrix(plan, { scene: true, limit: maxRuns });
   sizeOf(settings, runCount * (settings.views?.length ?? 1));
   const scene = loadScene(source);
@@ -210,8 +247,8 @@ function runScene({ kit, source, plan, directory, loadScene, renderCase, anchor 
     for (const seed of actualSeeds) {
       const id = group.id + '@' + seed;
       try {
-        const frames = renderCase(source, { seed, controls }, settings);
-        tiles.push({ id, case: group.case, seed, parameters: group.parameters, frames });
+        const { frames, approvals } = renderCase(source, { seed, controls }, settings, approval);
+        tiles.push({ id, case: group.case, seed, parameters: group.parameters, frames, ...(approvals && { approvals }) });
       } catch (error) { throw Error('Sweep run ' + id + ': ' + error.message, { cause: error }); }
     }
   }
