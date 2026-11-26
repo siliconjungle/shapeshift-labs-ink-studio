@@ -708,6 +708,48 @@ In the SDK, use `planPrefabMirror`, `previewPrefabMirror`, and
 `node examples/tileset-pick/prefab-mirror-demo.cjs mirror-bays`
 to link two bays, paint them together, and make a local variation.
 
+### Billboard selected prefab modules
+
+Use a retained instance rule to turn a sign or another linked module
+towards the camera in headless renders. This request configures two
+instances in one edit.
+
+```json
+{
+  "instances": ["west-sign", "east-sign"],
+  "billboard": { "mode": "upright", "facing": "position", "snapDegrees": 15 }
+}
+```
+
+```sh
+ink-studio mesh-topology billboard-prefab station.json facing.json --preview review --view view.json --out facing-station.json
+ink-studio render facing-station.json --yaw 1.1 --pitch .4 --px 1 --out view.png
+```
+
+- `full` turns the module's local +Z towards the camera and uses the
+  camera's up axis to orient the face. `upright` turns around world Y
+  and keeps the module vertical.
+- `direction` uses the camera's viewing axis for parallel facing.
+  `position` aims each module towards the camera eye from its origin.
+  Position facing uses the authored eye in orthographic views.
+- `snapDegrees` optionally rounds yaw, and pitch in full mode, to
+  world angular steps. Snapped full facing uses the stepped yaw to set
+  its right axis so the whole orientation holds between steps.
+- The module rotates around its placed origin and carries its nested
+  instances and points. A live mirror follows the reflected result of
+  its source. Set `"billboard": null` to clear the rule.
+
+Use `--selection` with a saved prefab instance selection in place of the
+`instances` list. Omit `--out` for a dry run. In the SDK, the scene editor
+provides `planPrefabBillboards`, `previewPrefabBillboards`, and
+`editPrefabBillboards`. A single undo restores every selected instance.
+
+Headless renders resolve the rule from the shot camera, including camera
+overrides. Ink reuses the last static presentation build when the solved
+placements match. Scene authoring and GLB delivery use the authored
+rest placements. Use `KIT.authoring.scenePrefabs.placements(instances,
+{ camera })` to inspect the resolved placements from a camera pose.
+
 ### Name object points for placement and alignment
 
 Store named points on a retained mesh or on a visual prefab definition.

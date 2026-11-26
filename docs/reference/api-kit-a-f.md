@@ -867,6 +867,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.physicalMaterials.checkStructural` | function | `(key,value,wet=true)` | [source](../../src/kit/p90-asset-materials.js) |
 | `KIT.authoring.physicalMaterials.definition` | function | `(input,pack)` | [source](../../src/kit/p90-asset-materials.js) |
 | `KIT.authoring.physicalMaterials.profile` | function | `(entry,wetness=0)` | [source](../../src/kit/p90-asset-materials.js) |
+| `KIT.authoring.prefabBillboards` | namespace |  |  |
+| `KIT.authoring.prefabBillboards.frames` | function | `(world)` | [source](../../src/kit/p23-prefab-billboards.js) |
+| `KIT.authoring.prefabBillboards.orient` | function | `(frame, instance, rule, camera)` | [source](../../src/kit/p23-prefab-billboards.js) |
+| `KIT.authoring.prefabBillboards.plan` | function | `(scene, env, request)` | [source](../../src/kit/p23-prefab-billboards.js) |
+| `KIT.authoring.prefabBillboards.prepare` | function | `(source, env, inputs)` | [source](../../src/kit/p23-prefab-billboards.js) |
+| `KIT.authoring.prefabBillboards.read` | function | `(value)` | [source](../../src/kit/p23-prefab-billboards.js) |
 | `KIT.authoring.prefabCombination` | namespace |  |  |
 | `KIT.authoring.prefabCombination.plan` | function | `(scene,env,request)` | [source](../../src/kit/p23-scene-prefab-combine.js) |
 | `KIT.authoring.prefabInstanceArray` | namespace |  |  |
@@ -921,7 +927,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.scenePrefabs.indexedTargets` | function | `(scene,before,after,mapAddress = (instance,table,name) => [instance,name])` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.origin` | function | `(transform)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.placedOrigin` | function | `(instance, frame)` | [source](../../src/kit/p23-scene-prefabs.js) |
-| `KIT.authoring.scenePrefabs.placements` | function | `(instances = {})` | [source](../../src/kit/p23-scene-prefabs.js) |
+| `KIT.authoring.scenePrefabs.placements` | function | `(instances = {}, { camera } = {})` | [guide](../scene-editor.md#billboard-selected-prefab-modules), [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.planMirror` | function | `(scene, env, request)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.planReparent` | function | `(scene, env, request)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.review` | function | `(source, before, after)` | [source](../../src/kit/p23-scene-prefabs.js) |
@@ -1797,6 +1803,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.diorama.sculptRestTrace` | function | `(spec, solid, env, { measureBounds = false } = {})` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidBounds` | function | `(spec, ids, env)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidFrames` | namespace |  | [guide](../build-profiles.md#bake-and-render-in-the-browser) |
+| `KIT.diorama.solidFrames.affine` | function | `(basis, scale, offset)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidFrames.authored` | function | `(raw, fallback)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidFrames.compose` | function | `(outer, inner)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidFrames.inverse` | function | `(frame)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |

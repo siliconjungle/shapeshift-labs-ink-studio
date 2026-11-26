@@ -415,7 +415,8 @@
   }
   function fromDiorama(world, env = {}) {
     check(world.spec, 'expected a built diorama');
-    const expanded = K.authoring.scenePrefabs.expand(world.spec, env),
+    const billboardFrames = K.authoring.prefabBillboards.frames(world);
+    const expanded = K.authoring.scenePrefabs.expand(world.spec, billboardFrames ? { ...env, billboardFrames } : env),
       rig = world.anim?.rig;
     const partSpecs = Object.fromEntries(
       (rig?.names.slice(1) ?? []).map(id => {
