@@ -861,6 +861,64 @@ In the SDK, use `planObjectPoints`, `editObjectPoints`, and
 `node examples/tileset-pick/object-points-demo.cjs station-points`
 to replay a named pivot, construction snap, and anchored prefab stamp.
 
+### Place and aim lights from construction anchors
+
+The `constructionLights` map stores mounted area emitters by ID. Use
+`mesh-topology construction-light` to inspect, preview, or save an edit.
+The fixture below starts at the working plane and is attached to the
+gantry's rig part in its current rest placement. Its aim is a named
+point on a different module.
+
+```json
+{
+  "id": "gantry-key",
+  "fixture": {
+    "mount": { "kind": "plane", "at": [2.4, 1], "height": 0.12, "snapGrid": true },
+    "aim": { "kind": "object-point", "instance": "cargo", "id": "lift-mark" },
+    "emitter": { "shape": "disk", "size": [0.35, 0.35], "color": "#ffbc73", "intensity": 5, "radius": 4 }
+  },
+  "parent": { "kind": "bone", "part": "gantry.arm" }
+}
+```
+
+```sh
+ink-studio mesh-topology construction-light dock.json fixture.json --preview review --view camera.json --out lit.json
+ink-studio render lit.json --t .5 --px 1 --out swing.png
+```
+
+Omit `--out` to preview the edit. The preview includes the world position,
+aim point, emission normal, and native changed-pixel count. Set
+`"fixture": null` to remove the light, or send just its ID to inspect an
+existing fixture. In the SDK, use `planConstructionLight`,
+`previewConstructionLight`, and `editConstructionLight`. The scene
+editor records the edit as one undoable operation.
+
+Use the same anchors for `mount` and `aim`.
+
+| Anchor kind | Address |
+| --- | --- |
+| `plane` | `at` in working-grid coordinates, optional world-unit `height` along the normal, and optional `snapGrid` |
+| `world` | Fixed world XYZ `at` |
+| `instance` | Named prefab `instance` origin and axes |
+| `object-point` | Named point `id` on a prefab `instance` or retained mesh `object` |
+| `solid-socket` | Named socket `id` on a solid `object`, including sockets carried by a moving rig part |
+| `bone` | Native diorama rig `part` and its joint frame |
+| `asset-binding` | Bound socket or bone `id` on a pinned imported asset `instance`, using the imported part's rest frame |
+| `vertex`, `bounds`, `average` | Existing construction-origin mesh targets |
+
+Use the parent anchor directly as the mount to place a fixture in its
+local coordinates. Supply an optional `local` affine transform for an
+offset or rotation. The request's `parent` option preserves the authored
+rest placement when assigning a different mount. Omitting `aim` uses
+the fixture's local +Z direction, with optional local `direction` and
+`up` overrides. Emitter size and radius are in world units.
+
+Ink resolves the mount and target independently as the scene moves.
+Hidden anchors and coincident aim points report a suspended light.
+Fixtures share the [native area emitter](light-emitters.md#shape-a-source)
+budget with `finish.areaLights` and use the same rendering, shadows,
+reflection, and cookie settings.
+
 ### Organize placed prefabs in scene layers
 
 Use `mesh-topology scene-layer` to organize placed visual prefabs.

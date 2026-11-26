@@ -248,6 +248,7 @@
     paintThrobs: 'list',
     paintEffects: 'obj',
     constructionPlane: 'obj',
+    constructionLights: 'obj',
     tilesets: 'obj',
     tilesetSources: 'obj',
     tilesetDefaults: 'obj',
@@ -563,9 +564,9 @@
     } catch (error) {
       return error.problems ?? [{ level: 'error', path: 'prefabs', problem: error.message, hint: '' }];
     }
-    return checkResolved(resolved.spec, env, {}, resolved.dataInputs, resolved.meshPlacements);
+    return checkResolved(resolved.spec, env, {}, resolved.dataInputs, resolved.meshPlacements, resolved.instances);
   };
-  function checkResolved(spec, env, presentation, dataInputs, meshPlacements) {
+  function checkResolved(spec, env, presentation, dataInputs, meshPlacements, instances) {
     const out = [],
       bad = (path, problem, hint) => out.push({ level: 'error', path, problem, hint: hint || '' }),
       warn = (path, problem, hint) => out.push({ level: 'warning', path, problem, hint: hint || '' });
@@ -686,6 +687,12 @@
       AreaLights.prepare(st.finish.areaLights);
     } catch (error) {
       bad('finish.areaLights', error.message);
+    }
+    try {
+      presentation.constructionLights = K.authoring.constructionLights.prepare(spec, env, instances, meshPlacements,
+        st.finish.areaLights);
+    } catch (error) {
+      bad('constructionLights', error.message);
     }
     try {
       ShotLighting.prepare(st.finish.shotLighting);
@@ -1817,7 +1824,7 @@
     let problems;
     try {
       resolved = resolveParameters(source, env);
-      problems = checkResolved(resolved.spec, env, presentation, resolved.dataInputs, resolved.meshPlacements);
+      problems = checkResolved(resolved.spec, env, presentation, resolved.dataInputs, resolved.meshPlacements, resolved.instances);
     } catch (error) {
       if (!error.problems) throw error;
       problems = error.problems;
@@ -1841,7 +1848,7 @@
     const hidden = modelOptions?.[brushField] ? undefined : resolved.hidden;
     const visibleEffect = (_,index) => !hidden?.effects.has(index);
     let { spec } = resolved;
-    const { timeline, cameraRig, dataMarks, decals } = presentation, dynamics = boundRuntime(source, env, resolved);
+    const { timeline, cameraRig, dataMarks, decals, constructionLights } = presentation, dynamics = boundRuntime(source, env, resolved);
     const hiddenSolids = hidden && new Set(hidden.solids);
     if (hiddenSolids) {
       for (const [id,{host}] of anchors) if (hiddenSolids.has(host.id)) hiddenSolids.add(id);
@@ -1928,7 +1935,7 @@
       const { palette, roles, sun } = st0;
       const { timeline: authoredTimeline, cameraRig: authoredCameraRig, dataInputs: authoredData, dataMarks: authoredMarks,
         breakables: authoredBreakables, surfaceDecals: authoredDecals, topologyMeshes: authoredTopology,
-        constructionPlane: authoredConstructionPlane,
+        constructionPlane: authoredConstructionPlane, constructionLights: authoredConstructionLights,
         tilesets: authoredTilesets, tilesetSources: authoredTileSources, tilesetDefaults: authoredTileDefaults, ...geometry } = spec;
       let world = (env.brushSession ?? K.authoring.brushRegions.create()).build(geometry, env, { palette, roles, sun });
       let marksSystem;
@@ -1944,6 +1951,7 @@
       bindSceneMeshes(world);
       bindBreakables(world);
       bindDecals(world);
+      K.authoring.constructionLights.bind(world, constructionLights, {hidden});
       if (dataInputs) world.dataInputs = dataInputs;
       if (cameraRig) K.cameraRig.bind(world, cameraRig);
       if (dynamics) world.parameters = dynamics.api;
@@ -1988,7 +1996,7 @@
     const B = (env.makeBuilder || makeBuilder)(seed, pal, detailBudgets === undefined && shadowArt === undefined ?
       undefined : { detailBudgets, shadowArt });
     const keepLightCasters = [...anchors.values()].some(anchor => anchor.finish?.spill?.shadows) ||
-      ShotLighting.needsCasters(st0.finish.shotLighting) ||
+      ShotLighting.needsCasters(st0.finish.shotLighting) || constructionLights?.shadows ||
       AreaLights.prepare(st0.finish.areaLights).some(light => light.shadows && light.intensity) ||
       EmissiveFinishes.prepare(st0.finish.emissiveFinishes, pal).some(({spill}) => spill?.shadows && spill.intensity) ||
       st0.finish.volumeLighting?.spots?.some(light => light.surfaceIntensity && light.castsShadow !== false);
@@ -2526,8 +2534,9 @@
         visiting.delete(name);
       }
       for (const name of groups.keys()) if (name !== null) place(name);
-      // Model joints are inferred from the rig before its decorative marks are added.
-      const rigSpec = layers.size ? { ...spec, solids: spec.solids.filter(solid => !layers.has(solid.id)) } : spec;
+      // The rig preview uses geometry with prefab placements and layer filtering already resolved.
+      const {constructionLights: fixtures, sceneLayers: authoredLayers, ...rigSpec} = spec;
+      if (layers.size) rigSpec.solids = spec.solids.filter(solid => !layers.has(solid.id));
       const { rig: previewRig } = names.length ? DIO.build(rigSpec, env).lab : {};
       const joints = [], joint = {};
       for (const name of [null, ...names]) {
@@ -2719,6 +2728,7 @@
     const socketSources = spec.solids.filter(solid => Object.keys(solid.sockets ?? {}).length);
     if (!authoredStage && !marksSystem && !socketSources.length && !paintParticles.length) {
       bindDecals(W);
+      K.authoring.constructionLights.bind(W, constructionLights, {hidden});
       return W;
     }
     const st = K.stage(W);
@@ -2755,6 +2765,7 @@
         j = PI[p] && PI[p].joint;
       joint[p] = j || (bx?.n ? [(bx.lo[0] + bx.hi[0]) / 2, bx.lo[1], (bx.lo[2] + bx.hi[2]) / 2] : [0, 0, 0]);
     }
+    K.authoring.constructionLights.bind(W, constructionLights, {hidden,joints:joint});
     const order = partNames.slice().sort((a, b) => {
       const depth = p => {
         let d = 0;
@@ -2867,7 +2878,7 @@
     }
     const rv = effects.find((e,i) => visibleEffect(e,i) && e.do === 'reveal');
     if (rv) st.add(K.fx.reveal(st, { auto: true, dur: rv.dur || 1.4, block: rv.block || 0.6 }));
-    W.lab = { rig, ps, lit, parts: partNames };
+    W.lab = { rig, ps, lit, parts: partNames, joints:joint };
     return W;
   };
   DIO.scene = (spec, env) => {
