@@ -431,7 +431,12 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   lint <id ...> [--map]              pixel-art lint: orphans, doubles, jaggies, banding, pillow shading, noise, colours
   review <id> [--ref pic --px 2]     a sheet of fixed shots (four sides, top, low, far, near, close), beside the last one
   tasks plan <plan.json>   validate native artifact tasks and show dependency order
-  tasks run <plan.json> --out directory [--resume]   execute and cache native artifact tasks
+  tasks run <plan.json> --out directory [--resume --budget limits.json --progress]   execute and cache native artifact tasks
+  tasks serve <plan.json> --out directory [--port N --host IP --budget limits.json --tls-cert CERT --tls-key KEY]   host an approved task recipe
+  tasks manifest <worker-url>   show the registered recipe, declared assets and limits
+  tasks submit <worker-url> <plan.json> [--budget limits.json --wait]   queue a task job
+  tasks status|cancel <worker-url> <job-id>   inspect progress and receipts or cancel a job
+  tasks fetch <worker-url> <job-id> <task-id> <artifact-id> --out path   download and verify an artifact
   sweep <scene> <plan.json> --out directory   render still and clip contact sheets across settings and seeds
   sweep pin <report-or-directory> <run-id|sample-id|tile> --out pin.json   save one exact case
   sweep compare <report> <left> <right> --out directory   export matched view differences
@@ -660,6 +665,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   graph impact <group.json> [--root folder] [--json]   find consumers of a shared group
   graph snapshot <project.json> [--inputs values.json] [--seed N] [--at T]   capture graph bindings and asset hashes
   graph diff <before.json> <after.json> [--json]   explain node, port and named output changes
+  graph material-preview <project.json> <plan.json> --out directory   link a native material carrier to its UV maps
   graph inspect <project.json> [--output NAME | --node PATH --port NAME | --map ID [--component r|g|b|a]] [--out directory]
   graph run <project.json> [--inputs values.json --at seconds --seed N --out directory]
     run, inspect, batch, clip, session: --workers N   schedule eligible branches on 1–8 workers
@@ -822,6 +828,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio graph material-library` · `--audience`, `--query`, `--tag`, `--offset`, `--limit`, `--out` · [source](../../cli/graph-cli.js)
 - `ink-studio graph material-parameters` · `--out`, `--instance`, `--inputs`, `--adapters` · [source](../../cli/graph-cli.js)
 - `ink-studio graph material-presets` · `--out`, `--instance`, `--export`, `--presets` · [source](../../cli/graph-cli.js)
+- `ink-studio graph material-preview` · `--inputs`, `--at`, `--seed`, `--out`, `--json`, `--instance`, `--base-context` · [source](../../cli/graph-cli.js)
 - `ink-studio graph material-vector` · `--out` · [source](../../cli/graph-cli.js)
 - `ink-studio graph material-visibility` · `--inputs`, `--instance`, `--scope` · [source](../../cli/graph-cli.js)
 - `ink-studio graph nodes` · `--json` · [source](../../cli/graph-cli.js)
