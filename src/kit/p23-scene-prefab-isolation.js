@@ -95,7 +95,7 @@ const prefabEditIsolation = (function (K) {
         const anchor = raw.target;
         const pivotTarget = anchor?.kind === 'center' && anchor.object === undefined && anchor.selection === undefined ?
           { ...anchor, selection: pickActive() } : anchor;
-        evidence = T.planPivot(doc, { ...raw, target: pivotTarget, frame: link.frame }, {
+        evidence = T.planPivot(doc, { ...raw, target: pivotTarget, frame: meshPlacements.get(target.object) }, {
           pivot: row.pivot, mesh: targetMesh, instance: target => A.sceneInstances.anchor(scene, env, target)
         });
         if (evidence.changed) {
@@ -109,7 +109,7 @@ const prefabEditIsolation = (function (K) {
         if (!record(raw) || Object.hasOwn(raw, 'frame')) throw new TypeError('An isolated transform uses the prefab placement frame');
         requireShapeOwner(target.object, spec.topologyMeshes[target.object].part, scene, 'Transform');
         const selection = raw.selection ?? pickActive();
-        const transformed = T.planTransform(doc, { ...raw, selection, frame: link.frame }, {
+        const transformed = T.planTransform(doc, { ...raw, selection, frame: meshPlacements.get(target.object) }, {
           object: target.object, pivot: row.pivot,
           ...(raw.constructionPlane === undefined && meshComponentSnap.usesConstructionPlane(raw) ?
             { constructionPlane: A.constructionPlane.forScene(scene).plane } : {}),

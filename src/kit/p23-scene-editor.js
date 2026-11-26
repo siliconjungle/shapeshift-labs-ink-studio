@@ -510,6 +510,42 @@
       else document.transact('Edit prefab instance ' + id, write);
     }
 
+    function stagePrefabCombination(request) {
+      const before = snapshot(), {patch,report} = A.prefabCombination.plan(before,buildEnv,request);
+      if (!patch) return {before,report};
+      const candidate = {...before,...patch};
+      const problems = DIO.check(candidate,buildEnv).filter(row => row.level === 'error');
+      try {
+        if (!problems.length) requireReviewEdit(before,candidate);
+      } catch (error) {
+        problems.push({level:'error',problem:error.message});
+      }
+      if (problems.length) return {before,report:freeze({...report,canCommit:false,problems})};
+      return {before,candidate,patch,report};
+    }
+
+    function planPrefabCombination(request) {
+      return stagePrefabCombination(request).report;
+    }
+
+    function previewPrefabCombination(request, {time=0} = {}) {
+      if (!Number.isFinite(time) || time < 0) throw new RangeError('Prefab preview time must be nonnegative');
+      const {before,candidate,report} = stagePrefabCombination(request);
+      const env = {...buildEnv,parameterInputs:{...buildEnv.parameterInputs,time}};
+      return {report,before:DIO.build(before,env),after:candidate && DIO.build(candidate,env)};
+    }
+
+    function combinePrefabs(request) {
+      const {patch,report} = stagePrefabCombination(request);
+      if (!patch) throw Object.assign(new RangeError('Prefab combination needs review'),{report});
+      const write = () => document.batchSession(() => {
+        if (patch.instances) document.setEnvironment({instances:null});
+        document.setEnvironment(patch);
+        return report;
+      });
+      return document.pending() ? write() : document.transact('Combine placements into '+report.prefab,write);
+    }
+
     function stagePrefabArray(request) {
       const before = snapshot(), {patch,report} = A.prefabInstanceArray.plan(before,buildEnv,request);
       if (!patch) return {before,report};
@@ -1759,6 +1795,7 @@
       planPainting3d, applyPainting3d, inspectPaintings3d,
       extractPainting3d: id => A.paintings3d.extract(snapshot(), id),
       placeSculptStamp, planSculptSplit, splitSculpt, planAssemblyStretch, stretchAssembly,
+      planPrefabCombination, previewPrefabCombination, combinePrefabs,
       planPrefabArray, previewPrefabArray, applyPrefabArray,
       planPrefabReplacement, previewPrefabReplacement, replacePrefabs,
       planPrefabVariant, previewPrefabVariant, applyPrefabVariant,
