@@ -15,6 +15,8 @@ ink-studio character-rig bind rig.json bind-plan.json --out binding.json
 ink-studio character-rig preview rig.json binding.json pose.json --view view.json --out preview
 ```
 
+The [headless skinned crowd bake](skinned-crowd.md) reuses these bindings across agents and adds optional muscle-driven skin deformation.
+
 ## Place and assemble components
 
 The built-in `torso`, `arm` and `leg` templates have neutral rest

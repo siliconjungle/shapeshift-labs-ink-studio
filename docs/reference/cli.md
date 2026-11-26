@@ -536,6 +536,9 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   character-motion sample <rig.json> <motion.json> <clip> [--at seconds --out pose.json --free --require-solved]   mix clips and solve contacts
   character-motion edit <rig.json> <motion.json> <edits.json> --out motion.json   edit curve keys or key saved rig controls
   character-motion retarget <rig.json> <motion.json> <clip> <target-rig.json> <plan.json> --out motion.json [--report report.json --require-solved]   bake editable controls with transferred contacts
+  skinned-crowd bake <plan.json> --out take.json [--require-contacts]   bake skinned agents, tissue, terrain contact and ragdoll poses
+  skinned-crowd sample <plan.json> <take.json> [--frame N --out frame.json]   export the visible posed surfaces and diagnostics
+  skinned-crowd preview <plan.json> <take.json> --out frame.png [--frame N]   render a saved headless crowd frame
   channels discover <plan.json> [--out index.json]   discover animation, audio and simulation channels
   channels filter <plan.json> <stage> [--out trace.json]   filter a named channel
   channels blend <plan.json> <stage> [--out trace.json]   combine aligned channels
