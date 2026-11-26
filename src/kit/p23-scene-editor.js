@@ -799,6 +799,8 @@
 
     function transformMeshTopology(object, request, options) {
       const plan = planMeshTransform(object, request, options);
+      if (plan.report.canCommit === false)
+        throw Object.assign(new RangeError('Face fold needs review'),{report:plan.report});
       return freeze({ transform: plan.report, ...((plan.patch.vertices.length || plan.patch.faces?.length) && {
         topology: editMeshTopology(object, plan.patch, options)
       }) });

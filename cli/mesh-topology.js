@@ -85,8 +85,13 @@ function transform(file, input, rest, opt, toolkit, openEditor) {
     const plan = editor.planMeshTransform(object, request);
     return { patch: plan.patch, evidence: plan.report };
   }
-  const evidence = editor.transformMeshTopology(object, request);
-  return { document: editor.snapshot(), evidence };
+  try {
+    const evidence = editor.transformMeshTopology(object, request);
+    return { document: editor.snapshot(), evidence };
+  } catch (error) {
+    if (error.report?.canCommit !== false) throw error;
+    return {evidence:error.report};
+  }
 }
 
 function pivot(file, input, rest, opt, meshTopology, openEditor) {
@@ -265,6 +270,10 @@ function command([action, file, input, ...rest], opt, toolkit, { build, openEdit
   if (opt.pieces !== undefined) throw new TypeError('Use --pieces with mesh-topology cut');
   if (action === 'transform') {
     const result = transform(file, input, rest, opt, toolkit, openEditor);
+    if (out && result.evidence.canCommit === false) {
+      if (report) files.json(path.resolve(report), result.evidence);
+      throw new RangeError('Face fold needs review');
+    }
     if (out) files.json(path.resolve(out), result.document);
     else process.stdout.write(JSON.stringify({ patch: result.patch, report: result.evidence }, null, 2) + '\n');
     if (report) files.json(path.resolve(report), result.evidence);

@@ -370,6 +370,7 @@ const meshComponentSnap = (function (K) {
       throw new TypeError('Use a component transform request');
     const doc = topology.create(source), special = constraints.includes(request.operation?.kind);
     if (request.operation?.kind === 'replay-randomize') return meshRandomTransform.replay(doc,request);
+    if (request.operation?.kind === 'fold') return meshFaceFold.plan(doc,request,planTransform);
     const pushing = request.operation?.kind === 'push';
     const random = request.operation?.kind === 'randomize' && meshRandomTransform.parse(request.operation);
     const mirror = request.operation?.kind === 'mirror' && mirrorOperation(request.operation,request);
