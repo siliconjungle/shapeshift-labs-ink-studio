@@ -421,6 +421,7 @@ function assignCommand([file,...rest], options, toolkit, openEditor) {
 
 const tilesetEdits = {
   'stamp-prefab':['planPrefabStamp','stampPrefab'],
+  'object-points':['planObjectPoints','editObjectPoints'],
   stroke:['planTilesetStroke','applyTilesetStroke'],
   rectangle:['planTilesetRectangle','applyTilesetRectangle'],
   'brush-run':['planTilesetBrushRun','applyTilesetBrushRun'],

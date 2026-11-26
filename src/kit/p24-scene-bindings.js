@@ -426,16 +426,28 @@
     );
     const imported = rig ? fromRig(rig, { parts: partSpecs }) : { graph: G.create(), geometry: [] },
       graph = imported.graph;
-    const prefabRoots = [];
+    const rigNodes = graph.ids(), prefabRoots = [];
     for (const [key, link] of expanded.instances) {
       const id = 'prefab.' + key;
-      graph.add(id, { kind: 'prefab', label: key, transform: link.frame });
+      graph.add(id, { kind: 'prefab', label: key, transform: link.frame,
+        sockets:K.authoring.objectPoints.socketFrames(link.resolved.points) });
       prefabRoots.push({ key, id });
     }
     for (const [key,{instance}] of expanded.instances)
       if (instance.parent !== undefined) graph.reparent('prefab.'+key,'prefab.'+instance.parent);
+    const meshOwners = new Map([...expanded.instances].flatMap(([id,link]) =>
+      Array.from(link.meshes.values(),row=>[row.object,'prefab.'+id])));
+    for (const [object,row] of Object.entries(expanded.spec.topologyMeshes ?? {})) {
+      if (!Object.keys(row.points ?? {}).length) continue;
+      let id = 'mesh.'+object;
+      while (graph.has(id)) id += '.';
+      graph.add(id,{kind:'geometry',label:object,transform:expanded.meshPlacements.get(object),
+        sockets:K.authoring.objectPoints.socketFrames(row.points)});
+      const owner = graph.has(row.part) ? row.part : meshOwners.get(object);
+      if (owner) graph.reparent(id,owner);
+    }
     prefabRoots.sort((a, b) => b.key.length - a.key.length);
-    for (const id of imported.graph.ids())
+    for (const id of rigNodes)
       if (graph.node(id).kind === 'geometry' && !graph.node(id).parent) {
         const prefab = prefabRoots.find(p => id.startsWith(p.key + '.'));
         if (prefab) graph.reparent(id, prefab.id);

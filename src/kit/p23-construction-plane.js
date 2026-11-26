@@ -161,16 +161,18 @@
     return V.mul(points.reduce(V.add,[0,0,0]),1/points.length);
   }
 
-  function originTarget(scene, request) {
-    const {kind,object,vertex,instance,instanceKind,selection} = request ?? {};
-    const fields = {vertex:['object','vertex'],instance:['instance','instanceKind'],bounds:['object','selection'],average:['object','selection']};
+  function originTarget(scene, request, env = {}) {
+    if (request?.kind === 'object-point') return A.objectPoints.resolve(scene,env,request);
+    const {kind,object,vertex,instance,instanceKind,anchor,selection} = request ?? {};
+    const fields = {vertex:['object','vertex'],instance:['instance','instanceKind','anchor'],bounds:['object','selection'],average:['object','selection']};
     const name = TargetSelectors.name;
     if (!request || Object.getPrototypeOf(request) !== Object.prototype || !Object.hasOwn(fields,kind) ||
         Object.keys(request).some(key=>key !== 'kind' && !fields[kind].includes(key)) ||
-        !(kind === 'instance' ? name(instance) && (instanceKind === undefined || ['prefab','asset-part'].includes(instanceKind)) :
+        !(kind === 'instance' ? name(instance) && (anchor === undefined || name(anchor)) && (instanceKind === undefined || ['prefab','asset-part'].includes(instanceKind)) :
           name(object) && (kind === 'vertex' ? name(vertex) : selection)))
-      throw new TypeError('Snap the construction origin to a vertex, instance, selection bounds, or selection average');
-    if (kind === 'instance') return {kind,...A.sceneInstances.select(scene,{kind:instanceKind,ids:[instance]})[0]};
+      throw new TypeError('Snap the construction origin to a vertex, instance, named object point, selection bounds, or selection average');
+    if (kind === 'instance') return {kind,...A.sceneInstances.anchor(scene,env,{instance,instanceKind,anchor}),
+      ...(anchor !== undefined && {anchor})};
 
     const rows = scene.topologyMeshes ?? {};
     if (!Object.hasOwn(rows,object)) throw new RangeError('Unknown editable mesh '+object);
@@ -201,9 +203,9 @@
     return {...evidence,target:mean(centers)};
   }
 
-  function snapOrigin(scene, request, {detachEdge = false} = {}) {
+  function snapOrigin(scene, request, {detachEdge = false} = {}, env) {
     if (typeof detachEdge !== 'boolean') throw new TypeError('Detach edge must be a boolean');
-    const snap = originTarget(scene,request);
+    const snap = originTarget(scene,request,env);
     let frame;
     try {
       frame = forScene(scene);

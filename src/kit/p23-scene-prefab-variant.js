@@ -10,7 +10,7 @@
     const taggedSolids = Object.fromEntries(Object.entries(solids).map(([id,solid]) =>
       [id,{...solid,prefabs:[provenance.prefab,...new Set((solid.prefabs ?? []).filter(tag => tag !== provenance.prefab))]}]));
     const definition = {revision:1,solids:taggedSolids,topologyMeshes,provenance};
-    for (const table of ['parts','groups','motion','effects'])
+    for (const table of ['parts','groups','motion','effects','points'])
       if (Object.keys(resolved[table]).length) definition[table] = resolved[table];
     if (link.definition.meshFrames) definition.meshFrames = Object.fromEntries(
       Object.entries(link.definition.meshFrames).filter(([member]) => Object.hasOwn(topologyMeshes,member)));
@@ -37,7 +37,9 @@
     const bindings = row.bindings?.map(binding => meshUVFlatten.isBinding(binding) && placement.scale !== 1 ?
       {...binding,data:{...binding.data,texelsPerUnit:binding.data.texelsPerUnit/placement.scale}} : binding);
     return {...row,document:T.create({...doc,vertices,faces}),
-      ...(bindings && {bindings}),...(row.pivot && {pivot:placement.point(row.pivot)})};
+      ...(bindings && {bindings}),...(row.pivot && {pivot:placement.point(row.pivot)}),
+      ...(row.points && {points:Object.fromEntries(Object.entries(A.objectPoints.read(row.points)).map(([id,point]) =>
+        [id,{position:placement.point(point.position),direction:placement.direction(point.direction ?? [0,0,1])}]))})};
   }
 
   function detach(scene, spec, meshPlacements, link, report) {
@@ -49,6 +51,8 @@
     if (conflicts.length) return;
     const instances = {...scene.instances};
     delete instances[instance];
+    const retiredPoints = Object.keys(link.resolved.points).sort();
+    if (retiredPoints.length) report.retiredPoints = retiredPoints;
     const topologyMeshes = {...scene.topologyMeshes};
     function placedFrame(member,object) {
       const frame = meshPlacements.get(object);

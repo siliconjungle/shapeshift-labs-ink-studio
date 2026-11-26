@@ -3,7 +3,7 @@
   const A = K.authoring, {freeze} = K.procedural.data;
 
   function compose(scene,env,links,origin,report) {
-    const {spec,meshPlacements} = A.scenePrefabs.expand({prefabs:scene.prefabs,tilesets:scene.tilesets,
+    const {spec,meshPlacements,instances} = A.scenePrefabs.expand({prefabs:scene.prefabs,tilesets:scene.tilesets,
       prefabLibrary:scene.prefabLibrary,instances:scene.instances},env,{only:new Set(links.map(([id]) => id)),origin});
     const topologyMeshes = spec.topologyMeshes ?? {}, sheets = new Set();
     for (const [,link] of links)
@@ -15,7 +15,10 @@
     }
     const named = (table,rows) => Object.fromEntries(links.flatMap(([id,link]) =>
       Object.keys(link.resolved[table]).map(name => id+'.'+name)).map((name,i) => [name,rows[i]]));
-    return {revision:1,solids:Object.fromEntries(spec.solids.map(row => [row.id,row])),topologyMeshes,
+    const points = Object.fromEntries([...instances].flatMap(([id,link]) =>
+      Object.entries(A.objectPoints.read(link.resolved.points)).map(([name,row]) =>
+        [id+'.'+name,A.objectPoints.transform(row,link.frame)])));
+    return {revision:1,...(Object.keys(points).length && {points}),solids:Object.fromEntries(spec.solids.map(row => [row.id,row])),topologyMeshes,
       ...(meshPlacements.size && {meshFrames:Object.fromEntries(meshPlacements)}),
       ...(Object.keys(spec.parts).length && {parts:spec.parts}),
       ...(Object.keys(spec.groups).length && {groups:spec.groups}),

@@ -325,7 +325,7 @@ const meshComponentSnap = (function (K) {
   function snap(raw, point, doc, frame, context, construction, anchor) {
     const keys = {
       vertex: ['id', 'object'], edge: ['id', 'object', 'at', 'from', 'match'], face: ['id', 'object'],
-      plane: ['origin', 'normal'], 'construction-plane': ['mode'], socket: ['instance', 'binding'], sdf: ['object', 'tolerance', 'iterations']
+      plane: ['origin', 'normal'], 'construction-plane': ['mode'], socket: ['instance', 'binding','instanceKind'], 'object-point':['id','object','instance'], sdf: ['object', 'tolerance', 'iterations']
     };
     if (!raw || !Object.hasOwn(keys, raw.kind) || !record(raw, ['kind', 'anchor', 'maxDistance', ...keys[raw.kind]]) ||
         raw.object !== undefined && !name(raw.object) ||
@@ -344,10 +344,17 @@ const meshComponentSnap = (function (K) {
     } else if (raw.kind === 'construction-plane') {
       hit = K.authoring.constructionPlane.project(construction,point,raw.mode);
     } else if (raw.kind === 'socket') {
-      if (!name(raw.instance) || !name(raw.binding)) throw new TypeError('Socket snap needs an instance and binding ID');
-      const socket = context.socket?.(raw.instance, raw.binding);
+      if (!name(raw.instance) || !name(raw.binding) ||
+          raw.instanceKind !== undefined && !['prefab','asset-part'].includes(raw.instanceKind))
+        throw new TypeError('Socket snap needs an instance and binding ID');
+      const socket = context.socket?.(raw.instance, raw.binding,raw.instanceKind);
       if (!vector(socket)) throw new RangeError('No bound snap socket ' + raw.instance + '/' + raw.binding);
       hit = { point: socket.slice() };
+    } else if (raw.kind === 'object-point') {
+      const {kind,id,object,instance} = raw;
+      const found = context.point?.({kind,id,...(object !== undefined ? {object} : {}),...(instance !== undefined ? {instance} : {})});
+      if (!vector(found?.target)) throw new RangeError('No named snap point '+id);
+      hit = {point:found.target};
     } else if (raw.kind === 'sdf') {
       if (!name(raw.object)) throw new TypeError('SDF snap needs a solid ID');
       hit = snapField(raw, point, context.sdf?.(raw.object));

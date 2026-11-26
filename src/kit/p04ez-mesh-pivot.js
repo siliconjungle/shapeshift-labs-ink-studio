@@ -35,12 +35,20 @@ const meshPivot = (function (K) {
         return { point: found.target, space: 'world', evidence: { kind, instance: raw.instance,
           ...(found.instanceKind && { instanceKind: found.instanceKind }), ...(raw.anchor && { anchor: raw.anchor }) } };
       }
+      case 'object-point': {
+        if (!record(raw,['kind','object','instance','id']) || !name(raw.id))
+          throw new TypeError('A named pivot point needs a mesh or prefab instance and point ID');
+        const found = context.point?.(raw);
+        if (!xyz(found?.target)) throw new RangeError('No named pivot point '+raw.id);
+        const {target,local,world,...evidence} = found;
+        return {point:target,space:'world',evidence};
+      }
       case 'vertex':
       case 'edge':
       case 'center':
         return meshAnchor(doc, frame, raw, context);
       default:
-        throw new TypeError('Place a mesh pivot at a point, vertex, edge, instance anchor, or selection center');
+        throw new TypeError('Place a mesh pivot at a coordinate, named object point, vertex, edge, instance anchor, or selection center');
     }
   }
 
