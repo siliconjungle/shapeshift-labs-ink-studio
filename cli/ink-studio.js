@@ -1475,7 +1475,7 @@ const CMD = {
         '  mesh-uv import <mesh> --out topology.json [--id id] [--uv-set n] [--join-coincident on|off]   retain triangle corner UVs for editing',
         '  mesh-uv layout <mesh-or-scene.json> [--object id] [--uv-set n | --channel id] [--atlas width,height] [--out file]   inspect normalized UVs and source texels on faces and seam sides',
         '  mesh-uv select <mesh-or-scene.json> <query.json> [--object id] [--view file] [--preview dir] [--out file] [--topology-out file] [--topology-domain match|faces|edges|vertices]   cross-select from atlas UVs, source texels, model pixels, or saved mesh components',
-        '  mesh-uv edit <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file] [--preview dir] [--out file] [--report file]   flatten, scale, orient, normalize, snap or nudge UVs, set pivots, edit seams, unwrap, or budget texels',
+        '  mesh-uv edit <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--view file] [--preview dir] [--out file] [--report file]   flatten, scale, orient, normalize, snap or nudge UVs, set pivots, edit seams, unwrap connected faces, or budget texels',
         '  scenery pack <scene.js> --out asset.inkscenery   pack indexed meshes and textures from a scenery hook',
         '  scenery inspect <asset.inkscenery>   decode the pack and report its transfer sizes',
         '  export-glb <scene.js|.json|.obj|.gltf|.glb> --out model.glb   write UV-mapped geometry with materials, skins and clips',
