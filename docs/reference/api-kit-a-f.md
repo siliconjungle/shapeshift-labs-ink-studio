@@ -849,6 +849,9 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.physicalMaterials.checkStructural` | function | `(key,value,wet=true)` | [source](../../src/kit/p90-asset-materials.js) |
 | `KIT.authoring.physicalMaterials.definition` | function | `(input,pack)` | [source](../../src/kit/p90-asset-materials.js) |
 | `KIT.authoring.physicalMaterials.profile` | function | `(entry,wetness=0)` | [source](../../src/kit/p90-asset-materials.js) |
+| `KIT.authoring.prefabInstanceArray` | namespace |  |  |
+| `KIT.authoring.prefabInstanceArray.check` | function | `(arrays)` | [source](../../src/kit/p23-scene-prefab-array.js) |
+| `KIT.authoring.prefabInstanceArray.plan` | function | `(scene,env,request)` | [source](../../src/kit/p23-scene-prefab-array.js) |
 | `KIT.authoring.prefabReplacement` | namespace |  |  |
 | `KIT.authoring.prefabReplacement.plan` | function | `(scene, env, request)` | [source](../../src/kit/p23-scene-prefab-replace.js) |
 | `KIT.authoring.prefabSourceEdit` | namespace |  |  |
@@ -885,6 +888,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.scenePrefabs` | namespace |  |  |
 | `KIT.authoring.scenePrefabs.checkProvenance` | function | `(row, mesh = false)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.expand` | function | `(source, { prefabs: external } = {})` | [source](../../src/kit/p23-scene-prefabs.js) |
+| `KIT.authoring.scenePrefabs.indexedTargets` | function | `(scene,before,after,mapMember = (instance,table,name) => name)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.origin` | function | `(transform)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.review` | function | `(source, before, after)` | [source](../../src/kit/p23-scene-prefabs.js) |
 | `KIT.authoring.scenePrefabs.tilesetRequirements` | function | `(definition, meshes)` | [source](../../src/kit/p23-scene-prefabs.js) |

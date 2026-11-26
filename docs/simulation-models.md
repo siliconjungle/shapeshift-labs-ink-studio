@@ -22,6 +22,8 @@ the resolved schedule, or `probe` to sample an individual world field.
 [Boundary sets](boundary-conditions.md) share source and boundary laws with
 finite-volume grids, wave networks, and moving-boundary world systems.
 
+Use [headless solver networks](solver-networks.md) to instantiate reusable stage definitions and inspect matched checkpoint branches.
+
 Use [simulation diagnostics](simulation-diagnostics.md) to check stability
 and conservation of individual solver plans.
 
