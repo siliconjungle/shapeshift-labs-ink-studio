@@ -257,7 +257,7 @@ function plan(file, studio, K) {
   function loadSource(file) {
     if (!sources.has(file)) {
       const detailed=read(file);
-      const model=Source.meshSource({kind:'mesh',model:detailed.value},directory,studio,K);
+      const model=Source.meshSource({kind:'mesh',model:detailed.value},path.dirname(file),studio,K);
       sources.set(file,{sha256:detailed.sha256,model});
     }
     return sources.get(file);

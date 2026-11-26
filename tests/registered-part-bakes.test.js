@@ -32,7 +32,12 @@ test('registered part batches fit cages, keep native UV texels and palette slots
   const read=name=>JSON.parse(fs.readFileSync(file(name),'utf8'));
   const cli=path.resolve(__dirname,'../cli/ink-studio.js');
   const run=(...args)=>JSON.parse(execFileSync(process.execPath,[cli,'material-bake',...args],{cwd:directory,encoding:'utf8'}));
-  save('high.json',source());
+  fs.mkdirSync(file('source'));
+  const detail=source();
+  detail.materials[0].texture='pigment.png';
+  detail.uvs=detail.faces.map(()=>[[0,0],[1,0],[1,1],[0,1]]);
+  fs.writeFileSync(file('source/pigment.png'),PNG.encode(1,1,Uint8Array.of(255,255,255)));
+  save('source/high.json',detail);
   const doc=receiver(), small=receiver(false);
   save('body.json',doc);
   save('body-far.json',small);
@@ -40,7 +45,7 @@ test('registered part batches fit cages, keep native UV texels and palette slots
     tiles:[{at:[0,0],material:'copper',size:[48,32],faces:['west']},{at:[1,0],material:'slate',size:[32,32],faces:['east']}]});
   const preset=run('preset','indexed','--out','preset.json');
   assert(preset.paletteRequired);
-  const a={id:'body-near',part:'body',lod:0,receiver:'body.json',revision:T.revision(doc),source:{file:'high.json'},
+  const a={id:'body-near',part:'body',lod:0,receiver:'body.json',revision:T.revision(doc),source:{file:'source/high.json'},
     layout:'tiles.json',sampling:{cage:{search:.23,margin:.025},maxWork:100000},
     pins:[{id:'mark',tile:[0,0],uv:[.44,.5],swatch:'signal'}]};
   const b={...a,id:'body-far',lod:1,receiver:'body-far.json',revision:T.revision(small),layout:undefined,

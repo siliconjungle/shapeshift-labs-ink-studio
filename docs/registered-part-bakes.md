@@ -53,6 +53,7 @@ The receiver is retained mesh topology or a scene with a named
 receiver materials. An optional `revision` checks the retained
 topology before any bake work. The detailed source is native retained
 mesh topology or indexed model JSON in the same coordinate system.
+Resolve a source material's PNG path from its model file.
 It can carry named source parts in `faceParts`, or the target can
 provide a `source.faceParts` table keyed by source face ID. Omitted
 source part tags default to the target part. The cage checks accepted
