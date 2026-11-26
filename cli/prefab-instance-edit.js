@@ -8,6 +8,7 @@ const read = file => JSON.parse(fs.readFileSync(file,'utf8'));
 const name = value => typeof value === 'string' && value.trim();
 
 const commands = {
+  'scene-layer': ['planSceneLayers','previewSceneLayers','editSceneLayers'],
   'mirror-prefab': ['planPrefabMirror','previewPrefabMirror','applyPrefabMirror'],
   'reparent-prefab': ['planPrefabReparent','previewPrefabReparent','reparentPrefab'],
   'combine-prefab': ['planPrefabCombination','previewPrefabCombination','combinePrefabs'],
@@ -17,7 +18,7 @@ const commands = {
 };
 
 function command(action,file,input,rest,opt,kit,openEditor) {
-  const {out,preview,view,selection} = opt, acceptsSelection = ['combine-prefab','replace-prefab'].includes(action);
+  const {out,preview,view,selection} = opt, acceptsSelection = ['combine-prefab','replace-prefab','scene-layer'].includes(action);
   const [plan,review,apply] = commands[action];
   if (rest.length || ![file,input,...Object.values(opt)].every(name) ||
       Object.keys(opt).some(key => !['out','preview','view',...(acceptsSelection ? ['selection'] : [])].includes(key)) ||

@@ -64,14 +64,22 @@
       return node;
     });
     const linked = A.scenePrefabs.expand(scene, env).instances;
+    const layout = scene.sceneLayers && A.sceneLayers.prepare(scene);
+    if (layout) {
+      for (const row of layout.branches.values()) Object.assign(parent('layer',row.id,row.label),{...row,layer:row.id});
+      for (const row of layout.branches.values())
+        (nodes.get('layer:'+row.parent)?.children ?? roots).push(nodes.get('layer:'+row.id));
+    }
     for (const [id, { instance, revision, solids, meshes }] of linked) {
       const objects = Array.from(meshes.values(), entry => entry.object);
-      const node = Object.assign(parent('prefab', id), { instance, revision, solids, ...(objects.length && { meshes: objects }) });
+      const node = Object.assign(parent('prefab', id), { instance, revision, solids, ...(objects.length && { meshes: objects }),
+        ...(layout && {layer:layout.layerOf(id),visible:layout.isVisible(id)}) });
       for (const name of [...solids, ...objects]) byEntity.set(name, node.key);
     }
     for (const [id,{instance}] of linked) {
-      const owner = nodes.get('prefab:'+instance.parent);
-      (owner?.children ?? roots).push(nodes.get('prefab:'+id));
+      const node = nodes.get('prefab:'+id), owner = nodes.get('prefab:'+instance.parent);
+      const container = owner && owner.layer === node.layer ? owner : nodes.get('layer:'+node.layer);
+      (container?.children ?? roots).push(node);
     }
     for (const [id, mesh] of Object.entries(scene.topologyMeshes ?? {})) {
       const node = Object.assign(parent('mesh-topology', id, mesh.label), { mesh });
@@ -501,22 +509,31 @@
 
     function setPrefabInstance(id, instance) {
       if (!K.world.data.id(id)) throw new TypeError('A prefab placement needs an instance ID');
-      const value = clone(instance);
-      const instances = { ...snapshot().instances };
+      const value = clone(instance), scene = snapshot();
+      const instances = { ...scene.instances };
       if (value === null) delete instances[id];
       else instances[id] = value;
-      const write = () => {
-        document.setEnvironment({ instances: null });
-        document.setEnvironment({ instances });
-      };
+      const write = () => writePlacementPatch({instances,...A.sceneLayers.reconcile(scene,instances)});
+
       if (document.pending()) document.batchSession(write);
       else document.transact('Edit prefab instance ' + id, write);
+    }
+
+    function writePlacementPatch(patch, { replaceInstances = true } = {}) {
+      const reset = {...(patch.instances && replaceInstances && {instances:null}),
+        ...(patch.sceneLayers && {sceneLayers:null})};
+      if (Object.keys(reset).length) document.setEnvironment(reset);
+      document.setEnvironment(patch);
+    }
+
+    function reconcileLayerMembership(scene, patch, source) {
+      return patch.instances ? {...patch,...A.sceneLayers.reconcile(scene,patch.instances,source)} : patch;
     }
 
     function stagePrefabPlacement(plan, request) {
       const before = snapshot(), {patch,report} = plan(before,buildEnv,request);
       if (!patch) return {before,report};
-      const candidate = {...before,...patch};
+      const candidate = {...before,...reconcileLayerMembership(before,patch)};
       const problems = DIO.check(candidate,buildEnv).filter(row => row.level === 'error');
       try {
         if (!problems.length) requireReviewEdit(before,candidate);
@@ -565,9 +582,34 @@
       return applyPrefabPlacement(A.scenePrefabs.planMirror,request,'Prefab mirror needs review');
     }
 
+    function planSceneLayers(request) {
+      return stagePrefabPlacement(A.sceneLayers.plan,request).report;
+    }
+
+    function previewSceneLayers(request, settings) {
+      return previewPrefabPlacement(A.sceneLayers.plan,request,settings);
+    }
+
+    function editSceneLayers(request) {
+      const {candidate,report} = stagePrefabPlacement(A.sceneLayers.plan,request);
+      if (!candidate) throw Object.assign(new RangeError('Scene layer edits need review'),{report});
+      if (!report.changed) return report;
+      const write = () => document.batchSession(() => {
+        writePlacementPatch({sceneLayers:candidate.sceneLayers});
+        return report;
+      });
+      return document.pending() ? write() : document.transact('Edit scene layers',write);
+    }
+
+    function selectSceneLayer(layer, {mode,includeHidden} = {}) {
+      const rows = A.sceneInstances.select(snapshot(),{kind:'prefab',layer,includeHidden});
+      return select(rows.map(row=>'prefab:'+row.instance),{mode});
+    }
+
     function stagePrefabCombination(request) {
-      const before = snapshot(), {patch,report} = A.prefabCombination.plan(before,buildEnv,request);
-      if (!patch) return {before,report};
+      const before = snapshot(), {patch:planned,report} = A.prefabCombination.plan(before,buildEnv,request);
+      if (!planned) return {before,report};
+      const patch = reconcileLayerMembership(before,planned,report.provenance[0]?.instance);
       const candidate = {...before,...patch};
       const problems = DIO.check(candidate,buildEnv).filter(row => row.level === 'error');
       try {
@@ -594,16 +636,16 @@
       const {patch,report} = stagePrefabCombination(request);
       if (!patch) throw Object.assign(new RangeError('Prefab combination needs review'),{report});
       const write = () => document.batchSession(() => {
-        if (patch.instances) document.setEnvironment({instances:null});
-        document.setEnvironment(patch);
+        writePlacementPatch(patch);
         return report;
       });
       return document.pending() ? write() : document.transact('Combine placements into '+report.prefab,write);
     }
 
     function stagePrefabArray(request) {
-      const before = snapshot(), {patch,report} = A.prefabInstanceArray.plan(before,buildEnv,request);
-      if (!patch) return {before,report};
+      const before = snapshot(), {patch:planned,report} = A.prefabInstanceArray.plan(before,buildEnv,request);
+      if (!planned) return {before,report};
+      const patch = reconcileLayerMembership(before,planned,report.source.instance);
       const candidate = {...before,...patch};
       const problems = DIO.check(candidate,buildEnv).filter(row => row.level === 'error');
       try {
@@ -631,8 +673,7 @@
       if (!patch) throw Object.assign(new RangeError('Prefab array needs review'),{report});
       if (!report.changed) return report;
       const write = () => document.batchSession(() => {
-        document.setEnvironment({instances:null});
-        document.setEnvironment(patch);
+        writePlacementPatch(patch);
         return report;
       });
       return document.pending() ? write() : document.transact('Edit prefab array '+report.id,write);
@@ -676,8 +717,9 @@
     }
 
     function stagePrefabVariant(request) {
-      const before = snapshot(), {patch,report} = A.prefabVariant.plan(before,buildEnv,request);
-      if (!patch) return {before,report};
+      const before = snapshot(), {patch:planned,report} = A.prefabVariant.plan(before,buildEnv,request);
+      if (!planned) return {before,report};
+      const patch = reconcileLayerMembership(before,planned);
       const candidate = {...before,...patch};
       const problems = DIO.check(candidate,buildEnv).filter(row => row.level === 'error');
       try {
@@ -704,8 +746,7 @@
       const {patch,report} = stagePrefabVariant(request);
       if (!patch) throw Object.assign(new RangeError('Prefab variant needs review'),{report});
       const write = () => document.batchSession(() => {
-        document.setEnvironment({instances:null});
-        document.setEnvironment(patch);
+        writePlacementPatch(patch);
         return report;
       });
       return document.pending() ? write() : document.transact('Make prefab variant of '+report.instance,write);
@@ -786,9 +827,11 @@
     function stagePrefabStamp(request) {
       const before = snapshot(), {instances,report} = A.prefabStamp.plan(before,request,buildEnv);
       if (!instances) return {report};
-      const candidate = {...before,instances:{...before.instances,...instances}};
+      const patch = reconcileLayerMembership(before,{instances:{...before.instances,...instances}});
+      const candidate = {...before,...patch};
       const problems = DIO.check(candidate,buildEnv).filter(row => row.level === 'error');
-      return problems.length ? {report:freeze({...report,canCommit:false,problems})} : {before,candidate,instances,report};
+      return problems.length ? {report:freeze({...report,canCommit:false,problems})} :
+        {before,candidate,patch:{...patch,instances},report};
     }
 
     function planPrefabStamp(request) {
@@ -796,19 +839,20 @@
     }
 
     function stampPrefab(request) {
-      const {before,candidate,instances,report} = stagePrefabStamp(request);
-      if (!instances) throw Object.assign(new RangeError('Prefab stamping needs review'),{report});
+      const {before,candidate,patch,report} = stagePrefabStamp(request);
+      if (!patch) throw Object.assign(new RangeError('Prefab stamping needs review'),{report});
       requireReviewEdit(before,candidate);
-      const write = () => {
-        document.setEnvironment({instances});
+      const write = () => document.batchSession(() => {
+        writePlacementPatch(patch,{replaceInstances:false});
         return report;
-      };
+      });
       return document.pending() ? write() : document.transact('Stamp prefab '+report.prefab,write);
     }
 
     function stageTilesetPrefab(request) {
-      const before = snapshot(), {patch,report} = A.tilesetPrefab.plan(before,request,buildEnv);
-      if (!patch) return {report};
+      const before = snapshot(), {patch:planned,report} = A.tilesetPrefab.plan(before,request,buildEnv);
+      if (!planned) return {report};
+      const patch = reconcileLayerMembership(before,planned);
       const candidate = {...before,...patch};
       const problems = DIO.check(candidate,buildEnv).filter(row => row.level === 'error');
       return problems.length ? {report:freeze({...report,canCommit:false,problems})} : {before,candidate,patch,report};
@@ -824,7 +868,7 @@
       requireReviewEdit(before,candidate);
       const write = () => document.batchSession(() => {
         document.setEnvironment({topologyMeshes:null,...(report.detachedPlaneEdge && {constructionPlane:null})});
-        document.setEnvironment(patch);
+        writePlacementPatch(patch,{replaceInstances:false});
         return report;
       });
       return document.pending() ? write() : document.transact('Promote tile prefab '+report.prefab,write);
@@ -1885,6 +1929,7 @@
       planPainting3d, applyPainting3d, inspectPaintings3d,
       extractPainting3d: id => A.paintings3d.extract(snapshot(), id),
       placeSculptStamp, planSculptSplit, splitSculpt, planAssemblyStretch, stretchAssembly,
+      planSceneLayers, previewSceneLayers, editSceneLayers, selectSceneLayer,
       planPrefabReparent, previewPrefabReparent, reparentPrefab,
       planPrefabMirror, previewPrefabMirror, applyPrefabMirror,
       planPrefabCombination, previewPrefabCombination, combinePrefabs,
