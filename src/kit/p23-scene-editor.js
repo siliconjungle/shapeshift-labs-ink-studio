@@ -510,6 +510,30 @@
       else document.transact('Edit prefab instance ' + id, write);
     }
 
+    function stageTilesetPrefab(request) {
+      const before = snapshot(), {patch,report} = A.tilesetPrefab.plan(before,request,buildEnv);
+      if (!patch) return {report};
+      const candidate = {...before,...patch};
+      const problems = DIO.check(candidate,buildEnv).filter(row => row.level === 'error');
+      return problems.length ? {report:freeze({...report,canCommit:false,problems})} : {before,candidate,patch,report};
+    }
+
+    function planTilesetPrefab(request) {
+      return stageTilesetPrefab(request).report;
+    }
+
+    function promoteTilesetPrefab(request) {
+      const {before,candidate,patch,report} = stageTilesetPrefab(request);
+      if (!patch) throw Object.assign(new RangeError('Tile face promotion needs review'),{report});
+      requireReviewEdit(before,candidate);
+      const write = () => document.batchSession(() => {
+        document.setEnvironment({topologyMeshes:null,...(report.detachedPlaneEdge && {constructionPlane:null})});
+        document.setEnvironment(patch);
+        return report;
+      });
+      return document.pending() ? write() : document.transact('Promote tile prefab '+report.prefab,write);
+    }
+
     function preparePrefabIsolation(request) {
       const before = snapshot(), plan = prefabEditIsolation.plan(before, buildEnv, request, requireMeshShapeOwner, authoredTransformCamera);
       if (!plan.report.changed) return plan;
@@ -1560,7 +1584,7 @@
       planPainting3d, applyPainting3d, inspectPaintings3d,
       extractPainting3d: id => A.paintings3d.extract(snapshot(), id),
       placeSculptStamp, planSculptSplit, splitSculpt, planAssemblyStretch, stretchAssembly,
-      setPrefabInstance,
+      setPrefabInstance, planTilesetPrefab, promoteTilesetPrefab,
       planPrefabIsolation, previewPrefabIsolation, editIsolatedPrefab,
       planPrefabRefresh, refreshPrefabs,
       registerTileset,

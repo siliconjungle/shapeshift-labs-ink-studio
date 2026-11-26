@@ -277,5 +277,5 @@
     return {point:point(frame,gridAt),gridAt};
   }
 
-  A.constructionPlane = Object.freeze({resolve,pick,forScene,tilt,snapOrigin,gridPreset,quantize,point,project});
+  A.constructionPlane = Object.freeze({resolve,pick,forScene,tilt,originTarget,snapOrigin,gridPreset,quantize,point,project});
 })(KIT);

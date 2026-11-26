@@ -766,6 +766,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.constructionPlane` | namespace |  |  |
 | `KIT.authoring.constructionPlane.forScene` | function | `(scene)` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.gridPreset` | function | `(scene, request, {projectTexelsPerUnit} = {})` | [guide](../mesh-topology.md#set-grid-increments-and-rounding), [source](../../src/kit/p23-construction-plane.js) |
+| `KIT.authoring.constructionPlane.originTarget` | function | `(scene, request)` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.pick` | function | `(raw, pose, {lock} = {})` | [guide](../mesh-topology.md#pick-and-lock-a-plane-from-the-camera), [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.point` | function | `(frame, at)` | [source](../../src/kit/p23-construction-plane.js) |
 | `KIT.authoring.constructionPlane.project` | function | `(frame, position, mode = 'plane')` | [source](../../src/kit/p23-construction-plane.js) |
@@ -961,6 +962,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetPickedSplit.atlasFor` | function | `(scene, row, polygon)` | [source](../../src/kit/p23-tileset-picked-split.js) |
 | `KIT.authoring.tilesetPickedSplit.decorate` | function | `(scene, row, plan, source)` | [source](../../src/kit/p23-tileset-picked-split.js) |
 | `KIT.authoring.tilesetPickedSplit.install` | function | `(bindings, split)` | [source](../../src/kit/p23-tileset-picked-split.js) |
+| `KIT.authoring.tilesetPrefab` | namespace |  |  |
+| `KIT.authoring.tilesetPrefab.plan` | function | `(scene, request, env)` | [source](../../src/kit/p23-tileset-prefab.js) |
 | `KIT.authoring.tilesetPrimitiveGeometry` | namespace |  |  |
 | `KIT.authoring.tilesetPrimitiveGeometry.build` | function | `(id, kind, frame, size, segments)` | [source](../../src/kit/p23-tileset-primitive-geometry.js) |
 | `KIT.authoring.tilesetPrimitives` | namespace |  |  |
