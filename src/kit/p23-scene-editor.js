@@ -1026,7 +1026,7 @@
 
     function planMeshUV(object, request, { part } = {}) {
       const row = meshTopology(object,part);
-      const atlasFor = Array.isArray(request?.operations) && request.operations.some(op=>op?.op==='nudge') ?
+      const atlasFor = Array.isArray(request?.operations) && request.operations.some(op=>['nudge','snap'].includes(op?.op)) ?
         A.meshTopologyScene.uvAtlases(snapshot(),row,request.uvSet ?? 0,{tileGrid:true}) : undefined;
       return K.meshTopology.uv.plan(row.document,request,{atlasFor});
     }
