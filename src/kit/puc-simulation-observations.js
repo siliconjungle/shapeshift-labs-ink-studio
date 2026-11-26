@@ -49,6 +49,19 @@
     return {observations,slots,reader};
   }
 
+  function canonical(value) {
+    return JSON.stringify(value, (_, item) => record(item)
+      ? Object.fromEntries(Object.keys(item).sort().map(key => [key,item[key]])) : item);
+  }
+
+  function sampleId(caseId, seed, parameters) {
+    const key = canonical(['ink-sweep-sample-v1',caseId,seed,parameters]);
+    let hash = 0xcbf29ce484222325n;
+    for (let i = 0; i < key.length; i++)
+      hash = BigInt.asUintN(64,(hash ^ BigInt(key.charCodeAt(i))) * 0x100000001b3n);
+    return 'sample-' + hash.toString(16).padStart(16,'0');
+  }
+
   const comparison = {
     eq: W.data.equal,
     ne: (a,b) => !W.data.equal(a,b),
@@ -121,7 +134,7 @@
     for (let attempt = 0; attempt < attempts && rows.length < sampling.count; attempt++) {
       const row = draw.map(sample => sample(attempt));
       if (!accepts(row)) continue;
-      const key = JSON.stringify(row.map(entry => entry.value));
+      const key = canonical(row.map(entry => entry.value));
       if (seen.has(key)) continue;
       seen.add(key);
       rows.push(row);
@@ -234,7 +247,7 @@
       const authored=group.edits.length?W.manifest(W.apply(world,group.edits).world):world;
       const groupRuns=[];
       for(const seed of plan.seeds??[authored.seed]){
-        const id=group.id+'@'+seed;
+        const id=group.id+'@'+seed, stableId=sampleId(group.case,seed,group.parameters);
         try {
           const run=R.create(seed===authored.seed?authored:{...authored,seed},{...runtime,checkpoint});
           run.schedule([...actions,...plan.actions,...group.actions,...group.ports.map(({port,value,tick})=>
@@ -250,10 +263,10 @@
             }
             for(const slot of slots.get(tick)??[])measurements.push(readObservation(query,slot,dt));
             if(captureTicks.has(tick))capture.frame(run.view(),query,{
-              id,case:group.case,parameters:copy(group.parameters),seed,tick,dt
+              id,sampleId:stableId,case:group.case,parameters:copy(group.parameters),seed,tick,dt
             });
           }
-          const result={id,group:group.id,seed,fromTick,toTick:currentTick,dt,samples:measurements};
+          const result={id,sampleId:stableId,group:group.id,seed,fromTick,toTick:currentTick,dt,samples:measurements};
           runs.push(result);
           groupRuns.push(result);
         }catch(error){throw Error('Sweep run '+id+': '+error.message,{cause:error});}
@@ -264,5 +277,5 @@
     return freeze({format,version:1,world:world.id,observations:plan.observations,runs,groups});
   }
 
-  W.observations=Object.freeze({format,prepare,measurements,matrix,schedule,run:(source,spec,options)=>prepare(spec).run(source,options)});
+  W.observations=Object.freeze({format,prepare,measurements,matrix,schedule,sampleId,run:(source,spec,options)=>prepare(spec).run(source,options)});
 })(KIT);

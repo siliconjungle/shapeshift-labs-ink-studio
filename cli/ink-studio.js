@@ -1633,7 +1633,7 @@ const CMD = {
         '  lint <id ...> [--map]              pixel-art lint: orphans, doubles, jaggies, banding, pillow shading, noise, colours',
         '  review <id> [--ref pic --px 2]     a sheet of fixed shots (four sides, top, low, far, near, close), beside the last one',
         '  sweep <scene> <plan.json> --out directory   render still and clip contact sheets across settings and seeds',
-        '  sweep pin <report-or-directory> <run-id-or-tile> --out pin.json   save one exact case',
+        '  sweep pin <report-or-directory> <run-id|sample-id|tile> --out pin.json   save one exact case',
         '  sweep compare <report> <left> <right> --out directory   export matched view differences',
         '  sweep rank <report> --out ranking.json   order candidates by approval results',
         '  sweep apply <pin.json> --out controls.json [--scene]   write selected scene controls',
@@ -3237,7 +3237,7 @@ const CMD = {
       return;
     }
     if (command === 'pin') {
-      if (pos.length !== 3) die('Use sweep pin <report-or-directory> <run-id-or-tile> --out pin.json');
+      if (pos.length !== 3) die('Use sweep pin <report-or-directory> <run-id|sample-id|tile> --out pin.json');
       const input = path.resolve(pos[1]);
       const report = fs.statSync(input).isDirectory() ? path.join(input, 'report.json') : input;
       if (report === directory) die('Choose a separate filename for the pin');

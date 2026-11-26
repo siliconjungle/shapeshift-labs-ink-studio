@@ -29,6 +29,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.world.observations.measurements` | function | `({ticks,observations:definitions})` | [source](../../src/kit/puc-simulation-observations.js) |
 | `KIT.world.observations.prepare` | function | `(input,{visual=false,limit=maxRuns}={})` | [guide](../headless-worlds.md#scheduled-observations-and-parameter-sweeps), [source](../../src/kit/puc-simulation-observations.js) |
 | `KIT.world.observations.run` | function | `(source,spec,options)` | [guide](../headless-worlds.md#scheduled-observations-and-parameter-sweeps), [source](../../src/kit/puc-simulation-observations.js) |
+| `KIT.world.observations.sampleId` | function | `(caseId, seed, parameters)` | [source](../../src/kit/puc-simulation-observations.js) |
 | `KIT.world.observations.schedule` | function | `(raw)` | [source](../../src/kit/puc-simulation-observations.js) |
 
 ## KIT.world.occupancy
