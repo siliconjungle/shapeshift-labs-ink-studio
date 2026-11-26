@@ -78,5 +78,5 @@
       uvSet,uvBounds:{min,max},ids:result.ids,selection:result});
   }
 
-  A.tilesetAtlasSelection = Object.freeze({select});
+  A.tilesetAtlasSelection = Object.freeze({select,touches});
 })(KIT);

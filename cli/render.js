@@ -1226,7 +1226,7 @@ function renderFrame(world, o, preparedPalettes) {
   const trackMeshes = isolate && o.trackPixelSources ? new Map() : null;
   const trackFields = trackMeshes && new Map();
   const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { V, W, H, focal, ortho, near,simulationLayers,
-      pbr,
+      pbr,paintIndex:fragmentTrace?.pixel,
       far:camera.clipFar, clip: geometryClip,multiprojection:localProjection,
       captureRestNormal:passSelection.has('sourceRestNormal'),trackMesh:trackMeshes && ((source,triangle,project)=>trackMeshes.set(PixelSourceTracking.meshKey(source,triangle),project)),
       paletteSampling: o.paletteSampling, semanticMipmaps:o.semanticMipmaps, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1,
