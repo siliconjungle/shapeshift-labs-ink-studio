@@ -443,6 +443,7 @@ All checked-in guides, indexed by title and section headings.
 - [Shared field outputs](../shared-field-outputs.md)
 - [Shared focus track](../shared-focus-track.md)
 - [Shared sky reflections](../shared-sky-reflections.md)
+- [Share procedural splat attributes across render and export](../shared-splat-attributes.md)
 - [Shared time domains](../shared-time-domains.md)
 - [Hand-drawn shoreline foam](../shore-foam.md)
 - [Shot approval](../shot-approval.md)
