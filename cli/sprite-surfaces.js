@@ -23,7 +23,7 @@ function triangleAxes([a,b,c]) {
   return [right,cross(normal,right),normal];
 }
 
-function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,sourceBinding=false,captureRestNormal=false,trackMesh,allow,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection,pbr}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,sourceBinding=false,captureRestNormal=false,trackMesh,allow,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection,pbr,paintIndex}) {
   if(!atlas)return [];
   const depth=depthOnly && new Float32Array(W*H).fill(Infinity);
   const fragments=depthOnly ? null : new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
@@ -201,7 +201,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
           const tx = Math.max(bounds[0], Math.min(bounds[2], Math.floor(S)));
           const ty = Math.max(bounds[1], Math.min(bounds[3], Math.floor(T)));
           const texel = (ty * width + tx) * 4;
-          let ink, material;
+          let ink, material, filteredPaint;
           if (filter || mip) {
             const [[dxU, dxV, dxZ], [dyU, dyV, dyZ]] = gradients;
             const dx=[transform[0]*(dxU-s*dxZ)/uvSum,transform[1]*(dxV-t*dxZ)/uvSum],
@@ -215,6 +215,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             } else {
               ink=filter.sample(S,T,...dx,...dy);
               if(ink===null)continue;
+              filteredPaint=ink!==undefined;
             }
           }
           if (ink === undefined && !material) {
@@ -277,6 +278,16 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
               }
             }
           }
+          let paint;
+          const faceId = p===paintIndex && layer.featureFaces?.[first/3];
+          if (faceId && chart) {
+            const region = chart.region;
+            const mode = filteredPaint ? 'palette' : material?.lod>=.5 ? 'mip' : 'texel';
+            const uv = [(S-region.x-.5)/Math.max(1,region.width-1),(T-region.y-.5)/Math.max(1,region.height-1)];
+            const at = material ? [region.width,region.height].map((n,k)=>Math.max(0,Math.min(n-1,
+              Math.floor(.5+uv[k]*(n-1))))) : [tx-region.x,ty-region.y];
+            paint = {face:faceId,mode,uv,...(mode==='texel' && {at})};
+          }
           fragments[p]={p,z,alpha:1,color:material?.color ?? [ink >>> 16, (ink >>> 8) & 255, ink & 255].map(n=>n/255),position,
             ...(pbrMaterial && {pbrMaterial,pbrReceives,pbrTangent:axes?.right}),
             ...(material && {semantic:material,semanticRule:mip.chain.rule,scan:mip.chain.scan,objectTexels:mip.objectTexels,liveLight:mip.liveLight,
@@ -285,6 +296,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             ...(local && {localProjection:true}),
             ...(lightingTarget&&{lightingTarget}),
             ...(fogObject!==undefined&&{fogObject}),
+            ...(paint && {paint}),
             ...(source && {source:{ ...source,coordinate:weights3,
               restNormal:restNormal && (dot(face,normal) < 0 ?
                 restNormal.map(n=>-n) : restNormal) }}),

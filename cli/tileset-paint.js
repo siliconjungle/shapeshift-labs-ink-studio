@@ -205,18 +205,26 @@ function write(editor, binding, document, {apply=false} = {}, kit = require('..'
   const loaded = Pixels.compile(document,binding.frame);
   for (const item of Object.values(overlays)) if (item.layer &&
     document.layers.some(row=>row.id===item.layer && row.kind!=='reference')) return blocked('overlay-is-paint');
-  const {asset,changedTexels,samples,paletteFull} = revisedAsset(board.asset,rect,pixelValues(Pixels.stamp(loaded)));
-  if (paletteFull) return blocked('indexed-palette-full');
-  const detail = {...report,encoding:asset.encoding,changedTexels,samples,
-    sampleUnits:asset.encoding==='indexed8' ? 'palette-slot' : 'rgba32',
-    paletteAdded:(asset.palette?.length ?? 0)-(board.asset.palette?.length ?? 0)};
-  if (!changedTexels) return {...detail,canCommit:true,conflicts:[]};
-  const request = {type:'replace',id:tileset,asset}, edit = editor.planTilesetRevision(request);
-  if (apply && edit.canCommit) editor.editTilesetRevision(request);
-  return {...detail,canCommit:edit.canCommit,conflicts:edit.blockers,revision:edit};
+  const planned = planPixels(editor,tileset,board.asset,rect,pixelValues(Pixels.stamp(loaded)));
+  if (!planned.detail) return blocked('indexed-palette-full');
+  if (apply && planned.edit?.canCommit) editor.editTilesetRevision(planned.request);
+  return {...report,...planned.detail};
 }
 
-function command([action,file,editFile,...rest], opt, kit, openEditor, sceneOutput) {
+function planPixels(editor, tileset, before, rect, pixels) {
+  const {asset,changedTexels,samples,paletteFull} = revisedAsset(before,rect,pixels);
+  if (paletteFull) return {};
+  const detail = {encoding:asset.encoding,changedTexels,samples,
+    sampleUnits:asset.encoding==='indexed8' ? 'palette-slot' : 'rgba32',
+    paletteAdded:(asset.palette?.length ?? 0)-(before.palette?.length ?? 0)};
+  if (!changedTexels) return {detail:{...detail,canCommit:true,conflicts:[]}};
+  const request = {type:'replace',id:tileset,asset}, edit = editor.planTilesetRevision(request);
+  return {request,edit,detail:{...detail,canCommit:edit.canCommit,conflicts:edit.blockers,revision:edit}};
+}
+
+function command([action,...args], opt, kit, openEditor, sceneOutput) {
+  if (action==='face') return require('./tileset-face-paint.js').command(args,opt,kit,openEditor,sceneOutput);
+  const [file,editFile,...rest] = args;
   const {scene,out,selection} = opt, opening = action==='open';
   if (!['open','write'].includes(action) || rest.length || ![scene,file].every(name) ||
       (opening ? editFile!==undefined || !name(out) : !name(editFile)) ||
@@ -250,4 +258,4 @@ function command([action,file,editFile,...rest], opt, kit, openEditor, sceneOutp
   process.stdout.write(JSON.stringify(result,null,2)+'\n');
 }
 
-module.exports = {open,write,command};
+module.exports = {open,write,command,planPixels};

@@ -20,11 +20,13 @@ function capture(world,at,w,h) {
       const { contributions,transmission } = Contributions.reduce(entries,1e-6);
       const hits = contributions.slice(0,32).map(({ row,depth,alpha,surface,glass,edge,weight })=>{
         const target = row >= 0 ? targets.row(row) : null;
-        const kind = edge ? 'ink' : glass ? 'glass' : surface?.sdf ? 'sdf' : surface?.mesh ? 'mesh' :
+        const kind = edge ? 'ink' : glass ? 'glass' : surface?.sdf ? 'sdf' : surface?.mesh || surface?.paint ? 'mesh' :
           surface?.emitter ? 'emitter' : surface ? 'sprite' : 'splat';
         const identity = row >= 0 ? (identities ??= Provenance.identities(world)).idAt(row) : undefined;
         return { kind,depth,alpha,visibleCoverage:weight,object:surface?.mesh?.object ?? surface?.objectId ?? target?.object ?? null,
-          part:surface?.mesh?.part ?? surface?.partId ?? target?.part ?? null,material:surface?.materialId ?? target?.material ?? null,
+          part:surface?.mesh?.part ?? surface?.partId ?? target?.part ?? null,
+          material:surface?.mesh?.material ?? surface?.materialId ?? target?.material ?? null,
+          ...(kind==='mesh' && surface?.paint && {paint:surface.paint}),
           ...(row >= 0 && { splatId:row+1 }),...(identity && { identity }) };
       });
       return { x,y,stage:'native-raster',hits,transmission,

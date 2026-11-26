@@ -1335,6 +1335,48 @@ values. A new indexed color or opacity uses a matching slot or adds an
 entry if the source palette has room. The write receipt includes atlas
 coordinates and affected bake dependencies.
 
+### Paint through a placed face
+
+Send a native-grid pixel and an RGBA color to paint the registered tileset
+texel used by the visible face. Coordinates start at the top left of the
+render. Use the camera, time, and grid from the view where you picked
+the pixel. Supply `object` and `face` to require that specific hit.
+
+```json
+{
+  "at": [62, 46],
+  "object": "relay-west",
+  "face": "plate",
+  "rgba": [255, 166, 88, 255],
+  "view": { "w": 180, "h": 96, "t": 0 }
+}
+```
+
+```sh
+ink-studio tileset paint face stroke.json --scene relay.json --preview preview > review.json
+ink-studio tileset paint face stroke.json --scene relay.json --expect review.json --out relay-painted.json
+```
+
+The first command leaves the scene untouched. The receipt shows the
+sampled atlas texel, the old and new pixel values, and the placements
+that can use that texel. It includes scoped prefab instances and
+off-camera faces. A `filter-or-uv-motion` entry marks a possible use
+through filtered sampling or UV motion. The preview PNGs compare the
+same native view before and after and highlight rendered differences.
+Use `view.raw: false` to review the authored look.
+
+The hit comes from the renderer after UV orientation, interpolation,
+cutout, and occlusion. If the visible sample comes from several source
+texels through filtering, zoom in to get a single-texel hit. If an
+intervening surface owns the hit, change the view or edit the atlas
+directly. The optional `--expect` check rejects a changed scene or
+stroke. Commit uses the regular tileset revision transaction and keeps
+compatible indexed colors, UVs, and other texels intact.
+
+Run `node examples/tileset-pick/face-paint-demo.cjs relay-face-paint-demo`
+to paint one shared texel through a placed relay. The second relay
+rotates the same crop. The spare relay samples a different region.
+
 In Node, use `ink.openTilesetPaint(editor, request)` and
 `ink.writeTilesetPaint(editor, binding, document, { apply: true })`.
 Omit `apply` to preview the write. One scene undo restores the atlas
