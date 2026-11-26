@@ -109,3 +109,87 @@ test('preview an indexed write with matched PNGs and commit from its receipt thr
   assert.equal(JSON.parse(rejected.stdout).conflicts[0].code,'stale-preview');
   assert(!fs.existsSync(file('stale.json')));
 });
+
+test('paint a local indexed variant on one face while retaining same-mesh neighbors and undo',()=>{
+  const base = fixture(true), setup = ink.createSceneEditor(base);
+  setup.placeTilesetFace({object:'east',face:'nearby',
+    selection:ink.pickTilesetRectangle(base,'enamel',{x:3,y:3,width:15,height:15}),
+    origin:[1.15,0,.2],texelsPerUnit:10});
+  const scene = structuredClone(setup.snapshot()), editor = ink.createSceneEditor(scene);
+  const local = {...stroke,sharing:'make-local-variant',variant:'weathered-enamel'};
+  const {report,images} = ink.paintTilesetFace(editor,local);
+  assert(report.canCommit,JSON.stringify(report.conflicts));
+  assert.deepEqual(report.uses.map(row=>[row.object,row.face]),[['east','plate']]);
+  assert.deepEqual(report.sharedPaintUses.map(row=>[row.object,row.face]).sort(),[['east','nearby'],['west','plate']]);
+  assert(report.sharedPaintUses.every(row=>row.changedPixels===0));
+  assert.deepEqual(report.destination.at,[9,6]);
+  assert.equal(report.changedTexels,1);
+  assert.notDeepEqual(images.before.rgb,images.after.rgb);
+  assert.deepEqual(editor.snapshot(),scene);
+
+  const {report:shared} = ink.paintTilesetFace(editor,{...stroke,sharing:'edit-every-instance'});
+  assert.deepEqual(shared.uses.map(row=>[row.object,row.face]).sort(),[['east','nearby'],['east','plate'],['west','plate']]);
+  assert(shared.changedPixels>report.changedPixels);
+  const blocked = ink.paintTilesetFace(editor,local,{apply:true,expect:shared.previewRevision});
+  assert.equal(blocked.report.conflicts[0].code,'stale-preview');
+  assert.deepEqual(ink.paintTilesetFace(editor,local,{apply:true,expect:report.previewRevision}).report,report);
+  const after = editor.snapshot(), original = scene.topologyMeshes.east, edited = after.topologyMeshes.east;
+  assert.deepEqual(after.tilesets.enamel,scene.tilesets.enamel);
+  assert.deepEqual(after.tilesets['weathered-enamel'].palette,[0x476959,0xef8f53]);
+  assert.deepEqual(edited.document.vertices,original.document.vertices);
+  assert.deepEqual(edited.document.faces[0].corners,original.document.faces[0].corners);
+  assert.deepEqual(edited.document.faces[1],original.document.faces[1]);
+  assert.deepEqual(edited.bindings[0].data,{...original.bindings[0].data,
+    selection:{...original.bindings[0].data.selection,tileset:'weathered-enamel'}});
+  assert.deepEqual(edited.bindings[1],original.bindings[1]);
+  assert.equal(ink.paintTilesetFace(editor,local).report.conflicts[0].reason,'variant-id-in-use');
+  assert(editor.undo());
+  assert.deepEqual(editor.snapshot(),scene);
+  assert(editor.redo());
+  assert.deepEqual(editor.snapshot(),after);
+});
+
+test('isolate prefab instance paint and carry active finishes without revising the prefab',()=>{
+  const scene = fixture(), mesh = scene.topologyMeshes.east;
+  delete scene.topologyMeshes.east;
+  mesh.bakes = [{id:'finish',material:mesh.materials[0].id,maps:{roughness:.35,texture:{tileset:'enamel'}}}];
+  scene.prefabs = {relay:{revision:3,solids:{},topologyMeshes:{panel:mesh},usesTilesets:['enamel']}};
+  scene.instances = {picked:{prefab:'relay'},twin:{prefab:'relay',transform:{translation:[30,0,0]}}};
+  const editor = ink.createSceneEditor(scene);
+  const request = {...stroke,object:'picked.panel',sharing:'make-local-variant',variant:'relay-local'};
+  const {report} = ink.paintTilesetFace(editor,request,{apply:true});
+  assert(report.canCommit,JSON.stringify(report.variantEdit));
+  assert.deepEqual(report.variantEdit.prefab,{instance:'picked',member:'panel',id:'relay',revision:3});
+  assert.equal(report.variantEdit.copiedFinish,'finish');
+  assert(report.sharedPaintUses.some(row=>row.object==='twin.panel' && row.visiblePixels===0));
+  const after = editor.snapshot(), override = after.instances.picked.meshOverrides.panel;
+  assert.equal(override.revision,3);
+  assert.deepEqual(override.mesh.bakes,mesh.bakes);
+  assert.equal(override.mesh.materials.at(-1).roughness,.35);
+  assert.deepEqual(after.prefabs,scene.prefabs);
+  assert.deepEqual(after.instances.twin,scene.instances.twin);
+  assert.deepEqual(after.tilesets.enamel,scene.tilesets.enamel);
+  assert.deepEqual(editor.tilesetDependencies('relay-local').sheets[0].faces.map(row=>row.object),['picked.panel']);
+  assert.equal(editor.planTilesetRevision({type:'remove',id:'relay-local'}).blockers[0].reason,'tileset-in-use');
+  assert(editor.undo());
+  assert.deepEqual(editor.snapshot(),scene);
+
+  const identical = ink.paintTilesetFace(editor,{...request,rgba:[71,105,89,255]},{apply:true}).report;
+  assert(identical.canCommit,JSON.stringify(identical.conflicts));
+  assert.equal(identical.changedTexels,0);
+  assert.equal(identical.changedPixels,0);
+  const dedup = editor.editTilesetRevision({type:'deduplicate',id:'relay-local',keepId:'enamel'});
+  assert(dedup.canCommit);
+  assert.equal(editor.snapshot().instances.picked.meshOverrides.panel.mesh.materials.at(-1).texture.tileset,'enamel');
+  assert.equal(editor.snapshot().tilesets['relay-local'],undefined);
+});
+
+test('reject an instance-local paint slot that a modifier would duplicate',()=>{
+  const scene = fixture();
+  scene.topologyMeshes.east.modifiers = [{kind:'array',id:'repeat',count:2,step:[30,0,0]}];
+  const editor = ink.createSceneEditor(scene);
+  const {report} = ink.paintTilesetFace(editor,{...stroke,sharing:'make-local-variant',variant:'unique-sign'},{apply:true});
+  assert.equal(report.conflicts[0]?.reason,'variant-affects-derived-faces',JSON.stringify(report.variantEdit));
+  assert(report.variantEdit.faces.length>=2);
+  assert.deepEqual(editor.snapshot(),scene);
+});

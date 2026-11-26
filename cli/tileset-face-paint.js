@@ -4,7 +4,7 @@ const fs = require('node:fs'), path = require('node:path');
 const files = require('./asset-files.js'), PNG = require('./png.js'), R = require('./render.js');
 const {viewSettings} = require('./mesh-native-view.js');
 const {digest,isRevision} = require('./pixel-edit-revisions.js');
-const {planPixels} = require('./tileset-paint.js');
+const {paintPixels,planPixels} = require('./tileset-paint.js');
 
 const format = 'ink-studio/tileset-face-paint';
 const read = file=>JSON.parse(fs.readFileSync(file,'utf8'));
@@ -16,7 +16,7 @@ const key = (object,face)=>JSON.stringify([object,face]);
 
 function settings(request) {
   const {at,rgba,object,face,view={}} = request ?? {};
-  if (!fields(request,['at','rgba','object','face','view']) || !fields(view,viewKeys) ||
+  if (!fields(request,['at','rgba','object','face','view','sharing','variant']) || !fields(view,viewKeys) ||
       object!==undefined && !name(object) || face!==undefined && !name(face) ||
       !Array.isArray(rgba) || rgba.length!==4 || !Array.from(rgba).every(n=>Number.isInteger(n) && n>=0 && n<=255) ||
       view.cameraShot!==undefined && !name(view.cameraShot) ||
@@ -89,14 +89,34 @@ function compare(before, after, uses) {
   return {changedPixels,diff:{w,h,rgb:diff}};
 }
 
+function planChange(editor, source, asset, pixels, variant) {
+  const rect = [...source.at,1,1];
+  if (variant===undefined) {
+    const planned = planPixels(editor,source.tileset,asset,rect,pixels);
+    return {...planned,...(planned.edit?.canCommit && {commit:target=>target.editTilesetRevision(planned.request)})};
+  }
+  const painted = paintPixels(asset,rect,pixels);
+  if (!painted) return {};
+  const request = {object:source.object,face:source.face,source:source.tileset,tileset:variant,asset:painted.asset};
+  const edit = editor.planTilesetFaceVariant(request);
+  const {canCommit,conflicts} = edit;
+  const detail = {...painted.detail,variantEdit:edit,canCommit,conflicts,
+    ...(canCommit && {destination:{...source,tileset:variant,material:edit.material}})};
+  return {detail,...(canCommit && {commit:target=>target.applyTilesetFaceVariant(request)})};
+}
+
 function paint(editor, request, {apply=false,expect} = {}, kit = require('..').load()) {
   if (typeof apply!=='boolean' || expect!==undefined && !isRevision(expect))
     throw new TypeError('Face paint options need an apply flag and optional preview revision');
-  const view = settings(request), {at,rgba,object,face} = request, scene = editor.snapshot();
+  const view = settings(request), {at,rgba,object,face,sharing='edit-every-instance',variant} = request, scene = editor.snapshot();
+  const K = kit.KIT, local = sharing==='make-local-variant';
+  if (!['edit-every-instance','make-local-variant'].includes(sharing) ||
+      (local ? !K.authoring.tilesets.validId(variant) : variant!==undefined))
+    throw new TypeError('Choose edit-every-instance or make-local-variant with a new tileset ID');
   const dependencies = editor.sourceDependencies?.();
   if (editor.sourceDependencies && dependencies===undefined) throw new RangeError('Cannot verify face paint scene dependencies');
-  const previewRevision = digest([scene,dependencies,at,rgba,object,face,view]);
-  const head = {format,version:1,scene:scene.id,at,view,previewRevision};
+  const previewRevision = digest([scene,dependencies,at,rgba,object,face,view,...(local ? [sharing,variant] : [])]);
+  const head = {format,version:1,scene:scene.id,at,view,sharing,...(local && {variant}),previewRevision};
   const blocked = (code,detail={})=>({report:{...head,...detail,canCommit:false,conflicts:[{code}]}});
   if (expect!==undefined && expect!==previewRevision) return blocked('stale-preview');
   const before = capture(editor,view,at,kit), {hits,truncated} = before.frame.pixelFragments, front = hits[0];
@@ -109,29 +129,32 @@ function paint(editor, request, {apply=false,expect} = {}, kit = require('..').l
   if (!sample || !tileset) return blocked('no-registered-tileset-hit',{front});
   if (sample.mode!=='texel') return blocked('filtered-hit',{front,tileset});
   const source = {tileset,at:sample.at,uv:sample.uv,object:front.object,part:front.part,face:sample.face,material:front.material};
-  const K = kit.KIT, asset = K.authoring.tilesets.prepare(scene.tilesets,scene.tilesetDefaults).source(tileset);
+  const asset = K.authoring.tilesets.prepare(scene.tilesets,scene.tilesetDefaults).source(tileset);
   const [x,y] = source.at;
   if (![x,y].every(Number.isSafeInteger) || x<0 || y<0 || x>=asset.width || y>=asset.height)
     return blocked('texel-outside-source',{front,tileset});
-  const value = rgba.reduce((packed,byte)=>packed*256+byte,0), rect = [...source.at,1,1];
-  const planned = planPixels(editor,tileset,asset,rect,[{value,slot:value===0 ? null : undefined}]);
+  const value = rgba.reduce((packed,byte)=>packed*256+byte,0);
+  const planned = planChange(editor,source,asset,[{value,slot:value===0 ? null : undefined}],variant);
   if (!planned.detail) return blocked('indexed-palette-full',{source});
   const detail = {...head,source,rgba,...planned.detail};
   if (!detail.canCommit) return {report:detail};
   let after = before;
-  if (planned.edit) {
+  if (planned.commit) {
     const candidate = editor.fork();
-    candidate.editTilesetRevision(planned.request);
+    planned.commit(candidate);
     after = capture(candidate,view,undefined,kit);
   }
   const uses = usesOf(before.world,tileset,source.at,K);
   // The observed hit is authoritative even if an authored projection moved its UV footprint.
-  uses.set(key(source.object,source.face),{object:source.object,...(source.part!==null && {part:source.part}),
+  const picked = key(source.object,source.face);
+  uses.set(picked,{object:source.object,...(source.part!==null && {part:source.part}),
     face:source.face,material:source.material,sampling:'picked-texel',visiblePixels:0,changedPixels:0});
   const {changedPixels,diff} = compare(before.frame,after.frame,uses);
   const refs = planned.edit?.before[0] ?? editor.tilesetDependencies(tileset).sheets[0];
-  if (apply && planned.edit) editor.editTilesetRevision(planned.request);
-  return {report:{...detail,uses:[...uses.values()],prefabDependencies:refs.prefabs,changedPixels},
+  if (apply) planned.commit?.(editor);
+  return {report:{...detail,uses:local ? [uses.get(picked)] : [...uses.values()],
+    ...(local && {sharedPaintUses:[...uses.entries()].filter(([id])=>id!==picked).map(([,row])=>row)}),
+    prefabDependencies:refs.prefabs,changedPixels},
     images:{before:before.frame,after:after.frame,diff}};
 }
 

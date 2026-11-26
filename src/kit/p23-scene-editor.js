@@ -228,6 +228,27 @@
       return report;
     }
 
+    function assemblyStretchProposal(request) {
+      const scene = snapshot(), plan = A.assemblyStretch.plan(scene, request, buildEnv);
+      const proposed = { ...scene, ...plan.patch };
+      validate(proposed);
+      return { ...plan, proposed };
+    }
+
+    function planAssemblyStretch(request) {
+      const { proposed, report } = assemblyStretchProposal(request);
+      return freeze({ scene: proposed, report });
+    }
+
+    function stretchAssembly(request) {
+      const { patch, report } = assemblyStretchProposal(request);
+      if (!report.canCommit) throw Object.assign(new RangeError('Assembly stretch needs review'), { report });
+      const write = () => document.setEnvironment(patch);
+      if (document.pending()) write();
+      else document.transact('Stretch assembly', write);
+      return report;
+    }
+
     const planSculptSplit = request => A.sculptSplit.plan(snapshot(), request, buildEnv).report;
     function splitSculpt(request) {
       const { patch, report } = A.sculptSplit.plan(snapshot(), request, buildEnv);
@@ -414,6 +435,62 @@
     function extractTileset(sourceId,targetId,rectangle) {
       const before = snapshot();
       return storeTileset(before,A.tilesets.extract(before,sourceId,targetId,rectangle),targetId,'Extract tileset '+targetId);
+    }
+
+    function stageTilesetFaceVariant(request) {
+      const {object,face,source,tileset,asset} = request ?? {};
+      if (!request || Object.getPrototypeOf(request)!==Object.prototype ||
+          Object.keys(request).some(key=>!['object','face','source','tileset','asset'].includes(key)) ||
+          ![object,face].every(TargetSelectors.name) || ![source,tileset].every(A.tilesets.validId))
+        throw new TypeError('Create a local tileset variant for an authored face');
+      const before = snapshot(), info = {object,face,source,tileset};
+      const blocked = (reason,detail={})=>({report:freeze({...info,canCommit:false,conflicts:[{reason}],...detail})});
+      if (Object.hasOwn(before.tilesets ?? {},tileset)) return blocked('variant-id-in-use');
+      const draft = A.tilesets.register(before,tileset,asset), target = {object,face,source,tileset};
+      let patch = {tilesets:draft.tilesets}, report;
+      if (Object.hasOwn(draft.topologyMeshes ?? {},object)) {
+        const plan = A.tilesetReskin.variant(draft,target);
+        if (!plan.report.canCommit) return {report:plan.report};
+        patch.topologyMeshes = {...draft.topologyMeshes,[object]:plan.row};
+        report = plan.report;
+      } else {
+        const {instances} = A.scenePrefabs.expand(draft,buildEnv);
+        for (const [instance,link] of instances) for (const [member,{object:id,row}] of link.meshes) {
+          if (id!==object) continue;
+          if (!row.document.faces.some(item=>item.id===face)) return blocked('face-not-authored');
+          const plan = prefabEditIsolation.plan(draft,buildEnv,{instance,revision:link.revision,faces:{[member]:[face]},
+            edits:[{member,variant:{face,source,tileset}}]},requireMeshShapeOwner,authoredTransformCamera);
+          if (!plan.report.canCommit) return blocked('prefab-variant-needs-review',{isolation:plan.report});
+          patch.instances = plan.draft.instances;
+          report = {...plan.report.edits[0].evidence,prefab:{instance,member,id:link.instance.prefab,revision:link.revision}};
+        }
+      }
+      if (!report) return blocked('face-not-authored');
+      const candidate = {...before,...patch};
+      const problems = DIO.check(candidate,buildEnv).filter(problem=>problem.level==='error');
+      if (problems.length) return blocked('variant-needs-review',{problems});
+      const expanded = A.scenePrefabs.expand(candidate,buildEnv), row = expanded.spec.topologyMeshes[object];
+      if (row.modifiers?.some(item=>item.enabled!==false)) {
+        const evaluated = A.meshTopologyScene.evaluator(expanded.spec.topologyMeshes,expanded.meshPlacements)(object).document;
+        const faces = evaluated.faces.filter(item=>item.material===report.material).map(item=>item.id);
+        if (faces.length!==1 || faces[0]!==face) return blocked('variant-affects-derived-faces',{faces});
+        if (row.attachments || row.shapeKeys) return blocked('variant-deformation-needs-review');
+      }
+      return {patch,report:freeze(report)};
+    }
+
+    function planTilesetFaceVariant(request) {
+      return stageTilesetFaceVariant(request).report;
+    }
+
+    function applyTilesetFaceVariant(request) {
+      const {patch,report} = stageTilesetFaceVariant(request);
+      if (!report.canCommit) throw Object.assign(new RangeError('Local tileset variant needs review'),{report});
+      const write = () => document.batchSession(() => {
+        document.setEnvironment(patch);
+        return report;
+      });
+      return document.pending() ? write() : document.transact('Paint local tileset variant '+report.tileset,write);
     }
 
     function tilesetGrid(id) {
@@ -1263,7 +1340,7 @@
       setModifiers,
       updateModifier,
       sculptContributions, inspectSculptContribution, editSculptContribution,
-      placeSculptStamp, planSculptSplit, splitSculpt,
+      placeSculptStamp, planSculptSplit, splitSculpt, planAssemblyStretch, stretchAssembly,
       setPrefabInstance,
       planPrefabIsolation, previewPrefabIsolation, editIsolatedPrefab,
       planPrefabRefresh, refreshPrefabs,
@@ -1273,7 +1350,8 @@
       setTilesetGrid,
       setTilesetTexelsPerUnit,
       constructionPlane, setConstructionPlane, planConstructionOrigin, snapConstructionOrigin,
-      planTilesetFace, placeTilesetFace, eyedropTilesetFace, planTilesetStroke, applyTilesetStroke,
+      planTilesetFace, placeTilesetFace, planTilesetFaceVariant, applyTilesetFaceVariant,
+      eyedropTilesetFace, planTilesetStroke, applyTilesetStroke,
       planTilesetRectangle, applyTilesetRectangle, planTilesetBrushRun, applyTilesetBrushRun,
       planTilesetReskin, applyTilesetReskin, planTilesetAssignment, applyTilesetAssignment,
       planTilesetGrow, growTilesetFace, planTilesetBlock, applyTilesetBlock,

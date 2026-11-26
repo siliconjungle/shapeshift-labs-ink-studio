@@ -9,7 +9,9 @@
     if (primary || solid.id !== undefined) next.id = name(primary ? key : solid.id);
     if (primary) {
       next.prefabs = [prefab, ...new Set((solid.prefabs ?? []).filter(value => value !== prefab))];
-      if (placement) next.transform = transform(compose(placement, authored(solid.transform, solid.at)));
+      if (placement && solid.restAffine !== undefined)
+        next.restAffine = K.sceneGraph.compose(placement.mesh, K.sceneGraph.transform(solid.restAffine));
+      else if (placement) next.transform = transform(compose(placement, authored(solid.transform, solid.at)));
     }
     if (solid.part !== undefined) next.part = name(solid.part);
     if (solid.group !== undefined) next.group = name(solid.group);

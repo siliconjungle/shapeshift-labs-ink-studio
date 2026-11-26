@@ -73,10 +73,10 @@ const prefabEditIsolation = (function (K) {
       return mesh && { document: mesh.document, frame: meshPlacements.get(object) };
     };
     for (const [index, edit] of edits.entries()) {
-      const kinds = ['patch', 'transform', 'reskin', 'pivot'];
+      const kinds = ['patch', 'transform', 'reskin', 'pivot', 'variant'];
       if (!fields(edit, ['member', ...kinds]) || !K.world.data.id(edit.member) ||
           kinds.filter(key => Object.hasOwn(edit, key)).length !== 1)
-        throw new TypeError('Each isolated edit needs a mesh member and one patch, transform, reskin, or pivot');
+        throw new TypeError('Each isolated edit needs a mesh member and one patch, transform, reskin, pivot, or variant');
       const { member } = edit, kind = kinds.find(key => Object.hasOwn(edit, key));
       const target = scope.get(member);
       if (!target) {
@@ -122,20 +122,21 @@ const prefabEditIsolation = (function (K) {
           ({ row: next, ...changes } = revise(row, transformed.patch));
         evidence = transformed.report;
       }
-      if (kind === 'reskin') {
-        const raw = edit.reskin;
+      if (kind === 'reskin' || kind === 'variant') {
+        const raw = edit[kind];
         if (!record(raw) || !TargetSelectors.name(raw.face) || Object.hasOwn(raw, 'object') || Object.hasOwn(raw, 'part'))
-          throw new TypeError('An isolated reskin uses the selected prefab member');
+          throw new TypeError('An isolated paint edit uses the selected prefab member');
         if (!target.active.has(raw.face)) {
           report.conflicts.push({ index, member, reason: 'outside-active-faces', faces: [raw.face], vertices: [] });
           break;
         }
-        const result = A.tilesetReskin.plan({ ...scene, topologyMeshes: { [target.object]: row } },
+        const reskin = kind==='variant' ? A.tilesetReskin.variant : A.tilesetReskin.plan;
+        const result = reskin({ ...scene, topologyMeshes: { [target.object]: row } },
           { ...raw, object: target.object });
         next = result.row;
         evidence = result.report;
         if (!evidence.canCommit) {
-          report.conflicts.push({ index, member, reason: 'reskin-needs-review', details: evidence.conflicts });
+          report.conflicts.push({ index, member, reason: kind+'-needs-review', details: evidence.conflicts });
           break;
         }
         changes = evidence.changes;

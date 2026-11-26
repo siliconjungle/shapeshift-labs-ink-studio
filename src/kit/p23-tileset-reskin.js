@@ -167,6 +167,45 @@
     return {row,report:freeze({...report,afterRevision,changes,...(material.add && {addedMaterial:material.definition})})};
   }
 
+  function variant(scene, request) {
+    const {object,face,source,tileset} = request ?? {};
+    if (!request || Object.getPrototypeOf(request)!==Object.prototype ||
+        Object.keys(request).some(key=>!['object','face','source','tileset'].includes(key)) ||
+        ![object,face].every(name) || ![source,tileset].every(A.tilesets.validId) || source===tileset)
+      throw new TypeError('A local variant needs a face and distinct source and destination tilesets');
+    const meshes = scene.topologyMeshes ?? {}, old = Object.hasOwn(meshes,object) && meshes[object];
+    const info = {format:'ink-studio/tileset-face-variant',version:1,object,face,source,tileset};
+    const blocked = reason=>({report:freeze({...info,canCommit:false,conflicts:[{reason}]})});
+    const target = old?.document.faces.find(item=>item.id===face);
+    if (!target) return blocked('face-not-authored');
+    const doc = topology.create(old.document), beforeRevision = topology.revision(doc);
+    const base = old.materials?.find(item=>item.id===target.material) ?? {id:target.material};
+    const bake = old.bakes?.find(item=>item.material===target.material && !item.invalidated);
+    const finish = bake ? {...base,...bake.maps,sampling:bake.maps.mipmaps ? undefined : base.sampling} : base;
+    if (finish.texture?.tileset!==source) return blocked('source-material-changed');
+    const atlas = A.tilesets.prepare(scene.tilesets,scene.tilesetDefaults);
+    const before = atlas.source(source), after = atlas.source(tileset);
+    if (before.width!==after.width || before.height!==after.height || before.encoding!==after.encoding ||
+        JSON.stringify(atlas.grid(source).tileSize)!==JSON.stringify(atlas.grid(tileset).tileSize))
+      return blocked('variant-layout-changed');
+    // Keep the visible finish and all UV sets. The original bake still belongs to the shared slot.
+    const {sampling,...settings} = finish;
+    const {definition,add} = materialFor(old,{...settings,...(sampling!==undefined && {sampling})},tileset,true);
+    const {row} = A.meshTopologyScene.revise(old,{faces:[{...target,material:definition.id}]});
+    if (old.bakes) row.bakes = old.bakes;
+    if (add) row.materials = [...(row.materials ?? []),definition];
+    const bindings = A.tilesetFaces.sourceBindings(row,source,(data,binding)=>binding.element===face ?
+      {...data,selection:{...data.selection,tileset}} : data);
+    if (bindings.changes.length) row.bindings = bindings.bindings;
+    const afterRevision = topology.revision(row.document);
+    if (!row.modifiers?.some(modifier=>modifier.enabled!==false)) {
+      if (row.attachments?.revision===beforeRevision) row.attachments = {...row.attachments,revision:afterRevision};
+      if (row.shapeKeys?.restRevision===beforeRevision) row.shapeKeys = {...row.shapeKeys,restRevision:afterRevision};
+    }
+    return {row,report:freeze({...info,beforeRevision,afterRevision,beforeMaterial:target.material,material:definition.id,
+      ...(bake && {copiedFinish:bake.id}),changes:A.meshTopologyScene.diff(old,row),canCommit:true,conflicts:[]})};
+  }
+
   function assignmentFaces(doc, {object,part,ids,selection}, uvSet) {
     if (selection?.format==='ink-studio/tileset-component-selection') {
       if (selection.version!==1 || selection.domain!=='tiles' || selection.object!==object || selection.part!==part)
@@ -364,5 +403,5 @@
     return {row,report:freeze({...report,afterRevision,addedMaterials:added,changes:A.meshTopologyScene.diff(old,row)})};
   }
 
-  A.tilesetReskin = Object.freeze({plan,planAssignment});
+  A.tilesetReskin = Object.freeze({plan,planAssignment,variant});
 })(KIT);

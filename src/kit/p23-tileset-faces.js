@@ -23,7 +23,7 @@
       const pick = before?.selection;
       if (!isSourceBinding(binding) ||
           pick?.tileset !== id || ![pick.x,pick.y,pick.width,pick.height].every(Number.isSafeInteger)) return binding;
-      const after = update(before);
+      const after = update(before,binding);
       if (!after || after === before) return binding;
       changes.push({face:binding.element,binding:binding.id,before,after});
       return {...binding,data:after};

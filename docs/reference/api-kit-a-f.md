@@ -687,6 +687,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring` | namespace |  |  |
 | `KIT.authoring.appearanceTransfer` | namespace |  |  |
 | `KIT.authoring.appearanceTransfer.create` | function | `({describe,compatible=(sample,target)=>sample.family===target.family,validate} = {})` | [guide](../procedural.md#optional-retained-authoring), [source](../../src/kit/p84-appearance-transfer.js) |
+| `KIT.authoring.assemblyStretch` | namespace |  |  |
+| `KIT.authoring.assemblyStretch.plan` | function | `(scene, input, env)` | [source](../../src/kit/p23a-assembly-stretch.js) |
 | `KIT.authoring.assetMeshes` | namespace |  |  |
 | `KIT.authoring.assetMeshes.colorSampler` | function | `(raw)` | [source](../../src/kit/p91-asset-meshes.js) |
 | `KIT.authoring.assetMeshes.fromGLB` | function | `(bytes,options)` | [guide](../procedural.md#asset-packs-and-portable-meshes), [source](../../src/kit/p91-asset-meshes.js) |
@@ -943,6 +945,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.tilesetReskin` | namespace |  |  |
 | `KIT.authoring.tilesetReskin.plan` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-reskin.js) |
 | `KIT.authoring.tilesetReskin.planAssignment` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-reskin.js) |
+| `KIT.authoring.tilesetReskin.variant` | function | `(scene, request)` | [source](../../src/kit/p23-tileset-reskin.js) |
 | `KIT.authoring.tilesetRevisions` | namespace |  |  |
 | `KIT.authoring.tilesetRevisions.dependencies` | function | `(scene, id, external)` | [source](../../src/kit/p23-tileset-revisions.js) |
 | `KIT.authoring.tilesetRevisions.plan` | function | `(scene, request, external)` | [source](../../src/kit/p23-tileset-revisions.js) |
@@ -1704,6 +1707,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.diorama.solidFrames.authored` | function | `(raw, fallback)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidFrames.compose` | function | `(outer, inner)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidFrames.inverse` | function | `(frame)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
+| `KIT.diorama.solidFrames.rest` | function | `(solid)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidFrames.transform` | function | `({ basis, scale, mesh })` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solidTransform` | function | `(value)` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |
 | `KIT.diorama.solids` | function | `(spec, { activeOnly = false } = {})` | [guide](../build-profiles.md#bake-and-render-in-the-browser), [source](../../src/kit/kc-data.js) |

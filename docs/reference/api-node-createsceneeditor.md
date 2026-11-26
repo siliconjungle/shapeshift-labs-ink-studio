@@ -13,6 +13,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().applyTilesetAssignment` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().applyTilesetBlock` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().applyTilesetBrushRun` | function | `(request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().applyTilesetFaceVariant` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().applyTilesetPrimitive` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().applyTilesetRectangle` | function | `(request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().applyTilesetReskin` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
@@ -61,6 +62,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().placeSculptStamp` | function | `(stamp, placement)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().placeTilesetFace` | function | `(request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planApplyMeshModifiers` | function | `(object, { through, part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().planAssemblyStretch` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planConstructionOrigin` | function | `(request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planMeshAttachmentTransfer` | function | `(object, patch, {part,projection, ...settings} = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planMeshBevel` | function | `(object, request, { part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
@@ -85,6 +87,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().planTilesetCanvas` | function | `(id,operation)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planTilesetFace` | function | `(request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planTilesetFaceFromVertices` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().planTilesetFaceVariant` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planTilesetGrow` | function | `(request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planTilesetGutters` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().planTilesetPrimitive` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
@@ -130,6 +133,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().snapshot` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().sourceDependencies` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().splitSculpt` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().stretchAssembly` | function | `(request)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().suggestBreakable` | function | `({ world, ...options } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().tilesetDependencies` | function | `(id)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().tilesetGrid` | function | `(id)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |

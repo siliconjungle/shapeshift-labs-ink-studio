@@ -221,7 +221,7 @@ function makeSculpt(B, rest) {
   };
   // Transform the geometry registered by one recipe, or its held boolean operand.
   S.transformSolids = (space, build, trackModifierSpace = false) => {
-    const { point,inverse,direction,scale } = space;
+    const { point, inverse, direction, scale, boundScale = scale } = space;
     const lists = [pos, neg, ghosts], starts = lists.map(list => list.length);
     const result = build();
     const solids = lists.flatMap((list, i) => list.slice(starts[i]));
@@ -230,29 +230,35 @@ function makeSculpt(B, rest) {
       const { sd, sample, lowerBound, along, analytic, geometryBounds, mat,sourceLocal } = solid;
       if (trackModifierSpace) solid.modifierSpace=space;
       solid.bc = point(solid.bc);
-      if (solid.br < 1e8) solid.br *= scale;
-      solid.reach *= scale;
-      if (solid.bump) solid.bump = [solid.bump[0] * scale, solid.bump[1]];
-      solid.sd = (x, y, z) => scale * sd(...inverse([x, y, z]));
+      const noisy = space.affine && solid.bump && { ...solid };
+      if (solid.br < 1e8) solid.br *= boundScale;
+      solid.reach *= boundScale;
+      if (noisy) solid.bump = null;
+      else if (solid.bump) solid.bump = [solid.bump[0] * scale, solid.bump[1]];
+      const original = noisy ? (...p) => psd(noisy, ...p) : sd;
+      solid.sd = (x, y, z) => scale * original(...inverse([x, y, z]));
       solid.sourceLocal = value => sourceLocal(inverse(value));
       solid.sample = function (visit) {
         const res = this.res;
-        this.res = res / scale;
+        this.res = res / boundScale;
         try {
           sample.call(this, (x, y, z) => visit(...point([x, y, z])));
         } finally {
           this.res = res;
         }
       };
-      if (lowerBound) solid.lowerBound = (x, y, z, limit) => scale * lowerBound(...inverse([x, y, z]), limit / scale);
+      if (noisy) delete solid.lowerBound;
+      else if (lowerBound) solid.lowerBound = (x, y, z, limit) => scale * lowerBound(...inverse([x, y, z]), limit / scale);
       if (along) solid.along = (x, y, z) => along(...inverse([x, y, z]));
       if (mat.rf) solid.mat = { ...mat, rf: (x, y, z) => mat.rf(...inverse([x, y, z])) };
       if (mat.surfaceState || mat.sdfPaint || mat.sdfNewSurface || mat.cutSurface) {
         const axes = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map(direction);
         solid.mat = S.mapSurfaceState(solid.mat, inverse,
-          normal => axes.map(axis => axis[0] * normal[0] + axis[1] * normal[1] + axis[2] * normal[2]), direction);
+          space.affine ? space.inverseDirection : normal => axes.map(axis => axis[0] * normal[0] + axis[1] * normal[1] + axis[2] * normal[2]),
+          space.pushNormal ?? direction);
       }
-      if (analytic) {
+      if (space.affine) delete solid.analytic;
+      else if (analytic) {
         const axes = analytic.frame ?? [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
         solid.analytic = { ...analytic, center: point(analytic.center), frame: axes.map(direction),
           ...(analytic.radii ? { radii: analytic.radii.map(r => r * scale) } :
