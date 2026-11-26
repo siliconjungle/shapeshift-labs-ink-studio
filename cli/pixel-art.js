@@ -2723,13 +2723,17 @@ function authoredCel(width,{ slots,alpha,knockouts },swatchIds) {
   return { slots:slots.map(slot=>slot === null ? null : swatchIds[slot]),marks };
 }
 
-function documentFromPNG(file) {
-  const image = PNG.paintRaster(file), { width,height,swatchIds } = image;
+function documentFromRaster(image) {
+  const { width,height,swatchIds } = image;
   const palette = PixelPalette.fromStamp(image);
   return { format,version:2,width,height,pixelAspect:[1,1],
     palette:paletteDefinition(palette.swatches),...(palette.ramps.length && { ramps:palette.ramps }),
     layers:[{ id:'image' }],frames:[{ id:'artwork',durationMs:100,
       cels:{ image:authoredCel(width,image,swatchIds) } }] };
+}
+
+function documentFromPNG(file) {
+  return documentFromRaster(PNG.paintRaster(file));
 }
 
 function documentFromAseprite(file,options) {
@@ -3819,5 +3823,5 @@ function sessionCommand(pos,opt,{ scene,capture,view,world }) {
     documentRevision:editor.describe().revision },null,2)+'\n');
 }
 
-module.exports = { createEditor, documentFromPNG, documentFromAseprite, documentFromAsepriteTiles, documentFromDeck, openEditorSession, compile, validate, stamp, image, review, edit, draw, trace, artRulesReport,
+module.exports = { createEditor, documentFromPNG, documentFromRaster, documentFromAseprite, documentFromAsepriteTiles, documentFromDeck, openEditorSession, compile, validate, stamp, image, review, edit, draw, trace, artRulesReport,
   command, sessionCommand, splatDiagnosticOptions, actions, sessionActions, paletteActions, stackActions };
