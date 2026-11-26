@@ -51,6 +51,7 @@ specific output, probe, array, or scalar.
 
 | Run kind | Source and replay |
 | --- | --- |
+| `solver-network` | A [headless solver network run](solver-networks.md) with matched branch inspections and checkpoint hashes. |
 | `model` | A versioned simulation model. Evaluate its outputs and probes at the absolute `tick`. Optional `commands` adds a JSON array of timed model input commands. Optional `checkpoint` resumes an inline world checkpoint or a checkpoint-store reference. |
 | `modes` | A resonant-mode plan. Bake its modes from the packaged source geometry or analytic definition. |
 | `native` | A built-in wave, mode, exciter, controller, lumped network, numerical solve, grid operator, state remap, or virtual sensor run. Sample counts and checkpoints belong to the solver document. |

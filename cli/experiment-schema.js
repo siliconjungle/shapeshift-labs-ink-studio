@@ -11,7 +11,7 @@ const revision=value=>Number.isSafeInteger(value)&&value>=1;
 const nonnegative=value=>Number.isFinite(value)&&value>=0;
 
 const entries=Object.freeze({model:'ink-studio/simulation-model',native:'native',
-  measure:'ink-studio/simulation-measurement-run',fit:'ink-studio/parameter-fit-run',modes:'ink-studio/resonant-mode-plan'});
+  'solver-network':'ink-studio/solver-network-run',measure:'ink-studio/simulation-measurement-run',fit:'ink-studio/parameter-fit-run',modes:'ink-studio/resonant-mode-plan'});
 const types=Object.freeze({
   'ink-studio/wave-run':document=>paths(document.network,document.settings?.conditions,document.checkpoint),
   'ink-studio/resonant-mode-run':document=>paths(document.asset,document.checkpoint),
@@ -66,6 +66,17 @@ function dependencies(document){
   if(key==='ink-studio/integration-plan')
     throw new TypeError('Portable experiment replay uses declarative native solvers and cannot load integration modules');
   if(Object.hasOwn(types,key))return types[key](document);
+  if(key===entries['solver-network'])return paths(document.network,...Object.values(document.branches??{}).flatMap(row=>
+    [typeof row?.commands==='string'?row.commands:undefined,row?.from?.checkpoint]));
+  if(key==='ink-studio/solver-stage')return document.kind==='simulation-model'?[{systems:{stage:document}}]:[];
+  if(key==='ink-studio/solver-network'){
+    const definitions=Object.values(document.library??{}), operators=[
+      ...definitions.filter(row=>row?.kind==='simulation-model'),
+      ...Object.values(document.stages??{}).filter(row=>row?.config?.model!==undefined).map(row=>({kind:'simulation-model',config:row.config}))
+    ];
+    return [...paths(...definitions.map(row=>row?.file)),
+      {...document.world,systems:Object.fromEntries(operators.map((operator,i)=>['stage'+i,operator]))}];
+  }
   if(key===entries.measure)return [...paths(document.plan),...inputSources(document.sources)];
   if(key===entries.fit)return [...paths(document.plan,...Object.values(document.candidate??{})),...inputSources(document.reference)];
   return [];
