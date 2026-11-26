@@ -385,7 +385,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art correct <document.json> <plan.json> [--out report.json] [--review review.html] [--apply artifact.json] [--patch edit.json] [--approval digest]   apply approved edits to cels, rest charts, or shot keys
   pixel-art reprobe <document.json> --binding id --before view.json [--after view.json] --selection id|--rect x,y,w,h [--out report.json] [--invalidate checked.json]   check edited source bindings
   pixel-art multiview <document.json> <plan.json> [--out report.json] [--patch edit.json] [--review review.html]   combine approved view marks on a bound surface
-  pixel-art paint-lighting <scene> [--subject object [--part name]] [--steps N] [--out directory]   review neutral paint, the shot and a moving light
+  pixel-art paint-lighting <scene> [--subject object [--part name]] [--steps N] [--ranges .75,1,1.5] [--out directory]   compare paint, finish and lighting
   pixel-art rules <design.json> [--frame id] [--layer id] [--art-shot id] [--out report.json]   inspect asset art rules and scene settings
   pixel-art lint <design.json> [--frame id] [--art-shot id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings
   pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint

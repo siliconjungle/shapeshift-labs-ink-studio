@@ -197,6 +197,28 @@ const PbrMaterials = (() => {
       color:ramp ? toLinear(ramp.tint(level)) : m.highlight
     };
   }
+  function projectionWeight(p, id, position) {
+    if (p.id && p.id !== id) return 0;
+    const offset = sub(position, p.origin);
+    const x = dot(p.u, offset), y = dot(p.v, offset), depth = Math.abs(dot(p.normal, offset));
+    const edge = Math.min(x, 1 - x, y, 1 - y);
+    return edge < 0 || depth > p.reach ? 0 : p.weight * (p.feather ? clamp(edge / p.feather) : 1);
+  }
+
+  function finish(plan, id, position, roughness, metalness) {
+    const m = plan?.materials[id - 1];
+    if (!m) return [roughness, metalness];
+    let rough = m.roughness < 0 ? roughness ?? .45 : m.roughness;
+    let metal = m.metalness < 0 ? metalness ?? 0 : m.metalness;
+    for (const p of plan.projections) {
+      const weight = projectionWeight(p, id, position);
+      if (!weight) continue;
+      if (p.roughness >= 0) rough = mix(rough, p.roughness, weight);
+      if (p.metalness >= 0) metal = mix(metal, p.metalness, weight);
+    }
+    return [rough, metal];
+  }
+
   function shade(plan, id, sample) {
     const m = plan.materials[id - 1];
     if (!m) return sample.color;
@@ -206,12 +228,8 @@ const PbrMaterials = (() => {
     let coat = m.coat < 0 ? sample.coating ?? 0 : m.coat;
     let emission = m.emission.map((channel, i) => channel + (sample.emission?.[i] ?? 0));
     for (const p of plan.projections) {
-      if (p.id && p.id !== id) continue;
-      const offset = sub(sample.position, p.origin);
-      const x = dot(p.u, offset), y = dot(p.v, offset), depth = Math.abs(dot(p.normal, offset));
-      const edge = Math.min(x, 1 - x, y, 1 - y);
-      if (edge < 0 || depth > p.reach) continue;
-      const weight = p.weight * (p.feather ? clamp(edge / p.feather) : 1);
+      const weight = projectionWeight(p, id, sample.position);
+      if (!weight) continue;
       if (p.base) base = base.map((value, i) => mix(value, p.base[i], weight));
       if (p.roughness >= 0) rough = mix(rough, p.roughness, weight);
       if (p.metalness >= 0) metal = mix(metal, p.metalness, weight);
@@ -238,6 +256,8 @@ const PbrMaterials = (() => {
     const visibilityAt=(index,point,normal)=>sample.receiveShadow!==false && plan.shadows ?
       plan.shadows.visibility(index,point,normal) : 1;
     const band = m.readBand?.(sample.restPosition ?? sample.position) ?? 0;
+    const directSpecular = sample.directSpecular;
+    if (directSpecular) directSpecular.fill(0);
     let highlight = 0, incidence = 0;
     for (const [index,light] of plan.lights.entries()) {
       const l = light.direction, nl = dot(n, l);
@@ -253,6 +273,7 @@ const PbrMaterials = (() => {
         const irradiance = light.color[i] * nl * visibility, fresnel = mix(f0[i], 1, s);
         const diffuse = base[i] * (1 - metal) * (1 - fresnel) / Math.PI;
         rgb[i] += irradiance * (diffuse*(1-coatFresnel)+specular[i]);
+        if (directSpecular) directSpecular[i] += irradiance * specular[i];
         highlight = Math.max(highlight,irradiance*specular[i]);
       }
     }
@@ -286,6 +307,7 @@ const PbrMaterials = (() => {
         cover+=swatch.weight*area;
         for(let i=0;i<3;i++){
           rgb[i]+=Math.min(cap,specular[i])*area;
+          if (directSpecular) directSpecular[i]+=Math.min(cap,specular[i])*area;
           accent[i]+=swatch.color[i]*swatch.weight*area;
         }
       }
@@ -709,6 +731,6 @@ vec3 pbrShade(int id,vec3 pigment,vec3 normal,vec3 shadowNormal,vec3 tangent,vec
   return pbrDisplay(display*(1.0-accent.a)+accent.rgb);
 }
 `;
-  return Object.freeze({ prepare, shade, footprint, uniforms, rampTable, glsl, restTransform, restPoint, restTable, splatNormal, splatBindings, encodeNormal, shadows });
+  return Object.freeze({ prepare, shade, finish, footprint, uniforms, rampTable, glsl, restTransform, restPoint, restTable, splatNormal, splatBindings, encodeNormal, shadows });
 })();
 if (typeof module !== 'undefined') module.exports = PbrMaterials;

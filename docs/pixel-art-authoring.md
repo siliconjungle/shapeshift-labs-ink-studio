@@ -2974,6 +2974,45 @@ The Node API is `ink.reviewPaintLighting(world, { view, subject, steps })`.
 Supply the world posed at the requested time. The CLI prepares that pose
 and requests albedo when it builds the scene.
 
+#### Compare paint and finish across camera ranges
+
+```sh
+ink-studio pixel-art paint-lighting scene.json --subject dial \
+  --w 316 --h 216 --steps 9 --ranges .74,1,1.56 --out dial-review
+```
+
+Open `review.html` and choose a channel and camera range for each panel.
+Both panels share one world-space directional key. Scrub its angle or play
+the sweep. The range multipliers dolly from the authored camera at the
+same pose time. A value of 1 uses the authored view.
+
+| View | What to compare |
+| --- | --- |
+| Neutral pigment | Retained base color on the visible surface. |
+| Directional light | Pigment, shading normals, and the sampled finish under the review key. |
+| Relief | A grayscale rake over the same shading normals, including painted or height-derived detail. |
+| Roughness | Effective roughness at each visible sample from registered maps, painted surface state, or the resolved finish. Darker pixels are smoother. |
+| Highlights | Direct specular response to the same review key and sampled roughness. |
+| Authored shot | The full scene with its authored incident lighting, effects, and grade. |
+
+Ink renders one native owner grid per range and uses it for every diagnostic
+view at that distance. It samples paint using the same surface coordinates
+as the shot. The light sweep changes shading without moving those samples.
+The review key is an inspection light with a fixed white fill. The authored
+shot is the reference for cast shadows and the final grade. Roughness and
+highlights are transparent where the visible surface has no known finish.
+
+The folder includes native PNGs, a contact sheet, and `review.json` with
+the camera poses, world-space key directions, and per-range UV, rest-space,
+and roughness coverage counts. Pass the same factors as `ranges` in the Node
+API. The returned `views` include the sampled coordinates and the image
+planes. Omit `ranges` for the single-camera diffuse sweep.
+
+Try the [Cinder Dial example](../examples/paint-lighting-review.cjs) with
+`node examples/paint-lighting-review.cjs /tmp/cinder-dial`. Its curved enamel
+face uses a material graph with registered pigment, painted height, and
+roughness. The graph differentiates the painted height into a normal map.
+
 ## Paint lighting and ink controls
 
 Bind each control to a `surface-channel` destination on the asset's rest
