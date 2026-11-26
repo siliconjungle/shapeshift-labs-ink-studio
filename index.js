@@ -338,6 +338,12 @@ module.exports = {
     return module.exports.load().KIT.authoring.tilesetAtlasSelection.select(scene,request);
   },
   sizeTilesetBrush: require('./cli/tileset-image.js').sizeTilesetBrush,
+  openTilesetPaint(editor, request) {
+    return require('./cli/tileset-paint.js').open(editor, request);
+  },
+  writeTilesetPaint(editor, binding, document, options) {
+    return require('./cli/tileset-paint.js').write(editor, binding, document, options);
+  },
   tilesetBrushUV: require('./cli/tileset-image.js').tilesetBrushUV,
   tilesetBrushCellUV: require('./cli/tileset-image.js').tilesetBrushCellUV,
   rasterizeTilesetBrush: require('./cli/tileset-image.js').rasterizeTilesetBrush,

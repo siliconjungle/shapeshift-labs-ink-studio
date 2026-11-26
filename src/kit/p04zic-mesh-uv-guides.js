@@ -29,19 +29,22 @@ const meshUVGuides = (() => {
     return {outline:stroke,fill:pigment,palette:Object.fromEntries(entries)};
   }
 
-  function trace(g, selected, width, height, mode) {
+  function trace(g, selected, atlas, [left,top,width,height], mode) {
     const mask = new Uint8Array(width*height), segments = new Set();
     let work = 0;
-    const emit = (x,y)=>{mask[y*width+x] = 1;};
+    const emit = (x,y)=>{
+      if (x>=0 && y>=0 && x<width && y<height) mask[y*width+x] = 1;
+    };
     for (const {kind,sides} of g.edges.values()) {
       if (mode==='charts' && kind==='continuous' && sides.every(side=>selected.has(side.face))) continue;
       for (const {face,uv} of sides) {
         if (!selected.has(face)) continue;
-        const pixels = uv.map(pair=>MaterialUV.texel(pair,width,height).map(Math.round));
-        if (pixels[0][1]*width+pixels[0][0]>pixels[1][1]*width+pixels[1][0]) pixels.reverse();
+        const pixels = uv.map(pair=>MaterialUV.texel(pair,...atlas).map(Math.round));
+        if (pixels[0][1]*atlas[0]+pixels[0][0]>pixels[1][1]*atlas[0]+pixels[1][0]) pixels.reverse();
+        const [a,b] = pixels.map(([x,y])=>[x-left,y-top]);
+        if ([0,1].some((i)=>Math.max(a[i],b[i])<0 || Math.min(a[i],b[i])>=[width,height][i])) continue;
         const key = pixels.join('/');
         if (segments.has(key)) continue;
-        const [a,b] = pixels;
         work += 1+Math.max(Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]));
         if (work>4000000) throw new RangeError('UV guide outlines exceed their drawing budget. Choose fewer charts.');
         segments.add(key);
@@ -66,7 +69,7 @@ const meshUVGuides = (() => {
   }
 
   function create(g, request, faceIds, atlasFor) {
-    if (!fields(request,['revision','atlas','material','uvSet','ids','domain','selection','outline','fill','palette']) ||
+    if (!fields(request,['revision','atlas','crop','material','uvSet','ids','domain','selection','outline','fill','palette']) ||
         request.material!==undefined && !name(request.material))
       throw new TypeError('Use UV guide settings with an optional atlas, material, and face or island selection');
     const faces = faceIds.filter(id=>request.material===undefined || request.material===g.faces.get(id).material);
@@ -80,29 +83,32 @@ const meshUVGuides = (() => {
       if (!size || inferred.some(value=>!value || !value.every((n,i)=>n===size[i])))
         throw new RangeError('Specify atlas dimensions or choose faces with matching registered atlas sizes');
     }
-    if (!tuple(size,2,n=>integer(n,1,512)))
-      throw new RangeError('Editable UV guides need an atlas from 1 to 512 pixels on each axis');
-    const [width,height] = size, {outline,fill,palette} = style(request);
+    if (!tuple(size,2,n=>integer(n,1,4096))) throw new RangeError('UV guides need valid atlas dimensions');
+    const crop = request.crop ?? [0,0,...size];
+    if (!tuple(crop,4,n=>integer(n,0,4096)) ||
+        !crop.slice(2).every((n,i)=>integer(n,1,512) && crop[i]+n<=size[i]))
+      throw new RangeError('Editable UV guides need an in-bounds crop from 1 to 512 pixels on each axis');
+    const [left,top,width,height] = crop, {outline,fill,palette} = style(request);
     const layers = [];
     let scanlines = 0, segments = 0;
     if (fill) {
       const triangles = g.triangles().filter(row=>selected.has(row.face)).map(({corners})=>
-        corners.map(id=>MaterialUV.texel(g.corners.get(id).uv,width,height)));
+        corners.map(id=>MaterialUV.texel(g.corners.get(id).uv,...size).map((n,i)=>n-crop[i])));
       const raster = MeshUV.texelMask(triangles,width,height);
       scanlines = raster.scanlines;
-      const paint = fill.mode==='checker' ? (x,y)=>fill.swatches[(Math.floor(x/fill.size)+Math.floor(y/fill.size))%2] :
+      const paint = fill.mode==='checker' ? (x,y)=>fill.swatches[(Math.floor((x+left)/fill.size)+Math.floor((y+top)/fill.size))%2] :
         ()=>fill.swatch;
       layers.push(layer('uv-fill','UV chart fill',raster.mask,width,paint));
     }
     if (outline) {
-      const raster = trace(g,selected,width,height,outline.mode);
+      const raster = trace(g,selected,size,crop,outline.mode);
       segments = raster.segments;
       layers.push(layer('uv-outline','UV outlines',raster.mask,width,()=>outline.swatch));
     }
     const document = {format:'ink-studio/pixel-art',version:2,width,height,pixelAspect:[1,1],palette,
       layers:layers.map(row=>row.definition),frames:[{id:'guide',durationMs:100,
         cels:Object.fromEntries(layers.map(row=>[row.definition.id,row.cel]))}]};
-    return {document,report:{atlas:[width,height],coordinates:{origin:'top-left',units:'texel-centers'},
+    return {document,report:{atlas:[...size],...(request.crop!==undefined && {crop:[...crop]}),coordinates:{origin:'top-left',units:'texel-centers'},
       faces,islands,materials,outline,fill,segments,scanlines,layers:layers.map(row=>row.evidence)}};
   }
 
