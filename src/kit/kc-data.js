@@ -1592,9 +1592,11 @@
         bad('cameraRig', error.message);
       }
     }
-    if (spec.timeline !== undefined) {
+    if (spec.timeline !== undefined || presentation.captureChannels) {
       try {
-        presentation.timeline = dioramaTimeline(spec, parts, presentation.cameraRig, look);
+        const channel = dioramaChannels(spec, parts, presentation.cameraRig, look);
+        if (presentation.captureChannels) presentation.captureChannels = channel;
+        if (spec.timeline !== undefined) presentation.timeline = K.timeline.compile(spec.timeline, { channel });
       } catch (error) {
         bad('timeline', error.message);
       }
@@ -1690,10 +1692,10 @@
     dust: ['at', 'n', 'every', 'spread'], embers: ['at', 'n', 'every'],
     smoke: ['at', 'n', 'every'], sparks: ['at', 'n', 'every', 'dir', 'speed']
   };
-  function dioramaTimeline(spec, parts, cameraRig, look) {
+  function dioramaChannels(spec, parts, cameraRig, look) {
     const poses = { translation: { size: 3 }, rotation: { size: 3, mode: 'radians' },
       orientation: { size: 9, mode: 'orientation' }, scale: { mode: 'positive' } };
-    return K.timeline.compile(spec.timeline, { channel([root, name, field, ...rest]) {
+    return ([root, name, field, ...rest]) => {
       if (root === 'camera' && field === undefined) return K.cameraRig.channel(name, cameraRig?.shots);
       if (root === 'renderGraph' || root === 'inspection')
         return K.presentationTimeline.channel(look, [root, name, field, ...rest]);
@@ -1705,7 +1707,7 @@
       if (field === 'box') return { size: 6 };
       if (['r', 'every', 'spread', 'speed'].includes(field)) return { mode: 'positive' };
       return { mode: 'number', validate: value => value >= 0 && (field !== 'flicker' || value <= 1) };
-    } });
+    };
   }
   function timelineFrame(timeline, time, effects) {
     const camera = {}, poses = Object.create(null), changes = new Map();
@@ -2930,6 +2932,13 @@
       blurb: spec.blurb || '',
       seed: seed0,
       build,
+      recording() {
+        const resolved = resolveParameters(spec, env), presentation = { captureChannels: true };
+        const problems = checkResolved(resolved.spec, env, presentation, resolved.dataInputs, resolved.meshPlacements)
+          .filter(row => row.level === 'error');
+        if (problems.length) throw new RangeError(DIO.report(problems));
+        return K.sceneRecording.bind(spec, presentation.captureChannels);
+      },
       model: (seed, { snapshot, controls, parameterInputs, ...options } = {}) =>
         DIO.build(resolve(seed, snapshot), {
           ...env, parameterInputs: { ...env?.parameterInputs, ...parameterInputs, ...(controls !== undefined && { controls }) }
