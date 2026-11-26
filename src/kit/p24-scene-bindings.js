@@ -426,25 +426,14 @@
     );
     const imported = rig ? fromRig(rig, { parts: partSpecs }) : { graph: G.create(), geometry: [] },
       graph = imported.graph;
-    function placement(raw) {
-      const t = K.diorama.solidTransform(raw ?? {}),
-        axes = [
-          [0, 1, 0],
-          [1, 0, 0],
-          [0, 0, 1]
-        ],
-        matrix = t.rotation.reduce((r, a, i) => M.mul(r, M.rot(axes[i], a)), M.id()).map(v => v * t.scale);
-      return {
-        matrix,
-        position: V.sub(V.add(t.pivot ?? [0, 0, 0], t.translation), M.app(matrix, t.pivot ?? [0, 0, 0]))
-      };
-    }
     const prefabRoots = [];
     for (const [key, link] of expanded.instances) {
       const id = 'prefab.' + key;
-      graph.add(id, { kind: 'prefab', label: key, transform: placement(link.instance.transform) });
+      graph.add(id, { kind: 'prefab', label: key, transform: link.frame });
       prefabRoots.push({ key, id });
     }
+    for (const [key,{instance}] of expanded.instances)
+      if (instance.parent !== undefined) graph.reparent('prefab.'+key,'prefab.'+instance.parent);
     prefabRoots.sort((a, b) => b.key.length - a.key.length);
     for (const id of imported.graph.ids())
       if (graph.node(id).kind === 'geometry' && !graph.node(id).parent) {

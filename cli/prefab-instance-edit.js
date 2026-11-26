@@ -8,6 +8,7 @@ const read = file => JSON.parse(fs.readFileSync(file,'utf8'));
 const name = value => typeof value === 'string' && value.trim();
 
 const commands = {
+  'reparent-prefab': ['planPrefabReparent','previewPrefabReparent','reparentPrefab'],
   'combine-prefab': ['planPrefabCombination','previewPrefabCombination','combinePrefabs'],
   'array-prefab': ['planPrefabArray','previewPrefabArray','applyPrefabArray'],
   'variant-prefab': ['planPrefabVariant','previewPrefabVariant','applyPrefabVariant'],

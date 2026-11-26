@@ -3,8 +3,12 @@
   const A = K.authoring;
 
   function select(scene, {kind,ids} = {}) {
+    let placements;
     const sources = [
-      ['prefab',scene.instances ?? {},A.scenePrefabs.origin],
+      ['prefab',scene.instances ?? {},(_,id) => {
+        placements ??= A.scenePrefabs.placements(scene.instances);
+        return placements.get(id)?.mesh.position ?? [0,0,0];
+      }],
       ['asset-part',scene.assetParts ?? {},transform=>K.sceneGraph.transform(transform).position]
     ];
     if (kind !== undefined && !sources.some(([type])=>type === kind))
@@ -13,7 +17,7 @@
       throw new TypeError('Instance IDs need an array of names');
     const enabled = sources.filter(([type])=>kind === undefined || kind === type);
     function target([instanceKind,rows,origin], instance) {
-      return {instance,instanceKind,target:origin(rows[instance].transform)};
+      return {instance,instanceKind,target:origin(rows[instance].transform,instance)};
     }
     if (ids === undefined) return enabled.flatMap(source=>Object.keys(source[1]).sort().map(id=>target(source,id)));
     return [...new Set(ids)].sort().map(instance=>{
