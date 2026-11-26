@@ -1,0 +1,47 @@
+{
+  "format": "ink-studio/gaussian-training-capture",
+  "version": 1,
+  "bounds": {
+    "min": [
+      -1.035,
+      -0.055,
+      -0.64
+    ],
+    "max": [
+      1.035,
+      2.62,
+      0.73
+    ]
+  },
+  "settings": {
+    "resolution": 42,
+    "maxPoints": 4600,
+    "iterations": 44,
+    "maxSamples": 450000000
+  },
+  "views": [
+    {"id":"orbit-00","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":0,"pitch":0.11,"dist":4.95,"ortho":true}},
+    {"id":"orbit-01","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":0.5235987755982988,"pitch":0.29,"dist":4.95,"ortho":false}},
+    {"id":"orbit-02","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":1.0471975511965976,"pitch":0.11,"dist":4.95,"ortho":true}},
+    {"id":"orbit-03","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":1.5707963267948966,"pitch":0.29,"dist":4.95,"ortho":true}},
+    {"id":"orbit-04","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":2.0943951023931953,"pitch":0.11,"dist":4.95,"ortho":false}},
+    {"id":"orbit-05","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":2.6179938779914944,"pitch":0.29,"dist":4.95,"ortho":true}},
+    {"id":"orbit-06","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":3.141592653589793,"pitch":0.11,"dist":4.95,"ortho":true}},
+    {"id":"orbit-07","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":3.665191429188092,"pitch":0.29,"dist":4.95,"ortho":false}},
+    {"id":"orbit-08","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":4.1887902047863905,"pitch":0.11,"dist":4.95,"ortho":true}},
+    {"id":"orbit-09","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":4.71238898038469,"pitch":0.29,"dist":4.95,"ortho":true}},
+    {"id":"orbit-10","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":5.235987755982989,"pitch":0.11,"dist":4.95,"ortho":false}},
+    {"id":"orbit-11","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":5.759586531581287,"pitch":0.29,"dist":4.95,"ortho":true}},
+    {"id":"elevated-0","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":0.29,"pitch":0.68,"dist":4.95,"ortho":true}},
+    {"id":"elevated-1","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":1.8607963267948966,"pitch":0.68,"dist":4.95,"ortho":false}},
+    {"id":"elevated-2","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":3.431592653589793,"pitch":0.68,"dist":4.95,"ortho":true}},
+    {"id":"elevated-3","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":5.00238898038469,"pitch":0.68,"dist":4.95,"ortho":false}},
+    {"id":"underside-0","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":0.69,"pitch":-0.38,"dist":4.95,"ortho":true}},
+    {"id":"underside-1","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":2.2607963267948965,"pitch":-0.38,"dist":4.95,"ortho":false}},
+    {"id":"underside-2","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":3.831592653589793,"pitch":-0.38,"dist":4.95,"ortho":true}},
+    {"id":"underside-3","split":"train","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":5.402388980384689,"pitch":-0.38,"dist":4.95,"ortho":false}},
+    {"id":"three-quarter","split":"holdout","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":0.58,"pitch":0.22,"dist":4.95,"ortho":true}},
+    {"id":"reverse","split":"holdout","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":2.77,"pitch":0.21,"dist":4.95,"ortho":false}},
+    {"id":"high-side","split":"holdout","width":100,"height":98,"camera":{"target":[0,1.28,0],"yaw":-1.13,"pitch":0.43,"dist":4.95,"ortho":true}}
+  ]
+}
