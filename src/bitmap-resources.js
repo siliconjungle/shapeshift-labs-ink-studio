@@ -177,16 +177,20 @@ const BitmapResources = (() => {
   function image(raw, spec, settings, edits, declare) {
     const { width, height, channels, descriptor } = spec, count = width * height;
     const Data = precisions[descriptor.precision], src = raw?.data, stride = raw?.channels ?? 0;
-    const copy = !edits?.length && src instanceof Data && channels === 4 && stride === 4;
+    const copy = !edits?.length && src instanceof Data && channels === 4 && stride === 4 && raw.alpha !== 'none';
     const data = copy ? src : new Data(count * channels);
     const sourceMax = src instanceof Uint16Array ? 65535 : src instanceof Uint8Array ? 255 : 1;
     const targetMax = Data === Uint16Array ? 65535 : Data === Uint8Array ? 255 : 1;
     if (src && !copy) {
       const lane = ['r', 'g', 'b', 'a'].indexOf(settings?.channel ?? 'r');
       function read(p, c) {
-        if (c === 3) return stride === 2 && raw.alpha !== 'none' ? src[p * stride + 1] :
-          stride === 4 && raw.alpha !== 'none' ? src[p * stride + 3] : sourceMax;
-        return src[p * stride + (stride < 3 ? 0 : c)];
+        if (c === 3) {
+          if (stride === 2 && raw.alpha !== 'none') return src[p * stride + 1];
+          if (stride === 4 && (channels === 1 || raw.alpha !== 'none')) return src[p * stride + 3];
+          return sourceMax;
+        }
+        const lane = stride >= 3 || channels === 1 && stride === 2 && raw.alpha === 'none' && c === 1 ? c : 0;
+        return src[p * stride + lane];
       }
       const ratio = targetMax / sourceMax;
       for (let p = 0; p < count; p++) {

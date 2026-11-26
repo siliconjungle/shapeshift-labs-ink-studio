@@ -137,6 +137,15 @@ test('material graph reimports TIFF and selected EXR planes and carries an ICC p
     {encoding:'exr',bitDepth:32}));
   assert.deepEqual(ordered.names,['X','Y','Z','W']);
   assert.deepEqual(ordered.data,packed.data);
+  const independent={encoding:'tiff',base64:replay.artifacts[2].bytes.toString('base64')};
+  const reopened=Ink.createGraphProject({...spec,
+    assets:{color:{format:'bitmap',source:independent},
+      mask:{format:'bitmap',source:independent,interpretation:{intent:'data',channel:'a'}}},
+    nodes:{color:spec.nodes.color,mask:spec.nodes.mask},outputs:{color:ref('color'),mask:ref('mask')},
+    exports:{},outputUsages:{}
+  },{baseDir:directory}).run().outputs;
+  assert.equal(reopened.color.raster.data[3],1);
+  assert.deepEqual(reopened.mask.raster.data,new Float32Array(width*height).fill(.125));
   const info=JSON.parse(execFileSync(process.execPath,[path.resolve(__dirname,'../cli/ink-studio.js'),'graph','texture-info',
     path.join(directory,'aux.exr'),'--channels',exrMask],{encoding:'utf8'}));
   assert.deepEqual(info.names,[exrMask]);
