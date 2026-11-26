@@ -109,3 +109,7 @@ See [bake output controls](bake-output-controls.md) for independent width and he
 ## Batch and update UDIM tiles
 
 See [UDIM and batch baking](udim-batch-bake.md) for named tile sets, delivery aliases, incremental cache reuse, parallel workers, and memory reservations.
+
+## Build masks from the delivered maps
+
+Use [smart material masks](smart-material-masks.md) to turn curvature, cavity, world normals, position, and visibility bakes into editable weathering masks.

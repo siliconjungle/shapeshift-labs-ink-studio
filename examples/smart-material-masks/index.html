@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Lock Nine · Ink Studio</title>
+  <style>
+    :root{color-scheme:dark;--page:#121919;--panel:#1b2424;--rule:#364544;--muted:#aab9b4;--ink:#eae9dc;--accent:#a9d2bd;--orange:#dfa77b}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--page);color:var(--ink);font:14px/1.45 system-ui,sans-serif}
+    main{max-width:1240px;margin:auto;padding:34px clamp(18px,4vw,50px)}
+    header{display:flex;justify-content:space-between;align-items:end;gap:17px;padding-bottom:24px}
+    h1,h2,p{margin:0}
+    h1{font:500 clamp(48px,7vw,76px)/1 Georgia,serif;letter-spacing:-.052em}
+    header p{color:var(--muted);margin-top:9px}
+    nav{display:flex;gap:17px;flex-wrap:wrap}
+    a{color:var(--orange);text-underline-offset:3px}
+    .layout{display:grid;grid-template-columns:minmax(0,1fr) 282px;gap:18px;align-items:stretch}
+    figure,.panel{margin:0;border:1px solid var(--rule);background:var(--panel);border-radius:5px;min-width:0}
+    figure{display:flex;flex-direction:column;overflow:hidden}
+    .tabs,.caption{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:11px 14px}
+    .tabs{border-bottom:1px solid var(--rule)}
+    .caption{border-top:1px solid var(--rule);color:var(--muted);justify-content:space-between;font-size:12px}
+    .stage{display:grid;place-items:center;flex:1;min-height:385px;padding:0 10px;
+      background:radial-gradient(ellipse at 44% 42%,#3a4b49,#293635 70%,#202b2b)}
+    canvas{display:block;width:min(100%,608px);height:auto;margin-block:-49px;image-rendering:pixelated;
+      filter:drop-shadow(0 10px 0 #141917) drop-shadow(0 21px 16px #111919bb)}
+    canvas[data-brush]:not([data-brush=""]){cursor:crosshair;touch-action:none}
+    .panel{padding:0 17px}
+    .group{padding:17px 0;border-bottom:1px solid var(--rule)}
+    .group:last-child{border:0}
+    h2{margin:0;font-size:15px;font-weight:630}
+    .group p{color:var(--muted);margin-top:7px;font-size:12px}
+    .group .maps{color:var(--accent);font:11px/1.5 ui-monospace,monospace;word-break:break-word}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-top:11px}
+    .row label{font-size:12px;white-space:nowrap}
+    .check{justify-content:flex-start}
+    .range{display:grid;grid-template-columns:50px 1fr 34px}
+    output{font:11px ui-monospace,monospace;color:var(--accent);text-align:right}
+    button,select{background:#22302f;border:1px solid #50635e;color:var(--ink);border-radius:3px;font:inherit;font-size:12px;padding:6px 9px}
+    button{cursor:pointer}
+    button:disabled{opacity:.44;cursor:default}
+    .tabs button{background:transparent;border-color:transparent}
+    .tabs button[aria-pressed="true"]{background:#30423e;border-color:#688477;color:var(--accent)}
+    button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+    input{accent-color:#8fc7b3}
+    input[type=range]{width:100%;margin:0}
+    input[type=checkbox]{margin:0;width:15px;height:15px}
+    @media(max-width:770px){.layout{grid-template-columns:1fr}.panel{display:grid;grid-template-columns:1fr 1fr;column-gap:19px}
+      .group:last-child{grid-column:1/-1}.stage{min-height:300px}}
+    @media(max-width:510px){header{display:block}nav{margin-top:15px}.panel{display:block}.stage{min-height:0}
+      canvas{margin-block:-25px}.tabs{gap:2px}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>Lock Nine</h1><p>Salt, runoff and wear on a cast-iron floodgate.</p></div>
+    <nav><a id="bake-review" href="#">Geometry bakes</a><a href="lock-nine.material.json" download>Material graph</a></nav>
+  </header>
+  <div class="layout">
+    <figure>
+      <div class="tabs" aria-label="Preview modes">
+        <button type="button" data-view="surface" aria-pressed="true">Surface</button>
+        <button type="button" data-view="" aria-pressed="false">Corrected</button>
+        <button type="button" data-view="Raw" aria-pressed="false">Generated</button>
+        <button type="button" data-view="Evidence" aria-pressed="false">Evidence</button>
+      </div>
+      <div class="stage"><canvas id="surface" aria-label="Cast-iron surface and material mask preview" data-brush=""></canvas></div>
+      <figcaption class="caption"><span id="status" role="status">Loading baked maps</span><span>152 × 152 texels</span></figcaption>
+    </figure>
+    <aside class="panel" aria-label="Mask settings and correction tools">
+      <section class="group">
+        <h2>Surface</h2>
+        <div class="row check"><input id="bare" type="checkbox"><label for="bare">Show bare cast iron</label></div>
+        <div class="row range"><label for="tide">Tide level</label><input id="tide" type="range" min="-.76" max=".70" value="-.35" step=".01"><output id="tide-value" for="tide">−0.35</output></div>
+      </section>
+      <section class="group">
+        <h2>Mask recipe</h2>
+        <div class="row"><label for="recipe">Inspect</label><select id="recipe"></select></div>
+        <div class="row range"><label for="amount">Amount</label><input id="amount" type="range" min="0" max="1" value="1" step=".01">
+          <output id="amount-value" for="amount">1.00</output></div>
+        <p id="ingredients"></p>
+        <p class="maps" id="input-maps"></p>
+      </section>
+      <section class="group">
+        <h2>Paint a correction</h2>
+        <div class="row"><label for="brush">Brush</label><select id="brush">
+          <option value="">Inspect only</option><option value="Paint">Add mask</option><option value="Protect">Protect surface</option>
+        </select></div>
+        <div class="row"><button id="clear-paint" type="button">Clear strokes</button>
+          <button id="save-paint" type="button" disabled>Save stroke map</button></div>
+      </section>
+    </aside>
+  </div>
+</main>
+<script src="ink-studio.browser.js"></script>
+<script src="data.js"></script>
+<script src="preview.js"></script>
+<script src="live.js"></script>
+</body>
+</html>

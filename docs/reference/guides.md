@@ -466,6 +466,7 @@ All checked-in guides, indexed by title and section headings.
 - [Deterministic simulation workers](../simulation-workers.md)
 - [Headless tissue and skinned crowds](../skinned-crowd.md)
 - [Compose with recorded slices](../slice-composition.md)
+- [Smart masks from baked geometry](../smart-material-masks.md)
 - [Headless solver networks](../solver-networks.md)
 - [Sound design inserts](../sound-design-effects.md)
 - [Sparse volume exchange](../sparse-volumes.md)

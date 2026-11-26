@@ -476,6 +476,11 @@ const specifications = {
     inputs: { captures: link('captures'), settings: { width: 4, height: 4, pixelPitchMm: [.3, .3] } }
   },
   'material.pack': { inputs: materialSource.inputs },
+  'material.smartMask': { nodes: {
+    coverage: { op: 'image.uniform', inputs: { value: 1, width: 8, height: 4, descriptor: { intent: 'mask' } } },
+    convex: { op: 'image.uniform', inputs: { value: .6, width: 8, height: 4, descriptor: { intent: 'data' } } },
+    bakes: { op: 'data.record', inputs: { coverage: link('coverage'), convex: link('convex') } }
+  }, inputs: { recipe: 'edgeWear', bakes: link('bakes'), options: { threshold: .3, breakup: .65, seed: 14 } } },
   'material.layer': { nodes: {
     baseRoughness: { op: 'image.uniform', inputs: { value: .67, width: 8, height: 6, descriptor: { intent: 'data' } } },
     coverage: { op: 'image.uniform', inputs: { value: .75, width: 4, height: 4, descriptor: { intent: 'mask' } } },
