@@ -212,6 +212,11 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   sculpt-guide apply <scene.json> <operation.json> --out scene.json   retain a guided stroke or stamp
   sculpt-guide update <scene.json> <edit.json> --out scene.json   revise an existing guided operation
   sculpt-guide inspect <scene.json>   report generated copies and placements
+  painting-3d plan <scene.json> <placement.json>   validate attachment slots and mark contacts
+  painting-3d apply <scene.json> <placement.json> --out scene.json   retain a 3D painting
+  painting-3d update <scene.json> <edit.json> --out scene.json   edit marks, order or placement
+  painting-3d inspect <scene.json>   report marks and resolved attachments
+  painting-3d extract <scene.json> --id painting --out painting.json   export a reusable painting
   sculpt-spray plan <scene.json> <brush.json>   capture receivers for a volumetric paint brush
   sculpt-spray apply <scene.json> <brush.json> --out scene.json   retain a shaped surface tint
   sculpt-spray inspect <scene.json>   show retained volumes and receiver coverage

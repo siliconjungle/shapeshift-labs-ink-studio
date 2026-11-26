@@ -1,0 +1,64 @@
+# Retain and edit a 3D painting
+
+Store a 3D painting as an ordered collection of shaped marks. Each mark retains its brush, pressure poses, material, transform, attachment, and place in the order. Use the same document in another scene by rebinding its attachment slots.
+
+```sh
+ink-studio painting-3d plan base.json placement.json
+ink-studio painting-3d apply base.json placement.json --out painted.json
+ink-studio painting-3d update painted.json edit.json --out revised.json
+ink-studio painting-3d inspect revised.json
+ink-studio painting-3d extract revised.json --id detail --out painting.json
+ink-studio render revised.json --ortho --out revised.png
+```
+
+A placement looks like this.
+
+```json
+{
+  "id": "detail",
+  "bindings": { "panel": "door-front" },
+  "painting": {
+    "format": "ink-studio/painting-3d",
+    "version": 1,
+    "id": "door-trim",
+    "marks": [{
+      "id": "pinstripe",
+      "brush": { "kind": "sphere", "radius": 0.045 },
+      "poses": [{ "point": [-0.4, 0.25, 0.5] }, { "point": [0.4, 0.25, 0.5] }],
+      "mat": "metal",
+      "attachment": {
+        "kind": "surface", "slot": "panel",
+        "snap": { "mode": "surface", "maxDistance": 0.5, "direction": [0, 0, 1], "offset": 0.01 }
+      }
+    }]
+  }
+}
+```
+
+| Attachment | Where authoring coordinates land |
+| --- | --- |
+| `free` (default) | Scene rest coordinates. |
+| `surface` | The named receiver's local rest coordinates. The sweep projects onto its field after sculpt modifiers and follows the receiver's transform and rig part. Use the [sweep snap settings](sculpt-snaps.md) to project all poses or anchor the root. |
+| `part` | Scene rest coordinates for the named sculpt rig part. Its posed transform carries the mark at playback, even when the mark sits away from the geometry. |
+
+Both the placement and each mark can supply `transform` with `position`, quaternion `rotation` and scalar or XYZ `scale`, or `position` and a 3×3 `matrix`. Ink applies the mark transform first, then the placement transform in the attachment's coordinate system. Surface snap directions use the receiver's rest axes. The plan and inspect reports include resolved IDs and projection contact counts. Invalid bindings or snap misses reject the request before it writes anything.
+
+Marks use native [sweep brushes and pressure poses](sculpt-sweeps.md). They render and export as ordinary 3D sweeps with addressable IDs such as `paint.detail.pinstripe`. Later marks take precedence on coincident paint surfaces in the same rest space. Geometry depth controls occlusion during rendering. Give a surface mark a little relief to keep its color visible above the receiving surface. `mat` uses the destination scene's palette roles or a native material definition. Define the same roles in a new scene when you want consistent colors. Extraction returns the portable painting and keeps bindings and placement transforms in the scene.
+
+An update can change a placement's `bindings` or `transform`, replace its `painting`, or apply an ordered `edits` array. `set` patches a mark, `move` places it `before` another mark or at the end, `add` appends a new mark, and `remove` deletes one. Set `enabled` to `false` to keep a mark available for later revisions. The scene retains the placement under `paintings3d`. Save beside the source file to preserve relative asset paths.
+
+```json
+{
+  "id": "detail",
+  "edits": [
+    { "op": "set", "id": "pinstripe", "patch": { "mat": "ember" } },
+    { "op": "move", "id": "pinstripe" }
+  ]
+}
+```
+
+For automation, the headless scene editor provides `planPainting3d`, `applyPainting3d`, `inspectPaintings3d`, and `extractPainting3d`. Pass `{ update: true }` to plan or apply an edit. Applying a placement or edit creates an undoable transaction.
+
+```sh
+node examples/painting-3d-demo.cjs /tmp/ink-painting-3d
+```
