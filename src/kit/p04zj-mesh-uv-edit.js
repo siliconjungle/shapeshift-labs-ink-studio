@@ -507,7 +507,7 @@
     return {ids,evidence:{pivotSource:pivot ? 'explicit' : dedicated ? 'dedicated' : 'island-center',pivots}};
   }
 
-  function overlappingCorners(g,ids) {
+  function cornerOverlaps(g) {
     const positionKey = corner=>JSON.stringify([g.faces.get(corner.face).material,...corner.uv]);
     const byPosition = new Map();
     for (const corner of g.corners.values()) {
@@ -515,36 +515,37 @@
       if (!byPosition.has(key)) byPosition.set(key,[]);
       byPosition.get(key).push(corner.id);
     }
-    const seen = new Set(ids), queue = ids.slice(), positions = new Set(), welds = new Set();
-    function include(rows) {
-      for (const id of rows) if (!seen.has(id)) {
-        seen.add(id);
-        queue.push(id);
+    return ids=>{
+      const seen = new Set(ids), queue = ids.slice(), positions = new Set(), welds = new Set();
+      function include(rows) {
+        for (const id of rows) if (!seen.has(id)) {
+          seen.add(id);
+          queue.push(id);
+        }
       }
-    }
-    for (const id of queue) {
-      const key = positionKey(g.corners.get(id)), weld = g.atWeld.get(id);
-      if (!positions.has(key)) {
-        positions.add(key);
-        include(byPosition.get(key));
+      for (const id of queue) {
+        const key = positionKey(g.corners.get(id)), weld = g.atWeld.get(id);
+        if (!positions.has(key)) {
+          positions.add(key);
+          include(byPosition.get(key));
+        }
+        if (!welds.has(weld)) {
+          welds.add(weld);
+          include(g.welds.get(weld));
+        }
       }
-      if (!welds.has(weld)) {
-        welds.add(weld);
-        include(g.welds.get(weld));
-      }
-    }
-    return order(queue);
+      return order(queue);
+    };
   }
 
-  function moveCornerScope(g,ids,scope,points,translation) {
-    const coincident = overlappingCorners(g,ids);
+  function moveCornerScope(g,ids,scope,points,propose,expand=cornerOverlaps(g)) {
+    const coincident = expand(ids);
     const active = new Set(scope === 'together' ? coincident : ids), moving = [], held = [];
     for (const id of coincident) {
       const {face,vertex,uv,uvPinned} = g.corners.get(id);
       const row = {id,face,vertex,material:g.faces.get(face).material,uv:uv.slice(),pinned:Boolean(uvPinned)};
       if (active.has(id)) {
-        const translate = translation(row.material);
-        const next = uv.map((n,i)=>n+translate[i]);
+        const next = propose(row);
         points.set(id,next);
         moving.push({...row,proposed:next.map(n=>Number.isFinite(n) ? n : null)});
       } else held.push(row);
@@ -558,8 +559,24 @@
         !['together','independent'].includes(scope) || !tuple(translate,2))
       throw new TypeError('Move UV corners with together or independent scope and an optional finite UV translation');
     const ids = targets(g,'corners',operation);
-    return {ids,evidence:{scope,translate:translate.slice(),...moveCornerScope(g,ids,scope,points,()=>translate)}};
+    const motion = moveCornerScope(g,ids,scope,points,({uv})=>uv.map((n,i)=>n+translate[i]));
+    return {ids,evidence:{scope,translate:translate.slice(),...motion}};
   }
+
+  function sourcePixelGrid(material,atlasFor,atlas,tile,explicitGrid,operation) {
+    const source = atlasFor?.(material), size = atlas ?? source?.size;
+    if (!tuple(size,2,n=>Number.isSafeInteger(n) && n>0))
+      throw new RangeError('UV '+operation+' needs source atlas dimensions for material '+material);
+    const grid = tile ? explicitGrid ?? source?.grid?.tileSize : undefined;
+    if (tile && !grid) throw new RangeError('Tile '+operation+' needs a declared tile grid for material '+material);
+    if (grid && !TilesetSelection.gridFits({width:size[0],height:size[1]},grid))
+      throw new RangeError('Tile '+operation+' grid must fit the source atlas for material '+material);
+    return {atlas:size.slice(),atlasSource:atlas ? 'explicit' : source.kind,
+      ...(!atlas && source.tileset && {tileset:source.tileset}),
+      ...(grid && {grid,gridSource:explicitGrid ? 'explicit' : source.grid.source})};
+  }
+
+  const tileStride = grid=>[grid.width+(grid.paddingX ?? 0),grid.height+(grid.paddingY ?? 0)];
 
   function nudge(g,operation,points,atlasFor) {
     const {steps,increment='pixel',atlas,tileSize,scope,domain=operation.selection?.domain ?? 'islands'} = operation;
@@ -574,31 +591,163 @@
     const ids = targets(g,domain,operation), resolved = new Map();
     function translation(material) {
       if (resolved.has(material)) return resolved.get(material).uv;
-      const source = atlasFor?.(material), size = atlas ?? source?.size;
-      if (!tuple(size,2,n=>Number.isSafeInteger(n) && n>0))
-        throw new RangeError('UV nudge needs source atlas dimensions for material '+material);
-      const grid = increment==='tile' ? explicitGrid ?? source?.grid?.tileSize : undefined;
-      if (increment==='tile' && !grid) throw new RangeError('Tile nudge needs a declared tile grid for material '+material);
-      if (grid && !TilesetSelection.gridFits({width:size[0],height:size[1]},grid))
-        throw new RangeError('Tile nudge grid must fit the source atlas for material '+material);
-      const pixels = grid ? [grid.width+(grid.paddingX ?? 0),grid.height+(grid.paddingY ?? 0)] : perAxis.slice();
+      const source = sourcePixelGrid(material,atlasFor,atlas,increment==='tile',explicitGrid,'nudge');
+      const pixels = source.grid ? tileStride(source.grid) : perAxis.slice();
       const texels = steps.map((n,i)=>n*pixels[i]);
-      const uv = texels.map((n,i)=>n===0 ? 0 : n/(size[i]-1));
+      const uv = texels.map((n,i)=>n===0 ? 0 : n/(source.atlas[i]-1));
       if (!uv.every(Number.isFinite)) throw new RangeError('UV nudge exceeds finite precision or moves along a one-texel axis for material '+material);
-      resolved.set(material,{material,atlas:size.slice(),atlasSource:atlas ? 'explicit' : source.kind,pixels,texels,uv,
-        ...(!atlas && source.tileset && {tileset:source.tileset}),
-        ...(grid && {grid,gridSource:explicitGrid ? 'explicit' : source.grid.source})});
+      const {atlas:size,atlasSource,tileset,grid,gridSource} = source;
+      resolved.set(material,{material,atlas:size,atlasSource,pixels,texels,uv,
+        ...(tileset && {tileset}),...(grid && {grid,gridSource})});
       return uv;
     }
     const selected = selection(g,domain,ids,undefined,operation.selection?.edgeSides);
     let corners;
-    if (domain!=='islands') corners = moveCornerScope(g,selected.corners,scope,points,translation);
+    if (domain!=='islands') corners = moveCornerScope(g,selected.corners,scope,points,({material,uv})=>{
+      const shift = translation(material);
+      return uv.map((n,i)=>n+shift[i]);
+    });
     else for (const id of selected.corners) {
       const {face,uv} = g.corners.get(id), shift = translation(g.faces.get(face).material);
       points.set(id,uv.map((n,i)=>n+shift[i]));
     }
     return {ids,evidence:{domain,steps:steps.slice(),increment:Array.isArray(increment) ? increment.slice() : increment,
       materials:[...resolved.values()],...(corners && {scope,...corners})}};
+  }
+
+  function snapGrid(target,atlasFor) {
+    const {axis,units='texel',step:spacing=1,origin:offset=0,atlas,tileSize} = target, tile = units==='tile';
+    if (!fields(target,['kind','axis','units','step','origin','atlas','tileSize']) ||
+        !['u','v'].includes(axis) || !['uv','texel','tile'].includes(units) ||
+        !Number.isFinite(spacing) || spacing<=0 || tile && (target.step!==undefined || target.origin!==undefined) ||
+        !tile && tileSize!==undefined || atlas!==undefined &&
+        (units==='uv' || !tuple(atlas,2,n=>Number.isSafeInteger(n) && n>0)))
+      throw new TypeError('UV grid snap needs a u or v axis and a positive texel or UV step, or a tile grid');
+    const explicitGrid = tileSize===undefined ? undefined : TilesetSelection.tileSize(tileSize);
+    const dimension = axis==='u' ? 0 : 1, materials = new Map(), guides = new Map();
+    function lineFor(material,at) {
+      if (!materials.has(material)) {
+        const source = units==='uv' ? {} : sourcePixelGrid(material,atlasFor,atlas,tile,explicitGrid,'snap');
+        const span = source.atlas ? source.atlas[dimension]-1 : 1;
+        const origin = tile ? (source.grid[dimension ? 'offsetY' : 'offsetX'] ?? 0) : offset;
+        const interval = tile ? tileStride(source.grid)[dimension] : spacing;
+        const limit = tile ? span+1-source.grid[dimension ? 'height' : 'width'] : span;
+        const epsilon = Number.EPSILON*span*4;
+        const first = tile ? 0 : Math.ceil((-origin-epsilon)/interval);
+        const last = Math.floor((limit-origin+epsilon)/interval);
+        if (!span) throw new RangeError('UV grid snap cannot resolve a line along a one-texel axis for '+material);
+        if (!Number.isFinite(origin) || origin<0 || origin>span || ![first,last].every(Number.isSafeInteger))
+          throw new RangeError('UV grid snap needs an in-bounds origin and representable grid lines for '+material);
+        materials.set(material,{material,...source,span,first,last,origin,step:interval});
+      }
+      const {span,first,last,origin,step} = materials.get(material);
+      const index = Math.min(last,Math.max(first,Math.round((at*span-origin)/step)));
+      const coordinate = Math.max(0,Math.min(1,(origin+index*step)/span));
+      const points = dimension ? [[0,coordinate],[1,coordinate]] : [[coordinate,0],[coordinate,1]];
+      guides.set(JSON.stringify([material,coordinate]),{material,points});
+      return coordinate;
+    }
+    return {dimension,lineFor,guides,evidence:()=>({kind:'grid',axis,units,
+      materials:[...materials.values()].map(({span,first,last,...row})=>row)})};
+  }
+
+  function snapReference(g,target) {
+    const {kind,corner,edge,face,selection:saved} = target;
+    if (!fields(target,['kind','corner','edge','face','selection']) || !['chart','seam'].includes(kind) ||
+        [corner,edge,saved].filter(n=>n!==undefined).length!==1 || face!==undefined && edge===undefined)
+      throw new TypeError('Choose a chart corner, chart edge side, or seam side by ID or saved selection');
+    const picked = saved===undefined ? undefined : select(g.doc,{domain:saved?.domain,from:saved,uvSet:g.set});
+    if (picked && (picked.ids.length!==1 || !['corners','edges'].includes(picked.domain)))
+      throw new RangeError('Snap needs one reference corner or edge side');
+    const anchor = g.corners.get(corner ?? (picked?.domain==='corners' ? picked.ids[0] : undefined));
+    if (corner!==undefined || picked?.domain==='corners') {
+      if (!anchor || kind!=='chart') throw new RangeError('Choose an existing chart corner');
+      return {kind,face:anchor.face,corners:[anchor.id],points:[anchor.uv.slice()]};
+    }
+    const edgeId = edge ?? picked?.ids[0], row = g.edges.get(edgeId);
+    if (!row || kind==='seam' && row.kind!=='seam') throw new RangeError('Choose an existing '+kind+' edge');
+    const sides = edgeSides(g,[edgeId],picked?.edgeSides ?? (face===undefined ? undefined : [{edge:edgeId,face}]));
+    if (sides.length!==1 && (kind==='seam' || row.kind!=='continuous'))
+      throw new RangeError('Choose the reference edge side by face or saved selection');
+    const side = sides[0], points = side.corners.map(id=>g.corners.get(id).uv.slice());
+    if (sameUV(...points)) throw new RangeError('Snap needs a nondegenerate reference edge');
+    return {kind,edge:edgeId,face:side.face,corners:side.corners,points};
+  }
+
+  function snapElements(g,operation,points,atlasFor,conflict) {
+    const {scope,target,domain=operation.selection?.domain ?? 'corners'} = operation;
+    if (!fields(operation,['op','ids','selection','scope','domain','target']) ||
+        !['corners','edges'].includes(domain) || !['together','independent'].includes(scope) || !target)
+      throw new TypeError('Snap UV corners or edges with together or independent scope and a grid, chart, or seam target');
+    const ids = targets(g,domain,operation);
+    const selected = selection(g,domain,ids,undefined,operation.selection?.edgeSides);
+    const sides = selected.edgeSides;
+    if (sides) {
+      const split = sides.filter(({edge})=>g.edges.get(edge).kind!=='continuous').map(({edge})=>edge);
+      if (new Set(split).size!==split.length) throw new RangeError('Choose the source edge side with a saved UV selection');
+    }
+
+    const grid = target.kind==='grid' ? snapGrid(target,atlasFor) : undefined;
+    const reference = grid ? undefined : snapReference(g,target);
+    if (reference && sides && (reference.points.length!==2 || ids.length!==1))
+      throw new RangeError('Snap one source edge to one chart or seam edge');
+    const materialOf = face=>g.faces.get(face).material;
+    const material = reference && materialOf(reference.face);
+    const size = reference && atlasFor?.(material)?.size;
+    const weights = size ? size.map(n=>Math.max(1,n-1)**2) : [1,1];
+    const distance2 = (a,b)=>a.reduce((sum,n,i)=>sum+(n-b[i])**2*weights[i],0);
+    const island = reference && g.atIsland.get(reference.face), fixed = new Set(reference?.corners);
+    const expand = cornerOverlaps(g), groups = new Map(), proposals = new Map();
+    function propose(id,uv) {
+      if (scope==='together' && !groups.has(id)) {
+        const group = expand([id]);
+        for (const corner of group) groups.set(corner,group);
+      }
+      for (const corner of groups.get(id) ?? [id]) {
+        const prior = proposals.get(corner);
+        if (prior && !prior.every((n,i)=>Math.abs(n-uv[i])<=1e-12))
+          conflict('snap-competing-targets',{corner,proposed:[prior,uv]});
+        else if (fixed.has(corner) && !uv.every((n,i)=>n===g.corners.get(corner).uv[i]))
+          conflict('snap-moves-reference',{corner,proposed:uv});
+        else if (!prior) proposals.set(corner,uv);
+      }
+    }
+    function eligible(face) {
+      if (grid) return true;
+      const code = materialOf(face)!==material ? 'snap-different-material' :
+        reference.kind==='chart' && g.atIsland.get(face)===island ? 'snap-same-chart' : undefined;
+      if (code) conflict(code,{face,reference:reference.face});
+      return !code;
+    }
+    function onGrid(uv,line) {
+      return uv.map((n,i)=>i===grid.dimension ? line : n);
+    }
+    function onReference(uv) {
+      const [a,b] = reference.points;
+      if (!b) return a;
+      const delta = b.map((n,i)=>n-a[i]), length = distance2(a,b);
+      const t = delta.reduce((sum,n,i)=>sum+n*(uv[i]-a[i])*weights[i],0)/length;
+      return t<=0 ? a : t>=1 ? b : a.map((n,i)=>n+t*delta[i]);
+    }
+    if (sides) for (const {edge,face,corners} of sides) {
+      if (!eligible(face)) continue;
+      const [a,b] = corners.map(id=>g.corners.get(id).uv);
+      if (grid) {
+        const line = grid.lineFor(materialOf(face),(a[grid.dimension]+b[grid.dimension])*.5);
+        corners.forEach((id,i)=>propose(id,onGrid(i ? b : a,line)));
+      } else {
+        const [c,d] = reference.points;
+        const reverse = edge!==reference.edge && distance2(a,d)+distance2(b,c)<distance2(a,c)+distance2(b,d);
+        propose(corners[0],reverse ? d : c);
+        propose(corners[1],reverse ? c : d);
+      }
+    } else for (const id of selected.corners) {
+      const {uv,face} = g.corners.get(id);
+      if (eligible(face)) propose(id,grid ? onGrid(uv,grid.lineFor(materialOf(face),uv[grid.dimension])) : onReference(uv));
+    }
+    const motion = moveCornerScope(g,selected.corners,scope,points,({id,uv})=>proposals.get(id) ?? uv,expand);
+    const guides = grid ? [...grid.guides.values()] : [{material,points:reference.points}];
+    return {ids,evidence:{domain,scope,target:grid ? grid.evidence() : reference,guides,...motion}};
   }
 
   function align(g, edges, keep, points, conflict) {
@@ -698,8 +847,8 @@
   function draft(g, operation, atlasFor) {
     if (operation?.op === 'set-pivot') return setPivot(g,operation);
     if (!operation || typeof operation !== 'object' ||
-        !['cut', 'stitch', 'pin', 'transform', 'move-corners', 'nudge', 'unwrap', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
-      throw new TypeError('Use a UV pivot, cut, stitch, pin, transform, nudge, corner move, face remap, local solve or texel budget operation');
+        !['cut', 'stitch', 'pin', 'transform', 'move-corners', 'nudge', 'snap', 'unwrap', 'relax', 'texel-budget', 'remap-face'].includes(operation.op))
+      throw new TypeError('Use a UV pivot, cut, stitch, pin, transform, nudge, snap, corner move, face remap, local solve or texel budget operation');
     const points = new Map(), edges = new Map(), pins = new Map(), conflicts = [];
     let count = 0;
     function conflict(code, evidence) {
@@ -708,8 +857,8 @@
     }
     let ids, evidence;
     const local = operation.op === 'unwrap' || operation.op === 'relax';
-    const precise = ['remap-face','move-corners','nudge'].includes(operation.op);
-    const preserveWinding = local || ['stitch','move-corners','nudge'].includes(operation.op);
+    const precise = ['remap-face','move-corners','nudge','snap'].includes(operation.op);
+    const preserveWinding = local || ['stitch','move-corners','nudge','snap'].includes(operation.op);
     if (local) {
       ids = targets(g, 'faces', operation);
       evidence = meshUVRegions.local(g, ids, operation, points, conflict);
@@ -720,6 +869,7 @@
     else if (operation.op === 'transform') ({ids,evidence} = transform(g, operation, points));
     else if (operation.op === 'move-corners') ({ids,evidence} = moveCorners(g,operation,points));
     else if (operation.op === 'nudge') ({ids,evidence} = nudge(g,operation,points,atlasFor));
+    else if (operation.op === 'snap') ({ids,evidence} = snapElements(g,operation,points,atlasFor,conflict));
     else if (operation.op === 'stitch') ids = stitch(g, operation, points, edges, conflict);
     else if (operation.op === 'cut') {
       if (!fields(operation, ['op', 'ids', 'selection'])) throw new TypeError('Unknown UV cut setting');
@@ -767,7 +917,7 @@
     const seams = [...edges].map(([id, uvSeam]) => g.set ?
       {id,uvSeams:{...original.get(id).uvSeams,[g.set]:uvSeam}} : {id,uvSeam});
     const document = topology.edit(g.doc, { faces, edges: seams });
-    if (operation.op==='move-corners' || operation.op==='nudge' && evidence.scope!==undefined) {
+    if (evidence?.edgeChanges) {
       const next = graph(document,g.set);
       evidence.edgeChanges = [...g.edges.values()].flatMap(({id,kind})=>{
         const after = next.edges.get(id).kind;
