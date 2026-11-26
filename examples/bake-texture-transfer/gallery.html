@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mothlight Screen · Ink Studio</title>
+<style>
+:root{color-scheme:dark;font:15px/1.45 system-ui,sans-serif;background:#141824;color:#fbebd2;--rule:#434860;--muted:#bcc1d0;--accent:#efbd82}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at 38% 0%,#2b324b,#141824 68%)}
+main{max-width:1180px;margin:auto;padding:clamp(20px,3.4vw,50px) clamp(14px,4vw,52px) 26px}
+header{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:10px 26px;border-bottom:1px solid var(--rule);padding-bottom:17px}
+h1{margin:0;font:400 clamp(47px,6.9vw,88px)/.97 Georgia,serif;letter-spacing:-.06em}
+p{margin:7px 0 0;color:var(--muted)}
+a{color:var(--accent);text-underline-offset:3px}
+header a{font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px;margin-top:16px}
+article{min-width:0;background:#21263a;border:1px solid var(--rule);padding:13px}
+label{display:grid;gap:4px;color:var(--muted);font-size:12px}
+select{font:15px system-ui;padding:8px;min-width:0;border:1px solid #525774;border-radius:3px;background:#2a3047;color:#fbebd2}
+a:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+figure{margin:12px 0;background:#121a2a}
+img{display:block;width:100%;aspect-ratio:1;image-rendering:pixelated}
+footer,.setup{display:flex;align-items:baseline;justify-content:space-between;gap:6px 14px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.setup{margin-top:17px;border-top:1px solid var(--rule);padding-top:11px}
+.setup label{display:flex;align-items:center;gap:8px}
+.setup select{font-size:13px;padding:4px 8px}
+body[data-backlight="linen"] figure{background:#e6d4ae}
+body[data-backlight="checker"] figure{background:repeating-conic-gradient(#232d41 0% 25%,#151d2e 0% 50%) 0/20px 20px}
+@media(max-width:650px){.grid{grid-template-columns:1fr}}
+</style>
+<script defer src="data.js"></script>
+</head>
+<body><main>
+<header><div><h1>Mothlight Screen</h1><p>Transferring painted acetate to a three-island UV atlas</p></div>
+<a id="review">Open bake review</a></header>
+<section id="views" aria-label="Texture comparison" class="grid"></section>
+<div class="setup"><label>Backlight<select id="backlight">
+  <option value="night">Night blue</option><option value="linen">Warm paper</option><option value="checker">Transparency grid</option>
+</select></label><span id="readings"></span></div>
+<template id="panel"><article>
+  <label>View<select></select></label>
+  <figure><img></figure>
+  <footer><span></span><a download>Download texture</a></footer>
+</article></template>
+<script>
+window.addEventListener('DOMContentLoaded',()=>{
+  const get=id=>document.getElementById(id);
+  const labels={
+    source:'Painted source · UV0', 'soft-pigment':'Transferred pigment · UV1', 'soft-opacity':'Soft opacity · UV1',
+    'cutout-pigment':'Thresholded pigment · UV1', 'cutout-opacity':'Thresholded opacity · UV1',
+    'soft-texture-transfer':'Signed edge distance · UV1', 'soft-coverage':'Geometric coverage · UV1'
+  };
+  get('review').href=demo.reviews.soft;
+  get('readings').textContent=demo.maps['soft-opacity'].stats.semi.toLocaleString()+
+    ' partial-alpha texels in the soft mask · '+demo.maps['cutout-opacity'].stats.semi+' after thresholding';
+  get('backlight').addEventListener('change',event=>{document.body.dataset.backlight=event.target.value;});
+  for(const [i,initial] of ['source','soft-pigment'].entries()) {
+    const panel=get('panel').content.firstElementChild.cloneNode(true), select=panel.querySelector('select'),
+      image=panel.querySelector('img'), caption=panel.querySelector('footer span'), link=panel.querySelector('a');
+    select.setAttribute('aria-label',i===0?'Left view':'Right view');
+    select.replaceChildren(...Object.entries(labels).map(([id,label])=>new Option(label,id)));
+    select.value=initial;
+    function render() {
+      const id=select.value,row=demo.maps[id];
+      image.src=row.image;image.alt=labels[id];link.href=row.file;
+      const {width,height,bitDepth}=row.stats;
+      caption.textContent=width+' × '+height+' · '+bitDepth+'-bit '+(row.file.endsWith('.exr')?'OpenEXR':'PNG')+
+        (row.transfer?.alphaCutoff===undefined?'':' · cutoff '+row.transfer.alphaCutoff);
+    }
+    select.addEventListener('change',render);
+    get('views').append(panel);
+    render();
+  }
+});
+</script>
+</main></body></html>

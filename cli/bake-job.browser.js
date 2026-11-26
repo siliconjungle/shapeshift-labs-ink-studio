@@ -8,10 +8,11 @@
     'bent-normal':'Bent normal','occlusion-direction':'Occlusion direction',
     curvature:'Signed curvature','curvature-convex':'Convex curvature','curvature-concave':'Concave curvature',
     'position-object':'Object position','position-world':'World position','position-normalized':'Normalized position',
-    'vertex-id':'Vertex ID','material-id':'Material ID','part-id':'Part ID'};
+    'vertex-id':'Vertex ID','material-id':'Material ID','part-id':'Part ID','texture-transfer':'Texture channel'};
   const geometry=['slope','cavity','exposure','thickness','thickness-valid'];
   const occlusionMaps=['ao','ao-contact','ao-directional','bent-normal','occlusion-direction'];
   const curvatureMaps=['curvature','curvature-convex','curvature-concave'];
+  const transferMaps=['pigment','emission','opacity','roughness','metalness','texture-transfer'];
   const encodings=[['png8','8-bit PNG'],['png16','16-bit PNG'],['exr','32-bit OpenEXR']];
   const {label,catalog,token}=bakeJob;
   function withAvailableMaps(value) {
@@ -277,6 +278,57 @@
     }
     draw();
   }
+  function transferControls(row,extra) {
+    const inputs=bakeJob.textureInputs??[], options=row.overrides, controls=node('div');
+    const color=['pigment','emission'].includes(row.id), alpha=color||row.id==='opacity', generic=row.id==='texture-transfer';
+    controls.className='map-controls';
+    extra.append(controls);
+    function draw() {
+      controls.replaceChildren();
+      const linked=options.textureInput;
+      if(inputs.length||linked||generic) {
+        const values=[['',generic?'Choose a texture':'Authored material'],...inputs.map(id=>[id,id])];
+        if(linked&&!inputs.includes(linked))values.push([linked,linked+' (missing)']);
+        controls.append(field('Texture source',selected(values,linked??'',value=>{
+          put(options,'textureInput',value);
+          if(!value)for(const key of ['sourceUV','sourceChannel','sourcePrecision','sourceColorSpace','sourceAlpha','filter','address'])
+            delete options[key];
+          if(!value&&generic)delete options.encoding;
+          draw();
+        })));
+      }
+      if(generic&&!linked)return;
+      function choice(label,key,values,fallback,redraw=false) {
+        controls.append(field(label,selected(values,options[key]??fallback,value=>{
+          put(options,key,value===fallback?undefined:value);
+          if(key==='alphaPolicy'&&value!=='cutout')delete options.alphaCutoff;
+          if(redraw)draw();
+        })));
+      }
+      const outputs=linked?encodings:[['','Default PNG'],...encodings];
+      choice('Encoding','encoding',outputs,linked?'png16':'');
+      if(linked) {
+        controls.append(field('Source UV set',numeric('Source UV set',options.sourceUV,
+          n=>put(options,'sourceUV',n),{min:0,max:31,step:1,placeholder:0})));
+        choice('Source precision','sourcePrecision',[['native','Detect native precision'],['unorm8','8-bit integer'],
+          ['unorm16','16-bit integer'],['float16','16-bit float'],['float32','32-bit float']],'native');
+        choice('Filtering','filter',[['linear','Bilinear'],['nearest','Nearest']],'linear');
+        choice('Source addressing','address',[['clamp','Clamp'],['wrap','Wrap'],['mirror','Mirror']],'clamp');
+        if(color) {
+          choice('Source color space','sourceColorSpace',[['auto','Detect color space'],['srgb','sRGB'],['srgb-linear','Linear sRGB']],'auto');
+          choice('Source alpha','sourceAlpha',[['auto','Use file setting'],['straight','Straight'],['premultiplied','Premultiplied']],'auto');
+        } else choice('Source channel','sourceChannel',[['r','Red / grayscale'],['g','Green'],['b','Blue'],['a','Alpha']],
+          row.id==='opacity'?'a':'r');
+      }
+      if(alpha) {
+        choice('Alpha policy','alphaPolicy',[['preserve','Preserve'],['ignore','Ignore'],['cutout','Threshold']],'preserve',true);
+        if(options.alphaPolicy==='cutout')
+          controls.append(field('Alpha cutoff',numeric('Alpha cutoff',options.alphaCutoff,n=>put(options,'alphaCutoff',n),
+            {min:0,max:1,step:'any',placeholder:.5})));
+      }
+    }
+    draw();
+  }
   function maps() {
     const list=preset.maps, rows=el('rows');rows.replaceChildren();
     for(const [i,row] of list.entries()) {
@@ -301,6 +353,7 @@
       if(occlusionMaps.includes(row.id))occlusionControls(row,extra);
       if(['thickness','thickness-valid'].includes(row.id))thicknessControls(row,extra);
       if(curvatureMaps.includes(row.id))curvatureControls(row,extra);
+      if(transferMaps.includes(row.id))transferControls(row,extra);
       if(geometry.includes(row.id)) {
         const tuning={slope:[],cavity:['samples','cavityRadius','rayBias'],exposure:['samples','exposureDistance','rayBias'],
           thickness:['thicknessScale','rayBias'],'thickness-valid':['rayBias']};
@@ -462,6 +515,16 @@
         'Measured samples':row.curvature.measured.toLocaleString(),'Unknown samples':row.curvature.unknown.toLocaleString(),
         'Encoding range':output.range?span(output.range):'Raw inverse units','Clipped samples':output.clipped,
         ...(row.curvature.measured&&{'Signed extrema':span([row.curvature.signedMin,row.curvature.signedMax])})}),
+      ...(row.textureTransfer&&{'Texture source':row.textureTransfer.input==='material'?'Authored material':row.textureTransfer.input,
+        ...(row.textureTransfer.uvSet!==undefined&&{'Source UV set':'TEXCOORD_'+row.textureTransfer.uvSet}),
+        ...(row.textureTransfer.sources.length&&{'Source precision':[...new Set(row.textureTransfer.sources.map(row=>row.precision))].join(' · ')}),
+        ...(row.textureTransfer.sources.some(row=>row.alpha)&&{'Source alpha':[
+          ...new Set(row.textureTransfer.sources.filter(row=>row.alpha).map(row=>title(row.alpha)))].join(' · ')}),
+        ...(row.textureTransfer.channel&&{'Source channel':row.textureTransfer.channel.toUpperCase()}),
+        ...(row.textureTransfer.range&&{'Sample range':span(row.textureTransfer.range)}),
+        ...(row.textureTransfer.alphaPolicy&&{'Alpha policy':title(row.textureTransfer.alphaPolicy),
+          ...(row.textureTransfer.alphaCutoff!==undefined&&{'Alpha cutoff':number(row.textureTransfer.alphaCutoff)})}),
+        ...(row.textureTransfer.clipped&&{'Clipped samples':row.textureTransfer.clipped.toLocaleString()})}),
       ...(row.projection&&{'Projection':row.projection.mode==='self'?'Self-bake':row.projection.highMeshes.join(', '),
         'Hits':row.projection.hits.toLocaleString(),'Misses':row.projection.misses.toLocaleString(),
         'Backfaces':row.projection.backfaces.toLocaleString(),

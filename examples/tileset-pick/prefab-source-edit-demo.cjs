@@ -58,8 +58,8 @@ commands.push('status=0','ink-studio '+blocked.join(' ')+' > conflict-receipt.js
 const w=730,h=249, drawing = ink.load().KIT.procedural.drawing2d;
 const label = (text,x,y,scale,color) => ({type:'text',text,at:[x,y],scale,color});
 const panels = [['BEFORE','before.png','Center sign has a local edit.'],
-  ['SHARED SOURCE EDIT','after.png','Center sign stays. Trim changes on all three.'],
-  ['CHANGED PIXELS','changes.png','Right bay keeps its local body material.']];
+  ['SHARED SOURCE EDIT','after.png','Trim changes on all three bays.'],
+  ['CHANGED PIXELS','changes.png','Right bay keeps its body material.']];
 const board = drawing.render({width:w,height:h,edges:'hard',commands:[
   {type:'rect',rect:[0,0,w,h],fill:'#192c34'},
   label('INK STUDIO / LINKED PREFABS',16,15,1,'#abc9b4'),
