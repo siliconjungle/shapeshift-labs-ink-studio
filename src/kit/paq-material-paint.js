@@ -157,7 +157,9 @@
     function load(name) {
       if (!active.has(name)) {
         const input = P.materialChannels.channel(source, name).raster, settings = document.canvases?.[name];
-        const image = settings ? P.graphImages.convert(input, settings) : input;
+        const image = settings ? P.graphImages.convert(input, {
+          intent: input.descriptor?.intent, layout: input.descriptor?.layout, ...settings
+        }) : input;
         const value = canvas(name, image);
         active.set(name, { ...value, converted: image !== input });
       }
