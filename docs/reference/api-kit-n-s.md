@@ -155,6 +155,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.pbr` | namespace |  |  |
 | `KIT.pbr.encodeNormal` | function | `(n)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
+| `KIT.pbr.finish` | function | `(plan, id, position, roughness, metalness)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
 | `KIT.pbr.footprint` | function | `(x, y, scale, sample)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
 | `KIT.pbr.glsl` | value | `string` |  |
 | `KIT.pbr.prepare` | function | `(definition, lightsOverride, {palette = [], paletteRoles = {}, surfaceLightRamps, specularSampling, paintShadowBands = true} = {})` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |

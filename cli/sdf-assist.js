@@ -103,7 +103,7 @@ function bind(world, data, settings,allow,sourceBinding,coverage,overrideRows) {
 
 const facing = (row,normal) => !row.normal || dot(row.normal,row.normal)<1e-8 || dot(row.normal,normal)>.25;
 const neutralInk = [0,0,0,0];
-function trace(source, ray, near, far, settings, clip, visible, x, y, sourceBinding, captureRestNormal) {
+function trace(source, ray, near, far, settings, clip, visible, x, y, sourceBinding, captureRestNormal, capturePaintFinish) {
   const {origin,direction,axial} = ray, {min,max} = source.bounds, {epsilon,steps} = settings;
   const range = [near/axial,far/axial];
   for (let k=0;k<3;k++) if (!slab(range,origin[k],direction[k],min[k],max[k])) return null;
@@ -135,7 +135,7 @@ function trace(source, ray, near, far, settings, clip, visible, x, y, sourceBind
         const rest = source.motion?.rest(...point) ?? point;
         const state = fieldOwner?.mat.surfaceState, program = fieldOwner?.mat.sdfPaint;
         const generated=materialOwner?.mat.sdfNewSurface;
-        const localNormal = (generated || program || state?.hasOpacity || state?.hasNormal || state?.hasInkControls) &&
+        const localNormal = (generated || program || state?.hasOpacity || state?.hasNormal || state?.hasInkControls || capturePaintFinish) &&
           (source.motion?.restNormal(...normal) ?? normal);
         const length = localNormal && Math.hypot(...localNormal);
         const normalAtRest = length && localNormal.map(n=>n/length);
@@ -147,7 +147,13 @@ function trace(source, ray, near, far, settings, clip, visible, x, y, sourceBind
         if (opacity && opacity.value < 1 && opacity.coverage > 0) return null;
         const shadingNormal = paint?.paintedNormal && (source.motion?.normal(...paint.paintedNormal) ?? paint.paintedNormal);
         const materialId = (generated || program || row.baseColor!==undefined) && (appearance?.material ?? row.target.material);
+        const finish = capturePaintFinish && fieldOwner && (() => {
+          const material = fieldOwner.mat, painted = paint && state.apply(material, paint, rest);
+          const sample = painted?.model ?? material.model;
+          return typeof sample === 'function' ? sample(rest, normalAtRest) : sample;
+        })();
         return {z:along*axial,position:point,normal,row,objectPosition:rest,...(shadingNormal&&{shadingNormal}),
+          ...(finish && { paintFinish: finish }),
           ...(materialId && {materialId}),...(appearance?.tint && {materialTint:appearance.tint}),...(surface && {uv:surface.uv}),
           ...(state?.hasInkControls && {inkControls:paint?.inkControls ?? neutralInk}),
           ...(sourceBinding && { source:{ ...sdfSource(source,fieldOwner,row,rest,materialPaint,surface?.details),...(captureRestNormal && {restNormal:source.motion?.restNormal(...normal) ?? normal}) } })};
@@ -195,7 +201,7 @@ function editableSource(field) {
   }};
 }
 
-function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible,sourceBinding,captureRestNormal=false,allow,editable=[],trackSdf,coverage,overrideRows}) {
+function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible,sourceBinding,captureRestNormal=false,capturePaintFinish,allow,editable=[],trackSdf,coverage,overrideRows}) {
   const {sources,rows} = bind(world,data,settings,allow,sourceBinding || trackSdf,coverage,overrideRows);
   for (const field of editable) {
     if (allow && !allow({object:field.objectId})) continue;
@@ -227,7 +233,7 @@ function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible,sourceBin
     const ray=rayAt(x+.5,y+.5);
     let closest;
     for (const source of sources) {
-      const hit=trace(source,ray,near,closest?.z ?? 400,settings,clip,visible,x,y,sourceBinding,captureRestNormal);
+      const hit=trace(source,ray,near,closest?.z ?? 400,settings,clip,visible,x,y,sourceBinding,captureRestNormal,capturePaintFinish);
       if (hit && (!closest || closest.z>hit.z)) closest=hit;
     }
     if (!closest) continue;

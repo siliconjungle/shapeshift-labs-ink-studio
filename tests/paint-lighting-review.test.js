@@ -50,7 +50,8 @@ test('the CLI captures committed SDF paint and writes separate PNGs and the ligh
   fs.writeFileSync(scene,JSON.stringify({id:'painted-enamel',style:'slate',camera:cam,solids:[
     {id:'enamel',kind:'box',at:[0,0,0],half:[.8,.6,.24],res:.09,mat:'stone',
       surfaceState:{charts:{front:{origin:[-.8,-.6,.24],u:[1.6,0,0],v:[0,1.2,0],depth:.06,stamps:[
-        {channel:'pigment',value:{swatch:'paint',color:'#29a68e'},brush:{kind:'rect',min:[.18,.18],max:[.83,.83]}}
+        {channel:'pigment',value:{swatch:'paint',color:'#29a68e'},brush:{kind:'rect',min:[.18,.18],max:[.83,.83]}},
+        {channel:'roughness',value:.22,brush:{kind:'rect',min:[.18,.18],max:[.83,.83]}}
       ]}}}}
   ]}));
   execFileSync(process.execPath,[path.join(__dirname,'../cli/ink-studio.js'),'pixel-art','paint-lighting',scene,
@@ -65,4 +66,63 @@ test('the CLI captures committed SDF paint and writes separate PNGs and the ligh
     assert.equal(PNG.layout(path.join(output,report.files[name])).w,80);
   assert(fs.readFileSync(path.join(output,report.files.sweep)).includes(Buffer.from('acTL')));
   assert(PNG.layout(path.join(output,report.files.comparison)).w>80);
+
+  const ranged=path.join(directory,'ranged');
+  execFileSync(process.execPath,[path.join(__dirname,'../cli/ink-studio.js'),'pixel-art','paint-lighting',scene,
+    '--subject','enamel','--sdf-assist','on','--w','80','--h','60','--steps','3','--ranges','1,1.24','--out',ranged],{stdio:'pipe'});
+  const extended=JSON.parse(fs.readFileSync(path.join(ranged,'review.json'),'utf8'));
+  assert.equal(extended.version,2);
+  const center=extended.views[0], finish=PNG.raster(path.join(ranged,center.files.roughness));
+  assert.deepEqual(Array.from(finish.data.subarray((30*80+40)*4,(30*80+40)*4+4)),[56,56,56,255]);
+  assert(center.registration.kinds.sdf>0);
+  assert(center.registration.roughness<center.coverage.visible);
+  assert(fs.existsSync(path.join(ranged,center.files.keys[1].relief)));
+  assert(fs.existsSync(path.join(ranged,extended.files.viewer)));
+});
+
+test('ranged review reprojects one registered material with a common world-space key',()=>{
+  const pixel = (image,p) => image.rgb[p*3];
+  const texture=Uint8Array.from({length:16*8*4},(_,i)=>{
+    const p=Math.floor(i/4), c=i%4;
+    return (p%16<8 ? [196,68,33,255] : [40,142,154,255])[c];
+  });
+  const roughness=Uint8Array.from({length:16*8},(_,p)=>p%16<8?51:204);
+  const normal=Uint8Array.from({length:texture.length},(_,i)=>
+    (Math.floor(i/4)%16<8 ? [171,128,246,255] : [128,128,255,255])[i%4]);
+  const mesh=KIT.sceneMeshes.create({id:'sign',positions:[-.90,-.55,.20,.90,-.55,.20,-.90,.55,.20,.90,.55,.20],
+    indices:[0,1,2,1,3,2],uvs:[0,1,1,1,0,0,1,0],materials:[{id:'ink',
+      texture:{width:16,height:8,pixels:texture},roughness,normal,mipmaps:{variance:0}}]});
+  const B=makeBuilder(31,[0x111c2a,0x54432d]);
+  const world=B.finish({cam,meshes:[mesh],dither:0});
+  const review=ink.reviewPaintLighting(world,{view,subject:{object:'sign'},steps:5,ranges:[.76,1,1.55]});
+  assert.equal(review.report.version,2);
+  assert.equal(review.report.rig.space,'world');
+  assert.deepEqual(review.report.rig.keys.map(k=>k.azimuth),[-65,-32.5,0,32.5,65]);
+  assert(review.views[0].coverage.visible>review.views[1].coverage.visible);
+  assert(review.views[1].coverage.visible>review.views[2].coverage.visible);
+  assert.deepEqual(review.views.map(row=>row.distance),[3.04,4,6.2]);
+  assert(review.views[0].camera.focal>review.views[2].camera.focal);
+  assert.notDeepEqual(review.views[0].camera.eye,review.views[2].camera.eye);
+  for (const row of review.views) {
+    const {neutral,roughness:finish,coordinates:{surfaceUV,surfaceUVValid},keyFrames}=row;
+    assert.equal(row.registration.uv,row.coverage.visible);
+    assert.equal(row.registration.kinds.mesh,row.coverage.visible);
+    for (const {lit,relief,highlights} of keyFrames) {
+      assert.deepEqual(lit.alpha,neutral.alpha);
+      assert.deepEqual(relief.alpha,neutral.alpha);
+      assert.deepEqual(highlights.alpha,neutral.alpha);
+    }
+    assert.deepEqual(finish.alpha,neutral.alpha);
+    const point = (min,max) => neutral.alpha.findIndex((alpha,p)=>alpha && surfaceUVValid[p] &&
+      min<surfaceUV[p*2] && surfaceUV[p*2]<max && Math.abs(surfaceUV[p*2+1]-.5)<.12);
+    const red=point(.18,.34), blue=point(.66,.83);
+    assert(red>=0 && blue>=0);
+    assert.deepEqual(rgb(neutral,red),[196,68,33]);
+    assert.deepEqual(rgb(neutral,blue),[40,142,154]);
+    assert.equal(pixel(finish,red),51);
+    assert.equal(pixel(finish,blue),204);
+    assert.notEqual(pixel(keyFrames[0].relief,red),pixel(keyFrames[4].relief,red));
+    assert.notDeepEqual(keyFrames[1].highlights.rgb,keyFrames[3].highlights.rgb);
+  }
+  assert.throws(()=>ink.reviewPaintLighting(world,{view,ranges:[1,1]}),/distinct camera ranges?/);
 });
