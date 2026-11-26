@@ -207,6 +207,10 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   splat-fit <scene> --plan approvals.json --out asset.json
   gaussian-train capture <scene> <plan.json> --out directory   capture registered RGBA views
   gaussian-train train <dataset.json> --out directory   fit and evaluate a Gaussian cloud
+  cloud-materials recover <cloud.ply|cloud.spz> [--plan plan.json] --out directory   recover editable material channels
+  cloud-materials override <material.json> <patch.json> --out directory   compose source-bound edits
+  cloud-materials render <material.json> <view.json> --out image.png   relight, restore capture or inspect channels
+  cloud-materials inspect <material.json> [--row N]   report recovery and override evidence
   splat-groups <scene> --plan groups.json --out fit.json [--base fit.json --report report.json]
   splat-redistribute <scene> --plan operations.json --out fit.json --report review.json [--base fit.json]
   render/clip --shot-corrections file.json|off   load or bypass native shot corrections
@@ -244,6 +248,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   painting-cels export <scene.json> <clip.json> --out directory [--view view.json]   render held exposures and animated PNG
   painting-flow sample <scene.json> <plan.json> [--at seconds] --out scene.json   advect retained marks through a painted field
   painting-flow bake <scene.json> <plan.json> [--from seconds --fps 12 --frames 24 --playback once] --out clip.json   bake editable flow poses into cels
+  paint-evaporation apply <scene.json> <plan.json> [--at seconds] --out scene.json   bake a painted region into a particle layer
+  paint-evaporation inspect <scene.json> [--at seconds] [--layer id]   report stored source, color, emission and release times
   painting-wave apply <scene.json> <plan.json> --out scene.json   retain a painted sway on marks or geometry
   painting-wave inspect <scene.json> [--at seconds]   inspect sampled direction, stiffness, phase and offset
   painting-wave sample <scene.json> --at seconds --out scene.json   hold the selected wave pose

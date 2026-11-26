@@ -317,6 +317,18 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.paintBoil.prepare` | function | `(raw)` | [source](../../src/kit/p26i-paint-boil.js) |
 | `KIT.procedural.paintBoil.state` | function | `(plan, time = 0, celTime)` | [source](../../src/kit/p26i-paint-boil.js) |
 
+## KIT.procedural.paintEvaporation
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.paintEvaporation` | namespace |  |  |
+| `KIT.procedural.paintEvaporation.bind` | function | `(stage,layers)` | [source](../../src/kit/p26l-paint-evaporation.js) |
+| `KIT.procedural.paintEvaporation.capture` | function | `(plan)` | [source](../../src/kit/p26l-paint-evaporation.js) |
+| `KIT.procedural.paintEvaporation.format` | value | `string = "ink-studio/paint-evaporation"` |  |
+| `KIT.procedural.paintEvaporation.prepare` | function | `(raw, baked=false)` | [source](../../src/kit/p26l-paint-evaporation.js) |
+| `KIT.procedural.paintEvaporation.reserve` | function | `(B,layers)` | [source](../../src/kit/p26l-paint-evaporation.js) |
+| `KIT.procedural.paintEvaporation.scene` | function | `(source,time=0)` | [source](../../src/kit/p26l-paint-evaporation.js) |
+
 ## KIT.procedural.paintLooseness
 
 | Member | Kind | Signature or value | Guides and source |
