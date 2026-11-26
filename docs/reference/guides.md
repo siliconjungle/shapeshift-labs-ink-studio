@@ -169,6 +169,7 @@ All checked-in guides, indexed by title and section headings.
 - [Gaussian glTF import](../gaussian-gltf.md)
 - [Painted materials for imported Gaussian splats](../gaussian-materials.md)
 - [Part proxies for imported Gaussian splats](../gaussian-part-proxies.md)
+- [Fit a Gaussian cloud from registered views](../gaussian-training.md)
 - [Geometric caustic projection](../geometric-caustics.md)
 - [Geometry-preserving splat morphs](../geometry-morphs.md)
 - [Clouds and fog shaped by geometry](../geometry-shaped-atmosphere.md)

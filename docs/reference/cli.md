@@ -205,6 +205,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   bounce-probes review <scene> --out directory [--from 0 --to 3 --fps 12 --w 184 --h 112]
   traced-lighting <scene> --out asset.json [--plan settings.json --t 0 --samples 32 --bounces 2]
   splat-fit <scene> --plan approvals.json --out asset.json
+  gaussian-train capture <scene> <plan.json> --out directory   capture registered RGBA views
+  gaussian-train train <dataset.json> --out directory   fit and evaluate a Gaussian cloud
   splat-groups <scene> --plan groups.json --out fit.json [--base fit.json --report report.json]
   splat-redistribute <scene> --plan operations.json --out fit.json --report review.json [--base fit.json]
   render/clip --shot-corrections file.json|off   load or bypass native shot corrections
