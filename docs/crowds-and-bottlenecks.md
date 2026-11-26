@@ -14,6 +14,8 @@ positions. [Frank Cheng's GDC session on pathing and steering](https://www.gdcva
 | `spacing` | 0.02 | Extra separation beyond walker radii. |
 | `bottlenecks` | `{}` | Named passages with capacity and directional admission. |
 
+Use the [headless skinned crowd bake](skinned-crowd.md) for terrain-planted animation, tissue, and ragdoll review.
+
 ## Author a passage
 
 ```json
