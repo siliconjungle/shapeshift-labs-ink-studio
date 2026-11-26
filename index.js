@@ -110,6 +110,7 @@ module.exports = {
   ...require('./cli/material-lighting-room.js'),
   ...require('./cli/physical-reference.js'),
   ...require('./cli/color-management-review.js'),
+  ...require('./cli/materialx-interchange.js'),
   inspectSceneResource: require('./cli/scene-resources.js').inspectSceneResource,
   convertSceneResource: require('./cli/scene-resources.js').convertSceneResource,
   saveBakePreset: require('./cli/bake-jobs.js').saveBakePreset,
