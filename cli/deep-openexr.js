@@ -79,7 +79,7 @@ function header(source, statistics, { reflection, time, view: authoredView }, ti
     attribute('chunkCount','int',int(h)),
     attribute('maxSamplesPerPixel','int',int(statistics.maxSamples)),
     attribute('inkSampleOrder','string',text(tidy?'sorted, non-overlapping':'sorted')),
-    attribute('chromaticities','chromaticities',float(.64,.33,.30,.60,.15,.06,.3127,.3290)),
+    attribute('chromaticities','chromaticities',float(...C.srgb)),
     attribute('inkColorEncoding','string',text('premultiplied linear sRGB')),
     attribute('inkDepthSpace','string',text('positive camera-axis depth in Ink world units')),
     attribute('inkStats','string',text(JSON.stringify(statistics))),
@@ -202,10 +202,12 @@ function readDeepEXR(input, { sampleBudget = maxSlots } = {}) {
   const text = name => get(name, 'string').toString('utf8');
   const box = get('dataWindow', 'box2i', 16), w = box.readInt32LE(8) + 1, h = box.readInt32LE(12) + 1;
   const compression = get('compression', 'compression', 1)[0];
+  const primaries = get('chromaticities', 'chromaticities', 32);
   if (text('type') !== 'deepscanline' || ![0, 2].includes(compression) || get('lineOrder', 'lineOrder', 1)[0] !== 0 ||
       box.readInt32LE(0) !== 0 || box.readInt32LE(4) !== 0 || !box.equals(get('displayWindow', 'box2i', 16)) ||
       !C.uint(w, 1, maxDimension) || !C.uint(h, 1, maxDimension) || w * h > maxSlots ||
       get('chunkCount', 'int', 4).readInt32LE() !== h || !C.uint(sampleBudget, 0, maxSlots) ||
+      !C.srgb.every((n,i) => Math.abs(primaries.readFloatLE(i * 4) - n) < 1e-6) ||
       text('inkColorEncoding') !== 'premultiplied linear sRGB' ||
       text('inkDepthSpace') !== 'positive camera-axis depth in Ink world units')
     throw new TypeError('Deep plate needs the native art grid, depth, and color contracts');

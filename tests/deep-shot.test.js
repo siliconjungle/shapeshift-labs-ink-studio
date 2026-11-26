@@ -42,7 +42,8 @@ const insert={z:3,alpha:.75,color:[.8,.3,.2],id:0xf0000011,material:1};
 
 function loaded(work,result) {
   const report=work.get('out/'+result.report), folder=path.dirname(result.report);
-  return {report, image: PNG.raster(work.file('out/'+folder+'/'+report.frames[0].image.file)),
+  const image = work.file('out/'+folder+'/'+report.frames[0].image.file);
+  return {report, image: PNG.raster(image), imageFile:image,
     deep: frame=>work.file('out/'+folder+'/'+report.frames[frame].deep.file)};
 }
 
@@ -88,6 +89,7 @@ test('deep shot edits alpha, color and depth before merging rays in linear worki
   const blended=a.map((n,i)=>(n*.25+2*b[i]*.75*.75)/alpha);
   const expected=fromLinear(blended).map(n=>Math.round(Math.max(0,Math.min(1,n))*255));
   assert.deepEqual(Array.from(result.image.data.slice(0,4)),[...expected,Math.round(alpha*255)]);
+  assert.equal(require('../cli/texture-png.js').read(fs.readFileSync(result.imageFile),{layoutOnly:true}).profile.srgb,0);
   const original=ink.readDeepEXR(fs.readFileSync(work.file('base.exr'))), edited=ink.readDeepEXR(fs.readFileSync(result.deep(0)));
   for(const name of ['ink.surface.R','ink.scatter.R','ink.transmission.R']) near(original.planes[name][0],edited.planes[name][0]);
   assert(edited.planes.R[1]>.75);

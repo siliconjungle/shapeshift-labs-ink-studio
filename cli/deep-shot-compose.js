@@ -148,7 +148,7 @@ function shotFrame(plan, frame) {
   return {
     plate: { w,h,offsets,planes,objects,materials,view,registration,time:frame.time,
       statistics: { droppedSamples,truncatedPixels } },
-    preview: PNG.encode(w,h,pixels,4),
+    preview: PNG.encode(w,h,pixels,4,{srgb:true}),
     receipt: { time:frame.time, width:w, height:h, sources, effects: effects.map(({ matches, apply, ...row }) => row),
       maxSamples, retainedSamples:used, trimmedSamples:trimmed, clippedSamples:clipped, droppedSamples, truncatedPixels }
   };
