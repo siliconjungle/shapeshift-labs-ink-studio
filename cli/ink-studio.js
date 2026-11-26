@@ -41,6 +41,7 @@ const num = (k, d) => (opt[k] === undefined ? d : +opt[k]),
   list = (k, d) => (opt[k] === undefined ? d : String(opt[k]).split(',').map(Number));
 let A = null;
 const importedAssets = new Map();
+const packedSplatFile = file => /\.inksplats$/i.test(file);
 const gaussianFile = file => /\.(ply|spz|gsz)$/i.test(file);
 const gaussianScenes = new Map();
 const gaussianGltfScenes = new Map();
@@ -215,7 +216,7 @@ function scene(id, options) {
   }
   if (opt['environment-preset'] !== undefined && !id.endsWith('.json'))
     die('--environment-preset selects a preset for a JSON diorama');
-  if (gaussianFile(id)) {
+  if (gaussianFile(id) || packedSplatFile(id)) {
     const descriptor = gaussianScenes.get(id);
     if (!descriptor) throw new Error('Gaussian input is supported by render, turn, sheet, clip, atlas and snap');
     return descriptor;
@@ -1431,6 +1432,10 @@ const CMD = {
         '  cloud-materials render <material.json> <view.json> --out image.png   relight, restore capture or inspect channels',
         '  cloud-materials inspect <material.json> [--row N]   report recovery and override evidence',
         '  splat-groups <scene> --plan groups.json --out fit.json [--base fit.json --report report.json]',
+        '  splat-attributes inspect <scene> --out attributes.json   capture stable typed splat attributes',
+        '  splat-attributes plan <scene> <plan.json> --out directory   select, clean, transfer and deform splats',
+        '  splat-attributes export <scene> <plan directory> --out cloud.inksplats   export a materialized native cloud',
+        '  splat-attributes verify <scene> <plan directory> <cloud.inksplats> --views views.json --out directory   check render and export parity',
         '  splat-redistribute <scene> --plan operations.json --out fit.json --report review.json [--base fit.json]',
         '  render/clip --shot-corrections file.json|off   load or bypass native shot corrections',
         '  render or clip --multiprojection plan.json   use local projection for named mesh surfaces',
@@ -2664,6 +2669,9 @@ const CMD = {
     }
     files.json(file,asset);
     console.log('Wrote',report.operations.length,'reviewed splat topology operations to',file);
+  },
+  'splat-attributes'() {
+    return require('./splat-attributes-command.js').command(pos,opt,lib().KIT,buildPreview);
   },
   'splat-groups'() {
     if (pos.length!==1 || typeof opt.out!=='string' || typeof opt.plan!=='string' ||
@@ -5832,8 +5840,16 @@ async function run() {
   }
   const captureScenes = cmd === 'gaussian-train' && pos[0] === 'capture' ? pos.slice(1, 2) : [];
   const pixelInputs=cmd==='pixel-art' ? (['capture','splat-diagnostics'].includes(pos[0]) ? [pos[1]] : [opt.scene,...(pos[0]==='feature-rebind' ? [opt.replacement] : [])]).filter(value=>typeof value==='string') : [];
-  const splatFiles = captureScenes.length ? captureScenes.filter(gaussianFile) : cmd === 'pixel-art' ? pixelInputs.filter(gaussianFile) : cmd === 'snap' ? pos.filter(gaussianFile) : ['render', 'turn', 'sheet', 'clip', 'atlas', 'splat-groups', 'splat-redistribute'].includes(cmd)
-    ? pos.slice(0, 1).filter(gaussianFile) : [];
+  const splatInputs = captureScenes.length ? captureScenes : cmd === 'pixel-art' ? pixelInputs : cmd === 'snap' ? pos :
+    cmd === 'splat-attributes' ? pos.slice(1, 2) : ['render', 'turn', 'sheet', 'clip', 'atlas', 'passes', 'splat-groups', 'splat-redistribute'].includes(cmd)
+      ? pos.slice(0, 1) : [];
+  for (const file of new Set(splatInputs.filter(packedSplatFile))) {
+    const world = await require('./splat-exchange.js').load(file, lib().KIT);
+    shot?.dependency(path.resolve(file));
+    const name = path.basename(file), id = name.replace(/\W+/g, '-');
+    gaussianScenes.set(file, { id, name, seed: world.seed, build: () => ({ ...world }) });
+  }
+  const splatFiles = splatInputs.filter(gaussianFile);
   if (splatFiles.length) {
     const ink = require('../index.js');
     const { gaussianSplatWorld } = await import('../src/gaussian-splats.mjs');
@@ -5842,7 +5858,7 @@ async function run() {
       const name = path.basename(file), id = name.replace(/\W+/g, '-');
       gaussianScenes.set(file, {
         id, name, seed: 1,
-        build: () => gaussianSplatWorld(cloud, { size: num('size', 6), up: opt.up, colorMode:cmd==='pixel-art'||cmd==='splat-groups'||cmd==='splat-redistribute'||opt['scan-appearance']!==undefined||opt['splat-fit']!==undefined ? 'rgb':'baked', objectId:'gaussian-cloud' })
+        build: () => gaussianSplatWorld(cloud, { size: num('size', 6), up: opt.up, colorMode:cmd==='splat-attributes'||cmd==='pixel-art'||cmd==='splat-groups'||cmd==='splat-redistribute'||opt['scan-appearance']!==undefined||opt['splat-fit']!==undefined ? 'rgb':'baked', objectId:'gaussian-cloud' })
       });
     }
   }

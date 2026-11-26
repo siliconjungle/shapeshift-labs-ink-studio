@@ -2,7 +2,6 @@
 
 const Provenance = require('../src/splat-provenance.js');
 const Targets = require('../src/target-selectors.js');
-const ScanRotation = require('./splat-scan-rotation.js');
 
 const fields = (value, keys) => value && typeof value === 'object' && !Array.isArray(value) &&
   Object.keys(value).every(key => keys.includes(key));
@@ -129,7 +128,7 @@ function prepare(world, groups, {target, attributes, retired, eligible}) {
       modifiers:modifiers.map(op=>op.type), before, after,
       minDeterminant:influenced ? minDeterminant : null});
   }
-  return {affected,report,...ScanRotation.transport(world,affected,M)};
+  return {affected,report};
 }
 
 module.exports = {prepare};

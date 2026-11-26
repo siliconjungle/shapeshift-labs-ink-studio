@@ -1166,6 +1166,8 @@ Build [WebGPU texture and geometry graphs](docs/webgpu-graphs.md) with reusable 
 
 [Cloud material recovery](docs/cloud-material-recovery.md) estimates illumination, pigment, normals, and roughness from a captured cloud and records uncertainty alongside editable channels.
 
+[Shared splat attributes](docs/shared-splat-attributes.md) retains named selections and deformation weights through outlier cleanup, headless rendering, and native cloud export.
+
 ```sh
 npx ink-studio render scan.spz --raw --out preview.png
 ```
