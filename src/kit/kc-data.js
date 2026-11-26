@@ -1753,6 +1753,9 @@
   const brushField = Symbol('brush field');
   DIO.brushField = (spec, env) => DIO.build(spec, env, { [brushField]: true });
   DIO.sculptFieldReceivers = (spec, env) => DIO.build(spec, env, { [brushField]: 'receivers' });
+  DIO.solidBounds = (spec, ids, env) => DIO.build(spec, env, {
+    [brushField]: { boundsIds: new Set(ids), measureBounds: true }
+  });
   DIO.paintingPlacements = (spec, env) => DIO.build(spec, env, { [brushField]: 'paintings' });
   DIO.sculptRestTrace = (spec, solid, env, { measureBounds = false } = {}) => {
     const trace = { solid, measureBounds, stages: new Map(), ...(measureBounds && { bumpPhases: new WeakMap() }) };
@@ -1871,7 +1874,7 @@
       return typeof query === 'function' ? query() : query;
     }
     const marks = !modelOptions && dataMarks?.sample(env.parameterInputs?.time ?? 0, { query: marksQuery });
-    if (spec.brushRegion != null) {
+    if (spec.brushRegion != null && !modelOptions?.[brushField]?.boundsIds) {
       if (modelOptions) throw new TypeError('Brush regions are baked as splat geometry');
       const { palette, roles, sun } = st0;
       const { timeline: authoredTimeline, cameraRig: authoredCameraRig, dataInputs: authoredData, dataMarks: authoredMarks,
@@ -2384,6 +2387,17 @@
     if (modelOptions?.[brushField]) {
       const request = modelOptions[brushField];
       if (request === 'paintings' && !anchors.size) return reports;
+      if (request?.boundsIds) {
+        const output = new Map();
+        for (const solid of spec.solids) {
+          const shape = make(solid);
+          if (!request.boundsIds.has(solid.id) || solid.hold || solid.carve) continue;
+          const bounds = shape && S.geometryBound(shape);
+          output.set(solid.id,bounds ? {bounds,method:shape.geometryBounds ? 'shape-envelope' : 'radius-envelope'} :
+            {bounds:null,method:'unbounded'});
+        }
+        return output;
+      }
       for (const solid of spec.solids) make(solid);
       if (recesses.size) S.applyPaintRecesses(recesses);
       if (request === 'paintings') return reports.map(report => ({ ...report, marks: report.marks.map(mark =>

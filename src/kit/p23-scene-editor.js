@@ -533,7 +533,8 @@
     function stagePrefabPlacement(plan, request) {
       const before = snapshot(), {patch,report} = plan(before,buildEnv,request);
       if (!patch) return {before,report};
-      const candidate = {...before,...reconcileLayerMembership(before,patch)};
+      const revised = reconcileLayerMembership(before,patch);
+      const candidate = {...before,...revised};
       const problems = DIO.check(candidate,buildEnv).filter(row => row.level === 'error');
       try {
         if (!problems.length) requireReviewEdit(before,candidate);
@@ -541,7 +542,7 @@
         problems.push({level:'error',problem:error.message});
       }
       if (problems.length) return {before,report:freeze({...report,canCommit:false,problems})};
-      return {before,candidate,report};
+      return {before,candidate,patch:revised,report};
     }
 
     function planPrefabReparent(request) {
@@ -591,11 +592,12 @@
     }
 
     function editSceneLayers(request) {
-      const {candidate,report} = stagePrefabPlacement(A.sceneLayers.plan,request);
-      if (!candidate) throw Object.assign(new RangeError('Scene layer edits need review'),{report});
+      const {patch,report} = stagePrefabPlacement(A.sceneLayers.plan,request);
+      if (!patch) throw Object.assign(new RangeError('Scene layer edits need review'),{report});
       if (!report.changed) return report;
       const write = () => document.batchSession(() => {
-        writePlacementPatch({sceneLayers:candidate.sceneLayers});
+        if (patch.constructionPlane) document.setEnvironment({constructionPlane:null});
+        writePlacementPatch(patch);
         return report;
       });
       return document.pending() ? write() : document.transact('Edit scene layers',write);
