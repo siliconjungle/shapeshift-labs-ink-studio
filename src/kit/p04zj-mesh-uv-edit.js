@@ -121,6 +121,22 @@
     };
   }
 
+  function guide(source, request = {}, {atlasFor} = {}) {
+    if (!request || Object.getPrototypeOf(request)!==Object.prototype)
+      throw new TypeError('Use a UV guide request');
+    const g = graph(source,request.uvSet ?? request.selection?.uvSet ?? 0);
+    const info = sourceInfo(g.doc,'ink-studio/uv-guide');
+    if (request.revision!==undefined && request.revision!==info.revision)
+      throw new RangeError('UV guide was authored against a different topology revision');
+    const {ids,selection:saved} = request, domain = request.domain ?? saved?.domain ?? 'islands';
+    if (!['faces','islands'].includes(domain) || ids!==undefined && saved!==undefined)
+      throw new TypeError('Choose UV face or island IDs, or a saved face or island selection');
+    const faces = saved!==undefined ? select(g.doc,{domain,from:saved,uvSet:g.set}).faces :
+      ids!==undefined ? selection(g,domain,known(g,domain,ids)).faces : order(g.faces.keys());
+    const {document,report} = meshUVGuides.create(g,request,faces,atlasFor);
+    return {document,report:{...info,uvSet:g.set,...report}};
+  }
+
   function known(g, domain, ids) {
     if (!Array.isArray(ids) || Array.from(ids).some(id => !g[domain].has(id)))
       throw new RangeError('Choose existing UV ' + domain + ' by their stable IDs');
@@ -1474,5 +1490,5 @@
     return topology.create({ id, vertices, faces, uvBindings, edges: [...cuts.values()] });
   }
 
-  K.meshTopology = Object.freeze({ ...topology, uv: Object.freeze({ fromTriangles, inspect, select, toTopologySelection, pickModel, modelFaces, readability, plan }) });
+  K.meshTopology = Object.freeze({ ...topology, uv: Object.freeze({ fromTriangles, inspect, guide, select, toTopologySelection, pickModel, modelFaces, readability, plan }) });
 })(KIT);
