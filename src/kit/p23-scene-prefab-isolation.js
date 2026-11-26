@@ -49,7 +49,7 @@ const prefabEditIsolation = (function (K) {
     return A.meshTopologyScene.revise(row, patch);
   }
 
-  function plan(scene, env, request, requireShapeOwner, authoredCamera) {
+  function plan(scene, env, request, requireShapeOwner, authoredCamera, { source = false } = {}) {
     if (!fields(request, ['instance', 'revision', 'faces', 'hideSurroundings', 'edits']) ||
         !K.world.data.id(request.instance) ||
         request.revision !== undefined && (!Number.isSafeInteger(request.revision) || request.revision < 1))
@@ -85,7 +85,9 @@ const prefabEditIsolation = (function (K) {
       }
       const row = target.row, doc = T.create(row.document), beforeRevision = T.revision(doc);
       let next = row, changes, evidence;
-      const pickActive = () => T.select(doc, { domain: 'faces', ids: doc.faces.filter(face => target.active.has(face.id)).map(face => face.id) });
+      const wholeMember = source && request.faces === undefined;
+      const pickActive = () => T.select(doc, { domain: 'faces',
+        ...(!wholeMember && { ids: doc.faces.filter(face => target.active.has(face.id)).map(face => face.id) }) });
       if (kind === 'patch') ({ row: next, ...changes } = revise(row, edit.patch));
       if (kind === 'pivot') {
         const raw = edit.pivot;
@@ -126,7 +128,7 @@ const prefabEditIsolation = (function (K) {
         const raw = edit[kind];
         if (!record(raw) || !TargetSelectors.name(raw.face) || Object.hasOwn(raw, 'object') || Object.hasOwn(raw, 'part'))
           throw new TypeError('An isolated paint edit uses the selected prefab member');
-        if (!target.active.has(raw.face)) {
+        if (!wholeMember && !target.active.has(raw.face)) {
           report.conflicts.push({ index, member, reason: 'outside-active-faces', faces: [raw.face], vertices: [] });
           break;
         }
@@ -145,7 +147,7 @@ const prefabEditIsolation = (function (K) {
         report.conflicts.push({ index, member, reason: 'empty-mesh-member' });
         break;
       }
-      const conflict = changes && changesOutside(row, next, changes, target.active);
+      const conflict = !wholeMember && changes && changesOutside(row, next, changes, target.active);
       if (conflict) {
         report.conflicts.push({ index, member, ...conflict });
         break;

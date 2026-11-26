@@ -849,6 +849,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.physicalMaterials.checkStructural` | function | `(key,value,wet=true)` | [source](../../src/kit/p90-asset-materials.js) |
 | `KIT.authoring.physicalMaterials.definition` | function | `(input,pack)` | [source](../../src/kit/p90-asset-materials.js) |
 | `KIT.authoring.physicalMaterials.profile` | function | `(entry,wetness=0)` | [source](../../src/kit/p90-asset-materials.js) |
+| `KIT.authoring.prefabSourceEdit` | namespace |  |  |
+| `KIT.authoring.prefabSourceEdit.plan` | function | `(scene, env, request, requireShapeOwner, authoredCamera)` | [source](../../src/kit/p23-scene-prefab-source.js) |
 | `KIT.authoring.prefabStamp` | namespace |  |  |
 | `KIT.authoring.prefabStamp.plan` | function | `(scene, request, env)` | [source](../../src/kit/p23-scene-prefab-stamp.js) |
 | `KIT.authoring.projectBundles` | namespace |  |  |
