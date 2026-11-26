@@ -60,7 +60,7 @@
     const {id} = request, registry = scene.prefabArrays ?? {};
     const prior = own(registry,id) ? registry[id] : undefined;
     const {template,source,retained} = state(scene,request,prior);
-    const instances = {...scene.instances}, coordinates = new Map(), occupied = new Map();
+    const instances = {...scene.instances}, coordinates = new Set(), occupied = new Map();
     const report = {format:'ink-studio/prefab-instance-array',version:1,scene:scene.id,id,source,
       count:retained.count,spacing:retained.spacing,space:retained.space,axes:retained.axes,
       ...(prior && {before:{count:prior.count,spacing:prior.spacing,space:prior.space}}),
@@ -69,7 +69,7 @@
     for (const cell of cells(retained.count)) {
       const seed = cell.every(n => n===0), instance = seed ? source.instance : id+'.'+cell.join('.');
       const nominal = position(retained,cell), key = JSON.stringify(nominal);
-      coordinates.set(instance,cell);
+      coordinates.add(instance);
       const existing = own(instances,instance) ? instances[instance] : undefined;
       const collision = occupied.get(key);
       if (collision) report.conflicts.push({reason:'repeated-position',instance,other:collision,cell});

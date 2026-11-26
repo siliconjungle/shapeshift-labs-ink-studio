@@ -32,7 +32,7 @@ p{margin:6px 0;color:var(--muted);font-size:12px}
 progress{width:100%;height:9px;accent-color:var(--gold)}
 .preview{--preview-edge:clamp(270px,49vw,429px);display:grid;place-items:center;margin:11px 0;height:var(--preview-edge);
 border:1px solid var(--line);background-color:#242b38;background-image:conic-gradient(#2e3746 25%,transparent 0 50%,#2e3746 0 75%,transparent 0);background-size:24px 24px}
-#map-frame{width:min(100%,var(--preview-edge));height:auto;aspect-ratio:1;position:relative;isolation:isolate}
+#map-frame{width:min(100%,calc(var(--preview-edge)*var(--map-aspect,1)));height:auto;aspect-ratio:var(--map-aspect,1);position:relative;isolation:isolate}
 #map-frame img{position:absolute;inset:0;display:block;width:100%;height:100%;image-rendering:pixelated;pointer-events:none}
 #uv-ownership{opacity:.71}
 #uv-border{position:absolute;inset:1px;border:1px dashed #faca91;pointer-events:none;box-shadow:0 0 0 1px #17202d}
@@ -80,6 +80,7 @@ dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 9px;font
 </section>
 <section class="card">
 <h2>Baked map</h2><label>Map, target and tile<select id="result"></select></label>
+<label id="mip-control" hidden>Mip level<select id="mip-level"></select></label>
 <div id="uv-tiles" class="toolbar" aria-label="Tiles for this map" hidden></div>
 <div id="uv-controls" aria-label="UV overlays" hidden>
 <label><input id="show-uv-outlines" type="checkbox"> Chart outlines</label>

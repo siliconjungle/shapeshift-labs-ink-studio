@@ -1,3 +1,4 @@
+const Grid=require('./uv-bake-grid.js');
 const Meshes=require('./bake-job-mesh.js');
 const Ray=require('./mesh-ray-index.js');
 const Surface=require('./bake-job-surface.js');
@@ -76,9 +77,9 @@ function directions(rays,spread) {
 
 function prepare(receiver,tile,size,configuration,requested,scene,K) {
   const {V}=K, {rays,spread,range,bias,falloff,selfOcclusion,direction}=configuration;
-  const visibility=requested.some(name=>scalars.includes(name))&&new Float32Array(size*size).fill(1);
-  const bent=requested.includes('bent-normal')&&new Float32Array(size*size*3);
-  const blocker=requested.includes('occlusion-direction')&&new Float32Array(size*size*3);
+  const visibility=requested.some(name=>scalars.includes(name))&&new Float32Array(Grid.count(size)).fill(1);
+  const bent=requested.includes('bent-normal')&&new Float32Array(Grid.count(size)*3);
+  const blocker=requested.includes('occlusion-direction')&&new Float32Array(Grid.count(size)*3);
   if(bent)for(let i=2;i<bent.length;i+=3)bent[i]=1;
   const cone=directions(rays,spread), attenuation=falloffs[falloff], limit=Math.max(0,bias*.1);
   let texels=0,rayCount=0,triangleTests=0,rejected=0,empty=0,blockedRays=0;
@@ -131,7 +132,8 @@ function prepare(receiver,tile,size,configuration,requested,scene,K) {
       emptyLobes:empty,blockedRays,sceneTriangles:scene.triangles})};
 }
 
-function encode(id,buffers,{size,encoding}) {
+function encode(id,buffers,settings) {
+  const size=Grid.rasterGrid(settings),{encoding}=settings;
   if(scalars.includes(id))return {...Surface.scalar(size,encoding,buffers.visibility),
     output:{kind:'ao',encoding,bitDepth:Surface.depth(encoding),domain:'unit'}};
   const isBent=id==='bent-normal', data=isBent?buffers.bent:buffers.blocker;

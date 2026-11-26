@@ -1,3 +1,4 @@
+const Grid=require('./uv-bake-grid.js');
 const Surface=require('./bake-job-surface.js');
 
 const names=['thickness','thickness-valid'];
@@ -70,7 +71,7 @@ function prepare(rows,nearest,{diagonal,rayBias,precision},settings,raw,V) {
 }
 
 function output(result,raw,settings) {
-  const {size,encoding}=settings, {geometryMasks,registeredMaps:{masks}}=result;
+  const size=Grid.rasterGrid(settings), {encoding}=settings, {geometryMasks,registeredMaps:{masks}}=result;
   const {thickness,thicknessScale:scale}=geometryMasks;
   const info={kind:'thickness',encoding,bitDepth:Surface.depth(encoding),units:'shape-units',
     range:encoding==='exr'?null:[0,scale],previewRange:[0,scale],searchRange:thickness.range,

@@ -8,7 +8,7 @@ const debugMap = map => map === 'coverage' || map === outline;
 const colors = ['#62c6b1','#f5aa68','#929cee','#e38cac','#d5cd74','#78bde7','#bd9de2','#acc981'];
 const conflict = [255,77,117];
 const ink = [255,218,155];
-const rgba = (size,pixels) => PNG.encode(size,size,pixels,4,{srgb:true});
+const rgba = (size,pixels) => {const {width,height}=Grid.dimensions(size);return PNG.encode(width,height,pixels,4,{srgb:true});};
 const swatch = id => colors[id-1] ?? '#' + ((Math.imul(id,0x9e3759) & 0xbfbfbf) | 0x404040).toString(16).padStart(6,'0');
 const rgb = hex => [1,3,5].map(index=>parseInt(hex.slice(index,index+2),16));
 const coverageNames = { coverage:'coverage', [outline]:'outline' };
@@ -88,15 +88,15 @@ function vectors(tile,layout,lines) {
 }
 
 function rasterOutline(lines,size) {
-  const pixels=new Uint8Array(size*size*4);
-  const sample=n=>Math.min(size-1,Math.floor(n*size));
+  const {width,height}=Grid.dimensions(size), pixels=new Uint8Array(width*height*4);
+  const sample=([u,v])=>[Math.min(width-1,Math.floor(u*width)),Math.min(height-1,Math.floor(v*height))];
   for(const edges of lines.values())for(const [a,b] of edges) {
-    let [x,y]=a.map(sample);
-    const [x1,y1]=b.map(sample),dx=Math.abs(x1-x),dy=-Math.abs(y1-y),sx=Math.sign(x1-x),sy=Math.sign(y1-y);
+    let [x,y]=sample(a);
+    const [x1,y1]=sample(b),dx=Math.abs(x1-x),dy=-Math.abs(y1-y),sx=Math.sign(x1-x),sy=Math.sign(y1-y);
     let error=dx+dy;
     while(true) {
-      pixels.set(ink,(y*size+x)*4);
-      pixels[(y*size+x)*4+3]=255;
+      pixels.set(ink,(y*width+x)*4);
+      pixels[(y*width+x)*4+3]=255;
       if(x===x1&&y===y1)break;
       const two=2*error;
       if(two>=dy){error+=dy;x+=sx;}
@@ -106,63 +106,79 @@ function rasterOutline(lines,size) {
   return rgba(size,pixels);
 }
 
-function rasterOwnership(tile,layout,size,padding) {
-  const count=size*size, owners=new Uint32Array(count), covered=new Uint8Array(count);
-  const interiors=new Uint8Array(count), footprint=new Uint8Array(count), overlap=new Uint8Array(count);
-  const rows=new Map();
-  let texels=0,collisions=0,gutters=0;
+function capture(tile,layout,size) {
+  const count=Grid.count(size), owners=new Uint32Array(count);
+  const interiors=new Uint8Array(count), overlaps=new Uint8Array(count);
   for(const [face,uv] of tile.uvs.entries()) {
     const id=layout.owner.get(tile.source[face]);
-    if(!rows.has(id))rows.set(id,{id,color:swatch(id),texels:0,gutter:0});
-    const row=rows.get(id);
     Grid.samples(Grid.triangle(uv,size),size,(i,_u,_v,interior)=>{
       if(interior) {
-        if(interiors[i]&&!overlap[i]) {overlap[i]=1;collisions++;}
-        interiors[i]=1;
+        overlaps[i]|=interiors[i];interiors[i]=1;
       }
-      if(covered[i])return;
-      owners[i]=id;
-      covered[i]=1;
-      footprint[i]=255;
-      row.texels++;
-      texels++;
+      if(!owners[i])owners[i]=id;
     });
   }
-  Grid.gutters(covered,size,padding,()=>true,(from,to,next)=>{
-    if(covered[to])return;
-    const id=owners[from];
-    covered[to]=1;
-    owners[to]=id;
-    rows.get(id).gutter++;
-    gutters++;
-    next.push(to);
-  });
-  const palette=new Map([...rows].map(([id,row])=>[id,rgb(row.color)])), pixels=new Uint8Array(count*4);
-  for(let i=0;i<count;i++)if(covered[i]) {
-    const at=i*4;
-    pixels.set(overlap[i]?conflict:palette.get(owners[i]),at);
-    pixels[at+3]=overlap[i]?255:footprint[i]?230:110;
+  return {owners,overlaps};
+}
+
+function rasterOwnership(tile,layout,size,padding,saved) {
+  const {width,height}=Grid.dimensions(size), count=width*height;
+  const {owners,overlaps}=saved??capture(tile,layout,size);
+  const footprint=saved?.footprint??Uint8Array.from(owners,id=>Number(id!==0));
+  if(!saved) {
+    const covered=footprint.slice();
+    Grid.gutters(covered,size,padding,()=>true,(from,to,next)=>{
+      if(covered[to])return;
+      covered[to]=1;owners[to]=owners[from];next.push(to);
+    });
   }
-  return {coverage:PNG.encodeGray(size,size,footprint),ownership:rgba(size,pixels),texels,
-    charts:rows.size,palette:[...rows.values()].sort((a,b)=>a.id-b.id).slice(0,64),overlaps:collisions,gutters};
+  const rows=new Map([...new Set(tile.source.map(i=>layout.owner.get(i)))].map(id=>
+    [id,{id,color:swatch(id),texels:0,gutter:0}]));
+  const palette=new Map([...rows].map(([id,row])=>[id,rgb(row.color)])), pixels=new Uint8Array(count*4);
+  let texels=0,collisions=0,gutters=0;
+  for(let i=0;i<count;i++)if(owners[i]) {
+    const at=i*4,row=rows.get(owners[i]);
+    if(footprint[i]){texels++;row.texels++;}else{gutters++;row.gutter++;}
+    collisions+=overlaps[i];
+    pixels.set(overlaps[i]?conflict:palette.get(owners[i]),at);
+    pixels[at+3]=overlaps[i]?255:footprint[i]?230:110;
+  }
+  return {coverage:PNG.encodeGray(width,height,Uint8Array.from(footprint,n=>Math.round(n*255))),
+    ownership:rgba(size,pixels),texels,charts:rows.size,palette:[...rows.values()].sort((a,b)=>a.id-b.id).slice(0,64),
+    overlaps:collisions,gutters};
 }
 
 function create(tasks,write,K) {
-  if(!tasks.some(task=>debugMap(task.map)))return ()=>undefined;
-  const groups=new Map(), after=new Map(), sources=new Map();
+  const enabled=tasks.some(task=>debugMap(task.map));
+  const groups=new Map(), after=new Map(), sources=new Map(), captured=new Map();
   let vectorsWritten=0;
-  const keyOf=({authored,tile,settings})=>JSON.stringify([authored.id,tile.tile,settings.size,settings.padding]);
+  const keyOf=({authored,tile,settings})=>JSON.stringify([authored.id,tile.tile,settings.delivery?.width??settings.size,
+    settings.delivery?.height??settings.size,settings.padding,settings.delivery?.antialiasing??1]);
   for(const task of tasks) {
     const key=keyOf(task);
     if(!groups.has(key))groups.set(key,new Set());
-    groups.get(key).add(task.map);
+    if(!task.settings.delivery)groups.get(key).add(task.map);
   }
-  return task=>{
+  function source({authored,selection}) {
+    if(!sources.has(authored.id))sources.set(authored.id,{layout:charts(selection,K),tiles:new Map()});
+    return sources.get(authored.id);
+  }
+  function samples(task) {
+    const grid=Grid.rasterGrid(task.settings);
+    const key=JSON.stringify([task.authored.id,task.tile.tile,grid]);
+    if(!captured.has(key)) {
+      if(captured.size>=2)captured.delete(captured.keys().next().value);
+      captured.set(key,capture(task.tile,source(task).layout,grid));
+    }
+    return captured.get(key);
+  }
+  function filesFor(task,saved) {
+    if(!enabled&&!saved)return;
     const key=keyOf(task);
     if(after.has(key))return after.get(key);
-    const {authored,selection,tile,settings:{size,padding}}=task;
-    if(!sources.has(authored.id))sources.set(authored.id,{layout:charts(selection,K),tiles:new Map()});
-    const {layout,tiles}=sources.get(authored.id);
+    const {authored,selection,tile,settings:{size,padding,delivery}}=task;
+    const rasterSize=delivery??size, {width,height}=Grid.dimensions(rasterSize);
+    const {layout,tiles}=source(task);
     const [u,v]=tile.tile, root='uv-debug/'+authored.id+'/'+u+'_'+v, tileKey=tile.tile.join(',');
     if(!tiles.has(tileKey)) {
       vectorsWritten+=tile.uvs.length;
@@ -170,24 +186,23 @@ function create(tasks,write,K) {
       const lines=outlines(selection,tile,layout);
       const vector=vectors(tile,layout,lines);
       const files={outlineSvg:root+'/outline.svg',coverageSvg:root+'/coverage.svg'};
-      write(files.outlineSvg,vector.outline);
-      write(files.coverageSvg,vector.coverage);
+      write(files.outlineSvg,vector.outline);write(files.coverageSvg,vector.coverage);
       tiles.set(tileKey,{lines,files});
     }
-    const vector=tiles.get(tileKey), grid=root+'/'+size+'-'+padding, maps=groups.get(key);
-    const mapPath=map=>maps.has(map)?'maps/'+authored.id+'/'+u+'_'+v+'/'+map+'.png':
-      grid+'/'+coverageNames[map]+'.png';
+    const vector=tiles.get(tileKey), maps=groups.get(key);
+    const grid=root+'/'+(width===height?width:width+'x'+height)+'-'+padding+
+      (delivery?.antialiasing>1?'-aa'+delivery.antialiasing:'');
+    const mapPath=map=>maps.has(map)?'maps/'+authored.id+'/'+u+'_'+v+'/'+map+'.png':grid+'/'+coverageNames[map]+'.png';
     const files={...vector.files,coverage:mapPath('coverage'),outline:mapPath(outline),ownership:grid+'/ownership.png'};
-    const {coverage,ownership,...raster}=rasterOwnership(tile,layout,size,padding);
-    const hashes={coverage:write(files.coverage,coverage),outline:write(files.outline,rasterOutline(vector.lines,size))};
+    const {coverage,ownership,...raster}=rasterOwnership(tile,layout,rasterSize,padding,saved);
+    const hashes={coverage:write(files.coverage,coverage),outline:write(files.outline,rasterOutline(vector.lines,rasterSize))};
     write(files.ownership,ownership);
-    const result={
-      entry:{target:authored.id,tile:tile.tile,tileLabel:tile.label,size,padding,files,...raster},
-      hashes
-    };
+    const result={entry:{target:authored.id,tile:tile.tile,tileLabel:tile.label,size,
+      ...(delivery&&{width,height,antialiasing:delivery.antialiasing}),padding,files,...raster},hashes};
     after.set(key,result);
     return result;
-  };
+  }
+  return {filesFor,samples,outline:task=>rasterOutline(outlines(task.selection,task.tile,source(task).layout),Grid.rasterGrid(task.settings))};
 }
 
 module.exports = { outline, debugMap, create };
