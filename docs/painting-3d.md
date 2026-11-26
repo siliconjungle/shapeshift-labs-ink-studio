@@ -55,6 +55,8 @@ Marks use native [sweep brushes and pressure poses](sculpt-sweeps.md). They rend
 
 [Paint relief](paint-relief.md) lets a retained stroke act as flat pigment, a shading ridge or groove, or finite raised or cut volume.
 
+[Brush presets](paint-presets.md) apply several style channels together. Each stroke can override any channel independently.
+
 ## Dabs, pressure, and ruled strokes
 
 Use one pose for a precise dab or multiple poses for a stroke. Both use the same brush, quaternion orientation, pressure, and edit operations. Set `path: "ruled"` to lay the recorded poses along a straight line between the first and last points. Ink distributes the poses along the line by their original spacing along the stroke. A surface-bound mark rules the guide before projecting it onto the receiver.
@@ -75,7 +77,7 @@ Use a mark's `set` edit to replace `pressureResponse` or switch `path` between `
 node examples/paint-mark-pressure-demo.cjs /tmp/ink-paint-mark-pressure
 ```
 
-An update can change a placement's `bindings` or `transform`, replace its `painting`, or apply an ordered `edits` array. `set` patches a mark, `move` places it `before` another mark or at the end, `add` appends a new mark, and `remove` deletes one. Set `enabled` to `false` to keep a mark available for later revisions. The scene retains the placement under `paintings3d`. Save beside the source file to preserve relative asset paths.
+An update can change a placement's `bindings` or `transform`, replace its `painting`, or apply an ordered `edits` array. `set` patches a mark, `move` places it `before` another mark or at the end, `add` appends a new mark, `remove` deletes one, and `apply-preset` changes its style channels together. Set `enabled` to `false` to keep a mark available for later revisions. The scene retains the placement under `paintings3d`. Save beside the source file to preserve relative asset paths.
 
 ```json
 {

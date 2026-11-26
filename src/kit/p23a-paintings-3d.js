@@ -5,9 +5,9 @@
   const record = value => K.world.data.record(value);
   const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
   const name = value => K.world.data.id(value) && /^[a-zA-Z0-9_-]{1,40}$/.test(value);
-  const editable = ['brush', 'poses', 'step', 'blendRadius', 'path', 'pressureResponse', 'looseness', 'direction', 'grid',
-    'relief', 'mat', 'res', 'transform', 'attachment', 'enabled'];
-  const resources = ['profiles', 'flowMaps'];
+  const channels = ['brush', 'step', 'blendRadius', 'pressureResponse', 'looseness', 'direction', 'grid', 'relief', 'mat'];
+  const editable = [...channels, 'preset', 'poses', 'path', 'res', 'transform', 'attachment', 'enabled'];
+  const resources = ['profiles', 'flowMaps', 'presets'];
 
   function resolveBrush(brush, profiles) {
     if (brush?.kind !== 'mark-profile') return brush;
@@ -18,6 +18,31 @@
     };
     return { ...brush, profile: definition(brush.profile),
       ...(record(brush.mix) && { mix: { ...brush.mix, profile: definition(brush.mix.profile) } }) };
+  }
+
+  function readPreset(presets, key) {
+    if (!name(key) || !Object.hasOwn(presets ?? {}, key)) throw new RangeError('Unknown brush preset ' + key);
+    return presets[key];
+  }
+
+  function checkPresets(presets, profiles, flowMaps) {
+    if (!record(presets) || Object.keys(presets).length > 64 || !Object.keys(presets).every(name))
+      throw new TypeError('A painting needs a map of up to 64 named brush presets');
+    const P = K.procedural;
+    for (const [id, style] of Object.entries(presets)) {
+      try {
+        if (!fields(style, channels) || !Object.keys(style).length || Object.values(style).some(value => value == null))
+          throw new TypeError('A brush preset needs one or more style channels');
+        const { brush = { kind: 'sphere', radius: .1 }, step, blendRadius, pressureResponse, looseness, direction, grid, relief } = style;
+        P.shapeSweeps.prepare({ brush: resolveBrush(brush, profiles), step, blendRadius, pressureResponse, looseness,
+          poses: [{ point: [0, 0, 0], pressure: pressureResponse?.width?.[0] > pressureResponse?.width?.[1] ? 0 : 1 }] });
+        P.markDirection.prepare(direction, flowMaps);
+        P.markGrid.prepare(grid, flowMaps);
+        P.paintRelief.prepare(relief);
+      } catch (error) {
+        throw new RangeError('Brush preset ' + id + ' — ' + error.message, { cause: error });
+      }
+    }
   }
 
   function expand(source) {
@@ -56,18 +81,23 @@
         try { return [key, K.flowMap.open(flow)]; }
         catch (error) { throw new TypeError(id + ' flow map ' + key + ' — ' + error.message, { cause: error }); }
       }));
+      const { presets = {} } = painting;
+      checkPresets(presets, profiles, openedFlows);
       const frame = graph.transform(transform), ids = new Set(), slots = new Set();
       const report = { id, painting: painting.id, transform: frame, marks: [],
         ...(painting.profiles !== undefined && { profiles: Object.keys(profiles) }),
-        ...(painting.flowMaps !== undefined && { flowMaps: Object.keys(flowMaps) }) };
+        ...(painting.flowMaps !== undefined && { flowMaps: Object.keys(flowMaps) }),
+        ...(painting.presets !== undefined && { presets: Object.keys(presets) }) };
       reports.push(report);
       for (const [order, mark] of painting.marks.entries()) {
-        if (!fields(mark, ['id', ...editable]) || !name(mark.id) || ids.has(mark.id) || mark.mat === undefined ||
+        if (!fields(mark, ['id', ...editable]) || !name(mark.id) || ids.has(mark.id) ||
             mark.enabled !== undefined && typeof mark.enabled !== 'boolean' ||
             mark.res !== undefined && (!Number.isFinite(mark.res) || mark.res <= 0))
           throw new TypeError(id + ' mark ' + order + ' needs a unique ID, brush, poses and material');
-        const { id: key, attachment = { kind: 'free' }, transform, enabled = true, looseness: authoredStyle,
-          direction: authoredDirection, grid: authoredGrid, relief: authoredRelief, ...stroke } = mark;
+        const presetStyle = mark.preset === undefined ? {} : readPreset(presets, mark.preset);
+        const { id: key, attachment = { kind: 'free' }, transform, enabled = true, looseness: authoredStyle, preset,
+          direction: authoredDirection, grid: authoredGrid, relief: authoredRelief, ...stroke } = { ...presetStyle, ...mark };
+        if (stroke.mat === undefined) throw new TypeError(id + ' mark ' + key + ' needs a material');
         ids.add(key);
         const solid = 'paint.' + id + '.' + key;
         const guideFrame = graph.compose(frame, graph.transform(transform));
@@ -130,6 +160,9 @@
         report.marks.push({ id: key, order, enabled, attachment: attachment.kind, ...(attachment.slot && { slot: attachment.slot }),
           ...(target && { target }), ...(part && { part }), ...(enabled && { solid, transform: restAffine }),
           brush: brush.kind, material: stroke.mat, poses: stroke.poses.length,
+          ...(preset !== undefined && { preset, channelSources: Object.fromEntries(channels.filter(channel =>
+            Object.hasOwn(mark, channel) || Object.hasOwn(presetStyle, channel)).map(channel =>
+            [channel, Object.hasOwn(mark, channel) ? 'mark' : 'preset'])) }),
           ...(typeof brush.profile === 'string' && { profile: brush.profile }),
           ...(brush.mix && { mix: { range: brush.mix.range, ...(typeof brush.mix.profile === 'string' && { profile: brush.mix.profile }) } }),
           ...(style && { looseness: style }),
@@ -137,6 +170,7 @@
             ruffleDegrees: direction.ruffleDegrees, seed: direction.seed } }),
           ...(grid && { grid: grid.settings }),
           ...(relief && { relief }),
+          ...(stroke.step !== undefined && { step: stroke.step }), ...(stroke.blendRadius !== undefined && { blendRadius: stroke.blendRadius }),
           ...(stroke.path !== undefined && { path: stroke.path }), ...(stroke.pressureResponse && { pressureResponse: stroke.pressureResponse }) });
       }
       for (const slot of Object.keys(bindings)) if (!slots.has(slot))
@@ -146,7 +180,7 @@
     return { spec: { ...scene, solids: [...solids, ...marks.reverse()] }, anchors, layers, looseness, reports };
   }
 
-  function editMarks(painting, edits) {
+  function editMarks(painting, edits, previousPresets) {
     if (!Array.isArray(edits) || !edits.length) throw new TypeError('Mark edits must be a nonempty ordered array');
     const marks = painting.marks.slice();
     for (const change of edits) {
@@ -164,12 +198,19 @@
         const updated = { ...marks[index], ...change.patch };
         for (const [key, value] of Object.entries(change.patch)) if (value === null) delete updated[key];
         marks[index] = updated;
+      } else if (change.op === 'apply-preset' && fields(change, ['op', 'id', 'preset'])) {
+        const current = marks[index], preset = readPreset(painting.presets, change.preset);
+        const available = Object.hasOwn(painting.presets ?? {}, current.preset) ? painting.presets : previousPresets;
+        const inherited = current.preset === undefined ? {} : readPreset(available, current.preset);
+        const updated = { ...inherited, ...current, preset: change.preset };
+        for (const channel of channels) if (Object.hasOwn(preset, channel)) delete updated[channel];
+        marks[index] = updated;
       } else if (change.op === 'move' && fields(change, ['op', 'id', 'before'])) {
         const [mark] = marks.splice(index, 1);
         const before = change.before === undefined ? marks.length : marks.findIndex(row => row.id === change.before);
         if (before < 0) throw new RangeError('Unknown destination mark ' + change.before);
         marks.splice(before, 0, mark);
-      } else throw new TypeError('Use add, remove, set or move to edit a mark');
+      } else throw new TypeError('Use add, remove, set, move or apply-preset to edit a mark');
     }
     return { ...painting, marks };
   }
@@ -187,14 +228,14 @@
         value.painting !== undefined && ['edits', ...resources].some(key => value[key] !== undefined) ||
         resources.some(key => value[key] !== undefined && !record(value[key])))
       throw new TypeError('A painting update can replace the document or edit resources, marks, bindings and transform');
-    const { edits, profiles, flowMaps, ...patch } = value, current = list[index];
-    const revised = { ...current, ...patch, ...(edits !== undefined && { painting: editMarks(current.painting, edits) }) };
-    for (const [key, changes] of Object.entries({ profiles, flowMaps })) {
+    const { edits, profiles, flowMaps, presets, ...patch } = value, current = list[index];
+    const revised = { ...current, ...patch };
+    for (const [key, changes] of Object.entries({ profiles, flowMaps, presets })) {
       if (changes === undefined) continue;
-      const definitions = { ...revised.painting[key], ...changes };
-      for (const [id, asset] of Object.entries(changes)) if (asset === null) delete definitions[id];
+      const definitions = Object.fromEntries(Object.entries({ ...revised.painting[key], ...changes }).filter(([, asset]) => asset !== null));
       revised.painting = { ...revised.painting, [key]: definitions };
     }
+    if (edits !== undefined) revised.painting = editMarks(revised.painting, edits, current.painting.presets);
     for (const key of ['transform', 'bindings']) if (revised[key] === null) delete revised[key];
     return list.map((row, i) => i === index ? revised : row);
   }
