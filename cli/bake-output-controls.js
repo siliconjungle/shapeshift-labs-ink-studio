@@ -63,7 +63,8 @@ function decode(bytes,output,map) {
     if(color&&i%channels<3&&encoding!=='exr')return linear(value);
     return value;
   });
-  return {width,height,channels,data,color,normal,categorical:categories.has(map),any:map==='thickness-valid',
+  return {width,height,channels,data,color,normal,direction:output?.kind==='direction',
+    categorical:categories.has(map),any:map==='thickness-valid',
     opacity:map==='opacity',coverageMap:map==='coverage',roughness:map==='roughness',sourceBitDepth:image.bitDepth};
 }
 
@@ -124,7 +125,7 @@ function reduce(source,width,height,semantic) {
       }
     } else if(normal) {
       const length=Math.hypot(...value);
-      for(let c=0;c<channels;c++)result.data[at+c]=length?value[c]/length:Number(c===2);
+      for(let c=0;c<channels;c++)result.data[at+c]=length?value[c]/length:Number(!semantic.direction&&c===2);
     } else for(let c=0;c<channels;c++) {
       const denominator=color&&c<3?visible:total;
       const mean=denominator?value[c]/denominator:0;
@@ -166,7 +167,7 @@ function pad(source,delivery,semantic,level) {
       });
       const length=normal?Math.hypot(...buffer.subarray(at,at+channels)):weight;
       for(let c=0;c<channels;c++)buffer[at+c]=gutters==='transparent'&&c===clearLane?0:
-        length?buffer[at+c]/length:Number(c===2);
+        length?buffer[at+c]/length:Number(!semantic.direction&&c===2);
     }
     [buffer,result.data]=[result.data,buffer];
   }
@@ -179,7 +180,7 @@ function encode(raster,semantic,delivery,range,weightedAlpha) {
   const alpha=channels===4&&color?'straight':'none';
   const scalar=(i,c)=>{
     if(coverageMap)return footprint[i];
-    if(!filled[i])return normal&&c===2?1:0;
+    if(!filled[i])return normal&&!semantic.direction&&c===2?1:0;
     const value=data[i*channels+c];
     if((opacity||alpha==='straight'&&c===3)&&weightedAlpha&&area[i])return value*area[i];
     if(!floating&&range)return (value-range[0])/(range[1]-range[0]);

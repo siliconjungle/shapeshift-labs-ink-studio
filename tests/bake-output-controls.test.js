@@ -50,7 +50,8 @@ test('rectangular supersampling, TIFF and odd mip chains keep chart colors separ
     ['coverage',{...grid,format:'png',precision:'unorm16',mipmaps:1}],
     ['normal',{width:27,height:13,antialiasing:2,format:'exr',precision:'float16',mipmaps:1}],
     ['material-id',{...grid,format:'exr',precision:'float32',mipmaps:2}],
-    ['position-world',{width:23,height:17,format:'exr',precision:'float32'}]
+    ['position-world',{width:23,height:17,format:'exr',precision:'float32'}],
+    ['occlusion-direction',{width:17,height:11,antialiasing:2,mipmaps:1,rays:8,selfOcclusion:'only'}]
   ]);
   const pigment=open(baked,'pigment'), coverage=open(baked,'coverage'), normal=open(baked,'normal');
   assert.deepEqual([pigment.width,pigment.height,pigment.bitDepth,pigment.encoding],[35,19,16,'tiff']);
@@ -72,6 +73,7 @@ test('rectangular supersampling, TIFF and odd mip chains keep chart colors separ
   const xyz=open(baked,'position-world');
   assert.equal(xyz.at(8,8)[2],-2);
   assert.deepEqual([xyz.width,xyz.height],[23,17]);
+  assert(open(baked,'occlusion-direction',1).data.every(value=>value===0));
   const debug=baked.report.uvDebug[pigment.row.uvDebug];
   assert.equal(debug.width,35);assert.equal(debug.height,19);
   assert.equal(debug.charts,2);
