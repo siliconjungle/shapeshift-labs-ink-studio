@@ -189,6 +189,7 @@ All checked-in guides, indexed by title and section headings.
 - [Learned cellular growth](../learned-cellular-growth.md)
 - [Additional light emitters](../light-emitters.md)
 - [Authored lightning](../lightning.md)
+- [Linked 3D material preview](../linked-material-preview.md)
 - [Linked views and selections](../linked-views.md)
 - [Live scene hierarchy](../live-scene-hierarchy.md)
 - [Live sun lighting](../live-sun.md)

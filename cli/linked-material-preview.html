@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ink Studio · Linked material preview</title>
+<style>
+:root{color-scheme:dark;--ink:#edf0e4;--muted:#b6c6be;--accent:#f3c786;--line:#36534d;--ground:#101d1b;--panel:#172825;--stage:#263d36}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+main{max-width:1440px;margin:auto;padding:38px 46px 27px}
+.mono,label,select,button,.aside,.stat,.status{font:600 11px/1.3 ui-monospace,monospace;letter-spacing:.085em;text-transform:uppercase}
+.mono{color:var(--accent);letter-spacing:.16em}
+header{display:flex;align-items:end;justify-content:space-between;gap:20px;padding-bottom:27px;border-bottom:1px solid var(--line);margin-bottom:17px}
+h1{font:normal clamp(52px,7.8vw,113px)/.88 Georgia,serif;letter-spacing:-.07em;margin:9px 0 0}
+h2{font:normal 29px/1 Georgia,serif;letter-spacing:-.03em;margin:0}
+a{color:var(--accent);text-underline-offset:3px}
+header a{white-space:nowrap}
+.bar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.bar label{display:grid;gap:7px;color:var(--muted)}
+select{width:100%;padding:10px;text-transform:none;letter-spacing:.02em;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--ink)}
+.panels{display:grid;grid-template-columns:minmax(0,1.23fr) minmax(0,1fr);gap:12px}
+section{border:1px solid var(--line);min-width:0;border-radius:4px;overflow:hidden;background:var(--panel)}
+.head,.foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 17px;min-height:62px}
+.aside,.stat,.status{color:var(--muted);overflow-wrap:anywhere}
+.view,.map-stage{display:grid;grid-template:100% / 100%;place-items:center;position:relative;overflow:hidden;height:360px;border-block:1px solid var(--line)}
+.view{background:radial-gradient(ellipse at 50% 41%,#436259,#203731 68%,#1b2d28)}
+.viewport{position:relative;aspect-ratio:var(--view-ratio);width:min(100%,calc(360px * var(--view-ratio)));max-height:100%;touch-action:none;cursor:grab}
+.viewport:active{cursor:grabbing}
+.viewport img,.viewport canvas{position:absolute;display:block;inset:0;width:100%;height:100%;image-rendering:pixelated;pointer-events:none}
+.viewport img{filter:drop-shadow(5px 13px 8px #151e1ab0)}
+.map-stage{background-color:#243b34;background-image:conic-gradient(#2c463d 25%,transparent 0 50%,#2c463d 0 75%,transparent 0);background-size:24px 24px}
+.map-wrap{position:relative;width:min(86%,370px,calc(var(--map-ratio,1) * 310px));aspect-ratio:var(--map-ratio,1);max-height:100%;cursor:crosshair}
+.map-wrap img{width:100%;height:100%;display:block;image-rendering:pixelated}
+.marker{position:absolute;width:20px;height:20px;border:1px solid var(--accent);border-radius:50%;box-shadow:0 0 0 1px #12211d;transform:translate(-50%,-50%);pointer-events:none}
+.marker::before,.marker::after{content:"";position:absolute;left:50%;top:50%;background:var(--accent);transform:translate(-50%,-50%)}
+.marker::before{width:26px;height:1px}.marker::after{width:1px;height:26px}
+.empty{margin:25px;text-align:center;color:var(--muted)}
+.orbit-control{width:min(235px,67%);display:flex;gap:9px;align-items:center;color:var(--muted)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+output{color:var(--accent);min-width:3ch;text-align:right}
+.note{color:var(--muted);margin:14px 0 0;font-size:13px}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(max-width:900px){main{padding:25px 19px}.view,.map-stage{height:295px}.viewport{width:min(100%,calc(295px * var(--view-ratio)))}.map-wrap{width:min(86%,350px,calc(var(--map-ratio,1) * 260px))}}
+@media(max-width:640px){header{align-items:start;flex-direction:column;gap:12px}.bar{grid-template-columns:repeat(2,minmax(0,1fr))}.panels{grid-template-columns:1fr}.head,.foot{padding:12px 13px}}
+</style>
+<script defer src="data.js"></script>
+<script defer src="live.js"></script>
+</head>
+<body>
+<main>
+  <header><div><div class="mono">Ink Studio · Linked material preview</div><h1 id="title"></h1></div>
+    <a class="aside" href="preview.json">Preview report</a></header>
+  <div class="bar">
+    <label>Carrier<select id="carrier"></select></label>
+    <label>Material slot<select id="slot"></select></label>
+    <label>UV tile<select id="tile"></select></label>
+    <label>Map<select id="channel"></select></label>
+  </div>
+  <div class="panels">
+    <section>
+      <div class="head"><h2>Surface</h2><span class="aside">Native Ink render</span></div>
+      <div class="view"><div id="viewport" class="viewport" aria-label="Drag to orbit or click to pick a surface">
+        <img id="render" alt=""><canvas id="overlay" aria-hidden="true"></canvas>
+      </div></div>
+      <div class="foot"><label class="orbit-control">Orbit<input type="range" id="orbit" min="0" value="0" step="1"><output for="orbit" id="angle"></output></label>
+        <span class="status" id="status" aria-live="polite"></span></div>
+    </section>
+    <section>
+      <div class="head"><h2>2D map</h2><span class="aside" id="map-title"></span></div>
+      <div class="map-stage"><div id="map-wrap" class="map-wrap"><img id="map" alt=""><span class="marker" id="marker" hidden></span></div>
+        <p class="empty" id="empty" hidden>No graph map is bound to this slot and tile.</p></div>
+      <div class="foot"><span class="stat" id="dimensions"></span><span class="stat" id="uv" aria-live="polite"></span></div>
+    </section>
+  </div>
+  <p class="note">Click the surface to locate its texel. Click a map to locate the nearest visible sample in the current view.</p>
+</main>
+</body>
+</html>
