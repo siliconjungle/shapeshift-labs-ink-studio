@@ -405,6 +405,7 @@ All checked-in guides, indexed by title and section headings.
 - [Sandpiles and excitable media](../sandpiles-excitable.md)
 - [Wave propagation through geometry](../scalar-wave.md)
 - [Scale-aware previews](../scale-aware-previews.md)
+- [Process a planar material scan](../scan-processing.md)
 - [Scan to mesh with residual splats](../scan-to-mesh.md)
 - [Scene soundtrack exports](../scene-audio.md)
 - [Headless scene editor](../scene-editor.md)

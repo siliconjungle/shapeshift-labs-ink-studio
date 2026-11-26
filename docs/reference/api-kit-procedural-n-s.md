@@ -1279,6 +1279,38 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sampling.poisson` | function | `(spec = {})` | [source](../../src/kit/p34-poisson-sampling.js) |
 | `KIT.procedural.sampling.triangles` | function | `(input, { count, seed = 0, accept, maxTriangles = 200000 } = {})` | [source](../../src/kit/p43-surface-sample-layouts.js) |
 
+## KIT.procedural.scanProcessing
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.scanProcessing` | namespace |  |  |
+| `KIT.procedural.scanProcessing.operations` | namespace |  |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"]` | namespace |  |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].description` | value | `string = "Register, de-light, repair and tile material scan maps on a shared surface grid."` |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].inputs` | namespace |  |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].inputs.defects` | namespace |  |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].inputs.defects.default` | value | `null` |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].inputs.defects.type` | value | `string = "any"` |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].inputs.illumination` | alias | `Alias of KIT.procedural.scanProcessing.operations["material.scanProcess"].inputs.defects` |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].inputs.options` | namespace |  |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].inputs.options.default` | namespace |  |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].inputs.options.type` | value | `string = "record"` |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].inputs.source` | value | `string = "materialChannels"` |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].inputs.validity` | namespace |  |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].inputs.validity.default` | namespace |  |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].inputs.validity.type` | value | `string = "record"` |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].outputs` | namespace |  |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].outputs.aligned` | value | `string = "materialChannels"` |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].outputs.delit` | value | `string = "materialChannels"` |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].outputs.repaired` | value | `string = "materialChannels"` |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].outputs.repairedMask` | value | `string = "grayImage"` |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].outputs.report` | value | `string = "record"` |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].outputs.support` | value | `string = "grayImage"` |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].outputs.unresolved` | value | `string = "grayImage"` |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].outputs.value` | value | `string = "materialChannels"` |  |
+| `KIT.procedural.scanProcessing.operations["material.scanProcess"].run` | function | `({ source, options, defects, illumination, validity })` | [source](../../src/kit/paq-scan-processing.js) |
+| `KIT.procedural.scanProcessing.process` | function | `(source, options = {}, defects = null, illumination = null, validity = {})` | [source](../../src/kit/paq-scan-processing.js) |
+
 ## KIT.procedural.sceneGraph
 
 | Member | Kind | Signature or value | Guides and source |

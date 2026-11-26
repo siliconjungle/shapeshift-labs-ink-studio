@@ -24,6 +24,8 @@ Keep the maps within each exposure at the same extent and in the same source coo
 
 The report includes per-exposure registration and color-calibration residuals. Bad or underdetermined fits fail with a diagnostic. The recovery favors agreement near a weighted median and flags contradictory observations in the confidence maps. A single height observation has confidence at most .5. A gap has zero confidence. In directional mode, usable normals or relief support illumination correction. Strong glare is easier to reject when several exposures give a consistent diffuse reading. Use controlled lighting or cross-polarized photography for glossy materials. The operation recovers diffuse pigment and transfers supplied roughness. More complex measured reflectance needs a capture and representation that describe it.
 
+Use [scan processing](scan-processing.md) to repair and tile the resulting material packet with shared channel correspondence.
+
 ## Deliver the recovered maps
 
 The graph returns `value` and a `report`. The packet contains `baseColor`, `normal`, `mask.pigment-confidence`, and `mask.normal-confidence`. Height adds `height` and `mask.relief-confidence`. Supplied roughness adds `roughness`. Export the aligned packet as [named EXR channels](material-texture-formats.md), or use the individual image ports with the existing material tools. The Tideglass demo also assigns the recovered pigment, normals, and roughness to the scan mesh used in its relighting preview.
