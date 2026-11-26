@@ -73,7 +73,7 @@ function view(input, standalone) {
     cameraShot,cameraTime,lockCamera,material,readability,afterMaterials};
 }
 
-function capture(document, settings, kit, editor, object) {
+function capture(document, settings, kit, editor, object, {basePaint=false} = {}) {
   let world, mesh;
   if (editor) {
     const scene = editor.snapshot(), row = scene.topologyMeshes[object];
@@ -90,7 +90,7 @@ function capture(document, settings, kit, editor, object) {
   let camera;
   const { w, h, t, raw, cameraShot, cameraTime, lockCamera } = settings;
   if (cameraShot !== undefined && !world.cameraRig) throw new RangeError('Choose a shot from an authored camera rig');
-  const frame = R.render(world, { w, h, t, raw, px: 1, camera: settings.camera, cameraShot, cameraTime, lockCamera, passes: ['sourceSurface'],
+  const frame = R.render(world, { w, h, t, raw, px: 1, camera: settings.camera, cameraShot, cameraTime, lockCamera, passes: ['sourceSurface'], captureBasePaint:basePaint,
     edges: false, composite: false, renderGraph: false, renderGrid: false, inspection: false, shutter: false, cameraGuides: false,
     ...R.cameraCapture(null, (raster, sample) => {
       if (raster.width === w && raster.height === h)

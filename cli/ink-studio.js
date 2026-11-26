@@ -1517,6 +1517,8 @@ const CMD = {
         '  tileset select-atlas <pick.json> --scene <scene.json> --object <mesh-id> [--part <part-id>] [--mode match|inside|touch] [--out <selection.json>]   select faces by pigment UV coverage of a tileset rectangle',
         '  tileset eyedrop --scene <scene.json> --object <mesh-id> --face <face-id> [--part ID] [--brush-size] [--out <pick.json>]   recover a reusable painted face pick for stamp --selection',
         '  tileset reskin --scene <scene.json> --object <mesh-id> --face <face-id> --mode crop|tileset|relative (--selection <pick.json> | --id <tileset-id>) [--part ID] [--column N --row N] [--out <new-scene.json>]   change the paint on an existing mesh face',
+        '  tileset gutters <request.json> --scene <scene.json> [--out <new-scene.json>]   copy exterior gutter pixels for tile rectangles or UV islands without moving UVs',
+        '  tileset bleed-review <request.json> --scene <scene.json> --out directory   compare an inset and painted gutters over matched native camera samples',
         '  tileset assign <request.json> --scene <scene.json> [--preview dir] [--view view.json] [--out <new-scene.json>]   fit selected UVs to a tile or sheet, or preserve texel scale with an optional clamp',
         '  tileset stroke <stroke.json> --scene <scene.json> [--collection <collection.json>] [--out <new-scene.json>]   draw or erase an interval-sampled run of painted faces',
         '  tileset rectangle <request.json> --scene <scene.json> [--collection <collection.json>] [--out <new-scene.json>]   fill or erase an inclusive rectangle of construction grid cells',

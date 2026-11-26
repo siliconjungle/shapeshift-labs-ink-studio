@@ -472,6 +472,23 @@
       return document.pending() ? write() : document.transact(label,write);
     }
 
+    function stageTilesetGutters(request) {
+      const {asset,report} = A.tilesetGutters.plan(snapshot(),request);
+      if (!report.writtenTexels) return {report:freeze({...report,canCommit:true})};
+      const {patch,report:revision} = stageTilesetRevision({type:'replace',id:request.tileset,asset});
+      return {patch,report:freeze({...report,canCommit:revision.canCommit,revision})};
+    }
+
+    function planTilesetGutters(request) {
+      return stageTilesetGutters(request).report;
+    }
+
+    function editTilesetGutters(request) {
+      const {patch,report} = stageTilesetGutters(request);
+      if (!report.canCommit) throw Object.assign(new RangeError('Painted gutters need tileset revision review'),{report});
+      return patch ? commitTilesetRevision(patch,report,'Paint gutters on '+request.tileset) : report;
+    }
+
     function planTilesetSource(id,asset,source) {
       return stageTilesetRevision({type:'replace',id,asset},{[id]:source}).report;
     }
@@ -1238,7 +1255,7 @@
       selectTilesetAtlas: (request) => A.tilesetAtlasSelection.select(snapshot(),request),
       planTilesetCanvas,
       transformTilesetCanvas,
-      tilesetDependencies, planTilesetRevision, editTilesetRevision,
+      tilesetDependencies, planTilesetRevision, editTilesetRevision, planTilesetGutters, editTilesetGutters,
       planTilesetSource, updateTilesetSource,
       meshTopology,
       selectMeshTopology(object, request, { part, visibility } = {}) {
