@@ -219,6 +219,7 @@ ${samplingGLSL}` : ''}
 ${section ? cutaway : ''}
 ${environment?.media ? environmentMediaSource(environment.lit) : ''}
 ${lighting ? emitterGLSL : ''}
+${normalMapped ? 'uniform bool u_receiveEmitterShadow;' : ''}
 ${chart ? 'uniform highp sampler2DArray u_surfaceLit;uniform int u_surfaceLightCount;in vec2 v_light;' : ''}
 ${mappedNormals ? 'uniform highp sampler2D u_surfaceNormalMap;uniform bool u_hasSurfaceNormalMap;' : ''}
 ${needsFrame ? 'uniform bool u_surfaceNormals;uniform vec3 u_surfaceEye;' : ''}
@@ -366,8 +367,8 @@ void main(){
   ${pbr && simulation ? 'vec3 pbrPigment=u_semanticOn&&u_simCount>0?rgb:ink.rgb;' : ''}
   ${semantic ? 'vec3 scanIrradiance=vec3(0),scanHighlight=vec3(0);':''}
   ${normalMapped ? `
-  ${semantic?'if(u_semanticOn&&(u_scanMaterial||u_texelMaterial))scanIrradiance=eSurfaceLighting(v_world,normal,false,vec3(0),geometricNormal,semanticObserver(v_world),detail.a,sheen,scanHighlight);else':''}
-  if(receivesLight)rgb=eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+eLighting(v_world,normal,false,vec3(0),geometricNormal))));
+  ${semantic?'if(u_semanticOn&&(u_scanMaterial||u_texelMaterial))scanIrradiance=eSurfaceLighting(v_world,normal,false,vec3(0),geometricNormal,semanticObserver(v_world),detail.a,sheen,u_receiveEmitterShadow,scanHighlight);else':''}
+  if(receivesLight)rgb=eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+eLighting(v_world,normal,false,vec3(0),geometricNormal,u_receiveEmitterShadow))));
   ` : ''}
   ${semantic?'if(u_semanticOn&&!u_index&&receivesLight)rgb=semanticFinish(rgb,normal,detail.a,sheen,emission,v_world,scanIrradiance,scanHighlight,captured);':''}
   ${pbr ? `
@@ -876,7 +877,9 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       const authored = Boolean(atlas.cornerNormals && surfaceNormals && !index && !coverageFilter);
       const tinted = atlas.cornerTints && !index && !coverageFilter && !anchors;
       const tintMode = tinted ? atlas.tintBlend ?? 'multiply' : null;
-      const normalMapped = lit && Boolean(authored||atlas.normalPixels||simulation||objectTexels||semantic?.some(row=>row.chain.scan));
+      const skipEmitterShadow=lit && lighting.receivesSurface &&
+        atlas.surfaceCharts?.some(chart=>!lighting.receivesSurface(chart));
+      const normalMapped = lit && Boolean(skipEmitterShadow||authored||atlas.normalPixels||simulation||objectTexels||semantic?.some(row=>row.chain.scan));
       if (normalMapped || tilesets && !lit) {
         gl.activeTexture(gl.TEXTURE0 + 24);
         gl.bindTexture(gl.TEXTURE_2D, atlas.normalPixels?normalTexture:texture);
@@ -903,6 +906,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       if (pbr) bindPbr();
       gl.useProgram(shader.p);
       shader.set({
+        ...(normalMapped && {u_receiveEmitterShadow:true}),
         u_view: view,
         u_proj: projection,
         u_range: range,
@@ -995,11 +999,11 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       }
       let chartIndex = 0, semanticIndex=0, blockIndex=0, tileIndex=0, wrapIndex=0;
       function drawRange(first, end) {
-        if(!coverageFilter && !semantic && !blockRanges && !pbr && !tilesets){
+        if(!coverageFilter && !semantic && !blockRanges && !pbr && !tilesets && !skipEmitterShadow){
           drawProjected(first,end);
           return;
         }
-        const charts=coverageFilter || pbr ? atlas.surfaceCharts??[] : [];
+        const charts=coverageFilter || pbr || skipEmitterShadow ? atlas.surfaceCharts??[] : [];
         while(first<end){
           while(charts[chartIndex]?.end<=first)chartIndex++;
           while(semantic?.[semanticIndex]?.end<=first)semanticIndex++;
@@ -1031,6 +1035,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
             shader.set({u_blockOn:true,u_blockOrigin:[block.region.x,block.region.y],u_blockTint:block.tint});
           } else if(blockRanges)shader.set({u_blockOn:false});
           if(coverageFilter)shader.set({u_filterSoftness:coverageFilter.at(chart?.materialId)});
+          if(normalMapped)shader.set({u_receiveEmitterShadow:lighting.receivesSurface?.(chart)!==false});
           if(pbr)shader.set({u_surfacePbr:pbr.surface(chart)*(pbr.shadows?.receivesSurface(chart)===false?-1:1)});
           if(mip){
             const {chain,region:r}=mip;

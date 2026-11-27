@@ -14,10 +14,15 @@ const images = ['before.png','after.png','changes.png'];
 function capture({before,after,report},settings,directory,kit) {
   const {w,h,t} = settings;
   const evidence = {grid:[w,h],time:t,files:[],instances:[]};
+  const compareShadows = report.format === 'ink-studio/shadow-controls-edit';
+  if (compareShadows) evidence.shadows = {};
   function frame(world,file) {
+    const shadows = {sun:null,pbr:[]};
     pose(world,t,{kit,maxSteps:7200});
     const result = R.render(world,{...settings,px:1,passes:['objectId'],composite:false,renderGraph:false,renderGrid:false,
-      inspection:false,shutter:false,cameraGuides:false});
+      inspection:false,shutter:false,cameraGuides:false,
+      ...(compareShadows && {liveShadowFrame:map=>{shadows.sun=map;},pbrShadowFrame:maps=>{shadows.pbr=maps;}})});
+    if (compareShadows) evidence.shadows[file===images[0]?'before':'after'] = shadows;
     if (result.w !== w || result.h !== h || result.passes?.objectId?.length !== w*h)
       throw new RangeError('Prefab review needs a matching native color and object capture');
     files.write(path.join(directory,file),PNG.encode(w,h,result.rgb));
@@ -29,9 +34,9 @@ function capture({before,after,report},settings,directory,kit) {
     evidence.lights = {before:before.constructionLights?.inspect() ?? []};
   if (!after) return evidence;
   const draft = frame(after,images[1]), owners = new Map();
-  const compareLighting = evidence.lights !== undefined;
+  const compareLighting = evidence.lights !== undefined || compareShadows;
   if (compareLighting) {
-    evidence.lights.after = after.constructionLights?.inspect() ?? [];
+    if (evidence.lights) evidence.lights.after = after.constructionLights?.inspect() ?? [];
     evidence.changedPixels = 0;
   }
   for (const row of report.instances ?? []) {

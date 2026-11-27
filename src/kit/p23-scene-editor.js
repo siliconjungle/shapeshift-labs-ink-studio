@@ -16,6 +16,77 @@
     return result;
   }
 
+  function shadowControlsPlan(scene, env, request) {
+    const {object, flags, light, map} = request ?? {};
+    const {own,id,equal} = K.world.data;
+    const fields = (value,keys) => K.world.data.record(value) && Object.keys(value).length &&
+      Object.keys(value).every(key=>keys.includes(key));
+    if (!fields(request,['object','flags','light','map']) || object===undefined && light===undefined ||
+        (object===undefined ? flags!==undefined : !id(object) || flags!==null && !fields(flags,['cast','receive'])) ||
+        (light===undefined ? map!==undefined : !fields(light,['type','id','index']) || !fields(map,['bias','mapSize','bounds','shadows','filter'])))
+      throw new TypeError('Choose an object and cast or receive flags, a light and shadow settings, or both');
+
+    const {spec} = A.scenePrefabs.expand(scene,env);
+    const {finish:base} = DIO.assemblyLighting(spec);
+    const look = {...base.look}, finish = {...scene.finish};
+    const patch = {};
+    const report = {format:'ink-studio/shadow-controls-edit',version:1,scene:scene.id,canCommit:true,changed:false};
+    const block = problem=>({report:freeze({...report,canCommit:false,problems:[{level:'error',problem}]})});
+    if (object!==undefined) {
+      const objects = {...look.shadowArt?.objects}, before = own(objects,object) ? objects[object] : null;
+      if (flags!==null && ![...DIO.solids(spec)].some(row=>row.id===object) && !own(spec.topologyMeshes ?? {},object))
+        return block('Unknown shadow object '+object);
+      const after = flags===null ? null : {...before,...flags};
+      if (after) Object.defineProperty(objects,object,{value:after,enumerable:true,configurable:true});
+      else delete objects[object];
+      const settings = {...look.shadowArt, objects};
+      try { ShadowArt.prepare(settings); }
+      catch (error) { return block(error.message); }
+      const changed = !equal(before,after);
+      if (changed) finish.look = {...look, shadowArt:settings};
+      report.object = {id:object,before,after};
+      report.changed ||= changed;
+    }
+    if (light!==undefined) {
+      const {type,index,id:fixture} = light;
+      if (type==='fixture') {
+        if (!id(fixture) || index!==undefined || !own(scene.constructionLights ?? {},fixture))
+          return block('Choose an existing named construction light');
+        if (!fields(map,['bias','shadows'])) return block('Construction lights use ray shadows and accept bias and shadows');
+        const row=scene.constructionLights[fixture], after={...row.emitter,...map};
+        patch.constructionLights={...scene.constructionLights,[fixture]:{...row,emitter:after}};
+        report.light={...light,before:row.emitter,after};
+        report.changed ||= !equal(row.emitter,after);
+      } else {
+        if (fixture!==undefined || type!=='sun' && type!=='pbr' ||
+            (type==='pbr' ? !Number.isSafeInteger(index) || index<0 : index!==undefined))
+          return block('Choose the sun or a directional PBR light index');
+        const pbr = look.pbrMaterials;
+        const current = type==='sun' ? base.liveSun : pbr?.lights?.[index];
+        if (type==='pbr' && !current) return block('Unknown directional PBR light index '+index);
+        const before = typeof current==='boolean' || current===undefined ? {} : current;
+        const after = {...before,...map};
+        if (map.bounds===null) delete after.bounds;
+        const {bias=.02,mapSize=256,filter=1,shadows=true} = after, max = type==='sun' ? 2048 : 1024;
+        if (!Number.isFinite(bias) || bias<0 || bias>10 || !Number.isSafeInteger(mapSize) || mapSize<32 || mapSize>max ||
+            !Number.isSafeInteger(filter) || filter<0 || filter>2 || typeof shadows!=='boolean')
+          return block('Directional shadows need bias from 0–10, mapSize from 32–'+max+', filter from 0–2, and boolean shadows');
+        try { DirectionalShadowMap.bounds(after.bounds); }
+        catch (error) { return block(error.message); }
+        if (type==='sun') finish.liveSun=after;
+        else {
+          const lights=pbr.lights.slice();
+          lights[index]=after;
+          finish.look={...(finish.look ?? look),pbrMaterials:{...pbr,lights}};
+        }
+        report.light={...light,before:current ?? null,after};
+        report.changed ||= !equal(current,after);
+      }
+    }
+    if (Object.keys(finish).length) patch.finish=finish;
+    return {patch:report.changed ? patch : {},report:freeze(report)};
+  }
+
   function sceneIndex(scene, env) {
     const solids = scene.solids ?? [];
     const nodes = new Map(), byEntity = new Map(), roots = [], parts = new Map(), groups = new Map();
@@ -620,6 +691,26 @@
         return report;
       });
       return document.pending() ? write() : document.transact('Edit construction light '+report.id,write);
+    }
+
+    function planShadowControls(request) {
+      return stagePrefabPlacement(shadowControlsPlan,request).report;
+    }
+
+    function previewShadowControls(request, settings) {
+      return previewPrefabPlacement(shadowControlsPlan,request,settings);
+    }
+
+    function editShadowControls(request) {
+      const {patch,report} = stagePrefabPlacement(shadowControlsPlan,request);
+      if (!patch) throw Object.assign(new RangeError('Shadow controls need review'),{report});
+      if (!report.changed) return report;
+      const write = () => document.batchSession(() => {
+        if (patch.finish) document.setEnvironment({finish:null});
+        document.setEnvironment(patch);
+        return report;
+      });
+      return document.pending() ? write() : document.transact('Edit object and light shadows',write);
     }
 
     function planSceneLayers(request) {
@@ -2007,6 +2098,7 @@
       planPrefabMirror, previewPrefabMirror, applyPrefabMirror,
       planPrefabBillboards, previewPrefabBillboards, editPrefabBillboards,
       planConstructionLight, previewConstructionLight, editConstructionLight,
+      planShadowControls, previewShadowControls, editShadowControls,
       planPrefabCombination, previewPrefabCombination, combinePrefabs,
       planPrefabArray, previewPrefabArray, applyPrefabArray,
       planPrefabReplacement, previewPrefabReplacement, replacePrefabs,

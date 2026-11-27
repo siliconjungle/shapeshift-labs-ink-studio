@@ -1230,11 +1230,14 @@ function renderFrame(world, o, preparedPalettes) {
   const decals=sampledDecals?.layers;
   const surfaceLayers = meshLayers.length || brickLayers.length || decals?.length ?
     [spriteSurfaces].flat().concat(meshLayers,brickLayers,decals || []) : spriteSurfaces;
+  const shadowSettings = ShadowArt.prepare(o.shadowArt ?? look.shadowArt);
   if(pbr) pbr.shadows=PbrMaterials.shadows.prepare(pbr,world,pbrFrames,{
     layers:[surfaceLayers],enabled:o.pbrShadows!==false,curveMode:curves?'curves':'splats',shadowArt:o.shadowArt,footprint:shadowFootprint,
     surfaceOptions:{time:t,interfaceTime:o.interfaceTime,enabled:o.cutoutShadows!==false,shadowShells:o.shadowShells,
       surfaces:o.spriteSurfaces===false?false:spriteSurfaces,sprites:spriteAtlases,atlasMode:o.spriteAtlasMode}
   });
+  if (pbr && !reflectionPlane && !probeView && o.pbrShadowFrame)
+    o.pbrShadowFrame(pbr.lights.map((_,i)=>PbrMaterials.shadows.inspect(pbr.shadows?.depths[i])));
   const simulationLayers=o.simulationMaterialLayers===false ? undefined : SimulationMaterialLayers.frame(
     [surfaceLayers].flat(),{time:sceneTime,session:lookInputs||undefined,
       query:()=>world.lookSnapshot?.query??world.surfaceEffects?.query??require('../index.js').load().KIT.world.query.fromScene(world,sceneTime),
@@ -1271,7 +1274,7 @@ function renderFrame(world, o, preparedPalettes) {
       captureRestNormal:passSelection.has('sourceRestNormal'),trackMesh:trackMeshes && ((source,triangle,project)=>trackMeshes.set(PixelSourceTracking.meshKey(source,triangle),project)),
       surfaceNormals:o.surfaceNormals,capture:captureTexturedSurface,sourceBinding:captureSourceSurface,
       motion:!!temporal||captureSurfaceMotion,captureFogOwners,
-      lightingTargets:artLighting || o.bounceProbes!==false &&
+      shadowObjects:shadowSettings?.objects, lightingTargets:artLighting || o.bounceProbes!==false &&
         (o.bounceProbes===true?world.bounceProbes:o.bounceProbes??world.bounceProbes)?.geometry });
   const localProjectionHits=surfaceFragments.some(sample=>sample.localProjection) && new Uint8Array(W*H);
   if (localProjectionHits) for (const sample of surfaceFragments) if (sample.localProjection) localProjectionHits[sample.p]=1;
@@ -1360,11 +1363,12 @@ function renderFrame(world, o, preparedPalettes) {
   const cutoutsForLight = areaLights.length || volumeLighting || paintedSpills?.length ? ShadowCutouts.prepare(world, {
     time: t, interfaceTime: o.interfaceTime, enabled: o.cutoutShadows !== false, shadowShells: o.shadowShells,
     surfaces: o.spriteSurfaces === false ? false : spriteSurfaces,
-    sprites: spriteAtlases, atlasMode: o.spriteAtlasMode
+    sprites: spriteAtlases, atlasMode: o.spriteAtlasMode,
+    accepts:shadowSettings?.objects && (target=>ShadowArt.objectAllows(shadowSettings,'cast',target))
   }) : [];
   const cutoutShadow = cutoutsForLight.length ? (origin, direction, stop) =>
     ShadowCutouts.occludes(cutoutsForLight, origin, direction, stop) : undefined;
-  const lightCasters=areaLights.some(l=>l.shadows)?AreaLights.staticSources(world,d,undefined,brickCasters):[];
+  const lightCasters=areaLights.some(l=>l.shadows)?AreaLights.staticSources(world,d,undefined,brickCasters,shadowSettings):[];
   const volumeSource=volumeLighting&&!volumeLighting.shadow&&lightCasters.length?{...volumeLighting,shadow:(x,y,z,direction,distance)=>AreaLights.occludes(lightCasters,[x,y,z],direction,distance)}:volumeLighting;
   const prepareVolumeLight = () => volumeSource ? (localLighting ??= SceneOptics.lighting(volumeSource, world.pal,
     { time: t, localLights: o.volumeLocalLights, localShadows: o.volumeLocalShadows, celestialSun: celestial?.sun,
@@ -1785,6 +1789,7 @@ function renderFrame(world, o, preparedPalettes) {
     live = LiveSun.create(sun, world, { x: X, y: Y, z: Z, alpha: occluderAlpha, scale: SC }, normalAt, cloudShadow, exposure?.light,
       { shadowArt: o.shadowArt, footprint: shadowFootprint, curveAt, curveData:d, artLighting, traced,
         paintShadowBands:o.shadowBandPaint !== false,
+        shadowReport:!reflectionPlane && !probeView ? o.liveShadowFrame : undefined,
         curveProxyAt:shadowProxies?.size ? (i,camera,opacity)=>prepareCurve(i,camera,world,true,undefined,opacity) : undefined,
         curveStats:counters && !reflectionPlane && !probeView ? stats=>{counters.strandShadows=stats;} : undefined,
         probes: probes && ((i,x,y,z,n) => n && probeReceiver(i) ? probes.sample([x,y,z],n) : null) });
@@ -1799,7 +1804,7 @@ function renderFrame(world, o, preparedPalettes) {
   const scanSplatView=scanFrame.appearance && world.gaussianHarmonics?.degree && world.gaussianAppearanceDelta &&
     {eye,back:[V[2],V[6],V[10]],ortho};
   const directLight = AreaRaster.createLighting(areaLights,world,d,occluderAlpha,
-      { spots:spotLighting?.surfaceSpots, shadow:spotLighting?.shadow, cutoutShadow, shot:shotLighting, art:artLighting, spill:spillLights, derived:brickCasters });
+      { spots:spotLighting?.surfaceSpots, shadow:spotLighting?.shadow, cutoutShadow, shot:shotLighting, art:artLighting, spill:spillLights, derived:brickCasters, shadowSettings });
   const diffuseFrames = (directLight || probes) && sampleFrames(world,t), diffuseNormals = [];
   function diffuseNormal(i) {
     return diffuseNormals[i] ?? (diffuseNormals[i] = receivesDiffuse(i) && diffuseFrames(i).normal || false);
@@ -2256,7 +2261,7 @@ function renderFrame(world, o, preparedPalettes) {
     }
     if(i<0&&sprite.surface&&!sprite.emission&&sprite.normal&&sprite.tilesetMaterial?.lighting!=='unlit'){
       const target=sprite.sdf?sprite.row.target:sprite.lightingTarget;
-      const directTarget=artLighting ? target : undefined;
+      const directTarget=artLighting || shadowSettings?.objects ? target : undefined;
       if(directLight?.receives(directTarget)) {
         if(sprite.scan||sprite.objectTexels)scanLight=directLight.scanSurface(position,sprite.normal,directTarget,sprite.biasNormal,
           sprite.semanticView,sprite.semantic.roughness,sprite.semantic.sheen??sprite.semanticRule.specular);
@@ -2277,7 +2282,7 @@ function renderFrame(world, o, preparedPalettes) {
         metalness: sprite.semantic?.metalness, emission: sprite.semantic?.emission
       });
       if (sprite.normal && directLight?.finishSpill)
-        color = directLight.finishSpill(position, sprite.normal, color, artLighting ? sprite.lightingTarget : undefined);
+        color = directLight.finishSpill(position, sprite.normal, color, artLighting || shadowSettings?.objects ? sprite.lightingTarget : undefined);
     } else if(sprite.semantic && sprite.tilesetMaterial?.lighting!=='unlit')color=SemanticMipmaps.shade(color,sprite.normal,sprite.semanticView,sprite.semantic,sprite.semanticRule,
       sprite.scan ? {...scanFrame,scan:sprite.scan,position,...scanLight} :
         sprite.objectTexels || sprite.liveLight ? {sun,...scanLight} : undefined);

@@ -129,12 +129,12 @@ const PbrMaterials = (() => {
       if (!direction) throw new RangeError('Light direction must be nonzero');
       const intensity = number(value.intensity ?? 1, 'Light intensity', 0, 64);
       const light = color(value.color ?? WHITE, 'Light color').map(channel => channel * intensity);
-      const {shadows=false,mapSize=256,bias=.02,filter=1}=value;
-      if(typeof shadows!=='boolean' || !Number.isSafeInteger(mapSize) || mapSize<32 || mapSize>1024 ||
+      const {shadows:castShadows=false,mapSize=256,bias=.02,filter=1}=value;
+      if(typeof castShadows!=='boolean' || !Number.isSafeInteger(mapSize) || mapSize<32 || mapSize>1024 ||
           !Number.isSafeInteger(filter) || filter<0 || filter>2)
         throw new RangeError('PBR shadows need a switch, mapSize of 32–1024 and filter of 0–2');
       number(bias,'PBR shadow bias',0,10);
-      return { direction,color:light,rampIntensity:clamp(Math.max(...light)),shadows:shadows&&light.some(Boolean),mapSize,bias,filter };
+      return { direction,color:light,rampIntensity:clamp(Math.max(...light)),shadows:castShadows&&light.some(Boolean),mapSize,bias,filter,bounds:shadows.bounds(value.bounds) };
     });
     const settings = definition.environment ?? {};
     const environment = {
@@ -479,7 +479,7 @@ vec2 pbrTapOffset(vec2 pixel,float scale,int index){
 }
 uniform highp sampler2D u_pbrRows;
 uniform highp int u_pbrRampOffset;
-uniform vec4 u_pbrShadow[16];
+uniform vec4 u_pbrShadow[16],u_pbrShadowBounds[4];
 uniform float u_pbrShadowRamp[16],u_pbrShadowStrength;
 uniform int u_pbrShadowRampCount;
 vec4 pbrRow(int at){
@@ -557,7 +557,10 @@ float pbrVisibility(int index,vec3 at,vec3 normal,vec3 light){
   int row=index*4;
   vec4 u=u_pbrShadow[row],v=u_pbrShadow[row+1],shape=u_pbrShadow[row+2],options=u_pbrShadow[row+3];
   if(shape.z<=0.0)return 1.0;
-  vec2 uv=(vec2(dot(at,u.xyz),dot(at,v.xyz))-vec2(u.a,v.a))/shape.z;
+  vec4 bounds=u_pbrShadowBounds[index];
+  vec2 lightAt=vec2(dot(at,u.xyz),dot(at,v.xyz));
+  if(bounds.z>bounds.x && (any(lessThan(lightAt,bounds.xy))||any(greaterThanEqual(lightAt,bounds.zw))))return 1.0;
+  vec2 uv=(lightAt-vec2(u.a,v.a))/shape.z;
   float facing=dot(normal,light);
   if(facing<0.0)normal=-normal;
   vec2 slope=-vec2(dot(normal,u.xyz),dot(normal,v.xyz))*shape.z/max(.1,abs(facing));

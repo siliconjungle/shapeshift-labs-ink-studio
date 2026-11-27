@@ -32,10 +32,22 @@ const ShadowArt = (() => {
   const allows = (mask, subject) => !mask ||
     (!mask.include || mask.include.some(rule => selectors.matches(rule, subject))) &&
     !mask.exclude?.some(rule => selectors.matches(rule, subject));
+  function objectFlags(value) {
+    if (value === undefined) return;
+    if (!value || Object.getPrototypeOf(value) !== Object.prototype || Object.keys(value).length > 4096)
+      throw new TypeError('Shadow objects need a map of up to 4096 object IDs');
+    return Object.freeze(Object.fromEntries(Object.entries(value).map(([id, flags]) => {
+      fields(flags, ['cast', 'receive'], 'object flags');
+      if (!selectors.name(id) || !Object.keys(flags).length || Object.values(flags).some(flag => typeof flag !== 'boolean'))
+        throw new TypeError('Shadow objects need named IDs and boolean cast or receive flags');
+      return [id, Object.freeze({ ...flags })];
+    })));
+  }
   function prepare(raw) {
     if (raw === undefined || raw === false) return null;
-    fields(raw, ['ramp', 'cast', 'receive', 'small'], 'art settings');
+    fields(raw, ['ramp', 'cast', 'receive', 'small', 'objects'], 'art settings');
     const gain = ramp(raw.ramp), cast = mask(raw.cast), receive = mask(raw.receive);
+    const objects = objectFlags(raw.objects);
     let small;
     if (raw.small !== undefined) {
       fields(raw.small, ['belowPixels', 'referenceSize', 'ramp', 'strength'], 'small-size settings');
@@ -48,7 +60,7 @@ const ShadowArt = (() => {
       small = Object.freeze({ belowPixels, referenceSize, strength, ...(band && { ramp: band }) });
     }
     const settings = Object.freeze({ ...(gain && { ramp: gain }), ...(cast && { cast }), ...(receive && { receive }),
-      ...(small && { small }) });
+      ...(small && { small }), ...(objects && Object.keys(objects).length && { objects }) });
     return Object.keys(settings).length ? Object.freeze({ ...settings, settings }) : null;
   }
   function transfer(art, visibility, small = false) {
@@ -57,14 +69,30 @@ const ShadowArt = (() => {
     const gain = steps ? steps[Math.round(Math.max(0, Math.min(1, visibility)) * (steps.length - 1))] : visibility;
     return coarse ? 1 - (1 - gain) * coarse.strength : gain;
   }
+  function objectAllows(art, mode, target) {
+    const { objects } = art ?? {};
+    if (!objects) return true;
+    const flag = id => id!=null && Object.hasOwn(objects,id) ? objects[id][mode] : undefined;
+    return (flag(target.object) ?? flag(target.entity)) !== false;
+  }
+
+  function participates(art, mode, target) {
+    return (mode !== 'cast' || target.castsShadow !== false) &&
+      objectAllows(art, mode, target) && allows(art?.[mode], target);
+  }
+
+  const surfaceTarget = (chart, fallback) => ({
+    object:chart?.objectId ?? fallback, entity:chart?.objectId ?? fallback, part:chart?.partId,
+    material:chart?.materialId, surface:chart?.id
+  });
+
   function bind(art, world, mode) {
-    const mask = art?.[mode];
     const respectCasters = mode === 'cast' && world.renderMetadata?.targets?.some(target => target?.castsShadow === false);
-    if (!mask && !respectCasters) return;
+    if (!art?.[mode] && !art?.objects && !respectCasters) return;
     const { row } = selectors.index(world), cache = new WeakMap();
     return i => {
       const target = row(i);
-      if (!cache.has(target)) cache.set(target, (!respectCasters || target.castsShadow !== false) && allows(mask, target));
+      if (!cache.has(target)) cache.set(target, participates(art, mode, target));
       return cache.get(target);
     };
   }
@@ -97,7 +125,7 @@ const ShadowArt = (() => {
       surfaceData: surfaceData ?? world.surfaceData } : world;
   }
 
-  return Object.freeze({ stride, prepare, allows, transfer, bind, frame,
+  return Object.freeze({ stride, prepare, allows, objectAllows, participates, surfaceTarget, transfer, bind, frame,
     small: (art, footprint) => Boolean(art?.small && footprint > art.small.referenceSize / art.small.belowPixels) });
 })();
 if (typeof module !== 'undefined') module.exports = ShadowArt;

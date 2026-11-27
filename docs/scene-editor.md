@@ -1080,3 +1080,55 @@ and `editCustomProperties`. Built dioramas expose effective values
 under `world.customProperties.project` and `world.customProperties.instances`.
 Run `node examples/tileset-pick/custom-properties-demo.cjs station-properties`
 to inspect all three scopes and clear an instance override.
+
+## Control shadows by object and light
+
+Set independent cast and receive flags by the scene's stable solid or mesh
+ID. For a prefab member, use its expanded ID, such as `gantry.roof`.
+This command keeps the same object in camera coverage and picking when
+either flag is off.
+
+```sh
+ink-studio mesh-topology shadow-controls courtyard.json shadow-edit.json \
+  --preview review --view view.json --out courtyard-shadows.json
+```
+
+```json
+{
+  "object": "west-roof",
+  "flags": { "cast": false },
+  "light": { "type": "sun" },
+  "map": {
+    "bias": 0.035,
+    "mapSize": 192,
+    "bounds": { "min": [-2.8, -2.1], "max": [2.8, 2.1] }
+  }
+}
+```
+
+The object and light clauses can be used independently. Object flags persist
+in `finish.look.shadowArt.objects`. Use `"receive": false` to keep direct
+lighting on a surface while bypassing occlusion from these lights. Setting
+`"flags": null` removes the object's override. A missing flag inherits
+normal participation, and `true` honors any existing shadow masks and
+representation-specific casting settings.
+
+| Light selector | Settings |
+| --- | --- |
+| `{"type":"sun"}` | The headless live sun. Supports `bias`, `mapSize` (32–2048), `bounds`, `filter` (0–2), and `shadows`. |
+| `{"type":"pbr","index":0}` | A directional light in `finish.look.pbrMaterials.lights`, used in headless and WebGL rendering. Supports the same settings with `mapSize` from 32–1024. |
+| `{"type":"fixture","id":"key"}` | A construction-mounted area emitter. Supports its native ray `bias` (0.001–0.25 scene units) and `shadows`. |
+
+For maps, `bias` is a depth offset of 0–10 scene units before the renderer
+adds its texel allowance. The longer axis determines the texel pitch.
+Fixed bounds are a rectangle in the light's right and up coordinates,
+measured from world zero. Receivers outside it stay unshadowed by that map.
+Use `"bounds": null` in an edit to restore automatic fitting. The preview
+receipt includes the light axes, effective map dimensions, texel pitch,
+effective bias, and the number of changed native-grid pixels.
+
+The SDK exposes `planShadowControls`, `previewShadowControls`, and
+`editShadowControls`. An edit to the object and light commits together
+in one undo step. Run the [courtyard example](../examples/tileset-pick/object-shadows-demo.cjs)
+to compare disabling one canopy's cast shadow with bypassing shadows on
+the other courtyard floor.

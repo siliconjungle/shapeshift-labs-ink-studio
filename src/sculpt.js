@@ -41,11 +41,11 @@ function makeSculpt(B, rest) {
   });
   const receives = new WeakMap();
   function receivesShadow(owner, material) {
-    if (!shadowArt?.receive) return true;
-    if (!owner) return ShadowArt.allows(shadowArt.receive, shadowTarget(owner, material));
+    if (!shadowArt?.receive && !shadowArt?.objects) return true;
+    if (!owner) return ShadowArt.participates(shadowArt, 'receive', shadowTarget(owner, material));
     if (!receives.has(owner)) receives.set(owner, new WeakMap());
     const cached = receives.get(owner);
-    if (!cached.has(material)) cached.set(material, ShadowArt.allows(shadowArt.receive, shadowTarget(owner, material)));
+    if (!cached.has(material)) cached.set(material, ShadowArt.participates(shadowArt, 'receive', shadowTarget(owner, material)));
     return cached.get(material);
   }
   const brushCache = new WeakMap();
@@ -150,7 +150,7 @@ function makeSculpt(B, rest) {
     p.tag = o.tag || null;
     p.renderOwner = o.objectId ?? p.tag;
     p.renderTarget = o.surfaceId !== undefined ? { surface: o.surfaceId, ...o.target } : o.target;
-    if (o.target?.castsShadow === false) {
+    if (o.target?.castsShadow === false || !ShadowArt.objectAllows(shadowArt, 'cast', shadowTarget(p, p.mat))) {
       p.shadowCaster = false;
       hasNonCaster = true;
     } else if (shadowArt?.cast) p.shadowCaster = ShadowArt.allows(shadowArt.cast, shadowTarget(p, p.mat));
@@ -1936,7 +1936,8 @@ function makeSculpt(B, rest) {
       field.ready();
       return {bounds:field.modelBounds(.05), distance:field.sdf, locate:field.renderSurface, accepts};
     }
-    const casts = p => p.renderTarget?.castsShadow !== false;
+    const casts = p => p.renderTarget?.castsShadow !== false &&
+      ShadowArt.objectAllows(B.shadowArt, 'cast', shadowTarget(p, p.mat));
     const filtered = positive.some(p => !casts(p));
     return { ...bind(()=>true,()=>true), bind, rows, owners, negative,
       ...(filtered && { shadowGeometry: bind(casts, () => true) }) };

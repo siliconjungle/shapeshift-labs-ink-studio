@@ -59,7 +59,7 @@
       }
       return Object.freeze({
         collision:Object.freeze({id:objectId,bounds,distance:point=>distance(...point)}),
-        ...(options.shadow && {shadow:Object.freeze({bounds,distance})})
+        ...(options.shadow && {shadow:Object.freeze({objectId,bounds,distance})})
       });
     })();
     const assets=Object.freeze({

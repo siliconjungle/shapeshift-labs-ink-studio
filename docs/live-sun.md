@@ -171,11 +171,17 @@ Set `finish.look.shadowArt` in a JSON diorama or pass `shadowArt` in the third a
 | `ramp` | Select evenly spaced steps of visibility and map each to a direct-light gain. Supply 2 to 16 nondecreasing gains from zero to one, ending at one for clear light. The material's own palette ramp supplies the colours. |
 | `cast` | Choose which geometry casts shadows with `include` and `exclude` selector arrays. |
 | `receive` | Choose which surfaces respond to those shadows, using the same mask fields. |
+| `objects` | Use an object ID as a key and set its `cast` and `receive` flags independently. The object still has to pass the existing masks and be eligible for that light's shadow path. |
 | `small` | Choose a `belowPixels` threshold and a `referenceSize` in world units, which defaults to one. When that span projects to fewer pixels on the camera target plane, use an optional simpler `ramp` and `strength` from zero to one. Zero strength suppresses the cast shadow. |
 
 Masks accept object, entity, material, surface, prefab, and tag selectors. A target matches a mask if it passes any supplied include selector and no exclude selector. Include is unrestricted when omitted. Masks leave the visible geometry and ambient occlusion intact.
 
 The CPU and WebGL renderers select the small-size variant for baked surface splats as camera scale changes. Headless live sun evaluates the same rule against its current depth map. Programmable point lights that use a cached visibility map can use the masks and regular ramp through `K.light.shadow`. Set the programmatic render option `shadowArt: false` to use the regular baked variant or the unstyled live sun.
+
+Use `--shadow-bounds minU,minV,maxU,maxV` to pin the live sun's shadow
+map to a light-space rectangle for a render. The authored version is
+`finish.liveSun.bounds` with `min` and `max` UV pairs. View the axes, bounds,
+and effective map dimensions with the [scene editor shadow preview](scene-editor.md#control-shadows-by-object-and-light).
 
 ## Sky and ground bounce
 
